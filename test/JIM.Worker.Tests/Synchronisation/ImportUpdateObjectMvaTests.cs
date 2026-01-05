@@ -96,7 +96,7 @@ public class ImportUpdateObjectMvaTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
@@ -178,7 +178,7 @@ public class ImportUpdateObjectMvaTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
@@ -259,7 +259,7 @@ public class ImportUpdateObjectMvaTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
@@ -339,7 +339,7 @@ public class ImportUpdateObjectMvaTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
@@ -413,7 +413,7 @@ public class ImportUpdateObjectMvaTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_GROUP",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
@@ -531,7 +531,7 @@ public class ImportUpdateObjectMvaTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
@@ -648,7 +648,7 @@ public class ImportUpdateObjectMvaTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
@@ -765,7 +765,7 @@ public class ImportUpdateObjectMvaTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
@@ -874,7 +874,7 @@ public class ImportUpdateObjectMvaTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
@@ -980,7 +980,7 @@ public class ImportUpdateObjectMvaTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_GROUP",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
@@ -1114,7 +1114,7 @@ public class ImportUpdateObjectMvaTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_GROUP",
             Attributes = new List<ConnectedSystemImportObjectAttribute>
             {

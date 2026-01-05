@@ -60,8 +60,9 @@ internal class FileConnectorImport
             }
 
             // start building the object that we pass back to JIM, representing the connected system object.
-            // TODO: expand this to support the UPDATE scenario
-            var importObject = new ConnectedSystemImportObject { ChangeType = Models.Enums.ObjectChangeType.Create };
+            // Use NotSet for Full Imports - JIM will determine Create vs Update based on CSO existence.
+            // Only delta imports with change tracking should specify explicit Create/Update/Delete.
+            var importObject = new ConnectedSystemImportObject { ChangeType = Models.Enums.ObjectChangeType.NotSet };
 
             // work out what object type this row is meant to be
             if (!string.IsNullOrEmpty(_objectTypeInfo.PredefinedObjectType))

@@ -106,7 +106,7 @@ public class ActivityRunProfileExecutionItemTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>
             {
@@ -116,7 +116,7 @@ public class ActivityRunProfileExecutionItemTests
         });
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>
             {
@@ -184,7 +184,7 @@ public class ActivityRunProfileExecutionItemTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>
             {
@@ -249,7 +249,7 @@ public class ActivityRunProfileExecutionItemTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>
             {
@@ -315,7 +315,7 @@ public class ActivityRunProfileExecutionItemTests
         {
             mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
             {
-                ChangeType = ObjectChangeType.Create,
+                ChangeType = ObjectChangeType.NotSet,
                 ObjectType = "SOURCE_USER",
                 Attributes = new List<ConnectedSystemImportObjectAttribute>
                 {
@@ -387,7 +387,7 @@ public class ActivityRunProfileExecutionItemTests
         {
             mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
             {
-                ChangeType = ObjectChangeType.Create,
+                ChangeType = ObjectChangeType.NotSet,
                 ObjectType = "SOURCE_USER",
                 Attributes = new List<ConnectedSystemImportObjectAttribute>
                 {
@@ -400,7 +400,7 @@ public class ActivityRunProfileExecutionItemTests
         // Add 1 object with error (duplicate attributes)
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>
             {

@@ -57,7 +57,7 @@ public class NonStringDataTypeExportTests
         {
             new()
             {
-                ChangeType = ObjectChangeType.Create,
+                ChangeType = ObjectChangeType.NotSet,
                 ObjectType = "User",
                 Attributes = new List<ConnectedSystemImportObjectAttribute>
                 {
@@ -132,7 +132,7 @@ public class NonStringDataTypeExportTests
         {
             new()
             {
-                ChangeType = ObjectChangeType.Create,
+                ChangeType = ObjectChangeType.NotSet,
                 ObjectType = "User",
                 Attributes = new List<ConnectedSystemImportObjectAttribute>
                 {
@@ -206,7 +206,7 @@ public class NonStringDataTypeExportTests
         {
             new()
             {
-                ChangeType = ObjectChangeType.Create,
+                ChangeType = ObjectChangeType.NotSet,
                 ObjectType = "User",
                 Attributes = new List<ConnectedSystemImportObjectAttribute>
                 {
@@ -266,7 +266,7 @@ public class NonStringDataTypeExportTests
         {
             new()
             {
-                ChangeType = ObjectChangeType.Create,
+                ChangeType = ObjectChangeType.NotSet,
                 ObjectType = "User",
                 Attributes = new List<ConnectedSystemImportObjectAttribute>
                 {
@@ -584,7 +584,7 @@ public class NonStringDataTypeExportTests
 
         return new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "User",
             Attributes = new List<ConnectedSystemImportObjectAttribute>
             {
@@ -607,7 +607,7 @@ public class NonStringDataTypeExportTests
 
         return new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "User",
             Attributes = new List<ConnectedSystemImportObjectAttribute>
             {
@@ -630,7 +630,7 @@ public class NonStringDataTypeExportTests
 
         return new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "User",
             Attributes = new List<ConnectedSystemImportObjectAttribute>
             {
@@ -653,7 +653,7 @@ public class NonStringDataTypeExportTests
 
         return new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "User",
             Attributes = new List<ConnectedSystemImportObjectAttribute>
             {
