@@ -1,0 +1,5 @@
+Id,Name,Age,StartDate,IsActive
+1,John Smith,,2023-01-15,true
+2,Jane Doe,25,,true
+3,Bob Wilson,45,2022-06-01,
+4,Empty All,,,
