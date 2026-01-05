@@ -25,7 +25,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     #region Connector Definitions
     public async Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync()
     {
-        return await Repository.Database.ConnectorDefinitions.OrderBy(x => x.Name).Select(cd => new ConnectorDefinitionHeader
+        return await Repository.Database.ConnectorDefinitions
+            .AsSplitQuery()
+            .OrderBy(x => x.Name)
+            .Select(cd => new ConnectorDefinitionHeader
         {
             Id = cd.Id,
             Name = cd.Name,
@@ -42,6 +45,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id)
     {
         return await Repository.Database.ConnectorDefinitions
+            .AsSplitQuery()
             .Include(cd => cd.Files)
             .Include(cd => cd.Settings)
             .SingleOrDefaultAsync(cd => cd.Id == id);
@@ -50,6 +54,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name)
     {
         return await Repository.Database.ConnectorDefinitions
+            .AsSplitQuery()
             .Include(x => x.Files)
             .Include(x => x.Settings)
             .SingleOrDefaultAsync(cd => cd.Name.Equals(name));
@@ -201,6 +206,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<ConnectedSystemObjectType?> GetObjectTypeAsync(int id)
     {
         return await Repository.Database.ConnectedSystemObjectTypes
+            .AsSplitQuery()
             .Include(ot => ot.Attributes)
             .Include(ot => ot.ConnectedSystem)
             .SingleOrDefaultAsync(ot => ot.Id == id);
@@ -284,6 +290,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<ObjectMatchingRule?> GetObjectMatchingRuleAsync(int id)
     {
         return await Repository.Database.ObjectMatchingRules
+            .AsSplitQuery()
             .Include(omr => omr.Sources)
                 .ThenInclude(s => s.ConnectedSystemAttribute)
             .Include(omr => omr.Sources)
@@ -753,6 +760,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
     {
         return await Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
             .Include(cso => cso.Type)
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
@@ -766,6 +774,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
     {
         return await Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
             .Include(cso => cso.Type)
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
@@ -778,6 +787,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, long attributeValue)
     {
         return await Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
             .Include(cso => cso.Type)
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
@@ -790,6 +800,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
     {
         var result = await Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
             .Include(cso => cso.Type)
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
@@ -822,6 +833,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         // External ID matching is case-sensitive to respect connected system identity
         return await Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
             .Include(cso => cso.Type)
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
@@ -1055,6 +1067,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<ConnectedSystemPartition?> GetConnectedSystemPartitionAsync(int id)
     {
         return await Repository.Database.ConnectedSystemPartitions
+            .AsSplitQuery()
             .Include(csp => csp.ConnectedSystem)
             .Include(csp => csp.Containers)
             .FirstOrDefaultAsync(csp => csp.Id == id);
@@ -1092,6 +1105,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<ConnectedSystemContainer?> GetConnectedSystemContainerAsync(int id)
     {
         return await Repository.Database.ConnectedSystemContainers
+            .AsSplitQuery()
             .Include(c => c.Partition)
             .ThenInclude(p => p!.ConnectedSystem)
             .Include(c => c.ConnectedSystem)
@@ -1184,6 +1198,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // the current attribute values (e.g., current DN for LDAP rename operations).
 
         return await Repository.Database.PendingExports
+            .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
             .Include(pe => pe.ConnectedSystemObject)
@@ -1271,6 +1286,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             pageSize = 100;
 
         var query = Repository.Database.PendingExports
+            .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.AttributeValues)
@@ -1758,6 +1774,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<List<SyncRuleMapping>> GetSyncRuleMappingsAsync(int syncRuleId)
     {
         return await Repository.Database.SyncRuleMappings
+            .AsSplitQuery()
             .Include(m => m.Sources)
                 .ThenInclude(s => s.ConnectedSystemAttribute)
             .Include(m => m.Sources)
@@ -1775,6 +1792,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<SyncRuleMapping?> GetSyncRuleMappingAsync(int id)
     {
         return await Repository.Database.SyncRuleMappings
+            .AsSplitQuery()
             .Include(m => m.SyncRule)
             .Include(m => m.Sources)
                 .ThenInclude(s => s.ConnectedSystemAttribute)

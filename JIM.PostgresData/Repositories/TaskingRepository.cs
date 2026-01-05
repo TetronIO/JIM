@@ -62,6 +62,7 @@ public class TaskingRepository : ITaskingRepository
     public async Task<List<WorkerTask>> GetWorkerTasksAsync()
     {
         return await Repository.Database.WorkerTasks
+            .AsSplitQuery()
             .Include(st => st.Activity)
             .Include(st => st.InitiatedByMetaverseObject)
             .ThenInclude(ib => ib!.Type)

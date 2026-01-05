@@ -501,6 +501,7 @@ public class MetaverseRepository : IMetaverseRepository
 
         // construct the base query
         var objects = Repository.Database.MetaverseObjects
+            .AsSplitQuery()
             .Include(mo => mo.Type)
             .Include(mo => mo.AttributeValues)
             .ThenInclude(av => av.Attribute)
@@ -735,6 +736,7 @@ public class MetaverseRepository : IMetaverseRepository
         var now = DateTime.UtcNow;
 
         var eligibleObjects = await Repository.Database.MetaverseObjects
+            .AsSplitQuery()
             .Include(mvo => mvo.Type)
             .Include(mvo => mvo.ConnectedSystemObjects)
             .Where(mvo =>
@@ -765,6 +767,7 @@ public class MetaverseRepository : IMetaverseRepository
         // 2. Have deletion rule WhenLastConnectorDisconnected
         // 3. Have ALL their CSOs in the specified connected system (will become orphaned)
         var orphanedMvos = await Repository.Database.MetaverseObjects
+            .AsSplitQuery()
             .Include(mvo => mvo.Type)
             .Include(mvo => mvo.ConnectedSystemObjects)
             .Where(mvo =>
@@ -818,6 +821,7 @@ public class MetaverseRepository : IMetaverseRepository
 
         // Build base query for MVOs pending deletion
         var query = Repository.Database.MetaverseObjects
+            .AsSplitQuery()
             .Include(mvo => mvo.Type)
             .Include(mvo => mvo.AttributeValues)
             .ThenInclude(av => av.Attribute)
