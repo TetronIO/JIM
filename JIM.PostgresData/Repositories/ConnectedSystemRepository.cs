@@ -1436,6 +1436,33 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .FirstOrDefaultAsync(pe => pe.ConnectedSystemObject != null && pe.ConnectedSystemObject.Id == connectedSystemObjectId);
     }
 
+    public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        var csoIdList = connectedSystemObjectIds.ToList();
+        if (csoIdList.Count == 0)
+            return new Dictionary<Guid, PendingExport>();
+
+        var pendingExports = await Repository.Database.PendingExports
+            .AsSplitQuery()
+            .Include(pe => pe.ConnectedSystem)
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Include(pe => pe.SourceMetaverseObject)
+                .ThenInclude(mvo => mvo!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+            .Where(pe => pe.ConnectedSystemObject != null && csoIdList.Contains(pe.ConnectedSystemObject.Id))
+            .ToListAsync();
+
+        // Build dictionary mapping CSO ID to pending export
+        // There should only be one pending export per CSO
+        return pendingExports
+            .Where(pe => pe.ConnectedSystemObject != null)
+            .ToDictionary(pe => pe.ConnectedSystemObject!.Id, pe => pe);
+    }
+
     public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)
     {
         return await Repository.Database.ConnectedSystemObjects
