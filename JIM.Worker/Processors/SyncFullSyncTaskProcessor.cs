@@ -98,6 +98,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 
         for (var i = 1; i <= totalCsoPages; i++)
         {
+            // Update progress message at start of each page
+            await _jim.Activities.UpdateActivityMessageAsync(_activity, $"Processing Connected System Objects (page {i}/{totalCsoPages})");
+
             PagedResultSet<ConnectedSystemObject> csoPagedResult;
             using (Diagnostics.Sync.StartSpan("LoadCsoPage"))
             {
@@ -163,7 +166,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // Clear per-page CSO attribute cache to free memory
             ClearPageCsoAttributeCache();
 
-            // Final progress update for this page (in case count wasn't evenly divisible by interval)
+            // Update progress with page completion - this persists ObjectsProcessed to database
             using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
             {
                 await _jim.Activities.UpdateActivityAsync(_activity);
