@@ -2103,6 +2103,19 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Bulk persists Connected System Objects without activity tracking.
+    /// Use this for provisioning CSOs created during sync where activity execution items are not needed.
+    /// </summary>
+    public async Task CreateConnectedSystemObjectsAsync(IEnumerable<ConnectedSystemObject> connectedSystemObjects)
+    {
+        var csoList = connectedSystemObjects.ToList();
+        if (csoList.Count == 0)
+            return;
+
+        await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectsAsync(csoList);
+    }
+
+    /// <summary>
     /// Bulk persists Connected System Objects and appends a Change Object to the Activity Run Profile Execution Item.
     /// </summary>
     public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, Activity activity)
