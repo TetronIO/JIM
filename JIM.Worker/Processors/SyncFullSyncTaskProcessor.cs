@@ -96,10 +96,11 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         processCsosSpan.SetTag("pageSize", pageSize);
         processCsosSpan.SetTag("totalPages", totalCsoPages);
 
+        // Set the message once for the entire phase (no page details for users)
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects");
+
         for (var i = 1; i <= totalCsoPages; i++)
         {
-            // Update progress message at start of each page
-            await _jim.Activities.UpdateActivityMessageAsync(_activity, $"Processing Connected System Objects (page {i}/{totalCsoPages})");
 
             PagedResultSet<ConnectedSystemObject> csoPagedResult;
             using (Diagnostics.Sync.StartSpan("LoadCsoPage"))

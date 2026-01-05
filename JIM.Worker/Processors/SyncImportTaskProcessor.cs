@@ -217,7 +217,7 @@ public class SyncImportTaskProcessor
             var existingCsoCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
             _activity.ObjectsToProcess = existingCsoCount;
             _activity.ObjectsProcessed = 0;
-            await _jim.Activities.UpdateActivityMessageAsync(_activity, $"Processing deletions (checking {existingCsoCount} objects)");
+            await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing deletions");
             using (Diagnostics.Sync.StartSpan("ProcessDeletions"))
             {
                 await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeUpdated);
@@ -230,7 +230,7 @@ public class SyncImportTaskProcessor
                                     connectedSystemObjectsToBeUpdated.Count(cso => cso.PendingAttributeValueAdditions.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)));
         _activity.ObjectsToProcess = objectsWithReferences;
         _activity.ObjectsProcessed = 0;
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, $"Resolving references ({objectsWithReferences} objects)");
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Resolving references");
         using (Diagnostics.Sync.StartSpan("ResolveReferences"))
         {
             await ResolveReferencesAsync(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
@@ -240,7 +240,7 @@ public class SyncImportTaskProcessor
         var totalChanges = connectedSystemObjectsToBeCreated.Count + connectedSystemObjectsToBeUpdated.Count;
         _activity.ObjectsToProcess = totalChanges;
         _activity.ObjectsProcessed = 0;
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, $"Saving changes ({connectedSystemObjectsToBeCreated.Count} creates, {connectedSystemObjectsToBeUpdated.Count} updates)");
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Saving changes");
         using (var persistSpan = Diagnostics.Database.StartSpan("PersistConnectedSystemObjects"))
         {
             persistSpan.SetTag("createCount", connectedSystemObjectsToBeCreated.Count);
@@ -259,7 +259,7 @@ public class SyncImportTaskProcessor
         // This confirms exported attribute changes or marks them for retry
         _activity.ObjectsToProcess = connectedSystemObjectsToBeUpdated.Count;
         _activity.ObjectsProcessed = 0;
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, $"Reconciling pending exports ({connectedSystemObjectsToBeUpdated.Count} objects)");
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Reconciling pending exports");
         using (Diagnostics.Sync.StartSpan("ReconcilePendingExports"))
         {
             await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated);

@@ -315,14 +315,14 @@ public class ExportExecutionServer
                     {
                         cancellationToken.ThrowIfCancellationRequested();
 
-                        // Report progress
+                        // Report progress (simple message without batch details for users)
                         await ReportProgressAsync(progressCallback, new ExportProgressInfo
                         {
                             Phase = ExportPhase.Executing,
                             TotalExports = result.TotalPendingExports,
                             ProcessedExports = processedCount,
                             CurrentBatchSize = batch.Count,
-                            Message = $"Processing batch {batches.IndexOf(batch) + 1} of {batches.Count} ({batch.Count} exports)"
+                            Message = "Exporting"
                         });
 
                         // Mark batch as executing
