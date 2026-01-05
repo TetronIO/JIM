@@ -32,10 +32,14 @@ internal class LdapConnectorPartitions
 
             foreach (SearchResultEntry entry in response.Entries)
             {
+                // ncName is the actual naming context DN (e.g., "DC=testdomain,DC=local")
+                // entry.DistinguishedName is the crossRef object DN (e.g., "CN=testdomain,CN=Partitions,CN=Configuration,DC=testdomain,DC=local")
+                // We use ncName as the Id because container DNs end with the naming context, not the crossRef DN
+                var ncName = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "ncname") ?? entry.DistinguishedName;
                 var partition = new ConnectorPartition
                 {
-                    Id = entry.DistinguishedName,
-                    Name = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "ncname") ?? entry.DistinguishedName,
+                    Id = ncName,
+                    Name = ncName,
                     Hidden = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags") != LdapConnectorConstants.SYSTEM_FLAGS_DOMAIN_PARTITION,
                 };
 
