@@ -551,13 +551,36 @@ public class SyncImportTaskProcessor
                     }
 
                     activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Create;
+
+                    // DEBUGGING: Log CSO creation attempt
+                    var externalIdValue = importObject.Attributes
+                        .FirstOrDefault(a => a.Name.Equals(csObjectType.Attributes.First(ca => ca.IsExternalId).Name, StringComparison.OrdinalIgnoreCase))
+                        ?.StringValues?.FirstOrDefault() ?? "[not found]";
+
+                    Log.Information("CreateCSO: Attempting to create CSO for import object with external ID '{ImportObjectExternalId}'. ObjectType: {ObjectType}, RPEI: {RpeiId}",
+                        externalIdValue,
+                        importObject.ObjectType,
+                        activityRunProfileExecutionItem.Id);
+
                     connectedSystemObject = CreateConnectedSystemObjectFromImportObject(importObject, csObjectType, activityRunProfileExecutionItem);
 
                     // cso could be null at this point if the create-cso flow failed due to unexpected import attributes, etc.
                     if (connectedSystemObject != null)
                     {
+                        Log.Information("CreateCSO: Successfully created CSO '{CsoId}' for import object with external ID '{ImportObjectExternalId}'. RPEI: {RpeiId}",
+                            connectedSystemObject.Id,
+                            externalIdValue,
+                            activityRunProfileExecutionItem.Id);
+
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
+                    }
+                    else
+                    {
+                        Log.Error("CreateCSO: FAILED to create CSO for import object with external ID '{ImportObjectExternalId}' - returned NULL. RPEI: {RpeiId}. ErrorType: {ErrorType}",
+                            externalIdValue,
+                            activityRunProfileExecutionItem.Id,
+                            activityRunProfileExecutionItem.ErrorType);
                     }
                 }
                 else
