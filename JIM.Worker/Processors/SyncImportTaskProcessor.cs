@@ -213,7 +213,10 @@ public class SyncImportTaskProcessor
         // note: if it's expected that 0 imported objects means all objects were deleted, then an admin will have to clear the Connected System manually to achieve the same result.
         if (totalObjectsImported > 0 && _connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport)
         {
-            // TODO: find out why this caused CSOs to be persisted early, and why this conflicts with later create CSOs statement
+            // Get count of existing CSOs to determine how many we need to check for deletions
+            var existingCsoCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
+            _activity.ObjectsToProcess = existingCsoCount;
+            _activity.ObjectsProcessed = 0;
             await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing deletions");
             using (Diagnostics.Sync.StartSpan("ProcessDeletions"))
             {
@@ -223,6 +226,10 @@ public class SyncImportTaskProcessor
 
         // now that all objects have been imported, we can attempt to resolve unresolved reference attribute values
         // i.e. attempt to convert unresolved reference strings into hard links to other Connected System Objects
+        var objectsWithReferences = connectedSystemObjectsToBeCreated.Count(cso => cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))) +
+                                    connectedSystemObjectsToBeUpdated.Count(cso => cso.PendingAttributeValueAdditions.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)));
+        _activity.ObjectsToProcess = objectsWithReferences;
+        _activity.ObjectsProcessed = 0;
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Resolving references");
         using (Diagnostics.Sync.StartSpan("ResolveReferences"))
         {
@@ -230,6 +237,9 @@ public class SyncImportTaskProcessor
         }
 
         // now persist all CSOs which will also create the required Change Objects within the Activity.
+        var totalChanges = connectedSystemObjectsToBeCreated.Count + connectedSystemObjectsToBeUpdated.Count;
+        _activity.ObjectsToProcess = totalChanges;
+        _activity.ObjectsProcessed = 0;
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Saving changes");
         using (var persistSpan = Diagnostics.Database.StartSpan("PersistConnectedSystemObjects"))
         {
@@ -237,11 +247,18 @@ public class SyncImportTaskProcessor
             persistSpan.SetTag("updateCount", connectedSystemObjectsToBeUpdated.Count);
 
             await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activityRunProfileExecutionItems);
+            _activity.ObjectsProcessed = connectedSystemObjectsToBeCreated.Count;
+            await _jim.Activities.UpdateActivityAsync(_activity);
+
             await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activityRunProfileExecutionItems);
+            _activity.ObjectsProcessed = totalChanges;
+            await _jim.Activities.UpdateActivityAsync(_activity);
         }
 
         // Reconcile pending exports against imported values (confirming import)
         // This confirms exported attribute changes or marks them for retry
+        _activity.ObjectsToProcess = connectedSystemObjectsToBeUpdated.Count;
+        _activity.ObjectsProcessed = 0;
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Reconciling pending exports");
         using (Diagnostics.Sync.StartSpan("ReconcilePendingExports"))
         {
@@ -1152,9 +1169,12 @@ public class SyncImportTaskProcessor
         var totalRetry = 0;
         var totalFailed = 0;
         var exportsDeleted = 0;
+        var processedCount = 0;
 
         foreach (var cso in updatedCsos)
         {
+            processedCount++;
+            _activity.ObjectsProcessed = processedCount;
             try
             {
                 PendingExportReconciliationResult result;
