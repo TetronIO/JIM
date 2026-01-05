@@ -1166,7 +1166,7 @@ public class SyncImportTaskProcessor
         {
             // reference not found. referenced object probably out of container scope!
             // todo: make it a per-connected system setting whether to raise an error, or ignore. sometimes this is desirable.
-            var activityRunProfileExecutionItem = _activity.RunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject == csoToProcess);
+            var activityRunProfileExecutionItem = _activityRunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject == csoToProcess);
             if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || (activityRunProfileExecutionItem.ErrorType == null && activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)))
             {
                 activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {referenceAttributeValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
