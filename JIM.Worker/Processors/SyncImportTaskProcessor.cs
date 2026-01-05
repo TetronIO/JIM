@@ -515,8 +515,12 @@ public class SyncImportTaskProcessor
                     // Log warning if connector said Update but object doesn't exist
                     if (importObject.ChangeType == ObjectChangeType.Update)
                     {
-                        Log.Warning("ProcessImportObjectsAsync: Connector indicated Update for object type '{ObjectType}' but no matching CSO found. Creating new object instead.",
-                            importObject.ObjectType);
+                        Log.Warning("ProcessImportObjectsAsync: Connector indicated Update for object type '{ObjectType}' but no matching CSO found. Creating new object instead. " +
+                            "ConnectedSystem: {ConnectedSystemId} ({ConnectedSystemName}), RunProfile: {RunProfileId} ({RunProfileName}), Activity: {ActivityId}",
+                            importObject.ObjectType,
+                            _connectedSystem.Id, _connectedSystem.Name,
+                            _connectedSystemRunProfile.Id, _connectedSystemRunProfile.Name,
+                            _activity.Id);
                     }
 
                     activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Create;
@@ -534,8 +538,12 @@ public class SyncImportTaskProcessor
                     // Log warning if connector said Create but object already exists
                     if (importObject.ChangeType == ObjectChangeType.Create)
                     {
-                        Log.Warning("ProcessImportObjectsAsync: Connector indicated Create for object type '{ObjectType}' but CSO {CsoId} already exists. Updating instead.",
-                            importObject.ObjectType, connectedSystemObject.Id);
+                        Log.Warning("ProcessImportObjectsAsync: Connector indicated Create for object type '{ObjectType}' but CSO {CsoId} already exists. Updating instead. " +
+                            "ConnectedSystem: {ConnectedSystemId} ({ConnectedSystemName}), RunProfile: {RunProfileId} ({RunProfileName}), Activity: {ActivityId}",
+                            importObject.ObjectType, connectedSystemObject.Id,
+                            _connectedSystem.Id, _connectedSystem.Name,
+                            _connectedSystemRunProfile.Id, _connectedSystemRunProfile.Name,
+                            _activity.Id);
                     }
 
                     // Transition PendingProvisioning CSOs to Normal status now that import confirms they exist
