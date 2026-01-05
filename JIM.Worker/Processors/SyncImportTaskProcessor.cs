@@ -246,6 +246,16 @@ public class SyncImportTaskProcessor
             persistSpan.SetTag("createCount", connectedSystemObjectsToBeCreated.Count);
             persistSpan.SetTag("updateCount", connectedSystemObjectsToBeUpdated.Count);
 
+            // Log RPEI error status before persistence
+            var rpeiWithErrors = _activityRunProfileExecutionItems.Where(r => r.ErrorType != null && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet).ToList();
+            if (rpeiWithErrors.Count > 0)
+            {
+                Log.Warning("About to persist {RpeiCount} RPEIs. {RpeiErrorCount} have errors: {ErrorDetails}",
+                    _activityRunProfileExecutionItems.Count,
+                    rpeiWithErrors.Count,
+                    string.Join("; ", rpeiWithErrors.Select(r => $"[Id={r.Id}, ErrorType={r.ErrorType}, Message={r.ErrorMessage}]")));
+            }
+
             await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activityRunProfileExecutionItems);
             _activity.ObjectsProcessed = connectedSystemObjectsToBeCreated.Count;
             await _jim.Activities.UpdateActivityAsync(_activity);
@@ -737,9 +747,20 @@ public class SyncImportTaskProcessor
             if (csAttribute == null)
             {
                 // unexpected import attribute!
+                Log.Error("CreateConnectedSystemObjectFromImportObject: UnexpectedAttribute error - attribute '{AttributeName}' not found in schema for object type '{ObjectType}'. Available schema attributes: {AvailableAttributes}. RPEI ID: {RpeiId}",
+                    importObjectAttribute.Name,
+                    connectedSystemObjectType.Name,
+                    string.Join(", ", connectedSystemObjectType.Attributes.Select(a => a.Name)),
+                    activityRunProfileExecutionItem.Id);
+
                 activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute;
                 activityRunProfileExecutionItem.ErrorMessage = $"Was not expecting the imported object attribute '{importObjectAttribute.Name}'.";
                 csoIsInvalid = true;
+
+                Log.Error("CreateConnectedSystemObjectFromImportObject: Set ErrorType={ErrorType}, ErrorMessage={ErrorMessage} on RPEI {RpeiId}",
+                    activityRunProfileExecutionItem.ErrorType,
+                    activityRunProfileExecutionItem.ErrorMessage,
+                    activityRunProfileExecutionItem.Id);
                 break;
             }
 
@@ -844,7 +865,13 @@ public class SyncImportTaskProcessor
         }
 
         if (csoIsInvalid)
+        {
+            Log.Error("CreateConnectedSystemObjectFromImportObject: Returning null because csoIsInvalid=true. RPEI {RpeiId} has ErrorType={ErrorType}, ErrorMessage={ErrorMessage}",
+                activityRunProfileExecutionItem.Id,
+                activityRunProfileExecutionItem.ErrorType,
+                activityRunProfileExecutionItem.ErrorMessage);
             return null;
+        }
 
         // now associate the cso with the activityRunProfileExecutionItem
         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
