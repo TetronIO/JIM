@@ -349,6 +349,51 @@ var systems = await jim.ConnectedSystems.GetAllAsync();
 **Use Workflow 1** for active development and debugging.
 **Use Workflow 2** for integration testing or production-like environment.
 
+## Integration Testing
+
+**IMPORTANT: The correct way to run integration tests is NOT by directly invoking scenario scripts.**
+
+Instead, use the main integration test runner which handles setup, environment management, and teardown:
+
+```powershell
+# From repository root, run in PowerShell (not bash/zsh)
+cd /workspaces/JIM
+
+# Run the complete test suite (Scenario 1 with default Nano template)
+./test/integration/Run-IntegrationTests.ps1
+
+# Run with a specific template size (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
+./test/integration/Run-IntegrationTests.ps1 -Template Small
+
+# Run only a specific test step (Joiner, Mover, Leaver, Reconnection, etc.)
+./test/integration/Run-IntegrationTests.ps1 -Step Joiner
+
+# Skip reset for faster re-runs (keeps existing environment)
+./test/integration/Run-IntegrationTests.ps1 -SkipReset
+
+# Skip rebuild (use existing Docker images)
+./test/integration/Run-IntegrationTests.ps1 -SkipReset -SkipBuild
+```
+
+**What the runner does automatically:**
+1. ✅ Resets environment (stops containers, removes volumes)
+2. ✅ Rebuilds and starts JIM stack + Samba AD
+3. ✅ Waits for all services to be ready
+4. ✅ Creates infrastructure API key
+5. ✅ Generates test data (CSV, Samba AD users)
+6. ✅ Configures JIM with connected systems and sync rules
+7. ✅ Runs the scenario
+8. ✅ Tears down all containers
+
+**For detailed integration testing guide, see:** [`docs/INTEGRATION_TESTING.md`](docs/INTEGRATION_TESTING.md)
+
+**Common templates by data size:**
+- **Nano**: 3 users, 1 group (~10 sec) - Fast dev iteration
+- **Micro**: 10 users, 3 groups (~30 sec) - Quick smoke tests
+- **Small**: 100 users, 20 groups (~2 min) - Small business scenarios
+- **Medium**: 1,000 users, 100 groups (~2 min) - Medium enterprise
+- **Large**: 10,000 users, 500 groups (~15 min) - Large enterprise
+
 ## Environment Setup
 
 **Required:**

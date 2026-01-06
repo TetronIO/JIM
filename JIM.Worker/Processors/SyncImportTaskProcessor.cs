@@ -246,6 +246,16 @@ public class SyncImportTaskProcessor
             persistSpan.SetTag("createCount", connectedSystemObjectsToBeCreated.Count);
             persistSpan.SetTag("updateCount", connectedSystemObjectsToBeUpdated.Count);
 
+            // Log RPEI error status before persistence
+            var rpeiWithErrors = _activityRunProfileExecutionItems.Where(r => r.ErrorType != null && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet).ToList();
+            if (rpeiWithErrors.Count > 0)
+            {
+                Log.Warning("About to persist {RpeiCount} RPEIs. {RpeiErrorCount} have errors: {ErrorDetails}",
+                    _activityRunProfileExecutionItems.Count,
+                    rpeiWithErrors.Count,
+                    string.Join("; ", rpeiWithErrors.Select(r => $"[Id={r.Id}, ErrorType={r.ErrorType}, Message={r.ErrorMessage}]")));
+            }
+
             await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activityRunProfileExecutionItems);
             _activity.ObjectsProcessed = connectedSystemObjectsToBeCreated.Count;
             await _jim.Activities.UpdateActivityAsync(_activity);
@@ -263,6 +273,27 @@ public class SyncImportTaskProcessor
         using (Diagnostics.Sync.StartSpan("ReconcilePendingExports"))
         {
             await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated);
+        }
+
+        // Validate all RPEIs before persisting - catch any that have no CSO and no error (indicates a bug)
+        // Check for RPEIs where: Create operation, no CSO ID assigned, and no error recorded
+        var orphanedRpeis = _activityRunProfileExecutionItems
+            .Where(r => r.ObjectChangeType == ObjectChangeType.Create &&
+                        r.ConnectedSystemObjectId == null &&
+                        r.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
+            .ToList();
+
+        if (orphanedRpeis.Count > 0)
+        {
+            foreach (var orphanedRpei in orphanedRpeis)
+            {
+                var extId = orphanedRpei.ConnectedSystemObject?.ExternalIdAttributeValue?.StringValue ?? "[unknown]";
+                var hasCsoRef = orphanedRpei.ConnectedSystemObject != null;
+                Log.Error("VALIDATION FAILURE: RPEI has ObjectChangeType=Create but no ConnectedSystemObjectId and no error. HasCsoRef={HasCsoRef}, ExtId={ExtId}. This is a bug! Setting error type.",
+                    hasCsoRef, extId);
+                orphanedRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.CsoCreationFailed;
+                orphanedRpei.ErrorMessage = $"Internal error: RPEI was created for import (ExtId={extId}) but CSO was not persisted. CSO reference exists={hasCsoRef}. This indicates a bug in the persistence layer.";
+            }
         }
 
         // now persist the activity run profile execution items with the activity
@@ -417,6 +448,8 @@ public class SyncImportTaskProcessor
         activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Obsolete;
         activityRunProfileExecutionItem.ConnectedSystemObject = cso;
         activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
+        // Snapshot the external ID so it's preserved even after CSO is deleted
+        activityRunProfileExecutionItem.ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue;
 
         // mark it obsolete, so that it's deleted when a synchronisation run profile is performed.
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
@@ -510,6 +543,8 @@ public class SyncImportTaskProcessor
                         activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Obsolete;
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
+                        // Snapshot the external ID so it's preserved even after CSO is deleted
+                        activityRunProfileExecutionItem.ExternalIdSnapshot = connectedSystemObject.ExternalIdAttributeValue?.StringValue;
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Obsolete;
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
                         connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
@@ -541,6 +576,14 @@ public class SyncImportTaskProcessor
                     }
 
                     activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Create;
+
+                    // Extract and snapshot the external ID - this persists even if the CSO is later deleted
+                    var externalIdAttributeName = csObjectType.Attributes.First(ca => ca.IsExternalId).Name;
+                    var externalIdValue = importObject.Attributes
+                        .FirstOrDefault(a => a.Name.Equals(externalIdAttributeName, StringComparison.OrdinalIgnoreCase))
+                        ?.StringValues?.FirstOrDefault();
+                    activityRunProfileExecutionItem.ExternalIdSnapshot = externalIdValue;
+
                     connectedSystemObject = CreateConnectedSystemObjectFromImportObject(importObject, csObjectType, activityRunProfileExecutionItem);
 
                     // cso could be null at this point if the create-cso flow failed due to unexpected import attributes, etc.
@@ -548,6 +591,17 @@ public class SyncImportTaskProcessor
                     {
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
+                    }
+                    else
+                    {
+                        // Ensure the RPEI has an error type if CSO creation failed but no specific error was set
+                        if (activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
+                        {
+                            activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CsoCreationFailed;
+                            activityRunProfileExecutionItem.ErrorMessage = $"Failed to create Connected System Object for import object with external ID '{externalIdValue ?? "[unknown]"}'. No specific error was recorded.";
+                            Log.Error("ProcessImportObjectsAsync: CSO creation failed for external ID '{ExternalId}' with no specific error. This indicates a bug in import processing.",
+                                externalIdValue ?? "[unknown]");
+                        }
                     }
                 }
                 else
@@ -576,6 +630,8 @@ public class SyncImportTaskProcessor
                     activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
                     activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                     activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
+                    // Snapshot the external ID so it's preserved even if CSO is later deleted
+                    activityRunProfileExecutionItem.ExternalIdSnapshot = connectedSystemObject.ExternalIdAttributeValue?.StringValue;
                     UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, csObjectType, activityRunProfileExecutionItem);
                     connectedSystemObject.LastUpdated = DateTime.UtcNow;
 
@@ -737,9 +793,20 @@ public class SyncImportTaskProcessor
             if (csAttribute == null)
             {
                 // unexpected import attribute!
+                Log.Error("CreateConnectedSystemObjectFromImportObject: UnexpectedAttribute error - attribute '{AttributeName}' not found in schema for object type '{ObjectType}'. Available schema attributes: {AvailableAttributes}. RPEI ID: {RpeiId}",
+                    importObjectAttribute.Name,
+                    connectedSystemObjectType.Name,
+                    string.Join(", ", connectedSystemObjectType.Attributes.Select(a => a.Name)),
+                    activityRunProfileExecutionItem.Id);
+
                 activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute;
                 activityRunProfileExecutionItem.ErrorMessage = $"Was not expecting the imported object attribute '{importObjectAttribute.Name}'.";
                 csoIsInvalid = true;
+
+                Log.Error("CreateConnectedSystemObjectFromImportObject: Set ErrorType={ErrorType}, ErrorMessage={ErrorMessage} on RPEI {RpeiId}",
+                    activityRunProfileExecutionItem.ErrorType,
+                    activityRunProfileExecutionItem.ErrorMessage,
+                    activityRunProfileExecutionItem.Id);
                 break;
             }
 
@@ -844,7 +911,13 @@ public class SyncImportTaskProcessor
         }
 
         if (csoIsInvalid)
+        {
+            Log.Error("CreateConnectedSystemObjectFromImportObject: Returning null because csoIsInvalid=true. RPEI {RpeiId} has ErrorType={ErrorType}, ErrorMessage={ErrorMessage}",
+                activityRunProfileExecutionItem.Id,
+                activityRunProfileExecutionItem.ErrorType,
+                activityRunProfileExecutionItem.ErrorMessage);
             return null;
+        }
 
         // now associate the cso with the activityRunProfileExecutionItem
         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
@@ -1139,7 +1212,7 @@ public class SyncImportTaskProcessor
         {
             // reference not found. referenced object probably out of container scope!
             // todo: make it a per-connected system setting whether to raise an error, or ignore. sometimes this is desirable.
-            var activityRunProfileExecutionItem = _activity.RunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject == csoToProcess);
+            var activityRunProfileExecutionItem = _activityRunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject == csoToProcess);
             if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || (activityRunProfileExecutionItem.ErrorType == null && activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)))
             {
                 activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {referenceAttributeValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
@@ -1246,6 +1319,7 @@ public class SyncImportTaskProcessor
                                     Activity = _activity,
                                     ConnectedSystemObject = cso,
                                     ConnectedSystemObjectId = cso.Id,
+                                    ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue,
                                     ObjectChangeType = ObjectChangeType.Update,
                                     ErrorType = ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed,
                                     ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.",
@@ -1263,6 +1337,7 @@ public class SyncImportTaskProcessor
                                     Activity = _activity,
                                     ConnectedSystemObject = cso,
                                     ConnectedSystemObjectId = cso.Id,
+                                    ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue,
                                     ObjectChangeType = ObjectChangeType.Update,
                                     ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
                                     ErrorMessage = $"Export not confirmed for {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will retry on next export run.",

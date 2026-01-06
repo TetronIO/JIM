@@ -39,6 +39,13 @@ public class ActivityRunProfileExecutionItem
     public Guid? ConnectedSystemObjectId { get; set; }
 
     /// <summary>
+    /// Snapshot of the external ID value at the time the RPEI was created.
+    /// This preserves the external ID even if the CSO is later deleted (e.g., due to obsolescence),
+    /// which would otherwise null out the ConnectedSystemObjectId via FK cascade.
+    /// </summary>
+    public string? ExternalIdSnapshot { get; set; }
+
+    /// <summary>
     /// If this was an import operation, what changes, if any were made to the Connected System Object in question?
     /// This needs populating for update and delete scenarios.
     /// </summary>
@@ -75,6 +82,21 @@ public class ActivityRunProfileExecutionItem
         return ConnectedSystemObject != null ?
             ConnectedSystemObject.ExternalIdAttributeValue :
             ConnectedSystemObjectChange?.DeletedObjectExternalIdAttributeValue;
+    }
+
+    /// <summary>
+    /// Gets the external ID as a string, using the snapshot as fallback if the CSO has been deleted.
+    /// This ensures historical RPEIs remain useful even after CSO deletion.
+    /// </summary>
+    public string? GetExternalIdString()
+    {
+        // First try to get from the live CSO
+        var attrValue = GetExternalIdAttributeValue();
+        if (attrValue?.StringValue != null)
+            return attrValue.StringValue;
+
+        // Fall back to snapshot (preserved when CSO was deleted)
+        return ExternalIdSnapshot;
     }
 
     public int? GetConnectedSystemId()

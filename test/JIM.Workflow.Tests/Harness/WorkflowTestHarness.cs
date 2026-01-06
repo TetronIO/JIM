@@ -471,6 +471,11 @@ public class ObjectTypeBuilder
         return WithAttribute(name, AttributeDataType.Guid, isExternalId: true);
     }
 
+    public ObjectTypeBuilder WithStringExternalId(string name)
+    {
+        return WithAttribute(name, AttributeDataType.Text, isExternalId: true);
+    }
+
     public ObjectTypeBuilder WithStringSecondaryExternalId(string name = "distinguishedName")
     {
         return WithAttribute(name, AttributeDataType.Text, isSecondaryExternalId: true);

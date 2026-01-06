@@ -107,6 +107,21 @@
                 </MudText>
             </MudPaper>
         }
+        else if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ExternalIdSnapshot))
+        {
+            @* CSO was deleted but we have the external ID snapshot preserved *@
+            <MudPaper Class="pa-5" Outlined="true" Style="@($"border-color: {Colors.Orange.Default};")">
+                <MudText Typo="Typo.overline">Connected System Object (Deleted)</MudText>
+                <MudText>
+                    <MudChip T="string" Color="Color.Warning" Variant="Variant.Outlined" Label="true">
+                        <MudTooltip Text="The CSO was deleted (e.g., due to obsolescence). External ID preserved from when the operation was recorded.">
+                            <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" Class="mr-1" />
+                        </MudTooltip>
+                        External ID: @_activityRunProfileExecutionItem.ExternalIdSnapshot
+                    </MudChip>
+                </MudText>
+            </MudPaper>
+        }
 
         <MudPaper Class="pa-5" Outlined="true" Style="@(_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Delete ? $"color:{Colors.Red.Lighten5}; background:{Colors.Red.Default};" : null)">
             <MudText Typo="Typo.overline">Change Type</MudText>
