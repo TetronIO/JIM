@@ -5,7 +5,7 @@ using JIM.Models.Staging;
 namespace JIM.Models.Activities;
 
 /// <summary>
-/// Tracks changed made to CSOs and MVOs as a result of a Sync Run Profile being executed.
+/// Tracks changes made to CSOs and MVOs as a result of a Sync Run Profile being executed.
 /// </summary>
 public class ActivityRunProfileExecutionItem
 {
@@ -46,13 +46,13 @@ public class ActivityRunProfileExecutionItem
     public string? ExternalIdSnapshot { get; set; }
 
     /// <summary>
-    /// If this was an import operation, what changes, if any were made to the Connected System Object in question?
+    /// If this is for an import operation, what changes, if any were made to the Connected System Object in question?
     /// This needs populating for update and delete scenarios.
     /// </summary>
     public ConnectedSystemObjectChange? ConnectedSystemObjectChange { get; set; }
 
     /// <summary>
-    /// If this is a full/delta sync run profile execution, what changes, if any were made to a joined Metaverse Object?
+    /// If this is for a full, or delta sync run profile execution, what changes, if any were made to a joined Metaverse Object?
     /// This needs populating for project, join, update and delete scenarios.
     /// </summary>
     public MetaverseObjectChange? MetaverseObjectChange { get; set; }
@@ -64,7 +64,7 @@ public class ActivityRunProfileExecutionItem
 
     /// <summary>
     /// If settings allow during run profile execution, a JSON representation of the data imported, or exported can be
-    /// accessed ere for investigative purposes in the event of an error.
+    /// accessed here for investigative purposes in the event of an error.
     /// </summary>
     public string? DataSnapshot { get; set; }
 

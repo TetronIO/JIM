@@ -10,7 +10,7 @@ public class ConnectedSystemObjectChange
     public Guid Id { get; set; }
 
     /// <summary>
-    /// The connected system object change would have been caused by a sync run profile execution, access that here if it still exists. 
+    /// The connected system object change would have been created after a sync run profile execution, access that here if it still exists.
     /// It's worth bearing in mind that sync run history can be cleared down so a reference may not always be present,
     /// depending on how old the connected system object change is.
     /// </summary>
@@ -19,13 +19,13 @@ public class ConnectedSystemObjectChange
 
     /// <summary>
     /// Which Connected System did/does the Connected System Object in question relate to.
-    /// Important information when the change type was DELETE and there's no ConnectedSystemObject to reference anymore.
+    /// Important information when the change type was DELETE and there's no ConnectedSystemObject to reference any more.
     /// </summary>
     public int ConnectedSystemId { get; set; }
 
     /// <summary>
     /// What Connected System Object does this change relate to?
-    /// Will be null if the change type was DELETE.
+    /// Will be null if the CSO has since been deleted.
     /// </summary>
     public ConnectedSystemObject? ConnectedSystemObject { get; set; }
 
