@@ -275,6 +275,27 @@ public class SyncImportTaskProcessor
             await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated);
         }
 
+        // Validate all RPEIs before persisting - catch any that have no CSO and no error (indicates a bug)
+        // Check for RPEIs where: Create operation, no CSO ID assigned, and no error recorded
+        var orphanedRpeis = _activityRunProfileExecutionItems
+            .Where(r => r.ObjectChangeType == ObjectChangeType.Create &&
+                        r.ConnectedSystemObjectId == null &&
+                        r.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
+            .ToList();
+
+        if (orphanedRpeis.Count > 0)
+        {
+            foreach (var orphanedRpei in orphanedRpeis)
+            {
+                var extId = orphanedRpei.ConnectedSystemObject?.ExternalIdAttributeValue?.StringValue ?? "[unknown]";
+                var hasCsoRef = orphanedRpei.ConnectedSystemObject != null;
+                Log.Error("VALIDATION FAILURE: RPEI has ObjectChangeType=Create but no ConnectedSystemObjectId and no error. HasCsoRef={HasCsoRef}, ExtId={ExtId}. This is a bug! Setting error type.",
+                    hasCsoRef, extId);
+                orphanedRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.CsoCreationFailed;
+                orphanedRpei.ErrorMessage = $"Internal error: RPEI was created for import (ExtId={extId}) but CSO was not persisted. CSO reference exists={hasCsoRef}. This indicates a bug in the persistence layer.";
+            }
+        }
+
         // now persist the activity run profile execution items with the activity
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Creating activity run profile execution items");
         _activity.AddRunProfileExecutionItems(_activityRunProfileExecutionItems);
@@ -427,6 +448,8 @@ public class SyncImportTaskProcessor
         activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Obsolete;
         activityRunProfileExecutionItem.ConnectedSystemObject = cso;
         activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
+        // Snapshot the external ID so it's preserved even after CSO is deleted
+        activityRunProfileExecutionItem.ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue;
 
         // mark it obsolete, so that it's deleted when a synchronisation run profile is performed.
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
@@ -520,6 +543,8 @@ public class SyncImportTaskProcessor
                         activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Obsolete;
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
+                        // Snapshot the external ID so it's preserved even after CSO is deleted
+                        activityRunProfileExecutionItem.ExternalIdSnapshot = connectedSystemObject.ExternalIdAttributeValue?.StringValue;
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Obsolete;
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
                         connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
@@ -552,35 +577,31 @@ public class SyncImportTaskProcessor
 
                     activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Create;
 
-                    // DEBUGGING: Log CSO creation attempt
+                    // Extract and snapshot the external ID - this persists even if the CSO is later deleted
+                    var externalIdAttributeName = csObjectType.Attributes.First(ca => ca.IsExternalId).Name;
                     var externalIdValue = importObject.Attributes
-                        .FirstOrDefault(a => a.Name.Equals(csObjectType.Attributes.First(ca => ca.IsExternalId).Name, StringComparison.OrdinalIgnoreCase))
-                        ?.StringValues?.FirstOrDefault() ?? "[not found]";
-
-                    Log.Information("CreateCSO: Attempting to create CSO for import object with external ID '{ImportObjectExternalId}'. ObjectType: {ObjectType}, RPEI: {RpeiId}",
-                        externalIdValue,
-                        importObject.ObjectType,
-                        activityRunProfileExecutionItem.Id);
+                        .FirstOrDefault(a => a.Name.Equals(externalIdAttributeName, StringComparison.OrdinalIgnoreCase))
+                        ?.StringValues?.FirstOrDefault();
+                    activityRunProfileExecutionItem.ExternalIdSnapshot = externalIdValue;
 
                     connectedSystemObject = CreateConnectedSystemObjectFromImportObject(importObject, csObjectType, activityRunProfileExecutionItem);
 
                     // cso could be null at this point if the create-cso flow failed due to unexpected import attributes, etc.
                     if (connectedSystemObject != null)
                     {
-                        Log.Information("CreateCSO: Successfully created CSO '{CsoId}' for import object with external ID '{ImportObjectExternalId}'. RPEI: {RpeiId}",
-                            connectedSystemObject.Id,
-                            externalIdValue,
-                            activityRunProfileExecutionItem.Id);
-
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
                     }
                     else
                     {
-                        Log.Error("CreateCSO: FAILED to create CSO for import object with external ID '{ImportObjectExternalId}' - returned NULL. RPEI: {RpeiId}. ErrorType: {ErrorType}",
-                            externalIdValue,
-                            activityRunProfileExecutionItem.Id,
-                            activityRunProfileExecutionItem.ErrorType);
+                        // Ensure the RPEI has an error type if CSO creation failed but no specific error was set
+                        if (activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
+                        {
+                            activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CsoCreationFailed;
+                            activityRunProfileExecutionItem.ErrorMessage = $"Failed to create Connected System Object for import object with external ID '{externalIdValue ?? "[unknown]"}'. No specific error was recorded.";
+                            Log.Error("ProcessImportObjectsAsync: CSO creation failed for external ID '{ExternalId}' with no specific error. This indicates a bug in import processing.",
+                                externalIdValue ?? "[unknown]");
+                        }
                     }
                 }
                 else
@@ -609,6 +630,8 @@ public class SyncImportTaskProcessor
                     activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
                     activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                     activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
+                    // Snapshot the external ID so it's preserved even if CSO is later deleted
+                    activityRunProfileExecutionItem.ExternalIdSnapshot = connectedSystemObject.ExternalIdAttributeValue?.StringValue;
                     UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, csObjectType, activityRunProfileExecutionItem);
                     connectedSystemObject.LastUpdated = DateTime.UtcNow;
 
@@ -1296,6 +1319,7 @@ public class SyncImportTaskProcessor
                                     Activity = _activity,
                                     ConnectedSystemObject = cso,
                                     ConnectedSystemObjectId = cso.Id,
+                                    ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue,
                                     ObjectChangeType = ObjectChangeType.Update,
                                     ErrorType = ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed,
                                     ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.",
@@ -1313,6 +1337,7 @@ public class SyncImportTaskProcessor
                                     Activity = _activity,
                                     ConnectedSystemObject = cso,
                                     ConnectedSystemObjectId = cso.Id,
+                                    ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue,
                                     ObjectChangeType = ObjectChangeType.Update,
                                     ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
                                     ErrorMessage = $"Export not confirmed for {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will retry on next export run.",

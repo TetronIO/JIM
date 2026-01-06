@@ -37,7 +37,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiner", "Leaver", "Mover", "Mover-Rename", "Mover-Move", "Reconnection", "All")]
+    [ValidateSet("Joiner", "Leaver", "Mover", "Mover-Rename", "Mover-Move", "Reconnection", "ImportOnly", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -230,6 +230,45 @@ try {
     Write-Host "✓ Baseline state established" -ForegroundColor Green
 
     $stepTimings["0. Setup"] = (Get-Date) - $step0Start
+
+    # ImportOnly: Just run the HR CSV Full Import and stop (for debugging CSO creation issues)
+    if ($Step -eq "ImportOnly") {
+        $stepImportStart = Get-Date
+        Write-TestSection "ImportOnly: HR CSV Full Import"
+
+        Write-Host "Triggering CSV Full Import only (for debugging)..." -ForegroundColor Gray
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "CSV Full Import (ImportOnly)"
+
+        Write-Host ""
+        Write-Host "✓ CSV Full Import completed" -ForegroundColor Green
+        Write-Host "  Activity ID: $($importResult.activityId)" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "Check the database for RPEI/CSO status:" -ForegroundColor Yellow
+        Write-Host "  docker compose exec jim.database psql -U jim -d jim -c `"" -ForegroundColor DarkGray
+        Write-Host "    SELECT COUNT(*) as total, " -ForegroundColor DarkGray
+        Write-Host "           COUNT(CASE WHEN \\`"ConnectedSystemObjectId\\`" IS NOT NULL THEN 1 END) as with_cso," -ForegroundColor DarkGray
+        Write-Host "           COUNT(CASE WHEN \\`"ConnectedSystemObjectId\\`" IS NULL THEN 1 END) as without_cso" -ForegroundColor DarkGray
+        Write-Host "    FROM \\`"ActivityRunProfileExecutionItems\\`"" -ForegroundColor DarkGray
+        Write-Host "    WHERE \\`"ActivityId\\`" = '$($importResult.activityId)'`"" -ForegroundColor DarkGray
+        Write-Host ""
+
+        $stepTimings["ImportOnly"] = (Get-Date) - $stepImportStart
+        $testResults.Steps += @{ Name = "ImportOnly"; Success = $true; ActivityId = $importResult.activityId }
+
+        # Skip all other tests
+        Write-Host "ImportOnly step complete - skipping remaining tests" -ForegroundColor Yellow
+
+        # Jump to results summary
+        $testResults.Success = $true
+        Write-TestSection "Test Results Summary"
+        Write-Host "Tests run:    1"
+        Write-Host "Tests passed: 1"
+        Write-Host "✓ ImportOnly" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "✓ ImportOnly test passed" -ForegroundColor Green
+        return
+    }
 
     # Test 1: Joiner (New Hire)
     if ($Step -eq "Joiner" -or $Step -eq "All") {

@@ -252,10 +252,11 @@ public class ActivityRepository : IActivityRepository
         var entities = await query.Skip(offset).Take(pageSize).ToListAsync();
 
         // Project to DTO in memory
+        // Use ExternalIdSnapshot as fallback if CSO was deleted (preserves historical external ID)
         var results = entities.Select(i => new ActivityRunProfileExecutionItemHeader
         {
             Id = i.Id,
-            ExternalIdValue = i.ConnectedSystemObject?.ExternalIdAttributeValue?.ToStringNoName(),
+            ExternalIdValue = i.ConnectedSystemObject?.ExternalIdAttributeValue?.ToStringNoName() ?? i.ExternalIdSnapshot,
             DisplayName = i.ConnectedSystemObject?.AttributeValues.FirstOrDefault(av => av.Attribute.Name.Equals("displayname", StringComparison.OrdinalIgnoreCase))?.StringValue,
             ConnectedSystemObjectType = i.ConnectedSystemObject?.Type?.Name,
             ErrorType = i.ErrorType,
