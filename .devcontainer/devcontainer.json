@@ -2,7 +2,6 @@
   "name": "JIM Development Environment",
   // Use the official .NET devcontainer base image which has vscode user pre-configured
   "image": "mcr.microsoft.com/devcontainers/dotnet:1-9.0-bookworm",
-
   // Features - pre-built development tools
   "features": {
     // Docker-in-Docker for running docker-compose
@@ -20,7 +19,6 @@
       "version": "latest"
     }
   },
-
   // VS Code customizations
   "customizations": {
     "vscode": {
@@ -28,38 +26,29 @@
       "extensions": [
         // Claude Code - AI coding assistant
         "Anthropic.claude-code",
-
         // .NET Development
         "ms-dotnettools.csharp",
         "ms-dotnettools.csdevkit",
         "ms-dotnettools.vscode-dotnet-runtime",
-
         // PowerShell
         "ms-vscode.powershell",
-
         // Database
         "ms-azuretools.vscode-docker",
         "cweijan.vscode-postgresql-client2",
-
         // JSON tooling
         "AykutSarac.jsoncrack-vscode",
-
         // Code quality
         "editorconfig.editorconfig",
         "streetsidesoftware.code-spell-checker",
-
         // Testing
         "formulahendry.dotnet-test-explorer",
-
         // Utilities
         "humao.rest-client",
         "eamodio.gitlens",
         "usernamehw.errorlens",
-
         // CSV viewing and editing
         "mechatroner.rainbow-csv"
       ],
-
       // VS Code settings
       "settings": {
         // .NET settings
@@ -67,29 +56,26 @@
         "omnisharp.enableEditorConfigSupport": true,
         "omnisharp.enableImportCompletion": true,
         "omnisharp.organizeImportsOnFormat": true,
-
         // C# settings
         "csharp.semanticHighlighting.enabled": true,
         "csharp.suppressDotnetInstallWarning": true,
-
         // Editor settings
         "editor.formatOnSave": true,
         "editor.codeActionsOnSave": {
           "source.organizeImports": "explicit"
         },
-        "editor.rulers": [120],
+        "editor.rulers": [
+          120
+        ],
         "files.trimTrailingWhitespace": true,
         "files.insertFinalNewline": true,
-
         // Terminal
         "terminal.integrated.defaultProfile.linux": "zsh",
         "terminal.integrated.fontSize": 14,
-
         // Git
         "git.autofetch": true,
         "git.enableSmartCommit": true,
         "git.confirmSync": false,
-
         // Spell checker - British English for JIM
         "cSpell.language": "en-GB",
         "cSpell.words": [
@@ -99,22 +85,19 @@
           "serialiser",
           "initialise"
         ],
-
         // Port forwarding - use localhost instead of 127.0.0.1 for Entra ID compatibility
         "remote.localPortHost": "localhost"
       }
     }
   },
-
   // Port forwarding
   // API is now served from JIM.Web at /api/ path
   "forwardPorts": [
-    5432,  // PostgreSQL
-    8080,  // Adminer
-    5200,  // JIM.Web (HTTP) - also serves API at /api/
-    5201   // JIM.Web (HTTPS) - also serves API at /api/
+    5432, // PostgreSQL
+    8080, // Adminer
+    5200, // JIM.Web (HTTP) - also serves API at /api/
+    5201 // JIM.Web (HTTPS) - also serves API at /api/
   ],
-
   // Port labels and auto-forward behaviour
   "portsAttributes": {
     "5432": {
@@ -134,35 +117,30 @@
       "onAutoForward": "openBrowser"
     }
   },
-
   // Container user
   "remoteUser": "vscode",
-
   // Lifecycle scripts
   "postCreateCommand": "bash .devcontainer/setup.sh",
-
   // Mount Docker socket for Docker-in-Docker
   "mounts": [
     "source=/var/run/docker.sock,target=/var/run/docker-host.sock,type=bind"
   ],
-
   // Container environment variables
   "containerEnv": {
     "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
     "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
     "ASPNETCORE_ENVIRONMENT": "Development"
   },
-
   // Enable privileged mode for Docker-in-Docker
   "privileged": true,
-
   // Additional capabilities
-  "capAdd": ["SYS_PTRACE"],
-
+  "capAdd": [
+    "SYS_PTRACE"
+  ],
   // Improved build performance
   "hostRequirements": {
-    "cpus": 4,
-    "memory": "8gb",
-    "storage": "32gb"
+    "cpus": 8,
+    "memory": "32gb",
+    "storage": "64gb"
   }
 }
