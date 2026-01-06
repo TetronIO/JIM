@@ -30,13 +30,14 @@ internal class SeedingServer
         stopwatch.Start();
 
         // has seeding already happened? don't run it twice!
+        // IMPORTANT: ServiceSettings is created at the END of seeding (in SeedDataAsync) to ensure
+        // that if the process crashes during seeding, the next restart will retry seeding from scratch.
+        // This prevents a race condition where ServiceSettings exists but MetaverseAttributes don't.
         if (await Application.ServiceSettings.ServiceSettingsExistAsync())
         {
             Log.Information("SeedAsync: ServiceSettings already exists so believe seeding has already been performed. Stopping.");
             return;
         }
-
-        await Application.ServiceSettings.CreateServiceSettingsAsync(new ServiceSettings());
 
         // get attributes, if they don't exist, prepare object in list for bulk submission via seeding method
         // create object types as needed
