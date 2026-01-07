@@ -278,7 +278,7 @@ public class SyncImportTaskProcessor
         // Validate all RPEIs before persisting - catch any that have no CSO and no error (indicates a bug)
         // Check for RPEIs where: Create operation, no CSO ID assigned, and no error recorded
         var orphanedRpeis = _activityRunProfileExecutionItems
-            .Where(r => r.ObjectChangeType == ObjectChangeType.Create &&
+            .Where(r => r.ObjectChangeType == ObjectChangeType.Add &&
                         r.ConnectedSystemObjectId == null &&
                         r.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
             .ToList();
@@ -445,13 +445,14 @@ public class SyncImportTaskProcessor
         // we need to create a run profile execution item for the object deletion. it will get persisted in the activity tree.
         var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
         _activityRunProfileExecutionItems.Add(activityRunProfileExecutionItem);
-        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Obsolete;
+        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Delete;
         activityRunProfileExecutionItem.ConnectedSystemObject = cso;
         activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
         // Snapshot the external ID so it's preserved even after CSO is deleted
         activityRunProfileExecutionItem.ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue;
 
-        // mark it obsolete, so that it's deleted when a synchronisation run profile is performed.
+        // mark it obsolete internally, so that it's deleted when a synchronisation run profile is performed.
+        // Note: The RPEI uses Delete (user-facing), but the CSO status uses Obsolete (internal state)
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
         cso.LastUpdated = DateTime.UtcNow;
 
@@ -535,12 +536,13 @@ public class SyncImportTaskProcessor
                 }
 
                 // Handle delete requests from delta imports (e.g., LDAP changelog)
-                // When a connector specifies Delete, mark the existing CSO as Obsolete
+                // When a connector specifies Delete, mark the existing CSO as Obsolete internally
                 if (importObject.ChangeType == ObjectChangeType.Delete)
                 {
                     if (connectedSystemObject != null)
                     {
-                        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Obsolete;
+                        // RPEI uses Delete (user-facing), CSO status uses Obsolete (internal state)
+                        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Delete;
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
                         // Snapshot the external ID so it's preserved even after CSO is deleted
@@ -548,12 +550,13 @@ public class SyncImportTaskProcessor
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Obsolete;
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
                         connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
-                        Log.Information("ProcessImportObjectsAsync: Connector requested delete for object with external ID in type '{ObjectType}'. Marking CSO {CsoId} as Obsolete.",
+                        Log.Information("ProcessImportObjectsAsync: Connector requested delete for object with external ID in type '{ObjectType}'. Marking CSO {CsoId} for deletion.",
                             importObject.ObjectType, connectedSystemObject.Id);
                     }
                     else
                     {
-                        // Connector says delete, but we don't have the object - nothing to do
+                        // Connector says delete, but we don't have the object - nothing to do, remove the RPEI
+                        _activityRunProfileExecutionItems.Remove(activityRunProfileExecutionItem);
                         Log.Debug("ProcessImportObjectsAsync: Connector requested delete for object type '{ObjectType}' but no matching CSO found. Ignoring.",
                             importObject.ObjectType);
                     }
@@ -575,7 +578,7 @@ public class SyncImportTaskProcessor
                             _activity.Id);
                     }
 
-                    activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Create;
+                    activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Add;
 
                     // Extract and snapshot the external ID - this persists even if the CSO is later deleted
                     var externalIdAttributeName = csObjectType.Attributes.First(ca => ca.IsExternalId).Name;
@@ -606,10 +609,10 @@ public class SyncImportTaskProcessor
                 }
                 else
                 {
-                    // Log warning if connector said Create but object already exists
-                    if (importObject.ChangeType == ObjectChangeType.Create)
+                    // Log warning if connector said Add but object already exists
+                    if (importObject.ChangeType == ObjectChangeType.Add)
                     {
-                        Log.Warning("ProcessImportObjectsAsync: Connector indicated Create for object type '{ObjectType}' but CSO {CsoId} already exists. Updating instead. " +
+                        Log.Warning("ProcessImportObjectsAsync: Connector indicated Add for object type '{ObjectType}' but CSO {CsoId} already exists. Updating instead. " +
                             "ConnectedSystem: {ConnectedSystemId} ({ConnectedSystemName}), RunProfile: {RunProfileId} ({RunProfileName}), Activity: {ActivityId}",
                             importObject.ObjectType, connectedSystemObject.Id,
                             _connectedSystem.Id, _connectedSystem.Name,
@@ -619,23 +622,24 @@ public class SyncImportTaskProcessor
 
                     // Transition PendingProvisioning CSOs to Normal status now that import confirms they exist
                     // in the connected system. This is essential for proper reconciliation and subsequent lookups.
+                    var statusTransitioned = false;
                     if (connectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning)
                     {
                         Log.Information("ProcessImportObjectsAsync: Transitioning CSO {CsoId} from PendingProvisioning to Normal status. Object now confirmed in connected system.",
                             connectedSystemObject.Id);
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Normal;
+                        statusTransitioned = true;
                     }
 
-                    // existing connected system object - update from import object if necessary
-                    activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
-                    activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
-                    activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
-                    // Snapshot the external ID so it's preserved even if CSO is later deleted
-                    activityRunProfileExecutionItem.ExternalIdSnapshot = connectedSystemObject.ExternalIdAttributeValue?.StringValue;
+                    // Calculate attribute changes before processing
                     UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, csObjectType, activityRunProfileExecutionItem);
-                    connectedSystemObject.LastUpdated = DateTime.UtcNow;
 
-                    // Only add if not already in the list (can happen if same CSO matches multiple import objects)
+                    // Check if there are any actual attribute changes
+                    var hasAttributeChanges = connectedSystemObject.PendingAttributeValueAdditions.Count > 0 ||
+                                              connectedSystemObject.PendingAttributeValueRemovals.Count > 0;
+
+                    // Always add to update list - needed for reference resolution even if no attribute changes
+                    // The update list is used by ResolveReferencesAsync to resolve references between objects
                     if (!connectedSystemObjectsToBeUpdated.Any(cso => cso.Id == connectedSystemObject.Id))
                     {
                         connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
@@ -643,6 +647,24 @@ public class SyncImportTaskProcessor
                     else
                     {
                         Log.Warning("ProcessImportObjectsAsync: CSO {CsoId} was already matched by a previous import object. Skipping duplicate addition to update list.",
+                            connectedSystemObject.Id);
+                    }
+
+                    // Only create RPEI if there are actual changes (attributes or status transition)
+                    if (hasAttributeChanges || statusTransitioned)
+                    {
+                        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
+                        activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+                        activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
+                        // Snapshot the external ID so it's preserved even if CSO is later deleted
+                        activityRunProfileExecutionItem.ExternalIdSnapshot = connectedSystemObject.ExternalIdAttributeValue?.StringValue;
+                        connectedSystemObject.LastUpdated = DateTime.UtcNow;
+                    }
+                    else
+                    {
+                        // No changes - remove the RPEI from the list (it was added at the start of the loop)
+                        _activityRunProfileExecutionItems.Remove(activityRunProfileExecutionItem);
+                        Log.Debug("ProcessImportObjectsAsync: No attribute changes for CSO {CsoId}. Skipping RPEI creation.",
                             connectedSystemObject.Id);
                     }
                 }

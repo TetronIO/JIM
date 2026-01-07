@@ -330,9 +330,10 @@ public abstract class SyncTaskProcessorBase
             return null;
 
         // Create the execution item for this obsolete CSO
+        // Note: RPEI uses Delete (user-facing), CSO status uses Obsolete (internal state)
         var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
         runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
-        runProfileExecutionItem.ObjectChangeType = ObjectChangeType.Obsolete;
+        runProfileExecutionItem.ObjectChangeType = ObjectChangeType.Delete;
 
         if (connectedSystemObject.MetaverseObject == null)
         {

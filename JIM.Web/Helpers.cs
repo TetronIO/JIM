@@ -164,10 +164,24 @@ public static class Helpers
     {
         return objectChangeType switch
         {
-            ObjectChangeType.Create => Color.Primary,
-            ObjectChangeType.Update => Color.Default,
+            // Import (CSO operations)
+            ObjectChangeType.Add => Color.Success,
+            ObjectChangeType.Update => Color.Info,
             ObjectChangeType.Delete => Color.Error,
-            ObjectChangeType.NoChange => Color.Info,
+
+            // Sync (MVO operations)
+            ObjectChangeType.Projected => Color.Primary,
+            ObjectChangeType.Joined => Color.Secondary,
+            ObjectChangeType.AttributeFlow => Color.Tertiary,
+            ObjectChangeType.Disconnected => Color.Warning,
+
+            // Export
+            ObjectChangeType.Provisioned => Color.Success,
+            ObjectChangeType.Exported => Color.Info,
+            ObjectChangeType.Deprovisioned => Color.Error,
+
+            // Other
+            ObjectChangeType.NoChange => Color.Default,
             _ => Color.Default,
         };
     }

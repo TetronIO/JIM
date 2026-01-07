@@ -139,8 +139,8 @@ public class ActivityRunProfileExecutionItemTests
         Assert.That(activity.RunProfileExecutionItems, Has.Count.EqualTo(2),
             "Expected 2 ActivityRunProfileExecutionItems to be created for 2 imported objects.");
 
-        Assert.That(activity.RunProfileExecutionItems.All(item => item.ObjectChangeType == ObjectChangeType.Create),
-            Is.True, "All execution items should have ObjectChangeType.Create for new imports.");
+        Assert.That(activity.RunProfileExecutionItems.All(item => item.ObjectChangeType == ObjectChangeType.Add),
+            Is.True, "All execution items should have ObjectChangeType.Add for new imports.");
 
         Assert.That(activity.RunProfileExecutionItems.All(item => item.ConnectedSystemObject != null),
             Is.True, "All execution items should be linked to a ConnectedSystemObject.");
@@ -155,7 +155,7 @@ public class ActivityRunProfileExecutionItemTests
     //
     // When an import finds an existing CSO:
     // - SyncImportTaskProcessor.ProcessImportObjectsAsync sets ObjectChangeType.Update
-    // - For Delete requests, it sets ObjectChangeType.Obsolete and marks CSO.Status = Obsolete
+    // - For Delete requests, it sets ObjectChangeType.Delete and marks CSO.Status = Obsolete
     //
     // These behaviours are tested indirectly through the integration test suite.
     // See: test/JIM.Worker.Tests/Synchronisation/ImportUpdateObjectSvaTests.cs
@@ -422,13 +422,13 @@ public class ActivityRunProfileExecutionItemTests
 
         // Assert
         Assert.That(activity.RunProfileExecutionItems, Has.Count.EqualTo(4),
-            "Expected 4 execution items total (3 creates + 1 error).");
+            "Expected 4 execution items total (3 adds + 1 error).");
 
-        // 3 successful items should have Create change type
-        var successfulCreateCount = activity.RunProfileExecutionItems.Count(i =>
-            i.ObjectChangeType == ObjectChangeType.Create &&
+        // 3 successful items should have Add change type
+        var successfulAddCount = activity.RunProfileExecutionItems.Count(i =>
+            i.ObjectChangeType == ObjectChangeType.Add &&
             (i.ErrorType == null || i.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet));
-        Assert.That(successfulCreateCount, Is.EqualTo(3), "Expected 3 successful items with Create change type.");
+        Assert.That(successfulAddCount, Is.EqualTo(3), "Expected 3 successful items with Add change type.");
 
         var errorCount = activity.RunProfileExecutionItems.Count(i =>
             i.ErrorType != null && i.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);

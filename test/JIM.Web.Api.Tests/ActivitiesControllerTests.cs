@@ -209,9 +209,9 @@ public class ActivitiesControllerTests
         {
             ActivityId = activityId,
             TotalObjectChangeCount = 100,
-            TotalObjectCreates = 50,
-            TotalObjectUpdates = 40,
-            TotalObjectDeletes = 5,
+            TotalCsoAdds = 50,
+            TotalCsoUpdates = 40,
+            TotalCsoDeletes = 5,
             TotalObjectErrors = 5
         };
         _mockActivityRepo.Setup(r => r.GetActivityAsync(activityId))
@@ -245,7 +245,7 @@ public class ActivitiesControllerTests
         {
             ActivityId = activityId,
             TotalObjectChangeCount = 50,
-            TotalObjectCreates = 50,
+            TotalCsoAdds = 50,
             TotalObjectErrors = 0
         };
         _mockActivityRepo.Setup(r => r.GetActivityAsync(activityId))
@@ -369,7 +369,7 @@ public class ActivitiesControllerTests
             Id = Guid.NewGuid(),
             DisplayName = "Test Object",
             ConnectedSystemObjectType = "User",
-            ObjectChangeType = ObjectChangeType.Create
+            ObjectChangeType = ObjectChangeType.Add
         };
         var pagedResult = new PagedResultSet<ActivityRunProfileExecutionItemHeader>
         {

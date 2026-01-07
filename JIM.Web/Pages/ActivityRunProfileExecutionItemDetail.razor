@@ -340,9 +340,20 @@ else
 
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
-            ObjectChangeType.Create => $"background: {Colors.Blue.Default}; color: {Colors.Shades.White};",
+            // Import operations
+            ObjectChangeType.Add => $"background: {Colors.Green.Default}; color: {Colors.Shades.White};",
             ObjectChangeType.Update => $"background: {Colors.Teal.Default}; color: {Colors.Shades.White};",
             ObjectChangeType.Delete => $"background: {Colors.DeepOrange.Default}; color: {Colors.Shades.White};",
+            // Sync operations
+            ObjectChangeType.Projected => $"background: {Colors.Blue.Default}; color: {Colors.Shades.White};",
+            ObjectChangeType.Joined => $"background: {Colors.Purple.Default}; color: {Colors.Shades.White};",
+            ObjectChangeType.AttributeFlow => $"background: {Colors.Cyan.Default}; color: {Colors.Shades.White};",
+            ObjectChangeType.Disconnected => $"background: {Colors.Orange.Default}; color: {Colors.Shades.White};",
+            // Export operations
+            ObjectChangeType.Provisioned => $"background: {Colors.Green.Default}; color: {Colors.Shades.White};",
+            ObjectChangeType.Exported => $"background: {Colors.Blue.Default}; color: {Colors.Shades.White};",
+            ObjectChangeType.Deprovisioned => $"background: {Colors.DeepOrange.Default}; color: {Colors.Shades.White};",
+            // Other
             ObjectChangeType.NoChange => $"background: {Colors.BlueGray.Default}; color: {Colors.Shades.White};",
             _ => $"background: {Colors.Gray.Default}; color: {Colors.Shades.White};"
         };
@@ -355,9 +366,20 @@ else
 
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
-            ObjectChangeType.Create => Icons.Material.Filled.Add,
+            // Import operations
+            ObjectChangeType.Add => Icons.Material.Filled.Add,
             ObjectChangeType.Update => Icons.Material.Filled.Edit,
             ObjectChangeType.Delete => Icons.Material.Filled.Delete,
+            // Sync operations
+            ObjectChangeType.Projected => Icons.Material.Filled.AccountTree,
+            ObjectChangeType.Joined => Icons.Material.Filled.Link,
+            ObjectChangeType.AttributeFlow => Icons.Material.Filled.SwapHoriz,
+            ObjectChangeType.Disconnected => Icons.Material.Filled.LinkOff,
+            // Export operations
+            ObjectChangeType.Provisioned => Icons.Material.Filled.Add,
+            ObjectChangeType.Exported => Icons.Material.Filled.Publish,
+            ObjectChangeType.Deprovisioned => Icons.Material.Filled.Delete,
+            // Other
             ObjectChangeType.NoChange => Icons.Material.Filled.CheckCircle,
             _ => Icons.Material.Filled.Info
         };
@@ -370,9 +392,20 @@ else
 
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
-            ObjectChangeType.Create => "Object Created",
+            // Import operations
+            ObjectChangeType.Add => "Object Added to Staging",
             ObjectChangeType.Update => "Object Updated",
-            ObjectChangeType.Delete => "Object Deleted",
+            ObjectChangeType.Delete => "Object Deleted from Source",
+            // Sync operations
+            ObjectChangeType.Projected => "New Metaverse Object Projected",
+            ObjectChangeType.Joined => "Joined to Metaverse Object",
+            ObjectChangeType.AttributeFlow => "Attributes Flowed",
+            ObjectChangeType.Disconnected => "Disconnected from Metaverse",
+            // Export operations
+            ObjectChangeType.Provisioned => "Object Provisioned",
+            ObjectChangeType.Exported => "Object Exported",
+            ObjectChangeType.Deprovisioned => "Object Deprovisioned",
+            // Other
             ObjectChangeType.NoChange => "No Changes",
             _ => "Synchronisation Complete"
         };
@@ -389,9 +422,20 @@ else
 
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
-            ObjectChangeType.Create => $"A new object ({objectDesc}) was created in the connected system.",
+            // Import operations
+            ObjectChangeType.Add => $"A new object ({objectDesc}) was imported and added to the staging area.",
             ObjectChangeType.Update => $"The object ({objectDesc}) was updated with new attribute values.",
-            ObjectChangeType.Delete => $"The object ({objectDesc}) was removed from the connected system.",
+            ObjectChangeType.Delete => $"The object ({objectDesc}) was deleted from the source system.",
+            // Sync operations
+            ObjectChangeType.Projected => $"A new metaverse object was created for ({objectDesc}) via projection.",
+            ObjectChangeType.Joined => $"The object ({objectDesc}) was joined to an existing metaverse object.",
+            ObjectChangeType.AttributeFlow => $"Attributes were flowed for ({objectDesc}) between staging and metaverse.",
+            ObjectChangeType.Disconnected => $"The object ({objectDesc}) was disconnected from the metaverse.",
+            // Export operations
+            ObjectChangeType.Provisioned => $"A new object ({objectDesc}) was provisioned in the target system.",
+            ObjectChangeType.Exported => $"The object ({objectDesc}) was exported with updated attributes.",
+            ObjectChangeType.Deprovisioned => $"The object ({objectDesc}) was deprovisioned from the target system.",
+            // Other
             ObjectChangeType.NoChange => $"The object ({objectDesc}) was already up to date.",
             _ => $"Synchronisation completed for {objectDesc}."
         };
@@ -401,9 +445,20 @@ else
     {
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
-            ObjectChangeType.Create => Icons.Material.Filled.Add,
+            // Import operations
+            ObjectChangeType.Add => Icons.Material.Filled.Add,
             ObjectChangeType.Update => Icons.Material.Filled.Edit,
             ObjectChangeType.Delete => Icons.Material.Filled.Delete,
+            // Sync operations
+            ObjectChangeType.Projected => Icons.Material.Filled.AccountTree,
+            ObjectChangeType.Joined => Icons.Material.Filled.Link,
+            ObjectChangeType.AttributeFlow => Icons.Material.Filled.SwapHoriz,
+            ObjectChangeType.Disconnected => Icons.Material.Filled.LinkOff,
+            // Export operations
+            ObjectChangeType.Provisioned => Icons.Material.Filled.Add,
+            ObjectChangeType.Exported => Icons.Material.Filled.Publish,
+            ObjectChangeType.Deprovisioned => Icons.Material.Filled.Delete,
+            // Other
             ObjectChangeType.NoChange => Icons.Material.Filled.CheckCircle,
             _ => Icons.Material.Filled.QuestionMark
         };
