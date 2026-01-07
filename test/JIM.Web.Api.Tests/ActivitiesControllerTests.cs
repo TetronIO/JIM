@@ -370,7 +370,7 @@ public class ActivitiesControllerTests
             Id = Guid.NewGuid(),
             DisplayName = "Test Object",
             ConnectedSystemObjectType = "User",
-            ObjectChangeType = ObjectChangeType.Add
+            ObjectChangeType = ObjectChangeType.Added
         };
         var pagedResult = new PagedResultSet<ActivityRunProfileExecutionItemHeader>
         {

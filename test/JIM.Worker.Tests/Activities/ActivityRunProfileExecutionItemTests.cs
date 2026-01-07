@@ -139,8 +139,8 @@ public class ActivityRunProfileExecutionItemTests
         Assert.That(activity.RunProfileExecutionItems, Has.Count.EqualTo(2),
             "Expected 2 ActivityRunProfileExecutionItems to be created for 2 imported objects.");
 
-        Assert.That(activity.RunProfileExecutionItems.All(item => item.ObjectChangeType == ObjectChangeType.Add),
-            Is.True, "All execution items should have ObjectChangeType.Add for new imports.");
+        Assert.That(activity.RunProfileExecutionItems.All(item => item.ObjectChangeType == ObjectChangeType.Added),
+            Is.True, "All execution items should have ObjectChangeType.Added for new imports.");
 
         Assert.That(activity.RunProfileExecutionItems.All(item => item.ConnectedSystemObject != null),
             Is.True, "All execution items should be linked to a ConnectedSystemObject.");
@@ -154,8 +154,8 @@ public class ActivityRunProfileExecutionItemTests
     // navigation property resolution that unit test mocks don't handle well.
     //
     // When an import finds an existing CSO:
-    // - SyncImportTaskProcessor.ProcessImportObjectsAsync sets ObjectChangeType.Update
-    // - For Delete requests, it sets ObjectChangeType.Delete and marks CSO.Status = Obsolete
+    // - SyncImportTaskProcessor.ProcessImportObjectsAsync sets ObjectChangeType.Updated
+    // - For Delete requests, it sets ObjectChangeType.Deleted and marks CSO.Status = Obsolete
     //
     // These behaviours are tested indirectly through the integration test suite.
     // See: test/JIM.Worker.Tests/Synchronisation/ImportUpdateObjectSvaTests.cs
@@ -426,7 +426,7 @@ public class ActivityRunProfileExecutionItemTests
 
         // 3 successful items should have Add change type
         var successfulAddCount = activity.RunProfileExecutionItems.Count(i =>
-            i.ObjectChangeType == ObjectChangeType.Add &&
+            i.ObjectChangeType == ObjectChangeType.Added &&
             (i.ErrorType == null || i.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet));
         Assert.That(successfulAddCount, Is.EqualTo(3), "Expected 3 successful items with Add change type.");
 

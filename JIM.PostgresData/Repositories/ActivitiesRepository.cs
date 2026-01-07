@@ -297,17 +297,22 @@ public class ActivityRepository : IActivityRepository
         
     public async Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId)
     {
+        // Get total objects processed from the activity itself (tracks all objects in scope)
+        var activity = await Repository.Database.Activities.FirstOrDefaultAsync(a => a.Id == activityId);
+        var totalObjectsProcessed = activity?.ObjectsProcessed ?? 0;
+
         return new ActivityRunProfileExecutionStats
         {
             ActivityId = activityId,
+            TotalObjectsProcessed = totalObjectsProcessed,
             TotalObjectChangeCount = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId),
             TotalObjectErrors = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ErrorType != null && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet),
             TotalObjectTypes = await Repository.Database.ActivityRunProfileExecutionItems.Where(q => q.Activity.Id == activityId && q.ConnectedSystemObject != null).Select(q => q.ConnectedSystemObject!.Type).Distinct().CountAsync(),
 
             // Import stats (CSO operations)
-            TotalCsoAdds = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Add),
-            TotalCsoUpdates = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Update),
-            TotalCsoDeletes = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Delete),
+            TotalCsoAdds = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Added),
+            TotalCsoUpdates = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Updated),
+            TotalCsoDeletes = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Deleted),
 
             // Sync stats (MVO operations)
             TotalProjections = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Projected),
@@ -320,8 +325,10 @@ public class ActivityRepository : IActivityRepository
             TotalExported = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Exported),
             TotalDeprovisioned = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Deprovisioned),
 
-            // NoChange stats
+            // NoChange stats (legacy, now calculated via TotalUnchanged)
+#pragma warning disable CS0618 // Type or member is obsolete
             TotalNoChanges = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.NoChange),
+#pragma warning restore CS0618
             TotalMvoNoAttributeChanges = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q =>
                 q.Activity.Id == activityId &&
                 q.ObjectChangeType == ObjectChangeType.NoChange &&

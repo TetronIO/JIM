@@ -333,7 +333,7 @@ public abstract class SyncTaskProcessorBase
         // Note: RPEI uses Delete (user-facing), CSO status uses Obsolete (internal state)
         var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
         runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
-        runProfileExecutionItem.ObjectChangeType = ObjectChangeType.Delete;
+        runProfileExecutionItem.ObjectChangeType = ObjectChangeType.Deleted;
 
         if (connectedSystemObject.MetaverseObject == null)
         {

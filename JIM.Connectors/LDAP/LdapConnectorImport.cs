@@ -477,19 +477,19 @@ internal class LdapConnectorImport
                 // Unknown types fall back to NotSet so JIM determines based on CSO existence.
                 var objectChangeType = changeType?.ToLowerInvariant() switch
                 {
-                    "add" => ObjectChangeType.Add,
-                    "modify" => ObjectChangeType.Update,
-                    "delete" => ObjectChangeType.Delete,
-                    "modrdn" or "moddn" => ObjectChangeType.Update,
+                    "add" => ObjectChangeType.Added,
+                    "modify" => ObjectChangeType.Updated,
+                    "delete" => ObjectChangeType.Deleted,
+                    "modrdn" or "moddn" => ObjectChangeType.Updated,
                     _ => ObjectChangeType.NotSet
                 };
 
                 // For deletes, we can create a minimal import object
-                if (objectChangeType == ObjectChangeType.Delete)
+                if (objectChangeType == ObjectChangeType.Deleted)
                 {
                     var deleteObject = new ConnectedSystemImportObject
                     {
-                        ChangeType = ObjectChangeType.Delete,
+                        ChangeType = ObjectChangeType.Deleted,
                         // Note: For deletes, we need the DN as the identifier
                         // The synchronisation engine will need to match this to existing objects
                     };
