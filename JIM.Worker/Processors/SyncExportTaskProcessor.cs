@@ -194,10 +194,10 @@ public class SyncExportTaskProcessor
                 ActivityId = _activity.Id,
                 ObjectChangeType = exportItem.ChangeType switch
                 {
-                    PendingExportChangeType.Create => ObjectChangeType.Create,
-                    PendingExportChangeType.Update => ObjectChangeType.Update,
-                    PendingExportChangeType.Delete => ObjectChangeType.Delete,
-                    _ => ObjectChangeType.Update
+                    PendingExportChangeType.Create => ObjectChangeType.Provisioned,
+                    PendingExportChangeType.Update => ObjectChangeType.Exported,
+                    PendingExportChangeType.Delete => ObjectChangeType.Deprovisioned,
+                    _ => ObjectChangeType.Exported
                 },
                 DataSnapshot = description
             };

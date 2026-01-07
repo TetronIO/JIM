@@ -1977,10 +1977,11 @@ public class ConnectedSystemServer
         int pageSize = 20,
         string? searchQuery = null,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
-            connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending);
+            connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending, statusFilter);
     }
     
     /// <summary>
@@ -2188,6 +2189,7 @@ public class ConnectedSystemServer
     
     /// <summary>
     /// Bulk persists Connected System Object updates and appends a Change Object to the Activity Run Profile Execution Item for each one.
+    /// CSOs without a corresponding RPEI (e.g., no attribute changes occurred) are still persisted but without change tracking.
     /// </summary>
     public async Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, List<ActivityRunProfileExecutionItem> activityRunProfileExecutionItems)
     {
@@ -2195,15 +2197,18 @@ public class ConnectedSystemServer
         // the change objects will be persisted later, further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
         {
-            // Use FirstOrDefault as multiple execution items may reference the same CSO (e.g., during confirming import
-            // when the same CSO could theoretically match multiple import objects by different identifiers)
-            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.FirstOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ??
-                                                  throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created before now.");
+            // Find the RPEI for this CSO - may be null if no attribute changes occurred (CSO was added to update list
+            // for reference resolution purposes only)
+            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.FirstOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id);
 
-            // Explicitly set the FK to ensure it's properly tracked when the execution item is saved.
-            activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
+            if (activityRunProfileExecutionItem != null)
+            {
+                // Explicitly set the FK to ensure it's properly tracked when the execution item is saved.
+                activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
 
-            ProcessConnectedSystemObjectAttributeValueChanges(cso, activityRunProfileExecutionItem);
+                ProcessConnectedSystemObjectAttributeValueChanges(cso, activityRunProfileExecutionItem);
+            }
+            // If no RPEI exists, CSO was added to update list for reference resolution but had no changes - skip change tracking
         }
 
         // bulk persist csos updates
@@ -2221,7 +2226,7 @@ public class ConnectedSystemServer
         {
             ConnectedSystemId = connectedSystemObject.ConnectedSystemId,
             ConnectedSystemObject = connectedSystemObject,
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.Add,
             ChangeTime = DateTime.UtcNow,
             ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,
             ActivityRunProfileExecutionItemId = activityRunProfileExecutionItem.Id

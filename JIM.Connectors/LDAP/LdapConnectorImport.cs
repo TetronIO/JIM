@@ -477,7 +477,7 @@ internal class LdapConnectorImport
                 // Unknown types fall back to NotSet so JIM determines based on CSO existence.
                 var objectChangeType = changeType?.ToLowerInvariant() switch
                 {
-                    "add" => ObjectChangeType.Create,
+                    "add" => ObjectChangeType.Add,
                     "modify" => ObjectChangeType.Update,
                     "delete" => ObjectChangeType.Delete,
                     "modrdn" or "moddn" => ObjectChangeType.Update,

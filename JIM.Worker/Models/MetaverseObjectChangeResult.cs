@@ -40,7 +40,7 @@ public readonly struct MetaverseObjectChangeResult
     public static MetaverseObjectChangeResult Projected(int attributesAdded) => new()
     {
         HasChanges = true,
-        ChangeType = ObjectChangeType.Create,
+        ChangeType = ObjectChangeType.Projected,
         AttributesAdded = attributesAdded
     };
 
@@ -50,7 +50,7 @@ public readonly struct MetaverseObjectChangeResult
     public static MetaverseObjectChangeResult Joined(int attributesAdded = 0, int attributesRemoved = 0) => new()
     {
         HasChanges = true,
-        ChangeType = ObjectChangeType.Update,
+        ChangeType = ObjectChangeType.Joined,
         AttributesAdded = attributesAdded,
         AttributesRemoved = attributesRemoved
     };
@@ -61,8 +61,17 @@ public readonly struct MetaverseObjectChangeResult
     public static MetaverseObjectChangeResult AttributeFlow(int attributesAdded, int attributesRemoved) => new()
     {
         HasChanges = attributesAdded > 0 || attributesRemoved > 0,
-        ChangeType = ObjectChangeType.Update,
+        ChangeType = ObjectChangeType.AttributeFlow,
         AttributesAdded = attributesAdded,
         AttributesRemoved = attributesRemoved
+    };
+
+    /// <summary>
+    /// Creates a result indicating a CSO was disconnected from MVO (out of scope).
+    /// </summary>
+    public static MetaverseObjectChangeResult Disconnected() => new()
+    {
+        HasChanges = true,
+        ChangeType = ObjectChangeType.Disconnected
     };
 }
