@@ -1977,10 +1977,11 @@ public class ConnectedSystemServer
         int pageSize = 20,
         string? searchQuery = null,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
-            connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending);
+            connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending, statusFilter);
     }
     
     /// <summary>

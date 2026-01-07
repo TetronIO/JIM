@@ -1,11 +1,11 @@
 @page "/admin/connected-systems/{Id:int}/objects"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application
-@using JIM.Models.Staging;
+@using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
-@using JIM.Models.Tasking;
-@using JIM.Models.Utility;
-@using JIM.Utilities;
+@using JIM.Models.Tasking
+@using JIM.Models.Utility
+@using JIM.Utilities
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
@@ -27,6 +27,24 @@
             </MudMenu>
         </MudItem>
     </MudGrid>
+
+    @* Status Filter Chips *@
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-4 mb-2">Filter by status:</MudText>
+    <MudChipSet T="ConnectedSystemObjectStatus"
+                SelectionMode="SelectionMode.MultiSelection"
+                SelectedValues="_selectedStatuses"
+                SelectedValuesChanged="OnStatusFilterChanged"
+                Class="mb-3">
+        @foreach (var status in GetAvailableStatuses())
+        {
+            <MudChip Value="@status"
+                     Color="@GetStatusColor(status)"
+                     Variant="@(IsStatusSelected(status) ? Variant.Filled : Variant.Outlined)"
+                     SelectedColor="@GetStatusColor(status)">
+                @status.ToString().SplitOnCapitalLetters()
+            </MudChip>
+        }
+    </MudChipSet>
 
     <MudTable @ref="_table"
               T="ConnectedSystemObjectHeader"
@@ -216,6 +234,14 @@ else
     private string _externalIdColumnHeader = "External Id";
     private string _secondaryExternalIdColumnHeader = "Secondary External Id";
 
+    // Status filter - by default, hide Obsolete CSOs to reduce noise
+    // Users can click the Obsolete chip to see deleted objects
+    private IReadOnlyCollection<ConnectedSystemObjectStatus> _selectedStatuses = new List<ConnectedSystemObjectStatus>
+    {
+        ConnectedSystemObjectStatus.Normal,
+        ConnectedSystemObjectStatus.PendingProvisioning
+    };
+
     protected override async Task OnInitializedAsync()
     {
         _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(Id);
@@ -245,13 +271,17 @@ else
             var page = state.Page + 1;
             var sortDescending = state.SortDirection == SortDirection.Descending;
 
+            // Get selected statuses for filtering (null means show all)
+            IEnumerable<ConnectedSystemObjectStatus>? statusFilter = _selectedStatuses.Count > 0 ? _selectedStatuses : null;
+
             var result = await Jim.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
                 Id,
                 page,
                 state.PageSize,
                 string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
                 state.SortLabel,
-                sortDescending);
+                sortDescending,
+                statusFilter);
 
             // Update column headers based on first result
             UpdateColumnHeaders(result.Results);
@@ -332,5 +362,49 @@ else
         }
 
         Snackbar.Add("Connected system objects queued for deletion.", Severity.Info);
+    }
+
+    /// <summary>
+    /// Returns all available CSO statuses for filtering.
+    /// </summary>
+    private static IEnumerable<ConnectedSystemObjectStatus> GetAvailableStatuses()
+    {
+        return new[]
+        {
+            ConnectedSystemObjectStatus.Normal,
+            ConnectedSystemObjectStatus.PendingProvisioning,
+            ConnectedSystemObjectStatus.Obsolete
+        };
+    }
+
+    /// <summary>
+    /// Gets the colour for a CSO status chip.
+    /// </summary>
+    private static Color GetStatusColor(ConnectedSystemObjectStatus status)
+    {
+        return status switch
+        {
+            ConnectedSystemObjectStatus.Normal => Color.Success,
+            ConnectedSystemObjectStatus.PendingProvisioning => Color.Info,
+            ConnectedSystemObjectStatus.Obsolete => Color.Warning,
+            _ => Color.Default
+        };
+    }
+
+    /// <summary>
+    /// Checks if a status is currently selected in the filter.
+    /// </summary>
+    private bool IsStatusSelected(ConnectedSystemObjectStatus status)
+    {
+        return _selectedStatuses.Contains(status);
+    }
+
+    /// <summary>
+    /// Called when status filter chips are selected/deselected.
+    /// </summary>
+    private void OnStatusFilterChanged(IReadOnlyCollection<ConnectedSystemObjectStatus> selectedStatuses)
+    {
+        _selectedStatuses = selectedStatuses;
+        _table?.ReloadServerData();
     }
 }

@@ -330,7 +330,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         int pageSize,
         string? searchQuery = null,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -344,6 +345,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         var query = Repository.Database.ConnectedSystemObjects
             .Where(cso => cso.ConnectedSystem.Id == connectedSystemId);
+
+        // Apply status filter if specified
+        if (statusFilter != null)
+        {
+            var statuses = statusFilter.ToList();
+            if (statuses.Count > 0)
+            {
+                query = query.Where(cso => statuses.Contains(cso.Status));
+            }
+        }
 
         // Apply search filter - search on display name, external ID, or secondary external ID
         // Search is case-insensitive for user convenience
