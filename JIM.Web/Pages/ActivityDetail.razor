@@ -250,7 +250,7 @@
                          Color="Color.Default"
                          Disabled="true">
                     Unchanged
-                    <MudText Typo="Typo.caption" Class="ml-1">(@(_activityRunProfileExecutionStats?.TotalUnchanged ?? 0).ToString("N0"))</MudText>
+                    <MudText Typo="Typo.caption" Class="ml-1">(@GetUnchangedCount().ToString("N0"))</MudText>
                 </MudChip>
             </MudChipSet>
         }
@@ -378,6 +378,8 @@
             return;
         }
 
+        // Note: These queries run sequentially because EF Core's DbContext is not thread-safe.
+        // The main performance win comes from the optimised GROUP BY query in GetActivityRunProfileExecutionStatsAsync.
         if (_activity.ConnectedSystemId.HasValue)
             _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(_activity.ConnectedSystemId.Value);
 
@@ -532,10 +534,31 @@
 
     /// <summary>
     /// Checks if this is an Import run (Full or Delta).
+    /// Falls back to checking if import stats are populated when run type is NotSet.
     /// </summary>
     private bool IsImportRun()
     {
-        return _activity?.ConnectedSystemRunType is ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport;
+        var runType = _activity?.ConnectedSystemRunType;
+        if (runType is ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport)
+            return true;
+
+        // Fallback: check if this looks like an import based on stats or target name
+        if (runType is null or ConnectedSystemRunType.NotSet)
+        {
+            // Check if the target name contains "Import" or if import stats exist
+            if (_activity?.TargetName?.Contains("Import", StringComparison.OrdinalIgnoreCase) == true)
+                return true;
+            // If there are CSO adds/updates/deletes but no sync or export stats, it's likely import
+            if (_activityRunProfileExecutionStats != null &&
+                (_activityRunProfileExecutionStats.TotalCsoAdds > 0 ||
+                 _activityRunProfileExecutionStats.TotalCsoUpdates > 0 ||
+                 _activityRunProfileExecutionStats.TotalCsoDeletes > 0) &&
+                _activityRunProfileExecutionStats.TotalProjections == 0 &&
+                _activityRunProfileExecutionStats.TotalProvisioned == 0)
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -543,7 +566,24 @@
     /// </summary>
     private bool IsSyncRun()
     {
-        return _activity?.ConnectedSystemRunType is ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation;
+        var runType = _activity?.ConnectedSystemRunType;
+        if (runType is ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation)
+            return true;
+
+        // Fallback: check if this looks like a sync based on stats or target name
+        if (runType is null or ConnectedSystemRunType.NotSet)
+        {
+            if (_activity?.TargetName?.Contains("Sync", StringComparison.OrdinalIgnoreCase) == true)
+                return true;
+            if (_activityRunProfileExecutionStats != null &&
+                (_activityRunProfileExecutionStats.TotalProjections > 0 ||
+                 _activityRunProfileExecutionStats.TotalJoins > 0 ||
+                 _activityRunProfileExecutionStats.TotalAttributeFlows > 0 ||
+                 _activityRunProfileExecutionStats.TotalDisconnections > 0))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -551,7 +591,31 @@
     /// </summary>
     private bool IsExportRun()
     {
-        return _activity?.ConnectedSystemRunType == ConnectedSystemRunType.Export;
+        var runType = _activity?.ConnectedSystemRunType;
+        if (runType == ConnectedSystemRunType.Export)
+            return true;
+
+        // Fallback: check if this looks like an export based on stats or target name
+        if (runType is null or ConnectedSystemRunType.NotSet)
+        {
+            if (_activity?.TargetName?.Contains("Export", StringComparison.OrdinalIgnoreCase) == true)
+                return true;
+            if (_activityRunProfileExecutionStats != null &&
+                (_activityRunProfileExecutionStats.TotalProvisioned > 0 ||
+                 _activityRunProfileExecutionStats.TotalExported > 0 ||
+                 _activityRunProfileExecutionStats.TotalDeprovisioned > 0))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Gets the unchanged count safely.
+    /// </summary>
+    private int GetUnchangedCount()
+    {
+        return _activityRunProfileExecutionStats?.TotalUnchanged ?? 0;
     }
 
     /// <summary>
