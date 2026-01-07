@@ -10,20 +10,20 @@ public enum ObjectChangeType
 
     // Import operations (CSO changes)
     /// <summary>
-    /// CSO added to staging (renamed from Create).
+    /// CSO added to staging.
     /// </summary>
-    Add,
+    Added,
 
     /// <summary>
     /// CSO attributes updated.
     /// </summary>
-    Update,
+    Updated,
 
     /// <summary>
     /// Object deleted from source system.
     /// Note: The CSO is marked with ConnectedSystemObjectStatus.Obsolete internally.
     /// </summary>
-    Delete,
+    Deleted,
 
     // Sync operations (MVO changes)
     /// <summary>

@@ -69,13 +69,26 @@ public class ActivityRunProfileExecutionStats
 
     #region Shared Stats
     /// <summary>
-    /// Total count of all run profile execution items.
+    /// Total number of objects that were in scope for processing during the run.
+    /// Used to calculate unchanged count: TotalObjectsProcessed - TotalObjectChangeCount.
+    /// </summary>
+    public int TotalObjectsProcessed { get; set; }
+
+    /// <summary>
+    /// Total count of all run profile execution items (objects that had changes).
     /// </summary>
     public int TotalObjectChangeCount { get; set; }
 
     /// <summary>
     /// Count of objects where no changes were needed.
+    /// Calculated as TotalObjectsProcessed - TotalObjectChangeCount, but never negative.
     /// </summary>
+    public int TotalUnchanged => Math.Max(0, TotalObjectsProcessed - TotalObjectChangeCount);
+
+    /// <summary>
+    /// Count of objects where no changes were needed.
+    /// </summary>
+    [Obsolete("Use TotalUnchanged instead")]
     public int TotalNoChanges { get; set; }
 
     /// <summary>

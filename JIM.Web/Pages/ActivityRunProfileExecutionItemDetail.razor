@@ -341,9 +341,9 @@ else
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations
-            ObjectChangeType.Add => $"background: {Colors.Green.Default}; color: {Colors.Shades.White};",
-            ObjectChangeType.Update => $"background: {Colors.Teal.Default}; color: {Colors.Shades.White};",
-            ObjectChangeType.Delete => $"background: {Colors.DeepOrange.Default}; color: {Colors.Shades.White};",
+            ObjectChangeType.Added => $"background: {Colors.Green.Default}; color: {Colors.Shades.White};",
+            ObjectChangeType.Updated => $"background: {Colors.Teal.Default}; color: {Colors.Shades.White};",
+            ObjectChangeType.Deleted => $"background: {Colors.DeepOrange.Default}; color: {Colors.Shades.White};",
             // Sync operations
             ObjectChangeType.Projected => $"background: {Colors.Blue.Default}; color: {Colors.Shades.White};",
             ObjectChangeType.Joined => $"background: {Colors.Purple.Default}; color: {Colors.Shades.White};",
@@ -367,9 +367,9 @@ else
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations
-            ObjectChangeType.Add => Icons.Material.Filled.Add,
-            ObjectChangeType.Update => Icons.Material.Filled.Edit,
-            ObjectChangeType.Delete => Icons.Material.Filled.Delete,
+            ObjectChangeType.Added => Icons.Material.Filled.Add,
+            ObjectChangeType.Updated => Icons.Material.Filled.Edit,
+            ObjectChangeType.Deleted => Icons.Material.Filled.Delete,
             // Sync operations
             ObjectChangeType.Projected => Icons.Material.Filled.AccountTree,
             ObjectChangeType.Joined => Icons.Material.Filled.Link,
@@ -393,9 +393,9 @@ else
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations
-            ObjectChangeType.Add => "Object Added to Staging",
-            ObjectChangeType.Update => "Object Updated",
-            ObjectChangeType.Delete => "Object Deleted from Source",
+            ObjectChangeType.Added => "Object Added to Staging",
+            ObjectChangeType.Updated => "Object Updated",
+            ObjectChangeType.Deleted => "Object Deleted from Source",
             // Sync operations
             ObjectChangeType.Projected => "New Metaverse Object Projected",
             ObjectChangeType.Joined => "Joined to Metaverse Object",
@@ -423,9 +423,9 @@ else
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations
-            ObjectChangeType.Add => $"A new object ({objectDesc}) was imported and added to the staging area.",
-            ObjectChangeType.Update => $"The object ({objectDesc}) was updated with new attribute values.",
-            ObjectChangeType.Delete => $"The object ({objectDesc}) was deleted from the source system.",
+            ObjectChangeType.Added => $"A new object ({objectDesc}) was imported and added to the staging area.",
+            ObjectChangeType.Updated => $"The object ({objectDesc}) was updated with new attribute values.",
+            ObjectChangeType.Deleted => $"The object ({objectDesc}) was deleted from the source system.",
             // Sync operations
             ObjectChangeType.Projected => $"A new metaverse object was created for ({objectDesc}) via projection.",
             ObjectChangeType.Joined => $"The object ({objectDesc}) was joined to an existing metaverse object.",
@@ -446,9 +446,9 @@ else
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations
-            ObjectChangeType.Add => Icons.Material.Filled.Add,
-            ObjectChangeType.Update => Icons.Material.Filled.Edit,
-            ObjectChangeType.Delete => Icons.Material.Filled.Delete,
+            ObjectChangeType.Added => Icons.Material.Filled.Add,
+            ObjectChangeType.Updated => Icons.Material.Filled.Edit,
+            ObjectChangeType.Deleted => Icons.Material.Filled.Delete,
             // Sync operations
             ObjectChangeType.Projected => Icons.Material.Filled.AccountTree,
             ObjectChangeType.Joined => Icons.Material.Filled.Link,

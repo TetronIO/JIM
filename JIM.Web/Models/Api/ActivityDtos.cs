@@ -288,9 +288,20 @@ public class ActivityRunProfileExecutionStatsDto
 {
     #region Shared Stats
     /// <summary>
-    /// Total number of object changes.
+    /// Total number of objects that were in scope for processing.
+    /// </summary>
+    public int TotalObjectsProcessed { get; set; }
+
+    /// <summary>
+    /// Total number of object changes (RPEIs created).
     /// </summary>
     public int TotalObjectChangeCount { get; set; }
+
+    /// <summary>
+    /// Number of objects that were unchanged.
+    /// Calculated as TotalObjectsProcessed - TotalObjectChangeCount.
+    /// </summary>
+    public int TotalUnchanged { get; set; }
 
     /// <summary>
     /// Number of objects with errors.
@@ -301,11 +312,6 @@ public class ActivityRunProfileExecutionStatsDto
     /// Number of distinct object types affected.
     /// </summary>
     public int TotalObjectTypes { get; set; }
-
-    /// <summary>
-    /// Number of objects with no changes.
-    /// </summary>
-    public int TotalNoChanges { get; set; }
     #endregion
 
     #region Import Stats (CSO operations)
@@ -389,10 +395,11 @@ public class ActivityRunProfileExecutionStatsDto
         return new ActivityRunProfileExecutionStatsDto
         {
             // Shared
+            TotalObjectsProcessed = stats.TotalObjectsProcessed,
             TotalObjectChangeCount = stats.TotalObjectChangeCount,
+            TotalUnchanged = stats.TotalUnchanged,
             TotalObjectErrors = stats.TotalObjectErrors,
             TotalObjectTypes = stats.TotalObjectTypes,
-            TotalNoChanges = stats.TotalNoChanges,
 
             // Import
             TotalCsoAdds = stats.TotalCsoAdds,

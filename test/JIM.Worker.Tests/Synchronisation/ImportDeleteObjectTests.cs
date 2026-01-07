@@ -333,7 +333,7 @@ public class ImportDeleteObjectTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Delete, // Key: connector says DELETE
+            ChangeType = ObjectChangeType.Deleted, // Key: connector says DELETE
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>
             {
@@ -385,7 +385,7 @@ public class ImportDeleteObjectTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Delete,
+            ChangeType = ObjectChangeType.Deleted,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>
             {

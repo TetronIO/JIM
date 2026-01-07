@@ -208,7 +208,7 @@ public class SyncImportTaskProcessor
         // process deletions
         // note: only run deletion detection for Full Imports
         // Delta Imports only return changed objects, so absence doesn't mean deletion
-        // Explicit deletes from delta imports are handled in ProcessImportObjectsAsync via ObjectChangeType.Delete
+        // Explicit deletes from delta imports are handled in ProcessImportObjectsAsync via ObjectChangeType.Deleted
         // note: make sure it doesn't apply deletes if no objects were imported, as this suggests there was a problem collecting data from the connected system?
         // note: if it's expected that 0 imported objects means all objects were deleted, then an admin will have to clear the Connected System manually to achieve the same result.
         if (totalObjectsImported > 0 && _connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport)
@@ -278,7 +278,7 @@ public class SyncImportTaskProcessor
         // Validate all RPEIs before persisting - catch any that have no CSO and no error (indicates a bug)
         // Check for RPEIs where: Create operation, no CSO ID assigned, and no error recorded
         var orphanedRpeis = _activityRunProfileExecutionItems
-            .Where(r => r.ObjectChangeType == ObjectChangeType.Add &&
+            .Where(r => r.ObjectChangeType == ObjectChangeType.Added &&
                         r.ConnectedSystemObjectId == null &&
                         r.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
             .ToList();
@@ -445,7 +445,7 @@ public class SyncImportTaskProcessor
         // we need to create a run profile execution item for the object deletion. it will get persisted in the activity tree.
         var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
         _activityRunProfileExecutionItems.Add(activityRunProfileExecutionItem);
-        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Delete;
+        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Deleted;
         activityRunProfileExecutionItem.ConnectedSystemObject = cso;
         activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
         // Snapshot the external ID so it's preserved even after CSO is deleted
@@ -537,12 +537,12 @@ public class SyncImportTaskProcessor
 
                 // Handle delete requests from delta imports (e.g., LDAP changelog)
                 // When a connector specifies Delete, mark the existing CSO as Obsolete internally
-                if (importObject.ChangeType == ObjectChangeType.Delete)
+                if (importObject.ChangeType == ObjectChangeType.Deleted)
                 {
                     if (connectedSystemObject != null)
                     {
                         // RPEI uses Delete (user-facing), CSO status uses Obsolete (internal state)
-                        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Delete;
+                        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Deleted;
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
                         // Snapshot the external ID so it's preserved even after CSO is deleted
@@ -568,7 +568,7 @@ public class SyncImportTaskProcessor
                 if (connectedSystemObject == null)
                 {
                     // Log warning if connector said Update but object doesn't exist
-                    if (importObject.ChangeType == ObjectChangeType.Update)
+                    if (importObject.ChangeType == ObjectChangeType.Updated)
                     {
                         Log.Warning("ProcessImportObjectsAsync: Connector indicated Update for object type '{ObjectType}' but no matching CSO found. Creating new object instead. " +
                             "ConnectedSystem: {ConnectedSystemId} ({ConnectedSystemName}), RunProfile: {RunProfileId} ({RunProfileName}), Activity: {ActivityId}",
@@ -578,7 +578,7 @@ public class SyncImportTaskProcessor
                             _activity.Id);
                     }
 
-                    activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Add;
+                    activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Added;
 
                     // Extract and snapshot the external ID - this persists even if the CSO is later deleted
                     var externalIdAttributeName = csObjectType.Attributes.First(ca => ca.IsExternalId).Name;
@@ -610,7 +610,7 @@ public class SyncImportTaskProcessor
                 else
                 {
                     // Log warning if connector said Add but object already exists
-                    if (importObject.ChangeType == ObjectChangeType.Add)
+                    if (importObject.ChangeType == ObjectChangeType.Added)
                     {
                         Log.Warning("ProcessImportObjectsAsync: Connector indicated Add for object type '{ObjectType}' but CSO {CsoId} already exists. Updating instead. " +
                             "ConnectedSystem: {ConnectedSystemId} ({ConnectedSystemName}), RunProfile: {RunProfileId} ({RunProfileName}), Activity: {ActivityId}",
@@ -653,7 +653,7 @@ public class SyncImportTaskProcessor
                     // Only create RPEI if there are actual changes (attributes or status transition)
                     if (hasAttributeChanges || statusTransitioned)
                     {
-                        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
+                        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Updated;
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
                         // Snapshot the external ID so it's preserved even if CSO is later deleted
@@ -1342,7 +1342,7 @@ public class SyncImportTaskProcessor
                                     ConnectedSystemObject = cso,
                                     ConnectedSystemObjectId = cso.Id,
                                     ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue,
-                                    ObjectChangeType = ObjectChangeType.Update,
+                                    ObjectChangeType = ObjectChangeType.Updated,
                                     ErrorType = ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed,
                                     ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.",
                                     DataSnapshot = $"Failed attributes: {failedAttrNames}"
@@ -1360,7 +1360,7 @@ public class SyncImportTaskProcessor
                                     ConnectedSystemObject = cso,
                                     ConnectedSystemObjectId = cso.Id,
                                     ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue,
-                                    ObjectChangeType = ObjectChangeType.Update,
+                                    ObjectChangeType = ObjectChangeType.Updated,
                                     ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
                                     ErrorMessage = $"Export not confirmed for {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will retry on next export run.",
                                     DataSnapshot = $"Unconfirmed attributes: {retryAttrNames}"

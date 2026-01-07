@@ -297,39 +297,94 @@ public class ActivityRepository : IActivityRepository
         
     public async Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId)
     {
+        // Get total objects processed from the activity itself (tracks all objects in scope)
+        var activity = await Repository.Database.Activities.FirstOrDefaultAsync(a => a.Id == activityId);
+        var totalObjectsProcessed = activity?.ObjectsProcessed ?? 0;
+
+        // Single query to get all counts grouped by change type, error status, and no-change reason
+        // This replaces 15+ individual COUNT queries with one efficient GROUP BY query
+        var rpeiQuery = Repository.Database.ActivityRunProfileExecutionItems
+            .Where(q => q.Activity.Id == activityId);
+
+        var aggregateData = await rpeiQuery
+            .GroupBy(q => new
+            {
+                q.ObjectChangeType,
+                HasError = q.ErrorType != null && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet,
+                q.NoChangeReason
+            })
+            .Select(g => new
+            {
+                g.Key.ObjectChangeType,
+                g.Key.HasError,
+                g.Key.NoChangeReason,
+                Count = g.Count()
+            })
+            .ToListAsync();
+
+        // Get distinct object types count (separate query as it needs DISTINCT)
+        var totalObjectTypes = await rpeiQuery
+            .Where(q => q.ConnectedSystemObject != null)
+            .Select(q => q.ConnectedSystemObject!.Type)
+            .Distinct()
+            .CountAsync();
+
+        // Calculate totals from grouped data
+        var totalObjectChangeCount = aggregateData.Sum(x => x.Count);
+        var totalObjectErrors = aggregateData.Where(x => x.HasError).Sum(x => x.Count);
+
+        // Import stats
+        var totalCsoAdds = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Added).Sum(x => x.Count);
+        var totalCsoUpdates = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Updated).Sum(x => x.Count);
+        var totalCsoDeletes = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deleted).Sum(x => x.Count);
+
+        // Sync stats
+        var totalProjections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Projected).Sum(x => x.Count);
+        var totalJoins = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Joined).Sum(x => x.Count);
+        var totalAttributeFlows = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.AttributeFlow).Sum(x => x.Count);
+        var totalDisconnections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Disconnected).Sum(x => x.Count);
+
+        // Export stats
+        var totalProvisioned = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Provisioned).Sum(x => x.Count);
+        var totalExported = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Exported).Sum(x => x.Count);
+        var totalDeprovisioned = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deprovisioned).Sum(x => x.Count);
+
+        // NoChange stats
+        var noChangeItems = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.NoChange).ToList();
+        var totalNoChanges = noChangeItems.Sum(x => x.Count);
+        var totalMvoNoAttributeChanges = noChangeItems.Where(x => x.NoChangeReason == NoChangeReason.MvoNoAttributeChanges).Sum(x => x.Count);
+        var totalCsoAlreadyCurrent = noChangeItems.Where(x => x.NoChangeReason == NoChangeReason.CsoAlreadyCurrent).Sum(x => x.Count);
+
         return new ActivityRunProfileExecutionStats
         {
             ActivityId = activityId,
-            TotalObjectChangeCount = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId),
-            TotalObjectErrors = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ErrorType != null && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet),
-            TotalObjectTypes = await Repository.Database.ActivityRunProfileExecutionItems.Where(q => q.Activity.Id == activityId && q.ConnectedSystemObject != null).Select(q => q.ConnectedSystemObject!.Type).Distinct().CountAsync(),
+            TotalObjectsProcessed = totalObjectsProcessed,
+            TotalObjectChangeCount = totalObjectChangeCount,
+            TotalObjectErrors = totalObjectErrors,
+            TotalObjectTypes = totalObjectTypes,
 
-            // Import stats (CSO operations)
-            TotalCsoAdds = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Add),
-            TotalCsoUpdates = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Update),
-            TotalCsoDeletes = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Delete),
+            // Import stats
+            TotalCsoAdds = totalCsoAdds,
+            TotalCsoUpdates = totalCsoUpdates,
+            TotalCsoDeletes = totalCsoDeletes,
 
-            // Sync stats (MVO operations)
-            TotalProjections = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Projected),
-            TotalJoins = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Joined),
-            TotalAttributeFlows = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.AttributeFlow),
-            TotalDisconnections = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Disconnected),
+            // Sync stats
+            TotalProjections = totalProjections,
+            TotalJoins = totalJoins,
+            TotalAttributeFlows = totalAttributeFlows,
+            TotalDisconnections = totalDisconnections,
 
             // Export stats
-            TotalProvisioned = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Provisioned),
-            TotalExported = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Exported),
-            TotalDeprovisioned = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.Deprovisioned),
+            TotalProvisioned = totalProvisioned,
+            TotalExported = totalExported,
+            TotalDeprovisioned = totalDeprovisioned,
 
             // NoChange stats
-            TotalNoChanges = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q => q.Activity.Id == activityId && q.ObjectChangeType == ObjectChangeType.NoChange),
-            TotalMvoNoAttributeChanges = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q =>
-                q.Activity.Id == activityId &&
-                q.ObjectChangeType == ObjectChangeType.NoChange &&
-                q.NoChangeReason == NoChangeReason.MvoNoAttributeChanges),
-            TotalCsoAlreadyCurrent = await Repository.Database.ActivityRunProfileExecutionItems.CountAsync(q =>
-                q.Activity.Id == activityId &&
-                q.ObjectChangeType == ObjectChangeType.NoChange &&
-                q.NoChangeReason == NoChangeReason.CsoAlreadyCurrent),
+#pragma warning disable CS0618 // Type or member is obsolete
+            TotalNoChanges = totalNoChanges,
+#pragma warning restore CS0618
+            TotalMvoNoAttributeChanges = totalMvoNoAttributeChanges,
+            TotalCsoAlreadyCurrent = totalCsoAlreadyCurrent,
         };
     }
 

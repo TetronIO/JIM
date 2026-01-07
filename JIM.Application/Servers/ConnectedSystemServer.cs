@@ -1880,7 +1880,7 @@ public class ConnectedSystemServer
         {
             ConnectedSystemId = connectedSystemObject.ConnectedSystemId,
             // ConnectedSystemObject is null for DELETE operations (CSO no longer exists)
-            ChangeType = ObjectChangeType.Delete,
+            ChangeType = ObjectChangeType.Deleted,
             ChangeTime = DateTime.UtcNow,
             DeletedObjectType = connectedSystemObject.Type,
             // DeletedObjectExternalIdAttributeValue cannot be set - the attribute value is cascade deleted with the CSO
@@ -1932,7 +1932,7 @@ public class ConnectedSystemServer
             var change = new ConnectedSystemObjectChange
             {
                 ConnectedSystemId = cso.ConnectedSystemId,
-                ChangeType = ObjectChangeType.Delete,
+                ChangeType = ObjectChangeType.Deleted,
                 ChangeTime = DateTime.UtcNow,
                 DeletedObjectType = cso.Type,
                 ActivityRunProfileExecutionItem = executionItem
@@ -2226,7 +2226,7 @@ public class ConnectedSystemServer
         {
             ConnectedSystemId = connectedSystemObject.ConnectedSystemId,
             ConnectedSystemObject = connectedSystemObject,
-            ChangeType = ObjectChangeType.Add,
+            ChangeType = ObjectChangeType.Added,
             ChangeTime = DateTime.UtcNow,
             ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,
             ActivityRunProfileExecutionItemId = activityRunProfileExecutionItem.Id
@@ -2263,7 +2263,7 @@ public class ConnectedSystemServer
         {
             ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
             ConnectedSystemObject = connectedSystemObject,
-            ChangeType = ObjectChangeType.Update,
+            ChangeType = ObjectChangeType.Updated,
             ChangeTime = DateTime.UtcNow,
             ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
         };
