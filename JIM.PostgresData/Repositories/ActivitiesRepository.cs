@@ -152,7 +152,8 @@ public class ActivityRepository : IActivityRepository
         int pageSize,
         string? searchQuery = null,
         string? sortBy = null,
-        bool sortDescending = false)
+        bool sortDescending = false,
+        IEnumerable<ObjectChangeType>? changeTypeFilter = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -172,6 +173,16 @@ public class ActivityRepository : IActivityRepository
                 .ThenInclude(cso => cso!.AttributeValues)
                     .ThenInclude(av => av.Attribute)
             .Where(a => a.Activity.Id == activityId);
+
+        // Apply change type filter if specified
+        if (changeTypeFilter != null)
+        {
+            var changeTypes = changeTypeFilter.ToList();
+            if (changeTypes.Count > 0)
+            {
+                query = query.Where(a => changeTypes.Contains(a.ObjectChangeType));
+            }
+        }
 
         // Apply search filter - search on display name, external ID, or object type
         // Search is case-insensitive for user convenience

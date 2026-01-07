@@ -29,7 +29,8 @@ public interface IActivityRepository
         int pageSize,
         string? searchQuery = null,
         string? sortBy = null,
-        bool sortDescending = false);
+        bool sortDescending = false,
+        IEnumerable<ObjectChangeType>? changeTypeFilter = null);
 
     public Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId);
 
