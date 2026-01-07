@@ -180,27 +180,30 @@
             </MudStack>
         }
 
-        @* Change Type Filter Chips *@
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by change type:</MudText>
-        <MudChipSet T="ObjectChangeType"
-                    SelectionMode="SelectionMode.MultiSelection"
-                    SelectedValues="_selectedChangeTypes"
-                    SelectedValuesChanged="OnChangeTypeFilterChanged"
-                    Class="mb-3">
-            @foreach (var changeType in GetAvailableChangeTypes())
-            {
-                <MudChip Value="@changeType"
-                         Color="@Helpers.GetRunItemMudBlazorColorForType(changeType)"
-                         Variant="@(IsChangeTypeSelected(changeType) ? Variant.Filled : Variant.Outlined)"
-                         SelectedColor="@Helpers.GetRunItemMudBlazorColorForType(changeType)">
-                    @changeType.ToString().SplitOnCapitalLetters()
-                    @if (GetChangeTypeCount(changeType) is var count && count > 0)
-                    {
-                        <MudText Typo="Typo.caption" Class="ml-1">(@count.ToString("N0"))</MudText>
-                    }
-                </MudChip>
-            }
-        </MudChipSet>
+        @* Change Type Filter Chips - only show when there are items to filter *@
+        @if (GetAvailableChangeTypes().Any())
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by change type:</MudText>
+            <MudChipSet T="ObjectChangeType"
+                        SelectionMode="SelectionMode.MultiSelection"
+                        SelectedValues="_selectedChangeTypes"
+                        SelectedValuesChanged="OnChangeTypeFilterChanged"
+                        Class="mb-3">
+                @foreach (var changeType in GetAvailableChangeTypes())
+                {
+                    <MudChip Value="@changeType"
+                             Color="@Helpers.GetRunItemMudBlazorColorForType(changeType)"
+                             Variant="@(IsChangeTypeSelected(changeType) ? Variant.Filled : Variant.Outlined)"
+                             SelectedColor="@Helpers.GetRunItemMudBlazorColorForType(changeType)">
+                        @changeType.ToString().SplitOnCapitalLetters()
+                        @if (GetChangeTypeCount(changeType) is var count && count > 0)
+                        {
+                            <MudText Typo="Typo.caption" Class="ml-1">(@count.ToString("N0"))</MudText>
+                        }
+                    </MudChip>
+                }
+            </MudChipSet>
+        }
 
         <MudTable @ref="_table"
                   T="ActivityRunProfileExecutionItemHeader"
