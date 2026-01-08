@@ -12,8 +12,8 @@
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
-<PageTitle>Activity: @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters(): @_activity?.TargetName</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Activity:</span> @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters(): <span class="mud-primary-text">@(!string.IsNullOrEmpty(_activity?.TargetName) ? _activity?.TargetName : "(no name)")</span></MudText>
+<PageTitle>Activity: @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters(): @GetTargetDisplayText()</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Activity:</span> @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters(): <span class="mud-primary-text">@GetTargetDisplayText()</span></MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @if (_activity != null)
@@ -636,5 +636,21 @@
             Color.Surface => "surface",
             _ => "default"
         };
+    }
+
+    /// <summary>
+    /// Gets the display text for the target, including context if available.
+    /// </summary>
+    private string GetTargetDisplayText()
+    {
+        if (_activity == null)
+            return "(no name)";
+
+        var targetName = !string.IsNullOrEmpty(_activity.TargetName) ? _activity.TargetName : "(no name)";
+
+        if (!string.IsNullOrEmpty(_activity.TargetContext))
+            return $"{_activity.TargetContext} → {targetName}";
+
+        return targetName;
     }
 }

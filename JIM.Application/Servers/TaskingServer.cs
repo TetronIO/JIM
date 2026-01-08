@@ -65,11 +65,13 @@ namespace JIM.Application.Servers
                 partitionWarning = validationResult.WarningMessage;
 
                 // every CRUD operation requires tracking with an activity...
+                var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemAsync(synchronisationWorkerTask.ConnectedSystemId);
                 var runProfiles = await Application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(synchronisationWorkerTask.ConnectedSystemId);
                 var runProfile = runProfiles.Single(rp => rp.Id == synchronisationWorkerTask.ConnectedSystemRunProfileId);
                 var activity = new Activity
                 {
                     TargetName = runProfile.Name,
+                    TargetContext = connectedSystem?.Name,
                     TargetType = ActivityTargetType.ConnectedSystemRunProfile,
                     TargetOperationType = ActivityTargetOperationType.Execute,
                     ConnectedSystemId = synchronisationWorkerTask.ConnectedSystemId,

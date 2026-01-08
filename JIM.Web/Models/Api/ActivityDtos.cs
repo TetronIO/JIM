@@ -44,6 +44,12 @@ public class ActivityHeader
     public string? TargetName { get; set; }
 
     /// <summary>
+    /// Additional context for the target, such as the parent entity name.
+    /// For example, for a Run Profile activity this would be the Connected System name.
+    /// </summary>
+    public string? TargetContext { get; set; }
+
+    /// <summary>
     /// Progress message for the activity.
     /// </summary>
     public string? Message { get; set; }
@@ -102,6 +108,7 @@ public class ActivityHeader
             TargetType = activity.TargetType,
             TargetOperationType = activity.TargetOperationType,
             TargetName = activity.TargetName,
+            TargetContext = activity.TargetContext,
             Message = activity.Message,
             InitiatedByType = activity.InitiatedByType,
             InitiatedById = activity.InitiatedById,
@@ -159,6 +166,12 @@ public class ActivityDetailDto
     /// The name of the target object.
     /// </summary>
     public string? TargetName { get; set; }
+
+    /// <summary>
+    /// Additional context for the target, such as the parent entity name.
+    /// For example, for a Run Profile activity this would be the Connected System name.
+    /// </summary>
+    public string? TargetContext { get; set; }
 
     /// <summary>
     /// Progress message for the activity.
@@ -260,6 +273,7 @@ public class ActivityDetailDto
             TargetType = activity.TargetType,
             TargetOperationType = activity.TargetOperationType,
             TargetName = activity.TargetName,
+            TargetContext = activity.TargetContext,
             Message = activity.Message,
             InitiatedByType = activity.InitiatedByType,
             InitiatedById = activity.InitiatedById,
