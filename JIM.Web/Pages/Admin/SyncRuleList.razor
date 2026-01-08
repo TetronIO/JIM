@@ -9,7 +9,7 @@
 <MudText Typo="Typo.h4">Synchronisation Rules</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    Synchronisation Rules are used to define the flow of information between JIM and connected systems.
+    Synchronisation Rules are used to define the flow of information between JIM and Connected Systems.
 </MudText>
 
 <MudPaper Elevation="0" Class="mt-2" Outlined="true">
@@ -42,8 +42,8 @@
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ConnectedSystemName)"><MudText Typo="Typo.button">Connected System</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.MetaverseObjectTypeName)"><MudText Typo="Typo.button">Metaverse Object Type</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ConnectedSystemObjectTypeName)"><MudText Typo="Typo.button">Connected System Object Type</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ProvisionToConnectedSystem!)"><MudText Typo="Typo.button">Provision?</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ProjectToMetaverse!)"><MudText Typo="Typo.button">Project?</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ProvisionToConnectedSystem!)"><MudText Typo="Typo.button">Provision?</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Enabled)"><MudText Typo="Typo.button">Status</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
     </HeaderContent>
@@ -62,20 +62,20 @@
         <MudTd DataLabel="Connected System">@context.ConnectedSystemName</MudTd>
         <MudTd DataLabel="Metaverse Object Type">@context.MetaverseObjectTypeName</MudTd>
         <MudTd DataLabel="Connected System Object Type">@context.ConnectedSystemObjectTypeName</MudTd>
-        <MudTd DataLabel="Provision?">
-            @if (context.Direction == SyncRuleDirection.Export)
+        <MudTd DataLabel="Project?">
+            @if (context.Direction == SyncRuleDirection.Import)
             {
-                @(context.ProvisionToConnectedSystem.HasValue && context.ProvisionToConnectedSystem.Value ? "Yes" : "No")
+                @(context.ProjectToMetaverse.HasValue && context.ProjectToMetaverse.Value ? "Yes" : "No")
             }
             else
             {
                 <MudText>-</MudText>
             }
         </MudTd>
-        <MudTd DataLabel="Project?">
-            @if (context.Direction == SyncRuleDirection.Import)
+        <MudTd DataLabel="Provision?">
+            @if (context.Direction == SyncRuleDirection.Export)
             {
-                @(context.ProjectToMetaverse.HasValue && context.ProjectToMetaverse.Value ? "Yes" : "No")
+                @(context.ProvisionToConnectedSystem.HasValue && context.ProvisionToConnectedSystem.Value ? "Yes" : "No")
             }
             else
             {
