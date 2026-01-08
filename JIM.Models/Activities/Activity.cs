@@ -123,10 +123,17 @@ public class Activity
 
     /// <summary>
     /// Aggregate count of all "update" operations from RPEIs.
-    /// Includes: Updated (import), Joined/AttributeFlow (sync), Exported (export).
+    /// Includes: Updated (import), Joined (sync), Exported (export).
     /// Populated when activity completes.
     /// </summary>
     public int TotalObjectUpdates { get; set; }
+
+    /// <summary>
+    /// Aggregate count of attribute flow operations from RPEIs.
+    /// Only applies to sync runs - data flowing through existing connections.
+    /// Populated when activity completes.
+    /// </summary>
+    public int TotalObjectFlows { get; set; }
 
     /// <summary>
     /// Aggregate count of all "delete" operations from RPEIs.
