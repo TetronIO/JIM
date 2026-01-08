@@ -111,6 +111,37 @@ public class Activity
     public int ObjectsProcessed { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
+    // summary stats for run profile executions (for list view display)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Aggregate count of all "create" operations from RPEIs.
+    /// Includes: Added (import), Projected (sync), Provisioned (export).
+    /// Populated when activity completes.
+    /// </summary>
+    public int TotalObjectCreates { get; set; }
+
+    /// <summary>
+    /// Aggregate count of all "update" operations from RPEIs.
+    /// Includes: Updated (import), Joined/AttributeFlow (sync), Exported (export).
+    /// Populated when activity completes.
+    /// </summary>
+    public int TotalObjectUpdates { get; set; }
+
+    /// <summary>
+    /// Aggregate count of all "delete" operations from RPEIs.
+    /// Includes: Deleted (import), Disconnected (sync), Deprovisioned (export).
+    /// Populated when activity completes.
+    /// </summary>
+    public int TotalObjectDeletes { get; set; }
+
+    /// <summary>
+    /// Count of RPEIs with errors.
+    /// Populated when activity completes.
+    /// </summary>
+    public int TotalObjectErrors { get; set; }
+
+    // -----------------------------------------------------------------------------------------------------------------
     // context specific properties
     // -----------------------------------------------------------------------------------------------------------------
 
