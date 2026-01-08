@@ -20,16 +20,13 @@
 
 @if (_connectedSystemHeader != null)
 {
-    <MudGrid Class="mt-5">
-        <MudItem xs="6">
-            <MudMenu Label="Options" Variant="Variant.Filled" EndIcon="@Icons.Material.Filled.KeyboardArrowDown" IconColor="Color.Default" DropShadow="false">
-                <MudMenuItem IconColor="Color.Primary" Icon="@Icons.Material.Filled.Delete" OnClick="HandleDeleteAllObjectsClickAsync">Delete all objects</MudMenuItem>
-            </MudMenu>
-        </MudItem>
-    </MudGrid>
-
-    @* Status Filter Chips *@
-    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-4 mb-2">Filter by status:</MudText>
+    @* Status Filter Chips with Options Menu *@
+    <div class="d-flex justify-space-between align-center mt-4 mb-2">
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Filter by status:</MudText>
+        <MudMenu Label="Options" Variant="Variant.Filled" EndIcon="@Icons.Material.Filled.KeyboardArrowDown" IconColor="Color.Default" DropShadow="false">
+            <MudMenuItem IconColor="Color.Primary" Icon="@Icons.Material.Filled.Delete" OnClick="HandleDeleteAllObjectsClickAsync">Delete all objects</MudMenuItem>
+        </MudMenu>
+    </div>
     <MudChipSet T="ConnectedSystemObjectStatus"
                 SelectionMode="SelectionMode.MultiSelection"
                 SelectedValues="_selectedStatuses"
@@ -39,7 +36,7 @@
         {
             <MudChip Value="@status"
                      Color="@GetStatusColor(status)"
-                     Variant="@(IsStatusSelected(status) ? Variant.Filled : Variant.Outlined)"
+                     Variant="@GetStatusVariant(status)"
                      SelectedColor="@GetStatusColor(status)">
                 @status.ToString().SplitOnCapitalLetters()
             </MudChip>
@@ -386,9 +383,22 @@ else
         {
             ConnectedSystemObjectStatus.Normal => Color.Success,
             ConnectedSystemObjectStatus.PendingProvisioning => Color.Info,
-            ConnectedSystemObjectStatus.Obsolete => Color.Warning,
+            ConnectedSystemObjectStatus.Obsolete => Color.Dark,
             _ => Color.Default
         };
+    }
+
+    /// <summary>
+    /// Gets the variant for a CSO status chip based on selection state.
+    /// Obsolete uses Text variant (no outline) when not selected to de-emphasise it.
+    /// </summary>
+    private Variant GetStatusVariant(ConnectedSystemObjectStatus status)
+    {
+        if (IsStatusSelected(status))
+            return Variant.Filled;
+
+        // Obsolete uses Text variant (no outline) when not selected
+        return status == ConnectedSystemObjectStatus.Obsolete ? Variant.Text : Variant.Outlined;
     }
 
     /// <summary>

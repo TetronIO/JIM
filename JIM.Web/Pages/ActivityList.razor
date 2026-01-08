@@ -40,6 +40,9 @@
             </MudTableSortLabel>
         </MudTh>
         <MudTh>
+            <MudText Typo="Typo.button">Stats</MudText>
+        </MudTh>
+        <MudTh>
             <MudTableSortLabel SortLabel="type" T="Activity">
                 <MudText Typo="Typo.button">Type</MudText>
             </MudTableSortLabel>
@@ -73,6 +76,40 @@
             </MudChip>
         </MudTd>
         <MudTd DataLabel="Target">@(!string.IsNullOrEmpty(context.TargetName) ? context.TargetName : "(no name)")</MudTd>
+        <MudTd DataLabel="Stats">
+            @if (context.TargetType == ActivityTargetType.ConnectedSystemRunProfile
+                 && context.TargetOperationType == ActivityTargetOperationType.Execute
+                 && context.Status != ActivityStatus.InProgress
+                 && (context.TotalObjectCreates > 0 || context.TotalObjectUpdates > 0 || context.TotalObjectDeletes > 0 || context.TotalObjectErrors > 0))
+            {
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    @if (context.TotalObjectCreates > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text" Class="px-1">
+                            +@context.TotalObjectCreates
+                        </MudChip>
+                    }
+                    @if (context.TotalObjectUpdates > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text" Class="px-1">
+                            ~@context.TotalObjectUpdates
+                        </MudChip>
+                    }
+                    @if (context.TotalObjectDeletes > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Text" Class="px-1">
+                            -@context.TotalObjectDeletes
+                        </MudChip>
+                    }
+                    @if (context.TotalObjectErrors > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" Class="px-1">
+                            !@context.TotalObjectErrors
+                        </MudChip>
+                    }
+                </MudStack>
+            }
+        </MudTd>
         <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
         <MudTd DataLabel="Created">
             <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
