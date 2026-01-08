@@ -88,7 +88,7 @@
                     {
                         <MudTooltip Text="@GetCreatesTooltip(context.ConnectedSystemRunType, context.TargetName)" Arrow="true" Placement="Placement.Bottom">
                             <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text"
-                                     Icon="@Icons.Material.Filled.Add" Class="px-2">
+                                     Icon="@GetCreatesIcon(context.ConnectedSystemRunType, context.TargetName)" Class="px-2">
                                 @context.TotalObjectCreates
                             </MudChip>
                         </MudTooltip>
@@ -332,6 +332,20 @@
             "Sync" => "Projected",
             "Export" => "Provisioned",
             _ => "Created"
+        };
+    }
+
+    /// <summary>
+    /// Gets run-type-aware icon for creates stat.
+    /// Sync uses Commit (committing projections to metaverse), others use Add.
+    /// </summary>
+    private static string GetCreatesIcon(ConnectedSystemRunType? runType, string? targetName)
+    {
+        var effectiveRunType = GetEffectiveRunType(runType, targetName);
+        return effectiveRunType switch
+        {
+            "Sync" => Icons.Material.Filled.Commit,
+            _ => Icons.Material.Filled.Add
         };
     }
 
