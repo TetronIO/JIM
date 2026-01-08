@@ -4,6 +4,7 @@
 @implements IDisposable
 @using JIM.Application
 @using JIM.Models.Activities
+@using JIM.Models.Staging
 @using JIM.Models.Utility;
 @using JIM.Utilities;
 @using Microsoft.AspNetCore.Components.Authorization
@@ -85,27 +86,39 @@
                 <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                     @if (context.TotalObjectCreates > 0)
                     {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text" Class="px-1">
-                            +@context.TotalObjectCreates
-                        </MudChip>
+                        <MudTooltip Text="@GetCreatesTooltip(context.ConnectedSystemRunType, context.TargetName)" Arrow="true" Placement="Placement.Bottom">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text"
+                                     Icon="@Icons.Material.Filled.Add" Class="px-2">
+                                @context.TotalObjectCreates
+                            </MudChip>
+                        </MudTooltip>
                     }
                     @if (context.TotalObjectUpdates > 0)
                     {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text" Class="px-1">
-                            ~@context.TotalObjectUpdates
-                        </MudChip>
+                        <MudTooltip Text="@GetUpdatesTooltip(context.ConnectedSystemRunType, context.TargetName)" Arrow="true" Placement="Placement.Bottom">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text"
+                                     Icon="@GetUpdatesIcon(context.ConnectedSystemRunType, context.TargetName)" Class="px-2">
+                                @context.TotalObjectUpdates
+                            </MudChip>
+                        </MudTooltip>
                     }
                     @if (context.TotalObjectDeletes > 0)
                     {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Text" Class="px-1">
-                            -@context.TotalObjectDeletes
-                        </MudChip>
+                        <MudTooltip Text="@GetDeletesTooltip(context.ConnectedSystemRunType, context.TargetName)" Arrow="true" Placement="Placement.Bottom">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Text"
+                                     Icon="@GetDeletesIcon(context.ConnectedSystemRunType, context.TargetName)" Class="px-2">
+                                @context.TotalObjectDeletes
+                            </MudChip>
+                        </MudTooltip>
                     }
                     @if (context.TotalObjectErrors > 0)
                     {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" Class="px-1">
-                            !@context.TotalObjectErrors
-                        </MudChip>
+                        <MudTooltip Text="Errors" Arrow="true" Placement="Placement.Bottom">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled"
+                                     Icon="@Icons.Material.Filled.Error" Class="px-2">
+                                @context.TotalObjectErrors
+                            </MudChip>
+                        </MudTooltip>
                     }
                 </MudStack>
             }
@@ -304,5 +317,108 @@
         // Navigate using absolute path to ensure no query params are carried over
         var uri = NavManager.ToAbsoluteUri($"/activity/{args.Item.Id}");
         NavManager.NavigateTo(uri.AbsolutePath);
+    }
+
+    /// <summary>
+    /// Gets run-type-aware tooltip for creates stat.
+    /// Falls back to checking target name if run type is NotSet.
+    /// </summary>
+    private static string GetCreatesTooltip(ConnectedSystemRunType? runType, string? targetName)
+    {
+        var effectiveRunType = GetEffectiveRunType(runType, targetName);
+        return effectiveRunType switch
+        {
+            "Import" => "Added",
+            "Sync" => "Projected",
+            "Export" => "Provisioned",
+            _ => "Created"
+        };
+    }
+
+    /// <summary>
+    /// Gets run-type-aware tooltip for updates stat.
+    /// Falls back to checking target name if run type is NotSet.
+    /// </summary>
+    private static string GetUpdatesTooltip(ConnectedSystemRunType? runType, string? targetName)
+    {
+        var effectiveRunType = GetEffectiveRunType(runType, targetName);
+        return effectiveRunType switch
+        {
+            "Import" => "Updated",
+            "Sync" => "Joined / Flowed",
+            "Export" => "Exported",
+            _ => "Updated"
+        };
+    }
+
+    /// <summary>
+    /// Gets run-type-aware tooltip for deletes stat.
+    /// Falls back to checking target name if run type is NotSet.
+    /// </summary>
+    private static string GetDeletesTooltip(ConnectedSystemRunType? runType, string? targetName)
+    {
+        var effectiveRunType = GetEffectiveRunType(runType, targetName);
+        return effectiveRunType switch
+        {
+            "Import" => "Deleted",
+            "Sync" => "Disconnected",
+            "Export" => "Deprovisioned",
+            _ => "Deleted"
+        };
+    }
+
+    /// <summary>
+    /// Gets run-type-aware icon for updates stat.
+    /// Sync uses Link (joining/flowing - opposite of LinkOff), others use Sync (circular arrows).
+    /// </summary>
+    private static string GetUpdatesIcon(ConnectedSystemRunType? runType, string? targetName)
+    {
+        var effectiveRunType = GetEffectiveRunType(runType, targetName);
+        return effectiveRunType switch
+        {
+            "Sync" => Icons.Material.Filled.Link,
+            _ => Icons.Material.Filled.Sync
+        };
+    }
+
+    /// <summary>
+    /// Gets run-type-aware icon for deletes stat.
+    /// Sync uses LinkOff (disconnection), others use Delete (trash).
+    /// </summary>
+    private static string GetDeletesIcon(ConnectedSystemRunType? runType, string? targetName)
+    {
+        var effectiveRunType = GetEffectiveRunType(runType, targetName);
+        return effectiveRunType switch
+        {
+            "Sync" => Icons.Material.Filled.LinkOff,
+            _ => Icons.Material.Filled.Delete
+        };
+    }
+
+    /// <summary>
+    /// Determines the effective run type category from the enum or target name fallback.
+    /// </summary>
+    private static string GetEffectiveRunType(ConnectedSystemRunType? runType, string? targetName)
+    {
+        // Check enum first
+        if (runType is ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport)
+            return "Import";
+        if (runType is ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation)
+            return "Sync";
+        if (runType is ConnectedSystemRunType.Export)
+            return "Export";
+
+        // Fallback to target name if run type is NotSet or null
+        if (!string.IsNullOrEmpty(targetName))
+        {
+            if (targetName.Contains("Import", StringComparison.OrdinalIgnoreCase))
+                return "Import";
+            if (targetName.Contains("Sync", StringComparison.OrdinalIgnoreCase))
+                return "Sync";
+            if (targetName.Contains("Export", StringComparison.OrdinalIgnoreCase))
+                return "Export";
+        }
+
+        return "Unknown";
     }
 }

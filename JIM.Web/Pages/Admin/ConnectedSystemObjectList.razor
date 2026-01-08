@@ -21,27 +21,26 @@
 @if (_connectedSystemHeader != null)
 {
     @* Status Filter Chips with Options Menu *@
-    <div class="d-flex justify-space-between align-center mt-4 mb-2">
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">Filter by status:</MudText>
-        <MudMenu Label="Options" Variant="Variant.Filled" EndIcon="@Icons.Material.Filled.KeyboardArrowDown" IconColor="Color.Default" DropShadow="false">
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-4 mb-2">Filter by status:</MudText>
+    <div class="d-flex justify-space-between align-center mb-3">
+        <MudChipSet T="ConnectedSystemObjectStatus"
+                    SelectionMode="SelectionMode.MultiSelection"
+                    SelectedValues="_selectedStatuses"
+                    SelectedValuesChanged="OnStatusFilterChanged">
+            @foreach (var status in GetAvailableStatuses())
+            {
+                <MudChip Value="@status"
+                         Color="@GetStatusColor(status)"
+                         Variant="@GetStatusVariant(status)"
+                         SelectedColor="@GetStatusColor(status)">
+                    @status.ToString().SplitOnCapitalLetters()
+                </MudChip>
+            }
+        </MudChipSet>
+        <MudMenu Label="Options" Variant="Variant.Filled" EndIcon="@Icons.Material.Filled.KeyboardArrowDown" IconColor="Color.Default" DropShadow="false" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
             <MudMenuItem IconColor="Color.Primary" Icon="@Icons.Material.Filled.Delete" OnClick="HandleDeleteAllObjectsClickAsync">Delete all objects</MudMenuItem>
         </MudMenu>
     </div>
-    <MudChipSet T="ConnectedSystemObjectStatus"
-                SelectionMode="SelectionMode.MultiSelection"
-                SelectedValues="_selectedStatuses"
-                SelectedValuesChanged="OnStatusFilterChanged"
-                Class="mb-3">
-        @foreach (var status in GetAvailableStatuses())
-        {
-            <MudChip Value="@status"
-                     Color="@GetStatusColor(status)"
-                     Variant="@GetStatusVariant(status)"
-                     SelectedColor="@GetStatusColor(status)">
-                @status.ToString().SplitOnCapitalLetters()
-            </MudChip>
-        }
-    </MudChipSet>
 
     <MudTable @ref="_table"
               T="ConnectedSystemObjectHeader"
@@ -383,7 +382,7 @@ else
         {
             ConnectedSystemObjectStatus.Normal => Color.Success,
             ConnectedSystemObjectStatus.PendingProvisioning => Color.Info,
-            ConnectedSystemObjectStatus.Obsolete => Color.Dark,
+            ConnectedSystemObjectStatus.Obsolete => Color.Default,
             _ => Color.Default
         };
     }
@@ -394,11 +393,13 @@ else
     /// </summary>
     private Variant GetStatusVariant(ConnectedSystemObjectStatus status)
     {
+        // When selected, all chips use Outlined variant (shows the outline)
         if (IsStatusSelected(status))
-            return Variant.Filled;
+            return Variant.Outlined;
 
-        // Obsolete uses Text variant (no outline) when not selected
-        return status == ConnectedSystemObjectStatus.Obsolete ? Variant.Text : Variant.Outlined;
+        // When not selected, Obsolete uses Text (no outline) to de-emphasise it
+        // Other statuses also use Text variant when not selected
+        return Variant.Text;
     }
 
     /// <summary>
