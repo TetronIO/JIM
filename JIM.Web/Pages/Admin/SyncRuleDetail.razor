@@ -519,10 +519,10 @@ else if (_syncRule != null)
             }
         </DialogContent>
         <DialogActions>
-            <MudButton DropShadow="false" Variant="Variant.Outlined" OnClick="@(() => _addAttributeFlowRuleDialogVisible = false)" Class="ma-4">Cancel</MudButton>
+            <MudButton DropShadow="false" Variant="Variant.Filled" Color="Color.Default"
+                OnClick="@(() => _addAttributeFlowRuleDialogVisible = false)" Class="me-2">Cancel</MudButton>
             <MudButton Disabled="DisableAddAttributeFlowMappingButton()" DropShadow="false" Variant="Variant.Filled"
-                Color="Color.Primary" OnClick="HandleAddAttributeFlowMappingButtonClick" Class="ma-4">Add Attribute Flow
-            </MudButton>
+                Color="Color.Primary" OnClick="HandleAddAttributeFlowMappingButtonClick">Add Attribute Flow</MudButton>
         </DialogActions>
     </MudDialog>
 
