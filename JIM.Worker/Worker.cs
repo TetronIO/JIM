@@ -481,7 +481,8 @@ public class Worker : BackgroundService
     /// <summary>
     /// Calculates aggregate summary stats from Run Profile Execution Items for activity list display.
     /// Creates = Added (import) + Projected (sync) + Provisioned (export)
-    /// Updates = Updated (import) + Joined + AttributeFlow (sync) + Exported (export)
+    /// Updates = Updated (import) + Joined (sync) + Exported (export)
+    /// Flows = AttributeFlow (sync only)
     /// Deletes = Deleted (import) + Disconnected (sync) + Deprovisioned (export)
     /// Errors = Any RPEI with an error type set
     /// </summary>
@@ -493,9 +494,13 @@ public class Worker : BackgroundService
         activity.TotalObjectCreates = rpeis.Count(r =>
             r.ObjectChangeType is ObjectChangeType.Added or ObjectChangeType.Projected or ObjectChangeType.Provisioned);
 
-        // Updates: Updated (import), Joined + AttributeFlow (sync), Exported (export)
+        // Updates: Updated (import), Joined (sync), Exported (export)
         activity.TotalObjectUpdates = rpeis.Count(r =>
-            r.ObjectChangeType is ObjectChangeType.Updated or ObjectChangeType.Joined or ObjectChangeType.AttributeFlow or ObjectChangeType.Exported);
+            r.ObjectChangeType is ObjectChangeType.Updated or ObjectChangeType.Joined or ObjectChangeType.Exported);
+
+        // Flows: AttributeFlow (sync only) - data flowing through existing connections
+        activity.TotalObjectFlows = rpeis.Count(r =>
+            r.ObjectChangeType is ObjectChangeType.AttributeFlow);
 
         // Deletes: Deleted (import), Disconnected (sync), Deprovisioned (export)
         activity.TotalObjectDeletes = rpeis.Count(r =>
@@ -505,8 +510,8 @@ public class Worker : BackgroundService
         activity.TotalObjectErrors = rpeis.Count(r =>
             r.ErrorType.HasValue && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
 
-        Log.Verbose("CalculateActivitySummaryStats: Activity {ActivityId} - Creates={Creates}, Updates={Updates}, Deletes={Deletes}, Errors={Errors}",
-            activity.Id, activity.TotalObjectCreates, activity.TotalObjectUpdates, activity.TotalObjectDeletes, activity.TotalObjectErrors);
+        Log.Verbose("CalculateActivitySummaryStats: Activity {ActivityId} - Creates={Creates}, Updates={Updates}, Flows={Flows}, Deletes={Deletes}, Errors={Errors}",
+            activity.Id, activity.TotalObjectCreates, activity.TotalObjectUpdates, activity.TotalObjectFlows, activity.TotalObjectDeletes, activity.TotalObjectErrors);
     }
 
     /// <summary>
