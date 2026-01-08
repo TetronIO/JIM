@@ -2520,6 +2520,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = $"Mapping to {targetName}",
+            TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SyncRule,
             TargetOperationType = ActivityTargetOperationType.Create
         };
@@ -2544,6 +2545,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = $"Mapping to {targetName}",
+            TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SyncRule,
             TargetOperationType = ActivityTargetOperationType.Create
         };
@@ -2570,6 +2572,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = $"Mapping to {targetName}",
+            TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SyncRule,
             TargetOperationType = ActivityTargetOperationType.Update
         };
@@ -2596,6 +2599,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = $"Mapping to {targetName}",
+            TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SyncRule,
             TargetOperationType = ActivityTargetOperationType.Delete
         };
@@ -2622,6 +2626,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = $"Mapping to {targetName}",
+            TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SyncRule,
             TargetOperationType = ActivityTargetOperationType.Delete
         };
@@ -2648,6 +2653,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = connectedSystemRunProfile.Name,
+            TargetContext = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystemRunProfile,
             TargetOperationType = ActivityTargetOperationType.Create,
             ConnectedSystemId = connectedSystemRunProfile.ConnectedSystemId
@@ -2675,6 +2681,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = connectedSystemRunProfile.Name,
+            TargetContext = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystemRunProfile,
             TargetOperationType = ActivityTargetOperationType.Create,
             ConnectedSystemId = connectedSystemRunProfile.ConnectedSystemId
@@ -2691,10 +2698,14 @@ public class ConnectedSystemServer
         if (connectedSystemRunProfile == null)
             return;
 
+        // Get connected system name for activity context
+        var connectedSystem = await GetConnectedSystemAsync(connectedSystemRunProfile.ConnectedSystemId);
+
         // every CRUD operation requires tracking with an activity...
         var activity = new Activity
         {
             TargetName = connectedSystemRunProfile.Name,
+            TargetContext = connectedSystem?.Name,
             ConnectedSystemRunType = connectedSystemRunProfile.RunType,
             TargetType = ActivityTargetType.ConnectedSystemRunProfile,
             TargetOperationType = ActivityTargetOperationType.Delete,
@@ -2710,10 +2721,14 @@ public class ConnectedSystemServer
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
+        // Get connected system name for activity context
+        var connectedSystem = await GetConnectedSystemAsync(connectedSystemRunProfile.ConnectedSystemId);
+
         // every CRUD operation requires tracking with an activity...
         var activity = new Activity
         {
             TargetName = connectedSystemRunProfile.Name,
+            TargetContext = connectedSystem?.Name,
             TargetType = ActivityTargetType.ConnectedSystemRunProfile,
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemRunProfileId = connectedSystemRunProfile.Id,
@@ -2962,10 +2977,15 @@ public class ConnectedSystemServer
         }
         
         
+        // Get connected system name for activity context
+        var connectedSystemForContext = syncRule.ConnectedSystem ??
+            (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(syncRule.ConnectedSystemId) : null);
+
         // every crud operation must be tracked via an Activity
         var activity = new Activity
         {
             TargetName = syncRule.Name,
+            TargetContext = connectedSystemForContext?.Name,
             TargetType = ActivityTargetType.SyncRule,
             ParentActivityId = parentActivity?.Id
         };
@@ -3031,9 +3051,14 @@ public class ConnectedSystemServer
             syncRule.ProjectToMetaverse = null;
         }
 
+        // Get connected system name for activity context
+        var connectedSystemForContext = syncRule.ConnectedSystem ??
+            (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(syncRule.ConnectedSystemId) : null);
+
         var activity = new Activity
         {
             TargetName = syncRule.Name,
+            TargetContext = connectedSystemForContext?.Name,
             TargetType = ActivityTargetType.SyncRule,
             ParentActivityId = parentActivity?.Id
         };
@@ -3058,10 +3083,15 @@ public class ConnectedSystemServer
 
     public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy)
     {
+        // Get connected system name for activity context
+        var connectedSystem = syncRule.ConnectedSystem ??
+            (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(syncRule.ConnectedSystemId) : null);
+
         // every crud operation must be tracked via an Activity
         var activity = new Activity
         {
             TargetName = syncRule.Name,
+            TargetContext = connectedSystem?.Name,
             TargetType = ActivityTargetType.SyncRule,
             TargetOperationType = ActivityTargetOperationType.Delete
         };
@@ -3073,6 +3103,41 @@ public class ConnectedSystemServer
 
     #region Object Matching Rules
     /// <summary>
+    /// Gets the target context for an ObjectMatchingRule activity.
+    /// Returns Connected System name for Mode A (rules on ConnectedSystemObjectType) or Sync Rule name for Mode B.
+    /// </summary>
+    private async Task<string?> GetObjectMatchingRuleContextAsync(ObjectMatchingRule rule)
+    {
+        // Mode B: Rule is on a SyncRule - show the Sync Rule name
+        if (rule.SyncRule != null)
+            return rule.SyncRule.Name;
+
+        // Mode A: Rule is on a ConnectedSystemObjectType - show the Connected System name
+        // First check if navigation property is loaded
+        if (rule.ConnectedSystemObjectType?.ConnectedSystem != null)
+            return rule.ConnectedSystemObjectType.ConnectedSystem.Name;
+
+        // Navigation property not loaded - fetch the Connected System
+        if (rule.ConnectedSystemObjectType != null)
+        {
+            var connectedSystem = await GetConnectedSystemAsync(rule.ConnectedSystemObjectType.ConnectedSystemId);
+            return connectedSystem?.Name;
+        }
+
+        if (rule.ConnectedSystemObjectTypeId.HasValue)
+        {
+            var objectType = await Application.Repository.ConnectedSystems.GetObjectTypeAsync(rule.ConnectedSystemObjectTypeId.Value);
+            if (objectType != null)
+            {
+                var connectedSystem = await GetConnectedSystemAsync(objectType.ConnectedSystemId);
+                return connectedSystem?.Name;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Creates a new object matching rule for a Connected System Object Type.
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
@@ -3080,6 +3145,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Create
         };
@@ -3096,6 +3162,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Create
         };
@@ -3112,6 +3179,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Update
         };
@@ -3128,6 +3196,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Delete
         };

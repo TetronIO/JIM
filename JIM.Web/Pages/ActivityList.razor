@@ -76,7 +76,16 @@
                 @context.TargetOperationType.ToString().SplitOnCapitalLetters()
             </MudChip>
         </MudTd>
-        <MudTd DataLabel="Target">@(!string.IsNullOrEmpty(context.TargetName) ? context.TargetName : "(no name)")</MudTd>
+        <MudTd DataLabel="Target">
+            @if (!string.IsNullOrEmpty(context.TargetContext))
+            {
+                <span><strong>@context.TargetContext</strong> → @(!string.IsNullOrEmpty(context.TargetName) ? context.TargetName : "(no name)")</span>
+            }
+            else
+            {
+                @(!string.IsNullOrEmpty(context.TargetName) ? context.TargetName : "(no name)")
+            }
+        </MudTd>
         <MudTd DataLabel="Stats">
             @if (context.TargetType == ActivityTargetType.ConnectedSystemRunProfile
                  && context.TargetOperationType == ActivityTargetOperationType.Execute

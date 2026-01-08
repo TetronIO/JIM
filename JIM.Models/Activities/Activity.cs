@@ -101,6 +101,15 @@ public class Activity
     public string? TargetName { get; set; }
 
     /// <summary>
+    /// Additional context for the target, providing hierarchical information such as the parent entity name.
+    /// For example, for a ConnectedSystemRunProfile activity, this would contain the Connected System name.
+    /// For a SyncRule activity, this would contain the Connected System name.
+    /// For an ObjectMatchingRule activity, this would contain the Sync Rule name.
+    /// This is a point-in-time copy, not kept in sync with the referenced entity.
+    /// </summary>
+    public string? TargetContext { get; set; }
+
+    /// <summary>
     /// Used to calculate a progress bar.
     /// </summary>
     public int ObjectsToProcess { get; set; }
