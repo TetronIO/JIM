@@ -30,5 +30,17 @@ public interface IDataGenerationRepository
     public Task UpdateTemplateAsync(DataGenerationTemplate template);
     public Task DeleteTemplateAsync(int templateId);
 
-    public Task CreateMetaverseObjectsAsync(List<MetaverseObject> metaverseObjects, CancellationToken cancellationToken);
+    /// <summary>
+    /// Bulk creates metaverse objects in the database using batched persistence.
+    /// </summary>
+    /// <param name="metaverseObjects">The list of MetaverseObjects to persist.</param>
+    /// <param name="batchSize">Number of objects to persist per batch. Smaller batches reduce memory pressure.</param>
+    /// <param name="cancellationToken">The cancellation token to use to determine if the operation should be cancelled.</param>
+    /// <param name="progressCallback">Optional callback for reporting persistence progress. Parameters are (totalObjects, objectsPersisted).</param>
+    /// <returns>The number of objects persisted.</returns>
+    public Task<int> CreateMetaverseObjectsAsync(
+        List<MetaverseObject> metaverseObjects,
+        int batchSize,
+        CancellationToken cancellationToken,
+        Func<int, int, Task>? progressCallback = null);
 }

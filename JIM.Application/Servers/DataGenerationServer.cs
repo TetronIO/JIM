@@ -106,14 +106,16 @@ public class DataGenerationServer
     /// </summary>
     /// <param name="templateId">The ID of the template to execute.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
-    /// <param name="progressCallback">Optional callback for reporting progress. Parameters are (totalObjects, objectsProcessed).</param>
+    /// <param name="progressCallback">Optional callback for reporting progress. Parameters are (totalObjects, objectsProcessed, message).</param>
     /// <param name="progressUpdateInterval">How often to report progress. If null, progress is only reported after each object type completes.</param>
+    /// <param name="batchSize">Batch size for database persistence. Smaller batches reduce memory pressure.</param>
     /// <returns>The number of objects created.</returns>
     public async Task<int> ExecuteTemplateAsync(
         int templateId,
         CancellationToken cancellationToken,
-        Func<int, int, Task>? progressCallback = null,
-        TimeSpan? progressUpdateInterval = null)
+        Func<int, int, string?, Task>? progressCallback = null,
+        TimeSpan? progressUpdateInterval = null,
+        int batchSize = 500)
     {
         // get the entire template
         // enumerate the object types
@@ -147,7 +149,7 @@ public class DataGenerationServer
 
         // Report initial progress (total objects to create, none processed yet)
         if (progressCallback != null)
-            await progressCallback(totalObjectsToCreate, 0);
+            await progressCallback(totalObjectsToCreate, 0, "Generating objects...");
 
         // object type dependency graph needs considering
         // for now we should probably just advise people to add template object types in reverse order to how they're referenced.
@@ -284,7 +286,7 @@ public class DataGenerationServer
                                     progress, totalObjectsToCreate);
                                 lastProgressReport.Restart();
                                 // Wait for the database write to complete so UI can see the update
-                                progressCallback(totalObjectsToCreate, progress).GetAwaiter().GetResult();
+                                progressCallback(totalObjectsToCreate, progress, "Generating objects...").GetAwaiter().GetResult();
                             }
                         }
                     }
@@ -296,10 +298,6 @@ public class DataGenerationServer
             objectTypeStopWatch.Stop();
             Log.Information($"ExecuteTemplateAsync: It took {objectTypeStopWatch.Elapsed} to process the {objectType.MetaverseObjectType.Name} metaverse object type");
         }
-
-        // Report final progress to ensure UI shows 100%
-        if (progressCallback != null)
-            await progressCallback(totalObjectsToCreate, objectsGeneratedHolder[0]);
 
         // ensure that attribute population percentage values are respected
         // do this by assigning all attributes with values (done), then go and randomly delete the required amount
@@ -313,13 +311,34 @@ public class DataGenerationServer
             return 0;
         }
 
-        // submit metaverse objects to data layer for creation
+        // Report that generation is complete, now starting persistence
+        if (progressCallback != null)
+            await progressCallback(totalObjectsToCreate, totalObjectsToCreate, "Persisting to database...");
+
+        // submit metaverse objects to data layer for creation (batched for memory efficiency and progress)
         var persistenceStopwatch = new Stopwatch();
         persistenceStopwatch.Start();
 
+        // Create a persistence progress callback that reports during the persistence phase
+        // We show persistence progress as a second phase - objects are generated (100%), now persisting
+        Func<int, int, Task>? persistenceProgressCallback = null;
+        if (progressCallback != null)
+        {
+            persistenceProgressCallback = async (total, persisted) =>
+            {
+                // Format message to show persistence progress
+                var message = $"Persisting to database... ({persisted:N0}/{total:N0})";
+                await progressCallback(totalObjectsToCreate, totalObjectsToCreate, message);
+            };
+        }
+
         try
         {
-            await Application.Repository.DataGeneration.CreateMetaverseObjectsAsync(metaverseObjectsToCreate, cancellationToken);
+            await Application.Repository.DataGeneration.CreateMetaverseObjectsAsync(
+                metaverseObjectsToCreate,
+                batchSize,
+                cancellationToken,
+                persistenceProgressCallback);
         }
         catch (OperationCanceledException ex)
         {

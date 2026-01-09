@@ -663,6 +663,10 @@ try {
             $ldapAttr = $ldapUserType.attributes | Where-Object { $_.name -eq $mapping.LdapAttr }
             $mvAttr = $mvAttributes | Where-Object { $_.name -eq $mapping.MvAttr }
 
+            # Debug: Verify we're getting the right attributes
+            # Always show during initial creation to help diagnose mapping issues
+            Write-Host "    Export: MV '$($mapping.MvAttr)' (ID:$($mvAttr.id)) → LDAP '$($mapping.LdapAttr)' (ID:$($ldapAttr.id))" -ForegroundColor DarkGray
+
             if ($ldapAttr -and $mvAttr) {
                 # Check if mapping already exists
                 $existsAlready = $existingExportMappings | Where-Object {
@@ -675,6 +679,7 @@ try {
                         New-JIMSyncRuleMapping -SyncRuleId $exportRule.id `
                             -TargetConnectedSystemAttributeId $ldapAttr.id `
                             -SourceMetaverseAttributeId $mvAttr.id | Out-Null
+                        # Mapping created successfully - ID info already shown above
                         $exportMappingsCreated++
                     }
                     catch {
@@ -682,6 +687,9 @@ try {
                         throw "Critical export mapping failed. Setup cannot continue."
                     }
                 }
+            }
+            else {
+                Write-Host "    ⚠ Skipped mapping: LDAP '$($mapping.LdapAttr)' or MV '$($mapping.MvAttr)' not found" -ForegroundColor Yellow
             }
         }
         Write-Host "  ✓ Export attribute mappings configured ($exportMappingsCreated new)" -ForegroundColor Green
