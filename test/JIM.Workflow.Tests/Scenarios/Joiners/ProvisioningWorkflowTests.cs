@@ -394,7 +394,7 @@ public class ProvisioningWorkflowTests
         {
             users.Add(new ConnectedSystemImportObject
             {
-                ChangeType = ObjectChangeType.Create,
+                ChangeType = ObjectChangeType.NotSet,
                 ObjectType = "User",
                 Attributes = new List<ConnectedSystemImportObjectAttribute>
                 {
@@ -428,7 +428,7 @@ public class ProvisioningWorkflowTests
 
         return new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "User",
             Attributes = new List<ConnectedSystemImportObjectAttribute>
             {

@@ -101,6 +101,15 @@ public class Activity
     public string? TargetName { get; set; }
 
     /// <summary>
+    /// Additional context for the target, providing hierarchical information such as the parent entity name.
+    /// For example, for a ConnectedSystemRunProfile activity, this would contain the Connected System name.
+    /// For a SyncRule activity, this would contain the Connected System name.
+    /// For an ObjectMatchingRule activity, this would contain the Sync Rule name.
+    /// This is a point-in-time copy, not kept in sync with the referenced entity.
+    /// </summary>
+    public string? TargetContext { get; set; }
+
+    /// <summary>
     /// Used to calculate a progress bar.
     /// </summary>
     public int ObjectsToProcess { get; set; }
@@ -109,6 +118,44 @@ public class Activity
     /// Used to calculate a progress bar.
     /// </summary>
     public int ObjectsProcessed { get; set; }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // summary stats for run profile executions (for list view display)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Aggregate count of all "create" operations from RPEIs.
+    /// Includes: Added (import), Projected (sync), Provisioned (export).
+    /// Populated when activity completes.
+    /// </summary>
+    public int TotalObjectCreates { get; set; }
+
+    /// <summary>
+    /// Aggregate count of all "update" operations from RPEIs.
+    /// Includes: Updated (import), Joined (sync), Exported (export).
+    /// Populated when activity completes.
+    /// </summary>
+    public int TotalObjectUpdates { get; set; }
+
+    /// <summary>
+    /// Aggregate count of attribute flow operations from RPEIs.
+    /// Only applies to sync runs - data flowing through existing connections.
+    /// Populated when activity completes.
+    /// </summary>
+    public int TotalObjectFlows { get; set; }
+
+    /// <summary>
+    /// Aggregate count of all "delete" operations from RPEIs.
+    /// Includes: Deleted (import), Disconnected (sync), Deprovisioned (export).
+    /// Populated when activity completes.
+    /// </summary>
+    public int TotalObjectDeletes { get; set; }
+
+    /// <summary>
+    /// Count of RPEIs with errors.
+    /// Populated when activity completes.
+    /// </summary>
+    public int TotalObjectErrors { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
     // context specific properties

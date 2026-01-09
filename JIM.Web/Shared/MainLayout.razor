@@ -72,15 +72,17 @@
             <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-5 pb-5">
                 @Body
 
-                <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5 mud-text-secondary">
-                    &copy; @DateTime.UtcNow.Year Tetron Ltd. All rights reserved.
-                </MudText>
+                <div class="jim-page-footer">
+                    <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5 mud-text-secondary">
+                        &copy; @DateTime.UtcNow.Year Tetron Ltd. All rights reserved.
+                    </MudText>
 
-                <MudText Align="Align.Center">
-                    <MudLink Href="https://github.com/TetronIO/JIM">
-                        <MudIconButton Icon="@Icons.Custom.Brands.GitHub" aria-label="See us on GitHub" Style="color:#515560;"/>
-                    </MudLink>
-                </MudText>
+                    <MudText Align="Align.Center">
+                        <MudLink Href="https://github.com/TetronIO/JIM">
+                            <MudIconButton Icon="@Icons.Custom.Brands.GitHub" aria-label="See us on GitHub" Style="color:#515560;"/>
+                        </MudLink>
+                    </MudText>
+                </div>
 
             </MudContainer>
         </MudMainContent>
@@ -153,7 +155,19 @@
     // Default to closed/unpinned - will be set based on screen size in OnAfterRenderAsync
     private bool IsDrawerOpen { get; set; }
     private bool IsDrawerPinned { get; set; }
-    private bool IsDarkMode { get; set; }
+    private bool _isDarkMode;
+    private bool IsDarkMode
+    {
+        get => _isDarkMode;
+        set
+        {
+            if (_isDarkMode != value)
+            {
+                _isDarkMode = value;
+                _ = UpdateDarkModeClassAsync(value);
+            }
+        }
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -162,7 +176,8 @@
             // Get dark mode preference
             if (_mudThemeProvider != null)
             {
-                IsDarkMode = await _mudThemeProvider.GetSystemDarkModeAsync();
+                _isDarkMode = await _mudThemeProvider.GetSystemDarkModeAsync();
+                await UpdateDarkModeClassAsync(_isDarkMode);
             }
 
             // Detect screen width and set drawer state accordingly
@@ -173,6 +188,21 @@
             IsDrawerPinned = isLargeScreen;
 
             StateHasChanged();
+        }
+    }
+
+    private async Task UpdateDarkModeClassAsync(bool isDark)
+    {
+        try
+        {
+            if (isDark)
+                await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('jim-dark-mode')");
+            else
+                await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.remove('jim-dark-mode')");
+        }
+        catch (JSDisconnectedException)
+        {
+            // Ignore - circuit is disconnected
         }
     }
 

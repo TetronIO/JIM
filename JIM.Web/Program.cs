@@ -23,6 +23,7 @@ using MudBlazor.Services;
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Compact;
+using Serilog.Formatting.Json;
 using System.Security.Claims;
 
 // Required environment variables:
@@ -418,7 +419,7 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
     loggerConfiguration.MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning);
     loggerConfiguration.Enrich.FromLogContext();
     loggerConfiguration.WriteTo.File(
-        formatter: new CompactJsonFormatter(),
+        formatter: new RenderedCompactJsonFormatter(),
         path: Path.Combine(loggingPath, "jim.web..log"),
         rollingInterval: RollingInterval.Day,
         retainedFileCountLimit: 31,  // Keep 31 days of logs for integration test analysis

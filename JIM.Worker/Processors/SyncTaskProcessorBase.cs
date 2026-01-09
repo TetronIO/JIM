@@ -48,6 +48,9 @@ public abstract class SyncTaskProcessorBase
     protected readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToDelete = [];
     protected readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToUpdate = [];
 
+    // Batch collection for deferred provisioning CSO creation (avoid per-CSO database calls)
+    protected readonly List<ConnectedSystemObject> _provisioningCsosToCreate = [];
+
     // Batch collection for deferred CSO deletions (avoid per-CSO database calls)
     protected readonly List<(ConnectedSystemObject Cso, ActivityRunProfileExecutionItem ExecutionItem)> _obsoleteCsosToDelete = [];
 
@@ -327,9 +330,10 @@ public abstract class SyncTaskProcessorBase
             return null;
 
         // Create the execution item for this obsolete CSO
+        // Note: RPEI uses Delete (user-facing), CSO status uses Obsolete (internal state)
         var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
         runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
-        runProfileExecutionItem.ObjectChangeType = ObjectChangeType.Obsolete;
+        runProfileExecutionItem.ObjectChangeType = ObjectChangeType.Deleted;
 
         if (connectedSystemObject.MetaverseObject == null)
         {
@@ -628,7 +632,7 @@ public abstract class SyncTaskProcessorBase
 
         // Evaluate export rules for MVOs that are IN scope, using cached data for O(1) lookups
         // Uses no-net-change detection to skip pending exports when CSO already has current values
-        // Pending exports are deferred (deferSave=true) and collected for batch saving
+        // Pending exports and provisioning CSOs are deferred (deferSave=true) and collected for batch saving
         using (Diagnostics.Sync.StartSpan("EvaluateExportRules"))
         {
             var result = await _jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
@@ -641,6 +645,12 @@ public abstract class SyncTaskProcessorBase
 
             // Aggregate no-net-change counts for statistics
             _totalCsoAlreadyCurrentCount += result.CsoAlreadyCurrentCount;
+
+            // Collect provisioning CSOs for batch creation at end of page (must be created before pending exports)
+            if (result.ProvisioningCsosToCreate.Count > 0)
+            {
+                _provisioningCsosToCreate.AddRange(result.ProvisioningCsosToCreate);
+            }
 
             // Collect pending exports for batch saving at end of page
             if (result.PendingExports.Count > 0)
@@ -721,18 +731,29 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Batch persists all pending export creates, deletes, and updates collected during the current page.
-    /// This reduces database round trips from n writes to 3 writes (one each for creates, deletes, updates).
+    /// Batch persists all provisioning CSOs and pending export creates, deletes, and updates collected during the current page.
+    /// CSOs must be created before pending exports since pending exports reference CSOs by ID.
+    /// This reduces database round trips from n writes to 4 writes (CSOs, creates, deletes, updates).
     /// </summary>
     protected async Task FlushPendingExportOperationsAsync()
     {
-        if (_pendingExportsToCreate.Count == 0 && _pendingExportsToDelete.Count == 0 && _pendingExportsToUpdate.Count == 0)
+        if (_provisioningCsosToCreate.Count == 0 && _pendingExportsToCreate.Count == 0 &&
+            _pendingExportsToDelete.Count == 0 && _pendingExportsToUpdate.Count == 0)
             return;
 
         using var span = Diagnostics.Sync.StartSpan("FlushPendingExportOperations");
+        span.SetTag("csoCreateCount", _provisioningCsosToCreate.Count);
         span.SetTag("createCount", _pendingExportsToCreate.Count);
         span.SetTag("deleteCount", _pendingExportsToDelete.Count);
         span.SetTag("updateCount", _pendingExportsToUpdate.Count);
+
+        // Batch create provisioning CSOs first (pending exports reference CSOs by ID)
+        if (_provisioningCsosToCreate.Count > 0)
+        {
+            await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(_provisioningCsosToCreate);
+            Log.Verbose("FlushPendingExportOperationsAsync: Created {Count} provisioning CSOs in batch", _provisioningCsosToCreate.Count);
+            _provisioningCsosToCreate.Clear();
+        }
 
         // Batch create new pending exports (evaluated during export evaluation phase)
         if (_pendingExportsToCreate.Count > 0)

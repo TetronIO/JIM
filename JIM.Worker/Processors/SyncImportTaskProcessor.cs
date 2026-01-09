@@ -208,12 +208,15 @@ public class SyncImportTaskProcessor
         // process deletions
         // note: only run deletion detection for Full Imports
         // Delta Imports only return changed objects, so absence doesn't mean deletion
-        // Explicit deletes from delta imports are handled in ProcessImportObjectsAsync via ObjectChangeType.Delete
+        // Explicit deletes from delta imports are handled in ProcessImportObjectsAsync via ObjectChangeType.Deleted
         // note: make sure it doesn't apply deletes if no objects were imported, as this suggests there was a problem collecting data from the connected system?
         // note: if it's expected that 0 imported objects means all objects were deleted, then an admin will have to clear the Connected System manually to achieve the same result.
         if (totalObjectsImported > 0 && _connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport)
         {
-            // TODO: find out why this caused CSOs to be persisted early, and why this conflicts with later create CSOs statement
+            // Get count of existing CSOs to determine how many we need to check for deletions
+            var existingCsoCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
+            _activity.ObjectsToProcess = existingCsoCount;
+            _activity.ObjectsProcessed = 0;
             await _jim.Activities.UpdateActivityMessageAsync(_activity, "Processing deletions");
             using (Diagnostics.Sync.StartSpan("ProcessDeletions"))
             {
@@ -223,6 +226,10 @@ public class SyncImportTaskProcessor
 
         // now that all objects have been imported, we can attempt to resolve unresolved reference attribute values
         // i.e. attempt to convert unresolved reference strings into hard links to other Connected System Objects
+        var objectsWithReferences = connectedSystemObjectsToBeCreated.Count(cso => cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))) +
+                                    connectedSystemObjectsToBeUpdated.Count(cso => cso.PendingAttributeValueAdditions.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)));
+        _activity.ObjectsToProcess = objectsWithReferences;
+        _activity.ObjectsProcessed = 0;
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Resolving references");
         using (Diagnostics.Sync.StartSpan("ResolveReferences"))
         {
@@ -230,22 +237,63 @@ public class SyncImportTaskProcessor
         }
 
         // now persist all CSOs which will also create the required Change Objects within the Activity.
+        var totalChanges = connectedSystemObjectsToBeCreated.Count + connectedSystemObjectsToBeUpdated.Count;
+        _activity.ObjectsToProcess = totalChanges;
+        _activity.ObjectsProcessed = 0;
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Saving changes");
         using (var persistSpan = Diagnostics.Database.StartSpan("PersistConnectedSystemObjects"))
         {
             persistSpan.SetTag("createCount", connectedSystemObjectsToBeCreated.Count);
             persistSpan.SetTag("updateCount", connectedSystemObjectsToBeUpdated.Count);
 
+            // Log RPEI error status before persistence
+            var rpeiWithErrors = _activityRunProfileExecutionItems.Where(r => r.ErrorType != null && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet).ToList();
+            if (rpeiWithErrors.Count > 0)
+            {
+                Log.Warning("About to persist {RpeiCount} RPEIs. {RpeiErrorCount} have errors: {ErrorDetails}",
+                    _activityRunProfileExecutionItems.Count,
+                    rpeiWithErrors.Count,
+                    string.Join("; ", rpeiWithErrors.Select(r => $"[Id={r.Id}, ErrorType={r.ErrorType}, Message={r.ErrorMessage}]")));
+            }
+
             await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activityRunProfileExecutionItems);
+            _activity.ObjectsProcessed = connectedSystemObjectsToBeCreated.Count;
+            await _jim.Activities.UpdateActivityAsync(_activity);
+
             await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activityRunProfileExecutionItems);
+            _activity.ObjectsProcessed = totalChanges;
+            await _jim.Activities.UpdateActivityAsync(_activity);
         }
 
         // Reconcile pending exports against imported values (confirming import)
         // This confirms exported attribute changes or marks them for retry
+        _activity.ObjectsToProcess = connectedSystemObjectsToBeUpdated.Count;
+        _activity.ObjectsProcessed = 0;
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Reconciling pending exports");
         using (Diagnostics.Sync.StartSpan("ReconcilePendingExports"))
         {
             await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated);
+        }
+
+        // Validate all RPEIs before persisting - catch any that have no CSO and no error (indicates a bug)
+        // Check for RPEIs where: Create operation, no CSO ID assigned, and no error recorded
+        var orphanedRpeis = _activityRunProfileExecutionItems
+            .Where(r => r.ObjectChangeType == ObjectChangeType.Added &&
+                        r.ConnectedSystemObjectId == null &&
+                        r.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
+            .ToList();
+
+        if (orphanedRpeis.Count > 0)
+        {
+            foreach (var orphanedRpei in orphanedRpeis)
+            {
+                var extId = orphanedRpei.ConnectedSystemObject?.ExternalIdAttributeValue?.StringValue ?? "[unknown]";
+                var hasCsoRef = orphanedRpei.ConnectedSystemObject != null;
+                Log.Error("VALIDATION FAILURE: RPEI has ObjectChangeType=Create but no ConnectedSystemObjectId and no error. HasCsoRef={HasCsoRef}, ExtId={ExtId}. This is a bug! Setting error type.",
+                    hasCsoRef, extId);
+                orphanedRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.CsoCreationFailed;
+                orphanedRpei.ErrorMessage = $"Internal error: RPEI was created for import (ExtId={extId}) but CSO was not persisted. CSO reference exists={hasCsoRef}. This indicates a bug in the persistence layer.";
+            }
         }
 
         // now persist the activity run profile execution items with the activity
@@ -397,11 +445,14 @@ public class SyncImportTaskProcessor
         // we need to create a run profile execution item for the object deletion. it will get persisted in the activity tree.
         var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
         _activityRunProfileExecutionItems.Add(activityRunProfileExecutionItem);
-        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Obsolete;
+        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Deleted;
         activityRunProfileExecutionItem.ConnectedSystemObject = cso;
         activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
+        // Snapshot the external ID so it's preserved even after CSO is deleted
+        activityRunProfileExecutionItem.ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue;
 
-        // mark it obsolete, so that it's deleted when a synchronisation run profile is performed.
+        // mark it obsolete internally, so that it's deleted when a synchronisation run profile is performed.
+        // Note: The RPEI uses Delete (user-facing), but the CSO status uses Obsolete (internal state)
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
         cso.LastUpdated = DateTime.UtcNow;
 
@@ -485,23 +536,27 @@ public class SyncImportTaskProcessor
                 }
 
                 // Handle delete requests from delta imports (e.g., LDAP changelog)
-                // When a connector specifies Delete, mark the existing CSO as Obsolete
-                if (importObject.ChangeType == ObjectChangeType.Delete)
+                // When a connector specifies Delete, mark the existing CSO as Obsolete internally
+                if (importObject.ChangeType == ObjectChangeType.Deleted)
                 {
                     if (connectedSystemObject != null)
                     {
-                        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Obsolete;
+                        // RPEI uses Delete (user-facing), CSO status uses Obsolete (internal state)
+                        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Deleted;
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
+                        // Snapshot the external ID so it's preserved even after CSO is deleted
+                        activityRunProfileExecutionItem.ExternalIdSnapshot = connectedSystemObject.ExternalIdAttributeValue?.StringValue;
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Obsolete;
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
                         connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
-                        Log.Information("ProcessImportObjectsAsync: Connector requested delete for object with external ID in type '{ObjectType}'. Marking CSO {CsoId} as Obsolete.",
+                        Log.Information("ProcessImportObjectsAsync: Connector requested delete for object with external ID in type '{ObjectType}'. Marking CSO {CsoId} for deletion.",
                             importObject.ObjectType, connectedSystemObject.Id);
                     }
                     else
                     {
-                        // Connector says delete, but we don't have the object - nothing to do
+                        // Connector says delete, but we don't have the object - nothing to do, remove the RPEI
+                        _activityRunProfileExecutionItems.Remove(activityRunProfileExecutionItem);
                         Log.Debug("ProcessImportObjectsAsync: Connector requested delete for object type '{ObjectType}' but no matching CSO found. Ignoring.",
                             importObject.ObjectType);
                     }
@@ -513,13 +568,25 @@ public class SyncImportTaskProcessor
                 if (connectedSystemObject == null)
                 {
                     // Log warning if connector said Update but object doesn't exist
-                    if (importObject.ChangeType == ObjectChangeType.Update)
+                    if (importObject.ChangeType == ObjectChangeType.Updated)
                     {
-                        Log.Warning("ProcessImportObjectsAsync: Connector indicated Update for object type '{ObjectType}' but no matching CSO found. Creating new object instead.",
-                            importObject.ObjectType);
+                        Log.Warning("ProcessImportObjectsAsync: Connector indicated Update for object type '{ObjectType}' but no matching CSO found. Creating new object instead. " +
+                            "ConnectedSystem: {ConnectedSystemId} ({ConnectedSystemName}), RunProfile: {RunProfileId} ({RunProfileName}), Activity: {ActivityId}",
+                            importObject.ObjectType,
+                            _connectedSystem.Id, _connectedSystem.Name,
+                            _connectedSystemRunProfile.Id, _connectedSystemRunProfile.Name,
+                            _activity.Id);
                     }
 
-                    activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Create;
+                    activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Added;
+
+                    // Extract and snapshot the external ID - this persists even if the CSO is later deleted
+                    var externalIdAttributeName = csObjectType.Attributes.First(ca => ca.IsExternalId).Name;
+                    var externalIdValue = importObject.Attributes
+                        .FirstOrDefault(a => a.Name.Equals(externalIdAttributeName, StringComparison.OrdinalIgnoreCase))
+                        ?.StringValues?.FirstOrDefault();
+                    activityRunProfileExecutionItem.ExternalIdSnapshot = externalIdValue;
+
                     connectedSystemObject = CreateConnectedSystemObjectFromImportObject(importObject, csObjectType, activityRunProfileExecutionItem);
 
                     // cso could be null at this point if the create-cso flow failed due to unexpected import attributes, etc.
@@ -528,33 +595,51 @@ public class SyncImportTaskProcessor
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
                     }
+                    else
+                    {
+                        // Ensure the RPEI has an error type if CSO creation failed but no specific error was set
+                        if (activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
+                        {
+                            activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CsoCreationFailed;
+                            activityRunProfileExecutionItem.ErrorMessage = $"Failed to create Connected System Object for import object with external ID '{externalIdValue ?? "[unknown]"}'. No specific error was recorded.";
+                            Log.Error("ProcessImportObjectsAsync: CSO creation failed for external ID '{ExternalId}' with no specific error. This indicates a bug in import processing.",
+                                externalIdValue ?? "[unknown]");
+                        }
+                    }
                 }
                 else
                 {
-                    // Log warning if connector said Create but object already exists
-                    if (importObject.ChangeType == ObjectChangeType.Create)
+                    // Log warning if connector said Add but object already exists
+                    if (importObject.ChangeType == ObjectChangeType.Added)
                     {
-                        Log.Warning("ProcessImportObjectsAsync: Connector indicated Create for object type '{ObjectType}' but CSO {CsoId} already exists. Updating instead.",
-                            importObject.ObjectType, connectedSystemObject.Id);
+                        Log.Warning("ProcessImportObjectsAsync: Connector indicated Add for object type '{ObjectType}' but CSO {CsoId} already exists. Updating instead. " +
+                            "ConnectedSystem: {ConnectedSystemId} ({ConnectedSystemName}), RunProfile: {RunProfileId} ({RunProfileName}), Activity: {ActivityId}",
+                            importObject.ObjectType, connectedSystemObject.Id,
+                            _connectedSystem.Id, _connectedSystem.Name,
+                            _connectedSystemRunProfile.Id, _connectedSystemRunProfile.Name,
+                            _activity.Id);
                     }
 
                     // Transition PendingProvisioning CSOs to Normal status now that import confirms they exist
                     // in the connected system. This is essential for proper reconciliation and subsequent lookups.
+                    var statusTransitioned = false;
                     if (connectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning)
                     {
                         Log.Information("ProcessImportObjectsAsync: Transitioning CSO {CsoId} from PendingProvisioning to Normal status. Object now confirmed in connected system.",
                             connectedSystemObject.Id);
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Normal;
+                        statusTransitioned = true;
                     }
 
-                    // existing connected system object - update from import object if necessary
-                    activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Update;
-                    activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
-                    activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
+                    // Calculate attribute changes before processing
                     UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, csObjectType, activityRunProfileExecutionItem);
-                    connectedSystemObject.LastUpdated = DateTime.UtcNow;
 
-                    // Only add if not already in the list (can happen if same CSO matches multiple import objects)
+                    // Check if there are any actual attribute changes
+                    var hasAttributeChanges = connectedSystemObject.PendingAttributeValueAdditions.Count > 0 ||
+                                              connectedSystemObject.PendingAttributeValueRemovals.Count > 0;
+
+                    // Always add to update list - needed for reference resolution even if no attribute changes
+                    // The update list is used by ResolveReferencesAsync to resolve references between objects
                     if (!connectedSystemObjectsToBeUpdated.Any(cso => cso.Id == connectedSystemObject.Id))
                     {
                         connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
@@ -562,6 +647,24 @@ public class SyncImportTaskProcessor
                     else
                     {
                         Log.Warning("ProcessImportObjectsAsync: CSO {CsoId} was already matched by a previous import object. Skipping duplicate addition to update list.",
+                            connectedSystemObject.Id);
+                    }
+
+                    // Only create RPEI if there are actual changes (attributes or status transition)
+                    if (hasAttributeChanges || statusTransitioned)
+                    {
+                        activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Updated;
+                        activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+                        activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
+                        // Snapshot the external ID so it's preserved even if CSO is later deleted
+                        activityRunProfileExecutionItem.ExternalIdSnapshot = connectedSystemObject.ExternalIdAttributeValue?.StringValue;
+                        connectedSystemObject.LastUpdated = DateTime.UtcNow;
+                    }
+                    else
+                    {
+                        // No changes - remove the RPEI from the list (it was added at the start of the loop)
+                        _activityRunProfileExecutionItems.Remove(activityRunProfileExecutionItem);
+                        Log.Debug("ProcessImportObjectsAsync: No attribute changes for CSO {CsoId}. Skipping RPEI creation.",
                             connectedSystemObject.Id);
                     }
                 }
@@ -712,9 +815,20 @@ public class SyncImportTaskProcessor
             if (csAttribute == null)
             {
                 // unexpected import attribute!
+                Log.Error("CreateConnectedSystemObjectFromImportObject: UnexpectedAttribute error - attribute '{AttributeName}' not found in schema for object type '{ObjectType}'. Available schema attributes: {AvailableAttributes}. RPEI ID: {RpeiId}",
+                    importObjectAttribute.Name,
+                    connectedSystemObjectType.Name,
+                    string.Join(", ", connectedSystemObjectType.Attributes.Select(a => a.Name)),
+                    activityRunProfileExecutionItem.Id);
+
                 activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute;
                 activityRunProfileExecutionItem.ErrorMessage = $"Was not expecting the imported object attribute '{importObjectAttribute.Name}'.";
                 csoIsInvalid = true;
+
+                Log.Error("CreateConnectedSystemObjectFromImportObject: Set ErrorType={ErrorType}, ErrorMessage={ErrorMessage} on RPEI {RpeiId}",
+                    activityRunProfileExecutionItem.ErrorType,
+                    activityRunProfileExecutionItem.ErrorMessage,
+                    activityRunProfileExecutionItem.Id);
                 break;
             }
 
@@ -819,7 +933,13 @@ public class SyncImportTaskProcessor
         }
 
         if (csoIsInvalid)
+        {
+            Log.Error("CreateConnectedSystemObjectFromImportObject: Returning null because csoIsInvalid=true. RPEI {RpeiId} has ErrorType={ErrorType}, ErrorMessage={ErrorMessage}",
+                activityRunProfileExecutionItem.Id,
+                activityRunProfileExecutionItem.ErrorType,
+                activityRunProfileExecutionItem.ErrorMessage);
             return null;
+        }
 
         // now associate the cso with the activityRunProfileExecutionItem
         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
@@ -1114,7 +1234,7 @@ public class SyncImportTaskProcessor
         {
             // reference not found. referenced object probably out of container scope!
             // todo: make it a per-connected system setting whether to raise an error, or ignore. sometimes this is desirable.
-            var activityRunProfileExecutionItem = _activity.RunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject == csoToProcess);
+            var activityRunProfileExecutionItem = _activityRunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject == csoToProcess);
             if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || (activityRunProfileExecutionItem.ErrorType == null && activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)))
             {
                 activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {referenceAttributeValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
@@ -1135,74 +1255,147 @@ public class SyncImportTaskProcessor
     /// Reconciles Pending Exports against imported CSO values.
     /// This is the "confirming import" step that validates exported attribute changes were persisted in the connected system.
     /// Creates ActivityRunProfileExecutionItems with warnings for unconfirmed or failed exports.
+    /// Uses batched database operations for better performance, processing CSOs in pages using the sync page size setting.
     /// </summary>
     /// <param name="updatedCsos">The CSOs that were updated during this import run.</param>
     private async Task ReconcilePendingExportsAsync(IReadOnlyCollection<ConnectedSystemObject> updatedCsos)
     {
+        if (updatedCsos.Count == 0)
+            return;
+
         var reconciliationService = new PendingExportReconciliationService(_jim);
         var totalConfirmed = 0;
         var totalRetry = 0;
         var totalFailed = 0;
         var exportsDeleted = 0;
 
-        foreach (var cso in updatedCsos)
+        // Use sync page size for consistent batching across all sync operations
+        var pageSize = await _jim.ServiceSettings.GetSyncPageSizeAsync();
+        var csoList = updatedCsos.ToList();
+        var totalPages = (int)Math.Ceiling((double)csoList.Count / pageSize);
+
+        Log.Debug("ReconcilePendingExportsAsync: Processing {CsoCount} CSOs in {PageCount} pages of {PageSize}",
+            csoList.Count, totalPages, pageSize);
+
+        var processedCount = 0;
+
+        for (var page = 0; page < totalPages; page++)
         {
-            try
+            var pageCsos = csoList.Skip(page * pageSize).Take(pageSize).ToList();
+
+            // Batch collections for deferred database operations (per page)
+            var pendingExportsToDelete = new List<JIM.Models.Transactional.PendingExport>();
+            var pendingExportsToUpdate = new List<JIM.Models.Transactional.PendingExport>();
+
+            // Bulk fetch pending exports for this page's CSOs in a single query
+            Dictionary<Guid, JIM.Models.Transactional.PendingExport> pendingExportsByCsoId;
+            using (Diagnostics.Sync.StartSpan("LoadPendingExports").SetTag("csoCount", pageCsos.Count))
             {
-                PendingExportReconciliationResult result;
-                using (Diagnostics.Sync.StartSpan("ReconcileCso"))
+                pendingExportsByCsoId = await _jim.Repository.ConnectedSystems
+                    .GetPendingExportsByConnectedSystemObjectIdsAsync(pageCsos.Select(c => c.Id));
+            }
+
+            Log.Verbose("ReconcilePendingExportsAsync: Page {Page}/{TotalPages}: Loaded {PendingExportCount} pending exports for {CsoCount} CSOs",
+                page + 1, totalPages, pendingExportsByCsoId.Count, pageCsos.Count);
+
+            // Process each CSO in this page against its pre-loaded pending export
+            using (Diagnostics.Sync.StartSpan("ProcessReconciliation").SetTag("csoCount", pageCsos.Count))
+            {
+                foreach (var cso in pageCsos)
                 {
-                    result = await reconciliationService.ReconcileAsync(cso);
-                }
+                    processedCount++;
+                    _activity.ObjectsProcessed = processedCount;
 
-                if (result.HasChanges)
-                {
-                    totalConfirmed += result.ConfirmedChanges.Count;
-                    totalRetry += result.RetryChanges.Count;
-                    totalFailed += result.FailedChanges.Count;
-
-                    if (result.PendingExportDeleted)
-                        exportsDeleted++;
-
-                    // Create execution items for failed exports (permanent failures)
-                    if (result.FailedChanges.Count > 0)
+                    try
                     {
-                        var failedAttrNames = string.Join(", ", result.FailedChanges.Select(c => c.Attribute?.Name ?? "unknown"));
-                        var executionItem = new ActivityRunProfileExecutionItem
+                        // Get the pre-loaded pending export for this CSO (if any)
+                        pendingExportsByCsoId.TryGetValue(cso.Id, out var pendingExport);
+
+                        // Perform in-memory reconciliation (no database operations)
+                        var result = new PendingExportReconciliationResult();
+                        reconciliationService.ReconcileCsoAgainstPendingExport(cso, pendingExport, result);
+
+                        if (result.HasChanges)
                         {
-                            Activity = _activity,
-                            ConnectedSystemObject = cso,
-                            ConnectedSystemObjectId = cso.Id,
-                            ObjectChangeType = ObjectChangeType.Update,
-                            ErrorType = ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed,
-                            ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.",
-                            DataSnapshot = $"Failed attributes: {failedAttrNames}"
-                        };
-                        _activityRunProfileExecutionItems.Add(executionItem);
+                            totalConfirmed += result.ConfirmedChanges.Count;
+                            totalRetry += result.RetryChanges.Count;
+                            totalFailed += result.FailedChanges.Count;
+
+                            // Collect pending exports for batch operations
+                            if (result.PendingExportToDelete != null)
+                            {
+                                pendingExportsToDelete.Add(result.PendingExportToDelete);
+                                exportsDeleted++;
+                            }
+                            else if (result.PendingExportToUpdate != null)
+                            {
+                                pendingExportsToUpdate.Add(result.PendingExportToUpdate);
+                            }
+
+                            // Create execution items for failed exports (permanent failures)
+                            if (result.FailedChanges.Count > 0)
+                            {
+                                var failedAttrNames = string.Join(", ", result.FailedChanges.Select(c => c.Attribute?.Name ?? "unknown"));
+                                var executionItem = new ActivityRunProfileExecutionItem
+                                {
+                                    Activity = _activity,
+                                    ConnectedSystemObject = cso,
+                                    ConnectedSystemObjectId = cso.Id,
+                                    ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue,
+                                    ObjectChangeType = ObjectChangeType.Updated,
+                                    ErrorType = ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed,
+                                    ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.",
+                                    DataSnapshot = $"Failed attributes: {failedAttrNames}"
+                                };
+                                _activityRunProfileExecutionItems.Add(executionItem);
+                            }
+
+                            // Create execution items for retry exports (temporary failures that will be retried)
+                            if (result.RetryChanges.Count > 0)
+                            {
+                                var retryAttrNames = string.Join(", ", result.RetryChanges.Select(c => c.Attribute?.Name ?? "unknown"));
+                                var executionItem = new ActivityRunProfileExecutionItem
+                                {
+                                    Activity = _activity,
+                                    ConnectedSystemObject = cso,
+                                    ConnectedSystemObjectId = cso.Id,
+                                    ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue,
+                                    ObjectChangeType = ObjectChangeType.Updated,
+                                    ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
+                                    ErrorMessage = $"Export not confirmed for {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will retry on next export run.",
+                                    DataSnapshot = $"Unconfirmed attributes: {retryAttrNames}"
+                                };
+                                _activityRunProfileExecutionItems.Add(executionItem);
+                            }
+                        }
                     }
-
-                    // Create execution items for retry exports (temporary failures that will be retried)
-                    if (result.RetryChanges.Count > 0)
+                    catch (Exception ex)
                     {
-                        var retryAttrNames = string.Join(", ", result.RetryChanges.Select(c => c.Attribute?.Name ?? "unknown"));
-                        var executionItem = new ActivityRunProfileExecutionItem
-                        {
-                            Activity = _activity,
-                            ConnectedSystemObject = cso,
-                            ConnectedSystemObjectId = cso.Id,
-                            ObjectChangeType = ObjectChangeType.Update,
-                            ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
-                            ErrorMessage = $"Export not confirmed for {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will retry on next export run.",
-                            DataSnapshot = $"Unconfirmed attributes: {retryAttrNames}"
-                        };
-                        _activityRunProfileExecutionItems.Add(executionItem);
+                        Log.Error(ex, "ReconcilePendingExportsAsync: Error reconciling pending exports for CSO {CsoId}", cso.Id);
                     }
                 }
             }
-            catch (Exception ex)
+
+            // Batch persist pending export changes for this page
+            using (Diagnostics.Sync.StartSpan("FlushPendingExportChanges")
+                .SetTag("deleteCount", pendingExportsToDelete.Count)
+                .SetTag("updateCount", pendingExportsToUpdate.Count))
             {
-                Log.Error(ex, "ReconcilePendingExportsAsync: Error reconciling pending exports for CSO {CsoId}", cso.Id);
+                if (pendingExportsToDelete.Count > 0)
+                {
+                    await _jim.Repository.ConnectedSystems.DeletePendingExportsAsync(pendingExportsToDelete);
+                    Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch deleted {Count} confirmed pending exports", page + 1, pendingExportsToDelete.Count);
+                }
+
+                if (pendingExportsToUpdate.Count > 0)
+                {
+                    await _jim.Repository.ConnectedSystems.UpdatePendingExportsAsync(pendingExportsToUpdate);
+                    Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch updated {Count} pending exports", page + 1, pendingExportsToUpdate.Count);
+                }
             }
+
+            // Update activity progress after each page
+            await _jim.Activities.UpdateActivityAsync(_activity);
         }
 
         if (totalConfirmed > 0 || totalRetry > 0 || totalFailed > 0)

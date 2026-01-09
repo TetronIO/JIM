@@ -9,6 +9,7 @@
 @attribute [Authorize(Roles = "Administrator")]
 @inject JimApplication Jim
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 @implements IDisposable
 
 <PageTitle>Operations</PageTitle>
@@ -25,22 +26,30 @@
     @if (_connectedSystemHeaders is { Count: > 0 })
     {
         <MudForm>
-            <MudSelect T="ConnectedSystemHeader" ValueChanged="HandleConnectedSystemHeaderChangedAsync" Label="Connected System" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Class="mt-5" Required="true" RequiredError="Please select a Connected System">
-                @foreach (var connectedSystem in _connectedSystemHeaders)
-                {
-                    <MudSelectItem Value="@connectedSystem" />
-                }
-            </MudSelect>
-            @if (_connectedSystemRunProfiles != null)
-            {
-                <MudSelect T="ConnectedSystemRunProfile" @bind-Value="_selectedConnectedSystemRunProfile" Label="Run Profile" Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomCenter" Required="true" RequiredError="A run profile is required">
-                    @foreach (var runProfile in _connectedSystemRunProfiles)
-                    {
-                        <MudSelectItem Value="@runProfile" />
-                    }
-                </MudSelect>
-            }
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleExecuteRunProfileSubmitAsync" Class="mt-5" DropShadow="false">Execute</MudButton>
+            <MudGrid Class="mt-3">
+                <MudItem xs="12" sm="5">
+                    <MudSelect T="ConnectedSystemHeader" ValueChanged="HandleConnectedSystemHeaderChangedAsync" Label="Connected System" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true" RequiredError="Please select a Connected System">
+                        @foreach (var connectedSystem in _connectedSystemHeaders)
+                        {
+                            <MudSelectItem Value="@connectedSystem" />
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="5">
+                    <MudSelect T="ConnectedSystemRunProfile" @bind-Value="_selectedConnectedSystemRunProfile" Label="Run Profile" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true" RequiredError="A run profile is required" Disabled="@(_connectedSystemRunProfiles == null)">
+                        @if (_connectedSystemRunProfiles != null)
+                        {
+                            @foreach (var runProfile in _connectedSystemRunProfiles)
+                            {
+                                <MudSelectItem Value="@runProfile" />
+                            }
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="2" Class="d-flex align-end pb-2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleExecuteRunProfileSubmitAsync" DropShadow="false" FullWidth="true" Style="height: 50px;">Execute</MudButton>
+                </MudItem>
+            </MudGrid>
         </MudForm>
     }
     else
@@ -49,24 +58,43 @@
     }
 </MudPaper>
 
-<MudTable T="WorkerTaskHeader" Items="@_workerTaskHeaders" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
+<MudTable T="WorkerTaskHeader" Items="@_workerTaskHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
     <HeaderContent>
-        <MudTh><MudText Typo="Typo.button">Actions</MudText></MudTh>
         <MudTh><MudText Typo="Typo.button">Type</MudText></MudTh>
         <MudTh><MudText Typo="Typo.button">Name</MudText></MudTh>
         <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
+        <MudTh Style="min-width: 200px;"><MudText Typo="Typo.button">Progress</MudText></MudTh>
         <MudTh><MudText Typo="Typo.button">Created</MudText></MudTh>
         <MudTh><MudText Typo="Typo.button">Initiated By</MudText></MudTh>
+        <MudTh Style="text-align: right;"><MudText Typo="Typo.button">Actions</MudText></MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd>
-            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
-                <MudMenuItem Icon="@Icons.Material.Filled.Cancel" OnClick="(_) => HandleCancelTaskAsync(context)">Cancel</MudMenuItem>
-            </MudMenu>
-        </MudTd>
         <MudTd DataLabel="Type">@context.Type</MudTd>
         <MudTd DataLabel="Name">@context.Name</MudTd>
         <MudTd DataLabel="Status">@context.Status.ToString().SplitOnCapitalLetters()</MudTd>
+        <MudTd DataLabel="Progress">
+            @if (context.Status == WorkerTaskStatus.Processing)
+            {
+                @if (context.ObjectsToProcess > 0)
+                {
+                    var percentage = (double)context.ObjectsProcessed!.Value / context.ObjectsToProcess.Value * 100;
+                    <MudProgressLinear Value="@percentage" Color="Color.Primary" Rounded="true" Size="Size.Small" />
+                    <MudText Typo="Typo.caption" Class="mt-2">@context.ObjectsProcessed / @context.ObjectsToProcess@(!string.IsNullOrEmpty(context.ProgressMessage) ? $" - {context.ProgressMessage}" : "")</MudText>
+                }
+                else
+                {
+                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Rounded="true" Size="Size.Small" />
+                    @if (!string.IsNullOrEmpty(context.ProgressMessage))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.ProgressMessage</MudText>
+                    }
+                }
+            }
+            else if (context.Status == WorkerTaskStatus.Queued)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Waiting...</MudText>
+            }
+        </MudTd>
         <MudTd DataLabel="Created">
             <MudTooltip Text="@context.Timestamp.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Bottom">
                 @context.Timestamp.ToLocalTime().ToRelativeTime()
@@ -87,6 +115,11 @@
             {
                 <span>@context.InitiatedByName</span>
             }
+        </MudTd>
+        <MudTd DataLabel="Actions" Style="text-align: right;">
+            <MudTooltip Text="Cancel" Arrow="true" Placement="Placement.Left">
+                    <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" OnClick="() => HandleCancelTaskAsync(context)" />
+                </MudTooltip>
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>
@@ -141,7 +174,7 @@
                         _workerTaskHeaders.Add(newWorkerTaskHeader);
                         stateHasChanged = true;
                     }
-                    else if (workerTaskHeader.Status != newWorkerTaskHeader.Status)
+                    else if (HasWorkerTaskHeaderChanged(workerTaskHeader, newWorkerTaskHeader))
                     {
                         // existing worker task, so it's either unchanged, or an update
                         Console.WriteLine("JIM.Web: Operations.razor: ST-POLLING: Updating worker task header: " + newWorkerTaskHeader.Id);
@@ -214,7 +247,27 @@
         if (workerTaskHeader == null)
             return;
 
+        var result = await DialogService.ShowMessageBox(
+            "Cancel Task",
+            $"Are you sure you want to cancel the task '{workerTaskHeader.Name}'?",
+            yesText: "Cancel Task",
+            cancelText: "Keep Running");
+
+        if (result != true)
+            return;
+
         await Jim.Tasking.CancelWorkerTaskAsync(workerTaskHeader.Id);
         Snackbar.Add("Worker task cancellation requested.", Severity.Success);
+    }
+
+    /// <summary>
+    /// Checks if any relevant fields have changed between two worker task headers.
+    /// </summary>
+    private static bool HasWorkerTaskHeaderChanged(WorkerTaskHeader existing, WorkerTaskHeader updated)
+    {
+        return existing.Status != updated.Status ||
+               existing.ObjectsProcessed != updated.ObjectsProcessed ||
+               existing.ObjectsToProcess != updated.ObjectsToProcess ||
+               existing.ProgressMessage != updated.ProgressMessage;
     }
 }

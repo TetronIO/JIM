@@ -810,7 +810,7 @@ public class NoNetChangeWorkflowTests
 
             users.Add(new ConnectedSystemImportObject
             {
-                ChangeType = ObjectChangeType.Create,
+                ChangeType = ObjectChangeType.NotSet,
                 ObjectType = "User",
                 Attributes = new List<ConnectedSystemImportObjectAttribute>
                 {
@@ -844,7 +844,7 @@ public class NoNetChangeWorkflowTests
 
             users.Add(new ConnectedSystemImportObject
             {
-                ChangeType = ObjectChangeType.Create,
+                ChangeType = ObjectChangeType.NotSet,
                 ObjectType = "User",
                 Attributes = new List<ConnectedSystemImportObjectAttribute>
                 {
@@ -883,7 +883,7 @@ public class NoNetChangeWorkflowTests
 
             users.Add(new ConnectedSystemImportObject
             {
-                ChangeType = ObjectChangeType.Create,
+                ChangeType = ObjectChangeType.NotSet,
                 ObjectType = "User",
                 Attributes = new List<ConnectedSystemImportObjectAttribute>
                 {
@@ -922,7 +922,7 @@ public class NoNetChangeWorkflowTests
 
             users.Add(new ConnectedSystemImportObject
             {
-                ChangeType = ObjectChangeType.Create,
+                ChangeType = ObjectChangeType.NotSet,
                 ObjectType = "User",
                 Attributes = new List<ConnectedSystemImportObjectAttribute>
                 {
@@ -943,7 +943,7 @@ public class NoNetChangeWorkflowTests
     {
         return new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "Group",
             Attributes = new List<ConnectedSystemImportObjectAttribute>
             {

@@ -12,7 +12,7 @@ Docker automatically pulls the correct architecture for your platform, providing
 
 ## Why Pre-built Images?
 
-The standard base image provisions a new Active Directory domain on every startup, which takes **3-5 minutes**. These pre-built images have domain provisioning already complete, reducing startup time to **~30 seconds**.
+The standard base image provisions a new Active Directory domain on every startup, which takes **3-5 minutes**. These pre-built images have domain provisioning already complete, reducing startup time to **~10 seconds**.
 
 | Metric | Standard Image | Pre-built Image |
 |--------|----------------|-----------------|

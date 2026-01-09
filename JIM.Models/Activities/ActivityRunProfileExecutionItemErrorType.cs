@@ -22,4 +22,9 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// Manual intervention may be required.
     /// </summary>
     ExportConfirmationFailed,
+    /// <summary>
+    /// CSO creation failed during import but no specific error was recorded.
+    /// This indicates a bug in the import processing logic.
+    /// </summary>
+    CsoCreationFailed,
 }

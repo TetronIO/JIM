@@ -25,11 +25,12 @@ cd /workspaces/JIM
 ```
 
 This single script handles everything:
-1. ✅ Resets the environment (stops containers, removes volumes)
-2. ✅ Rebuilds and starts JIM stack + Samba AD
-3. ✅ Waits for all services to be ready
-4. ✅ Creates an infrastructure API key
-5. ✅ Runs the test scenario
+1. ✅ Builds custom Samba AD image if not present (first run only, ~30 seconds)
+2. ✅ Resets the environment (stops containers, removes volumes)
+3. ✅ Rebuilds and starts JIM stack + Samba AD
+4. ✅ Waits for all services to be ready
+5. ✅ Creates an infrastructure API key
+6. ✅ Runs the test scenario
 
 **Common Options:**
 
@@ -94,6 +95,7 @@ See [Data Scale Templates](#data-scale-templates) for detailed template specific
 **Current Limitations:**
 - ⚠️ Progress bars not yet implemented (see [#196](https://github.com/TetronIO/JIM/issues/196))
 - ✅ Samba AD optimised with pre-built images (~30 seconds startup, down from ~5 minutes)
+- ✅ **Automatic Samba image building** - custom image built automatically on first run if not present
 - ✅ **Multi-architecture support** (AMD64 and ARM64/Apple Silicon - no Rosetta emulation needed)
 - ✅ Unit tests all passing (617 tests)
 - ✅ Expression evaluation support implemented
@@ -1743,7 +1745,10 @@ Integration test scripts should provide visual progress feedback including:
 - Pre-built images: `ghcr.io/tetronio/jim-samba-ad:{primary,source,target}`
 - Samba binaries location: `/usr/local/samba/bin/`
 
-**To rebuild pre-built images locally (required after base image updates):**
+**Automatic Image Building:**
+The `Run-IntegrationTests.ps1` script automatically builds the custom Samba AD image if it doesn't exist locally. This happens on first run and takes ~30 seconds. Subsequent runs use the cached image for fast startup (~10 seconds).
+
+**To manually rebuild pre-built images (required after base image updates):**
 ```powershell
 pwsh test/integration/docker/samba-ad-prebuilt/Build-SambaImages.ps1 -Images All
 ```

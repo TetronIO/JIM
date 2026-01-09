@@ -1,4 +1,4 @@
-﻿@page "/activity/sync/{Id:guid}"
+@page "/activity/sync/{Id:guid}"
 @attribute [Authorize(Roles = "User")]
 @using JIM.Application
 @using JIM.Models.Activities;
@@ -9,185 +9,284 @@
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
-<PageTitle>Run Profile Execution Item: @_activityRunProfileExecutionItem.?Id</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Run Profile Execution Item:</span> @_activityRunProfileExecutionItem?.Id</MudText>
-<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<PageTitle>Sync Details: @(_externalIdAttributeValue?.ToStringNoName() ?? _activityRunProfileExecutionItem?.Id.ToString())</PageTitle>
 
 @if (_activityRunProfileExecutionItem != null)
 {
-    <MudStack Row="true" Class="mt-5 mb-5">
-
-        @if (_connectedSystemHeader != null)
-        {
-            <MudPaper Class="pa-5" Outlined="true">
-                <MudText Typo="Typo.overline">Connected System</MudText>
-                <MudText><MudLink Href="@Utilities.GetConnectedSystemHref(_connectedSystemHeader)" Typo="Typo.h5">@_connectedSystemHeader.Name</MudLink></MudText>
-            </MudPaper>
-        }
-
-        @if (_activity != null)
-        {
-            <MudPaper Class="pa-5" Outlined="true">
-                <MudText Typo="Typo.overline">Run Profile</MudText>
-                <MudText Typo="Typo.h5">@_activity.TargetName</MudText>
-            </MudPaper>
-
-            <MudPaper Class="pa-5" Outlined="true">
-                <MudText Typo="Typo.overline">Execution Time</MudText>
-                <MudText Typo="Typo.h5">@_activity.Executed</MudText>
-            </MudPaper>
-        }
-
-        @if (_activity is { InitiatedByType: ActivityInitiatorType.User, InitiatedByMetaverseObject: not null })
-        {
-            <MudPaper Class="pa-5" Outlined="true">
-                <MudText Typo="Typo.overline">Initiated By</MudText>
-                <MudText>
-                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                    <MudLink Href="@(Utilities.GetMetaverseObjectHref(_activity.InitiatedByMetaverseObject))" Typo="Typo.h5">@_activity.InitiatedByMetaverseObject.DisplayName</MudLink>
+    @* Status Banner *@
+    <MudPaper Class="pa-4 mb-4"
+              Style="@GetStatusBannerStyle()"
+              Elevation="0">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+            <MudIcon Icon="@GetStatusIcon()" Size="Size.Large" />
+            <div>
+                <MudText Typo="Typo.h5" Style="color: inherit;">
+                    @GetStatusTitle()
                 </MudText>
-            </MudPaper>
-        }
-        else if (_activity is { InitiatedByType: ActivityInitiatorType.ApiKey })
-        {
-            <MudPaper Class="pa-5" Outlined="true">
-                <MudText Typo="Typo.overline">Initiated By</MudText>
-                <MudText>
-                    <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                    @if (_activity.InitiatedByApiKey != null)
-                    {
-                        <MudLink Href="@Utilities.GetApiKeyHref(_activity.InitiatedByApiKey.Id)" Typo="Typo.h5">@_activity.InitiatedByName</MudLink>
-                    }
-                    else
-                    {
-                        <span>@_activity.InitiatedByName</span>
-                    }
+                <MudText Typo="Typo.body2" Style="color: inherit; opacity: 0.9;">
+                    @GetStatusDescription()
                 </MudText>
-            </MudPaper>
-        }
-        else if (_activity != null && !string.IsNullOrEmpty(_activity.InitiatedByName))
-        {
-            <MudPaper Class="pa-5" Outlined="true">
-                <MudText Typo="Typo.overline">Initiated By</MudText>
-                <MudText Typo="Typo.h5">@_activity.InitiatedByName</MudText>
-            </MudPaper>
-        }
-        else
-        {
-            <MudPaper Class="pa-5" Outlined="true">
-                <MudText Typo="Typo.overline">Initiated By</MudText>
-                <MudText Typo="Typo.h5">System</MudText>
-            </MudPaper>
-        }
+            </div>
+        </MudStack>
+    </MudPaper>
 
-        @if (_activityRunProfileExecutionItem.ConnectedSystemObject != null)
-        {
-            <MudPaper Class="pa-5" Outlined="true">
-                <MudText Typo="Typo.overline">Connected System Object</MudText>
-                <MudText>
+    <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0 mb-4"></MudBreadcrumbs>
 
-                    <MudTooltip Text="Object Type">
-                        <MudChip T="string" Color="Color.Default" Label="true" Icon="@Icons.Material.Filled.Schema">@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name</MudChip>
-                    </MudTooltip>
+    @* Summary Section *@
+    <MudText Typo="Typo.h6" Class="mb-3">
+        Execution Summary
+    </MudText>
+    <MudPaper Class="pa-5 mb-5" Outlined="true">
+        <MudGrid Spacing="3">
+            @* Connected System *@
+            @if (_connectedSystemHeader != null)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Connected System</MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Storage" Size="Size.Small" Class="mud-text-secondary" />
+                        <MudLink Href="@Utilities.GetConnectedSystemHref(_connectedSystemHeader)" Typo="Typo.body1">
+                            @_connectedSystemHeader.Name
+                        </MudLink>
+                    </MudStack>
+                </MudItem>
+            }
 
-                    <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined" Label="true">
-                        @if (_externalIdAttributeValue != null)
+            @* Run Profile *@
+            @if (_activity != null)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Run Profile</MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Small" Class="mud-text-secondary" />
+                        <MudText Typo="Typo.body1">@_activity.TargetName</MudText>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="12" sm="6" md="4">
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Executed</MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="mud-text-secondary" />
+                        <MudText Typo="Typo.body1" title="@_activity.Executed.ToLocalTime().ToString("F")">
+                            @_activity.Executed.ToLocalTime().ToRelativeTime()
+                        </MudText>
+                    </MudStack>
+                </MudItem>
+            }
+
+            @* Initiated By *@
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Initiated By</MudText>
+                @if (_activity is { InitiatedByType: ActivityInitiatorType.User, InitiatedByMetaverseObject: not null })
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mud-text-secondary" />
+                        <MudLink Href="@(Utilities.GetMetaverseObjectHref(_activity.InitiatedByMetaverseObject))" Typo="Typo.body1">
+                            @_activity.InitiatedByMetaverseObject.DisplayName
+                        </MudLink>
+                    </MudStack>
+                }
+                else if (_activity is { InitiatedByType: ActivityInitiatorType.ApiKey })
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mud-text-secondary" />
+                        @if (_activity.InitiatedByApiKey != null)
                         {
-                            <MudTooltip Text="External Id Attribute Name">
-                                <MudText>@(_externalIdAttributeValue.Attribute.Name):</MudText>
-                            </MudTooltip>
-                            <span>&nbsp;</span>
-                            <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))">@_externalIdAttributeValue.ToStringNoName()</MudLink>
+                            <MudLink Href="@Utilities.GetApiKeyHref(_activity.InitiatedByApiKey.Id)" Typo="Typo.body1">
+                                @_activity.InitiatedByName
+                            </MudLink>
                         }
                         else
                         {
-                            <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))">Connected System Object (No External Id yet)</MudLink>
+                            <MudText Typo="Typo.body1">@_activity.InitiatedByName</MudText>
                         }
-                    </MudChip>
-                </MudText>
-            </MudPaper>
-        }
+                    </MudStack>
+                }
+                else if (_activity != null && !string.IsNullOrEmpty(_activity.InitiatedByName))
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Settings" Size="Size.Small" Class="mud-text-secondary" />
+                        <MudText Typo="Typo.body1">@_activity.InitiatedByName</MudText>
+                    </MudStack>
+                }
+                else
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.SmartToy" Size="Size.Small" Class="mud-text-secondary" />
+                        <MudText Typo="Typo.body1">System (Automated)</MudText>
+                    </MudStack>
+                }
+            </MudItem>
 
-        <MudPaper Class="pa-5" Outlined="true" Style="@(_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Delete ? $"color:{Colors.Red.Lighten5}; background:{Colors.Red.Default};" : null)">
-            <MudText Typo="Typo.overline">Change Type</MudText>
-            <MudText Typo="Typo.h5">@_activityRunProfileExecutionItem.ObjectChangeType.ToString().SplitOnCapitalLetters()</MudText>
-        </MudPaper>
+            @* Change Type *@
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Operation</MudText><br />
+                <MudChip T="string"
+                         Color="@Helpers.GetRunItemMudBlazorColorForType(_activityRunProfileExecutionItem.ObjectChangeType)"
+                         Variant="Variant.Filled"
+                         Size="Size.Medium"
+                         Icon="@GetChangeTypeIcon()"
+                         Class="ml-0 mt-1">
+                    @_activityRunProfileExecutionItem.ObjectChangeType.ToString().SplitOnCapitalLetters()
+                </MudChip>
+            </MudItem>
 
-    </MudStack>
+            @* Connected System Object *@
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">Connected System Object</MudText>
+                @if (_activityRunProfileExecutionItem.ConnectedSystemObject != null)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
+                        <MudChip T="string" Color="Color.Default">
+                            @_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name
+                        </MudChip>
+                        @if (_externalIdAttributeValue != null)
+                        {
+                            <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))"
+                                     Class="jim-text-code">
+                                @_externalIdAttributeValue.ToStringNoName()
+                            </MudLink>
+                        }
+                        else
+                        {
+                            <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))">
+                                View Object
+                            </MudLink>
+                        }
+                    </MudStack>
+                }
+                else if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ExternalIdSnapshot))
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudTooltip Text="This object has been deleted. The external ID shown is preserved from when this operation was recorded.">
+                            <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.History">
+                                Deleted
+                            </MudChip>
+                        </MudTooltip>
+                        <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
+                    </MudStack>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Not available</MudText>
+                }
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
 
-    // display a table for what attribute values were changed as a result of this activity
-    // todo: change this to a single table and consider multiple columns, i.e. one for remove, one for add
+    @* Attribute Changes Section *@
     @if (_activityRunProfileExecutionItem.ConnectedSystemObjectChange != null)
     {
-        <MudText Typo="Typo.h5" Class="mb-5">Changes:</MudText>
-        <MudSimpleTable Style="overflow-x: auto; width: 100%;" Elevation="0" Outlined="true" Dense="true" Hover="true">
-            <thead>
-                <tr>
-                    <th style="width: auto; text-align: left;">External Attribute Name</th>
-                    <th style="width: auto; text-align: left;">Attribute Change Type</th>
-                    <th style="width: 100%; text-align: left;">Value</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var changeAttribute in _activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges.OrderBy(q => q.Attribute.Name))
-                {
-                    for (var i = 0; i < changeAttribute.ValueChanges.Count; i++)
-                    {
-                        <tr>
-                            @if (changeAttribute.ValueChanges.Count == 1)
-                            {
-                                <td>@changeAttribute.Attribute.Name</td>
-                            }
-                            else if (i == 0)
-                            {
-                                <td rowspan="@changeAttribute.ValueChanges.Count">@changeAttribute.Attribute.Name</td>
-                            }
-                            <td><MudChip T="string" Variant="Variant.Text" Color="Helpers.GetMudBlazorColorForValueChangeType(changeAttribute.ValueChanges[i].ValueChangeType)" Class="ml-0">@changeAttribute.ValueChanges[i-1].ValueChangeType</MudChip></td>
-                            <td>
-                                @if (changeAttribute.ValueChanges[i].ReferenceValue != null)
-                                {
-                                    var rv = changeAttribute.ValueChanges[i].ReferenceValue;
-                                    if (rv != null)
-                                    {
-                                        <MudChip T="string" Color="Color.Default" Size="Size.Small">@rv.Type.Name</MudChip>
-                                        <text> </text>
-                                        <MudLink Href="@Utilities.GetConnectedSystemObjectHref(rv)">@rv.DisplayNameOrId</MudLink>
+        var changeCount = _activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges
+            .Sum(c => c.ValueChanges.Count);
 
-                                        if (rv.SecondaryExternalIdAttributeValue != null)
-                                        {
-                                            <span class="mud-text-secondary"> (@rv.SecondaryExternalIdAttributeValue.ToString())</span>
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    @changeAttribute.ValueChanges[i].ToString()
-                                }
-                            </td>
-                        </tr>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+            <MudText Typo="Typo.h6">
+                Attribute Changes
+            </MudText>
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary">@changeCount</MudChip>
+        </MudStack>
+
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+            The following attributes were modified during this synchronisation operation.
+        </MudText>
+
+        <MudTable Items="@GetFlattenedChanges()"
+                  Hover="true"
+                  Dense="true"
+                  Outlined="true"
+                  Elevation="0"
+                  Class="mb-5">
+            <HeaderContent>
+                <MudTh Style="width: 25%;">Attribute</MudTh>
+                <MudTh Style="width: 15%;">Change</MudTh>
+                <MudTh Style="width: 60%;">Value</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Attribute">
+                    <MudText Class="jim-text-code">@context.AttributeName</MudText>
+                </MudTd>
+                <MudTd DataLabel="Change">
+                    <MudChip T="string"
+                             Variant="Variant.Text"
+                             Color="@Helpers.GetMudBlazorColorForValueChangeType(context.ChangeType)"
+                             Class="ml-0">
+                        @context.ChangeType
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Value">
+                    @if (context.ReferenceValue != null)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudChip T="string" Color="Color.Default" Size="Size.Small">@context.ReferenceValue.Type.Name</MudChip>
+                            <MudLink Href="@Utilities.GetConnectedSystemObjectHref(context.ReferenceValue)">
+                                @context.ReferenceValue.DisplayNameOrId
+                            </MudLink>
+                            @if (context.ReferenceValue.SecondaryExternalIdAttributeValue != null)
+                            {
+                                <MudText Class="mud-text-secondary">(@context.ReferenceValue.SecondaryExternalIdAttributeValue.ToString())</MudText>
+                            }
+                        </MudStack>
                     }
+                    else
+                    {
+                        <MudText>@context.Value</MudText>
+                    }
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Class="pa-4">No attribute changes recorded.</MudText>
+            </NoRecordsContent>
+        </MudTable>
+    }
+    else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.NoChange)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+            <MudText Typo="Typo.body1">No Changes Required</MudText>
+            <MudText Typo="Typo.body2">
+                @if (_activityRunProfileExecutionItem.NoChangeReason != null)
+                {
+                    @_activityRunProfileExecutionItem.NoChangeReason.ToString()!.SplitOnCapitalLetters()
                 }
-            </tbody>
-        </MudSimpleTable>
+                else
+                {
+                    <text>The object was already up to date with no attribute changes needed.</text>
+                }
+            </MudText>
+        </MudAlert>
     }
 
+    @* Error Section *@
     @if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
     {
-        <MudPaper Class="pa-4 mt-4" Style="@($"color:{Colors.Shades.White}; background:{Colors.Red.Default};")" Outlined="true">
+        <MudText Typo="Typo.h6" Class="mb-3">
+            <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Small" Class="mr-2" Style="vertical-align: middle;" />
+            Error Details
+        </MudText>
+
+        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-3">
+            <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                @_activityRunProfileExecutionItem.ErrorType.ToString()!.SplitOnCapitalLetters()
+            </MudText>
             @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorMessage))
             {
-                <MudText Typo="Typo.button">Error Message:</MudText>
-                <MudText>@_activityRunProfileExecutionItem.ErrorMessage</MudText>
-                <br />
+                <MudText Typo="Typo.body2" Class="mt-2">@_activityRunProfileExecutionItem.ErrorMessage</MudText>
             }
+        </MudAlert>
 
-            @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorStackTrace))
-            {
-                <MudText Typo="Typo.button">Error Stack:</MudText>
-                <pre style="white-space: pre-wrap; word-wrap: break-word; overflow-x: auto; max-width: 100%;">@_activityRunProfileExecutionItem.ErrorStackTrace</pre>
-            }
-        </MudPaper>
+        @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorStackTrace))
+        {
+            <MudExpansionPanels Class="mb-5">
+                <MudExpansionPanel Text="Stack Trace" MaxHeight="400">
+                    <pre class="jim-text-code" style="white-space: pre-wrap; word-wrap: break-word; overflow-x: auto; font-size: 0.8rem; margin: 0;">@_activityRunProfileExecutionItem.ErrorStackTrace</pre>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        }
     }
+}
+else
+{
+    <MudProgressCircular Indeterminate="true" />
 }
 
 @code {
@@ -200,12 +299,20 @@
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private ConnectedSystemObjectAttributeValue? _externalIdAttributeValue;
 
+    /// <summary>
+    /// Helper record for flattened changes display in the table.
+    /// </summary>
+    private record FlattenedChange(
+        string AttributeName,
+        ValueChangeType ChangeType,
+        string? Value,
+        ConnectedSystemObject? ReferenceValue);
+
     protected override async Task OnParametersSetAsync()
     {
         _activityRunProfileExecutionItem = await Jim.Activities.GetActivityRunProfileExecutionItemAsync(Id);
         if (_activityRunProfileExecutionItem == null)
         {
-            // ActivityRunProfileExecutionItem not found, redirect to index page
             NavManager.NavigateTo("/activity");
             return;
         }
@@ -215,17 +322,160 @@
             new("Home", href: "/", icon: Icons.Material.Filled.Home),
             new("Activity", href: "/activity"),
             new("Activity Detail", href: $"/activity/{_activityRunProfileExecutionItem.ActivityId}"),
-            new(_activityRunProfileExecutionItem.Id.ToString(), href: null, disabled: true)
+            new("Sync Details", href: null, disabled: true)
         };
 
         _activity = await Jim.Activities.GetActivityAsync(_activityRunProfileExecutionItem.ActivityId);
-
-        // try and get the external id attribute value. we'll need the value and attribute name
         _externalIdAttributeValue = _activityRunProfileExecutionItem.GetExternalIdAttributeValue();
 
-        // try and get the connected system this relates to (might not exist if it's been deleted)
         var connectedSystemId = _activityRunProfileExecutionItem.GetConnectedSystemId();
         if (connectedSystemId != null)
             _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(connectedSystemId.Value);
+    }
+
+    private string GetStatusBannerStyle()
+    {
+        if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+            return $"background: {Colors.Red.Default}; color: {Colors.Shades.White};";
+
+        return _activityRunProfileExecutionItem?.ObjectChangeType switch
+        {
+            // Import operations
+            ObjectChangeType.Added => $"background: {Colors.Green.Default}; color: {Colors.Shades.White};",
+            ObjectChangeType.Updated => $"background: {Colors.Teal.Default}; color: {Colors.Shades.White};",
+            ObjectChangeType.Deleted => $"background: {Colors.DeepOrange.Default}; color: {Colors.Shades.White};",
+            // Sync operations
+            ObjectChangeType.Projected => $"background: {Colors.Blue.Default}; color: {Colors.Shades.White};",
+            ObjectChangeType.Joined => $"background: {Colors.Purple.Default}; color: {Colors.Shades.White};",
+            ObjectChangeType.AttributeFlow => $"background: {Colors.Cyan.Default}; color: {Colors.Shades.White};",
+            ObjectChangeType.Disconnected => $"background: {Colors.Orange.Default}; color: {Colors.Shades.White};",
+            // Export operations
+            ObjectChangeType.Provisioned => $"background: {Colors.Green.Default}; color: {Colors.Shades.White};",
+            ObjectChangeType.Exported => $"background: {Colors.Blue.Default}; color: {Colors.Shades.White};",
+            ObjectChangeType.Deprovisioned => $"background: {Colors.DeepOrange.Default}; color: {Colors.Shades.White};",
+            // Other
+            ObjectChangeType.NoChange => $"background: {Colors.BlueGray.Default}; color: {Colors.Shades.White};",
+            _ => $"background: {Colors.Gray.Default}; color: {Colors.Shades.White};"
+        };
+    }
+
+    private string GetStatusIcon()
+    {
+        if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+            return Icons.Material.Filled.Error;
+
+        return _activityRunProfileExecutionItem?.ObjectChangeType switch
+        {
+            // Import operations
+            ObjectChangeType.Added => Icons.Material.Filled.Add,
+            ObjectChangeType.Updated => Icons.Material.Filled.Edit,
+            ObjectChangeType.Deleted => Icons.Material.Filled.Delete,
+            // Sync operations
+            ObjectChangeType.Projected => Icons.Material.Filled.AccountTree,
+            ObjectChangeType.Joined => Icons.Material.Filled.Link,
+            ObjectChangeType.AttributeFlow => Icons.Material.Filled.SwapHoriz,
+            ObjectChangeType.Disconnected => Icons.Material.Filled.LinkOff,
+            // Export operations
+            ObjectChangeType.Provisioned => Icons.Material.Filled.Add,
+            ObjectChangeType.Exported => Icons.Material.Filled.Publish,
+            ObjectChangeType.Deprovisioned => Icons.Material.Filled.Delete,
+            // Other
+            ObjectChangeType.NoChange => Icons.Material.Filled.CheckCircle,
+            _ => Icons.Material.Filled.Info
+        };
+    }
+
+    private string GetStatusTitle()
+    {
+        if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+            return "Synchronisation Failed";
+
+        return _activityRunProfileExecutionItem?.ObjectChangeType switch
+        {
+            // Import operations
+            ObjectChangeType.Added => "Object Added to Staging",
+            ObjectChangeType.Updated => "Object Updated",
+            ObjectChangeType.Deleted => "Object Deleted from Source",
+            // Sync operations
+            ObjectChangeType.Projected => "New Metaverse Object Projected",
+            ObjectChangeType.Joined => "Joined to Metaverse Object",
+            ObjectChangeType.AttributeFlow => "Attributes Flowed",
+            ObjectChangeType.Disconnected => "Disconnected from Metaverse",
+            // Export operations
+            ObjectChangeType.Provisioned => "Object Provisioned",
+            ObjectChangeType.Exported => "Object Exported",
+            ObjectChangeType.Deprovisioned => "Object Deprovisioned",
+            // Other
+            ObjectChangeType.NoChange => "No Changes",
+            _ => "Synchronisation Complete"
+        };
+    }
+
+    private string GetStatusDescription()
+    {
+        var objectDesc = _externalIdAttributeValue?.ToStringNoName()
+            ?? _activityRunProfileExecutionItem?.ExternalIdSnapshot
+            ?? "object";
+
+        if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+            return $"An error occurred while synchronising {objectDesc}.";
+
+        return _activityRunProfileExecutionItem?.ObjectChangeType switch
+        {
+            // Import operations
+            ObjectChangeType.Added => $"A new object ({objectDesc}) was imported and added to the staging area.",
+            ObjectChangeType.Updated => $"The object ({objectDesc}) was updated with new attribute values.",
+            ObjectChangeType.Deleted => $"The object ({objectDesc}) was deleted from the source system.",
+            // Sync operations
+            ObjectChangeType.Projected => $"A new metaverse object was created for ({objectDesc}) via projection.",
+            ObjectChangeType.Joined => $"The object ({objectDesc}) was joined to an existing metaverse object.",
+            ObjectChangeType.AttributeFlow => $"Attributes were flowed for ({objectDesc}) between staging and metaverse.",
+            ObjectChangeType.Disconnected => $"The object ({objectDesc}) was disconnected from the metaverse.",
+            // Export operations
+            ObjectChangeType.Provisioned => $"A new object ({objectDesc}) was provisioned in the target system.",
+            ObjectChangeType.Exported => $"The object ({objectDesc}) was exported with updated attributes.",
+            ObjectChangeType.Deprovisioned => $"The object ({objectDesc}) was deprovisioned from the target system.",
+            // Other
+            ObjectChangeType.NoChange => $"The object ({objectDesc}) was already up to date.",
+            _ => $"Synchronisation completed for {objectDesc}."
+        };
+    }
+
+    private string GetChangeTypeIcon()
+    {
+        return _activityRunProfileExecutionItem?.ObjectChangeType switch
+        {
+            // Import operations
+            ObjectChangeType.Added => Icons.Material.Filled.Add,
+            ObjectChangeType.Updated => Icons.Material.Filled.Edit,
+            ObjectChangeType.Deleted => Icons.Material.Filled.Delete,
+            // Sync operations
+            ObjectChangeType.Projected => Icons.Material.Filled.AccountTree,
+            ObjectChangeType.Joined => Icons.Material.Filled.Link,
+            ObjectChangeType.AttributeFlow => Icons.Material.Filled.SwapHoriz,
+            ObjectChangeType.Disconnected => Icons.Material.Filled.LinkOff,
+            // Export operations
+            ObjectChangeType.Provisioned => Icons.Material.Filled.Add,
+            ObjectChangeType.Exported => Icons.Material.Filled.Publish,
+            ObjectChangeType.Deprovisioned => Icons.Material.Filled.Delete,
+            // Other
+            ObjectChangeType.NoChange => Icons.Material.Filled.CheckCircle,
+            _ => Icons.Material.Filled.QuestionMark
+        };
+    }
+
+    private IEnumerable<FlattenedChange> GetFlattenedChanges()
+    {
+        if (_activityRunProfileExecutionItem?.ConnectedSystemObjectChange == null)
+            return Enumerable.Empty<FlattenedChange>();
+
+        return _activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges
+            .OrderBy(c => c.Attribute.Name)
+            .SelectMany(change => change.ValueChanges.Select(vc => new FlattenedChange(
+                change.Attribute.Name,
+                vc.ValueChangeType,
+                vc.ReferenceValue == null ? vc.ToString() : null,
+                vc.ReferenceValue
+            )));
     }
 }

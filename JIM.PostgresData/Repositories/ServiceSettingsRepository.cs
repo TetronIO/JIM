@@ -18,7 +18,10 @@ public class ServiceSettingsRepository : IServiceSettingsRepository
     {
         try
         {
-            return await Repository.Database.ServiceSettings.Include(q => q.SSOUniqueIdentifierMetaverseAttribute).FirstOrDefaultAsync();
+            return await Repository.Database.ServiceSettings
+                .Include(q => q.SSOUniqueIdentifierMetaverseAttribute)
+                .OrderBy(s => s.Id)
+                .FirstOrDefaultAsync();
         }
         catch (PostgresException ex)
         {
@@ -32,7 +35,9 @@ public class ServiceSettingsRepository : IServiceSettingsRepository
 
     public async Task UpdateServiceSettingsAsync(ServiceSettings serviceSettings)
     {
-        var dbServiceSettings = Repository.Database.ServiceSettings.FirstOrDefault();
+        var dbServiceSettings = await Repository.Database.ServiceSettings
+            .OrderBy(s => s.Id)
+            .FirstOrDefaultAsync();
         if (dbServiceSettings == null)
         {
             Log.Error("UpdateServiceSettingsAsync: Could not retrieve a ServiceSettings object to update.");

@@ -55,6 +55,33 @@ else if (_syncRule != null)
         <MudForm @bind-IsValid="@_isDetailsFormValid" @bind-Errors="@_detailsFormErrors">
             <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="_syncRule.Name"
                 Variant="Variant.Outlined" />
+
+            @if (_syncRule.Id > 0 && _syncRule.ConnectedSystem != null)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-4" Spacing="3">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Power" Size="Size.Small" Class="mud-text-secondary" />
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Connected System:</MudText>
+                        <MudLink Href="@($"/admin/connected-systems/{_syncRule.ConnectedSystemId}")" Typo="Typo.body2">
+                            @_syncRule.ConnectedSystem.Name
+                        </MudLink>
+                    </MudStack>
+                    <MudDivider Vertical="true" FlexItem="true" />
+                    <MudChip T="string" Variant="Variant.Text" Size="Size.Small"
+                             Color="@(_syncRule.Direction == SyncRuleDirection.Import ? Color.Info : Color.Warning)">
+                        @(_syncRule.Direction == SyncRuleDirection.Import ? "Inbound" : "Outbound")
+                    </MudChip>
+                    <MudDivider Vertical="true" FlexItem="true" />
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Object Types:</MudText>
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text">MV: @_syncRule.MetaverseObjectType?.Name</MudChip>
+                        <MudIcon Icon="@(_syncRule.Direction == SyncRuleDirection.Import ? Icons.Material.Filled.KeyboardDoubleArrowLeft : Icons.Material.Filled.KeyboardDoubleArrowRight)"
+                                 Size="Size.Small" Class="mud-text-secondary" />
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text">CS: @_syncRule.ConnectedSystemObjectType?.Name</MudChip>
+                    </MudStack>
+                </MudStack>
+            }
+
             @if (_syncRule.Id == 0)
             {
                 @if (_connectedSystemHeaders != null)
@@ -154,10 +181,10 @@ else if (_syncRule != null)
                 }
             }
         </MudForm>
-        <MudSwitch Class="mt-5" @bind-Value="@_syncRule.Enabled" Color="Color.Primary" Label="Enabled?" />
-        <MudAlert Class="mt-5" Severity="Severity.Info" Variant="Variant.Text">Synchronisation Rules will not be evaluated
-            when disabled. This allows to either prepare a rule in advance of it being needed, or to temporarily stop a sync
-            rule from being evaluated.</MudAlert>
+        <MudTooltip Text="Synchronisation Rules will not be evaluated when disabled. This allows to either prepare a rule in advance of it being needed, or to temporarily stop a sync rule from being evaluated."
+                    Placement="Placement.Bottom">
+            <MudSwitch Class="mt-5" @bind-Value="@_syncRule.Enabled" Color="Color.Primary" Label="Enabled?" />
+        </MudTooltip>
     </MudPaper>
 
     @if (_syncRule.Direction != SyncRuleDirection.NotSet)
@@ -176,13 +203,10 @@ else if (_syncRule != null)
             @if (_syncRule.ConnectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem)
             {
                 <MudAlert Severity="Severity.Info" Class="mt-3" Icon="@Icons.Material.Outlined.Info">
-                    This Connected System uses <strong>Simple Mode</strong> for object matching. Matching Rules are configured
-                    at the Connected System level for each object type.<br />
-                    <MudButton StartIcon="@Icons.Material.Filled.OpenInNew" Variant="Variant.Outlined"
-                        Href="@($"/admin/connected-systems/{_syncRule.ConnectedSystemId}")" Color="Color.Primary" Class="mt-4"
-                        DropShadow="false">
-                        Manage Matching Rules on Connected System
-                    </MudButton>
+                    This Connected System uses <strong>Simple Mode</strong> for object matching.
+                    <MudLink Href="@($"/admin/connected-systems/{_syncRule.ConnectedSystemId}")" Underline="Underline.Always" Class="ms-1">
+                        <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Class="me-1" Style="vertical-align: middle;" />Configure Matching Rules
+                    </MudLink>
                 </MudAlert>
             }
             else
@@ -495,9 +519,10 @@ else if (_syncRule != null)
             }
         </DialogContent>
         <DialogActions>
+            <MudButton DropShadow="false" Variant="Variant.Filled" Color="Color.Default"
+                OnClick="@(() => _addAttributeFlowRuleDialogVisible = false)" Class="me-2">Cancel</MudButton>
             <MudButton Disabled="DisableAddAttributeFlowMappingButton()" DropShadow="false" Variant="Variant.Filled"
-                Color="Color.Primary" OnClick="HandleAddAttributeFlowMappingButtonClick" Class="ma-4">Add Attribute Flow
-            </MudButton>
+                Color="Color.Primary" OnClick="HandleAddAttributeFlowMappingButtonClick">Add Attribute Flow</MudButton>
         </DialogActions>
     </MudDialog>
 

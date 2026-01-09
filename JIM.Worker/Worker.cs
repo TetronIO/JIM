@@ -7,12 +7,14 @@ using JIM.Connectors.LDAP;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
+using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.PostgresData;
 using JIM.Worker.Processors;
 using Serilog;
 using Serilog.Formatting.Compact;
+using Serilog.Formatting.Json;
 namespace JIM.Worker;
 
 // **************************************************************************************
@@ -437,12 +439,16 @@ public class Worker : BackgroundService
     /// <summary>
     /// Completes an activity based on the execution results of its run profile execution items.
     /// Determines whether to mark as complete, complete with warning, or failed based on error counts.
+    /// Also calculates and persists summary stats for display in the activity list view.
     /// This method is wrapped in robust error handling to ensure activities are always finalised.
     /// </summary>
     private async Task CompleteActivityBasedOnExecutionResultsAsync(JimApplication jim, Activity activity)
     {
         try
         {
+            // Calculate summary stats from RPEIs for activity list display
+            CalculateActivitySummaryStats(activity);
+
             // Note: .All() returns true for empty collections, so we must check for Any() first
             var hasItems = activity.RunProfileExecutionItems.Count > 0;
             var hasErrors = activity.RunProfileExecutionItems.Any(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
@@ -470,6 +476,42 @@ public class Worker : BackgroundService
             Log.Error(ex, "CompleteActivityBasedOnExecutionResultsAsync: Failed to complete activity {ActivityId}, attempting to mark as failed", activity.Id);
             await SafeFailActivityAsync(jim, activity, ex, "Failed to complete activity after sync run");
         }
+    }
+
+    /// <summary>
+    /// Calculates aggregate summary stats from Run Profile Execution Items for activity list display.
+    /// Creates = Added (import) + Projected (sync) + Provisioned (export)
+    /// Updates = Updated (import) + Joined (sync) + Exported (export)
+    /// Flows = AttributeFlow (sync only)
+    /// Deletes = Deleted (import) + Disconnected (sync) + Deprovisioned (export)
+    /// Errors = Any RPEI with an error type set
+    /// </summary>
+    private static void CalculateActivitySummaryStats(Activity activity)
+    {
+        var rpeis = activity.RunProfileExecutionItems;
+
+        // Creates: Added (import), Projected (sync), Provisioned (export)
+        activity.TotalObjectCreates = rpeis.Count(r =>
+            r.ObjectChangeType is ObjectChangeType.Added or ObjectChangeType.Projected or ObjectChangeType.Provisioned);
+
+        // Updates: Updated (import), Joined (sync), Exported (export)
+        activity.TotalObjectUpdates = rpeis.Count(r =>
+            r.ObjectChangeType is ObjectChangeType.Updated or ObjectChangeType.Joined or ObjectChangeType.Exported);
+
+        // Flows: AttributeFlow (sync only) - data flowing through existing connections
+        activity.TotalObjectFlows = rpeis.Count(r =>
+            r.ObjectChangeType is ObjectChangeType.AttributeFlow);
+
+        // Deletes: Deleted (import), Disconnected (sync), Deprovisioned (export)
+        activity.TotalObjectDeletes = rpeis.Count(r =>
+            r.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected or ObjectChangeType.Deprovisioned);
+
+        // Errors: Any RPEI with an error
+        activity.TotalObjectErrors = rpeis.Count(r =>
+            r.ErrorType.HasValue && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
+
+        Log.Verbose("CalculateActivitySummaryStats: Activity {ActivityId} - Creates={Creates}, Updates={Updates}, Flows={Flows}, Deletes={Deletes}, Errors={Errors}",
+            activity.Id, activity.TotalObjectCreates, activity.TotalObjectUpdates, activity.TotalObjectFlows, activity.TotalObjectDeletes, activity.TotalObjectErrors);
     }
 
     /// <summary>
@@ -569,7 +611,7 @@ public class Worker : BackgroundService
 
         loggerConfiguration.Enrich.FromLogContext();
         loggerConfiguration.WriteTo.File(
-            formatter: new CompactJsonFormatter(),
+            formatter: new RenderedCompactJsonFormatter(),
             path: Path.Combine(loggingPath, "jim.worker..log"),
             rollingInterval: RollingInterval.Day,
             retainedFileCountLimit: 31,  // Keep 31 days of logs for integration test analysis

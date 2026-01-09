@@ -50,7 +50,7 @@ Write-TestStep "Step 1" "Generating HR users CSV"
 $csvPath = Join-Path $OutputPath "hr-users.csv"
 $users = @()
 
-for ($i = 1; $i -le $scale.Users; $i++) {
+for ($i = 1; $i -lt $scale.Users + 1; $i++) {
     $user = New-TestUser -Index $i -Domain "testdomain.local"
 
     $upn = "$($user.SamAccountName)@testdomain.local"

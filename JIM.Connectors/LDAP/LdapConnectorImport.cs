@@ -352,7 +352,9 @@ internal class LdapConnectorImport
             return;
         }
 
-        connectedSystemImportResult.ImportObjects.AddRange(ConvertLdapResults(searchResponse.Entries, ObjectChangeType.Create));
+        // Use NotSet for Full Imports - JIM will determine Create vs Update based on CSO existence.
+        // Only delta imports with change tracking should specify explicit Create/Update/Delete.
+        connectedSystemImportResult.ImportObjects.AddRange(ConvertLdapResults(searchResponse.Entries, ObjectChangeType.NotSet));
         stopwatch.Stop();
         _logger.Debug($"GetFisoResults: Executed for object type '{connectedSystemObjectType.Name}' within container '{connectedSystemContainer.Name}' in {stopwatch.Elapsed}");
     }
@@ -422,8 +424,9 @@ internal class LdapConnectorImport
             return;
         }
 
-        // For delta imports, changed objects are marked as Update (JIM will determine if they're actually new)
-        result.ImportObjects.AddRange(ConvertLdapResults(searchResponse.Entries, ObjectChangeType.Update));
+        // USN-based delta imports cannot distinguish Create vs Update, only that something changed.
+        // Use NotSet so JIM determines the actual change type based on CSO existence.
+        result.ImportObjects.AddRange(ConvertLdapResults(searchResponse.Entries, ObjectChangeType.NotSet));
 
         stopwatch.Stop();
         _logger.Debug("GetDeltaResultsUsingUsn: Found {Count} changed objects for type '{ObjectType}' in container '{Container}' (USN > {Usn}) in {Elapsed}",
@@ -470,21 +473,23 @@ internal class LdapConnectorImport
                     continue;
 
                 // Map changelog changeType to ObjectChangeType
+                // Changelog provides explicit change types, so we use them directly.
+                // Unknown types fall back to NotSet so JIM determines based on CSO existence.
                 var objectChangeType = changeType?.ToLowerInvariant() switch
                 {
-                    "add" => ObjectChangeType.Create,
-                    "modify" => ObjectChangeType.Update,
-                    "delete" => ObjectChangeType.Delete,
-                    "modrdn" or "moddn" => ObjectChangeType.Update,
-                    _ => ObjectChangeType.Update
+                    "add" => ObjectChangeType.Added,
+                    "modify" => ObjectChangeType.Updated,
+                    "delete" => ObjectChangeType.Deleted,
+                    "modrdn" or "moddn" => ObjectChangeType.Updated,
+                    _ => ObjectChangeType.NotSet
                 };
 
                 // For deletes, we can create a minimal import object
-                if (objectChangeType == ObjectChangeType.Delete)
+                if (objectChangeType == ObjectChangeType.Deleted)
                 {
                     var deleteObject = new ConnectedSystemImportObject
                     {
-                        ChangeType = ObjectChangeType.Delete,
+                        ChangeType = ObjectChangeType.Deleted,
                         // Note: For deletes, we need the DN as the identifier
                         // The synchronisation engine will need to match this to existing objects
                     };

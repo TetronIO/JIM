@@ -1324,8 +1324,16 @@ public class ConnectedSystemServer
                     ? FindContainerByExternalId(partition.Containers, parentDn)
                     : null;
 
-                // Only auto-select if parent is selected (or if it's a top-level container in a selected partition)
-                var shouldSelect = parentContainer?.Selected == true || (parentContainer == null && partition.Selected);
+                // Determine if any ancestor container is already selected.
+                // If so, this new container is already implicitly included via the ancestor's subtree search,
+                // so we should NOT select it separately (that would cause duplicate imports).
+                var hasSelectedAncestor = IsAnyAncestorSelected(parentContainer);
+
+                // Only auto-select if:
+                // 1. It's a top-level container in a selected partition, OR
+                // 2. No ancestor is selected (meaning this branch wasn't previously covered)
+                // In practice, if parent is selected, we do NOT select the child - it's already covered by subtree.
+                var shouldSelect = !hasSelectedAncestor && (parentContainer == null && partition.Selected);
 
                 // Create the new container
                 var containerName = ExtractContainerName(containerDn);
@@ -1349,8 +1357,16 @@ public class ConnectedSystemServer
                 }
 
                 containersAdded++;
-                Log.Information("RefreshAndAutoSelectContainersAsync: Added container {ContainerDn}, Selected: {Selected}",
-                    containerDn, shouldSelect);
+                if (hasSelectedAncestor)
+                {
+                    Log.Information("RefreshAndAutoSelectContainersAsync: Added container {ContainerDn}, Selected: False (ancestor already selected, implicitly included via subtree)",
+                        containerDn);
+                }
+                else
+                {
+                    Log.Information("RefreshAndAutoSelectContainersAsync: Added container {ContainerDn}, Selected: {Selected}",
+                        containerDn, shouldSelect);
+                }
             }
             catch (Exception ex)
             {
@@ -1472,6 +1488,22 @@ public class ConnectedSystemServer
             return null;
 
         return containerDn.Substring(commaIndex + 1);
+    }
+
+    /// <summary>
+    /// Checks if any ancestor container in the hierarchy is selected.
+    /// Used to determine if a new child container is already implicitly included via a parent's subtree search.
+    /// </summary>
+    private static bool IsAnyAncestorSelected(ConnectedSystemContainer? container)
+    {
+        var current = container;
+        while (current != null)
+        {
+            if (current.Selected)
+                return true;
+            current = current.ParentContainer;
+        }
+        return false;
     }
 
     /// <summary>
@@ -1848,7 +1880,7 @@ public class ConnectedSystemServer
         {
             ConnectedSystemId = connectedSystemObject.ConnectedSystemId,
             // ConnectedSystemObject is null for DELETE operations (CSO no longer exists)
-            ChangeType = ObjectChangeType.Delete,
+            ChangeType = ObjectChangeType.Deleted,
             ChangeTime = DateTime.UtcNow,
             DeletedObjectType = connectedSystemObject.Type,
             // DeletedObjectExternalIdAttributeValue cannot be set - the attribute value is cascade deleted with the CSO
@@ -1900,7 +1932,7 @@ public class ConnectedSystemServer
             var change = new ConnectedSystemObjectChange
             {
                 ConnectedSystemId = cso.ConnectedSystemId,
-                ChangeType = ObjectChangeType.Delete,
+                ChangeType = ObjectChangeType.Deleted,
                 ChangeTime = DateTime.UtcNow,
                 DeletedObjectType = cso.Type,
                 ActivityRunProfileExecutionItem = executionItem
@@ -1945,10 +1977,11 @@ public class ConnectedSystemServer
         int pageSize = 20,
         string? searchQuery = null,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
-            connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending);
+            connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending, statusFilter);
     }
     
     /// <summary>
@@ -2103,6 +2136,19 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Bulk persists Connected System Objects without activity tracking.
+    /// Use this for provisioning CSOs created during sync where activity execution items are not needed.
+    /// </summary>
+    public async Task CreateConnectedSystemObjectsAsync(IEnumerable<ConnectedSystemObject> connectedSystemObjects)
+    {
+        var csoList = connectedSystemObjects.ToList();
+        if (csoList.Count == 0)
+            return;
+
+        await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectsAsync(csoList);
+    }
+
+    /// <summary>
     /// Bulk persists Connected System Objects and appends a Change Object to the Activity Run Profile Execution Item.
     /// </summary>
     public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, Activity activity)
@@ -2143,6 +2189,7 @@ public class ConnectedSystemServer
     
     /// <summary>
     /// Bulk persists Connected System Object updates and appends a Change Object to the Activity Run Profile Execution Item for each one.
+    /// CSOs without a corresponding RPEI (e.g., no attribute changes occurred) are still persisted but without change tracking.
     /// </summary>
     public async Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, List<ActivityRunProfileExecutionItem> activityRunProfileExecutionItems)
     {
@@ -2150,15 +2197,18 @@ public class ConnectedSystemServer
         // the change objects will be persisted later, further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
         {
-            // Use FirstOrDefault as multiple execution items may reference the same CSO (e.g., during confirming import
-            // when the same CSO could theoretically match multiple import objects by different identifiers)
-            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.FirstOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ??
-                                                  throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created before now.");
+            // Find the RPEI for this CSO - may be null if no attribute changes occurred (CSO was added to update list
+            // for reference resolution purposes only)
+            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.FirstOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id);
 
-            // Explicitly set the FK to ensure it's properly tracked when the execution item is saved.
-            activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
+            if (activityRunProfileExecutionItem != null)
+            {
+                // Explicitly set the FK to ensure it's properly tracked when the execution item is saved.
+                activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
 
-            ProcessConnectedSystemObjectAttributeValueChanges(cso, activityRunProfileExecutionItem);
+                ProcessConnectedSystemObjectAttributeValueChanges(cso, activityRunProfileExecutionItem);
+            }
+            // If no RPEI exists, CSO was added to update list for reference resolution but had no changes - skip change tracking
         }
 
         // bulk persist csos updates
@@ -2176,7 +2226,7 @@ public class ConnectedSystemServer
         {
             ConnectedSystemId = connectedSystemObject.ConnectedSystemId,
             ConnectedSystemObject = connectedSystemObject,
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.Added,
             ChangeTime = DateTime.UtcNow,
             ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,
             ActivityRunProfileExecutionItemId = activityRunProfileExecutionItem.Id
@@ -2213,7 +2263,7 @@ public class ConnectedSystemServer
         {
             ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
             ConnectedSystemObject = connectedSystemObject,
-            ChangeType = ObjectChangeType.Update,
+            ChangeType = ObjectChangeType.Updated,
             ChangeTime = DateTime.UtcNow,
             ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
         };
@@ -2470,6 +2520,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = $"Mapping to {targetName}",
+            TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SyncRule,
             TargetOperationType = ActivityTargetOperationType.Create
         };
@@ -2494,6 +2545,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = $"Mapping to {targetName}",
+            TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SyncRule,
             TargetOperationType = ActivityTargetOperationType.Create
         };
@@ -2520,6 +2572,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = $"Mapping to {targetName}",
+            TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SyncRule,
             TargetOperationType = ActivityTargetOperationType.Update
         };
@@ -2546,6 +2599,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = $"Mapping to {targetName}",
+            TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SyncRule,
             TargetOperationType = ActivityTargetOperationType.Delete
         };
@@ -2572,6 +2626,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = $"Mapping to {targetName}",
+            TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SyncRule,
             TargetOperationType = ActivityTargetOperationType.Delete
         };
@@ -2598,6 +2653,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = connectedSystemRunProfile.Name,
+            TargetContext = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystemRunProfile,
             TargetOperationType = ActivityTargetOperationType.Create,
             ConnectedSystemId = connectedSystemRunProfile.ConnectedSystemId
@@ -2625,6 +2681,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = connectedSystemRunProfile.Name,
+            TargetContext = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystemRunProfile,
             TargetOperationType = ActivityTargetOperationType.Create,
             ConnectedSystemId = connectedSystemRunProfile.ConnectedSystemId
@@ -2641,10 +2698,14 @@ public class ConnectedSystemServer
         if (connectedSystemRunProfile == null)
             return;
 
+        // Get connected system name for activity context
+        var connectedSystem = await GetConnectedSystemAsync(connectedSystemRunProfile.ConnectedSystemId);
+
         // every CRUD operation requires tracking with an activity...
         var activity = new Activity
         {
             TargetName = connectedSystemRunProfile.Name,
+            TargetContext = connectedSystem?.Name,
             ConnectedSystemRunType = connectedSystemRunProfile.RunType,
             TargetType = ActivityTargetType.ConnectedSystemRunProfile,
             TargetOperationType = ActivityTargetOperationType.Delete,
@@ -2660,10 +2721,14 @@ public class ConnectedSystemServer
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
+        // Get connected system name for activity context
+        var connectedSystem = await GetConnectedSystemAsync(connectedSystemRunProfile.ConnectedSystemId);
+
         // every CRUD operation requires tracking with an activity...
         var activity = new Activity
         {
             TargetName = connectedSystemRunProfile.Name,
+            TargetContext = connectedSystem?.Name,
             TargetType = ActivityTargetType.ConnectedSystemRunProfile,
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemRunProfileId = connectedSystemRunProfile.Id,
@@ -2912,10 +2977,15 @@ public class ConnectedSystemServer
         }
         
         
+        // Get connected system name for activity context
+        var connectedSystemForContext = syncRule.ConnectedSystem ??
+            (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(syncRule.ConnectedSystemId) : null);
+
         // every crud operation must be tracked via an Activity
         var activity = new Activity
         {
             TargetName = syncRule.Name,
+            TargetContext = connectedSystemForContext?.Name,
             TargetType = ActivityTargetType.SyncRule,
             ParentActivityId = parentActivity?.Id
         };
@@ -2981,9 +3051,14 @@ public class ConnectedSystemServer
             syncRule.ProjectToMetaverse = null;
         }
 
+        // Get connected system name for activity context
+        var connectedSystemForContext = syncRule.ConnectedSystem ??
+            (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(syncRule.ConnectedSystemId) : null);
+
         var activity = new Activity
         {
             TargetName = syncRule.Name,
+            TargetContext = connectedSystemForContext?.Name,
             TargetType = ActivityTargetType.SyncRule,
             ParentActivityId = parentActivity?.Id
         };
@@ -3008,10 +3083,15 @@ public class ConnectedSystemServer
 
     public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy)
     {
+        // Get connected system name for activity context
+        var connectedSystem = syncRule.ConnectedSystem ??
+            (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(syncRule.ConnectedSystemId) : null);
+
         // every crud operation must be tracked via an Activity
         var activity = new Activity
         {
             TargetName = syncRule.Name,
+            TargetContext = connectedSystem?.Name,
             TargetType = ActivityTargetType.SyncRule,
             TargetOperationType = ActivityTargetOperationType.Delete
         };
@@ -3023,6 +3103,41 @@ public class ConnectedSystemServer
 
     #region Object Matching Rules
     /// <summary>
+    /// Gets the target context for an ObjectMatchingRule activity.
+    /// Returns Connected System name for Mode A (rules on ConnectedSystemObjectType) or Sync Rule name for Mode B.
+    /// </summary>
+    private async Task<string?> GetObjectMatchingRuleContextAsync(ObjectMatchingRule rule)
+    {
+        // Mode B: Rule is on a SyncRule - show the Sync Rule name
+        if (rule.SyncRule != null)
+            return rule.SyncRule.Name;
+
+        // Mode A: Rule is on a ConnectedSystemObjectType - show the Connected System name
+        // First check if navigation property is loaded
+        if (rule.ConnectedSystemObjectType?.ConnectedSystem != null)
+            return rule.ConnectedSystemObjectType.ConnectedSystem.Name;
+
+        // Navigation property not loaded - fetch the Connected System
+        if (rule.ConnectedSystemObjectType != null)
+        {
+            var connectedSystem = await GetConnectedSystemAsync(rule.ConnectedSystemObjectType.ConnectedSystemId);
+            return connectedSystem?.Name;
+        }
+
+        if (rule.ConnectedSystemObjectTypeId.HasValue)
+        {
+            var objectType = await Application.Repository.ConnectedSystems.GetObjectTypeAsync(rule.ConnectedSystemObjectTypeId.Value);
+            if (objectType != null)
+            {
+                var connectedSystem = await GetConnectedSystemAsync(objectType.ConnectedSystemId);
+                return connectedSystem?.Name;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Creates a new object matching rule for a Connected System Object Type.
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
@@ -3030,6 +3145,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Create
         };
@@ -3046,6 +3162,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Create
         };
@@ -3062,6 +3179,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Update
         };
@@ -3078,6 +3196,7 @@ public class ConnectedSystemServer
         var activity = new Activity
         {
             TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Delete
         };

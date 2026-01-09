@@ -61,3 +61,39 @@ JIM includes several security features:
 - **API Security**: JWT Bearer token authentication
 - **Audit Trail**: Activity logging for all operations
 - **Secure Connections**: Support for LDAPS with certificate validation
+- **Credential Encryption**: AES-256-GCM encryption for all stored credentials (see below)
+
+## Credential Encryption
+
+JIM encrypts all sensitive credentials at rest using industry-standard cryptographic algorithms.
+
+### Encryption Details
+
+- **Algorithm**: AES-256-GCM (Galois/Counter Mode)
+- **Authentication**: HMAC-SHA256 for integrity verification
+- **Implementation**: ASP.NET Core Data Protection API
+- **Key Management**: Automatic key rotation with configurable storage
+
+AES-256-GCM is an authenticated encryption algorithm that provides both confidentiality and integrity protection. It is approved by NIST and widely used in government and enterprise security applications.
+
+### What Gets Encrypted
+
+All sensitive connector credentials are encrypted before storage, including:
+
+- Service account passwords
+- API keys and tokens
+- Database connection passwords
+- LDAP bind credentials
+- Any credential marked as sensitive in connector settings
+
+### Key Storage
+
+Encryption keys are stored separately from the database at `/data/keys`. This path should be mounted to persistent storage to ensure keys survive container restarts.
+
+To use a custom path, set the `JIM_ENCRYPTION_KEY_PATH` environment variable.
+
+### Key Storage Security Recommendations
+
+1. **Backup encryption keys**: Keys are required to decrypt credentials. Loss of keys means credentials must be re-entered.
+2. **Separate from database backups**: Store key backups separately from database backups to maintain defence in depth.
+3. **Use persistent storage**: Mount `/data/keys` to persistent storage to survive container restarts.

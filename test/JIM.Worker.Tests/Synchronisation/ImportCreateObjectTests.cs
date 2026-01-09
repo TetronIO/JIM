@@ -4,6 +4,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.PostgresData;
 using JIM.Worker.Processors;
 using JIM.Worker.Tests.Models;
@@ -27,6 +28,10 @@ public class ImportCreateObjectTests
     private Mock<DbSet<ConnectedSystemPartition>> MockDbSetConnectedSystemPartitions { get; set; }
     private List<Activity> ActivitiesData { get; set; }
     private Mock<DbSet<Activity>> MockDbSetActivities { get; set; }
+    private List<ServiceSetting> ServiceSettingsData { get; set; }
+    private Mock<DbSet<ServiceSetting>> MockDbSetServiceSettings { get; set; }
+    private List<PendingExport> PendingExportsData { get; set; }
+    private Mock<DbSet<PendingExport>> MockDbSetPendingExports { get; set; }
     private Mock<JimDbContext> MockJimDbContext { get; set; }
     private JimApplication Jim { get; set; }
     #endregion
@@ -63,7 +68,15 @@ public class ImportCreateObjectTests
         var fullImportRunProfile = ConnectedSystemRunProfilesData[0];
         ActivitiesData = TestUtilities.GetActivityData(fullImportRunProfile.RunType, fullImportRunProfile.Id);
         MockDbSetActivities = ActivitiesData.BuildMockDbSet();
-        
+
+        // set up the service settings mock
+        ServiceSettingsData = TestUtilities.GetServiceSettingsData();
+        MockDbSetServiceSettings = ServiceSettingsData.BuildMockDbSet();
+
+        // set up the pending exports mock (empty - import tests don't have pending exports to reconcile)
+        PendingExportsData = new List<PendingExport>();
+        MockDbSetPendingExports = PendingExportsData.BuildMockDbSet();
+
         // mock entity framework calls to use our data sources above
         MockJimDbContext = new Mock<JimDbContext>();
         MockJimDbContext.Setup(m => m.Activities).Returns(MockDbSetActivities.Object);
@@ -71,7 +84,9 @@ public class ImportCreateObjectTests
         MockJimDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(MockDbSetConnectedSystemObjectTypes.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemRunProfiles).Returns(MockDbSetConnectedSystemRunProfiles.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemPartitions).Returns(MockDbSetConnectedSystemPartitions.Object);
-        
+        MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(MockDbSetServiceSettings.Object);
+        MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
+
         // instantiate Jim using the mocked db context
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
     }
@@ -94,7 +109,7 @@ public class ImportCreateObjectTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
@@ -150,7 +165,7 @@ public class ImportCreateObjectTests
         });
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
@@ -280,7 +295,7 @@ public class ImportCreateObjectTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
@@ -425,7 +440,7 @@ public class ImportCreateObjectTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {
@@ -500,7 +515,7 @@ public class ImportCreateObjectTests
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
-            ChangeType = ObjectChangeType.Create,
+            ChangeType = ObjectChangeType.NotSet,
             ObjectType = "SOURCE_USER",
             Attributes = new List<ConnectedSystemImportObjectAttribute>()
             {

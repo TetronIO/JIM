@@ -62,6 +62,7 @@ public class TaskingRepository : ITaskingRepository
     public async Task<List<WorkerTask>> GetWorkerTasksAsync()
     {
         return await Repository.Database.WorkerTasks
+            .AsSplitQuery()
             .Include(st => st.Activity)
             .Include(st => st.InitiatedByMetaverseObject)
             .ThenInclude(ib => ib!.Type)
@@ -75,6 +76,7 @@ public class TaskingRepository : ITaskingRepository
         var workerTaskHeaders = new List<WorkerTaskHeader>();
         var workerTasks = await Repository.Database.WorkerTasks.
             AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
+            Include(st => st.Activity).
             Include(st => st.InitiatedByMetaverseObject).
             ThenInclude(ib => ib!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
             ThenInclude(av => av.Attribute).
@@ -94,7 +96,10 @@ public class TaskingRepository : ITaskingRepository
                 Type = GetWorkerTaskType(workerTask),
                 InitiatedByType = workerTask.InitiatedByType,
                 InitiatedById = workerTask.InitiatedById,
-                InitiatedByName = workerTask.InitiatedByName
+                InitiatedByName = workerTask.InitiatedByName,
+                ObjectsToProcess = workerTask.Activity?.ObjectsToProcess,
+                ObjectsProcessed = workerTask.Activity?.ObjectsProcessed,
+                ProgressMessage = workerTask.Activity?.Message
             });
         }
         return workerTaskHeaders;

@@ -127,7 +127,7 @@ $titles = @("Manager", "Director", "Analyst", "Specialist", "Coordinator", "Admi
 $createdUsers = @()
 $usersWithExpiry = 0
 
-for ($i = 1; $i -le $scale.Users; $i++) {
+for ($i = 1; $i -lt $scale.Users + 1; $i++) {
     $user = New-TestUser -Index $i -Domain ($domain.ToLower() + ".local")
 
     $userPrincipalName = "$($user.SamAccountName)@$($domain.ToLower()).local"
@@ -177,7 +177,7 @@ Write-TestStep "Step 3" "Creating $($scale.Groups) groups"
 
 $createdGroups = @()
 
-for ($i = 1; $i -le $scale.Groups; $i++) {
+for ($i = 1; $i -lt $scale.Groups + 1; $i++) {
     $groupName = "TestGroup$i"
     $description = "Test group $i for integration testing"
 

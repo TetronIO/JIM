@@ -60,8 +60,9 @@ internal class FileConnectorImport
             }
 
             // start building the object that we pass back to JIM, representing the connected system object.
-            // TODO: expand this to support the UPDATE scenario
-            var importObject = new ConnectedSystemImportObject { ChangeType = Models.Enums.ObjectChangeType.Create };
+            // Use NotSet for Full Imports - JIM will determine Create vs Update based on CSO existence.
+            // Only delta imports with change tracking should specify explicit Create/Update/Delete.
+            var importObject = new ConnectedSystemImportObject { ChangeType = Models.Enums.ObjectChangeType.NotSet };
 
             // work out what object type this row is meant to be
             if (!string.IsNullOrEmpty(_objectTypeInfo.PredefinedObjectType))
@@ -125,48 +126,62 @@ internal class FileConnectorImport
                     else if (attribute.Type == AttributeDataType.Number)
                     {
                         var fieldValue = _reader.CsvReader.GetField(attribute.Name);
-                        if (isMultiValued && !string.IsNullOrEmpty(fieldValue))
+                        if (!string.IsNullOrEmpty(fieldValue))
                         {
-                            var values = fieldValue.Split(_multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                            foreach (var value in values)
+                            if (isMultiValued)
                             {
-                                if (int.TryParse(value, out var intValue))
-                                    importObjectAttribute.IntValues.Add(intValue);
-                                else
-                                    throw new FormatException($"Cannot parse '{value}' as integer");
+                                var values = fieldValue.Split(_multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                                foreach (var value in values)
+                                {
+                                    if (int.TryParse(value, out var intValue))
+                                        importObjectAttribute.IntValues.Add(intValue);
+                                    else
+                                        throw new FormatException($"Cannot parse '{value}' as integer");
+                                }
                             }
-                        }
-                        else
-                        {
-                            importObjectAttribute.IntValues.Add(_reader.CsvReader.GetField<int>(attribute.Name));
+                            else
+                            {
+                                importObjectAttribute.IntValues.Add(_reader.CsvReader.GetField<int>(attribute.Name));
+                            }
                         }
                     }
                     else if (attribute.Type == AttributeDataType.LongNumber)
                     {
                         var fieldValue = _reader.CsvReader.GetField(attribute.Name);
-                        if (isMultiValued && !string.IsNullOrEmpty(fieldValue))
+                        if (!string.IsNullOrEmpty(fieldValue))
                         {
-                            var values = fieldValue.Split(_multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                            foreach (var value in values)
+                            if (isMultiValued)
                             {
-                                if (long.TryParse(value, out var longValue))
-                                    importObjectAttribute.LongValues.Add(longValue);
-                                else
-                                    throw new FormatException($"Cannot parse '{value}' as long number");
+                                var values = fieldValue.Split(_multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                                foreach (var value in values)
+                                {
+                                    if (long.TryParse(value, out var longValue))
+                                        importObjectAttribute.LongValues.Add(longValue);
+                                    else
+                                        throw new FormatException($"Cannot parse '{value}' as long number");
+                                }
                             }
-                        }
-                        else
-                        {
-                            importObjectAttribute.LongValues.Add(_reader.CsvReader.GetField<long>(attribute.Name));
+                            else
+                            {
+                                importObjectAttribute.LongValues.Add(_reader.CsvReader.GetField<long>(attribute.Name));
+                            }
                         }
                     }
                     else if (attribute.Type == AttributeDataType.DateTime)
                     {
-                        importObjectAttribute.DateTimeValue = _reader.CsvReader.GetField<DateTime>(attribute.Name);
+                        var fieldValue = _reader.CsvReader.GetField(attribute.Name);
+                        if (!string.IsNullOrEmpty(fieldValue))
+                        {
+                            importObjectAttribute.DateTimeValue = _reader.CsvReader.GetField<DateTime>(attribute.Name);
+                        }
                     }
                     else if (attribute.Type == AttributeDataType.Boolean)
                     {
-                        importObjectAttribute.BoolValue = _reader.CsvReader.GetField<bool>(attribute.Name);
+                        var fieldValue = _reader.CsvReader.GetField(attribute.Name);
+                        if (!string.IsNullOrEmpty(fieldValue))
+                        {
+                            importObjectAttribute.BoolValue = _reader.CsvReader.GetField<bool>(attribute.Name);
+                        }
                     }
                     else if (attribute.Type == AttributeDataType.Guid)
                     {

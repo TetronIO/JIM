@@ -832,6 +832,7 @@ catch {
 }
 
 # Step 7: Create Run Profiles
+# Run profiles are scoped to Connected Systems, so we use simple names without prefixes
 Write-TestStep "Step 7" "Creating Run Profiles"
 
 try {
@@ -839,105 +840,122 @@ try {
     $csvProfiles = Get-JIMRunProfile -ConnectedSystemId $csvSystem.id
     $ldapProfiles = Get-JIMRunProfile -ConnectedSystemId $ldapSystem.id
 
-    # Full Import from LDAP - MUST be created first and run before any syncs
-    # This establishes the baseline for Delta Import (USN watermark)
-    $ldapFullImportProfile = $ldapProfiles | Where-Object { $_.name -eq "Samba AD - Full Import" }
-    if (-not $ldapFullImportProfile) {
-        $ldapFullImportProfile = New-JIMRunProfile `
-            -Name "Samba AD - Full Import" `
-            -ConnectedSystemId $ldapSystem.id `
-            -RunType "FullImport" `
-            -PassThru
-        Write-Host "  ✓ Created 'Samba AD - Full Import' run profile" -ForegroundColor Green
-    }
-    else {
-        Write-Host "  Run profile 'Samba AD - Full Import' already exists" -ForegroundColor Gray
-    }
-
-    # Full Import from CSV - FilePath is required for file-based connectors
+    # CSV Run Profiles
     $csvFilePath = "/var/connector-files/test-data/hr-users.csv"
-    $csvImportProfile = $csvProfiles | Where-Object { $_.name -eq "HR CSV - Full Import" }
+
+    # Full Import (CSV)
+    $csvImportProfile = $csvProfiles | Where-Object { $_.name -eq "Full Import" }
     if (-not $csvImportProfile) {
         $csvImportProfile = New-JIMRunProfile `
-            -Name "HR CSV - Full Import" `
+            -Name "Full Import" `
             -ConnectedSystemId $csvSystem.id `
             -RunType "FullImport" `
             -FilePath $csvFilePath `
             -PassThru
-        Write-Host "  ✓ Created 'HR CSV - Full Import' run profile" -ForegroundColor Green
+        Write-Host "  ✓ Created 'Full Import' run profile (CSV)" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'HR CSV - Full Import' already exists" -ForegroundColor Gray
+        Write-Host "  Run profile 'Full Import' already exists (CSV)" -ForegroundColor Gray
     }
 
-    # Full Sync from CSV - evaluates sync rules and creates MVOs/pending exports
-    $csvSyncProfile = $csvProfiles | Where-Object { $_.name -eq "HR CSV - Full Sync" }
+    # Full Synchronisation (CSV)
+    $csvSyncProfile = $csvProfiles | Where-Object { $_.name -eq "Full Synchronisation" }
     if (-not $csvSyncProfile) {
         $csvSyncProfile = New-JIMRunProfile `
-            -Name "HR CSV - Full Sync" `
+            -Name "Full Synchronisation" `
             -ConnectedSystemId $csvSystem.id `
             -RunType "FullSynchronisation" `
             -PassThru
-        Write-Host "  ✓ Created 'HR CSV - Full Sync' run profile" -ForegroundColor Green
+        Write-Host "  ✓ Created 'Full Synchronisation' run profile (CSV)" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'HR CSV - Full Sync' already exists" -ForegroundColor Gray
+        Write-Host "  Run profile 'Full Synchronisation' already exists (CSV)" -ForegroundColor Gray
     }
 
-    # Export to LDAP (Note: 'Export' is the correct RunType, not 'FullExport')
-    $ldapExportProfile = $ldapProfiles | Where-Object { $_.name -eq "Samba AD - Export" }
-    if (-not $ldapExportProfile) {
-        $ldapExportProfile = New-JIMRunProfile `
-            -Name "Samba AD - Export" `
-            -ConnectedSystemId $ldapSystem.id `
-            -RunType "Export" `
-            -PassThru
-        Write-Host "  ✓ Created 'Samba AD - Export' run profile" -ForegroundColor Green
-    }
-    else {
-        Write-Host "  Run profile 'Samba AD - Export' already exists" -ForegroundColor Gray
-    }
-
-    # Delta Import from LDAP - for confirming exports
-    $ldapDeltaImportProfile = $ldapProfiles | Where-Object { $_.name -eq "Samba AD - Delta Import" }
-    if (-not $ldapDeltaImportProfile) {
-        $ldapDeltaImportProfile = New-JIMRunProfile `
-            -Name "Samba AD - Delta Import" `
-            -ConnectedSystemId $ldapSystem.id `
-            -RunType "DeltaImport" `
-            -PassThru
-        Write-Host "  ✓ Created 'Samba AD - Delta Import' run profile" -ForegroundColor Green
-    }
-    else {
-        Write-Host "  Run profile 'Samba AD - Delta Import' already exists" -ForegroundColor Gray
-    }
-
-    # Delta Sync for CSV - for efficient sync of changes
-    $csvDeltaSyncProfile = $csvProfiles | Where-Object { $_.name -eq "HR CSV - Delta Sync" }
+    # Delta Synchronisation (CSV)
+    $csvDeltaSyncProfile = $csvProfiles | Where-Object { $_.name -eq "Delta Synchronisation" }
     if (-not $csvDeltaSyncProfile) {
         $csvDeltaSyncProfile = New-JIMRunProfile `
-            -Name "HR CSV - Delta Sync" `
+            -Name "Delta Synchronisation" `
             -ConnectedSystemId $csvSystem.id `
             -RunType "DeltaSynchronisation" `
             -PassThru
-        Write-Host "  ✓ Created 'HR CSV - Delta Sync' run profile" -ForegroundColor Green
+        Write-Host "  ✓ Created 'Delta Synchronisation' run profile (CSV)" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'HR CSV - Delta Sync' already exists" -ForegroundColor Gray
+        Write-Host "  Run profile 'Delta Synchronisation' already exists (CSV)" -ForegroundColor Gray
     }
 
-    # Delta Sync for LDAP - for efficient sync of changes
-    $ldapDeltaSyncProfile = $ldapProfiles | Where-Object { $_.name -eq "Samba AD - Delta Sync" }
+    # LDAP Run Profiles
+
+    # Full Import (LDAP) - MUST be run before any syncs to establish baseline
+    $ldapFullImportProfile = $ldapProfiles | Where-Object { $_.name -eq "Full Import" }
+    if (-not $ldapFullImportProfile) {
+        $ldapFullImportProfile = New-JIMRunProfile `
+            -Name "Full Import" `
+            -ConnectedSystemId $ldapSystem.id `
+            -RunType "FullImport" `
+            -PassThru
+        Write-Host "  ✓ Created 'Full Import' run profile (LDAP)" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Full Import' already exists (LDAP)" -ForegroundColor Gray
+    }
+
+    # Delta Import (LDAP) - for confirming exports
+    $ldapDeltaImportProfile = $ldapProfiles | Where-Object { $_.name -eq "Delta Import" }
+    if (-not $ldapDeltaImportProfile) {
+        $ldapDeltaImportProfile = New-JIMRunProfile `
+            -Name "Delta Import" `
+            -ConnectedSystemId $ldapSystem.id `
+            -RunType "DeltaImport" `
+            -PassThru
+        Write-Host "  ✓ Created 'Delta Import' run profile (LDAP)" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Delta Import' already exists (LDAP)" -ForegroundColor Gray
+    }
+
+    # Full Synchronisation (LDAP) - for manual sync operations
+    $ldapFullSyncProfile = $ldapProfiles | Where-Object { $_.name -eq "Full Synchronisation" }
+    if (-not $ldapFullSyncProfile) {
+        $ldapFullSyncProfile = New-JIMRunProfile `
+            -Name "Full Synchronisation" `
+            -ConnectedSystemId $ldapSystem.id `
+            -RunType "FullSynchronisation" `
+            -PassThru
+        Write-Host "  ✓ Created 'Full Synchronisation' run profile (LDAP)" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Full Synchronisation' already exists (LDAP)" -ForegroundColor Gray
+    }
+
+    # Delta Synchronisation (LDAP)
+    $ldapDeltaSyncProfile = $ldapProfiles | Where-Object { $_.name -eq "Delta Synchronisation" }
     if (-not $ldapDeltaSyncProfile) {
         $ldapDeltaSyncProfile = New-JIMRunProfile `
-            -Name "Samba AD - Delta Sync" `
+            -Name "Delta Synchronisation" `
             -ConnectedSystemId $ldapSystem.id `
             -RunType "DeltaSynchronisation" `
             -PassThru
-        Write-Host "  ✓ Created 'Samba AD - Delta Sync' run profile" -ForegroundColor Green
+        Write-Host "  ✓ Created 'Delta Synchronisation' run profile (LDAP)" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'Samba AD - Delta Sync' already exists" -ForegroundColor Gray
+        Write-Host "  Run profile 'Delta Synchronisation' already exists (LDAP)" -ForegroundColor Gray
+    }
+
+    # Export (LDAP)
+    $ldapExportProfile = $ldapProfiles | Where-Object { $_.name -eq "Export" }
+    if (-not $ldapExportProfile) {
+        $ldapExportProfile = New-JIMRunProfile `
+            -Name "Export" `
+            -ConnectedSystemId $ldapSystem.id `
+            -RunType "Export" `
+            -PassThru
+        Write-Host "  ✓ Created 'Export' run profile (LDAP)" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Export' already exists (LDAP)" -ForegroundColor Gray
     }
 }
 catch {
@@ -967,7 +985,8 @@ return @{
     CSVSyncProfileId = $csvSyncProfile.id
     CSVDeltaSyncProfileId = $csvDeltaSyncProfile.id
     LDAPFullImportProfileId = $ldapFullImportProfile.id
-    LDAPExportProfileId = $ldapExportProfile.id
     LDAPDeltaImportProfileId = $ldapDeltaImportProfile.id
+    LDAPFullSyncProfileId = $ldapFullSyncProfile.id
     LDAPDeltaSyncProfileId = $ldapDeltaSyncProfile.id
+    LDAPExportProfileId = $ldapExportProfile.id
 }

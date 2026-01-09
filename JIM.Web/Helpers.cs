@@ -2,6 +2,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -164,10 +165,24 @@ public static class Helpers
     {
         return objectChangeType switch
         {
-            ObjectChangeType.Create => Color.Primary,
-            ObjectChangeType.Update => Color.Default,
-            ObjectChangeType.Delete => Color.Error,
-            ObjectChangeType.NoChange => Color.Info,
+            // Import (CSO operations)
+            ObjectChangeType.Added => Color.Success,
+            ObjectChangeType.Updated => Color.Info,
+            ObjectChangeType.Deleted => Color.Error,
+
+            // Sync (MVO operations)
+            ObjectChangeType.Projected => Color.Primary,
+            ObjectChangeType.Joined => Color.Secondary,
+            ObjectChangeType.AttributeFlow => Color.Tertiary,
+            ObjectChangeType.Disconnected => Color.Warning,
+
+            // Export
+            ObjectChangeType.Provisioned => Color.Success,
+            ObjectChangeType.Exported => Color.Info,
+            ObjectChangeType.Deprovisioned => Color.Error,
+
+            // Other
+            ObjectChangeType.NoChange => Color.Default,
             _ => Color.Default,
         };
     }
@@ -204,6 +219,75 @@ public static class Helpers
             PendingExportChangeType.Update => Color.Info,
             PendingExportChangeType.Delete => Color.Error,
             _ => Color.Default,
+        };
+    }
+    #endregion
+
+    #region Run Type Helpers
+    /// <summary>
+    /// Gets the display title for the results section based on run type.
+    /// </summary>
+    public static string GetRunTypeResultsTitle(ConnectedSystemRunType? runType)
+    {
+        return runType switch
+        {
+            ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport => "Import Results",
+            ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation => "Synchronisation Results",
+            ConnectedSystemRunType.Export => "Export Results",
+            _ => "Results"
+        };
+    }
+
+    /// <summary>
+    /// Gets the relevant ObjectChangeTypes for a given run type.
+    /// </summary>
+    public static IEnumerable<ObjectChangeType> GetChangeTypesForRunType(ConnectedSystemRunType? runType)
+    {
+        return runType switch
+        {
+            ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport =>
+                new[] { ObjectChangeType.Added, ObjectChangeType.Updated, ObjectChangeType.Deleted },
+            ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation =>
+                new[] { ObjectChangeType.Projected, ObjectChangeType.Joined, ObjectChangeType.AttributeFlow, ObjectChangeType.Disconnected },
+            ConnectedSystemRunType.Export =>
+                new[] { ObjectChangeType.Provisioned, ObjectChangeType.Exported, ObjectChangeType.Deprovisioned },
+            _ => Array.Empty<ObjectChangeType>()
+        };
+    }
+
+    /// <summary>
+    /// Gets the stat count for a specific change type from the stats model.
+    /// </summary>
+    public static int GetStatCountForChangeType(ActivityRunProfileExecutionStats stats, ObjectChangeType changeType)
+    {
+        return changeType switch
+        {
+            // Import
+            ObjectChangeType.Added => stats.TotalCsoAdds,
+            ObjectChangeType.Updated => stats.TotalCsoUpdates,
+            ObjectChangeType.Deleted => stats.TotalCsoDeletes,
+            // Sync
+            ObjectChangeType.Projected => stats.TotalProjections,
+            ObjectChangeType.Joined => stats.TotalJoins,
+            ObjectChangeType.AttributeFlow => stats.TotalAttributeFlows,
+            ObjectChangeType.Disconnected => stats.TotalDisconnections,
+            // Export
+            ObjectChangeType.Provisioned => stats.TotalProvisioned,
+            ObjectChangeType.Exported => stats.TotalExported,
+            ObjectChangeType.Deprovisioned => stats.TotalDeprovisioned,
+            _ => 0
+        };
+    }
+
+    /// <summary>
+    /// Gets a human-readable display name for a change type with proper spacing.
+    /// </summary>
+    public static string GetChangeTypeDisplayName(ObjectChangeType changeType)
+    {
+        return changeType switch
+        {
+            ObjectChangeType.AttributeFlow => "Attribute Flow",
+            _ => changeType.ToString()
         };
     }
     #endregion

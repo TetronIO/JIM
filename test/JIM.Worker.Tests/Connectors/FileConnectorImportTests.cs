@@ -337,6 +337,96 @@ public class FileConnectorImportTests
         Assert.That(tagsAttr2.StringValues[0], Is.EqualTo("user"));
     }
 
+    [Test]
+    public async Task ImportAsync_WithEmptyDateTime_SkipsAttributeAsync()
+    {
+        // Arrange - file has rows with empty DateTime values
+        var filePath = Path.Combine(_testFilesPath, "empty_values.csv");
+        var connectedSystem = CreateConnectedSystem(filePath, "User");
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            FilePath = filePath,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+
+        // Act
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.ImportObjects, Has.Count.EqualTo(4));
+
+        // Row 1: Empty Age (Number) - should have no IntValues for Age
+        var row1 = result.ImportObjects[0];
+        Assert.That(row1.ErrorType, Is.Null, "Row with empty Number should not cause error");
+        var ageAttr1 = row1.Attributes.SingleOrDefault(a => a.Name == "Age");
+        Assert.That(ageAttr1, Is.Not.Null);
+        Assert.That(ageAttr1!.IntValues, Is.Empty, "Empty Number should result in no IntValues");
+
+        // Row 2: Empty StartDate (DateTime) - should have no DateTimeValue
+        var row2 = result.ImportObjects[1];
+        Assert.That(row2.ErrorType, Is.Null, "Row with empty DateTime should not cause error");
+        var dateAttr2 = row2.Attributes.SingleOrDefault(a => a.Name == "StartDate");
+        Assert.That(dateAttr2, Is.Not.Null);
+        Assert.That(dateAttr2!.DateTimeValue, Is.Null, "Empty DateTime should result in null DateTimeValue");
+
+        // Row 3: Empty IsActive (Boolean) - should have no BoolValue
+        var row3 = result.ImportObjects[2];
+        Assert.That(row3.ErrorType, Is.Null, "Row with empty Boolean should not cause error");
+        var boolAttr3 = row3.Attributes.SingleOrDefault(a => a.Name == "IsActive");
+        Assert.That(boolAttr3, Is.Not.Null);
+        Assert.That(boolAttr3!.BoolValue, Is.Null, "Empty Boolean should result in null BoolValue");
+
+        // Row 4: All empty (except Name) - should have no errors
+        var row4 = result.ImportObjects[3];
+        Assert.That(row4.ErrorType, Is.Null, "Row with all empty values should not cause error");
+        var nameAttr4 = row4.Attributes.SingleOrDefault(a => a.Name == "Name");
+        Assert.That(nameAttr4, Is.Not.Null);
+        Assert.That(nameAttr4!.StringValues, Has.Count.EqualTo(1));
+        Assert.That(nameAttr4.StringValues[0], Is.EqualTo("Empty All"));
+    }
+
+    [Test]
+    public async Task ImportAsync_WithEmptyGuid_SkipsAttributeAsync()
+    {
+        // Arrange - file has a row with an empty GUID value
+        var filePath = Path.Combine(_testFilesPath, "empty_guids.csv");
+        var connectedSystem = CreateConnectedSystemWithGuidAttr(filePath, "User");
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            FilePath = filePath,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+
+        // Act
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.ImportObjects, Has.Count.EqualTo(3));
+
+        // Row 1: Has GUID
+        var row1 = result.ImportObjects[0];
+        Assert.That(row1.ErrorType, Is.Null);
+        var guidAttr1 = row1.Attributes.SingleOrDefault(a => a.Name == "UniqueId");
+        Assert.That(guidAttr1, Is.Not.Null);
+        Assert.That(guidAttr1!.GuidValues, Has.Count.EqualTo(1));
+
+        // Row 2: Empty GUID - should have no GuidValues, no error
+        var row2 = result.ImportObjects[1];
+        Assert.That(row2.ErrorType, Is.Null, "Row with empty GUID should not cause error");
+        var guidAttr2 = row2.Attributes.SingleOrDefault(a => a.Name == "UniqueId");
+        Assert.That(guidAttr2, Is.Not.Null);
+        Assert.That(guidAttr2!.GuidValues, Is.Empty, "Empty GUID should result in no GuidValues");
+
+        // Row 3: Has GUID
+        var row3 = result.ImportObjects[2];
+        Assert.That(row3.ErrorType, Is.Null);
+        var guidAttr3 = row3.Attributes.SingleOrDefault(a => a.Name == "UniqueId");
+        Assert.That(guidAttr3, Is.Not.Null);
+        Assert.That(guidAttr3!.GuidValues, Has.Count.EqualTo(1));
+    }
+
     #endregion
 
     #region ValidateSettingValues Tests
@@ -596,6 +686,30 @@ public class FileConnectorImportTests
             Name = "Test File Connector",
             ObjectTypes = new List<ConnectedSystemObjectType> { objectType },
             SettingValues = CreateSettingValues(filePath, objectTypeName, multiValueDelimiter: multiValueDelimiter)
+        };
+    }
+
+    private ConnectedSystem CreateConnectedSystemWithGuidAttr(string filePath, string objectTypeName)
+    {
+        var objectType = new ConnectedSystemObjectType
+        {
+            Id = 1,
+            Name = objectTypeName,
+            Selected = true,
+            Attributes = new List<ConnectedSystemObjectTypeAttribute>
+            {
+                new() { Id = 1, Name = "Id", Type = AttributeDataType.Number, Selected = true, AttributePlurality = AttributePlurality.SingleValued },
+                new() { Id = 2, Name = "Name", Type = AttributeDataType.Text, Selected = true, AttributePlurality = AttributePlurality.SingleValued },
+                new() { Id = 3, Name = "UniqueId", Type = AttributeDataType.Guid, Selected = true, AttributePlurality = AttributePlurality.SingleValued }
+            }
+        };
+
+        return new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test File Connector",
+            ObjectTypes = new List<ConnectedSystemObjectType> { objectType },
+            SettingValues = CreateSettingValues(filePath, objectTypeName)
         };
     }
 
