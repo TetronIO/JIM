@@ -151,7 +151,12 @@ public enum ServiceSettingCategory
     /// <summary>
     /// Security and encryption settings.
     /// </summary>
-    Security = 4
+    Security = 4,
+
+    /// <summary>
+    /// User interface settings.
+    /// </summary>
+    UI = 5
 }
 
 /// <summary>

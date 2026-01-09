@@ -41,8 +41,8 @@ $scale = Get-TemplateScale -Template $Template
 $containerMap = @{
     Primary = @{
         Container = "samba-ad-primary"
-        Domain = "TESTDOMAIN"
-        DomainDN = "DC=testdomain,DC=local"
+        Domain = "SUBATOMIC"
+        DomainDN = "DC=subatomic,DC=local"
     }
     Source = @{
         Container = "samba-ad-source"
@@ -83,28 +83,46 @@ foreach ($ou in $baseOus) {
     }
 }
 
-# Create the Borton Corp base OU - this is the OU that will be selected in JIM for partition/container testing
-# Department OUs will be created dynamically by the LDAP connector when provisioning users
-# (enabled by the "Create containers as needed?" connector setting)
-Write-Host "  Creating Borton Corp base OU..." -ForegroundColor Gray
-$result = docker exec $container samba-tool ou create "OU=Borton Corp,$domainDN" 2>&1
+# Create the Corp base OU - this is the OU that will be selected in JIM for partition/container testing
+# Structure: OU=Corp,DC=subatomic,DC=local
+#   - OU=Users,OU=Corp,DC=subatomic,DC=local  (for user objects)
+#   - OU=Groups,OU=Corp,DC=subatomic,DC=local (for group objects)
+Write-Host "  Creating Corp base OU..." -ForegroundColor Gray
+$result = docker exec $container samba-tool ou create "OU=Corp,$domainDN" 2>&1
 if ($LASTEXITCODE -ne 0 -and $result -notmatch "already exists") {
-    Write-Host "    Warning: Failed to create OU 'Borton Corp': $result" -ForegroundColor Yellow
+    Write-Host "    Warning: Failed to create OU 'Corp': $result" -ForegroundColor Yellow
 }
 else {
-    Write-Host "    ✓ OU created: Borton Corp" -ForegroundColor Green
+    Write-Host "    ✓ OU created: Corp" -ForegroundColor Green
 }
 
-# Note: Department OUs (Finance, IT, Marketing, etc.) are no longer pre-created here.
-# The LDAP Connector's "Create containers as needed?" setting will automatically create
-# OUs under /Borton Corp/ when provisioning users, e.g.:
-#   OU=Finance,OU=Borton Corp,DC=testdomain,DC=local
-#   OU=IT,OU=Borton Corp,DC=testdomain,DC=local
+# Create the Users OU under Corp
+Write-Host "  Creating Users OU under Corp..." -ForegroundColor Gray
+$result = docker exec $container samba-tool ou create "OU=Users,OU=Corp,$domainDN" 2>&1
+if ($LASTEXITCODE -ne 0 -and $result -notmatch "already exists") {
+    Write-Host "    Warning: Failed to create OU 'Users': $result" -ForegroundColor Yellow
+}
+else {
+    Write-Host "    ✓ OU created: Users (under Corp)" -ForegroundColor Green
+}
+
+# Create the Groups OU under Corp
+Write-Host "  Creating Groups OU under Corp..." -ForegroundColor Gray
+$result = docker exec $container samba-tool ou create "OU=Groups,OU=Corp,$domainDN" 2>&1
+if ($LASTEXITCODE -ne 0 -and $result -notmatch "already exists") {
+    Write-Host "    Warning: Failed to create OU 'Groups': $result" -ForegroundColor Yellow
+}
+else {
+    Write-Host "    ✓ OU created: Groups (under Corp)" -ForegroundColor Green
+}
+
+# Note: Department OUs (Finance, IT, Marketing, etc.) can be auto-created under OU=Users,OU=Corp
+# by the LDAP Connector's "Create containers as needed?" setting when provisioning users.
 # This tests the container creation functionality and matches real-world use cases
 # where department OUs may not exist initially.
 
 # Legacy department OUs at root level (kept for backward compatibility with any existing tests)
-# These will be removed in a future cleanup once all tests use the /Borton Corp/{Department} structure
+# These will be removed in a future cleanup once all tests use the /Corp/Users/{Department} structure
 $departmentOus = @("Marketing", "Operations", "Finance", "Sales", "Human Resources", "Procurement",
                    "Information Technology", "Research & Development", "Executive", "Legal", "Facilities", "Catering")
 Write-Host "  Creating legacy department OUs at root level..." -ForegroundColor Gray

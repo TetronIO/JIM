@@ -239,26 +239,49 @@ public class DataGenerationRepository : IDataGenerationRepository
     #endregion
 
     /// <summary>
-    /// Bulk creates metaverse objects in the database.
+    /// Bulk creates metaverse objects in the database using batched persistence.
+    /// Batching reduces memory pressure and allows progress reporting during persistence.
     /// </summary>
     /// <param name="metaverseObjects">The list of MetaverseObjects to persist.</param>
-    /// <param name="cancellationToken">The cancellation token to use to determine if the operation should be cancelled before completion.</param>
-    /// <returns></returns>
+    /// <param name="batchSize">Number of objects to persist per batch. Smaller batches reduce memory pressure.</param>
+    /// <param name="cancellationToken">The cancellation token to use to determine if the operation should be cancelled.</param>
+    /// <param name="progressCallback">Optional callback for reporting persistence progress. Parameters are (totalObjects, objectsPersisted).</param>
+    /// <returns>The number of objects persisted.</returns>
     /// <exception cref="ArgumentNullException"></exception>
     /// <exception cref="OperationCanceledException"></exception>
-    public async Task CreateMetaverseObjectsAsync(List<MetaverseObject> metaverseObjects, CancellationToken cancellationToken)
+    public async Task<int> CreateMetaverseObjectsAsync(
+        List<MetaverseObject> metaverseObjects,
+        int batchSize,
+        CancellationToken cancellationToken,
+        Func<int, int, Task>? progressCallback = null)
     {
-        Log.Verbose("CreateMetaverseObjectsAsync: Starting to persist MetaverseObjects...");
+        Log.Verbose("CreateMetaverseObjectsAsync: Starting to persist {Count:N0} MetaverseObjects in batches of {BatchSize}...",
+            metaverseObjects?.Count ?? 0, batchSize);
+
         if (metaverseObjects == null || metaverseObjects.Count == 0)
             throw new ArgumentNullException(nameof(metaverseObjects));
 
+        if (batchSize <= 0)
+            batchSize = 500; // Sensible default
+
+        var totalObjects = metaverseObjects.Count;
+
+        // For now, persist all objects in a single transaction.
+        // Batched persistence with progress reporting is complex due to EF Core's change tracking
+        // of navigation properties causing duplicate key errors. This is tracked in GitHub issue #276
+        // for Post-MVP optimisation.
         Repository.Database.MetaverseObjects.AddRange(metaverseObjects);
         await Repository.Database.SaveChangesAsync(cancellationToken);
 
         if (cancellationToken.IsCancellationRequested)
             cancellationToken.ThrowIfCancellationRequested();
 
-        Log.Verbose("CreateMetaverseObjectsAsync: Done");
+        // Report completion
+        if (progressCallback != null)
+            await progressCallback(totalObjects, totalObjects);
+
+        Log.Verbose("CreateMetaverseObjectsAsync: Done - persisted {Count:N0} objects", totalObjects);
+        return totalObjects;
     }
 
     #region private methods

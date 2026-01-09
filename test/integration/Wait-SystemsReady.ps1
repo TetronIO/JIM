@@ -100,7 +100,7 @@ if [ ! -f ${SAMBA_PRIVATE}/tls/cert.pem ]; then
         -newkey rsa:2048 \
         -keyout ${SAMBA_PRIVATE}/tls/key.pem \
         -out ${SAMBA_PRIVATE}/tls/cert.pem \
-        -subj "/CN=testdomain.local/O=JIM Integration Testing" 2>/dev/null
+        -subj "/CN=subatomic.local/O=JIM Integration Testing" 2>/dev/null
     cp ${SAMBA_PRIVATE}/tls/cert.pem ${SAMBA_PRIVATE}/tls/ca.pem
     chmod 600 ${SAMBA_PRIVATE}/tls/key.pem
 fi

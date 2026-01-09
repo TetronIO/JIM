@@ -218,5 +218,13 @@ public static class Constants
         // Security Settings
         public const string CredentialEncryptionEnabled = "Security.CredentialEncryptionEnabled";
         public const string EncryptionKeyPath = "Security.EncryptionKeyPath";
+
+        // UI Settings
+        /// <summary>
+        /// The interval at which progress updates are reported and polled for in the UI.
+        /// Used by both the Operations page polling and background task progress reporting.
+        /// Default: 1 second.
+        /// </summary>
+        public const string ProgressUpdateInterval = "UI.ProgressUpdateInterval";
     }
 }

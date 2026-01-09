@@ -101,9 +101,23 @@ public class DataGenerationServer
         await Application.Repository.DataGeneration.DeleteTemplateAsync(templateId);
     }
 
-    public async Task ExecuteTemplateAsync(int templateId, CancellationToken cancellationToken)
+    /// <summary>
+    /// Executes a data generation template to create metaverse objects.
+    /// </summary>
+    /// <param name="templateId">The ID of the template to execute.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    /// <param name="progressCallback">Optional callback for reporting progress. Parameters are (totalObjects, objectsProcessed, message).</param>
+    /// <param name="progressUpdateInterval">How often to report progress. If null, progress is only reported after each object type completes.</param>
+    /// <param name="batchSize">Batch size for database persistence. Smaller batches reduce memory pressure.</param>
+    /// <returns>The number of objects created.</returns>
+    public async Task<int> ExecuteTemplateAsync(
+        int templateId,
+        CancellationToken cancellationToken,
+        Func<int, int, string?, Task>? progressCallback = null,
+        TimeSpan? progressUpdateInterval = null,
+        int batchSize = 500)
     {
-        // get the entire template 
+        // get the entire template
         // enumerate the object types
         // build the objects << probably fine up to a point, then it might consume too much ram
         // submit in bulk to data layer << probably fine up to a point, then EF might blow a gasket
@@ -124,6 +138,19 @@ public class DataGenerationServer
 
         template.Validate();
 
+        // Calculate total objects to create for progress tracking
+        var totalObjectsToCreate = template.ObjectTypes.Sum(ot => ot.ObjectsToCreate);
+        // Use an array to hold the counter - arrays are reference types so they work correctly
+        // with closures and allow thread-safe access via Interlocked/Volatile
+        var objectsGeneratedHolder = new int[1];
+        // Track when we last reported progress (for time-based updates)
+        var lastProgressReport = Stopwatch.StartNew();
+        var progressIntervalMs = progressUpdateInterval?.TotalMilliseconds ?? 2000;
+
+        // Report initial progress (total objects to create, none processed yet)
+        if (progressCallback != null)
+            await progressCallback(totalObjectsToCreate, 0, "Generating objects...");
+
         // object type dependency graph needs considering
         // for now we should probably just advise people to add template object types in reverse order to how they're referenced.
         // note: entity framework might handle dependency sequencing for us at time of persistence
@@ -140,7 +167,7 @@ public class DataGenerationServer
             if (cancellationToken.IsCancellationRequested)
             {
                 Log.Debug("ExecuteTemplateAsync: Cancellation requested. Returning from data set processing prematurely.");
-                return;
+                return 0;
             }
 
             if (datasetInstance?.ExampleDataSet == null || exampleDataSets.Any(q => q.Id == datasetInstance.ExampleDataSet.Id)) 
@@ -156,7 +183,7 @@ public class DataGenerationServer
             if (cancellationToken.IsCancellationRequested)
             {
                 Log.Debug("ExecuteTemplateAsync: Cancellation requested. Returning from object type processing prematurely.");
-                return;
+                return 0;
             }
 
             var objectTypeStopWatch = Stopwatch.StartNew();
@@ -242,7 +269,27 @@ public class DataGenerationServer
                     lock (_metaverseObjectLock)
                         create.Add(metaverseObject);
 
-                    Interlocked.Add(ref totalObjectsCreated, 1);
+                    var currentCount = Interlocked.Add(ref totalObjectsCreated, 1);
+                    Interlocked.Increment(ref objectsGeneratedHolder[0]);
+
+                    // Check if we should report progress (time-based, inside the parallel loop)
+                    // Only one thread will win the race to report, others will see the reset stopwatch
+                    if (progressCallback != null && lastProgressReport.ElapsedMilliseconds >= progressIntervalMs)
+                    {
+                        lock (_metaverseObjectLock) // Reuse existing lock to avoid creating another
+                        {
+                            // Double-check after acquiring lock
+                            if (lastProgressReport.ElapsedMilliseconds >= progressIntervalMs)
+                            {
+                                var progress = objectsGeneratedHolder[0];
+                                Log.Debug("ExecuteTemplateAsync: Progress update - {Current}/{Total} objects generated",
+                                    progress, totalObjectsToCreate);
+                                lastProgressReport.Restart();
+                                // Wait for the database write to complete so UI can see the update
+                                progressCallback(totalObjectsToCreate, progress, "Generating objects...").GetAwaiter().GetResult();
+                            }
+                        }
+                    }
                 });
 
             // user manager attributes need assigning after all users have been prepared
@@ -261,16 +308,37 @@ public class DataGenerationServer
         if (cancellationToken.IsCancellationRequested)
         {
             Log.Debug("ExecuteTemplateAsync: Cancellation requested. Returning after removing unecessary attributes prematurely.");
-            return;
+            return 0;
         }
 
-        // submit metaverse objects to data layer for creation
+        // Report that generation is complete, now starting persistence
+        if (progressCallback != null)
+            await progressCallback(totalObjectsToCreate, totalObjectsToCreate, "Persisting to database...");
+
+        // submit metaverse objects to data layer for creation (batched for memory efficiency and progress)
         var persistenceStopwatch = new Stopwatch();
         persistenceStopwatch.Start();
 
+        // Create a persistence progress callback that reports during the persistence phase
+        // We show persistence progress as a second phase - objects are generated (100%), now persisting
+        Func<int, int, Task>? persistenceProgressCallback = null;
+        if (progressCallback != null)
+        {
+            persistenceProgressCallback = async (total, persisted) =>
+            {
+                // Format message to show persistence progress
+                var message = $"Persisting to database... ({persisted:N0}/{total:N0})";
+                await progressCallback(totalObjectsToCreate, totalObjectsToCreate, message);
+            };
+        }
+
         try
         {
-            await Application.Repository.DataGeneration.CreateMetaverseObjectsAsync(metaverseObjectsToCreate, cancellationToken);
+            await Application.Repository.DataGeneration.CreateMetaverseObjectsAsync(
+                metaverseObjectsToCreate,
+                batchSize,
+                cancellationToken,
+                persistenceProgressCallback);
         }
         catch (OperationCanceledException ex)
         {
@@ -284,6 +352,8 @@ public class DataGenerationServer
         // trying to help garbage collection along. data generation results in a lot of ram usage.
         metaverseObjectsToCreate.Clear();
         dataGenerationValueTrackers.Clear();
+
+        return totalObjectsCreated;
     }
     #endregion
 

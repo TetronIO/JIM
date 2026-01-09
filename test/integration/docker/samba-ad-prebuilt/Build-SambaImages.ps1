@@ -19,7 +19,7 @@
     4. Commits the container as a new image
 
     Images built:
-    - ghcr.io/tetronio/jim-samba-ad:primary   (TESTDOMAIN.LOCAL)
+    - ghcr.io/tetronio/jim-samba-ad:primary   (SUBATOMIC.LOCAL)
     - ghcr.io/tetronio/jim-samba-ad:source    (SOURCEDOMAIN.LOCAL)
     - ghcr.io/tetronio/jim-samba-ad:target    (TARGETDOMAIN.LOCAL)
 
@@ -65,7 +65,7 @@ $scriptDir = $PSScriptRoot
 # Image definitions
 $imageDefinitions = @{
     Primary = @{
-        Domain    = "TESTDOMAIN.LOCAL"
+        Domain    = "SUBATOMIC.LOCAL"
         Tag       = "primary"
         Password  = "Test@123!"
         Container = "samba-build-primary"

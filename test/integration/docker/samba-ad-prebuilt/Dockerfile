@@ -30,13 +30,13 @@
 FROM diegogslomp/samba-ad-dc:latest
 
 # Build arguments (used by docker-compose build context)
-ARG SAMBA_DOMAIN=TESTDOMAIN.LOCAL
+ARG SAMBA_DOMAIN=SUBATOMIC.LOCAL
 ARG SAMBA_PASSWORD=Test@123!
 
 # Store domain info for runtime use
 # Note: diegogslomp/samba-ad-dc uses different env vars than nowsci/samba-domain:
-#   - REALM = full domain (e.g., TESTDOMAIN.LOCAL)
-#   - DOMAIN = short domain (e.g., TESTDOMAIN)
+#   - REALM = full domain (e.g., SUBATOMIC.LOCAL)
+#   - DOMAIN = short domain (e.g., SUBATOMIC)
 #   - ADMIN_PASS = administrator password
 #   - DNS_FORWARDER = DNS forwarder IP
 ENV REALM=${SAMBA_DOMAIN}

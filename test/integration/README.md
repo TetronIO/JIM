@@ -95,7 +95,7 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 | `Populate-SambaAD.ps1` | test/integration/ | Create users/groups in Samba AD |
 | `Generate-TestCSV.ps1` | test/integration/ | Generate HR CSV files |
 | `Setup-Scenario1.ps1` | test/integration/ | Configure JIM for Scenario 1 |
-| `Invoke-Scenario1-HRToDirectory.ps1` | test/integration/scenarios/ | Run Scenario 1 tests (Joiner, Mover, Leaver, Reconnection) |
+| `Invoke-Scenario1-HRToIdentityDirectory.ps1` | test/integration/scenarios/ | Run Scenario 1 tests (Joiner, Mover, Leaver, Reconnection) |
 
 ## Data Scale Templates
 
@@ -226,22 +226,22 @@ You can run specific tests from Scenario 1:
 
 ```powershell
 # Run all tests (default)
-pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Step All -Template Small -ApiKey $env:JIM_API_KEY
+pwsh test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step All -Template Small -ApiKey $env:JIM_API_KEY
 
 # Run only Joiner test
-pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Step Joiner -Template Micro -ApiKey $env:JIM_API_KEY
+pwsh test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step Joiner -Template Micro -ApiKey $env:JIM_API_KEY
 
 # Run only Mover tests (all three variants: attribute, rename, OU move)
-pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Step Mover -Template Small -ApiKey $env:JIM_API_KEY
+pwsh test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step Mover -Template Small -ApiKey $env:JIM_API_KEY
 
 # Run only Leaver test
-pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Step Leaver -Template Small -ApiKey $env:JIM_API_KEY
+pwsh test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step Leaver -Template Small -ApiKey $env:JIM_API_KEY
 
 # Run only Reconnection test
-pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Step Reconnection -Template Small -ApiKey $env:JIM_API_KEY
+pwsh test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step Reconnection -Template Small -ApiKey $env:JIM_API_KEY
 
 # Continue on error (run all tests even if some fail)
-pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Step All -Template Small -ApiKey $env:JIM_API_KEY -ContinueOnError
+pwsh test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step All -Template Small -ApiKey $env:JIM_API_KEY -ContinueOnError
 ```
 
 ## Troubleshooting

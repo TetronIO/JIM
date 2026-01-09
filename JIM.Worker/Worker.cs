@@ -160,7 +160,30 @@ public class Worker : BackgroundService
                                     {
                                         try
                                         {
-                                            await taskJim.DataGeneration.ExecuteTemplateAsync(dataGenTemplateServiceTask.TemplateId, cancellationTokenSource.Token);
+                                            // Progress callback to update activity with generation progress and message
+                                            async Task ProgressCallback(int totalObjects, int objectsProcessed, string? message)
+                                            {
+                                                newWorkerTask.Activity.ObjectsToProcess = totalObjects;
+                                                newWorkerTask.Activity.ObjectsProcessed = objectsProcessed;
+                                                newWorkerTask.Activity.Message = message;
+                                                await taskJim.Activities.UpdateActivityAsync(newWorkerTask.Activity);
+                                            }
+
+                                            // Get settings for progress updates and batch size
+                                            var progressUpdateInterval = await taskJim.ServiceSettings.GetSettingValueAsync(
+                                                Constants.SettingKeys.ProgressUpdateInterval,
+                                                TimeSpan.FromSeconds(1));
+                                            var batchSize = await taskJim.ServiceSettings.GetSyncPageSizeAsync();
+                                            Log.Information("ExecuteAsync: Data generation progress update interval: {Interval}, batch size: {BatchSize}",
+                                                progressUpdateInterval, batchSize);
+
+                                            var objectsCreated = await taskJim.DataGeneration.ExecuteTemplateAsync(
+                                                dataGenTemplateServiceTask.TemplateId,
+                                                cancellationTokenSource.Token,
+                                                ProgressCallback,
+                                                progressUpdateInterval,
+                                                batchSize);
+                                            newWorkerTask.Activity.TotalObjectCreates = objectsCreated;
                                             await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
                                         }
                                         catch (Exception ex)

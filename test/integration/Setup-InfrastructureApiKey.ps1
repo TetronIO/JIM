@@ -183,7 +183,7 @@ Write-Host "  cd test/integration" -ForegroundColor Gray
 Write-Host "  ./Invoke-IntegrationTests.ps1 -Template Small -Phase 1" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Or run specific scenarios:" -ForegroundColor Cyan
-Write-Host "  pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Nano -ApiKey (Get-Content test/integration/.api-key)" -ForegroundColor Gray
+Write-Host "  pwsh test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1 -Template Nano -ApiKey (Get-Content test/integration/.api-key)" -ForegroundColor Gray
 Write-Host ""
 
 exit 0

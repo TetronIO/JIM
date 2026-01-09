@@ -29,14 +29,14 @@ services:
       context: ./test/integration/docker/samba-ad-prebuilt
       dockerfile: Dockerfile
       args:
-        SAMBA_DOMAIN: TESTDOMAIN.LOCAL
+        SAMBA_DOMAIN: SUBATOMIC.LOCAL
         SAMBA_PASSWORD: Test@123!
     container_name: samba-ad-primary
     privileged: true
     environment:
       # diegogslomp/samba-ad-dc environment variables
-      - REALM=TESTDOMAIN.LOCAL
-      - DOMAIN=TESTDOMAIN
+      - REALM=SUBATOMIC.LOCAL
+      - DOMAIN=SUBATOMIC
       - ADMIN_PASS=Test@123!
       - DNS_FORWARDER=8.8.8.8
       # Legacy environment variables for compatibility with existing scripts

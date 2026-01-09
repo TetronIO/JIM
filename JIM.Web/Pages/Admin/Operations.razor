@@ -1,5 +1,6 @@
 ﻿@page "/admin/operations"
 @using JIM.Application;
+@using JIM.Models.Core;
 @using JIM.Models.Staging;
 @using JIM.Models.Staging.DTOs;
 @using JIM.Models.Tasking;
@@ -177,11 +178,16 @@
                     else if (HasWorkerTaskHeaderChanged(workerTaskHeader, newWorkerTaskHeader))
                     {
                         // existing worker task, so it's either unchanged, or an update
-                        Console.WriteLine("JIM.Web: Operations.razor: ST-POLLING: Updating worker task header: " + newWorkerTaskHeader.Id);
+                        Console.WriteLine($"JIM.Web: Operations.razor: ST-POLLING: Updating worker task header: {newWorkerTaskHeader.Id} - Progress: {newWorkerTaskHeader.ObjectsProcessed}/{newWorkerTaskHeader.ObjectsToProcess}");
                         var position = _workerTaskHeaders.IndexOf(workerTaskHeader);
                         _workerTaskHeaders.Remove(workerTaskHeader);
                         _workerTaskHeaders.Insert(position, newWorkerTaskHeader);
                         stateHasChanged = true;
+                    }
+                    else if (newWorkerTaskHeader.Status == WorkerTaskStatus.Processing)
+                    {
+                        // Log even when no change detected for processing tasks (debugging)
+                        Console.WriteLine($"JIM.Web: Operations.razor: ST-POLLING: No change for processing task: {newWorkerTaskHeader.Id} - Progress: {newWorkerTaskHeader.ObjectsProcessed}/{newWorkerTaskHeader.ObjectsToProcess}");
                     }
                 }
 
@@ -198,7 +204,11 @@
                 if (stateHasChanged)
                     await InvokeAsync(StateHasChanged);
 
-                await Task.Delay(TimeSpan.FromSeconds(2), token);
+                // Use the configurable polling interval from settings
+                var pollingInterval = await iterationJim.ServiceSettings.GetSettingValueAsync(
+                    Constants.SettingKeys.ProgressUpdateInterval,
+                    TimeSpan.FromSeconds(1));
+                await Task.Delay(pollingInterval, token);
                 if (token.IsCancellationRequested)
                     break;
             }

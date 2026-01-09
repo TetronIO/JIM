@@ -668,8 +668,8 @@ internal class LdapConnectorExport
 
     /// <summary>
     /// Builds a list of container DNs from root to the specified container.
-    /// For example, for "OU=Engineering,OU=Users,DC=testdomain,DC=local", returns:
-    /// ["OU=Users,DC=testdomain,DC=local", "OU=Engineering,OU=Users,DC=testdomain,DC=local"]
+    /// For example, for "OU=Engineering,OU=Users,DC=subatomic,DC=local", returns:
+    /// ["OU=Users,DC=subatomic,DC=local", "OU=Engineering,OU=Users,DC=subatomic,DC=local"]
     /// </summary>
     internal static List<string> BuildContainerChain(string containerDn)
     {

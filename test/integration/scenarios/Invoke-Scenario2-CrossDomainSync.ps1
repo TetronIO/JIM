@@ -1,14 +1,14 @@
 <#
 .SYNOPSIS
-    Test Scenario 2: Directory to Directory Synchronisation
+    Test Scenario 2: Person Entity - Cross-domain Synchronisation
 
 .DESCRIPTION
-    Validates bidirectional synchronisation between two Samba AD instances.
-    Tests forward sync (Source -> Target), reverse sync (Target -> Source),
-    and conflict resolution.
+    Validates unidirectional synchronisation of person entities between two Samba AD instances.
+    Source AD is authoritative. Tests forward sync (Source -> Target), drift detection,
+    and state reassertion when changes are made directly in Target AD.
 
 .PARAMETER Step
-    Which test step to execute (Provision, ForwardSync, ReverseSync, Conflict, All)
+    Which test step to execute (Provision, ForwardSync, DetectDrift, ReassertState, All)
 
 .PARAMETER Template
     Data scale template (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
@@ -23,10 +23,10 @@
     Seconds to wait between steps for JIM processing (default: 20)
 
 .EXAMPLE
-    ./Invoke-Scenario2-DirectorySync.ps1 -Step All -Template Micro -ApiKey "jim_..."
+    ./Invoke-Scenario2-CrossDomainSync.ps1 -Step All -Template Micro -ApiKey "jim_..."
 
 .EXAMPLE
-    ./Invoke-Scenario2-DirectorySync.ps1 -Step Provision -Template Small -ApiKey $env:JIM_API_KEY
+    ./Invoke-Scenario2-CrossDomainSync.ps1 -Step Provision -Template Small -ApiKey $env:JIM_API_KEY
 #>
 
 param(

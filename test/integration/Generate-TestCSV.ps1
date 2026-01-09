@@ -51,9 +51,9 @@ $csvPath = Join-Path $OutputPath "hr-users.csv"
 $users = @()
 
 for ($i = 1; $i -lt $scale.Users + 1; $i++) {
-    $user = New-TestUser -Index $i -Domain "testdomain.local"
+    $user = New-TestUser -Index $i -Domain "subatomic.local"
 
-    $upn = "$($user.SamAccountName)@testdomain.local"
+    $upn = "$($user.SamAccountName)@subatomic.local"
 
     # Format employeeEndDate as ISO 8601 for CSV compatibility
     # This represents the employee's contract/employment end date from HR
@@ -71,6 +71,7 @@ for ($i = 1; $i -lt $scale.Users + 1; $i++) {
         email = $user.Email
         department = $user.Department
         title = $user.Title
+        company = $user.Company
         samAccountName = $user.SamAccountName
         displayName = $user.DisplayName
         status = "Active"

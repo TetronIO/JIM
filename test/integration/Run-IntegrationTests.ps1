@@ -11,7 +11,7 @@
     5. Runs the specified test scenario
 
 .PARAMETER Scenario
-    The test scenario to run. Default: "Scenario1-HRToDirectory"
+    The test scenario to run. Default: "Scenario1-HRToIdentityDirectory"
     Available scenarios are in test/integration/scenarios/
 
 .PARAMETER Template
@@ -34,7 +34,7 @@
 .EXAMPLE
     ./Run-IntegrationTests.ps1
 
-    Runs the default scenario (Scenario1-HRToDirectory) with Nano template.
+    Runs the default scenario (Scenario1-HRToIdentityDirectory) with Nano template.
 
 .EXAMPLE
     ./Run-IntegrationTests.ps1 -Template Small
@@ -52,14 +52,14 @@
     Re-runs tests without resetting the environment.
 
 .EXAMPLE
-    ./Run-IntegrationTests.ps1 -Scenario "Scenario1-HRToDirectory" -Template Nano -Step All
+    ./Run-IntegrationTests.ps1 -Scenario "Scenario1-HRToIdentityDirectory" -Template Nano -Step All
 
     Explicit full specification of all parameters.
 #>
 
 param(
     [Parameter(Mandatory=$false)]
-    [string]$Scenario = "Scenario1-HRToDirectory",
+    [string]$Scenario = "Scenario1-HRToIdentityDirectory",
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
@@ -283,33 +283,57 @@ else {
 $timings["4. Wait for Services"] = (Get-Date) - $step4Start
 
 # Step 4b: Prepare Samba AD for testing
-# For Scenario 1, we need a clean Borton Corp OU - delete if exists and recreate
+# For Scenario 1, we need a clean Corp OU - delete if exists and recreate
 Write-Section "Step 4b: Preparing Samba AD for Testing"
 
-# First, try to delete the Borton Corp OU if it exists (to ensure clean state)
-Write-Step "Cleaning up any existing Borton Corp OU..."
-$result = docker exec samba-ad-primary samba-tool ou delete "OU=Borton Corp,DC=testdomain,DC=local" --force-subtree-delete 2>&1
+# First, try to delete the Corp OU if it exists (to ensure clean state)
+Write-Step "Cleaning up any existing Corp OU..."
+$result = docker exec samba-ad-primary samba-tool ou delete "OU=Corp,DC=subatomic,DC=local" --force-subtree-delete 2>&1
 if ($LASTEXITCODE -eq 0) {
-    Write-Success "Deleted existing OU: Borton Corp"
+    Write-Success "Deleted existing OU: Corp"
 }
 elseif ($result -match "No such object") {
     Write-Success "OU does not exist (clean state)"
 }
 else {
-    Write-Warning "Could not delete OU Borton Corp: $result (continuing anyway)"
+    Write-Warning "Could not delete OU Corp: $result (continuing anyway)"
 }
 
-# Create the Borton Corp base OU - department sub-OUs will be created by LDAP connector
-Write-Step "Creating Borton Corp OU..."
-$result = docker exec samba-ad-primary samba-tool ou create "OU=Borton Corp,DC=testdomain,DC=local" 2>&1
+# Create the Corp base OU and its sub-OUs (Users, Groups)
+Write-Step "Creating Corp OU structure..."
+$result = docker exec samba-ad-primary samba-tool ou create "OU=Corp,DC=subatomic,DC=local" 2>&1
 if ($LASTEXITCODE -eq 0) {
-    Write-Success "Created OU: Borton Corp"
+    Write-Success "Created OU: Corp"
 }
 elseif ($result -match "already exists") {
-    Write-Success "OU already exists: Borton Corp"
+    Write-Success "OU already exists: Corp"
 }
 else {
-    Write-Warning "Failed to create OU Borton Corp: $result"
+    Write-Warning "Failed to create OU Corp: $result"
+}
+
+# Create Users OU under Corp
+$result = docker exec samba-ad-primary samba-tool ou create "OU=Users,OU=Corp,DC=subatomic,DC=local" 2>&1
+if ($LASTEXITCODE -eq 0) {
+    Write-Success "Created OU: Users (under Corp)"
+}
+elseif ($result -match "already exists") {
+    Write-Success "OU already exists: Users"
+}
+else {
+    Write-Warning "Failed to create OU Users: $result"
+}
+
+# Create Groups OU under Corp
+$result = docker exec samba-ad-primary samba-tool ou create "OU=Groups,OU=Corp,DC=subatomic,DC=local" 2>&1
+if ($LASTEXITCODE -eq 0) {
+    Write-Success "Created OU: Groups (under Corp)"
+}
+elseif ($result -match "already exists") {
+    Write-Success "OU already exists: Groups"
+}
+else {
+    Write-Warning "Failed to create OU Groups: $result"
 }
 
 # Step 5: Setup API Key

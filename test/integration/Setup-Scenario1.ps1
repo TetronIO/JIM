@@ -251,7 +251,7 @@ try {
     }
     if ($usernameSetting) {
         # DN format for Simple bind
-        $ldapSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=testdomain,DC=local" }
+        $ldapSettings[$usernameSetting.id] = @{ stringValue = "CN=Administrator,CN=Users,DC=subatomic,DC=local" }
     }
     if ($passwordSetting) {
         # Password setting uses stringValue - API stores it encrypted based on setting type
@@ -330,7 +330,7 @@ else {
 }
 
 # Step 6a: Import LDAP Hierarchy and Select Containers
-Write-TestStep "Step 6a" "Importing LDAP hierarchy and selecting Borton Corp container"
+Write-TestStep "Step 6a" "Importing LDAP hierarchy and selecting Corp container"
 
 try {
     # Import the partition/container hierarchy from LDAP
@@ -347,11 +347,11 @@ try {
             Write-Host "    - Name: '$($p.name)', ExternalId: '$($p.externalId)', Selected: $($p.selected)" -ForegroundColor Gray
         }
 
-        # Find the main domain partition (DC=testdomain,DC=local)
+        # Find the main domain partition (DC=subatomic,DC=local)
         # Note: API returns 'name' (display name) and 'externalId' (distinguished name)
         # We need the exact domain partition, not ForestDnsZones or DomainDnsZones
         $domainPartition = $partitions | Where-Object {
-            $_.name -eq "DC=testdomain,DC=local" -or $_.externalId -eq "DC=testdomain,DC=local"
+            $_.name -eq "DC=subatomic,DC=local" -or $_.externalId -eq "DC=subatomic,DC=local"
         } | Select-Object -First 1
 
         if ($domainPartition) {
@@ -359,9 +359,9 @@ try {
             Set-JIMConnectedSystemPartition -ConnectedSystemId $ldapSystem.id -PartitionId $domainPartition.id -Selected $true | Out-Null
             Write-Host "  ✓ Partition selected: $($domainPartition.name)" -ForegroundColor Green
 
-            # Find and select the "Borton Corp" container within this partition
+            # Find and select the "Corp" container within this partition
             # The hierarchy structure is: partition -> containers (nested)
-            $bortonCorpContainer = $null
+            $corpContainer = $null
 
             # Helper function to search containers recursively
             # Note: API returns camelCase JSON, so use 'childContainers' for nested containers
@@ -387,21 +387,21 @@ try {
                 foreach ($c in $domainPartition.containers) {
                     Write-Host "      - Name: '$($c.name)', ID: $($c.id), Selected: $($c.selected)" -ForegroundColor Gray
                 }
-                $bortonCorpContainer = Find-Container -Containers $domainPartition.containers -Name "Borton Corp"
+                $corpContainer = Find-Container -Containers $domainPartition.containers -Name "Corp"
             }
             else {
                 Write-Host "    No containers found in partition (containers property is null/empty)" -ForegroundColor Yellow
             }
 
-            if ($bortonCorpContainer) {
-                Write-Host "  Selecting container: Borton Corp (ID: $($bortonCorpContainer.id))" -ForegroundColor Gray
-                Set-JIMConnectedSystemContainer -ConnectedSystemId $ldapSystem.id -ContainerId $bortonCorpContainer.id -Selected $true | Out-Null
-                Write-Host "  ✓ Container selected: Borton Corp" -ForegroundColor Green
-                Write-Host "    Users will be provisioned under: OU=Borton Corp,DC=testdomain,DC=local" -ForegroundColor DarkGray
-                Write-Host "    Department OUs will be auto-created: OU={Dept},OU=Borton Corp,DC=testdomain,DC=local" -ForegroundColor DarkGray
+            if ($corpContainer) {
+                Write-Host "  Selecting container: Corp (ID: $($corpContainer.id))" -ForegroundColor Gray
+                Set-JIMConnectedSystemContainer -ConnectedSystemId $ldapSystem.id -ContainerId $corpContainer.id -Selected $true | Out-Null
+                Write-Host "  ✓ Container selected: Corp" -ForegroundColor Green
+                Write-Host "    Users will be provisioned under: OU=Users,OU=Corp,DC=subatomic,DC=local" -ForegroundColor DarkGray
+                Write-Host "    Department OUs will be auto-created: OU={Dept},OU=Users,OU=Corp,DC=subatomic,DC=local" -ForegroundColor DarkGray
             }
             else {
-                Write-Host "  ⚠ 'Borton Corp' container not found in hierarchy" -ForegroundColor Yellow
+                Write-Host "  ⚠ 'Corp' container not found in hierarchy" -ForegroundColor Yellow
                 Write-Host "    Available top-level containers:" -ForegroundColor Gray
                 if ($domainPartition.containers) {
                     $domainPartition.containers | ForEach-Object { Write-Host "      - $($_.name)" -ForegroundColor Gray }
@@ -409,11 +409,11 @@ try {
                 else {
                     Write-Host "      (none)" -ForegroundColor Gray
                 }
-                Write-Host "    Ensure Populate-SambaAD.ps1 has been run to create the Borton Corp OU" -ForegroundColor Yellow
+                Write-Host "    Ensure Populate-SambaAD.ps1 has been run to create the Corp OU" -ForegroundColor Yellow
             }
         }
         else {
-            Write-Host "  ⚠ Could not find testdomain partition" -ForegroundColor Yellow
+            Write-Host "  ⚠ Could not find subatomic partition" -ForegroundColor Yellow
             Write-Host "    Available partitions:" -ForegroundColor Gray
             $partitions | ForEach-Object { Write-Host "      - $($_.name)" -ForegroundColor Gray }
         }
@@ -502,6 +502,7 @@ try {
             'userPrincipalName',  # UPN (also mapped from Email)
             'title',              # Job Title
             'department',         # Department
+            'company',            # Company name (Subatomic or partner company)
             'distinguishedName',  # DN - required for LDAP provisioning
             'accountExpires',     # Account expiry (Large Integer/Int64) - populated from HR Employee End Date via ToFileTime
             'userAccountControl'  # Account control flags (Number/Int32) - tests integer data type flow
@@ -579,6 +580,7 @@ try {
             @{ CsAttr = "email";             MvAttr = "Email" }
             @{ CsAttr = "title";             MvAttr = "Job Title" }
             @{ CsAttr = "department";        MvAttr = "Department" }
+            @{ CsAttr = "company";           MvAttr = "Company" }  # Company name - Subatomic for employees, partner companies for contractors
             @{ CsAttr = "samAccountName";    MvAttr = "Account Name" }
             @{ CsAttr = "employeeType";      MvAttr = "Employee Type" }
             @{ CsAttr = "employeeEndDate";   MvAttr = "Employee End Date" }  # DateTime - HR end date → MV, then exported to AD accountExpires via ToFileTime
@@ -594,19 +596,20 @@ try {
             @{ MvAttr = "Email";         LdapAttr = "userPrincipalName" }  # UPN = email for AD login
             @{ MvAttr = "Job Title";     LdapAttr = "title" }
             @{ MvAttr = "Department";    LdapAttr = "department" }
+            @{ MvAttr = "Company";       LdapAttr = "company" }  # Company name exported to AD
         )
 
         # Expression-based mappings for computed values
-        # DN uses Department to place users in department OUs under Borton Corp
-        # Structure: CN={Display Name},OU={Department},OU=Borton Corp,DC=testdomain,DC=local
+        # DN uses Department to place users in department OUs under OU=Users,OU=Corp
+        # Structure: CN={Display Name},OU={Department},OU=Users,OU=Corp,DC=subatomic,DC=local
         # This enables:
         #   1. OU move testing when department changes
         #   2. Auto-creation of department OUs by the LDAP connector (when "Create containers as needed?" is enabled)
-        #   3. Partition/container selection testing (only Borton Corp is selected)
+        #   3. Partition/container selection testing (only Corp is selected)
         $expressionMappings = @(
             @{
                 LdapAttr = "distinguishedName"
-                Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",OU=Borton Corp,DC=testdomain,DC=local"'
+                Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",OU=Users,OU=Corp,DC=subatomic,DC=local"'
             }
             @{
                 LdapAttr = "userAccountControl"
@@ -660,6 +663,10 @@ try {
             $ldapAttr = $ldapUserType.attributes | Where-Object { $_.name -eq $mapping.LdapAttr }
             $mvAttr = $mvAttributes | Where-Object { $_.name -eq $mapping.MvAttr }
 
+            # Debug: Verify we're getting the right attributes
+            # Always show during initial creation to help diagnose mapping issues
+            Write-Host "    Export: MV '$($mapping.MvAttr)' (ID:$($mvAttr.id)) → LDAP '$($mapping.LdapAttr)' (ID:$($ldapAttr.id))" -ForegroundColor DarkGray
+
             if ($ldapAttr -and $mvAttr) {
                 # Check if mapping already exists
                 $existsAlready = $existingExportMappings | Where-Object {
@@ -672,6 +679,7 @@ try {
                         New-JIMSyncRuleMapping -SyncRuleId $exportRule.id `
                             -TargetConnectedSystemAttributeId $ldapAttr.id `
                             -SourceMetaverseAttributeId $mvAttr.id | Out-Null
+                        # Mapping created successfully - ID info already shown above
                         $exportMappingsCreated++
                     }
                     catch {
@@ -679,6 +687,9 @@ try {
                         throw "Critical export mapping failed. Setup cannot continue."
                     }
                 }
+            }
+            else {
+                Write-Host "    ⚠ Skipped mapping: LDAP '$($mapping.LdapAttr)' or MV '$($mapping.MvAttr)' not found" -ForegroundColor Yellow
             }
         }
         Write-Host "  ✓ Export attribute mappings configured ($exportMappingsCreated new)" -ForegroundColor Green
@@ -970,7 +981,7 @@ Write-Host ""
 Write-Host "✓ Scenario 1 setup complete" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
-Write-Host "  1. Run: ./scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template $Template" -ForegroundColor Gray
+Write-Host "  1. Run: ./scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1 -Template $Template" -ForegroundColor Gray
 Write-Host "  2. Or manually trigger run profiles via JIM UI" -ForegroundColor Gray
 Write-Host ""
 

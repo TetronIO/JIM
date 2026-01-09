@@ -133,7 +133,7 @@ public async Task FullSyncThenDeltaSync_WithOneModifiedCso_ProcessesOnlyModified
 **Example**: HR to Directory synchronisation scenario
 
 ```powershell
-./Invoke-Scenario1-HRToDirectory.ps1 -Template Large -ApiKey "jim_..."
+./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Template Large -ApiKey "jim_..."
 ```
 
 **What Integration Tests Are Good At**:
