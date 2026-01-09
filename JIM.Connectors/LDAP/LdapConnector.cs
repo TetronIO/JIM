@@ -356,10 +356,85 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
     #region IConnectorContainerCreation members
     /// <summary>
-    /// Gets the list of container DNs that were created during the current export session.
+    /// Gets the list of container external IDs (DNs) that were created during the current export session.
     /// </summary>
-    public IReadOnlyList<string> CreatedContainerDns =>
-        _currentExport?.CreatedContainerDns ?? Array.Empty<string>();
+    public IReadOnlyList<string> CreatedContainerExternalIds =>
+        _currentExport?.CreatedContainerExternalIds ?? Array.Empty<string>();
+
+    /// <summary>
+    /// Verifies that a container exists in LDAP using a lightweight base-scope search.
+    /// </summary>
+    /// <param name="containerExternalId">The container DN to verify.</param>
+    /// <returns>True if the container exists, false otherwise.</returns>
+    public async Task<bool> VerifyContainerExistsAsync(string containerExternalId)
+    {
+        if (_connection == null)
+            throw new InvalidOperationException("No connection available. Call OpenExportConnection() first.");
+
+        return await Task.Run(() =>
+        {
+            try
+            {
+                // Simple base-scope search to check if the DN exists
+                var request = new SearchRequest(
+                    containerExternalId,
+                    "(objectClass=*)",
+                    SearchScope.Base);
+                request.Attributes.Add("objectClass"); // Request minimal attribute
+
+                var response = (SearchResponse)_connection.SendRequest(request);
+                return response.Entries.Count > 0;
+            }
+            catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
+            {
+                // Container doesn't exist
+                return false;
+            }
+            catch (LdapException ex) when (ex.ErrorCode == 32) // LDAP_NO_SUCH_OBJECT
+            {
+                return false;
+            }
+        });
+    }
+
+    /// <summary>
+    /// Gets the parent container's DN from a child container's DN.
+    /// </summary>
+    /// <param name="containerExternalId">The child container's DN.</param>
+    /// <returns>The parent container's DN, or null if at root level.</returns>
+    public string? GetParentContainerExternalId(string containerExternalId)
+    {
+        if (string.IsNullOrEmpty(containerExternalId))
+            return null;
+
+        // Find the first comma (which separates the RDN from the parent DN)
+        var commaIndex = containerExternalId.IndexOf(',');
+        if (commaIndex == -1 || commaIndex == containerExternalId.Length - 1)
+            return null;
+
+        return containerExternalId.Substring(commaIndex + 1);
+    }
+
+    /// <summary>
+    /// Extracts a human-readable display name from a container's DN.
+    /// </summary>
+    /// <param name="containerExternalId">The container's DN.</param>
+    /// <returns>The container name (e.g., "Sales" from "OU=Sales,DC=example,DC=com").</returns>
+    public string GetContainerDisplayName(string containerExternalId)
+    {
+        if (string.IsNullOrEmpty(containerExternalId))
+            return string.Empty;
+
+        // The name is the value of the first RDN component
+        var commaIndex = containerExternalId.IndexOf(',');
+        var rdn = commaIndex > 0 ? containerExternalId.Substring(0, commaIndex) : containerExternalId;
+
+        // Extract value after = sign (e.g., "OU=Sales" -> "Sales")
+        var equalsIndex = rdn.IndexOf('=');
+        return equalsIndex > 0 && equalsIndex < rdn.Length - 1
+            ? rdn.Substring(equalsIndex + 1)
+            : rdn;
+    }
     #endregion
 
     #region IConnectorCertificateAware members

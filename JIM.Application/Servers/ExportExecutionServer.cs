@@ -385,11 +385,11 @@ public class ExportExecutionServer
 
                 // Capture created containers before closing connection
                 if (connector is IConnectorContainerCreation containerCreator &&
-                    containerCreator.CreatedContainerDns.Count > 0)
+                    containerCreator.CreatedContainerExternalIds.Count > 0)
                 {
-                    result.CreatedContainerDns.AddRange(containerCreator.CreatedContainerDns);
+                    result.CreatedContainerExternalIds.AddRange(containerCreator.CreatedContainerExternalIds);
                     Log.Information("ExecuteUsingCallsWithBatchingAsync: Captured {Count} created container(s) for auto-selection",
-                        containerCreator.CreatedContainerDns.Count);
+                        containerCreator.CreatedContainerExternalIds.Count);
                 }
             }
             finally

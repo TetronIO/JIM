@@ -683,7 +683,7 @@ public class ExportExecutionTests
     /// Tests that created container DNs are captured from connectors that implement IConnectorContainerCreation.
     /// </summary>
     [Test]
-    public async Task ExecuteExportsAsync_WithContainerCreation_CapturesCreatedContainerDnsAsync()
+    public async Task ExecuteExportsAsync_WithContainerCreation_CapturesCreatedContainerExternalIdsAsync()
     {
         // Arrange
         var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
@@ -738,7 +738,7 @@ public class ExportExecutionTests
             "OU=Sales,OU=Borton Corp,DC=testdomain,DC=local",
             "OU=Marketing,OU=Borton Corp,DC=testdomain,DC=local"
         };
-        mockContainerCreation.Setup(c => c.CreatedContainerDns)
+        mockContainerCreation.Setup(c => c.CreatedContainerExternalIds)
             .Returns(createdContainers.AsReadOnly());
 
         // Act
@@ -749,16 +749,16 @@ public class ExportExecutionTests
 
         // Assert
         Assert.That(result.SuccessCount, Is.EqualTo(1), "Export should have succeeded");
-        Assert.That(result.CreatedContainerDns.Count, Is.EqualTo(2), "Should have captured 2 created containers");
-        Assert.That(result.CreatedContainerDns, Does.Contain("OU=Sales,OU=Borton Corp,DC=testdomain,DC=local"));
-        Assert.That(result.CreatedContainerDns, Does.Contain("OU=Marketing,OU=Borton Corp,DC=testdomain,DC=local"));
+        Assert.That(result.CreatedContainerExternalIds.Count, Is.EqualTo(2), "Should have captured 2 created containers");
+        Assert.That(result.CreatedContainerExternalIds, Does.Contain("OU=Sales,OU=Borton Corp,DC=testdomain,DC=local"));
+        Assert.That(result.CreatedContainerExternalIds, Does.Contain("OU=Marketing,OU=Borton Corp,DC=testdomain,DC=local"));
     }
 
     /// <summary>
-    /// Tests that when a connector doesn't implement IConnectorContainerCreation, CreatedContainerDns remains empty.
+    /// Tests that when a connector doesn't implement IConnectorContainerCreation, CreatedContainerExternalIds remains empty.
     /// </summary>
     [Test]
-    public async Task ExecuteExportsAsync_WithoutContainerCreation_CreatedContainerDnsIsEmptyAsync()
+    public async Task ExecuteExportsAsync_WithoutContainerCreation_CreatedContainerExternalIdsIsEmptyAsync()
     {
         // Arrange
         var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
@@ -814,7 +814,7 @@ public class ExportExecutionTests
 
         // Assert
         Assert.That(result.SuccessCount, Is.EqualTo(1), "Export should have succeeded");
-        Assert.That(result.CreatedContainerDns, Is.Empty, "CreatedContainerDns should be empty when connector doesn't support container creation");
+        Assert.That(result.CreatedContainerExternalIds, Is.Empty, "CreatedContainerExternalIds should be empty when connector doesn't support container creation");
     }
 
     #endregion

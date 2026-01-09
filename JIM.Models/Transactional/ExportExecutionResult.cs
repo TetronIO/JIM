@@ -61,10 +61,10 @@ public class ExportExecutionResult
     public List<ProcessedExportItem> ProcessedExportItems { get; set; } = [];
 
     /// <summary>
-    /// DNs of containers (OUs) that were created during this export session.
+    /// External IDs of containers that were created during this export session.
     /// Used by JIM to auto-select newly created containers in the hierarchy.
     /// </summary>
-    public List<string> CreatedContainerDns { get; set; } = [];
+    public List<string> CreatedContainerExternalIds { get; set; } = [];
 }
 
 /// <summary>
