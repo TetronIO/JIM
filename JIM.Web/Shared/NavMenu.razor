@@ -16,6 +16,7 @@
         <MudNavLink Href="/t/groups/s/distribution-groups" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Distribution Groups</MudNavLink>
     </MudNavGroup>
 
+    @* Dashboard - Hidden until implemented
     <AuthorizeView Roles="Administrator">
         <MudNavGroup Title="Dashboard" @bind-Expanded="_dashboardExpanded" Icon="@Icons.Material.Filled.Dashboard" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
             <MudNavLink Href="/dashboard/daily" Match="NavLinkMatch.All" Class="jim-nav-child">Daily</MudNavLink>
@@ -24,6 +25,7 @@
             <MudNavLink Href="/dashboard/weekly" Match="NavLinkMatch.All" Class="jim-nav-child">Annually</MudNavLink>
         </MudNavGroup>
     </AuthorizeView>
+    *@
 
     <AuthorizeView Roles="Administrator">
         <MudNavGroup Title="Admin" @bind-Expanded="_adminExpanded" Icon="@Icons.Material.Filled.Settings" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
