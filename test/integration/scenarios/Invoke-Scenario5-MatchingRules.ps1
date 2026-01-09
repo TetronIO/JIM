@@ -130,12 +130,29 @@ try {
         $testUser.Email = "test.projection@testdomain.local"
         $testUser.DisplayName = "Test Projection User"
 
-        # Add user to CSV (DN is calculated dynamically by the export sync rule expression)
+        # Add user to CSV using proper CSV parsing (DN is calculated dynamically by the export sync rule expression)
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $upn = "$($testUser.SamAccountName)@testdomain.local"
-        $csvLine = "`"$($testUser.EmployeeId)`",`"$($testUser.FirstName)`",`"$($testUser.LastName)`",`"$($testUser.Email)`",`"$($testUser.Department)`",`"$($testUser.Title)`",`"$($testUser.SamAccountName)`",`"$($testUser.DisplayName)`",`"Active`",`"$upn`""
 
-        Add-Content -Path $csvPath -Value $csvLine
+        # Use Import-Csv/Export-Csv to ensure correct column handling
+        $csv = Import-Csv $csvPath
+        $newUser = [PSCustomObject]@{
+            employeeId = $testUser.EmployeeId
+            firstName = $testUser.FirstName
+            lastName = $testUser.LastName
+            email = $testUser.Email
+            department = $testUser.Department
+            title = $testUser.Title
+            company = $testUser.Company
+            samAccountName = $testUser.SamAccountName
+            displayName = $testUser.DisplayName
+            status = "Active"
+            userPrincipalName = $upn
+            employeeType = $testUser.EmployeeType
+            employeeEndDate = ""
+        }
+        $csv = @($csv) + $newUser
+        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
         Write-Host "  Added test.projection to CSV with EmployeeId=$($testUser.EmployeeId)" -ForegroundColor Gray
 
         # Copy updated CSV to container
@@ -182,9 +199,26 @@ try {
         # DN is calculated dynamically by the export sync rule expression
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $upn = "$($testUser.SamAccountName)@testdomain.local"
-        $csvLine = "`"$($testUser.EmployeeId)`",`"$($testUser.FirstName)`",`"$($testUser.LastName)`",`"$($testUser.Email)`",`"$($testUser.Department)`",`"$($testUser.Title)`",`"$($testUser.SamAccountName)`",`"$($testUser.DisplayName)`",`"Active`",`"$upn`""
 
-        Add-Content -Path $csvPath -Value $csvLine
+        # Use Import-Csv/Export-Csv to ensure correct column handling
+        $csv = Import-Csv $csvPath
+        $joinUser = [PSCustomObject]@{
+            employeeId = $testUser.EmployeeId
+            firstName = $testUser.FirstName
+            lastName = $testUser.LastName
+            email = $testUser.Email
+            department = $testUser.Department
+            title = $testUser.Title
+            company = $testUser.Company
+            samAccountName = $testUser.SamAccountName
+            displayName = $testUser.DisplayName
+            status = "Active"
+            userPrincipalName = $upn
+            employeeType = $testUser.EmployeeType
+            employeeEndDate = ""
+        }
+        $csv = @($csv) + $joinUser
+        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
         # Import from HR to create MVO
@@ -257,9 +291,26 @@ try {
         # DN is calculated dynamically by the export sync rule expression
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $upn1 = "$($testUser1.SamAccountName)@testdomain.local"
-        $csvLine1 = "`"$($testUser1.EmployeeId)`",`"$($testUser1.FirstName)`",`"$($testUser1.LastName)`",`"$($testUser1.Email)`",`"$($testUser1.Department)`",`"$($testUser1.Title)`",`"$($testUser1.SamAccountName)`",`"$($testUser1.DisplayName)`",`"Active`",`"$upn1`""
 
-        Add-Content -Path $csvPath -Value $csvLine1
+        # Use Import-Csv/Export-Csv to ensure correct column handling
+        $csv = Import-Csv $csvPath
+        $dupUser1 = [PSCustomObject]@{
+            employeeId = $testUser1.EmployeeId
+            firstName = $testUser1.FirstName
+            lastName = $testUser1.LastName
+            email = $testUser1.Email
+            department = $testUser1.Department
+            title = $testUser1.Title
+            company = $testUser1.Company
+            samAccountName = $testUser1.SamAccountName
+            displayName = $testUser1.DisplayName
+            status = "Active"
+            userPrincipalName = $upn1
+            employeeType = $testUser1.EmployeeType
+            employeeEndDate = ""
+        }
+        $csv = @($csv) + $dupUser1
+        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
         # Import first user
@@ -278,9 +329,26 @@ try {
 
         # DN is calculated dynamically by the export sync rule expression
         $upn2 = "$($testUser2.SamAccountName)@testdomain.local"
-        $csvLine2 = "`"$($testUser2.EmployeeId)`",`"$($testUser2.FirstName)`",`"$($testUser2.LastName)`",`"$($testUser2.Email)`",`"$($testUser2.Department)`",`"$($testUser2.Title)`",`"$($testUser2.SamAccountName)`",`"$($testUser2.DisplayName)`",`"Active`",`"$upn2`""
 
-        Add-Content -Path $csvPath -Value $csvLine2
+        # Use Import-Csv/Export-Csv to ensure correct column handling
+        $csv = Import-Csv $csvPath
+        $dupUser2 = [PSCustomObject]@{
+            employeeId = $testUser2.EmployeeId
+            firstName = $testUser2.FirstName
+            lastName = $testUser2.LastName
+            email = $testUser2.Email
+            department = $testUser2.Department
+            title = $testUser2.Title
+            company = $testUser2.Company
+            samAccountName = $testUser2.SamAccountName
+            displayName = $testUser2.DisplayName
+            status = "Active"
+            userPrincipalName = $upn2
+            employeeType = $testUser2.EmployeeType
+            employeeEndDate = ""
+        }
+        $csv = @($csv) + $dupUser2
+        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
         # Import second user
@@ -383,9 +451,26 @@ try {
                 # DN is calculated dynamically by the export sync rule expression
                 $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
                 $upn1 = "$($testUser1.SamAccountName)@testdomain.local"
-                $csvLine1 = "`"$($testUser1.EmployeeId)`",`"$($testUser1.FirstName)`",`"$($testUser1.LastName)`",`"$($testUser1.Email)`",`"$($testUser1.Department)`",`"$($testUser1.Title)`",`"$($testUser1.SamAccountName)`",`"$($testUser1.DisplayName)`",`"Active`",`"$upn1`""
 
-                Add-Content -Path $csvPath -Value $csvLine1
+                # Use Import-Csv/Export-Csv to ensure correct column handling
+                $csv = Import-Csv $csvPath
+                $multiRule1 = [PSCustomObject]@{
+                    employeeId = $testUser1.EmployeeId
+                    firstName = $testUser1.FirstName
+                    lastName = $testUser1.LastName
+                    email = $testUser1.Email
+                    department = $testUser1.Department
+                    title = $testUser1.Title
+                    company = $testUser1.Company
+                    samAccountName = $testUser1.SamAccountName
+                    displayName = $testUser1.DisplayName
+                    status = "Active"
+                    userPrincipalName = $upn1
+                    employeeType = $testUser1.EmployeeType
+                    employeeEndDate = ""
+                }
+                $csv = @($csv) + $multiRule1
+                $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
                 docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
                 # Import first user to create MVO
@@ -428,9 +513,26 @@ try {
 
                     # DN is calculated dynamically by the export sync rule expression
                     $upn2 = "$($testUser2.SamAccountName)@testdomain.local"
-                    $csvLine2 = "`"$($testUser2.EmployeeId)`",`"$($testUser2.FirstName)`",`"$($testUser2.LastName)`",`"$($testUser2.Email)`",`"$($testUser2.Department)`",`"$($testUser2.Title)`",`"$($testUser2.SamAccountName)`",`"$($testUser2.DisplayName)`",`"Active`",`"$upn2`""
 
-                    Add-Content -Path $csvPath -Value $csvLine2
+                    # Use Import-Csv/Export-Csv to ensure correct column handling
+                    $csv = Import-Csv $csvPath
+                    $multiRule2 = [PSCustomObject]@{
+                        employeeId = $testUser2.EmployeeId
+                        firstName = $testUser2.FirstName
+                        lastName = $testUser2.LastName
+                        email = $testUser2.Email
+                        department = $testUser2.Department
+                        title = $testUser2.Title
+                        company = $testUser2.Company
+                        samAccountName = $testUser2.SamAccountName
+                        displayName = $testUser2.DisplayName
+                        status = "Active"
+                        userPrincipalName = $upn2
+                        employeeType = $testUser2.EmployeeType
+                        employeeEndDate = ""
+                    }
+                    $csv = @($csv) + $multiRule2
+                    $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
                     docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
                     # Import second user

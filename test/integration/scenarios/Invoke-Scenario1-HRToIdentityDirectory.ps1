@@ -348,22 +348,16 @@ try {
         # NOTE: We change Title (not Department) because Department now affects DN/OU placement.
         # This test validates simple attribute updates that don't trigger DN changes.
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-        $csvContent = Get-Content $csvPath
 
-        # CSV columns: employeeId,firstName,lastName,email,department,title,samAccountName,displayName,status,userPrincipalName
-        # Change title from whatever it is to "Senior Developer"
+        # Parse CSV properly to update the correct column
+        # CSV columns: employeeId,firstName,lastName,email,department,title,company,samAccountName,displayName,status,userPrincipalName,employeeType,employeeEndDate
         $moverSamAccountName = $moverUser.SamAccountName
-        $updatedContent = $csvContent | ForEach-Object {
-            if ($_ -match [regex]::Escape($moverSamAccountName)) {
-                # Replace the title field (between department and samAccountName)
-                $_ -replace ",`"[^`"]+`",`"$([regex]::Escape($moverSamAccountName))`"", ",`"Senior Developer`",`"$moverSamAccountName`""
-            }
-            else {
-                $_
-            }
+        $csv = Import-Csv $csvPath
+        $targetUser = $csv | Where-Object { $_.samAccountName -eq $moverSamAccountName }
+        if ($targetUser) {
+            $targetUser.title = "Senior Developer"
         }
-
-        $updatedContent | Set-Content $csvPath
+        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
         Write-Host "  ✓ Changed $moverSamAccountName title to 'Senior Developer'" -ForegroundColor Green
 
         # Copy updated CSV
@@ -404,34 +398,23 @@ try {
         # Continue using the first user (index 1) for mover tests
         $moverUser = New-TestUser -Index 1
         $moverSamAccountName = $moverUser.SamAccountName
-        $originalFirstName = $moverUser.FirstName
-        $originalLastName = $moverUser.LastName
-        $originalDisplayName = $moverUser.DisplayName
         $newFirstName = "Renamed"
-        $newDisplayName = "$newFirstName $originalLastName"
+        $newDisplayName = "$newFirstName $($moverUser.LastName)"
 
         Write-Host "Updating user display name in CSV (triggers AD rename)..." -ForegroundColor Gray
 
         # The DN is computed from displayName: "CN=" + EscapeDN(mv["Display Name"]) + ",OU=..."
         # So changing firstName in CSV will change displayName, which changes DN
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-        $csvContent = Get-Content $csvPath
 
-        # Update the first user's firstName and displayName
-        $updatedContent = $csvContent | ForEach-Object {
-            if ($_ -match [regex]::Escape($moverSamAccountName)) {
-                # Update firstName
-                $line = $_ -replace "`"$([regex]::Escape($originalFirstName))`",`"$([regex]::Escape($originalLastName))`"", "`"$newFirstName`",`"$originalLastName`""
-                # Update displayName
-                $line = $line -replace "`"$([regex]::Escape($originalDisplayName))`"", "`"$newDisplayName`""
-                $line
-            }
-            else {
-                $_
-            }
+        # Parse CSV properly to update the correct columns
+        $csv = Import-Csv $csvPath
+        $targetUser = $csv | Where-Object { $_.samAccountName -eq $moverSamAccountName }
+        if ($targetUser) {
+            $targetUser.firstName = $newFirstName
+            $targetUser.displayName = $newDisplayName
         }
-
-        $updatedContent | Set-Content $csvPath
+        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
         Write-Host "  ✓ Changed $moverSamAccountName display name to '$newDisplayName'" -ForegroundColor Green
 
         # Copy updated CSV
@@ -480,48 +463,16 @@ try {
         # User at index 1 is assigned to Marketing department (1 % 12 = 1)
         # This should trigger an LDAP move to OU=Finance
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-        $csvContent = Get-Content $csvPath
 
-        # Get the current user info to determine current department
-        $currentLine = $csvContent | Where-Object { $_ -match [regex]::Escape($moverSamAccountName) } | Select-Object -First 1
-
-        # Debug: Show current line before change
-        Write-Host "  Current CSV line: $currentLine" -ForegroundColor DarkGray
-
-        # Change department to Finance
-        # CSV columns: employeeId,firstName,lastName,email,department,title,samAccountName,displayName,status,userPrincipalName
-        # We need to update the department field (5th field, index 4)
-        $updatedContent = $csvContent | ForEach-Object {
-            if ($_ -match [regex]::Escape($moverSamAccountName)) {
-                # Parse CSV line and update department field directly
-                # This is more robust than regex replacement
-                $fields = $_ -split '","'
-                if ($fields.Count -ge 5) {
-                    # Field indices (after split on ","):
-                    # 0: "employeeId  (has leading quote)
-                    # 1: firstName
-                    # 2: lastName
-                    # 3: email
-                    # 4: department  <-- this is what we want to change
-                    # 5: title
-                    # etc.
-                    $oldDept = $fields[4]
-                    $fields[4] = "Finance"
-                    $newLine = $fields -join '","'
-                    Write-Host "  Changed department from '$oldDept' to 'Finance'" -ForegroundColor DarkGray
-                    $newLine
-                }
-                else {
-                    Write-Host "  Warning: Could not parse CSV line for $moverSamAccountName" -ForegroundColor Yellow
-                    $_
-                }
-            }
-            else {
-                $_
-            }
+        # Parse CSV properly to update the correct column
+        $csv = Import-Csv $csvPath
+        $targetUser = $csv | Where-Object { $_.samAccountName -eq $moverSamAccountName }
+        if ($targetUser) {
+            $oldDept = $targetUser.department
+            $targetUser.department = "Finance"
+            Write-Host "  Changed department from '$oldDept' to 'Finance'" -ForegroundColor DarkGray
         }
-
-        $updatedContent | Set-Content $csvPath
+        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
         Write-Host "  ✓ Changed $moverSamAccountName department to Finance (triggers OU move)" -ForegroundColor Green
 
         # Copy updated CSV
@@ -637,12 +588,29 @@ try {
         $reconnectUser.Department = "IT"
         $reconnectUser.Title = "Developer"
 
-        # Add to CSV (DN is calculated dynamically by the export sync rule expression)
+        # Add to CSV using proper CSV parsing (DN is calculated dynamically by the export sync rule expression)
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $upn = "$($reconnectUser.SamAccountName)@testdomain.local"
-        $csvLine = "`"$($reconnectUser.EmployeeId)`",`"$($reconnectUser.FirstName)`",`"$($reconnectUser.LastName)`",`"$($reconnectUser.Email)`",`"$($reconnectUser.Department)`",`"$($reconnectUser.Title)`",`"$($reconnectUser.SamAccountName)`",`"Test Reconnect`",`"Active`",`"$upn`""
 
-        Add-Content -Path $csvPath -Value $csvLine
+        # Use Import-Csv/Export-Csv to ensure correct column handling
+        $csv = Import-Csv $csvPath
+        $newUser = [PSCustomObject]@{
+            employeeId = $reconnectUser.EmployeeId
+            firstName = $reconnectUser.FirstName
+            lastName = $reconnectUser.LastName
+            email = $reconnectUser.Email
+            department = $reconnectUser.Department
+            title = $reconnectUser.Title
+            company = $reconnectUser.Company
+            samAccountName = $reconnectUser.SamAccountName
+            displayName = "$($reconnectUser.FirstName) $($reconnectUser.LastName)"
+            status = "Active"
+            userPrincipalName = $upn
+            employeeType = $reconnectUser.EmployeeType
+            employeeEndDate = ""
+        }
+        $csv = @($csv) + $newUser
+        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
         # Initial sync - uses Delta Sync for efficiency (baseline already established)
@@ -691,7 +659,10 @@ try {
 
             # Restore user (simulating rehire before grace period)
             Write-Host "  Restoring user (simulating rehire)..." -ForegroundColor Gray
-            Add-Content -Path $csvPath -Value $csvLine
+            # Re-add user using proper CSV parsing
+            $csv = Import-Csv $csvPath
+            $csv = @($csv) + $newUser
+            $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
             docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
             Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null

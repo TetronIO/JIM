@@ -147,12 +147,29 @@ try {
         $testUser.Email = "test.leaver@testdomain.local"
         $testUser.DisplayName = "Test Leaver"
 
-        # Add user to CSV (DN is calculated dynamically by the export sync rule expression)
+        # Add user to CSV using proper CSV parsing (DN is calculated dynamically by the export sync rule expression)
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $upn = "$($testUser.SamAccountName)@testdomain.local"
-        $csvLine = "`"$($testUser.EmployeeId)`",`"$($testUser.FirstName)`",`"$($testUser.LastName)`",`"$($testUser.Email)`",`"$($testUser.Department)`",`"$($testUser.Title)`",`"$($testUser.SamAccountName)`",`"$($testUser.DisplayName)`",`"Active`",`"$upn`""
 
-        Add-Content -Path $csvPath -Value $csvLine
+        # Use Import-Csv/Export-Csv to ensure correct column handling
+        $csv = Import-Csv $csvPath
+        $newUser = [PSCustomObject]@{
+            employeeId = $testUser.EmployeeId
+            firstName = $testUser.FirstName
+            lastName = $testUser.LastName
+            email = $testUser.Email
+            department = $testUser.Department
+            title = $testUser.Title
+            company = $testUser.Company
+            samAccountName = $testUser.SamAccountName
+            displayName = $testUser.DisplayName
+            status = "Active"
+            userPrincipalName = $upn
+            employeeType = $testUser.EmployeeType
+            employeeEndDate = ""
+        }
+        $csv = @($csv) + $newUser
+        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
         Write-Host "  ✓ Added test.leaver to CSV" -ForegroundColor Green
 
         # Copy updated CSV to container
@@ -224,12 +241,29 @@ try {
         $reconnectUser.Email = "test.reconnect2@testdomain.local"
         $reconnectUser.DisplayName = "Test Reconnect Two"
 
-        # Add user to CSV (DN is calculated dynamically by the export sync rule expression)
+        # Add user to CSV using proper CSV parsing (DN is calculated dynamically by the export sync rule expression)
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
         $upn = "$($reconnectUser.SamAccountName)@testdomain.local"
-        $csvLine = "`"$($reconnectUser.EmployeeId)`",`"$($reconnectUser.FirstName)`",`"$($reconnectUser.LastName)`",`"$($reconnectUser.Email)`",`"$($reconnectUser.Department)`",`"$($reconnectUser.Title)`",`"$($reconnectUser.SamAccountName)`",`"$($reconnectUser.DisplayName)`",`"Active`",`"$upn`""
 
-        Add-Content -Path $csvPath -Value $csvLine
+        # Use Import-Csv/Export-Csv to ensure correct column handling
+        $csv = Import-Csv $csvPath
+        $reconnectNewUser = [PSCustomObject]@{
+            employeeId = $reconnectUser.EmployeeId
+            firstName = $reconnectUser.FirstName
+            lastName = $reconnectUser.LastName
+            email = $reconnectUser.Email
+            department = $reconnectUser.Department
+            title = $reconnectUser.Title
+            company = $reconnectUser.Company
+            samAccountName = $reconnectUser.SamAccountName
+            displayName = $reconnectUser.DisplayName
+            status = "Active"
+            userPrincipalName = $upn
+            employeeType = $reconnectUser.EmployeeType
+            employeeEndDate = ""
+        }
+        $csv = @($csv) + $reconnectNewUser
+        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
         # Initial sync to provision the user
@@ -264,7 +298,10 @@ try {
 
             # Re-add user to CSV (simulating rehire before grace period)
             Write-Host "Re-adding user to CSV (simulating rehire)..." -ForegroundColor Gray
-            Add-Content -Path $csvPath -Value $csvLine
+            # Re-add using proper CSV parsing
+            $csv = Import-Csv $csvPath
+            $csv = @($csv) + $reconnectNewUser
+            $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
             docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
             # Sync to process the rehire
