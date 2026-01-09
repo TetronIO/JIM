@@ -399,7 +399,7 @@ All templates generate realistic enterprise data following normal distribution p
 - Target: Samba AD Primary
 
 **Test Data**:
-- HR CSV includes Company attribute: "Sub Atomic" for employees, partner companies for contractors
+- HR CSV includes Company attribute: "Subatomic" for employees, partner companies for contractors
 - Partner companies: Nexus Dynamics, Orbital Systems, Quantum Bridge, Stellar Logistics, Vertex Solutions
 
 **Test Steps** (executed sequentially):
@@ -540,7 +540,7 @@ These scenarios test group management capabilities - a core ILM function where t
 
 **Group Types Created**:
 - **Department Groups**: `Dept-{Department}` (e.g., `Dept-Finance`, `Dept-Information Technology`)
-- **Company Groups**: `Company-{Company}` (e.g., `Company-Sub Atomic`, `Company-Nexus Dynamics`)
+- **Company Groups**: `Company-{Company}` (e.g., `Company-Subatomic`, `Company-Nexus Dynamics`)
 - **Job Title Groups**: `Role-{Title}` (e.g., `Role-Manager`, `Role-Analyst`)
 
 **Test Steps** (executed sequentially):

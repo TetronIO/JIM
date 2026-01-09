@@ -502,7 +502,7 @@ try {
             'userPrincipalName',  # UPN (also mapped from Email)
             'title',              # Job Title
             'department',         # Department
-            'company',            # Company name (Sub Atomic or partner company)
+            'company',            # Company name (Subatomic or partner company)
             'distinguishedName',  # DN - required for LDAP provisioning
             'accountExpires',     # Account expiry (Large Integer/Int64) - populated from HR Employee End Date via ToFileTime
             'userAccountControl'  # Account control flags (Number/Int32) - tests integer data type flow
@@ -580,7 +580,7 @@ try {
             @{ CsAttr = "email";             MvAttr = "Email" }
             @{ CsAttr = "title";             MvAttr = "Job Title" }
             @{ CsAttr = "department";        MvAttr = "Department" }
-            @{ CsAttr = "company";           MvAttr = "Company" }  # Company name - Sub Atomic for employees, partner companies for contractors
+            @{ CsAttr = "company";           MvAttr = "Company" }  # Company name - Subatomic for employees, partner companies for contractors
             @{ CsAttr = "samAccountName";    MvAttr = "Account Name" }
             @{ CsAttr = "employeeType";      MvAttr = "Employee Type" }
             @{ CsAttr = "employeeEndDate";   MvAttr = "Employee End Date" }  # DateTime - HR end date → MV, then exported to AD accountExpires via ToFileTime

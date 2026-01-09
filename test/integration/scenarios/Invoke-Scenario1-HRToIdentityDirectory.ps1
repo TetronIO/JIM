@@ -6,7 +6,7 @@
     Validates provisioning users from HR system (CSV) to identity directory (Samba AD).
     Tests the complete ILM lifecycle: Joiner, Mover, Leaver, and Reconnection patterns.
 
-    HR CSV includes Company attribute: "Sub Atomic" for employees, partner companies for contractors.
+    HR CSV includes Company attribute: "Subatomic" for employees, partner companies for contractors.
     Partner companies: Nexus Dynamics, Orbital Systems, Quantum Bridge, Stellar Logistics, Vertex Solutions.
 
 .PARAMETER Step
