@@ -144,12 +144,12 @@ try {
         $testUser = New-TestUser -Index 7777
         $testUser.EmployeeId = "EMP777777"
         $testUser.SamAccountName = "test.leaver"
-        $testUser.Email = "test.leaver@testdomain.local"
+        $testUser.Email = "test.leaver@subatomic.local"
         $testUser.DisplayName = "Test Leaver"
 
         # Add user to CSV using proper CSV parsing (DN is calculated dynamically by the export sync rule expression)
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-        $upn = "$($testUser.SamAccountName)@testdomain.local"
+        $upn = "$($testUser.SamAccountName)@subatomic.local"
 
         # Use Import-Csv/Export-Csv to ensure correct column handling
         $csv = Import-Csv $csvPath
@@ -238,12 +238,12 @@ try {
         $reconnectUser = New-TestUser -Index 6666
         $reconnectUser.EmployeeId = "EMP666666"
         $reconnectUser.SamAccountName = "test.reconnect2"
-        $reconnectUser.Email = "test.reconnect2@testdomain.local"
+        $reconnectUser.Email = "test.reconnect2@subatomic.local"
         $reconnectUser.DisplayName = "Test Reconnect Two"
 
         # Add user to CSV using proper CSV parsing (DN is calculated dynamically by the export sync rule expression)
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-        $upn = "$($reconnectUser.SamAccountName)@testdomain.local"
+        $upn = "$($reconnectUser.SamAccountName)@subatomic.local"
 
         # Use Import-Csv/Export-Csv to ensure correct column handling
         $csv = Import-Csv $csvPath
@@ -413,7 +413,7 @@ try {
                                     EmployeeId = "SCOPE001"
                                     FirstName = "Scope"
                                     LastName = "ITUser"
-                                    Email = "scope.ituser@testdomain.local"
+                                    Email = "scope.ituser@subatomic.local"
                                     Department = "IT"  # Should be IN scope
                                     Title = "IT Engineer"
                                     SamAccountName = "scope.ituser"
@@ -424,7 +424,7 @@ try {
                                     EmployeeId = "SCOPE002"
                                     FirstName = "Scope"
                                     LastName = "FinanceUser"
-                                    Email = "scope.financeuser@testdomain.local"
+                                    Email = "scope.financeuser@subatomic.local"
                                     Department = "Finance"  # Should be OUT of scope
                                     Title = "Financial Analyst"
                                     SamAccountName = "scope.financeuser"
@@ -435,8 +435,8 @@ try {
                                 $csvPath = "/var/connector-files/test-data/hr-users.csv"
                                 $csvContent = docker exec samba-ad-primary cat $csvPath 2>$null
                                 if ($csvContent) {
-                                    $itCsvLine = "`"$($itUser.EmployeeId)`",`"$($itUser.FirstName)`",`"$($itUser.LastName)`",`"$($itUser.Email)`",`"$($itUser.Department)`",`"$($itUser.Title)`",`"$($itUser.SamAccountName)`",`"$($itUser.DisplayName)`",`"Active`",`"$($itUser.Email)`",`"CN=$($itUser.DisplayName),CN=Users,DC=testdomain,DC=local`""
-                                    $financeCsvLine = "`"$($financeUser.EmployeeId)`",`"$($financeUser.FirstName)`",`"$($financeUser.LastName)`",`"$($financeUser.Email)`",`"$($financeUser.Department)`",`"$($financeUser.Title)`",`"$($financeUser.SamAccountName)`",`"$($financeUser.DisplayName)`",`"Active`",`"$($financeUser.Email)`",`"CN=$($financeUser.DisplayName),CN=Users,DC=testdomain,DC=local`""
+                                    $itCsvLine = "`"$($itUser.EmployeeId)`",`"$($itUser.FirstName)`",`"$($itUser.LastName)`",`"$($itUser.Email)`",`"$($itUser.Department)`",`"$($itUser.Title)`",`"$($itUser.SamAccountName)`",`"$($itUser.DisplayName)`",`"Active`",`"$($itUser.Email)`",`"CN=$($itUser.DisplayName),CN=Users,DC=subatomic,DC=local`""
+                                    $financeCsvLine = "`"$($financeUser.EmployeeId)`",`"$($financeUser.FirstName)`",`"$($financeUser.LastName)`",`"$($financeUser.Email)`",`"$($financeUser.Department)`",`"$($financeUser.Title)`",`"$($financeUser.SamAccountName)`",`"$($financeUser.DisplayName)`",`"Active`",`"$($financeUser.Email)`",`"CN=$($financeUser.DisplayName),CN=Users,DC=subatomic,DC=local`""
 
                                     $newContent = $csvContent + "`n" + $itCsvLine + "`n" + $financeCsvLine
                                     $newContent | docker exec -i samba-ad-primary tee $csvPath > $null

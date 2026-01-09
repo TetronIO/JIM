@@ -26,7 +26,7 @@ PASSWORD=${ADMIN_PASS:-${DOMAINPASS}}
 echo "Domain: ${FULL_DOMAIN}"
 echo "Short Domain: ${URDOMAIN}"
 
-# Build the DC string (e.g., TESTDOMAIN.LOCAL -> DC=testdomain,DC=local)
+# Build the DC string (e.g., SUBATOMIC.LOCAL -> DC=subatomic,DC=local)
 DOMAIN_DC=$(echo "$LDOMAIN" | sed 's/\./,DC=/g' | sed 's/^/DC=/')
 
 echo "Domain DN: ${DOMAIN_DC}"

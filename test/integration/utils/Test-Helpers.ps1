@@ -299,7 +299,7 @@ function New-TestUser {
         [int]$Index,
 
         [Parameter(Mandatory=$false)]
-        [string]$Domain = "testdomain.local"
+        [string]$Domain = "subatomic.local"
     )
 
     $nameData = Get-TestNameData

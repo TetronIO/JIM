@@ -283,33 +283,57 @@ else {
 $timings["4. Wait for Services"] = (Get-Date) - $step4Start
 
 # Step 4b: Prepare Samba AD for testing
-# For Scenario 1, we need a clean Borton Corp OU - delete if exists and recreate
+# For Scenario 1, we need a clean Corp OU - delete if exists and recreate
 Write-Section "Step 4b: Preparing Samba AD for Testing"
 
-# First, try to delete the Borton Corp OU if it exists (to ensure clean state)
-Write-Step "Cleaning up any existing Borton Corp OU..."
-$result = docker exec samba-ad-primary samba-tool ou delete "OU=Borton Corp,DC=testdomain,DC=local" --force-subtree-delete 2>&1
+# First, try to delete the Corp OU if it exists (to ensure clean state)
+Write-Step "Cleaning up any existing Corp OU..."
+$result = docker exec samba-ad-primary samba-tool ou delete "OU=Corp,DC=subatomic,DC=local" --force-subtree-delete 2>&1
 if ($LASTEXITCODE -eq 0) {
-    Write-Success "Deleted existing OU: Borton Corp"
+    Write-Success "Deleted existing OU: Corp"
 }
 elseif ($result -match "No such object") {
     Write-Success "OU does not exist (clean state)"
 }
 else {
-    Write-Warning "Could not delete OU Borton Corp: $result (continuing anyway)"
+    Write-Warning "Could not delete OU Corp: $result (continuing anyway)"
 }
 
-# Create the Borton Corp base OU - department sub-OUs will be created by LDAP connector
-Write-Step "Creating Borton Corp OU..."
-$result = docker exec samba-ad-primary samba-tool ou create "OU=Borton Corp,DC=testdomain,DC=local" 2>&1
+# Create the Corp base OU and its sub-OUs (Users, Groups)
+Write-Step "Creating Corp OU structure..."
+$result = docker exec samba-ad-primary samba-tool ou create "OU=Corp,DC=subatomic,DC=local" 2>&1
 if ($LASTEXITCODE -eq 0) {
-    Write-Success "Created OU: Borton Corp"
+    Write-Success "Created OU: Corp"
 }
 elseif ($result -match "already exists") {
-    Write-Success "OU already exists: Borton Corp"
+    Write-Success "OU already exists: Corp"
 }
 else {
-    Write-Warning "Failed to create OU Borton Corp: $result"
+    Write-Warning "Failed to create OU Corp: $result"
+}
+
+# Create Users OU under Corp
+$result = docker exec samba-ad-primary samba-tool ou create "OU=Users,OU=Corp,DC=subatomic,DC=local" 2>&1
+if ($LASTEXITCODE -eq 0) {
+    Write-Success "Created OU: Users (under Corp)"
+}
+elseif ($result -match "already exists") {
+    Write-Success "OU already exists: Users"
+}
+else {
+    Write-Warning "Failed to create OU Users: $result"
+}
+
+# Create Groups OU under Corp
+$result = docker exec samba-ad-primary samba-tool ou create "OU=Groups,OU=Corp,DC=subatomic,DC=local" 2>&1
+if ($LASTEXITCODE -eq 0) {
+    Write-Success "Created OU: Groups (under Corp)"
+}
+elseif ($result -match "already exists") {
+    Write-Success "OU already exists: Groups"
+}
+else {
+    Write-Warning "Failed to create OU Groups: $result"
 }
 
 # Step 5: Setup API Key

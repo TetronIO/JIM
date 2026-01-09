@@ -536,7 +536,7 @@ These scenarios test group management capabilities - a core ILM function where t
 
 **Systems**:
 - Source: JIM Metaverse (groups created via JIM API, not imported from a Connected System)
-- Target: Samba AD Primary (OU=Entitlements,OU=Borton Corp,DC=testdomain,DC=local)
+- Target: Samba AD Primary (OU=Entitlements,OU=Groups,OU=Corp,DC=subatomic,DC=local)
 
 **Group Types Created**:
 - **Department Groups**: `Dept-{Department}` (e.g., `Dept-Finance`, `Dept-Information Technology`)
@@ -580,7 +580,7 @@ These scenarios test group management capabilities - a core ILM function where t
 **Concept**: Organisations often have existing groups in AD that were created manually or by other tools. This scenario tests bringing those groups under JIM management, making JIM authoritative for their membership.
 
 **Systems**:
-- Source: Samba AD Primary (existing groups in OU=Legacy Groups,OU=Borton Corp)
+- Source: Samba AD Primary (existing groups in OU=Legacy Groups,OU=Groups,OU=Corp)
 - Target: JIM Metaverse (becomes authoritative after import)
 - Export Target: Samba AD Primary (same groups, now JIM-managed)
 
@@ -823,10 +823,10 @@ $adSystem = New-JIMConnectedSystem -Name "Samba AD Primary" `
     -Configuration @{
         Server = "samba-ad-primary"
         Port = 389
-        BaseDN = "DC=testdomain,DC=local"
-        BindDN = "CN=Administrator,CN=Users,DC=testdomain,DC=local"
+        BaseDN = "DC=subatomic,DC=local"
+        BindDN = "CN=Administrator,CN=Users,DC=subatomic,DC=local"
         BindPassword = "Test@123!"
-        UserContainer = "OU=Users,DC=testdomain,DC=local"
+        UserContainer = "OU=Users,OU=Corp,DC=subatomic,DC=local"
     }
 
 # Create Inbound Sync Rule (HR -> Metaverse)

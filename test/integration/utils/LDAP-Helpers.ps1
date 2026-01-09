@@ -114,10 +114,10 @@ function Get-LDAPUser {
         [int]$Port = 389,
 
         [Parameter(Mandatory=$false)]
-        [string]$BaseDN = "DC=testdomain,DC=local",
+        [string]$BaseDN = "DC=subatomic,DC=local",
 
         [Parameter(Mandatory=$false)]
-        [string]$BindDN = "CN=Administrator,CN=Users,DC=testdomain,DC=local",
+        [string]$BindDN = "CN=Administrator,CN=Users,DC=subatomic,DC=local",
 
         [Parameter(Mandatory=$false)]
         [string]$BindPassword = "Test@123!"
@@ -180,10 +180,10 @@ function Test-LDAPUserExists {
         [int]$Port = 389,
 
         [Parameter(Mandatory=$false)]
-        [string]$BaseDN = "DC=testdomain,DC=local",
+        [string]$BaseDN = "DC=subatomic,DC=local",
 
         [Parameter(Mandatory=$false)]
-        [string]$BindDN = "CN=Administrator,CN=Users,DC=testdomain,DC=local",
+        [string]$BindDN = "CN=Administrator,CN=Users,DC=subatomic,DC=local",
 
         [Parameter(Mandatory=$false)]
         [string]$BindPassword = "Test@123!"
@@ -213,10 +213,10 @@ function Get-LDAPUserCount {
         [int]$Port = 389,
 
         [Parameter(Mandatory=$false)]
-        [string]$BaseDN = "DC=testdomain,DC=local",
+        [string]$BaseDN = "DC=subatomic,DC=local",
 
         [Parameter(Mandatory=$false)]
-        [string]$BindDN = "CN=Administrator,CN=Users,DC=testdomain,DC=local",
+        [string]$BindDN = "CN=Administrator,CN=Users,DC=subatomic,DC=local",
 
         [Parameter(Mandatory=$false)]
         [string]$BindPassword = "Test@123!",

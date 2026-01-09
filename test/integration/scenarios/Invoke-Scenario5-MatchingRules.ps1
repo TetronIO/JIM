@@ -127,12 +127,12 @@ try {
         $testUser = New-TestUser -Index 9001
         $testUser.EmployeeId = "EMP900001"
         $testUser.SamAccountName = "test.projection"
-        $testUser.Email = "test.projection@testdomain.local"
+        $testUser.Email = "test.projection@subatomic.local"
         $testUser.DisplayName = "Test Projection User"
 
         # Add user to CSV using proper CSV parsing (DN is calculated dynamically by the export sync rule expression)
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-        $upn = "$($testUser.SamAccountName)@testdomain.local"
+        $upn = "$($testUser.SamAccountName)@subatomic.local"
 
         # Use Import-Csv/Export-Csv to ensure correct column handling
         $csv = Import-Csv $csvPath
@@ -193,12 +193,12 @@ try {
         $testUser = New-TestUser -Index 9002
         $testUser.EmployeeId = "EMP900002"
         $testUser.SamAccountName = "test.join"
-        $testUser.Email = "test.join@testdomain.local"
+        $testUser.Email = "test.join@subatomic.local"
         $testUser.DisplayName = "Test Join User"
 
         # DN is calculated dynamically by the export sync rule expression
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-        $upn = "$($testUser.SamAccountName)@testdomain.local"
+        $upn = "$($testUser.SamAccountName)@subatomic.local"
 
         # Use Import-Csv/Export-Csv to ensure correct column handling
         $csv = Import-Csv $csvPath
@@ -285,12 +285,12 @@ try {
         $testUser1 = New-TestUser -Index 9003
         $testUser1.EmployeeId = "EMP900003"  # Same employeeId for both
         $testUser1.SamAccountName = "test.duplicate1"
-        $testUser1.Email = "test.duplicate1@testdomain.local"
+        $testUser1.Email = "test.duplicate1@subatomic.local"
         $testUser1.DisplayName = "Test Duplicate User One"
 
         # DN is calculated dynamically by the export sync rule expression
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-        $upn1 = "$($testUser1.SamAccountName)@testdomain.local"
+        $upn1 = "$($testUser1.SamAccountName)@subatomic.local"
 
         # Use Import-Csv/Export-Csv to ensure correct column handling
         $csv = Import-Csv $csvPath
@@ -324,11 +324,11 @@ try {
         $testUser2 = New-TestUser -Index 9004
         $testUser2.EmployeeId = "EMP900003"  # SAME employeeId - this is the conflict
         $testUser2.SamAccountName = "test.duplicate2"
-        $testUser2.Email = "test.duplicate2@testdomain.local"
+        $testUser2.Email = "test.duplicate2@subatomic.local"
         $testUser2.DisplayName = "Test Duplicate User Two"
 
         # DN is calculated dynamically by the export sync rule expression
-        $upn2 = "$($testUser2.SamAccountName)@testdomain.local"
+        $upn2 = "$($testUser2.SamAccountName)@subatomic.local"
 
         # Use Import-Csv/Export-Csv to ensure correct column handling
         $csv = Import-Csv $csvPath
@@ -445,12 +445,12 @@ try {
                 $testUser1 = New-TestUser -Index 9010
                 $testUser1.EmployeeId = "EMP901000"
                 $testUser1.SamAccountName = "test.multirule.first"
-                $testUser1.Email = "test.multirule@testdomain.local"  # This email will be shared
+                $testUser1.Email = "test.multirule@subatomic.local"  # This email will be shared
                 $testUser1.DisplayName = "Test MultiRule First"
 
                 # DN is calculated dynamically by the export sync rule expression
                 $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
-                $upn1 = "$($testUser1.SamAccountName)@testdomain.local"
+                $upn1 = "$($testUser1.SamAccountName)@subatomic.local"
 
                 # Use Import-Csv/Export-Csv to ensure correct column handling
                 $csv = Import-Csv $csvPath
@@ -508,11 +508,11 @@ try {
                     $testUser2 = New-TestUser -Index 9011
                     $testUser2.EmployeeId = "EMP901001"  # Different employeeId (rule 1 won't match)
                     $testUser2.SamAccountName = "test.multirule.second"
-                    $testUser2.Email = "test.multirule@testdomain.local"  # SAME email (rule 2 should match)
+                    $testUser2.Email = "test.multirule@subatomic.local"  # SAME email (rule 2 should match)
                     $testUser2.DisplayName = "Test MultiRule Second"
 
                     # DN is calculated dynamically by the export sync rule expression
-                    $upn2 = "$($testUser2.SamAccountName)@testdomain.local"
+                    $upn2 = "$($testUser2.SamAccountName)@subatomic.local"
 
                     # Use Import-Csv/Export-Csv to ensure correct column handling
                     $csv = Import-Csv $csvPath
