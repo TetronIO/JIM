@@ -135,26 +135,27 @@ public class SyncExportTaskProcessor
             }
 
             // Auto-select any containers created during export
-            if (result.CreatedContainerDns.Count > 0)
+            if (result.CreatedContainerExternalIds.Count > 0)
             {
                 Log.Information("PerformExportAsync: Export created {Count} new container(s), triggering auto-selection",
-                    result.CreatedContainerDns.Count);
+                    result.CreatedContainerExternalIds.Count);
 
                 await _jim.Activities.UpdateActivityMessageAsync(_activity,
-                    $"Auto-selecting {result.CreatedContainerDns.Count} container(s) created during export");
+                    $"Auto-selecting {result.CreatedContainerExternalIds.Count} container(s) created during export");
 
-                using (Diagnostics.Sync.StartSpan("AutoSelectContainers").SetTag("containerCount", result.CreatedContainerDns.Count))
+                using (Diagnostics.Sync.StartSpan("AutoSelectContainers").SetTag("containerCount", result.CreatedContainerExternalIds.Count))
                 {
                     await _jim.ConnectedSystems.RefreshAndAutoSelectContainersAsync(
                         _connectedSystem,
-                        result.CreatedContainerDns,
+                        _connector,
+                        result.CreatedContainerExternalIds,
                         _initiatedByApiKey,
                         _initiatedByMetaverseObject,
                         _activity);
                 }
 
                 // Update completion message to include container count
-                var updatedMessage = $"{_activity.Message} | {result.CreatedContainerDns.Count} container(s) auto-selected";
+                var updatedMessage = $"{_activity.Message} | {result.CreatedContainerExternalIds.Count} container(s) auto-selected";
                 await _jim.Activities.UpdateActivityMessageAsync(_activity, updatedMessage);
             }
 

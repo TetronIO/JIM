@@ -1251,27 +1251,37 @@ public class ConnectedSystemServer
 
     /// <summary>
     /// Adds newly created containers to the hierarchy and auto-selects them if their parent is selected.
-    /// This method queries LDAP to verify containers exist before adding them.
+    /// Uses the connector's interface methods to parse container identifiers without connector-specific
+    /// knowledge in the application layer.
     /// </summary>
     /// <param name="connectedSystem">The connected system to update.</param>
-    /// <param name="createdContainerDns">List of container DNs that were created during export.</param>
+    /// <param name="connector">The connector that created the containers (must implement IConnectorContainerCreation).</param>
+    /// <param name="createdContainerExternalIds">List of container external IDs that were created during export.</param>
     /// <param name="initiatedByApiKey">Optional API key that initiated this operation.</param>
     /// <param name="initiatedByUser">Optional user that initiated this operation.</param>
     /// <param name="parentActivity">Optional parent activity to link this operation to (e.g., the export activity).</param>
     public async Task RefreshAndAutoSelectContainersAsync(
         ConnectedSystem connectedSystem,
-        IReadOnlyList<string> createdContainerDns,
+        IConnector connector,
+        IReadOnlyList<string> createdContainerExternalIds,
         ApiKey? initiatedByApiKey = null,
         MetaverseObject? initiatedByUser = null,
         Activity? parentActivity = null)
     {
         ValidateConnectedSystemParameter(connectedSystem);
 
-        if (createdContainerDns.Count == 0)
+        if (createdContainerExternalIds.Count == 0)
             return;
 
+        // The connector must implement IConnectorContainerCreation to provide hierarchy parsing methods
+        if (connector is not IConnectorContainerCreation containerCreator)
+        {
+            Log.Warning("RefreshAndAutoSelectContainersAsync: Connector does not implement IConnectorContainerCreation, skipping auto-selection");
+            return;
+        }
+
         Log.Information("RefreshAndAutoSelectContainersAsync: Processing {Count} created container(s) for system {SystemName}",
-            createdContainerDns.Count, connectedSystem.Name);
+            createdContainerExternalIds.Count, connectedSystem.Name);
 
         // Create activity for tracking - link to parent activity if provided so this doesn't
         // appear as a separate top-level activity in the Activity list
@@ -1282,7 +1292,7 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Update,
             ConnectedSystemId = connectedSystem.Id,
             ParentActivityId = parentActivity?.Id,
-            Message = $"Auto-selecting {createdContainerDns.Count} container(s) created during export"
+            Message = $"Auto-selecting {createdContainerExternalIds.Count} container(s) created during export"
         };
 
         if (initiatedByApiKey != null)
@@ -1292,36 +1302,29 @@ public class ConnectedSystemServer
 
         var containersAdded = 0;
 
-        foreach (var containerDn in createdContainerDns)
+        foreach (var containerExternalId in createdContainerExternalIds)
         {
             try
             {
-                // Query LDAP to verify the container exists
-                if (!await VerifyContainerExistsInLdapAsync(connectedSystem, containerDn))
-                {
-                    Log.Warning("RefreshAndAutoSelectContainersAsync: Container {ContainerDn} not found in LDAP, skipping", containerDn);
-                    continue;
-                }
-
                 // Find which partition this container belongs to
-                var partition = FindPartitionForContainer(connectedSystem, containerDn);
+                var partition = FindPartitionForContainer(connectedSystem, containerExternalId);
                 if (partition == null)
                 {
-                    Log.Warning("RefreshAndAutoSelectContainersAsync: Could not find partition for container {ContainerDn}", containerDn);
+                    Log.Warning("RefreshAndAutoSelectContainersAsync: Could not find partition for container {ContainerExternalId}", containerExternalId);
                     continue;
                 }
 
                 // Check if container already exists in hierarchy
-                if (partition.Containers != null && FindContainerByExternalId(partition.Containers, containerDn) != null)
+                if (partition.Containers != null && FindContainerByExternalId(partition.Containers, containerExternalId) != null)
                 {
-                    Log.Debug("RefreshAndAutoSelectContainersAsync: Container {ContainerDn} already exists in hierarchy", containerDn);
+                    Log.Debug("RefreshAndAutoSelectContainersAsync: Container {ContainerExternalId} already exists in hierarchy", containerExternalId);
                     continue;
                 }
 
-                // Find the parent container
-                var parentDn = GetParentDn(containerDn);
-                var parentContainer = parentDn != null && partition.Containers != null
-                    ? FindContainerByExternalId(partition.Containers, parentDn)
+                // Find the parent container using connector's method (no connector-specific knowledge here)
+                var parentExternalId = containerCreator.GetParentContainerExternalId(containerExternalId);
+                var parentContainer = parentExternalId != null && partition.Containers != null
+                    ? FindContainerByExternalId(partition.Containers, parentExternalId)
                     : null;
 
                 // Determine if any ancestor container is already selected.
@@ -1335,11 +1338,11 @@ public class ConnectedSystemServer
                 // In practice, if parent is selected, we do NOT select the child - it's already covered by subtree.
                 var shouldSelect = !hasSelectedAncestor && (parentContainer == null && partition.Selected);
 
-                // Create the new container
-                var containerName = ExtractContainerName(containerDn);
+                // Create the new container using connector's method to extract display name
+                var containerName = containerCreator.GetContainerDisplayName(containerExternalId);
                 var newContainer = new ConnectedSystemContainer
                 {
-                    ExternalId = containerDn,
+                    ExternalId = containerExternalId,
                     Name = containerName,
                     Selected = shouldSelect,
                     Partition = partition
@@ -1359,18 +1362,18 @@ public class ConnectedSystemServer
                 containersAdded++;
                 if (hasSelectedAncestor)
                 {
-                    Log.Information("RefreshAndAutoSelectContainersAsync: Added container {ContainerDn}, Selected: False (ancestor already selected, implicitly included via subtree)",
-                        containerDn);
+                    Log.Information("RefreshAndAutoSelectContainersAsync: Added container {ContainerExternalId}, Selected: False (ancestor already selected, implicitly included via subtree)",
+                        containerExternalId);
                 }
                 else
                 {
-                    Log.Information("RefreshAndAutoSelectContainersAsync: Added container {ContainerDn}, Selected: {Selected}",
-                        containerDn, shouldSelect);
+                    Log.Information("RefreshAndAutoSelectContainersAsync: Added container {ContainerExternalId}, Selected: {Selected}",
+                        containerExternalId, shouldSelect);
                 }
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "RefreshAndAutoSelectContainersAsync: Error processing container {ContainerDn}", containerDn);
+                Log.Error(ex, "RefreshAndAutoSelectContainersAsync: Error processing container {ContainerExternalId}", containerExternalId);
             }
         }
 
@@ -1389,74 +1392,13 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Verifies that a container exists in LDAP before adding it to the hierarchy.
+    /// Finds the partition that a container external ID belongs to based on suffix matching.
     /// </summary>
-    private async Task<bool> VerifyContainerExistsInLdapAsync(ConnectedSystem connectedSystem, string containerDn)
+    private static ConnectedSystemPartition? FindPartitionForContainer(ConnectedSystem connectedSystem, string containerExternalId)
     {
-        if (connectedSystem.ConnectorDefinition.Name != Connectors.ConnectorConstants.LdapConnectorName)
-        {
-            Log.Warning("VerifyContainerExistsInLdapAsync: Container verification only supported for LDAP connector");
-            return true; // Assume exists for non-LDAP connectors
-        }
-
-        try
-        {
-            using var connector = CreateConfiguredLdapConnector();
-            connector.OpenImportConnection(connectedSystem.SettingValues, Log.Logger);
-
-            try
-            {
-                // Use the LDAP connector to check if the container exists
-                // This is a simple approach - we attempt to get partitions and check if the container is in any of them
-                // A more efficient approach would be to add a dedicated method to check container existence
-                var partitions = await connector.GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
-
-                foreach (var partition in partitions)
-                {
-                    if (ContainerExistsInHierarchy(partition.Containers, containerDn))
-                        return true;
-                }
-
-                // Container not found in any partition - this might happen due to replication lag
-                return false;
-            }
-            finally
-            {
-                connector.CloseImportConnection();
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "VerifyContainerExistsInLdapAsync: Error verifying container {ContainerDn}", containerDn);
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Checks if a container exists anywhere in a container hierarchy.
-    /// </summary>
-    private static bool ContainerExistsInHierarchy(IEnumerable<ConnectorContainer> containers, string containerDn)
-    {
-        foreach (var container in containers)
-        {
-            if (container.Id.Equals(containerDn, StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            if (container.ChildContainers.Count > 0 && ContainerExistsInHierarchy(container.ChildContainers, containerDn))
-                return true;
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Finds the partition that a container DN belongs to based on the DN suffix.
-    /// </summary>
-    private static ConnectedSystemPartition? FindPartitionForContainer(ConnectedSystem connectedSystem, string containerDn)
-    {
-        // Container DN should end with the partition's external ID (which is the partition DN for LDAP)
+        // Container external ID should end with the partition's external ID
         return connectedSystem.Partitions?.FirstOrDefault(p =>
-            containerDn.EndsWith(p.ExternalId, StringComparison.OrdinalIgnoreCase));
+            containerExternalId.EndsWith(p.ExternalId, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -1478,19 +1420,6 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Gets the parent DN from a container DN.
-    /// </summary>
-    private static string? GetParentDn(string containerDn)
-    {
-        // Find the first comma (which separates the RDN from the parent DN)
-        var commaIndex = containerDn.IndexOf(',');
-        if (commaIndex == -1 || commaIndex == containerDn.Length - 1)
-            return null;
-
-        return containerDn.Substring(commaIndex + 1);
-    }
-
-    /// <summary>
     /// Checks if any ancestor container in the hierarchy is selected.
     /// Used to determine if a new child container is already implicitly included via a parent's subtree search.
     /// </summary>
@@ -1504,22 +1433,6 @@ public class ConnectedSystemServer
             current = current.ParentContainer;
         }
         return false;
-    }
-
-    /// <summary>
-    /// Extracts the container name from a DN.
-    /// </summary>
-    private static string ExtractContainerName(string containerDn)
-    {
-        // The name is the value of the first RDN component
-        var commaIndex = containerDn.IndexOf(',');
-        var rdn = commaIndex > 0 ? containerDn.Substring(0, commaIndex) : containerDn;
-
-        // Extract value after = sign (e.g., "OU=Sales" -> "Sales")
-        var equalsIndex = rdn.IndexOf('=');
-        return equalsIndex > 0 && equalsIndex < rdn.Length - 1
-            ? rdn.Substring(equalsIndex + 1)
-            : rdn;
     }
 
     private static ConnectedSystemContainer BuildConnectedSystemContainerTree(ConnectorContainer connectorContainer)
