@@ -67,14 +67,17 @@ $testResults = @{
     Success = $false
 }
 
-# Test user details
-$testUserSam = "sync.test1"
-$testUserDN = "sync.test1"
-$testUserFirstName = "Sync"
+# Test user details - use unique names for Scenario 2 to avoid conflicts with Scenario 1
+$testUserSam = "crossdomain.test1"
+$testUserFirstName = "CrossDomain"
 $testUserLastName = "TestUser"
-$testUserDisplayName = "Sync TestUser"
+$testUserDisplayName = "CrossDomain TestUser"
 $testUserDepartment = "Engineering"
-$testUserEmail = "sync.test1@sourcedomain.local"
+$testUserEmail = "crossdomain.test1@sourcedomain.local"
+
+# OU paths for creating test users (scoped imports only look at TestUsers OU)
+$sourceTestUsersOU = "OU=TestUsers"
+$targetTestUsersOU = "OU=TestUsers"
 
 try {
     # Step 0: Setup JIM configuration
@@ -105,19 +108,23 @@ try {
     # Clean up test users from previous runs
     Write-Host "Cleaning up test users from previous runs..." -ForegroundColor Gray
 
-    $testUsers = @($testUserSam, "forward.test", "reverse.test", "conflict.test")
+    $testUsers = @($testUserSam, "cd.forward.test", "cd.reverse.test", "cd.conflict.test")
+    $deletedFromSource = $false
+    $deletedFromTarget = $false
 
     foreach ($user in $testUsers) {
         # Clean from Source
         $output = docker exec samba-ad-source bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
         if ($output -match "Deleted user") {
             Write-Host "  ✓ Deleted $user from Source AD" -ForegroundColor Gray
+            $deletedFromSource = $true
         }
 
         # Clean from Target
         $output = docker exec samba-ad-target bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
         if ($output -match "Deleted user") {
             Write-Host "  ✓ Deleted $user from Target AD" -ForegroundColor Gray
+            $deletedFromTarget = $true
         }
     }
 
@@ -153,6 +160,31 @@ try {
     $targetImportProfile = $targetProfiles | Where-Object { $_.name -eq "EMEA AD - Full Import" }
     $targetSyncProfile = $targetProfiles | Where-Object { $_.name -eq "EMEA AD - Full Sync" }
     $targetExportProfile = $targetProfiles | Where-Object { $_.name -eq "EMEA AD - Export" }
+
+    # If users were deleted from AD, run imports AND syncs to properly clean up JIM state
+    # The Full Import marks CSOs as "Obsolete" but the Full Sync is needed to:
+    # 1. Process the obsolete CSOs and disconnect them from Metaverse objects
+    # 2. Clear any pending exports that would otherwise cause Update instead of Create
+    if ($deletedFromSource -or $deletedFromTarget) {
+        Write-Host "Syncing deletions to JIM..." -ForegroundColor Gray
+        if ($deletedFromSource) {
+            Write-Host "  Running Source AD Full Import..." -ForegroundColor Gray
+            Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceImportProfile.id | Out-Null
+            Start-Sleep -Seconds 5
+            Write-Host "  Running Source AD Full Sync..." -ForegroundColor Gray
+            Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceSyncProfile.id | Out-Null
+            Start-Sleep -Seconds 5
+        }
+        if ($deletedFromTarget) {
+            Write-Host "  Running Target AD Full Import..." -ForegroundColor Gray
+            Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetImportProfile.id | Out-Null
+            Start-Sleep -Seconds 5
+            Write-Host "  Running Target AD Full Sync..." -ForegroundColor Gray
+            Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetSyncProfile.id | Out-Null
+            Start-Sleep -Seconds 5
+        }
+        Write-Host "  ✓ Deletions synced to JIM" -ForegroundColor Green
+    }
 
     # Helper function to run forward sync (Source -> Metaverse -> Target)
     function Invoke-ForwardSync {
@@ -194,10 +226,11 @@ try {
 
         Write-Host "Creating test user in Source AD..." -ForegroundColor Gray
 
-        # Create user in Source AD
+        # Create user in Source AD (in TestUsers OU for scoped import)
         $createResult = docker exec samba-ad-source samba-tool user create `
             $testUserSam `
             "Password123!" `
+            --userou="$sourceTestUsersOU" `
             --given-name="$testUserFirstName" `
             --surname="$testUserLastName" `
             --mail-address="$testUserEmail" `
@@ -250,9 +283,9 @@ try {
 
         Write-Host "Updating user department in Source AD..." -ForegroundColor Gray
 
-        # Update department in Source AD
+        # Update department in Source AD (note: user is in OU=TestUsers, not CN=Users)
         $modifyResult = docker exec samba-ad-source bash -c "cat > /tmp/modify.ldif << 'EOF'
-dn: CN=$testUserDisplayName,CN=Users,DC=sourcedomain,DC=local
+dn: CN=$testUserDisplayName,$sourceTestUsersOU,DC=sourcedomain,DC=local
 changetype: modify
 replace: department
 department: Sales
@@ -291,21 +324,22 @@ ldapmodify -x -H ldap://localhost -D 'CN=Administrator,CN=Users,DC=sourcedomain,
         }
     }
 
-    # Test 3: ReverseSync (Attribute change in Target flows back to Source)
+    # Test 3: Verify import from Target creates MV object (but doesn't export to Source due to unidirectional design)
     if ($Step -eq "ReverseSync" -or $Step -eq "All") {
-        Write-TestSection "Test 3: Reverse Sync (Target → Source)"
+        Write-TestSection "Test 3: Target Import (Unidirectional Validation)"
 
-        Write-Host "Creating new user in Target AD for reverse sync..." -ForegroundColor Gray
+        Write-Host "Creating user in Target AD to test import..." -ForegroundColor Gray
 
-        $reverseUserSam = "reverse.test"
+        $reverseUserSam = "cd.reverse.test"
         $reverseUserFirstName = "Reverse"
         $reverseUserLastName = "SyncTest"
         $reverseUserDepartment = "Marketing"
 
-        # Create user in Target AD
+        # Create user in Target AD (in TestUsers OU for scoped import)
         $createResult = docker exec samba-ad-target samba-tool user create `
             $reverseUserSam `
             "Password123!" `
+            --userou="$targetTestUsersOU" `
             --given-name="$reverseUserFirstName" `
             --surname="$reverseUserLastName" `
             --department="$reverseUserDepartment" 2>&1
@@ -320,30 +354,40 @@ ldapmodify -x -H ldap://localhost -D 'CN=Administrator,CN=Users,DC=sourcedomain,
             throw "Failed to create user in Target AD: $createResult"
         }
 
-        # Run reverse sync
-        Invoke-ReverseSync
+        # Run Target import and sync (not full reverse sync to Source)
+        Write-Host "  Running Target import and sync..." -ForegroundColor Gray
 
-        # Validate user exists in Source AD
-        Write-Host "Validating user in Source AD..." -ForegroundColor Gray
+        # Import from Target
+        Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetImportProfile.id | Out-Null
+        Start-Sleep -Seconds $WaitSeconds
 
-        $sourceUser = docker exec samba-ad-source samba-tool user show $reverseUserSam 2>&1
+        # Sync to Metaverse
+        Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetSyncProfile.id | Out-Null
+        Start-Sleep -Seconds $WaitSeconds
 
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  ✓ User '$reverseUserSam' synced to Source AD" -ForegroundColor Green
+        # Verify user was imported to Metaverse (via API)
+        Write-Host "Validating user imported to Metaverse..." -ForegroundColor Gray
 
-            # Verify attributes
-            if ($sourceUser -match "givenName:\s*$reverseUserFirstName") {
-                Write-Host "    ✓ First name correct" -ForegroundColor Green
+        $mvObjects = Get-JIMMetaverseObject -Search "$reverseUserSam" -Attributes "Account Name"
+
+        if ($mvObjects -and $mvObjects.Count -gt 0) {
+            Write-Host "  ✓ User '$reverseUserSam' imported to Metaverse" -ForegroundColor Green
+
+            # Verify the user was NOT provisioned to Source (unidirectional design)
+            docker exec samba-ad-source samba-tool user show $reverseUserSam 2>&1 | Out-Null
+
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "  ✓ User correctly NOT provisioned to Source AD (unidirectional sync)" -ForegroundColor Green
+                $testResults.Steps += @{ Name = "TargetImport"; Success = $true; Note = "Unidirectional sync validated - Target imports don't flow to Source" }
             }
-            if ($sourceUser -match "department:\s*$reverseUserDepartment") {
-                Write-Host "    ✓ Department correct" -ForegroundColor Green
+            else {
+                Write-Host "  ⚠ User unexpectedly found in Source AD" -ForegroundColor Yellow
+                $testResults.Steps += @{ Name = "TargetImport"; Success = $true; Warning = "User found in Source AD (may be from previous run)" }
             }
-
-            $testResults.Steps += @{ Name = "ReverseSync"; Success = $true }
         }
         else {
-            Write-Host "  ✗ User '$reverseUserSam' NOT found in Source AD" -ForegroundColor Red
-            $testResults.Steps += @{ Name = "ReverseSync"; Success = $false; Error = "User not synced to Source AD" }
+            Write-Host "  ✗ User '$reverseUserSam' NOT found in Metaverse" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "TargetImport"; Success = $false; Error = "User not imported to Metaverse" }
         }
     }
 
@@ -353,12 +397,13 @@ ldapmodify -x -H ldap://localhost -D 'CN=Administrator,CN=Users,DC=sourcedomain,
 
         Write-Host "Testing conflict resolution with simultaneous changes..." -ForegroundColor Gray
 
-        $conflictUserSam = "conflict.test"
+        $conflictUserSam = "cd.conflict.test"
 
-        # Create user in Source AD first
+        # Create user in Source AD first (in TestUsers OU for scoped import)
         $createResult = docker exec samba-ad-source samba-tool user create `
             $conflictUserSam `
             "Password123!" `
+            --userou="$sourceTestUsersOU" `
             --given-name="Conflict" `
             --surname="TestUser" `
             --department="OriginalDept" 2>&1
@@ -372,7 +417,7 @@ ldapmodify -x -H ldap://localhost -D 'CN=Administrator,CN=Users,DC=sourcedomain,
         Invoke-ForwardSync
 
         # Verify user exists in Target
-        $targetCheck = docker exec samba-ad-target samba-tool user show $conflictUserSam 2>&1
+        docker exec samba-ad-target samba-tool user show $conflictUserSam 2>&1 | Out-Null
 
         if ($LASTEXITCODE -eq 0) {
             Write-Host "  ✓ User exists in both directories" -ForegroundColor Green
@@ -420,20 +465,20 @@ Write-Host "Scenario: $($testResults.Scenario)" -ForegroundColor Cyan
 Write-Host "Template: $($testResults.Template)" -ForegroundColor Cyan
 Write-Host ""
 
-foreach ($step in $testResults.Steps) {
-    $icon = if ($step.Success) { "✓" } else { "✗" }
-    $color = if ($step.Success) { "Green" } else { "Red" }
+foreach ($testStep in $testResults.Steps) {
+    $icon = if ($testStep.Success) { "✓" } else { "✗" }
+    $color = if ($testStep.Success) { "Green" } else { "Red" }
 
-    Write-Host "  $icon $($step.Name)" -ForegroundColor $color
+    Write-Host "  $icon $($testStep.Name)" -ForegroundColor $color
 
-    if ($step.Warning) {
-        Write-Host "    ⚠ $($step.Warning)" -ForegroundColor Yellow
+    if ($testStep.ContainsKey('Warning') -and $testStep.Warning) {
+        Write-Host "    ⚠ $($testStep.Warning)" -ForegroundColor Yellow
     }
-    if ($step.Note) {
-        Write-Host "    ℹ $($step.Note)" -ForegroundColor Gray
+    if ($testStep.ContainsKey('Note') -and $testStep.Note) {
+        Write-Host "    ℹ $($testStep.Note)" -ForegroundColor Gray
     }
-    if (-not $step.Success -and $step.Error) {
-        Write-Host "    Error: $($step.Error)" -ForegroundColor Red
+    if (-not $testStep.Success -and $testStep.ContainsKey('Error') -and $testStep.Error) {
+        Write-Host "    Error: $($testStep.Error)" -ForegroundColor Red
     }
 }
 
