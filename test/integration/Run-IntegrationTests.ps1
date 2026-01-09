@@ -11,7 +11,7 @@
     5. Runs the specified test scenario
 
 .PARAMETER Scenario
-    The test scenario to run. Default: "Scenario1-HRToDirectory"
+    The test scenario to run. Default: "Scenario1-HRToIdentityDirectory"
     Available scenarios are in test/integration/scenarios/
 
 .PARAMETER Template
@@ -34,7 +34,7 @@
 .EXAMPLE
     ./Run-IntegrationTests.ps1
 
-    Runs the default scenario (Scenario1-HRToDirectory) with Nano template.
+    Runs the default scenario (Scenario1-HRToIdentityDirectory) with Nano template.
 
 .EXAMPLE
     ./Run-IntegrationTests.ps1 -Template Small
@@ -52,14 +52,14 @@
     Re-runs tests without resetting the environment.
 
 .EXAMPLE
-    ./Run-IntegrationTests.ps1 -Scenario "Scenario1-HRToDirectory" -Template Nano -Step All
+    ./Run-IntegrationTests.ps1 -Scenario "Scenario1-HRToIdentityDirectory" -Template Nano -Step All
 
     Explicit full specification of all parameters.
 #>
 
 param(
     [Parameter(Mandatory=$false)]
-    [string]$Scenario = "Scenario1-HRToDirectory",
+    [string]$Scenario = "Scenario1-HRToIdentityDirectory",
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]

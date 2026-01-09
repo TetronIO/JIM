@@ -82,7 +82,7 @@ See [Data Scale Templates](#data-scale-templates) for detailed template specific
 ./test/integration/Setup-InfrastructureApiKey.ps1
 
 # 3. Run Scenario 1
-./test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Nano -ApiKey (Get-Content test/integration/.api-key)
+./test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1 -Template Nano -ApiKey (Get-Content test/integration/.api-key)
 ```
 
 **Helper Scripts:**
@@ -172,7 +172,7 @@ For developers running tests locally in a DevContainer or development environmen
 | Stand up JIM | `jim-stack` or `docker compose up -d` | Start JIM services |
 | Populate test data | `./Populate-SambaAD.ps1 -Template Small` | Create users/groups in external systems |
 | Configure JIM | `./Setup-Scenario1.ps1` | Create Connected Systems, Sync Rules |
-| Run tests | `./Invoke-Scenario1-HRToDirectory.ps1 -Step All` | Execute test scenario |
+| Run tests | `./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step All` | Execute test scenario |
 | Reset external systems | `docker compose -f docker-compose.integration-tests.yml down -v` | Remove external system data |
 | Reset JIM | `docker compose -f docker-compose.yml down -v` | Remove JIM database (metaverse, config) |
 
@@ -341,8 +341,8 @@ All external systems run as Docker containers defined in `docker-compose.integra
 
 4. Execute Scenarios
    └─> Run scenario scripts
-       ├─> Invoke-Scenario1-HRToDirectory.ps1
-       ├─> Invoke-Scenario2-DirectorySync.ps1
+       ├─> Invoke-Scenario1-HRToIdentityDirectory.ps1
+       ├─> Invoke-Scenario2-CrossDomainSync.ps1
        └─> Invoke-Scenario3-GALSYNC.ps1
 
 5. Validate Results
@@ -942,7 +942,7 @@ Start-Sleep -Seconds 120
 ./test/integration/Generate-TestCSV.ps1 -Template Small
 
 # Run Scenario 1
-./test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template Small
+./test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1 -Template Small
 
 # Tear down when complete
 docker compose -f docker-compose.integration-tests.yml down -v
@@ -966,7 +966,7 @@ Start-Sleep -Seconds 180
 ./test/integration/Populate-SambaAD.ps1 -Template Medium -Instance Target
 
 # Run scenario
-./test/integration/scenarios/Invoke-Scenario2-DirectorySync.ps1 -Template Medium
+./test/integration/scenarios/Invoke-Scenario2-CrossDomainSync.ps1 -Template Medium
 
 # Tear down
 docker compose -f docker-compose.integration-tests.yml --profile scenario2 down -v
@@ -1461,8 +1461,8 @@ JIM/
 │       ├── Populate-PostgreSQL.ps1                         # PostgreSQL setup (Phase 2)
 │       ├── Wait-SystemsReady.ps1                           # Health check script
 │       ├── scenarios/
-│       │   ├── Invoke-Scenario1-HRToDirectory.ps1
-│       │   ├── Invoke-Scenario2-DirectorySync.ps1
+│       │   ├── Invoke-Scenario1-HRToIdentityDirectory.ps1
+│       │   ├── Invoke-Scenario2-CrossDomainSync.ps1
 │       │   ├── Invoke-Scenario3-GALSYNC.ps1
 │       │   ├── Invoke-Scenario4-MultiSourceAggregation.ps1  # Phase 2
 │       │   ├── Invoke-Scenario5-DatabaseSourceTarget.ps1    # Phase 2
@@ -1576,7 +1576,7 @@ pwsh test/integration/Setup-InfrastructureApiKey.ps1
 pwsh test/integration/Setup-Scenario1.ps1 -ApiKey "jim_ak_xxx" -Template Micro
 
 # 5. Run the full test scenario
-pwsh test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1 -ApiKey "jim_ak_xxx" -Template Micro
+pwsh test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1 -ApiKey "jim_ak_xxx" -Template Micro
 
 # 6. Check logs if tests fail
 docker logs jim.worker --tail 100
@@ -1600,7 +1600,7 @@ docker logs jim.web --tail 100
 
 **Integration Test Improvements:**
 - `test/integration/Setup-Scenario1.ps1` - Fixed API response property names (metaverseObjectTypes)
-- `test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1` - Added CSV reset and AD cleanup for repeatable tests
+- `test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1` - Added CSV reset and AD cleanup for repeatable tests
 
 ### Next Steps
 
@@ -1636,7 +1636,7 @@ var objectType = _connectedSystem.ObjectTypes.SingleOrDefault(
 
 **Files Created (Ready for Use Once Bug Fixed)**:
 - `test/integration/Setup-Scenario2.ps1` - JIM configuration for directory sync (fully functional)
-- `test/integration/scenarios/Invoke-Scenario2-DirectorySync.ps1` - Test execution script
+- `test/integration/scenarios/Invoke-Scenario2-CrossDomainSync.ps1` - Test execution script
 
 ### Resolved Issue: LDAP Partition Management API Missing
 
@@ -1685,7 +1685,7 @@ var objectType = _connectedSystem.ObjectTypes.SingleOrDefault(
 |---------|------------|-------------------------------------------------|
 | 2.0     | 2025-12-21 | All 6 Scenario 1 tests passing. Fixed DN column removal (now expression-calculated), deletion rules configuration, Reconnection test property overrides, and Leaver test expectations for grace period. |
 | 1.9     | 2025-12-16 | Resolved partition API blocking issue. Added partition/container management API and PowerShell cmdlets. Discovered LDAP connector object type matching bug (new blocker). |
-| 1.8     | 2025-12-16 | Added Scenario 2 scripts (Setup-Scenario2.ps1, Invoke-Scenario2-DirectorySync.ps1). Documented blocking issue - LDAP partition management API needed. |
+| 1.8     | 2025-12-16 | Added Scenario 2 scripts (Setup-Scenario2.ps1, Invoke-Scenario2-CrossDomainSync.ps1). Documented blocking issue - LDAP partition management API needed. |
 | 1.7     | 2025-12-16 | **Phase 1 Complete!** All Scenario 1 tests passing. Fixed file connector change detection (missing .Include() calls). Added test data reset and AD cleanup for repeatable tests. |
 | 1.6     | 2025-12-16 | Ran full Scenario 1 tests, documented file connector change detection issue |
 | 1.5     | 2025-12-16 | Scenario 1 Joiner test passing, added Nano template, multiple bug fixes |
