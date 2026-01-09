@@ -386,15 +386,19 @@ All templates generate realistic enterprise data following normal distribution p
 
 ## Test Scenarios
 
-### Phase 1 (MVP) - LDAP & CSV
+### Phase 1 (MVP) - Person Entity Scenarios (LDAP & CSV)
 
-#### Scenario 1: HR to Enterprise Directory
+#### Scenario 1: Person Entity - HR to Identity Directory
 
 **Purpose**: Validate the most common ILM use case - provisioning users from HR system to Active Directory.
 
 **Systems**:
 - Source: CSV (HR system)
 - Target: Samba AD Primary
+
+**Test Data**:
+- HR CSV includes Company attribute: "Sub Atomic" for employees, partner companies for contractors
+- Partner companies: Nexus Dynamics, Orbital Systems, Quantum Bridge, Stellar Logistics, Vertex Solutions
 
 **Test Steps** (executed sequentially):
 
@@ -407,7 +411,7 @@ All templates generate realistic enterprise data following normal distribution p
 | 3 | **Leaver** | User removed from CSV → deprovisioned from AD (respecting deletion rules) |
 | 4 | **Reconnection** | User re-added to CSV within grace period → scheduled deletion cancelled |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1`
 
 **Execution Model**:
 
@@ -415,25 +419,25 @@ Each test step is triggered via a `-Step` parameter. This allows JIM to complete
 
 ```powershell
 # Step 1: Joiner - Add user to HR CSV, trigger JIM sync, verify in AD
-./Invoke-Scenario1-HRToDirectory.ps1 -Step Joiner -Template Small
+./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step Joiner -Template Small
 
 # Step 2a: Mover - Modify user attributes in CSV, verify changes in AD
-./Invoke-Scenario1-HRToDirectory.ps1 -Step Mover -Template Small
+./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step Mover -Template Small
 
 # Step 2b: Mover-Rename - Change user name, verify DN rename in AD
-./Invoke-Scenario1-HRToDirectory.ps1 -Step Mover-Rename -Template Small
+./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step Mover-Rename -Template Small
 
 # Step 2c: Mover-Move - Change display name, verify LDAP move operation
-./Invoke-Scenario1-HRToDirectory.ps1 -Step Mover-Move -Template Small
+./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step Mover-Move -Template Small
 
 # Step 3: Leaver - Remove user from CSV, verify deprovisioned in AD
-./Invoke-Scenario1-HRToDirectory.ps1 -Step Leaver -Template Small
+./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step Leaver -Template Small
 
 # Step 4: Reconnection - Re-add user before grace period, verify preserved
-./Invoke-Scenario1-HRToDirectory.ps1 -Step Reconnection -Template Small
+./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step Reconnection -Template Small
 
 # Run all steps sequentially (waits for JIM between each)
-./Invoke-Scenario1-HRToDirectory.ps1 -Step All -Template Small
+./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step All -Template Small
 ```
 
 **Step Details**:
@@ -452,12 +456,12 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 
 ---
 
-#### Scenario 2: Directory to Directory Synchronisation
+#### Scenario 2: Person Entity - Cross-domain Synchronisation
 
-**Purpose**: Validate bidirectional synchronisation between two directory services.
+**Purpose**: Validate unidirectional synchronisation of person entities between two directory services.
 
 **Systems**:
-- Source: Samba AD Source
+- Source: Samba AD Source (authoritative)
 - Target: Samba AD Target
 
 **Test Steps** (executed sequentially):
@@ -466,27 +470,27 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 |------|-----------|-------------|
 | 1 | **Provision** | User created in Source AD → provisioned to Target AD |
 | 2 | **ForwardSync** | Attributes changed in Source AD → flow to Target AD |
-| 3 | **ReverseSync** | Different attributes changed in Target AD → flow back to Source AD |
-| 4 | **Conflict** | Simultaneous changes to same user → conflict resolution applied |
+| 3 | **DetectDrift** | Attributes manually changed in Target AD → JIM detects drift |
+| 4 | **ReassertState** | JIM reasserts expected state from Source AD to Target AD |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario2-DirectorySync.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario2-CrossDomainSync.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario2-DirectorySync.ps1 -Step Provision -Template Small
-./Invoke-Scenario2-DirectorySync.ps1 -Step ForwardSync -Template Small
-./Invoke-Scenario2-DirectorySync.ps1 -Step ReverseSync -Template Small
-./Invoke-Scenario2-DirectorySync.ps1 -Step Conflict -Template Small
+./Invoke-Scenario2-CrossDomainSync.ps1 -Step Provision -Template Small
+./Invoke-Scenario2-CrossDomainSync.ps1 -Step ForwardSync -Template Small
+./Invoke-Scenario2-CrossDomainSync.ps1 -Step DetectDrift -Template Small
+./Invoke-Scenario2-CrossDomainSync.ps1 -Step ReassertState -Template Small
 
 # Run all steps sequentially
-./Invoke-Scenario2-DirectorySync.ps1 -Step All -Template Small
+./Invoke-Scenario2-CrossDomainSync.ps1 -Step All -Template Small
 ```
 
 ---
 
-#### Scenario 3: GALSYNC (Global Address List Synchronisation)
+#### Scenario 3: Person Entity - GALSYNC (Global Address List Synchronisation)
 
 **Purpose**: Validate exporting directory users to CSV for distribution/reporting.
 
@@ -518,9 +522,139 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 
 ---
 
-### Phase 2 (Post-MVP) - Databases
+### Phase 1 (MVP) - Entitlement Management Scenarios
 
-#### Scenario 4: Multi-Source Aggregation
+These scenarios test group management capabilities - a core ILM function where the system manages group memberships based on identity attributes.
+
+#### Scenario 4: Entitlement Management - JIM to AD
+
+**Purpose**: Validate JIM as the authoritative source for entitlement groups, provisioning them to AD with membership derived from person attributes.
+
+**Concept**: JIM creates and manages role-based groups (e.g., department groups, company groups, job title groups). Group membership is calculated from person attributes in the metaverse. Groups are provisioned to AD, and JIM detects and corrects any unauthorised changes made directly in AD.
+
+**Systems**:
+- Source: JIM Metaverse (groups created via JIM API, not imported from a Connected System)
+- Target: Samba AD Primary (OU=Entitlements,OU=Borton Corp,DC=testdomain,DC=local)
+
+**Group Types Created**:
+- **Department Groups**: `Dept-{Department}` (e.g., `Dept-Finance`, `Dept-Information Technology`)
+- **Company Groups**: `Company-{Company}` (e.g., `Company-Sub Atomic`, `Company-Nexus Dynamics`)
+- **Job Title Groups**: `Role-{Title}` (e.g., `Role-Manager`, `Role-Analyst`)
+
+**Test Steps** (executed sequentially):
+
+| Step | Test Case | Description |
+|------|-----------|-------------|
+| 1 | **CreateGroups** | Groups created in JIM via API → provisioned to AD with calculated membership |
+| 2 | **UpdateMembership** | User department changes in HR → membership updated (removed from old group, added to new) |
+| 3 | **DetectDrift** | Admin manually adds/removes member in AD → JIM detects drift on next sync |
+| 4 | **ReassertState** | JIM reasserts expected membership, overwriting unauthorised AD changes |
+| 5 | **DeleteGroup** | Group deleted from JIM MV → group deleted from AD |
+| 6 | **DeleteMember** | User deleted from JIM MV → user removed from all group memberships in AD |
+
+**Script**: `test/integration/scenarios/Invoke-Scenario4-EntitlementJIMToAD.ps1`
+
+**Execution Model**:
+
+```powershell
+# Individual steps
+./Invoke-Scenario4-EntitlementJIMToAD.ps1 -Step CreateGroups -Template Small
+./Invoke-Scenario4-EntitlementJIMToAD.ps1 -Step UpdateMembership -Template Small
+./Invoke-Scenario4-EntitlementJIMToAD.ps1 -Step DetectDrift -Template Small
+./Invoke-Scenario4-EntitlementJIMToAD.ps1 -Step ReassertState -Template Small
+./Invoke-Scenario4-EntitlementJIMToAD.ps1 -Step DeleteGroup -Template Small
+./Invoke-Scenario4-EntitlementJIMToAD.ps1 -Step DeleteMember -Template Small
+
+# Run all steps sequentially
+./Invoke-Scenario4-EntitlementJIMToAD.ps1 -Step All -Template Small
+```
+
+---
+
+#### Scenario 5: Entitlement Management - Convert AD Group Authority to JIM
+
+**Purpose**: Validate importing existing AD groups into JIM and converting authority so JIM becomes the authoritative source. After conversion, any changes made directly in AD are overwritten by JIM.
+
+**Concept**: Organisations often have existing groups in AD that were created manually or by other tools. This scenario tests bringing those groups under JIM management, making JIM authoritative for their membership.
+
+**Systems**:
+- Source: Samba AD Primary (existing groups in OU=Legacy Groups,OU=Borton Corp)
+- Target: JIM Metaverse (becomes authoritative after import)
+- Export Target: Samba AD Primary (same groups, now JIM-managed)
+
+**Test Steps** (executed sequentially):
+
+| Step | Test Case | Description |
+|------|-----------|-------------|
+| 1 | **ImportGroups** | Existing AD groups imported into JIM metaverse with current membership |
+| 2 | **ConvertAuthority** | Groups marked as JIM-authoritative (export sync rule enabled) |
+| 3 | **UpdateViaJIM** | Membership changed via JIM API → changes exported to AD |
+| 4 | **DetectDrift** | Admin manually modifies group in AD → JIM detects drift |
+| 5 | **ReassertState** | JIM overwrites AD changes, reasserting JIM-managed membership |
+
+**Script**: `test/integration/scenarios/Invoke-Scenario5-ConvertADGroupAuthority.ps1`
+
+**Execution Model**:
+
+```powershell
+# Individual steps
+./Invoke-Scenario5-ConvertADGroupAuthority.ps1 -Step ImportGroups -Template Small
+./Invoke-Scenario5-ConvertADGroupAuthority.ps1 -Step ConvertAuthority -Template Small
+./Invoke-Scenario5-ConvertADGroupAuthority.ps1 -Step UpdateViaJIM -Template Small
+./Invoke-Scenario5-ConvertADGroupAuthority.ps1 -Step DetectDrift -Template Small
+./Invoke-Scenario5-ConvertADGroupAuthority.ps1 -Step ReassertState -Template Small
+
+# Run all steps sequentially
+./Invoke-Scenario5-ConvertADGroupAuthority.ps1 -Step All -Template Small
+```
+
+---
+
+#### Scenario 6: Entitlement Management - Cross-domain Entitlement Synchronisation
+
+**Purpose**: Validate synchronising entitlement groups between two AD domains, with one domain authoritative for groups.
+
+**Concept**: In multi-domain environments, groups may need to be replicated across domains. This scenario tests importing groups from AD1 (authoritative) and exporting them to AD2, ensuring AD2 groups mirror AD1.
+
+**Systems**:
+- Source: Samba AD Source (OU=Entitlements,OU=SourceCorp - authoritative for groups)
+- Target: Samba AD Target (OU=Entitlements,OU=TargetCorp - replica of source groups)
+
+**Important**: Each domain uses dedicated OUs to avoid conflicts with other scenarios.
+
+**Test Steps** (executed sequentially):
+
+| Step | Test Case | Description |
+|------|-----------|-------------|
+| 1 | **InitialSync** | Groups and membership imported from AD1 → provisioned to AD2 |
+| 2 | **ForwardSync** | Group membership changed in AD1 → changes flow to AD2 |
+| 3 | **DetectDrift** | Admin manually modifies group in AD2 → JIM detects drift |
+| 4 | **ReassertState** | JIM reasserts AD1 membership to AD2, overwriting AD2 changes |
+| 5 | **NewGroup** | New group created in AD1 → provisioned to AD2 |
+| 6 | **DeleteGroup** | Group deleted from AD1 → deleted from AD2 |
+
+**Script**: `test/integration/scenarios/Invoke-Scenario6-CrossDomainEntitlementSync.ps1`
+
+**Execution Model**:
+
+```powershell
+# Individual steps
+./Invoke-Scenario6-CrossDomainEntitlementSync.ps1 -Step InitialSync -Template Small
+./Invoke-Scenario6-CrossDomainEntitlementSync.ps1 -Step ForwardSync -Template Small
+./Invoke-Scenario6-CrossDomainEntitlementSync.ps1 -Step DetectDrift -Template Small
+./Invoke-Scenario6-CrossDomainEntitlementSync.ps1 -Step ReassertState -Template Small
+./Invoke-Scenario6-CrossDomainEntitlementSync.ps1 -Step NewGroup -Template Small
+./Invoke-Scenario6-CrossDomainEntitlementSync.ps1 -Step DeleteGroup -Template Small
+
+# Run all steps sequentially
+./Invoke-Scenario6-CrossDomainEntitlementSync.ps1 -Step All -Template Small
+```
+
+---
+
+### Phase 2 (Post-MVP) - Database Scenarios
+
+#### Scenario 7: Multi-Source Aggregation
 
 **Purpose**: Validate multiple database sources feeding the metaverse with join rules and attribute precedence.
 
@@ -539,24 +673,24 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 | 3 | **Precedence** | SQL Server authoritative for email/phone, Oracle for department/title |
 | 4 | **DataTypes** | VARCHAR, NVARCHAR, DATE, DATETIME, INT, BIT → correct mapping |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario4-MultiSourceAggregation.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario7-MultiSourceAggregation.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario4-MultiSourceAggregation.ps1 -Step InitialLoad -Template Small
-./Invoke-Scenario4-MultiSourceAggregation.ps1 -Step JoinRules -Template Small
-./Invoke-Scenario4-MultiSourceAggregation.ps1 -Step Precedence -Template Small
-./Invoke-Scenario4-MultiSourceAggregation.ps1 -Step DataTypes -Template Small
+./Invoke-Scenario7-MultiSourceAggregation.ps1 -Step InitialLoad -Template Small
+./Invoke-Scenario7-MultiSourceAggregation.ps1 -Step JoinRules -Template Small
+./Invoke-Scenario7-MultiSourceAggregation.ps1 -Step Precedence -Template Small
+./Invoke-Scenario7-MultiSourceAggregation.ps1 -Step DataTypes -Template Small
 
 # Run all steps sequentially
-./Invoke-Scenario4-MultiSourceAggregation.ps1 -Step All -Template Small
+./Invoke-Scenario7-MultiSourceAggregation.ps1 -Step All -Template Small
 ```
 
 ---
 
-#### Scenario 5: Database Source/Target
+#### Scenario 8: Database Source/Target
 
 **Purpose**: Validate database connector import/export capabilities.
 
@@ -573,24 +707,24 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 | 3 | **DataTypes** | Data type handling (text, numeric, date, boolean) |
 | 4 | **MultiValue** | Multi-valued attributes (if supported) |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario5-DatabaseSourceTarget.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario8-DatabaseSourceTarget.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario5-DatabaseSourceTarget.ps1 -Step Import -Template Small
-./Invoke-Scenario5-DatabaseSourceTarget.ps1 -Step Export -Template Small
-./Invoke-Scenario5-DatabaseSourceTarget.ps1 -Step DataTypes -Template Small
-./Invoke-Scenario5-DatabaseSourceTarget.ps1 -Step MultiValue -Template Small
+./Invoke-Scenario8-DatabaseSourceTarget.ps1 -Step Import -Template Small
+./Invoke-Scenario8-DatabaseSourceTarget.ps1 -Step Export -Template Small
+./Invoke-Scenario8-DatabaseSourceTarget.ps1 -Step DataTypes -Template Small
+./Invoke-Scenario8-DatabaseSourceTarget.ps1 -Step MultiValue -Template Small
 
 # Run all steps sequentially
-./Invoke-Scenario5-DatabaseSourceTarget.ps1 -Step All -Template Small
+./Invoke-Scenario8-DatabaseSourceTarget.ps1 -Step All -Template Small
 ```
 
 ---
 
-#### Scenario 6: Performance Baselines
+#### Scenario 9: Performance Baselines
 
 **Purpose**: Establish performance characteristics at various scales.
 
@@ -603,7 +737,7 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 4. Identify bottlenecks
 5. Establish acceptable thresholds
 
-**Script**: `test/integration/scenarios/Invoke-Scenario6-Performance.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario9-Performance.ps1`
 
 ---
 

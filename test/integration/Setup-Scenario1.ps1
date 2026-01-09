@@ -502,6 +502,7 @@ try {
             'userPrincipalName',  # UPN (also mapped from Email)
             'title',              # Job Title
             'department',         # Department
+            'company',            # Company name (Sub Atomic or partner company)
             'distinguishedName',  # DN - required for LDAP provisioning
             'accountExpires',     # Account expiry (Large Integer/Int64) - populated from HR Employee End Date via ToFileTime
             'userAccountControl'  # Account control flags (Number/Int32) - tests integer data type flow
@@ -579,6 +580,7 @@ try {
             @{ CsAttr = "email";             MvAttr = "Email" }
             @{ CsAttr = "title";             MvAttr = "Job Title" }
             @{ CsAttr = "department";        MvAttr = "Department" }
+            @{ CsAttr = "company";           MvAttr = "Company" }  # Company name - Sub Atomic for employees, partner companies for contractors
             @{ CsAttr = "samAccountName";    MvAttr = "Account Name" }
             @{ CsAttr = "employeeType";      MvAttr = "Employee Type" }
             @{ CsAttr = "employeeEndDate";   MvAttr = "Employee End Date" }  # DateTime - HR end date → MV, then exported to AD accountExpires via ToFileTime
@@ -594,6 +596,7 @@ try {
             @{ MvAttr = "Email";         LdapAttr = "userPrincipalName" }  # UPN = email for AD login
             @{ MvAttr = "Job Title";     LdapAttr = "title" }
             @{ MvAttr = "Department";    LdapAttr = "department" }
+            @{ MvAttr = "Company";       LdapAttr = "company" }  # Company name exported to AD
         )
 
         # Expression-based mappings for computed values
@@ -952,7 +955,7 @@ Write-Host ""
 Write-Host "✓ Scenario 1 setup complete" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
-Write-Host "  1. Run: ./scenarios/Invoke-Scenario1-HRToDirectory.ps1 -Template $Template" -ForegroundColor Gray
+Write-Host "  1. Run: ./scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1 -Template $Template" -ForegroundColor Gray
 Write-Host "  2. Or manually trigger run profiles via JIM UI" -ForegroundColor Gray
 Write-Host ""
 

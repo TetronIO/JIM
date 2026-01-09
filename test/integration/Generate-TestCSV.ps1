@@ -71,6 +71,7 @@ for ($i = 1; $i -le $scale.Users; $i++) {
         email = $user.Email
         department = $user.Department
         title = $user.Title
+        company = $user.Company
         samAccountName = $user.SamAccountName
         displayName = $user.DisplayName
         status = "Active"

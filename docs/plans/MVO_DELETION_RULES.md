@@ -188,7 +188,7 @@ API and PowerShell support:
 - `/workspaces/JIM/JIM.PowerShell/JIM/Public/Metaverse/Set-JIMMetaverseObjectType.ps1`
 - `/workspaces/JIM/JIM.Worker/Worker.cs`
 - `/workspaces/JIM/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs`
-- `/workspaces/JIM/test/integration/scenarios/Invoke-Scenario1-HRToDirectory.ps1`
+- `/workspaces/JIM/test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1`
 
 ## Success Criteria
 

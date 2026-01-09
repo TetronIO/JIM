@@ -290,6 +290,7 @@ function New-TestUser {
 
         Also generates realistic employment data:
         - EmployeeType: ~20% Contractors, ~80% Employees
+        - Company: Sub Atomic for employees, one of five partner companies for contractors
         - AccountExpires: All contractors get expiry dates (1 week to 12 months)
                          ~15% of employees get expiry dates (resignations, 1 week to 3 months)
     #>
@@ -310,6 +311,17 @@ function New-TestUser {
     $departments = @("Marketing", "Operations", "Finance", "Sales", "Human Resources", "Procurement",
                      "Information Technology", "Research & Development", "Executive", "Legal", "Facilities", "Catering")
     $titles = @("Manager", "Director", "Analyst", "Specialist", "Coordinator", "Administrator", "Engineer", "Developer", "Consultant", "Associate")
+
+    # Companies: Sub Atomic is the main company (employees), partner companies for contractors
+    # These are used for company-specific entitlement groups in Scenario 4
+    $mainCompany = "Sub Atomic"
+    $partnerCompanies = @(
+        "Nexus Dynamics",      # Technology consulting partner
+        "Orbital Systems",     # Cloud infrastructure provider
+        "Quantum Bridge",      # Integration services partner
+        "Stellar Logistics",   # Supply chain partner
+        "Vertex Solutions"     # Professional services firm
+    )
 
     # Calculate unique first/last name combination based on index
     # Use a distribution that spreads names across both first and last name pools
@@ -351,6 +363,15 @@ function New-TestUser {
     $isContractor = ($Index % 5) -eq 0
     $employeeType = if ($isContractor) { "Contractor" } else { "Employee" }
 
+    # Assign company: Employees work for Sub Atomic, contractors come from partner companies
+    # Contractors are distributed across the 5 partner companies deterministically
+    $company = if ($isContractor) {
+        $partnerIndex = ($Index / 5) % $partnerCompanies.Count
+        $partnerCompanies[$partnerIndex]
+    } else {
+        $mainCompany
+    }
+
     # Calculate account expiry date
     # - All contractors: 1 week to 12 months in the future
     # - ~15% of employees (those with resignations): 1 week to 3 months in the future
@@ -385,6 +406,7 @@ function New-TestUser {
         EmployeeId = $employeeId
         DisplayName = $displayName
         EmployeeType = $employeeType
+        Company = $company
         AccountExpires = $accountExpires
     }
 }

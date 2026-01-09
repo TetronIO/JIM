@@ -1038,4 +1038,4 @@ Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "  1. Populate Source AD with test users:" -ForegroundColor Gray
 Write-Host "     pwsh test/integration/Populate-SambaAD.ps1 -Container samba-ad-source -Template $Template" -ForegroundColor Gray
-Write-Host "  2. Run: ./scenarios/Invoke-Scenario2-DirectorySync.ps1 -ApiKey `$ApiKey -Template $Template" -ForegroundColor Gray
+Write-Host "  2. Run: ./scenarios/Invoke-Scenario2-CrossDomainSync.ps1 -ApiKey `$ApiKey -Template $Template" -ForegroundColor Gray

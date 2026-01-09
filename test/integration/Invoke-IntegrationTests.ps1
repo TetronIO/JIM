@@ -303,7 +303,7 @@ try {
     Write-Host ""
 
     try {
-        & "$scriptRoot/scenarios/Invoke-Scenario1-HRToDirectory.ps1" `
+        & "$scriptRoot/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1" `
             -Template $Template `
             -Step All `
             -JIMUrl $jimUrl `

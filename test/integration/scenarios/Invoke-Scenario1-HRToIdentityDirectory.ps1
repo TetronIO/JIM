@@ -1,10 +1,13 @@
 <#
 .SYNOPSIS
-    Test Scenario 1: HR to Enterprise Directory
+    Test Scenario 1: Person Entity - HR to Identity Directory
 
 .DESCRIPTION
-    Validates provisioning users from HR system (CSV) to enterprise directory (Samba AD).
+    Validates provisioning users from HR system (CSV) to identity directory (Samba AD).
     Tests the complete ILM lifecycle: Joiner, Mover, Leaver, and Reconnection patterns.
+
+    HR CSV includes Company attribute: "Sub Atomic" for employees, partner companies for contractors.
+    Partner companies: Nexus Dynamics, Orbital Systems, Quantum Bridge, Stellar Logistics, Vertex Solutions.
 
 .PARAMETER Step
     Which test step to execute (Joiner, Leaver, Mover, Reconnection, All)
@@ -26,13 +29,13 @@
     Continue executing remaining tests even if a test fails. By default, tests stop on first failure.
 
 .EXAMPLE
-    ./Invoke-Scenario1-HRToDirectory.ps1 -Step All -Template Small -ApiKey "jim_..."
+    ./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step All -Template Small -ApiKey "jim_..."
 
 .EXAMPLE
-    ./Invoke-Scenario1-HRToDirectory.ps1 -Step Joiner -Template Micro -ApiKey $env:JIM_API_KEY
+    ./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step Joiner -Template Micro -ApiKey $env:JIM_API_KEY
 
 .EXAMPLE
-    ./Invoke-Scenario1-HRToDirectory.ps1 -Step All -Template Large -ApiKey "jim_..." -ContinueOnError
+    ./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step All -Template Large -ApiKey "jim_..." -ContinueOnError
 #>
 
 param(
