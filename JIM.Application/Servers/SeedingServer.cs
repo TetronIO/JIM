@@ -784,6 +784,18 @@ internal class SeedingServer
             IsReadOnly = true
         });
 
+        // UI Settings
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ProgressUpdateInterval,
+            DisplayName = "Progress update interval",
+            Description = "The interval at which progress updates are reported and polled for in the UI. Affects both the Operations page polling frequency and background task progress reporting. Default: 1 second.",
+            Category = ServiceSettingCategory.UI,
+            ValueType = ServiceSettingValueType.TimeSpan,
+            DefaultValue = "00:00:01",
+            IsReadOnly = false
+        });
+
         stopwatch.Stop();
         Log.Information($"SyncServiceSettingsAsync: Completed in: {stopwatch.Elapsed}");
     }

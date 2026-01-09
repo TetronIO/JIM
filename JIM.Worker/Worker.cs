@@ -160,7 +160,26 @@ public class Worker : BackgroundService
                                     {
                                         try
                                         {
-                                            await taskJim.DataGeneration.ExecuteTemplateAsync(dataGenTemplateServiceTask.TemplateId, cancellationTokenSource.Token);
+                                            // Progress callback to update activity with generation progress
+                                            async Task ProgressCallback(int totalObjects, int objectsProcessed)
+                                            {
+                                                newWorkerTask.Activity.ObjectsToProcess = totalObjects;
+                                                newWorkerTask.Activity.ObjectsProcessed = objectsProcessed;
+                                                await taskJim.Activities.UpdateActivityAsync(newWorkerTask.Activity);
+                                            }
+
+                                            // Get the progress update interval from settings
+                                            var progressUpdateInterval = await taskJim.ServiceSettings.GetSettingValueAsync(
+                                                Constants.SettingKeys.ProgressUpdateInterval,
+                                                TimeSpan.FromSeconds(1));
+                                            Log.Information("ExecuteAsync: Data generation progress update interval: {Interval}", progressUpdateInterval);
+
+                                            var objectsCreated = await taskJim.DataGeneration.ExecuteTemplateAsync(
+                                                dataGenTemplateServiceTask.TemplateId,
+                                                cancellationTokenSource.Token,
+                                                ProgressCallback,
+                                                progressUpdateInterval);
+                                            newWorkerTask.Activity.TotalObjectCreates = objectsCreated;
                                             await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
                                         }
                                         catch (Exception ex)
