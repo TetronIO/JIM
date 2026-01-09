@@ -22,24 +22,24 @@ public class MetaverseObjectHeader
 
     public MetaverseObjectStatus Status { get; set; }
 
-    public string? DisplayName 
-    { 
+    public string? DisplayName
+    {
         get
         {
             if (AttributeValues.Count == 0)
                 return null;
 
-            var av = AttributeValues.SingleOrDefault(q => q.Attribute.Name == Constants.BuiltInAttributes.DisplayName);
+            var av = AttributeValues.FirstOrDefault(q => q.Attribute.Name == Constants.BuiltInAttributes.DisplayName);
             if (av != null && ! string.IsNullOrEmpty(av.StringValue))
                 return av.StringValue;
 
             return null;
-        } 
+        }
     }
 
     public MetaverseObjectAttributeValue? GetAttributeValue(string name)
     {
-        return AttributeValues.SingleOrDefault(q => q.Attribute.Name == name);
+        return AttributeValues.FirstOrDefault(q => q.Attribute.Name == name);
     }
 
     public bool HasAttributeValue(string name)

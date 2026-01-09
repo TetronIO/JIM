@@ -153,13 +153,13 @@ try {
     $sourceProfiles = Get-JIMRunProfile -ConnectedSystemId $sourceSystem.id
     $targetProfiles = Get-JIMRunProfile -ConnectedSystemId $targetSystem.id
 
-    $sourceImportProfile = $sourceProfiles | Where-Object { $_.name -eq "APAC AD - Full Import" }
-    $sourceSyncProfile = $sourceProfiles | Where-Object { $_.name -eq "APAC AD - Full Sync" }
-    $sourceExportProfile = $sourceProfiles | Where-Object { $_.name -eq "APAC AD - Export" }
+    $sourceImportProfile = $sourceProfiles | Where-Object { $_.name -eq "Full Import" }
+    $sourceSyncProfile = $sourceProfiles | Where-Object { $_.name -eq "Full Sync" }
+    $sourceExportProfile = $sourceProfiles | Where-Object { $_.name -eq "Export" }
 
-    $targetImportProfile = $targetProfiles | Where-Object { $_.name -eq "EMEA AD - Full Import" }
-    $targetSyncProfile = $targetProfiles | Where-Object { $_.name -eq "EMEA AD - Full Sync" }
-    $targetExportProfile = $targetProfiles | Where-Object { $_.name -eq "EMEA AD - Export" }
+    $targetImportProfile = $targetProfiles | Where-Object { $_.name -eq "Full Import" }
+    $targetSyncProfile = $targetProfiles | Where-Object { $_.name -eq "Full Sync" }
+    $targetExportProfile = $targetProfiles | Where-Object { $_.name -eq "Export" }
 
     # If users were deleted from AD, run imports AND syncs to properly clean up JIM state
     # The Full Import marks CSOs as "Obsolete" but the Full Sync is needed to:
@@ -169,54 +169,94 @@ try {
         Write-Host "Syncing deletions to JIM..." -ForegroundColor Gray
         if ($deletedFromSource) {
             Write-Host "  Running Source AD Full Import..." -ForegroundColor Gray
-            Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceImportProfile.id | Out-Null
+            $cleanupImportResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceImportProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $cleanupImportResult.activityId -Name "Source Full Import (cleanup)"
             Start-Sleep -Seconds 5
             Write-Host "  Running Source AD Full Sync..." -ForegroundColor Gray
-            Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceSyncProfile.id | Out-Null
+            $cleanupSyncResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceSyncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $cleanupSyncResult.activityId -Name "Source Full Sync (cleanup)"
             Start-Sleep -Seconds 5
         }
         if ($deletedFromTarget) {
             Write-Host "  Running Target AD Full Import..." -ForegroundColor Gray
-            Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetImportProfile.id | Out-Null
+            $cleanupImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetImportProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $cleanupImportResult.activityId -Name "Target Full Import (cleanup)"
             Start-Sleep -Seconds 5
             Write-Host "  Running Target AD Full Sync..." -ForegroundColor Gray
-            Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetSyncProfile.id | Out-Null
+            $cleanupSyncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetSyncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $cleanupSyncResult.activityId -Name "Target Full Sync (cleanup)"
             Start-Sleep -Seconds 5
         }
         Write-Host "  ✓ Deletions synced to JIM" -ForegroundColor Green
     }
 
     # Helper function to run forward sync (Source -> Metaverse -> Target)
+    # Includes confirming import from Target to establish the CSO-MVO link
     function Invoke-ForwardSync {
+        param(
+            [string]$Context = ""
+        )
+        $contextSuffix = if ($Context) { " ($Context)" } else { "" }
         Write-Host "  Running forward sync (Source → Metaverse → Target)..." -ForegroundColor Gray
 
-        # Import from Source
-        Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceImportProfile.id | Out-Null
+        # Step 1: Import from Source
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceImportProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Source Full Import$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
-        # Sync to Metaverse
-        Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceSyncProfile.id | Out-Null
+        # Step 2: Sync to Metaverse
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceSyncProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Source Full Sync$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
-        # Export to Target
-        Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExportProfile.id | Out-Null
+        # Step 3: Export to Target
+        $exportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExportProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "Target Export$contextSuffix"
+        Start-Sleep -Seconds $WaitSeconds
+
+        # Step 4: Confirming Import from Target (tells JIM the export succeeded)
+        $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetImportProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "Target Confirming Import$contextSuffix"
+        Start-Sleep -Seconds $WaitSeconds
+
+        # Step 5: Confirming Sync (processes the confirmed imports)
+        $confirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetSyncProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $confirmSyncResult.activityId -Name "Target Confirming Sync$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
     }
 
     # Helper function to run reverse sync (Target -> Metaverse -> Source)
+    # Includes confirming import from Source to establish the CSO-MVO link
     function Invoke-ReverseSync {
+        param(
+            [string]$Context = ""
+        )
+        $contextSuffix = if ($Context) { " ($Context)" } else { "" }
         Write-Host "  Running reverse sync (Target → Metaverse → Source)..." -ForegroundColor Gray
 
-        # Import from Target
-        Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetImportProfile.id | Out-Null
+        # Step 1: Import from Target
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetImportProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Target Full Import$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
-        # Sync to Metaverse
-        Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetSyncProfile.id | Out-Null
+        # Step 2: Sync to Metaverse
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetSyncProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Target Full Sync$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
-        # Export to Source
-        Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceExportProfile.id | Out-Null
+        # Step 3: Export to Source
+        $exportResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceExportProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "Source Export$contextSuffix"
+        Start-Sleep -Seconds $WaitSeconds
+
+        # Step 4: Confirming Import from Source (tells JIM the export succeeded)
+        $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceImportProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "Source Confirming Import$contextSuffix"
+        Start-Sleep -Seconds $WaitSeconds
+
+        # Step 5: Confirming Sync (processes the confirmed imports)
+        $confirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceSyncProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $confirmSyncResult.activityId -Name "Source Confirming Sync$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
     }
 
@@ -247,7 +287,7 @@ try {
         }
 
         # Run forward sync
-        Invoke-ForwardSync
+        Invoke-ForwardSync -Context "Provision"
 
         # Validate user exists in Target AD
         Write-Host "Validating user in Target AD..." -ForegroundColor Gray
@@ -303,7 +343,7 @@ ldapmodify -x -H ldap://localhost -D 'CN=Administrator,CN=Users,DC=sourcedomain,
         }
 
         # Run forward sync
-        Invoke-ForwardSync
+        Invoke-ForwardSync -Context "ForwardSync"
 
         # Validate department change in Target AD
         Write-Host "Validating attribute update in Target AD..." -ForegroundColor Gray
@@ -358,11 +398,13 @@ ldapmodify -x -H ldap://localhost -D 'CN=Administrator,CN=Users,DC=sourcedomain,
         Write-Host "  Running Target import and sync..." -ForegroundColor Gray
 
         # Import from Target
-        Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetImportProfile.id | Out-Null
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetImportProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Target Full Import (TargetImport test)"
         Start-Sleep -Seconds $WaitSeconds
 
         # Sync to Metaverse
-        Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetSyncProfile.id | Out-Null
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetSyncProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Target Full Sync (TargetImport test)"
         Start-Sleep -Seconds $WaitSeconds
 
         # Verify user was imported to Metaverse (via API)
@@ -414,7 +456,7 @@ ldapmodify -x -H ldap://localhost -D 'CN=Administrator,CN=Users,DC=sourcedomain,
 
         # Initial forward sync to create in Target
         Write-Host "  Initial sync to create user in both directories..." -ForegroundColor Gray
-        Invoke-ForwardSync
+        Invoke-ForwardSync -Context "Conflict"
 
         # Verify user exists in Target
         docker exec samba-ad-target samba-tool user show $conflictUserSam 2>&1 | Out-Null

@@ -38,6 +38,12 @@ This single script handles everything:
 # Run with default settings (Scenario1, Nano template, all steps)
 ./test/integration/Run-IntegrationTests.ps1
 
+# Run a specific scenario
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario1-HRToIdentityDirectory"   # HR CSV → AD provisioning
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync"         # APAC AD → EMEA AD sync
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario4-DeletionRules"           # Deletion rules testing
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario5-MatchingRules"           # Matching rules testing
+
 # Run with a specific template size
 ./test/integration/Run-IntegrationTests.ps1 -Template Nano
 ./test/integration/Run-IntegrationTests.ps1 -Template Micro
@@ -48,8 +54,12 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Template XLarge
 ./test/integration/Run-IntegrationTests.ps1 -Template XXLarge
 
-# Run only a specific test step
-./test/integration/Run-IntegrationTests.ps1 -Step Joiner
+# Run only a specific test step (steps vary by scenario)
+./test/integration/Run-IntegrationTests.ps1 -Step Joiner                          # Scenario 1
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Step Provision  # Scenario 2
+
+# Combine scenario, template, and step
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Template Small -Step All
 
 # Skip reset for faster re-runs (keeps existing environment)
 ./test/integration/Run-IntegrationTests.ps1 -SkipReset
@@ -57,6 +67,15 @@ This single script handles everything:
 # Skip rebuild (use existing Docker images)
 ./test/integration/Run-IntegrationTests.ps1 -SkipReset -SkipBuild
 ```
+
+**Available Scenarios (`-Scenario` parameter):**
+
+| Scenario | Description | Containers Used |
+|----------|-------------|-----------------|
+| `Scenario1-HRToIdentityDirectory` | HR CSV → Subatomic AD provisioning (Joiner/Mover/Leaver) | samba-ad-primary |
+| `Scenario2-CrossDomainSync` | Quantum Dynamics APAC → EMEA directory sync | samba-ad-source, samba-ad-target |
+| `Scenario4-DeletionRules` | Deletion rules and grace period testing | samba-ad-primary |
+| `Scenario5-MatchingRules` | Object matching rules testing | samba-ad-primary |
 
 **Available Templates (`-Template` parameter):**
 
