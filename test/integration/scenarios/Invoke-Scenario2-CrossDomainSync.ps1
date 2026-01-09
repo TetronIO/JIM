@@ -3,7 +3,7 @@
     Test Scenario 2: Person Entity - Cross-domain Synchronisation
 
 .DESCRIPTION
-    Validates unidirectional synchronisation of person entities between two Samba AD instances.
+    Validates unidirectional synchronisation of person entities between two AD instances (Quantum Dynamics APAC and EMEA).
     Source AD is authoritative. Tests forward sync (Source -> Target), drift detection,
     and state reassertion when changes are made directly in Target AD.
 
@@ -136,8 +136,8 @@ try {
 
     # Get connected system and run profile IDs
     $connectedSystems = Get-JIMConnectedSystem
-    $sourceSystem = $connectedSystems | Where-Object { $_.name -eq "Samba AD Source" }
-    $targetSystem = $connectedSystems | Where-Object { $_.name -eq "Samba AD Target" }
+    $sourceSystem = $connectedSystems | Where-Object { $_.name -eq "Quantum Dynamics APAC" }
+    $targetSystem = $connectedSystems | Where-Object { $_.name -eq "Quantum Dynamics EMEA" }
 
     if (-not $sourceSystem -or -not $targetSystem) {
         throw "Connected systems not found. Ensure Setup-Scenario2.ps1 completed successfully."
@@ -146,13 +146,13 @@ try {
     $sourceProfiles = Get-JIMRunProfile -ConnectedSystemId $sourceSystem.id
     $targetProfiles = Get-JIMRunProfile -ConnectedSystemId $targetSystem.id
 
-    $sourceImportProfile = $sourceProfiles | Where-Object { $_.name -eq "Source AD - Full Import" }
-    $sourceSyncProfile = $sourceProfiles | Where-Object { $_.name -eq "Source AD - Full Sync" }
-    $sourceExportProfile = $sourceProfiles | Where-Object { $_.name -eq "Source AD - Export" }
+    $sourceImportProfile = $sourceProfiles | Where-Object { $_.name -eq "APAC AD - Full Import" }
+    $sourceSyncProfile = $sourceProfiles | Where-Object { $_.name -eq "APAC AD - Full Sync" }
+    $sourceExportProfile = $sourceProfiles | Where-Object { $_.name -eq "APAC AD - Export" }
 
-    $targetImportProfile = $targetProfiles | Where-Object { $_.name -eq "Target AD - Full Import" }
-    $targetSyncProfile = $targetProfiles | Where-Object { $_.name -eq "Target AD - Full Sync" }
-    $targetExportProfile = $targetProfiles | Where-Object { $_.name -eq "Target AD - Export" }
+    $targetImportProfile = $targetProfiles | Where-Object { $_.name -eq "EMEA AD - Full Import" }
+    $targetSyncProfile = $targetProfiles | Where-Object { $_.name -eq "EMEA AD - Full Sync" }
+    $targetExportProfile = $targetProfiles | Where-Object { $_.name -eq "EMEA AD - Export" }
 
     # Helper function to run forward sync (Source -> Metaverse -> Target)
     function Invoke-ForwardSync {

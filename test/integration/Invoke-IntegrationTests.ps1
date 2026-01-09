@@ -263,7 +263,7 @@ try {
         # Step 3: Populate test data
         Write-TestSection "Step 3: Populate Test Data"
 
-        Write-Host "Populating Samba AD Primary..." -ForegroundColor Gray
+        Write-Host "Populating Subatomic AD..." -ForegroundColor Gray
         & "$scriptRoot/Populate-SambaAD.ps1" -Template $Template -Instance Primary
 
         if ($LASTEXITCODE -ne 0) {

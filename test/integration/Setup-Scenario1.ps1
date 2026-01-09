@@ -210,14 +210,14 @@ catch {
 Write-TestStep "Step 5" "Creating LDAP Connected System"
 
 try {
-    $ldapSystem = $existingSystems | Where-Object { $_.name -eq "Samba AD Primary" }
+    $ldapSystem = $existingSystems | Where-Object { $_.name -eq "Subatomic AD" }
 
     if ($ldapSystem) {
-        Write-Host "  Connected System 'Samba AD Primary' already exists (ID: $($ldapSystem.id))" -ForegroundColor Yellow
+        Write-Host "  Connected System 'Subatomic AD' already exists (ID: $($ldapSystem.id))" -ForegroundColor Yellow
     }
     else {
         $ldapSystem = New-JIMConnectedSystem `
-            -Name "Samba AD Primary" `
+            -Name "Subatomic AD" `
             -Description "Samba Active Directory for integration testing" `
             -ConnectorDefinitionId $ldapConnector.id `
             -PassThru

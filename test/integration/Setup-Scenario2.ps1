@@ -5,8 +5,8 @@
 .DESCRIPTION
     Sets up Connected Systems and Sync Rules for bidirectional LDAP synchronisation.
     This script creates:
-    - LDAP Connected System (Samba AD Source)
-    - LDAP Connected System (Samba AD Target)
+    - LDAP Connected System (Quantum Dynamics APAC)
+    - LDAP Connected System (Quantum Dynamics EMEA)
     - Sync Rules for bidirectional attribute flow
     - Run Profiles for synchronisation
 
@@ -29,7 +29,7 @@
     This script requires:
     - JIM PowerShell module
     - JIM running and accessible
-    - Samba AD Source and Target containers running (docker compose --profile scenario2)
+    - Quantum Dynamics APAC and EMEA containers running (docker compose --profile scenario2)
 #>
 
 param(
@@ -108,21 +108,21 @@ catch {
     throw
 }
 
-# Step 4: Create Source LDAP Connected System (Samba AD Source)
+# Step 4: Create Source LDAP Connected System (Quantum Dynamics APAC)
 Write-TestStep "Step 4" "Creating Source LDAP Connected System"
 
 $existingSystems = Get-JIMConnectedSystem
 
 try {
-    $sourceSystem = $existingSystems | Where-Object { $_.name -eq "Samba AD Source" }
+    $sourceSystem = $existingSystems | Where-Object { $_.name -eq "Quantum Dynamics APAC" }
 
     if ($sourceSystem) {
-        Write-Host "  Connected System 'Samba AD Source' already exists (ID: $($sourceSystem.id))" -ForegroundColor Yellow
+        Write-Host "  Connected System 'Quantum Dynamics APAC' already exists (ID: $($sourceSystem.id))" -ForegroundColor Yellow
     }
     else {
         $sourceSystem = New-JIMConnectedSystem `
-            -Name "Samba AD Source" `
-            -Description "Samba Active Directory Source for directory-to-directory sync" `
+            -Name "Quantum Dynamics APAC" `
+            -Description "Quantum Dynamics APAC Active Directory for cross-domain sync" `
             -ConnectorDefinitionId $ldapConnector.id `
             -PassThru
 
@@ -177,19 +177,19 @@ catch {
     throw
 }
 
-# Step 5: Create Target LDAP Connected System (Samba AD Target)
+# Step 5: Create Target LDAP Connected System (Quantum Dynamics EMEA)
 Write-TestStep "Step 5" "Creating Target LDAP Connected System"
 
 try {
-    $targetSystem = $existingSystems | Where-Object { $_.name -eq "Samba AD Target" }
+    $targetSystem = $existingSystems | Where-Object { $_.name -eq "Quantum Dynamics EMEA" }
 
     if ($targetSystem) {
-        Write-Host "  Connected System 'Samba AD Target' already exists (ID: $($targetSystem.id))" -ForegroundColor Yellow
+        Write-Host "  Connected System 'Quantum Dynamics EMEA' already exists (ID: $($targetSystem.id))" -ForegroundColor Yellow
     }
     else {
         $targetSystem = New-JIMConnectedSystem `
-            -Name "Samba AD Target" `
-            -Description "Samba Active Directory Target for directory-to-directory sync" `
+            -Name "Quantum Dynamics EMEA" `
+            -Description "Quantum Dynamics EMEA Active Directory for cross-domain sync" `
             -ConnectorDefinitionId $ldapConnector.id `
             -PassThru
 
@@ -534,7 +534,7 @@ try {
 
     # Create Import sync rule (Source -> Metaverse)
     $existingRules = Get-JIMSyncRule
-    $sourceImportRuleName = "Source AD Import Users"
+    $sourceImportRuleName = "APAC AD Import Users"
     $sourceImportRule = $existingRules | Where-Object { $_.name -eq $sourceImportRuleName }
 
     if (-not $sourceImportRule) {
@@ -553,7 +553,7 @@ try {
     }
 
     # Create Export sync rule (Metaverse -> Target)
-    $targetExportRuleName = "Target AD Export Users"
+    $targetExportRuleName = "EMEA AD Export Users"
     $targetExportRule = $existingRules | Where-Object { $_.name -eq $targetExportRuleName }
 
     if (-not $targetExportRule) {
@@ -573,7 +573,7 @@ try {
 
     # For bidirectional sync, create reverse rules as well
     # Import from Target -> Metaverse (for reverse sync)
-    $targetImportRuleName = "Target AD Import Users"
+    $targetImportRuleName = "EMEA AD Import Users"
     $targetImportRule = $existingRules | Where-Object { $_.name -eq $targetImportRuleName }
 
     if (-not $targetImportRule) {
@@ -591,7 +591,7 @@ try {
     }
 
     # Export to Source (for reverse sync)
-    $sourceExportRuleName = "Source AD Export Users"
+    $sourceExportRuleName = "APAC AD Export Users"
     $sourceExportRule = $existingRules | Where-Object { $_.name -eq $sourceExportRuleName }
 
     if (-not $sourceExportRule) {
@@ -930,88 +930,88 @@ try {
     $sourceProfiles = Get-JIMRunProfile -ConnectedSystemId $sourceSystem.id
     $targetProfiles = Get-JIMRunProfile -ConnectedSystemId $targetSystem.id
 
-    # Source AD - Full Import
-    $sourceImportProfile = $sourceProfiles | Where-Object { $_.name -eq "Source AD - Full Import" }
+    # APAC AD - Full Import
+    $sourceImportProfile = $sourceProfiles | Where-Object { $_.name -eq "APAC AD - Full Import" }
     if (-not $sourceImportProfile) {
         $sourceImportProfile = New-JIMRunProfile `
-            -Name "Source AD - Full Import" `
+            -Name "APAC AD - Full Import" `
             -ConnectedSystemId $sourceSystem.id `
             -RunType "FullImport" `
             -PassThru
-        Write-Host "  ✓ Created 'Source AD - Full Import' run profile" -ForegroundColor Green
+        Write-Host "  ✓ Created 'APAC AD - Full Import' run profile" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'Source AD - Full Import' already exists" -ForegroundColor Gray
+        Write-Host "  Run profile 'APAC AD - Full Import' already exists" -ForegroundColor Gray
     }
 
-    # Source AD - Full Sync
-    $sourceSyncProfile = $sourceProfiles | Where-Object { $_.name -eq "Source AD - Full Sync" }
+    # APAC AD - Full Sync
+    $sourceSyncProfile = $sourceProfiles | Where-Object { $_.name -eq "APAC AD - Full Sync" }
     if (-not $sourceSyncProfile) {
         $sourceSyncProfile = New-JIMRunProfile `
-            -Name "Source AD - Full Sync" `
+            -Name "APAC AD - Full Sync" `
             -ConnectedSystemId $sourceSystem.id `
             -RunType "FullSynchronisation" `
             -PassThru
-        Write-Host "  ✓ Created 'Source AD - Full Sync' run profile" -ForegroundColor Green
+        Write-Host "  ✓ Created 'APAC AD - Full Sync' run profile" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'Source AD - Full Sync' already exists" -ForegroundColor Gray
+        Write-Host "  Run profile 'APAC AD - Full Sync' already exists" -ForegroundColor Gray
     }
 
-    # Source AD - Export (for reverse sync)
-    $sourceExportProfile = $sourceProfiles | Where-Object { $_.name -eq "Source AD - Export" }
+    # APAC AD - Export (for reverse sync)
+    $sourceExportProfile = $sourceProfiles | Where-Object { $_.name -eq "APAC AD - Export" }
     if (-not $sourceExportProfile) {
         $sourceExportProfile = New-JIMRunProfile `
-            -Name "Source AD - Export" `
+            -Name "APAC AD - Export" `
             -ConnectedSystemId $sourceSystem.id `
             -RunType "Export" `
             -PassThru
-        Write-Host "  ✓ Created 'Source AD - Export' run profile" -ForegroundColor Green
+        Write-Host "  ✓ Created 'APAC AD - Export' run profile" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'Source AD - Export' already exists" -ForegroundColor Gray
+        Write-Host "  Run profile 'APAC AD - Export' already exists" -ForegroundColor Gray
     }
 
-    # Target AD - Full Import
-    $targetImportProfile = $targetProfiles | Where-Object { $_.name -eq "Target AD - Full Import" }
+    # EMEA AD - Full Import
+    $targetImportProfile = $targetProfiles | Where-Object { $_.name -eq "EMEA AD - Full Import" }
     if (-not $targetImportProfile) {
         $targetImportProfile = New-JIMRunProfile `
-            -Name "Target AD - Full Import" `
+            -Name "EMEA AD - Full Import" `
             -ConnectedSystemId $targetSystem.id `
             -RunType "FullImport" `
             -PassThru
-        Write-Host "  ✓ Created 'Target AD - Full Import' run profile" -ForegroundColor Green
+        Write-Host "  ✓ Created 'EMEA AD - Full Import' run profile" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'Target AD - Full Import' already exists" -ForegroundColor Gray
+        Write-Host "  Run profile 'EMEA AD - Full Import' already exists" -ForegroundColor Gray
     }
 
-    # Target AD - Full Sync
-    $targetSyncProfile = $targetProfiles | Where-Object { $_.name -eq "Target AD - Full Sync" }
+    # EMEA AD - Full Sync
+    $targetSyncProfile = $targetProfiles | Where-Object { $_.name -eq "EMEA AD - Full Sync" }
     if (-not $targetSyncProfile) {
         $targetSyncProfile = New-JIMRunProfile `
-            -Name "Target AD - Full Sync" `
+            -Name "EMEA AD - Full Sync" `
             -ConnectedSystemId $targetSystem.id `
             -RunType "FullSynchronisation" `
             -PassThru
-        Write-Host "  ✓ Created 'Target AD - Full Sync' run profile" -ForegroundColor Green
+        Write-Host "  ✓ Created 'EMEA AD - Full Sync' run profile" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'Target AD - Full Sync' already exists" -ForegroundColor Gray
+        Write-Host "  Run profile 'EMEA AD - Full Sync' already exists" -ForegroundColor Gray
     }
 
-    # Target AD - Export
-    $targetExportProfile = $targetProfiles | Where-Object { $_.name -eq "Target AD - Export" }
+    # EMEA AD - Export
+    $targetExportProfile = $targetProfiles | Where-Object { $_.name -eq "EMEA AD - Export" }
     if (-not $targetExportProfile) {
         $targetExportProfile = New-JIMRunProfile `
-            -Name "Target AD - Export" `
+            -Name "EMEA AD - Export" `
             -ConnectedSystemId $targetSystem.id `
             -RunType "Export" `
             -PassThru
-        Write-Host "  ✓ Created 'Target AD - Export' run profile" -ForegroundColor Green
+        Write-Host "  ✓ Created 'EMEA AD - Export' run profile" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'Target AD - Export' already exists" -ForegroundColor Gray
+        Write-Host "  Run profile 'EMEA AD - Export' already exists" -ForegroundColor Gray
     }
 }
 catch {
@@ -1028,14 +1028,14 @@ Write-Host ""
 Write-Host "✓ Scenario 2 setup complete" -ForegroundColor Green
 Write-Host ""
 Write-Host "Sync Rules Created:" -ForegroundColor Yellow
-Write-Host "  Forward Flow: Source AD -> Metaverse -> Target AD" -ForegroundColor Gray
-Write-Host "  Reverse Flow: Target AD -> Metaverse -> Source AD" -ForegroundColor Gray
+Write-Host "  Forward Flow: APAC AD -> Metaverse -> EMEA AD" -ForegroundColor Gray
+Write-Host "  Reverse Flow: EMEA AD -> Metaverse -> APAC AD" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Run Profiles Created:" -ForegroundColor Yellow
-Write-Host "  Source AD: Full Import, Full Sync, Export" -ForegroundColor Gray
-Write-Host "  Target AD: Full Import, Full Sync, Export" -ForegroundColor Gray
+Write-Host "  APAC AD: Full Import, Full Sync, Export" -ForegroundColor Gray
+Write-Host "  EMEA AD: Full Import, Full Sync, Export" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
-Write-Host "  1. Populate Source AD with test users:" -ForegroundColor Gray
+Write-Host "  1. Populate APAC AD with test users:" -ForegroundColor Gray
 Write-Host "     pwsh test/integration/Populate-SambaAD.ps1 -Container samba-ad-source -Template $Template" -ForegroundColor Gray
 Write-Host "  2. Run: ./scenarios/Invoke-Scenario2-CrossDomainSync.ps1 -ApiKey `$ApiKey -Template $Template" -ForegroundColor Gray

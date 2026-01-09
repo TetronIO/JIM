@@ -299,9 +299,9 @@ All external systems run as Docker containers defined in `docker-compose.integra
 │                                                                │
 │  Phase 1 (MVP):                                                │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐  │
-│  │ Samba AD Primary │  │ Samba AD Source  │  │ Samba AD     │  │
-│  │ (Scenarios 1&3)  │  │ (Scenario 2)     │  │ Target       │  │
-│  │ Port: 389/636    │  │ Port: 10389/636  │  │ Port: 11389  │  │
+│  │ Subatomic AD     │  │ Quantum Dynamics │  │ Quantum      │  │
+│  │ (Scenarios 1&3)  │  │ APAC (Scen. 2)   │  │ Dynamics     │  │
+│  │ Port: 389/636    │  │ Port: 10389/636  │  │ EMEA: 11389  │  │
 │  └──────────────────┘  └──────────────────┘  └──────────────┘  │
 │                                                                │
 │  ┌──────────────────────────────────────────────────────────┐  │
@@ -396,7 +396,7 @@ All templates generate realistic enterprise data following normal distribution p
 
 **Systems**:
 - Source: CSV (HR system)
-- Target: Samba AD Primary
+- Target: Subatomic AD
 
 **Test Data**:
 - HR CSV includes Company attribute: "Subatomic" for employees, partner companies for contractors
@@ -463,8 +463,8 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 **Purpose**: Validate unidirectional synchronisation of person entities between two directory services.
 
 **Systems**:
-- Source: Samba AD Source (authoritative)
-- Target: Samba AD Target
+- Source: Quantum Dynamics APAC (authoritative)
+- Target: Quantum Dynamics EMEA
 
 **Test Steps** (executed sequentially):
 
@@ -497,7 +497,7 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 **Purpose**: Validate exporting directory users to CSV for distribution/reporting.
 
 **Systems**:
-- Source: Samba AD Primary
+- Source: Subatomic AD
 - Target: CSV (GAL export)
 
 **Test Steps** (executed sequentially):
@@ -536,7 +536,7 @@ These scenarios test group management capabilities - a core ILM function where t
 
 **Systems**:
 - Source: JIM Metaverse (groups created via JIM API, not imported from a Connected System)
-- Target: Samba AD Primary (OU=Entitlements,OU=Groups,OU=Corp,DC=subatomic,DC=local)
+- Target: Subatomic AD (OU=Entitlements,OU=Groups,OU=Corp,DC=subatomic,DC=local)
 
 **Group Types Created**:
 - **Department Groups**: `Dept-{Department}` (e.g., `Dept-Finance`, `Dept-Information Technology`)
@@ -580,9 +580,9 @@ These scenarios test group management capabilities - a core ILM function where t
 **Concept**: Organisations often have existing groups in AD that were created manually or by other tools. This scenario tests bringing those groups under JIM management, making JIM authoritative for their membership.
 
 **Systems**:
-- Source: Samba AD Primary (existing groups in OU=Legacy Groups,OU=Groups,OU=Corp)
+- Source: Subatomic AD (existing groups in OU=Legacy Groups,OU=Groups,OU=Corp)
 - Target: JIM Metaverse (becomes authoritative after import)
-- Export Target: Samba AD Primary (same groups, now JIM-managed)
+- Export Target: Subatomic AD (same groups, now JIM-managed)
 
 **Test Steps** (executed sequentially):
 
@@ -619,8 +619,8 @@ These scenarios test group management capabilities - a core ILM function where t
 **Concept**: In multi-domain environments, groups may need to be replicated across domains. This scenario tests importing groups from AD1 (authoritative) and exporting them to AD2, ensuring AD2 groups mirror AD1.
 
 **Systems**:
-- Source: Samba AD Source (OU=Entitlements,OU=SourceCorp - authoritative for groups)
-- Target: Samba AD Target (OU=Entitlements,OU=TargetCorp - replica of source groups)
+- Source: Quantum Dynamics APAC (OU=Entitlements,OU=SourceCorp - authoritative for groups)
+- Target: Quantum Dynamics EMEA (OU=Entitlements,OU=TargetCorp - replica of source groups)
 
 **Important**: Each domain uses dedicated OUs to avoid conflicts with other scenarios.
 
@@ -663,7 +663,7 @@ These scenarios test group management capabilities - a core ILM function where t
 **Systems**:
 - Source 1: SQL Server (HRIS System A - Business Unit A)
 - Source 2: Oracle Database (HRIS System B - Business Unit B)
-- Target 1: Samba AD Primary
+- Target 1: Subatomic AD
 - Target 2: CSV (Reporting)
 
 **Test Steps** (executed sequentially):
@@ -818,7 +818,7 @@ $hrSystem = New-JIMConnectedSystem -Name "HR CSV" `
     }
 
 # Create Samba AD Connected System (Target)
-$adSystem = New-JIMConnectedSystem -Name "Samba AD Primary" `
+$adSystem = New-JIMConnectedSystem -Name "Subatomic AD" `
     -ConnectorType "LDAP" `
     -Configuration @{
         Server = "samba-ad-primary"
@@ -1482,12 +1482,12 @@ JIM/
 
 | Service              | Container Port | Host Port | Protocol |
 |----------------------|----------------|-----------|----------|
-| Samba AD Primary     | 389            | 389       | LDAP     |
-| Samba AD Primary     | 636            | 636       | LDAPS    |
-| Samba AD Source      | 389            | 10389     | LDAP     |
-| Samba AD Source      | 636            | 10636     | LDAPS    |
-| Samba AD Target      | 389            | 11389     | LDAP     |
-| Samba AD Target      | 636            | 11636     | LDAPS    |
+| Subatomic AD     | 389            | 389       | LDAP     |
+| Subatomic AD     | 636            | 636       | LDAPS    |
+| Quantum Dynamics APAC | 389            | 10389     | LDAP     |
+| Quantum Dynamics APAC | 636            | 10636     | LDAPS    |
+| Quantum Dynamics EMEA | 389            | 11389     | LDAP     |
+| Quantum Dynamics EMEA | 636            | 11636     | LDAPS    |
 | SQL Server           | 1433           | 1433      | TCP      |
 | Oracle XE            | 1521           | 1521      | TCP      |
 | PostgreSQL (Test)    | 5432           | 5433      | TCP      |

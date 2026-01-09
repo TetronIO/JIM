@@ -65,7 +65,7 @@ function Test-ContainerRunning {
 $phase1Systems = @(
     @{
         Name = "samba-ad-primary"
-        Description = "Samba AD Primary"
+        Description = "Subatomic AD"
         HasHealthCheck = $true
         AdditionalCheck = $null
         PostReadySetup = {
