@@ -80,15 +80,15 @@ public class ConnectedSystemObject
     public List<ConnectedSystemObjectAttributeValue> PendingAttributeValueRemovals { get; set; } = new();
 
     [NotMapped]
-    public ConnectedSystemObjectAttributeValue? ExternalIdAttributeValue 
-    {  
+    public ConnectedSystemObjectAttributeValue? ExternalIdAttributeValue
+    {
         get
         {
             if (AttributeValues.Count == 0)
                 return null;
 
-            return AttributeValues.SingleOrDefault(q => (q.AttributeId != 0 ? q.AttributeId : q.Attribute?.Id) == ExternalIdAttributeId);
-        } 
+            return AttributeValues.FirstOrDefault(q => (q.AttributeId != 0 ? q.AttributeId : q.Attribute?.Id) == ExternalIdAttributeId);
+        }
     }
 
     [NotMapped]
@@ -99,7 +99,7 @@ public class ConnectedSystemObject
             if (AttributeValues.Count == 0)
                 return null;
 
-            return AttributeValues.SingleOrDefault(q => (q.AttributeId != 0 ? q.AttributeId : q.Attribute?.Id) == SecondaryExternalIdAttributeId);
+            return AttributeValues.FirstOrDefault(q => (q.AttributeId != 0 ? q.AttributeId : q.Attribute?.Id) == SecondaryExternalIdAttributeId);
         }
     }
 
@@ -162,8 +162,8 @@ public class ConnectedSystemObject
         // if all is good by this point, add the change attribute to the list of pending attribute changes
         PendingAttributeValueAdditions.Add(connectedSystemObjectAttributeValue);
 
-        // add  removal for the existing value
-        var existingAttributeValue = AttributeValues.SingleOrDefault(av => av.Attribute.Id == connectedSystemAttribute.Id);
+        // add removal for the existing value
+        var existingAttributeValue = AttributeValues.FirstOrDefault(av => av.Attribute.Id == connectedSystemAttribute.Id);
         if (existingAttributeValue != null)
             PendingAttributeValueRemovals.Add(existingAttributeValue);
     }
@@ -173,7 +173,7 @@ public class ConnectedSystemObject
         if (connectedSystemAttribute.AttributePlurality != AttributePlurality.SingleValued)
             throw new ArgumentException($"Attribute '{connectedSystemAttribute.Name}' is not a Single-Valued attribute (SVA). Cannot update value. Use the Add/Remove Multi-Valued attribute methods instead.", nameof(connectedSystemAttribute));
 
-        var existingAttributeValue = AttributeValues.SingleOrDefault(av => av.Attribute.Id == connectedSystemAttribute.Id);
+        var existingAttributeValue = AttributeValues.FirstOrDefault(av => av.Attribute.Id == connectedSystemAttribute.Id);
         if (existingAttributeValue != null)
             PendingAttributeValueRemovals.Add(existingAttributeValue);
     }
@@ -232,8 +232,10 @@ public class ConnectedSystemObject
 
     public ConnectedSystemObjectAttributeValue? GetAttributeValue(string attributeName)
     {
-        var attributeValue = AttributeValues.SingleOrDefault(q => q.Attribute.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase));
-        return attributeValue ?? null;
+        // Use FirstOrDefault to be defensive against data anomalies (duplicate attribute values)
+        // TODO: Investigate root cause of duplicate MVO/CSO attribute values (GitHub issue needed)
+        var attributeValue = AttributeValues.FirstOrDefault(q => q.Attribute.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase));
+        return attributeValue;
     }
 
     public List<ConnectedSystemObjectAttributeValue> GetAttributeValues(string attributeName)

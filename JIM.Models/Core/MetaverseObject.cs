@@ -67,9 +67,10 @@ public class MetaverseObject
             if (AttributeValues.Count == 0)
                 return null;
 
-            // as a built-in attribute, we know DisplayName is a single-valued attribute, so no need to do a attribute plurality check
-            var av = AttributeValues.SingleOrDefault(q => q.Attribute.Name == Constants.BuiltInAttributes.DisplayName);
-            if (av != null && ! string.IsNullOrEmpty(av.StringValue))
+            // Use FirstOrDefault to be defensive against data anomalies (duplicate attribute values)
+            // TODO: Investigate root cause of duplicate MVO/CSO attribute values (GitHub issue needed)
+            var av = AttributeValues.FirstOrDefault(q => q.Attribute.Name == Constants.BuiltInAttributes.DisplayName);
+            if (av != null && !string.IsNullOrEmpty(av.StringValue))
                 return av.StringValue;
 
             return null;
@@ -97,7 +98,7 @@ public class MetaverseObject
     #region public methods
     public MetaverseObjectAttributeValue? GetAttributeValue(string name)
     {
-        return AttributeValues.SingleOrDefault(q => q.Attribute.Name == name);
+        return AttributeValues.FirstOrDefault(q => q.Attribute.Name == name);
     }
 
     public bool HasAttributeValue(string name)
