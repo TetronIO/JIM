@@ -87,7 +87,7 @@ public class ConnectedSystemObject
             if (AttributeValues.Count == 0)
                 return null;
 
-            return AttributeValues.FirstOrDefault(q => (q.AttributeId != 0 ? q.AttributeId : q.Attribute?.Id) == ExternalIdAttributeId);
+            return AttributeValues.SingleOrDefault(q => (q.AttributeId != 0 ? q.AttributeId : q.Attribute?.Id) == ExternalIdAttributeId);
         }
     }
 
@@ -99,7 +99,7 @@ public class ConnectedSystemObject
             if (AttributeValues.Count == 0)
                 return null;
 
-            return AttributeValues.FirstOrDefault(q => (q.AttributeId != 0 ? q.AttributeId : q.Attribute?.Id) == SecondaryExternalIdAttributeId);
+            return AttributeValues.SingleOrDefault(q => (q.AttributeId != 0 ? q.AttributeId : q.Attribute?.Id) == SecondaryExternalIdAttributeId);
         }
     }
 
@@ -113,8 +113,7 @@ public class ConnectedSystemObject
 
             // this works well for LDAP systems, where DisplayName is a common attribute, but for other systems that are not so standards based
             // we may have to look at supporting a configurable attribute on the Connected System to use as the label.
-            // Use FirstOrDefault to handle edge cases where duplicate attributes might exist
-            var av = AttributeValues.FirstOrDefault(q => q.Attribute.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase));
+            var av = AttributeValues.SingleOrDefault(q => q.Attribute.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase));
             if (av != null && !string.IsNullOrEmpty(av.StringValue))
                 return av.StringValue;
 
@@ -163,7 +162,7 @@ public class ConnectedSystemObject
         PendingAttributeValueAdditions.Add(connectedSystemObjectAttributeValue);
 
         // add removal for the existing value
-        var existingAttributeValue = AttributeValues.FirstOrDefault(av => av.Attribute.Id == connectedSystemAttribute.Id);
+        var existingAttributeValue = AttributeValues.SingleOrDefault(av => av.Attribute.Id == connectedSystemAttribute.Id);
         if (existingAttributeValue != null)
             PendingAttributeValueRemovals.Add(existingAttributeValue);
     }
@@ -173,7 +172,7 @@ public class ConnectedSystemObject
         if (connectedSystemAttribute.AttributePlurality != AttributePlurality.SingleValued)
             throw new ArgumentException($"Attribute '{connectedSystemAttribute.Name}' is not a Single-Valued attribute (SVA). Cannot update value. Use the Add/Remove Multi-Valued attribute methods instead.", nameof(connectedSystemAttribute));
 
-        var existingAttributeValue = AttributeValues.FirstOrDefault(av => av.Attribute.Id == connectedSystemAttribute.Id);
+        var existingAttributeValue = AttributeValues.SingleOrDefault(av => av.Attribute.Id == connectedSystemAttribute.Id);
         if (existingAttributeValue != null)
             PendingAttributeValueRemovals.Add(existingAttributeValue);
     }
@@ -232,10 +231,7 @@ public class ConnectedSystemObject
 
     public ConnectedSystemObjectAttributeValue? GetAttributeValue(string attributeName)
     {
-        // Use FirstOrDefault to be defensive against data anomalies (duplicate attribute values)
-        // TODO: Investigate root cause of duplicate MVO/CSO attribute values (GitHub issue needed)
-        var attributeValue = AttributeValues.FirstOrDefault(q => q.Attribute.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase));
-        return attributeValue;
+        return AttributeValues.SingleOrDefault(q => q.Attribute.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase));
     }
 
     public List<ConnectedSystemObjectAttributeValue> GetAttributeValues(string attributeName)
