@@ -67,7 +67,7 @@
                           Style="min-width: 350px;" />
         </ToolBarContent>
         <HeaderContent>
-            <MudTh Style="width: 50px;"></MudTh>
+            <MudTh Style="width: 1px;"></MudTh>
             <MudTh>
                 <MudTableSortLabel SortLabel="externalid" T="ConnectedSystemObjectHeader">
                     <MudText Typo="Typo.button">@_externalIdColumnHeader</MudText>
@@ -114,10 +114,12 @@
         </HeaderContent>
         <RowTemplate>
             <MudTd>
-                <MudButton Variant="Variant.Filled"
-                            StartIcon="@Icons.Material.Filled.Visibility"
-                            Href="@(Utilities.GetConnectedSystemObjectHref(context))"
-                            IconColor="Color.Primary">View</MudButton>
+                <MudButton Variant="Variant.Outlined"
+                           Size="Size.Small"
+                           Color="Color.Primary"
+                           Href="@(Utilities.GetConnectedSystemObjectHref(context))">
+                    View
+                </MudButton>
             </MudTd>
             <MudTd DataLabel="External Id">
                 @if (!string.IsNullOrEmpty(context.PendingExternalId))
