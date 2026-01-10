@@ -586,6 +586,8 @@ public class SyncImportTaskProcessor
                             // Go back and mark the FIRST object as duplicate too
                             firstOccurrence.rpei.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
                             firstOccurrence.rpei.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found in the same import batch. All objects with this external ID have been rejected. Fix the source data to ensure unique external IDs.";
+                            // Reset change type since no object was actually created/updated
+                            firstOccurrence.rpei.ObjectChangeType = ObjectChangeType.NotSet;
 
                             // If the first object had already created a CSO, remove it from the create list
                             if (firstOccurrence.cso != null)
@@ -667,12 +669,8 @@ public class SyncImportTaskProcessor
 
                     activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Added;
 
-                    // Extract and snapshot the external ID - this persists even if the CSO is later deleted
-                    var externalIdAttributeName = csObjectType.Attributes.First(ca => ca.IsExternalId).Name;
-                    var externalIdValue = importObject.Attributes
-                        .FirstOrDefault(a => a.Name.Equals(externalIdAttributeName, StringComparison.OrdinalIgnoreCase))
-                        ?.StringValues?.FirstOrDefault();
-                    activityRunProfileExecutionItem.ExternalIdSnapshot = externalIdValue;
+                    // Note: ExternalIdSnapshot is already set earlier in the duplicate detection block (line ~564)
+                    // for all data types (Text, Number, LongNumber, Guid). No need to set it again here.
 
                     connectedSystemObject = CreateConnectedSystemObjectFromImportObject(importObject, csObjectType, activityRunProfileExecutionItem);
 
@@ -712,9 +710,10 @@ public class SyncImportTaskProcessor
                         if (activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
                         {
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CsoCreationFailed;
-                            activityRunProfileExecutionItem.ErrorMessage = $"Failed to create Connected System Object for import object with external ID '{externalIdValue ?? "[unknown]"}'. No specific error was recorded.";
+                            var extIdForError = activityRunProfileExecutionItem.ExternalIdSnapshot ?? "[unknown]";
+                            activityRunProfileExecutionItem.ErrorMessage = $"Failed to create Connected System Object for import object with external ID '{extIdForError}'. No specific error was recorded.";
                             Log.Error("ProcessImportObjectsAsync: CSO creation failed for external ID '{ExternalId}' with no specific error. This indicates a bug in import processing.",
-                                externalIdValue ?? "[unknown]");
+                                extIdForError);
                         }
                     }
                 }
