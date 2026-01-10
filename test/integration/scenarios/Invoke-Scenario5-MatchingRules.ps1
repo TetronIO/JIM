@@ -389,30 +389,34 @@ try {
         $syncResult2 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $syncResult2.activityId -Name "Full Sync (DuplicatePrevention - second user)"
 
-        # Check results - we should have appropriate handling of this conflict
-        # Get-JIMMetaverseObject returns objects directly, not wrapped in .items
+        # When two CSV rows have the SAME external ID (employeeId), the import stage handles this:
+        # - The connector detects duplicate external IDs during import
+        # - Only one CSO is created/updated (the second row is skipped as a duplicate)
+        # - This is logged as: "CSO was already matched by a previous import object. Skipping duplicate addition"
+        #
+        # This is CORRECT behaviour - duplicate source data is handled at import, not sync.
+        # The CouldNotJoinDueToExistingJoin error only occurs when:
+        # - Two DIFFERENT CSOs (with different external IDs) both try to join the SAME MVO
+        # - This happens via object matching rules, not duplicate external IDs
+
+        # Verify only one MVO exists (duplicate external ID was handled at import)
         $mvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Duplicate" -PageSize 20 -ErrorAction SilentlyContinue
+        $duplicateMvos = @($mvos | Where-Object { $_.displayName -match "Test Duplicate" })
 
-        if ($mvos) {
-            $duplicateMvos = $mvos | Where-Object { $_.displayName -match "Test Duplicate" }
+        Write-Host "  Found $($duplicateMvos.Count) MVO(s) for duplicate test" -ForegroundColor Gray
 
-            # The expected behaviour depends on JIM's configuration:
-            # - Could create two MVOs (if matching fails and projection creates new)
-            # - Could have one MVO with join error on second CSO
-            # - Could reject the second import entirely
-
-            Write-Host "  Found $($duplicateMvos.Count) MVO(s) for duplicate test" -ForegroundColor Gray
-
-            # For now, we're documenting what happens rather than asserting specific behaviour
-            # The key is that data integrity is maintained (no silent data corruption)
-            $testResults.Steps += @{
-                Name = "DuplicatePrevention"
-                Success = $true
-                Warning = "Found $($duplicateMvos.Count) MVOs - review sync errors for conflict handling"
-            }
+        if ($duplicateMvos.Count -eq 1) {
+            Write-Host "  ✓ Only 1 MVO exists (duplicate external ID was handled at import)" -ForegroundColor Green
+            $testResults.Steps += @{ Name = "DuplicatePrevention"; Success = $true }
+        }
+        elseif ($duplicateMvos.Count -eq 0) {
+            Write-Host "  ✗ No MVOs found" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "DuplicatePrevention"; Success = $false; Error = "No MVOs found" }
         }
         else {
-            $testResults.Steps += @{ Name = "DuplicatePrevention"; Success = $true; Warning = "Could not verify duplicate handling" }
+            # If we got 2 MVOs, something went wrong - duplicates should not create separate MVOs
+            Write-Host "  ✗ Expected 1 MVO but found $($duplicateMvos.Count) - duplicate prevention may have failed" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "DuplicatePrevention"; Success = $false; Error = "Expected 1 MVO, found $($duplicateMvos.Count)" }
         }
     }
 
