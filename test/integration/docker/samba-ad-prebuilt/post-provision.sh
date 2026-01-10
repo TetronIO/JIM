@@ -87,10 +87,29 @@ if [ "${NOCOMPLEXITY}" = "true" ]; then
     echo "  Password complexity disabled"
 fi
 
-# NOTE: Test OUs (OU=TestUsers, OU=TestGroups) are NOT created here because
-# the samba data directories may be declared as VOLUMEs, and docker commit
-# does not include volume data. The OUs should be created at runtime by
-# Populate-SambaAD.ps1 or similar scripts. Creating OUs is fast (<1s).
+# Create baseline OU structure for integration testing
+# These OUs are created here (during post-provisioning) so they're baked into
+# the committed image. This runs AFTER the container is running, so the database
+# exists and will be persisted by docker commit.
+#
+# Structure:
+#   OU=Corp,DC=...              - Main corporate structure (selected in JIM)
+#     OU=Users,OU=Corp,DC=...   - User objects (provisioned here by JIM)
+#     OU=Groups,OU=Corp,DC=...  - Group objects
+#   OU=TestUsers,DC=...         - Legacy test users (for compatibility)
+#   OU=TestGroups,DC=...        - Legacy test groups
+echo "Creating baseline OU structure..."
+
+# Corp base OU - this is selected as the partition container in JIM
+${SAMBA_BIN}/samba-tool ou create "OU=Corp,${DOMAIN_DC}" 2>/dev/null || echo "  OU=Corp already exists"
+${SAMBA_BIN}/samba-tool ou create "OU=Users,OU=Corp,${DOMAIN_DC}" 2>/dev/null || echo "  OU=Users,OU=Corp already exists"
+${SAMBA_BIN}/samba-tool ou create "OU=Groups,OU=Corp,${DOMAIN_DC}" 2>/dev/null || echo "  OU=Groups,OU=Corp already exists"
+
+# Legacy test OUs (kept for backward compatibility with Populate-SambaAD.ps1)
+${SAMBA_BIN}/samba-tool ou create "OU=TestUsers,${DOMAIN_DC}" 2>/dev/null || echo "  OU=TestUsers already exists"
+${SAMBA_BIN}/samba-tool ou create "OU=TestGroups,${DOMAIN_DC}" 2>/dev/null || echo "  OU=TestGroups already exists"
+
+echo "  OU structure created"
 
 # Install SSH public key schema (optional, may already exist)
 echo "Checking SSH public key schema..."

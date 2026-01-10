@@ -39,6 +39,12 @@ Each image includes:
 - TLS/LDAPS enabled with self-signed certificates
 - RFC2307 attributes configured
 - SSH public key schema installed
+- Baseline OU structure:
+  - `OU=Corp` - Main corporate structure (selected as partition container in JIM)
+  - `OU=Users,OU=Corp` - User objects provisioned by JIM
+  - `OU=Groups,OU=Corp` - Group objects
+  - `OU=TestUsers` - Legacy test users
+  - `OU=TestGroups` - Legacy test groups
 
 ## What's NOT Included
 
@@ -46,7 +52,7 @@ Each image includes:
 - Test groups
 - Group memberships
 
-This allows each test run to start with a clean, provisioned domain.
+This allows each test run to start with a clean, provisioned domain with baseline OU structure.
 
 ## Building Images Locally
 

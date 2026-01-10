@@ -80,14 +80,28 @@ try {
         throw "API key required for authentication"
     }
 
-    # Reset CSV to baseline state before running tests
-    Write-Host "Resetting CSV test data to baseline..." -ForegroundColor Gray
-    & "$PSScriptRoot/../Generate-TestCSV.ps1" -Template $Template -OutputPath "$PSScriptRoot/../../test-data"
-    Write-Host "  ✓ CSV test data reset to baseline" -ForegroundColor Green
+    # Use dedicated minimal CSV for Scenario 5 (no baseline users)
+    # This ensures tests are self-contained and don't cause mass export failures
+    Write-Host "Setting up dedicated CSV for Scenario 5 tests..." -ForegroundColor Gray
+    $testDataPath = "$PSScriptRoot/../../test-data"
+    $scenarioDataPath = "$PSScriptRoot/data"
+
+    # Ensure test-data directory exists
+    if (-not (Test-Path $testDataPath)) {
+        New-Item -ItemType Directory -Path $testDataPath -Force | Out-Null
+    }
+
+    # Copy empty scenario-specific CSV as the starting point
+    Copy-Item -Path "$scenarioDataPath/scenario5-hr-users.csv" -Destination "$testDataPath/hr-users.csv" -Force
+
+    # Copy to container volume
+    $csvPath = "$testDataPath/hr-users.csv"
+    docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+    Write-Host "  ✓ Dedicated CSV initialised (1 baseline user for schema discovery)" -ForegroundColor Green
 
     # Clean up test-specific AD users from previous test runs
     Write-Host "Cleaning up test-specific AD users from previous runs..." -ForegroundColor Gray
-    $testUsers = @("test.projection", "test.join", "test.duplicate1", "test.duplicate2", "test.multirule.first", "test.multirule.second")
+    $testUsers = @("test.projection", "test.join", "test.duplicate1", "test.duplicate2", "test.multirule.first", "test.multirule.second", "baseline.user1")
     $deletedCount = 0
     foreach ($user in $testUsers) {
         $output = & docker exec samba-ad-primary bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
@@ -108,6 +122,21 @@ try {
     }
 
     Write-Host "✓ JIM configured for Scenario 5" -ForegroundColor Green
+
+    # Create department OUs needed for test users AFTER Setup-Scenario1
+    # (Setup may recreate base Corp OU structure, so department OUs must come after)
+    # The DN expression uses: OU=<Department>,OU=Users,OU=Corp,DC=subatomic,DC=local
+    Write-Host "Creating department OUs for test users..." -ForegroundColor Gray
+    $testDepartments = @("Information Technology", "Operations", "Finance", "Sales", "Marketing")
+    foreach ($dept in $testDepartments) {
+        $result = docker exec samba-ad-primary samba-tool ou create "OU=$dept,OU=Users,OU=Corp,DC=subatomic,DC=local" 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  ✓ Created OU: $dept" -ForegroundColor Gray
+        } elseif ($result -match "already exists") {
+            Write-Host "  - OU $dept already exists" -ForegroundColor DarkGray
+        }
+    }
+    Write-Host "  ✓ Department OUs ready" -ForegroundColor Green
     Write-Host "  CSV System ID: $($config.CSVSystemId)" -ForegroundColor Gray
     Write-Host "  LDAP System ID: $($config.LDAPSystemId)" -ForegroundColor Gray
 
@@ -166,10 +195,11 @@ try {
         Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Sync (Projection)"
 
         # Verify MVO was created
-        $mvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "test.projection" -PageSize 10 -ErrorAction SilentlyContinue
+        $mvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Projection" -PageSize 10 -ErrorAction SilentlyContinue
 
-        if ($mvos -and $mvos.items) {
-            $projectedMvo = $mvos.items | Where-Object { $_.displayName -match "Test Projection" }
+        # Get-JIMMetaverseObject returns objects directly, not wrapped in .items
+        if ($mvos) {
+            $projectedMvo = $mvos | Where-Object { $_.displayName -match "Test Projection" }
             if ($projectedMvo) {
                 Write-Host "  ✓ MVO created with ID: $($projectedMvo.id)" -ForegroundColor Green
                 $testResults.Steps += @{ Name = "Projection"; Success = $true }
@@ -228,9 +258,9 @@ try {
         $syncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Sync (Join - create MVO)"
 
-        # Get the MVO that was created
-        $mvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "test.join" -PageSize 10 -ErrorAction SilentlyContinue
-        $originalMvo = $mvos.items | Where-Object { $_.displayName -match "Test Join" } | Select-Object -First 1
+        # Get the MVO that was created (Get-JIMMetaverseObject returns objects directly)
+        $mvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Join" -PageSize 10 -ErrorAction SilentlyContinue
+        $originalMvo = $mvos | Where-Object { $_.displayName -match "Test Join" } | Select-Object -First 1
 
         if (-not $originalMvo) {
             Write-Host "  Failed to create initial MVO for join test" -ForegroundColor Red
@@ -247,12 +277,13 @@ try {
 
             # Import from AD to confirm the CSO joins back to the same MVO
             Write-Host "  Importing from AD to verify join..." -ForegroundColor Gray
-            $ldapImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPImportProfileId -Wait -PassThru
+            $ldapImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $ldapImportResult.activityId -Name "LDAP Import (Join - confirm)"
 
             # Verify the MVO still has the same ID (not duplicated)
-            $mvosAfter = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "test.join" -PageSize 10 -ErrorAction SilentlyContinue
-            $matchingMvos = $mvosAfter.items | Where-Object { $_.displayName -match "Test Join" }
+            # Get-JIMMetaverseObject returns objects directly, not wrapped in .items
+            $mvosAfter = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Join" -PageSize 10 -ErrorAction SilentlyContinue
+            $matchingMvos = $mvosAfter | Where-Object { $_.displayName -match "Test Join" }
 
             if ($matchingMvos.Count -eq 1 -and $matchingMvos[0].id -eq $originalMvoId) {
                 Write-Host "  ✓ AD CSO joined to existing MVO (no duplicate created)" -ForegroundColor Green
@@ -359,10 +390,11 @@ try {
         Assert-ActivitySuccess -ActivityId $syncResult2.activityId -Name "Full Sync (DuplicatePrevention - second user)"
 
         # Check results - we should have appropriate handling of this conflict
-        $mvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "test.duplicate" -PageSize 20 -ErrorAction SilentlyContinue
+        # Get-JIMMetaverseObject returns objects directly, not wrapped in .items
+        $mvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Duplicate" -PageSize 20 -ErrorAction SilentlyContinue
 
-        if ($mvos -and $mvos.items) {
-            $duplicateMvos = $mvos.items | Where-Object { $_.displayName -match "Test Duplicate" }
+        if ($mvos) {
+            $duplicateMvos = $mvos | Where-Object { $_.displayName -match "Test Duplicate" }
 
             # The expected behaviour depends on JIM's configuration:
             # - Could create two MVOs (if matching fails and projection creates new)
@@ -399,7 +431,10 @@ try {
 
         # First, get the CSV object type and its attributes
         $csvSystem = Get-JIMConnectedSystem | Where-Object { $_.name -match "HR CSV" }
-        $csvUserType = $csvSystem.objectTypes | Where-Object { $_.name -eq "User" }
+        # Get object types separately (returns array of object types, not system with .objectTypes property)
+        $csvObjectTypes = Get-JIMConnectedSystem -Id $csvSystem.id -ObjectTypes
+        # CSV object type is "person" not "User" (LDAP uses "User")
+        $csvUserType = $csvObjectTypes | Where-Object { $_.name -eq "person" }
         $mvAttributes = Get-JIMMetaverseAttribute
 
         if (-not $csvSystem -or -not $csvUserType) {
@@ -480,9 +515,9 @@ try {
                 $syncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
                 Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Sync (MultipleRules - first user)"
 
-                # Verify MVO was created
-                $mvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "test.multirule" -PageSize 10 -ErrorAction SilentlyContinue
-                $originalMvo = $mvos.items | Where-Object { $_.displayName -match "Test MultiRule First" } | Select-Object -First 1
+                # Verify MVO was created (Get-JIMMetaverseObject returns objects directly)
+                $mvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test MultiRule" -PageSize 10 -ErrorAction SilentlyContinue
+                $originalMvo = $mvos | Where-Object { $_.displayName -match "Test MultiRule First" } | Select-Object -First 1
 
                 if (-not $originalMvo) {
                     Write-Host "  Failed to create initial MVO" -ForegroundColor Red
@@ -543,8 +578,9 @@ try {
                     Assert-ActivitySuccess -ActivityId $syncResult2.activityId -Name "Full Sync (MultipleRules - second user)"
 
                     # Step 4: Verify the second CSO joined to the SAME MVO (via email rule)
-                    $mvosAfter = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "test.multirule" -PageSize 10 -ErrorAction SilentlyContinue
-                    $matchingMvos = @($mvosAfter.items | Where-Object { $_.displayName -match "Test MultiRule" })
+                    # Get-JIMMetaverseObject returns objects directly, not wrapped in .items
+                    $mvosAfter = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test MultiRule" -PageSize 10 -ErrorAction SilentlyContinue
+                    $matchingMvos = @($mvosAfter | Where-Object { $_.displayName -match "Test MultiRule" })
 
                     Write-Host "  Found $($matchingMvos.Count) MVO(s) after second import" -ForegroundColor Gray
 
