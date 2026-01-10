@@ -1538,7 +1538,8 @@ JIM/
 | PowerShell Module | ✅ Complete | All cmdlets for Scenario 1 |
 | Setup-Scenario1.ps1 | ✅ Complete | Automated JIM configuration with deletion rules |
 | Invoke-Scenario1 | ✅ Complete | All 6 tests passing (Joiner, Mover, Mover-Rename, Mover-Move, Leaver, Reconnection) |
-| Scenario 2 & 3 | ⏳ Pending | Placeholder scripts exist |
+| Scenario 2 | 🔧 Ready | Blocking bug fixed (PR #279) - uses objectGUID as external ID |
+| Scenario 3 | ⏳ Pending | Placeholder script exists |
 | Scenario 4 & 5 | ✅ Complete | Deletion rules and matching rules scenarios |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 
@@ -1627,37 +1628,31 @@ docker logs jim.web --tail 100
 
 1. ~~**Debug sync engine export**~~ - ✅ Fixed! Users now provisioned to AD successfully
 2. ~~**Fix file connector change detection**~~ - ✅ Fixed! All Scenario 1 tests now passing
-3. **Complete Scenarios 2 & 3** - Directory-to-Directory sync and GALSYNC (blocked - see below)
-4. **Create GitHub Actions workflow** - Automate integration tests in CI/CD
+3. ~~**Fix Scenario 2 duplicate attribute bug**~~ - ✅ Fixed! PR #279 - uses objectGUID as external ID
+4. **Test and validate Scenario 2** - Run full cross-domain sync tests
+5. **Complete Scenario 3** - GALSYNC (AD to CSV export)
+6. **Create GitHub Actions workflow** - Automate integration tests in CI/CD
 
-### Blocking Issue: LDAP Connector Object Type Matching Bug
+### Scenario 2 Status: Ready for Testing
 
-**Status**: 🚧 BLOCKED
+**Status**: 🔧 Ready for Testing
 
-**Symptom**: Scenario 2 (Directory-to-Directory) LDAP import fails with error: `Sequence contains more than one matching element`
+**Previous Issue**: Scenario 2 (Directory-to-Directory) was failing with error: `Sequence contains more than one matching element`
 
-**Root Cause**: The LDAP connector's `ConvertLdapResults` method (line 539 in `LdapConnectorImport.cs`) uses `SingleOrDefault` to match object types by object class. Active Directory objects inherit from multiple object classes (e.g., `user`, `organizationalPerson`, `person`, `top`), and when multiple of these classes are defined in the schema as object types, the match fails.
+**Root Cause & Fix (PR #279)**: The error was caused by duplicate CSO attribute values being created:
 
-```csharp
-// Line 539 - fails when multiple object types match
-var objectType = _connectedSystem.ObjectTypes.SingleOrDefault(
-    ot => objectClasses.Any(oc => oc.Equals(ot.Name, StringComparison.OrdinalIgnoreCase)));
-```
+1. **Export storing value with wrong type**: `ExportExecutionServer.UpdateCsoAfterSuccessfulExportAsync` was blindly trying to parse external ID as GUID and storing in `GuidValue`, regardless of the attribute's actual data type. Fixed by looking up the attribute type before storing.
 
-**Impact**:
-- Scenario 2 (Directory-to-Directory): ❌ BLOCKED - LDAP import fails during object conversion
-- Scenario 3 (GALSYNC): ❌ BLOCKED - LDAP import required for this scenario
+2. **Incorrect external ID configuration**: Setup-Scenario2.ps1 was using `sAMAccountName` (Text type) as the external ID. This is incorrect because `sAMAccountName` can change (user renames). Fixed by changing to `objectGUID` which is immutable and the correct AD anchor.
 
-**Fix Required**: The LDAP connector needs to prioritise the most specific object class (e.g., `user` over `person`). Potential fixes:
-1. Use the first (most specific) object class in the array
-2. Implement object class hierarchy awareness
-3. Filter schema to only include leaf object types
-
-**GitHub Issue**: To be created
-
-**Files Created (Ready for Use Once Bug Fixed)**:
-- `test/integration/Setup-Scenario2.ps1` - JIM configuration for directory sync (fully functional)
+**Files Available**:
+- `test/integration/Setup-Scenario2.ps1` - JIM configuration for directory sync
 - `test/integration/scenarios/Invoke-Scenario2-CrossDomainSync.ps1` - Test execution script
+
+**To Run Scenario 2**:
+```powershell
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Template Nano
+```
 
 ### Resolved Issue: LDAP Partition Management API Missing
 
@@ -1704,6 +1699,7 @@ var objectType = _connectedSystem.ObjectTypes.SingleOrDefault(
 
 | Version | Date       | Changes                                         |
 |---------|------------|-------------------------------------------------|
+| 2.1     | 2026-01-10 | Scenario 2 blocker fixed (PR #279). Export now stores external ID with correct data type. Setup-Scenario2.ps1 updated to use objectGUID as external ID instead of sAMAccountName. |
 | 2.0     | 2025-12-21 | All 6 Scenario 1 tests passing. Fixed DN column removal (now expression-calculated), deletion rules configuration, Reconnection test property overrides, and Leaver test expectations for grace period. |
 | 1.9     | 2025-12-16 | Resolved partition API blocking issue. Added partition/container management API and PowerShell cmdlets. Discovered LDAP connector object type matching bug (new blocker). |
 | 1.8     | 2025-12-16 | Added Scenario 2 scripts (Setup-Scenario2.ps1, Invoke-Scenario2-CrossDomainSync.ps1). Documented blocking issue - LDAP partition management API needed. |
