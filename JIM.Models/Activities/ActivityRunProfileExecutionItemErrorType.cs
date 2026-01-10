@@ -27,4 +27,10 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// This indicates a bug in the import processing logic.
     /// </summary>
     CsoCreationFailed,
+    /// <summary>
+    /// Multiple objects in the same import batch have the same external ID.
+    /// All duplicates are marked with this error - none are processed.
+    /// The data owner must fix the source data to ensure unique external IDs.
+    /// </summary>
+    DuplicateObject,
 }

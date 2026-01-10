@@ -491,10 +491,20 @@ public class SyncImportTaskProcessor
         if (_connectedSystem.ObjectTypes == null)
             throw new InvalidDataException("ProcessImportObjectsAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
 
+        // Track external IDs seen in THIS batch to detect same-batch duplicates.
+        // Key: "objectTypeId:externalIdValue" (composite key to handle multiple object types)
+        // Value: Tuple of (index in ImportObjects, RPEI, CSO if created)
+        // When duplicate found, we error BOTH objects - no "random winner" based on file order.
+        var seenExternalIds = new Dictionary<string, (int index, ActivityRunProfileExecutionItem rpei, ConnectedSystemObject? cso)>(StringComparer.OrdinalIgnoreCase);
+        var knownDuplicateExternalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         // decision: do we want to load the whole connector space into memory to maximise performance? for now, let's keep it db-centric.
         // todo: experiment with using parallel foreach to see if we can speed up processing
+        var importIndex = -1;
         foreach (var importObject in connectedSystemImportResult.ImportObjects)
         {
+            importIndex++;
+
             // this will store the detail for the import object that will persist in the history for the run
             var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
             _activityRunProfileExecutionItems.Add(activityRunProfileExecutionItem);
@@ -527,6 +537,83 @@ public class SyncImportTaskProcessor
 
                 // precautionary pre-processing...
                 RemoveNullImportObjectAttributes(importObject);
+
+                // Same-batch duplicate detection: Check if another object in THIS batch has the same external ID.
+                // If so, error BOTH objects - we don't pick a "random winner" based on file order.
+                // This forces the data owner to fix the source data.
+                var externalIdAttribute = csObjectType.Attributes.First(a => a.IsExternalId);
+                var externalIdImportAttr = importObject.Attributes.SingleOrDefault(a => a.Name.Equals(externalIdAttribute.Name, StringComparison.OrdinalIgnoreCase));
+                if (externalIdImportAttr != null)
+                {
+                    // Extract the external ID value as a string for tracking (works for all data types)
+                    var externalIdValue = externalIdAttribute.Type switch
+                    {
+                        AttributeDataType.Text => externalIdImportAttr.StringValues.FirstOrDefault(),
+                        AttributeDataType.Number => externalIdImportAttr.IntValues.FirstOrDefault().ToString(),
+                        AttributeDataType.LongNumber => externalIdImportAttr.LongValues.FirstOrDefault().ToString(),
+                        AttributeDataType.Guid => externalIdImportAttr.GuidValues.FirstOrDefault().ToString(),
+                        _ => null
+                    };
+
+                    if (!string.IsNullOrEmpty(externalIdValue))
+                    {
+                        // Composite key: objectTypeId:externalIdValue to handle multiple object types in same import
+                        var duplicateKey = $"{csObjectType.Id}:{externalIdValue}";
+
+                        // Snapshot the external ID for error reporting
+                        activityRunProfileExecutionItem.ExternalIdSnapshot = externalIdValue;
+
+                        if (knownDuplicateExternalIds.Contains(duplicateKey))
+                        {
+                            // This is the 3rd+ duplicate - just mark it as error (first already handled)
+                            activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
+                            activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found in the same import batch. All objects with this external ID have been rejected. Fix the source data to ensure unique external IDs.";
+                            Log.Warning("ProcessImportObjectsAsync: Duplicate external ID '{ExternalId}' (3rd+ occurrence) at index {Index}. Marking as error.",
+                                externalIdValue, importIndex);
+                            continue;
+                        }
+
+                        if (seenExternalIds.TryGetValue(duplicateKey, out var firstOccurrence))
+                        {
+                            // Duplicate found! Error BOTH objects.
+                            Log.Warning("ProcessImportObjectsAsync: Duplicate external ID '{ExternalId}' found at index {CurrentIndex}. First occurrence was at index {FirstIndex}. Erroring BOTH objects.",
+                                externalIdValue, importIndex, firstOccurrence.index);
+
+                            // Mark THIS object as duplicate
+                            activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
+                            activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found in the same import batch. All objects with this external ID have been rejected. Fix the source data to ensure unique external IDs.";
+
+                            // Go back and mark the FIRST object as duplicate too
+                            firstOccurrence.rpei.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
+                            firstOccurrence.rpei.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found in the same import batch. All objects with this external ID have been rejected. Fix the source data to ensure unique external IDs.";
+
+                            // If the first object had already created a CSO, remove it from the create list
+                            if (firstOccurrence.cso != null)
+                            {
+                                var removed = connectedSystemObjectsToBeCreated.Remove(firstOccurrence.cso);
+                                if (removed)
+                                {
+                                    Log.Debug("ProcessImportObjectsAsync: Removed CSO for first occurrence of duplicate external ID '{ExternalId}' from create list.",
+                                        externalIdValue);
+                                }
+                                // Clear the CSO reference from the RPEI since we're not persisting it
+                                firstOccurrence.rpei.ConnectedSystemObject = null;
+                            }
+
+                            // Track this as a known duplicate for any subsequent occurrences (3rd, 4th, etc.)
+                            knownDuplicateExternalIds.Add(duplicateKey);
+
+                            // Remove from seenExternalIds since we've handled it
+                            seenExternalIds.Remove(duplicateKey);
+
+                            continue;
+                        }
+
+                        // First time seeing this external ID in this batch - track it
+                        // We'll update the CSO reference after it's created (if it gets created)
+                        seenExternalIds[duplicateKey] = (importIndex, activityRunProfileExecutionItem, null);
+                    }
+                }
 
                 // see if we already have a matching connected system object for this imported object within JIM
                 ConnectedSystemObject? connectedSystemObject;
@@ -594,6 +681,30 @@ public class SyncImportTaskProcessor
                     {
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
+
+                        // Update the seenExternalIds entry with the CSO reference so we can remove it if a duplicate is found later
+                        var extIdAttr = csObjectType.Attributes.First(a => a.IsExternalId);
+                        var extIdImportAttr = importObject.Attributes
+                            .FirstOrDefault(a => a.Name.Equals(extIdAttr.Name, StringComparison.OrdinalIgnoreCase));
+                        if (extIdImportAttr != null)
+                        {
+                            var extIdVal = extIdAttr.Type switch
+                            {
+                                AttributeDataType.Text => extIdImportAttr.StringValues.FirstOrDefault(),
+                                AttributeDataType.Number => extIdImportAttr.IntValues.FirstOrDefault().ToString(),
+                                AttributeDataType.LongNumber => extIdImportAttr.LongValues.FirstOrDefault().ToString(),
+                                AttributeDataType.Guid => extIdImportAttr.GuidValues.FirstOrDefault().ToString(),
+                                _ => null
+                            };
+                            if (!string.IsNullOrEmpty(extIdVal))
+                            {
+                                var dupKey = $"{csObjectType.Id}:{extIdVal}";
+                                if (seenExternalIds.ContainsKey(dupKey))
+                                {
+                                    seenExternalIds[dupKey] = (seenExternalIds[dupKey].index, seenExternalIds[dupKey].rpei, connectedSystemObject);
+                                }
+                            }
+                        }
                     }
                     else
                     {
