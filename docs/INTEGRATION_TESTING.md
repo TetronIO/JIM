@@ -112,7 +112,7 @@ See [Data Scale Templates](#data-scale-templates) for detailed template specific
 - `Setup-InfrastructureApiKey.ps1` - Creates API key for testing
 
 **Current Limitations:**
-- ⚠️ Progress bars not yet implemented (see [#196](https://github.com/TetronIO/JIM/issues/196))
+- ✅ Progress bars implemented (see [#196](https://github.com/TetronIO/JIM/issues/196))
 - ✅ Samba AD optimised with pre-built images (~30 seconds startup, down from ~5 minutes)
 - ✅ **Automatic Samba image building** - custom image built automatically on first run if not present
 - ✅ **Multi-architecture support** (AMD64 and ARM64/Apple Silicon - no Rosetta emulation needed)
@@ -1719,23 +1719,22 @@ docker logs jim.web --tail 100
 ### Infrastructure Improvements Needed
 
 #### 1. Progress Bars for Test Execution
-**Priority: Medium | Status: Not Started**
+**Priority: Medium | Status: ✅ Complete**
 
-Integration test scripts should provide visual progress feedback including:
-- **Stand-up phase**: Infrastructure container startup progress (Samba AD, databases)
-- **Execution phase**: Test step progress with sub-steps (import, sync, export, validation)
-- **Tear-down phase**: Container shutdown and volume cleanup progress
+Progress bar helper functions implemented in `Test-Helpers.ps1`:
+- `Write-ProgressBar`: Visual progress bar with percentage, elapsed time, and ETA
+- `Complete-ProgressBar`: Complete progress bar with success/failure indicator
+- `Start-TimedOperation`: Start tracking a timed operation
+- `Update-OperationProgress`: Update progress for a timed operation
+- `Complete-TimedOperation`: Complete operation and show final duration
+- `Write-Spinner`: Spinner animation for indeterminate progress
 
-**Implementation Notes:**
-- Use PowerShell `Write-Progress` cmdlet with `-Activity`, `-Status`, `-PercentComplete`
-- Show elapsed time and estimated time remaining where possible
-- Provide detailed status messages (e.g., "Waiting for Samba AD to initialize LDAP...")
-- Example: `Write-Progress -Activity "Running Scenario 1" -Status "Step 2 of 4: Full Sync" -PercentComplete 50`
+**Example output:**
+```
+[████████████████████░░░░] 80% | Elapsed: 8.2s | ETA: 2.1s
+```
 
-**Benefits:**
-- Easier to track long-running operations
-- Helps identify where time is spent
-- Better user experience during test execution
+See [#196](https://github.com/TetronIO/JIM/issues/196) for implementation details.
 
 #### 2. Docker Compose Files for Test Infrastructure
 **Priority: High | Status: ✅ Complete**
