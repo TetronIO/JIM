@@ -482,17 +482,19 @@ try {
     Set-JIMConnectedSystemObjectType -ConnectedSystemId $targetSystem.id -ObjectTypeId $targetUserType.id -Selected $true | Out-Null
     Write-Host "  ✓ Selected 'user' object types for Source and Target" -ForegroundColor Green
 
-    # Mark sAMAccountName as External ID (anchor) for both systems
-    $sourceAnchorAttr = $sourceUserType.attributes | Where-Object { $_.name -eq 'sAMAccountName' }
-    $targetAnchorAttr = $targetUserType.attributes | Where-Object { $_.name -eq 'sAMAccountName' }
+    # Mark objectGUID as External ID (anchor) for both systems
+    # objectGUID is the correct anchor for AD because it's immutable and system-assigned
+    # sAMAccountName can change (user renames) and is not suitable as an anchor
+    $sourceAnchorAttr = $sourceUserType.attributes | Where-Object { $_.name -eq 'objectGUID' }
+    $targetAnchorAttr = $targetUserType.attributes | Where-Object { $_.name -eq 'objectGUID' }
 
     if ($sourceAnchorAttr) {
         Set-JIMConnectedSystemAttribute -ConnectedSystemId $sourceSystem.id -ObjectTypeId $sourceUserType.id -AttributeId $sourceAnchorAttr.id -IsExternalId $true | Out-Null
-        Write-Host "  ✓ Set 'sAMAccountName' as External ID for Source" -ForegroundColor Green
+        Write-Host "  ✓ Set 'objectGUID' as External ID for Source" -ForegroundColor Green
     }
     if ($targetAnchorAttr) {
         Set-JIMConnectedSystemAttribute -ConnectedSystemId $targetSystem.id -ObjectTypeId $targetUserType.id -AttributeId $targetAnchorAttr.id -IsExternalId $true | Out-Null
-        Write-Host "  ✓ Set 'sAMAccountName' as External ID for Target" -ForegroundColor Green
+        Write-Host "  ✓ Set 'objectGUID' as External ID for Target" -ForegroundColor Green
     }
 
     # Select only the LDAP attributes needed for bidirectional sync flows
@@ -500,7 +502,8 @@ try {
     # only import/export the attributes they actually need, rather than the entire schema.
     # See: https://github.com/TetronIO/JIM/issues/227
     $requiredLdapAttributes = @(
-        'sAMAccountName',     # Account Name - required anchor
+        'objectGUID',         # Immutable object identifier - External ID (anchor)
+        'sAMAccountName',     # Account Name - used for matching/joining
         'givenName',          # First Name
         'sn',                 # Last Name (surname)
         'displayName',        # Display Name
@@ -510,7 +513,7 @@ try {
         'title',              # Job Title
         'department',         # Department
         'telephoneNumber',    # Phone
-        'distinguishedName'   # DN - required for LDAP provisioning
+        'distinguishedName'   # DN - required for LDAP provisioning (Secondary External ID)
     )
 
     # Using bulk update API for efficiency - creates single Activity record instead of one per attribute
