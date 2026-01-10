@@ -348,6 +348,8 @@ function New-TestUser {
     # Always include index in samAccountName for guaranteed uniqueness
     $samAccountName = "$($firstName.ToLower()).$($lastName.ToLower())$Index"
     $email = "$samAccountName@$Domain"
+    # HrId is a GUID - use deterministic generation based on index for reproducibility
+    $hrId = [guid]::new("{0:D8}-0000-0000-0000-000000000000" -f $Index).ToString()
     $employeeId = "EMP{0:D6}" -f $Index
 
     # For display name, add suffix only if we've exhausted unique combinations
@@ -403,6 +405,7 @@ function New-TestUser {
         Email = $email
         Department = $department
         Title = $title
+        HrId = $hrId
         EmployeeId = $employeeId
         DisplayName = $displayName
         EmployeeType = $employeeType
