@@ -10,7 +10,9 @@ internal static class LdapConnectorUtilities
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
         if (entry.Attributes[attributeName].Count != 1) return null;
-        return (string)entry.Attributes[attributeName][0];
+        // Strip null bytes and treat empty strings as "no value"
+        var value = ((string)entry.Attributes[attributeName][0]).Replace("\0", string.Empty);
+        return string.IsNullOrEmpty(value) ? null : value;
     }
 
     internal static bool? GetEntryAttributeBooleanValue(SearchResultEntry entry, string attributeName)
@@ -186,9 +188,12 @@ internal static class LdapConnectorUtilities
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
         if (entry.Attributes[attributeName].Count == 0) return null;
-        // PostgreSQL cannot store null bytes (0x00) in text columns, so strip them
-        return (from string value in entry.Attributes[attributeName].GetValues(typeof(string))
-            select value.Replace("\0", string.Empty)).ToList();
+        // Strip null bytes and filter out empty strings (treat as "no value")
+        var values = (from string value in entry.Attributes[attributeName].GetValues(typeof(string))
+            let cleanedValue = value.Replace("\0", string.Empty)
+            where !string.IsNullOrEmpty(cleanedValue)
+            select cleanedValue).ToList();
+        return values.Count > 0 ? values : null;
     }
 
     internal static List<byte[]>? GetEntryAttributeBinaryValues(SearchResultEntry entry, string attributeName)

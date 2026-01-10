@@ -80,15 +80,15 @@ public class ConnectedSystemObject
     public List<ConnectedSystemObjectAttributeValue> PendingAttributeValueRemovals { get; set; } = new();
 
     [NotMapped]
-    public ConnectedSystemObjectAttributeValue? ExternalIdAttributeValue 
-    {  
+    public ConnectedSystemObjectAttributeValue? ExternalIdAttributeValue
+    {
         get
         {
             if (AttributeValues.Count == 0)
                 return null;
 
             return AttributeValues.SingleOrDefault(q => (q.AttributeId != 0 ? q.AttributeId : q.Attribute?.Id) == ExternalIdAttributeId);
-        } 
+        }
     }
 
     [NotMapped]
@@ -113,8 +113,7 @@ public class ConnectedSystemObject
 
             // this works well for LDAP systems, where DisplayName is a common attribute, but for other systems that are not so standards based
             // we may have to look at supporting a configurable attribute on the Connected System to use as the label.
-            // Use FirstOrDefault to handle edge cases where duplicate attributes might exist
-            var av = AttributeValues.FirstOrDefault(q => q.Attribute.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase));
+            var av = AttributeValues.SingleOrDefault(q => q.Attribute.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase));
             if (av != null && !string.IsNullOrEmpty(av.StringValue))
                 return av.StringValue;
 
@@ -162,7 +161,7 @@ public class ConnectedSystemObject
         // if all is good by this point, add the change attribute to the list of pending attribute changes
         PendingAttributeValueAdditions.Add(connectedSystemObjectAttributeValue);
 
-        // add  removal for the existing value
+        // add removal for the existing value
         var existingAttributeValue = AttributeValues.SingleOrDefault(av => av.Attribute.Id == connectedSystemAttribute.Id);
         if (existingAttributeValue != null)
             PendingAttributeValueRemovals.Add(existingAttributeValue);
@@ -232,8 +231,7 @@ public class ConnectedSystemObject
 
     public ConnectedSystemObjectAttributeValue? GetAttributeValue(string attributeName)
     {
-        var attributeValue = AttributeValues.SingleOrDefault(q => q.Attribute.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase));
-        return attributeValue ?? null;
+        return AttributeValues.SingleOrDefault(q => q.Attribute.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase));
     }
 
     public List<ConnectedSystemObjectAttributeValue> GetAttributeValues(string attributeName)

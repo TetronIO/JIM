@@ -22,8 +22,8 @@ public class MetaverseObjectHeader
 
     public MetaverseObjectStatus Status { get; set; }
 
-    public string? DisplayName 
-    { 
+    public string? DisplayName
+    {
         get
         {
             if (AttributeValues.Count == 0)
@@ -34,7 +34,7 @@ public class MetaverseObjectHeader
                 return av.StringValue;
 
             return null;
-        } 
+        }
     }
 
     public MetaverseObjectAttributeValue? GetAttributeValue(string name)

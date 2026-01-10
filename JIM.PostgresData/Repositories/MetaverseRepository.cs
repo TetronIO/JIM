@@ -161,8 +161,10 @@ public class MetaverseRepository : IMetaverseRepository
         return await Repository.Database.MetaverseObjects
             .Include(mo => mo.Type)
             .Include(mo => mo.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+                .ThenInclude(av => av.Attribute)
+            .Include(mo => mo.AttributeValues)
+                .ThenInclude(av => av.ReferenceValue)
+                    .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
             .Select(d => new MetaverseObjectHeader
             {
                 Id = d.Id,
@@ -170,7 +172,8 @@ public class MetaverseRepository : IMetaverseRepository
                 Status = d.Status,
                 TypeId = d.Type.Id,
                 TypeName = d.Type.Name,
-                TypePluralName = d.Type.PluralName
+                TypePluralName = d.Type.PluralName,
+                AttributeValues = d.AttributeValues.ToList()
             }).SingleOrDefaultAsync(mo => mo.Id == id);
     }
 

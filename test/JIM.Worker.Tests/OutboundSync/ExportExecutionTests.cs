@@ -30,6 +30,8 @@ public class ExportExecutionTests
     private Mock<DbSet<ConnectedSystem>> MockDbSetConnectedSystems { get; set; } = null!;
     private List<ConnectedSystemObjectType> ConnectedSystemObjectTypesData { get; set; } = null!;
     private Mock<DbSet<ConnectedSystemObjectType>> MockDbSetConnectedSystemObjectTypes { get; set; } = null!;
+    private List<ConnectedSystemObjectTypeAttribute> ConnectedSystemAttributesData { get; set; } = null!;
+    private Mock<DbSet<ConnectedSystemObjectTypeAttribute>> MockDbSetConnectedSystemAttributes { get; set; } = null!;
     private List<ConnectedSystemPartition> ConnectedSystemPartitionsData { get; set; } = null!;
     private Mock<DbSet<ConnectedSystemPartition>> MockDbSetConnectedSystemPartitions { get; set; } = null!;
     private List<PendingExport> PendingExportsData { get; set; } = null!;
@@ -71,6 +73,10 @@ public class ExportExecutionTests
         ConnectedSystemObjectTypesData = TestUtilities.GetConnectedSystemObjectTypeData();
         MockDbSetConnectedSystemObjectTypes = ConnectedSystemObjectTypesData.BuildMockDbSet();
 
+        // Set up the Connected System Attributes mock (all attributes from all object types)
+        ConnectedSystemAttributesData = ConnectedSystemObjectTypesData.SelectMany(t => t.Attributes).ToList();
+        MockDbSetConnectedSystemAttributes = ConnectedSystemAttributesData.BuildMockDbSet();
+
         // Set up the Connected System Objects mock
         ConnectedSystemObjectsData = TestUtilities.GetConnectedSystemObjectData();
         MockDbSetConnectedSystemObjects = ConnectedSystemObjectsData.BuildMockDbSet();
@@ -98,6 +104,7 @@ public class ExportExecutionTests
         // Mock entity framework calls
         MockJimDbContext = new Mock<JimDbContext>();
         MockJimDbContext.Setup(m => m.Activities).Returns(MockDbSetActivities.Object);
+        MockJimDbContext.Setup(m => m.ConnectedSystemAttributes).Returns(MockDbSetConnectedSystemAttributes.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(MockDbSetConnectedSystemObjectTypes.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(MockDbSetConnectedSystemObjects.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemPartitions).Returns(MockDbSetConnectedSystemPartitions.Object);
@@ -946,6 +953,7 @@ public class ExportExecutionTests
             ConnectedSystemObjectType = targetUserType
         };
         targetUserType.Attributes.Add(objectGuidAttr);
+        ConnectedSystemAttributesData.Add(objectGuidAttr);
 
         // Create a CSO in PendingProvisioning state with ExternalIdAttributeId set
         var pendingProvisioningCso = new ConnectedSystemObject

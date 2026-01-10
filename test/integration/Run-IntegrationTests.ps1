@@ -55,6 +55,11 @@
     ./Run-IntegrationTests.ps1 -Scenario "Scenario1-HRToIdentityDirectory" -Template Nano -Step All
 
     Explicit full specification of all parameters.
+
+.EXAMPLE
+    ./Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Template Small
+
+    Runs Scenario 2 (cross-domain sync between APAC and EMEA directories).
 #>
 
 param(
@@ -251,22 +256,34 @@ Write-Success "JIM stack started"
 
 Start-Sleep -Seconds 2
 
-Write-Step "Starting Samba AD..."
+Write-Step "Starting Samba AD (Primary)..."
 $sambaResult = docker compose -f docker-compose.integration-tests.yml up -d 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Failure "Failed to start Samba AD"
     Write-Host "${GRAY}$sambaResult${NC}"
     exit 1
 }
-Write-Success "Samba AD started"
+Write-Success "Samba AD Primary started"
+
+# Start Scenario 2 containers if running Scenario 2
+if ($Scenario -like "*Scenario2*") {
+    Write-Step "Starting Samba AD (Source and Target for Scenario 2)..."
+    $scenario2Result = docker compose -f docker-compose.integration-tests.yml --profile scenario2 up -d 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Failure "Failed to start Scenario 2 Samba AD containers"
+        Write-Host "${GRAY}$scenario2Result${NC}"
+        exit 1
+    }
+    Write-Success "Samba AD Source and Target started"
+}
 $timings["3. Start Services"] = (Get-Date) - $step3Start
 
 # Step 4: Wait for services
 $step4Start = Get-Date
 Write-Section "Step 4: Waiting for Services"
 
-# Wait for Samba AD
-Write-Step "Waiting for Samba AD to be ready..."
+# Wait for Samba AD Primary
+Write-Step "Waiting for Samba AD Primary to be ready..."
 $waitScript = Join-Path $scriptRoot "Wait-SambaReady.ps1"
 if (Test-Path $waitScript) {
     & $waitScript -TimeoutSeconds $TimeoutSeconds
@@ -280,60 +297,106 @@ else {
     Write-Warning "Wait-SambaReady.ps1 not found, waiting 60 seconds..."
     Start-Sleep -Seconds 60
 }
+
+# Wait for Scenario 2 containers if applicable
+if ($Scenario -like "*Scenario2*") {
+    Write-Step "Waiting for Samba AD Source to be ready..."
+    $sourceReady = $false
+    $elapsed = 0
+    while (-not $sourceReady -and $elapsed -lt $TimeoutSeconds) {
+        $status = docker inspect --format='{{.State.Health.Status}}' samba-ad-source 2>&1
+        if ($status -eq "healthy") {
+            $sourceReady = $true
+            Write-Success "Samba AD Source is healthy"
+        }
+        else {
+            Start-Sleep -Seconds 5
+            $elapsed += 5
+        }
+    }
+    if (-not $sourceReady) {
+        Write-Failure "Samba AD Source did not become ready in time"
+        Write-Host "${YELLOW}  Check logs: docker logs samba-ad-source${NC}"
+        exit 1
+    }
+
+    Write-Step "Waiting for Samba AD Target to be ready..."
+    $targetReady = $false
+    $elapsed = 0
+    while (-not $targetReady -and $elapsed -lt $TimeoutSeconds) {
+        $status = docker inspect --format='{{.State.Health.Status}}' samba-ad-target 2>&1
+        if ($status -eq "healthy") {
+            $targetReady = $true
+            Write-Success "Samba AD Target is healthy"
+        }
+        else {
+            Start-Sleep -Seconds 5
+            $elapsed += 5
+        }
+    }
+    if (-not $targetReady) {
+        Write-Failure "Samba AD Target did not become ready in time"
+        Write-Host "${YELLOW}  Check logs: docker logs samba-ad-target${NC}"
+        exit 1
+    }
+}
 $timings["4. Wait for Services"] = (Get-Date) - $step4Start
 
 # Step 4b: Prepare Samba AD for testing
 # For Scenario 1, we need a clean Corp OU - delete if exists and recreate
-Write-Section "Step 4b: Preparing Samba AD for Testing"
+# Scenario 2 uses TestUsers OU which is handled by the scenario setup script
+if ($Scenario -like "*Scenario1*") {
+    Write-Section "Step 4b: Preparing Samba AD for Testing"
 
-# First, try to delete the Corp OU if it exists (to ensure clean state)
-Write-Step "Cleaning up any existing Corp OU..."
-$result = docker exec samba-ad-primary samba-tool ou delete "OU=Corp,DC=subatomic,DC=local" --force-subtree-delete 2>&1
-if ($LASTEXITCODE -eq 0) {
-    Write-Success "Deleted existing OU: Corp"
-}
-elseif ($result -match "No such object") {
-    Write-Success "OU does not exist (clean state)"
-}
-else {
-    Write-Warning "Could not delete OU Corp: $result (continuing anyway)"
-}
+    # First, try to delete the Corp OU if it exists (to ensure clean state)
+    Write-Step "Cleaning up any existing Corp OU..."
+    $result = docker exec samba-ad-primary samba-tool ou delete "OU=Corp,DC=subatomic,DC=local" --force-subtree-delete 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Success "Deleted existing OU: Corp"
+    }
+    elseif ($result -match "No such object") {
+        Write-Success "OU does not exist (clean state)"
+    }
+    else {
+        Write-Warning "Could not delete OU Corp: $result (continuing anyway)"
+    }
 
-# Create the Corp base OU and its sub-OUs (Users, Groups)
-Write-Step "Creating Corp OU structure..."
-$result = docker exec samba-ad-primary samba-tool ou create "OU=Corp,DC=subatomic,DC=local" 2>&1
-if ($LASTEXITCODE -eq 0) {
-    Write-Success "Created OU: Corp"
-}
-elseif ($result -match "already exists") {
-    Write-Success "OU already exists: Corp"
-}
-else {
-    Write-Warning "Failed to create OU Corp: $result"
-}
+    # Create the Corp base OU and its sub-OUs (Users, Groups)
+    Write-Step "Creating Corp OU structure..."
+    $result = docker exec samba-ad-primary samba-tool ou create "OU=Corp,DC=subatomic,DC=local" 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Success "Created OU: Corp"
+    }
+    elseif ($result -match "already exists") {
+        Write-Success "OU already exists: Corp"
+    }
+    else {
+        Write-Warning "Failed to create OU Corp: $result"
+    }
 
-# Create Users OU under Corp
-$result = docker exec samba-ad-primary samba-tool ou create "OU=Users,OU=Corp,DC=subatomic,DC=local" 2>&1
-if ($LASTEXITCODE -eq 0) {
-    Write-Success "Created OU: Users (under Corp)"
-}
-elseif ($result -match "already exists") {
-    Write-Success "OU already exists: Users"
-}
-else {
-    Write-Warning "Failed to create OU Users: $result"
-}
+    # Create Users OU under Corp
+    $result = docker exec samba-ad-primary samba-tool ou create "OU=Users,OU=Corp,DC=subatomic,DC=local" 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Success "Created OU: Users (under Corp)"
+    }
+    elseif ($result -match "already exists") {
+        Write-Success "OU already exists: Users"
+    }
+    else {
+        Write-Warning "Failed to create OU Users: $result"
+    }
 
-# Create Groups OU under Corp
-$result = docker exec samba-ad-primary samba-tool ou create "OU=Groups,OU=Corp,DC=subatomic,DC=local" 2>&1
-if ($LASTEXITCODE -eq 0) {
-    Write-Success "Created OU: Groups (under Corp)"
-}
-elseif ($result -match "already exists") {
-    Write-Success "OU already exists: Groups"
-}
-else {
-    Write-Warning "Failed to create OU Groups: $result"
+    # Create Groups OU under Corp
+    $result = docker exec samba-ad-primary samba-tool ou create "OU=Groups,OU=Corp,DC=subatomic,DC=local" 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Success "Created OU: Groups (under Corp)"
+    }
+    elseif ($result -match "already exists") {
+        Write-Success "OU already exists: Groups"
+    }
+    else {
+        Write-Warning "Failed to create OU Groups: $result"
+    }
 }
 
 # Step 5: Setup API Key

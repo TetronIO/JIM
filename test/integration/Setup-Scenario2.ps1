@@ -482,17 +482,19 @@ try {
     Set-JIMConnectedSystemObjectType -ConnectedSystemId $targetSystem.id -ObjectTypeId $targetUserType.id -Selected $true | Out-Null
     Write-Host "  ✓ Selected 'user' object types for Source and Target" -ForegroundColor Green
 
-    # Mark sAMAccountName as External ID (anchor) for both systems
-    $sourceAnchorAttr = $sourceUserType.attributes | Where-Object { $_.name -eq 'sAMAccountName' }
-    $targetAnchorAttr = $targetUserType.attributes | Where-Object { $_.name -eq 'sAMAccountName' }
+    # Mark objectGUID as External ID (anchor) for both systems
+    # objectGUID is the correct anchor for AD because it's immutable and system-assigned
+    # sAMAccountName can change (user renames) and is not suitable as an anchor
+    $sourceAnchorAttr = $sourceUserType.attributes | Where-Object { $_.name -eq 'objectGUID' }
+    $targetAnchorAttr = $targetUserType.attributes | Where-Object { $_.name -eq 'objectGUID' }
 
     if ($sourceAnchorAttr) {
         Set-JIMConnectedSystemAttribute -ConnectedSystemId $sourceSystem.id -ObjectTypeId $sourceUserType.id -AttributeId $sourceAnchorAttr.id -IsExternalId $true | Out-Null
-        Write-Host "  ✓ Set 'sAMAccountName' as External ID for Source" -ForegroundColor Green
+        Write-Host "  ✓ Set 'objectGUID' as External ID for Source" -ForegroundColor Green
     }
     if ($targetAnchorAttr) {
         Set-JIMConnectedSystemAttribute -ConnectedSystemId $targetSystem.id -ObjectTypeId $targetUserType.id -AttributeId $targetAnchorAttr.id -IsExternalId $true | Out-Null
-        Write-Host "  ✓ Set 'sAMAccountName' as External ID for Target" -ForegroundColor Green
+        Write-Host "  ✓ Set 'objectGUID' as External ID for Target" -ForegroundColor Green
     }
 
     # Select only the LDAP attributes needed for bidirectional sync flows
@@ -500,7 +502,8 @@ try {
     # only import/export the attributes they actually need, rather than the entire schema.
     # See: https://github.com/TetronIO/JIM/issues/227
     $requiredLdapAttributes = @(
-        'sAMAccountName',     # Account Name - required anchor
+        'objectGUID',         # Immutable object identifier - External ID (anchor)
+        'sAMAccountName',     # Account Name - used for matching/joining
         'givenName',          # First Name
         'sn',                 # Last Name (surname)
         'displayName',        # Display Name
@@ -510,7 +513,7 @@ try {
         'title',              # Job Title
         'department',         # Department
         'telephoneNumber',    # Phone
-        'distinguishedName'   # DN - required for LDAP provisioning
+        'distinguishedName'   # DN - required for LDAP provisioning (Secondary External ID)
     )
 
     # Using bulk update API for efficiency - creates single Activity record instead of one per attribute
@@ -864,8 +867,8 @@ try {
                 try {
                     New-JIMMatchingRule -ConnectedSystemId $sourceSystem.id `
                         -ObjectTypeId $sourceUserType.id `
-                        -TargetMetaverseAttributeName 'Account Name' `
-                        -SourceConnectedSystemAttributeName 'sAMAccountName' | Out-Null
+                        -TargetMetaverseAttributeId $mvAccountNameAttr.id `
+                        -SourceAttributeId $sourceSamAttr.id | Out-Null
                     Write-Host "  ✓ Source matching rule configured (sAMAccountName → Account Name)" -ForegroundColor Green
                 }
                 catch {
@@ -892,8 +895,8 @@ try {
                 try {
                     New-JIMMatchingRule -ConnectedSystemId $targetSystem.id `
                         -ObjectTypeId $targetUserType.id `
-                        -TargetMetaverseAttributeName 'Account Name' `
-                        -SourceConnectedSystemAttributeName 'sAMAccountName' | Out-Null
+                        -TargetMetaverseAttributeId $mvAccountNameAttr.id `
+                        -SourceAttributeId $targetSamAttr.id | Out-Null
                     Write-Host "  ✓ Target matching rule configured (sAMAccountName → Account Name)" -ForegroundColor Green
                 }
                 catch {
@@ -930,88 +933,88 @@ try {
     $sourceProfiles = Get-JIMRunProfile -ConnectedSystemId $sourceSystem.id
     $targetProfiles = Get-JIMRunProfile -ConnectedSystemId $targetSystem.id
 
-    # APAC AD - Full Import
-    $sourceImportProfile = $sourceProfiles | Where-Object { $_.name -eq "APAC AD - Full Import" }
+    # Source (APAC) - Full Import
+    $sourceImportProfile = $sourceProfiles | Where-Object { $_.name -eq "Full Import" }
     if (-not $sourceImportProfile) {
         $sourceImportProfile = New-JIMRunProfile `
-            -Name "APAC AD - Full Import" `
+            -Name "Full Import" `
             -ConnectedSystemId $sourceSystem.id `
             -RunType "FullImport" `
             -PassThru
-        Write-Host "  ✓ Created 'APAC AD - Full Import' run profile" -ForegroundColor Green
+        Write-Host "  ✓ Created 'Full Import' run profile for Source (APAC)" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'APAC AD - Full Import' already exists" -ForegroundColor Gray
+        Write-Host "  Run profile 'Full Import' already exists for Source (APAC)" -ForegroundColor Gray
     }
 
-    # APAC AD - Full Sync
-    $sourceSyncProfile = $sourceProfiles | Where-Object { $_.name -eq "APAC AD - Full Sync" }
+    # Source (APAC) - Full Sync
+    $sourceSyncProfile = $sourceProfiles | Where-Object { $_.name -eq "Full Sync" }
     if (-not $sourceSyncProfile) {
         $sourceSyncProfile = New-JIMRunProfile `
-            -Name "APAC AD - Full Sync" `
+            -Name "Full Sync" `
             -ConnectedSystemId $sourceSystem.id `
             -RunType "FullSynchronisation" `
             -PassThru
-        Write-Host "  ✓ Created 'APAC AD - Full Sync' run profile" -ForegroundColor Green
+        Write-Host "  ✓ Created 'Full Sync' run profile for Source (APAC)" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'APAC AD - Full Sync' already exists" -ForegroundColor Gray
+        Write-Host "  Run profile 'Full Sync' already exists for Source (APAC)" -ForegroundColor Gray
     }
 
-    # APAC AD - Export (for reverse sync)
-    $sourceExportProfile = $sourceProfiles | Where-Object { $_.name -eq "APAC AD - Export" }
+    # Source (APAC) - Export (for reverse sync)
+    $sourceExportProfile = $sourceProfiles | Where-Object { $_.name -eq "Export" }
     if (-not $sourceExportProfile) {
         $sourceExportProfile = New-JIMRunProfile `
-            -Name "APAC AD - Export" `
+            -Name "Export" `
             -ConnectedSystemId $sourceSystem.id `
             -RunType "Export" `
             -PassThru
-        Write-Host "  ✓ Created 'APAC AD - Export' run profile" -ForegroundColor Green
+        Write-Host "  ✓ Created 'Export' run profile for Source (APAC)" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'APAC AD - Export' already exists" -ForegroundColor Gray
+        Write-Host "  Run profile 'Export' already exists for Source (APAC)" -ForegroundColor Gray
     }
 
-    # EMEA AD - Full Import
-    $targetImportProfile = $targetProfiles | Where-Object { $_.name -eq "EMEA AD - Full Import" }
+    # Target (EMEA) - Full Import
+    $targetImportProfile = $targetProfiles | Where-Object { $_.name -eq "Full Import" }
     if (-not $targetImportProfile) {
         $targetImportProfile = New-JIMRunProfile `
-            -Name "EMEA AD - Full Import" `
+            -Name "Full Import" `
             -ConnectedSystemId $targetSystem.id `
             -RunType "FullImport" `
             -PassThru
-        Write-Host "  ✓ Created 'EMEA AD - Full Import' run profile" -ForegroundColor Green
+        Write-Host "  ✓ Created 'Full Import' run profile for Target (EMEA)" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'EMEA AD - Full Import' already exists" -ForegroundColor Gray
+        Write-Host "  Run profile 'Full Import' already exists for Target (EMEA)" -ForegroundColor Gray
     }
 
-    # EMEA AD - Full Sync
-    $targetSyncProfile = $targetProfiles | Where-Object { $_.name -eq "EMEA AD - Full Sync" }
+    # Target (EMEA) - Full Sync
+    $targetSyncProfile = $targetProfiles | Where-Object { $_.name -eq "Full Sync" }
     if (-not $targetSyncProfile) {
         $targetSyncProfile = New-JIMRunProfile `
-            -Name "EMEA AD - Full Sync" `
+            -Name "Full Sync" `
             -ConnectedSystemId $targetSystem.id `
             -RunType "FullSynchronisation" `
             -PassThru
-        Write-Host "  ✓ Created 'EMEA AD - Full Sync' run profile" -ForegroundColor Green
+        Write-Host "  ✓ Created 'Full Sync' run profile for Target (EMEA)" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'EMEA AD - Full Sync' already exists" -ForegroundColor Gray
+        Write-Host "  Run profile 'Full Sync' already exists for Target (EMEA)" -ForegroundColor Gray
     }
 
-    # EMEA AD - Export
-    $targetExportProfile = $targetProfiles | Where-Object { $_.name -eq "EMEA AD - Export" }
+    # Target (EMEA) - Export
+    $targetExportProfile = $targetProfiles | Where-Object { $_.name -eq "Export" }
     if (-not $targetExportProfile) {
         $targetExportProfile = New-JIMRunProfile `
-            -Name "EMEA AD - Export" `
+            -Name "Export" `
             -ConnectedSystemId $targetSystem.id `
             -RunType "Export" `
             -PassThru
-        Write-Host "  ✓ Created 'EMEA AD - Export' run profile" -ForegroundColor Green
+        Write-Host "  ✓ Created 'Export' run profile for Target (EMEA)" -ForegroundColor Green
     }
     else {
-        Write-Host "  Run profile 'EMEA AD - Export' already exists" -ForegroundColor Gray
+        Write-Host "  Run profile 'Export' already exists for Target (EMEA)" -ForegroundColor Gray
     }
 }
 catch {
@@ -1032,8 +1035,8 @@ Write-Host "  Forward Flow: APAC AD -> Metaverse -> EMEA AD" -ForegroundColor Gr
 Write-Host "  Reverse Flow: EMEA AD -> Metaverse -> APAC AD" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Run Profiles Created:" -ForegroundColor Yellow
-Write-Host "  APAC AD: Full Import, Full Sync, Export" -ForegroundColor Gray
-Write-Host "  EMEA AD: Full Import, Full Sync, Export" -ForegroundColor Gray
+Write-Host "  Quantum Dynamics APAC: Full Import, Full Sync, Export" -ForegroundColor Gray
+Write-Host "  Quantum Dynamics EMEA: Full Import, Full Sync, Export" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "  1. Populate APAC AD with test users:" -ForegroundColor Gray
