@@ -112,20 +112,18 @@
 
     @if (!string.IsNullOrEmpty(_activity.ErrorMessage) || !string.IsNullOrEmpty(_activity.ErrorStackTrace))
     {
-        <MudPaper Class="pa-4 mt-4" Style="@($"color:{Colors.Shades.White}; background:{Colors.Red.Default};")" Outlined="true">
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-4 jim-alert-error">
             @if (!string.IsNullOrEmpty(_activity.ErrorMessage))
             {
-                <MudText Typo="Typo.button">Error Message:</MudText>
-                <MudText>@_activity.ErrorMessage</MudText>
-                <br />
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">@_activity.ErrorMessage</MudText>
             }
 
             @if (!string.IsNullOrEmpty(_activity.ErrorStackTrace))
             {
-                <MudText Typo="Typo.button">Error Stack:</MudText>
-                <pre style="white-space: pre-wrap; word-wrap: break-word; overflow-x: auto; max-width: 100%;">@_activity.ErrorStackTrace</pre>
+                <MudText Typo="Typo.button" Class="mt-3">Stack Trace:</MudText>
+                <pre style="white-space: pre-wrap; word-wrap: break-word; overflow-x: auto; max-width: 100%; margin-top: 8px;">@_activity.ErrorStackTrace</pre>
             }
-        </MudPaper>
+        </MudAlert>
     }
 
     @if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute)

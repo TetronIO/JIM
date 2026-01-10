@@ -157,6 +157,31 @@ body {
     /* Approx of Colors.Red.Darken4 with low opacity */
 }
 
+/* Error alert styling - accessible alternative to filled red backgrounds */
+/* Uses standard text colours for WCAG compliance with red border for visual emphasis */
+.jim-alert-error {
+    border: 2px solid #f44336 !important;
+    /* MudBlazor red/default */
+    background-color: rgba(183, 28, 28, 0.05) !important;
+    /* Very subtle red tint */
+}
+
+/* Use standard palette text colours for accessibility (dark text in light mode, light text in dark mode) */
+.jim-alert-error .mud-alert-message {
+    color: var(--mud-palette-text-primary) !important;
+}
+
+/* Error alert icon should be red for visual emphasis */
+.jim-alert-error .mud-icon-root {
+    color: #f44336 !important;
+}
+
+/* Dark mode adjustments for error alert */
+.mud-theme-dark .jim-alert-error {
+    background-color: rgba(244, 67, 54, 0.08) !important;
+    /* Very subtle red tint in dark mode */
+}
+
 /* Info panel styling for pending exports and informational content */
 .jim-paper-info {
     border: 2px solid #2196f3;
