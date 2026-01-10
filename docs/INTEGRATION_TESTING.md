@@ -534,11 +534,83 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 
 ---
 
+#### Scenario 4: MVO Deletion Rules and Deprovisioning
+
+**Purpose**: Validate MVO deletion rules including grace periods, reconnection, admin protection, and scope filter changes.
+
+**Systems**:
+- Source: CSV (HR system)
+- Target: Subatomic AD
+
+**Test Steps** (executed sequentially):
+
+| Step | Test Case | Description |
+|------|-----------|-------------|
+| 1 | **LeaverGracePeriod** | User removed from CSV → MVO enters grace period, not immediately deleted |
+| 2 | **Reconnection** | User re-added within grace period → MVO preserved, grace period cleared |
+| 3 | **SourceDeletion** | Authoritative source record deleted → triggers MVO deletion rule processing |
+| 4 | **AdminProtection** | Admin accounts with Origin=Internal → protected from auto-deletion |
+| 5 | **InboundScopeFilter** | Scoping criteria on import sync rule → filters CSOs by department |
+| 6 | **OutboundScopeFilter** | Scoping criteria on export sync rule → filters MVOs for export |
+
+**Script**: `test/integration/scenarios/Invoke-Scenario4-DeletionRules.ps1`
+
+**Execution Model**:
+
+```powershell
+# Individual steps
+./Invoke-Scenario4-DeletionRules.ps1 -Step LeaverGracePeriod -Template Small
+./Invoke-Scenario4-DeletionRules.ps1 -Step Reconnection -Template Small
+./Invoke-Scenario4-DeletionRules.ps1 -Step SourceDeletion -Template Small
+./Invoke-Scenario4-DeletionRules.ps1 -Step AdminProtection -Template Small
+./Invoke-Scenario4-DeletionRules.ps1 -Step InboundScopeFilter -Template Small
+./Invoke-Scenario4-DeletionRules.ps1 -Step OutboundScopeFilter -Template Small
+
+# Run all steps sequentially
+./Invoke-Scenario4-DeletionRules.ps1 -Step All -Template Small
+```
+
+---
+
+#### Scenario 5: Matching Rules and Join Logic
+
+**Purpose**: Validate matching rules for joining CSOs to existing MVOs based on configurable criteria.
+
+**Systems**:
+- Source: CSV (HR system)
+- Target: Subatomic AD
+
+**Test Steps** (executed sequentially):
+
+| Step | Test Case | Description |
+|------|-----------|-------------|
+| 1 | **ExactMatch** | CSO matches MVO by exact attribute value (e.g., employeeId) |
+| 2 | **MultiAttributeMatch** | CSO matches MVO using multiple attributes (e.g., firstName + lastName + email) |
+| 3 | **NoMatch** | CSO does not match any MVO → projects new MVO |
+| 4 | **AmbiguousMatch** | CSO matches multiple MVOs → handled per configuration (error, first match, etc.) |
+
+**Script**: `test/integration/scenarios/Invoke-Scenario5-MatchingRules.ps1`
+
+**Execution Model**:
+
+```powershell
+# Individual steps
+./Invoke-Scenario5-MatchingRules.ps1 -Step ExactMatch -Template Small
+./Invoke-Scenario5-MatchingRules.ps1 -Step MultiAttributeMatch -Template Small
+./Invoke-Scenario5-MatchingRules.ps1 -Step NoMatch -Template Small
+./Invoke-Scenario5-MatchingRules.ps1 -Step AmbiguousMatch -Template Small
+
+# Run all steps sequentially
+./Invoke-Scenario5-MatchingRules.ps1 -Step All -Template Small
+```
+
+---
+
 ### Phase 1 (MVP) - Entitlement Management Scenarios
 
 These scenarios test group management capabilities - a core ILM function where the system manages group memberships based on identity attributes.
 
-#### Scenario 4: Entitlement Management - JIM to AD
+#### Scenario 6: Entitlement Management - JIM to AD
 
 **Purpose**: Validate JIM as the authoritative source for entitlement groups, provisioning them to AD with membership derived from person attributes.
 
@@ -564,26 +636,26 @@ These scenarios test group management capabilities - a core ILM function where t
 | 5 | **DeleteGroup** | Group deleted from JIM MV → group deleted from AD |
 | 6 | **DeleteMember** | User deleted from JIM MV → user removed from all group memberships in AD |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario4-EntitlementJIMToAD.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario6-EntitlementJIMToAD.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario4-EntitlementJIMToAD.ps1 -Step CreateGroups -Template Small
-./Invoke-Scenario4-EntitlementJIMToAD.ps1 -Step UpdateMembership -Template Small
-./Invoke-Scenario4-EntitlementJIMToAD.ps1 -Step DetectDrift -Template Small
-./Invoke-Scenario4-EntitlementJIMToAD.ps1 -Step ReassertState -Template Small
-./Invoke-Scenario4-EntitlementJIMToAD.ps1 -Step DeleteGroup -Template Small
-./Invoke-Scenario4-EntitlementJIMToAD.ps1 -Step DeleteMember -Template Small
+./Invoke-Scenario6-EntitlementJIMToAD.ps1 -Step CreateGroups -Template Small
+./Invoke-Scenario6-EntitlementJIMToAD.ps1 -Step UpdateMembership -Template Small
+./Invoke-Scenario6-EntitlementJIMToAD.ps1 -Step DetectDrift -Template Small
+./Invoke-Scenario6-EntitlementJIMToAD.ps1 -Step ReassertState -Template Small
+./Invoke-Scenario6-EntitlementJIMToAD.ps1 -Step DeleteGroup -Template Small
+./Invoke-Scenario6-EntitlementJIMToAD.ps1 -Step DeleteMember -Template Small
 
 # Run all steps sequentially
-./Invoke-Scenario4-EntitlementJIMToAD.ps1 -Step All -Template Small
+./Invoke-Scenario6-EntitlementJIMToAD.ps1 -Step All -Template Small
 ```
 
 ---
 
-#### Scenario 5: Entitlement Management - Convert AD Group Authority to JIM
+#### Scenario 7: Entitlement Management - Convert AD Group Authority to JIM
 
 **Purpose**: Validate importing existing AD groups into JIM and converting authority so JIM becomes the authoritative source. After conversion, any changes made directly in AD are overwritten by JIM.
 
@@ -604,25 +676,25 @@ These scenarios test group management capabilities - a core ILM function where t
 | 4 | **DetectDrift** | Admin manually modifies group in AD → JIM detects drift |
 | 5 | **ReassertState** | JIM overwrites AD changes, reasserting JIM-managed membership |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario5-ConvertADGroupAuthority.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario7-ConvertADGroupAuthority.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario5-ConvertADGroupAuthority.ps1 -Step ImportGroups -Template Small
-./Invoke-Scenario5-ConvertADGroupAuthority.ps1 -Step ConvertAuthority -Template Small
-./Invoke-Scenario5-ConvertADGroupAuthority.ps1 -Step UpdateViaJIM -Template Small
-./Invoke-Scenario5-ConvertADGroupAuthority.ps1 -Step DetectDrift -Template Small
-./Invoke-Scenario5-ConvertADGroupAuthority.ps1 -Step ReassertState -Template Small
+./Invoke-Scenario7-ConvertADGroupAuthority.ps1 -Step ImportGroups -Template Small
+./Invoke-Scenario7-ConvertADGroupAuthority.ps1 -Step ConvertAuthority -Template Small
+./Invoke-Scenario7-ConvertADGroupAuthority.ps1 -Step UpdateViaJIM -Template Small
+./Invoke-Scenario7-ConvertADGroupAuthority.ps1 -Step DetectDrift -Template Small
+./Invoke-Scenario7-ConvertADGroupAuthority.ps1 -Step ReassertState -Template Small
 
 # Run all steps sequentially
-./Invoke-Scenario5-ConvertADGroupAuthority.ps1 -Step All -Template Small
+./Invoke-Scenario7-ConvertADGroupAuthority.ps1 -Step All -Template Small
 ```
 
 ---
 
-#### Scenario 6: Entitlement Management - Cross-domain Entitlement Synchronisation
+#### Scenario 8: Entitlement Management - Cross-domain Entitlement Synchronisation
 
 **Purpose**: Validate synchronising entitlement groups between two AD domains, with one domain authoritative for groups.
 
@@ -645,28 +717,28 @@ These scenarios test group management capabilities - a core ILM function where t
 | 5 | **NewGroup** | New group created in AD1 → provisioned to AD2 |
 | 6 | **DeleteGroup** | Group deleted from AD1 → deleted from AD2 |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario6-CrossDomainEntitlementSync.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario8-CrossDomainEntitlementSync.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario6-CrossDomainEntitlementSync.ps1 -Step InitialSync -Template Small
-./Invoke-Scenario6-CrossDomainEntitlementSync.ps1 -Step ForwardSync -Template Small
-./Invoke-Scenario6-CrossDomainEntitlementSync.ps1 -Step DetectDrift -Template Small
-./Invoke-Scenario6-CrossDomainEntitlementSync.ps1 -Step ReassertState -Template Small
-./Invoke-Scenario6-CrossDomainEntitlementSync.ps1 -Step NewGroup -Template Small
-./Invoke-Scenario6-CrossDomainEntitlementSync.ps1 -Step DeleteGroup -Template Small
+./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step InitialSync -Template Small
+./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step ForwardSync -Template Small
+./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step DetectDrift -Template Small
+./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step ReassertState -Template Small
+./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step NewGroup -Template Small
+./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step DeleteGroup -Template Small
 
 # Run all steps sequentially
-./Invoke-Scenario6-CrossDomainEntitlementSync.ps1 -Step All -Template Small
+./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step All -Template Small
 ```
 
 ---
 
 ### Phase 2 (Post-MVP) - Database Scenarios
 
-#### Scenario 7: Multi-Source Aggregation
+#### Scenario 9: Multi-Source Aggregation
 
 **Purpose**: Validate multiple database sources feeding the metaverse with join rules and attribute precedence.
 
@@ -685,24 +757,24 @@ These scenarios test group management capabilities - a core ILM function where t
 | 3 | **Precedence** | SQL Server authoritative for email/phone, Oracle for department/title |
 | 4 | **DataTypes** | VARCHAR, NVARCHAR, DATE, DATETIME, INT, BIT → correct mapping |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario7-MultiSourceAggregation.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario9-MultiSourceAggregation.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario7-MultiSourceAggregation.ps1 -Step InitialLoad -Template Small
-./Invoke-Scenario7-MultiSourceAggregation.ps1 -Step JoinRules -Template Small
-./Invoke-Scenario7-MultiSourceAggregation.ps1 -Step Precedence -Template Small
-./Invoke-Scenario7-MultiSourceAggregation.ps1 -Step DataTypes -Template Small
+./Invoke-Scenario9-MultiSourceAggregation.ps1 -Step InitialLoad -Template Small
+./Invoke-Scenario9-MultiSourceAggregation.ps1 -Step JoinRules -Template Small
+./Invoke-Scenario9-MultiSourceAggregation.ps1 -Step Precedence -Template Small
+./Invoke-Scenario9-MultiSourceAggregation.ps1 -Step DataTypes -Template Small
 
 # Run all steps sequentially
-./Invoke-Scenario7-MultiSourceAggregation.ps1 -Step All -Template Small
+./Invoke-Scenario9-MultiSourceAggregation.ps1 -Step All -Template Small
 ```
 
 ---
 
-#### Scenario 8: Database Source/Target
+#### Scenario 10: Database Source/Target
 
 **Purpose**: Validate database connector import/export capabilities.
 
@@ -719,24 +791,24 @@ These scenarios test group management capabilities - a core ILM function where t
 | 3 | **DataTypes** | Data type handling (text, numeric, date, boolean) |
 | 4 | **MultiValue** | Multi-valued attributes (if supported) |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario8-DatabaseSourceTarget.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario10-DatabaseSourceTarget.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario8-DatabaseSourceTarget.ps1 -Step Import -Template Small
-./Invoke-Scenario8-DatabaseSourceTarget.ps1 -Step Export -Template Small
-./Invoke-Scenario8-DatabaseSourceTarget.ps1 -Step DataTypes -Template Small
-./Invoke-Scenario8-DatabaseSourceTarget.ps1 -Step MultiValue -Template Small
+./Invoke-Scenario10-DatabaseSourceTarget.ps1 -Step Import -Template Small
+./Invoke-Scenario10-DatabaseSourceTarget.ps1 -Step Export -Template Small
+./Invoke-Scenario10-DatabaseSourceTarget.ps1 -Step DataTypes -Template Small
+./Invoke-Scenario10-DatabaseSourceTarget.ps1 -Step MultiValue -Template Small
 
 # Run all steps sequentially
-./Invoke-Scenario8-DatabaseSourceTarget.ps1 -Step All -Template Small
+./Invoke-Scenario10-DatabaseSourceTarget.ps1 -Step All -Template Small
 ```
 
 ---
 
-#### Scenario 9: Performance Baselines
+#### Scenario 11: Performance Baselines
 
 **Purpose**: Establish performance characteristics at various scales.
 
@@ -1531,7 +1603,10 @@ JIM/
 | Invoke-Scenario1 | ✅ Complete | All 6 tests passing (Joiner, Mover, Mover-Rename, Mover-Move, Leaver, Reconnection) |
 | Scenario 2 | 🔧 Ready | Blocking bug fixed (PR #279) - uses objectGUID as external ID |
 | Scenario 3 | ⏳ Pending | Placeholder script exists |
-| Scenario 4 & 5 | ✅ Complete | Deletion rules and matching rules scenarios |
+| Scenario 4 | 🔧 Ready | Deletion rules - script exists, needs validation |
+| Scenario 5 | 🔧 Ready | Matching rules - script exists, needs validation |
+| Scenarios 6-8 | 📋 Defined | Entitlement Management scenarios (not yet implemented) |
+| Scenarios 9-11 | ⏳ Post-MVP | Database scenarios |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 
 ### Completed Fixes (2025-12-21)
