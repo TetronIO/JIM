@@ -1,5 +1,6 @@
 using JIM.Application.Diagnostics;
 using JIM.Application.Services;
+using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -563,6 +564,9 @@ public class ExportExecutionServer
         // Populate external ID attribute if provided in the export result
         if (exportResult != null && !string.IsNullOrEmpty(exportResult.ExternalId) && cso.ExternalIdAttributeId > 0)
         {
+            // Get the attribute definition to determine the correct data type
+            var externalIdAttribute = await Application.Repository.ConnectedSystems.GetAttributeAsync(cso.ExternalIdAttributeId);
+
             // Find or create the external ID attribute value
             var externalIdAttrValue = cso.AttributeValues
                 .FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
@@ -579,21 +583,23 @@ public class ExportExecutionServer
                 newAttributeValues.Add(externalIdAttrValue);
             }
 
-            // Set the external ID value - try to parse as GUID first, then string
-            if (Guid.TryParse(exportResult.ExternalId, out var guidValue))
+            // Set the external ID value based on the attribute's data type
+            // This ensures consistency with how import stores values
+            if (externalIdAttribute?.Type == AttributeDataType.Guid && Guid.TryParse(exportResult.ExternalId, out var guidValue))
             {
                 externalIdAttrValue.GuidValue = guidValue;
                 externalIdAttrValue.StringValue = null;
             }
             else
             {
+                // For Text or other types, or if attribute type is unknown, store as string
                 externalIdAttrValue.StringValue = exportResult.ExternalId;
                 externalIdAttrValue.GuidValue = null;
             }
 
             needsUpdate = true;
-            Log.Information("UpdateCsoAfterSuccessfulExportAsync: Set CSO {CsoId} external ID to {ExternalId}",
-                cso.Id, exportResult.ExternalId);
+            Log.Information("UpdateCsoAfterSuccessfulExportAsync: Set CSO {CsoId} external ID to {ExternalId} (type: {AttrType})",
+                cso.Id, exportResult.ExternalId, externalIdAttribute?.Type.ToString() ?? "Unknown");
         }
 
         // Update secondary external ID if provided
