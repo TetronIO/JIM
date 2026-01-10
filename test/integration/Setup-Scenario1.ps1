@@ -503,6 +503,7 @@ try {
             'title',              # Job Title
             'department',         # Department
             'company',            # Company name (Subatomic or partner company)
+            'employeeID',         # Employee ID - required for LDAP matching rule (join to existing AD accounts)
             'distinguishedName',  # DN - required for LDAP provisioning
             'accountExpires',     # Account expiry (Large Integer/Int64) - populated from HR Employee End Date via ToFileTime
             'userAccountControl'  # Account control flags (Number/Int32) - tests integer data type flow
@@ -597,6 +598,7 @@ try {
             @{ MvAttr = "Job Title";     LdapAttr = "title" }
             @{ MvAttr = "Department";    LdapAttr = "department" }
             @{ MvAttr = "Company";       LdapAttr = "company" }  # Company name exported to AD
+            @{ MvAttr = "Employee ID";   LdapAttr = "employeeID" }  # Required for LDAP matching rule
         )
 
         # Expression-based mappings for computed values
@@ -765,30 +767,32 @@ try {
 
         $ldapEmployeeIdAttr = $ldapUserType.attributes | Where-Object { $_.name -eq 'employeeID' }
 
-        if ($ldapEmployeeIdAttr -and $mvEmployeeIdAttr) {
-            # Check if matching rule already exists
-            $existingLdapMatchingRules = Get-JIMMatchingRule -ConnectedSystemId $ldapSystem.id -ObjectTypeId $ldapUserType.id
+        if (-not $ldapEmployeeIdAttr) {
+            Write-Host "  ✗ LDAP 'employeeID' attribute not found in schema" -ForegroundColor Red
+            throw "Required LDAP attribute 'employeeID' not found. Ensure the attribute is selected in the LDAP object type configuration."
+        }
+        if (-not $mvEmployeeIdAttr) {
+            Write-Host "  ✗ Metaverse 'Employee ID' attribute not found" -ForegroundColor Red
+            throw "Required Metaverse attribute 'Employee ID' not found. Setup cannot continue."
+        }
 
-            $ldapMatchingRuleExists = $existingLdapMatchingRules | Where-Object {
-                $_.targetMetaverseAttributeId -eq $mvEmployeeIdAttr.id -and
-                ($_.sources | Where-Object { $_.connectedSystemAttributeId -eq $ldapEmployeeIdAttr.id })
-            }
+        # Check if matching rule already exists
+        $existingLdapMatchingRules = Get-JIMMatchingRule -ConnectedSystemId $ldapSystem.id -ObjectTypeId $ldapUserType.id
 
-            if (-not $ldapMatchingRuleExists) {
-                New-JIMMatchingRule -ConnectedSystemId $ldapSystem.id `
-                    -ObjectTypeId $ldapUserType.id `
-                    -SourceAttributeId $ldapEmployeeIdAttr.id `
-                    -TargetMetaverseAttributeId $mvEmployeeIdAttr.id | Out-Null
-                Write-Host "  ✓ LDAP object matching rule configured (employeeID → Employee ID)" -ForegroundColor Green
-            }
-            else {
-                Write-Host "  LDAP object matching rule already exists" -ForegroundColor Gray
-            }
+        $ldapMatchingRuleExists = $existingLdapMatchingRules | Where-Object {
+            $_.targetMetaverseAttributeId -eq $mvEmployeeIdAttr.id -and
+            ($_.sources | Where-Object { $_.connectedSystemAttributeId -eq $ldapEmployeeIdAttr.id })
+        }
+
+        if (-not $ldapMatchingRuleExists) {
+            New-JIMMatchingRule -ConnectedSystemId $ldapSystem.id `
+                -ObjectTypeId $ldapUserType.id `
+                -SourceAttributeId $ldapEmployeeIdAttr.id `
+                -TargetMetaverseAttributeId $mvEmployeeIdAttr.id | Out-Null
+            Write-Host "  ✓ LDAP object matching rule configured (employeeID → Employee ID)" -ForegroundColor Green
         }
         else {
-            Write-Host "  ⚠ Could not find required attributes for LDAP matching rule (employeeID attribute may not exist in AD schema)" -ForegroundColor Yellow
-            Write-Host "    This is expected - standard AD schemas don't include employeeID by default" -ForegroundColor DarkGray
-            Write-Host "    Objects will be provisioned without matching to existing AD accounts" -ForegroundColor DarkGray
+            Write-Host "  LDAP object matching rule already exists" -ForegroundColor Gray
         }
 
         # Restart jim.worker to pick up schema changes (API modifications may require reload)

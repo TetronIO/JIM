@@ -157,14 +157,29 @@
                 }
                 else if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ExternalIdSnapshot))
                 {
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudTooltip Text="This object has been deleted. The external ID shown is preserved from when this operation was recorded.">
-                            <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.History">
-                                Deleted
-                            </MudChip>
-                        </MudTooltip>
-                        <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
-                    </MudStack>
+                    @* CSO doesn't exist but we have an external ID snapshot - differentiate between error (rejected) vs deleted *@
+                    @if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudTooltip Text="This object was not created due to an import error. The external ID shown is from the source data.">
+                                <MudChip T="string" Color="Color.Error" Size="Size.Small" Icon="@Icons.Material.Filled.Block">
+                                    Rejected
+                                </MudChip>
+                            </MudTooltip>
+                            <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudTooltip Text="This object has been deleted. The external ID shown is preserved from when this operation was recorded.">
+                                <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.History">
+                                    Deleted
+                                </MudChip>
+                            </MudTooltip>
+                            <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
+                        </MudStack>
+                    }
                 }
                 else
                 {
