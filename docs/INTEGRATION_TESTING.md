@@ -584,10 +584,10 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 
 | Step | Test Case | Description |
 |------|-----------|-------------|
-| 1 | **ExactMatch** | CSO matches MVO by exact attribute value (e.g., employeeId) |
-| 2 | **MultiAttributeMatch** | CSO matches MVO using multiple attributes (e.g., firstName + lastName + email) |
-| 3 | **NoMatch** | CSO does not match any MVO → projects new MVO |
-| 4 | **AmbiguousMatch** | CSO matches multiple MVOs → handled per configuration (error, first match, etc.) |
+| 1 | **Projection** | New CSO with unique employeeId → projects to new MVO |
+| 2 | **Join** | CSO with matching employeeId → joins existing MVO (no duplicate created) |
+| 3 | **DuplicatePrevention** | Two CSOs from same CS with same employeeId → conflict handling |
+| 4 | **MultipleRules** | First rule doesn't match → falls back to secondary matching rule (email) |
 
 **Script**: `test/integration/scenarios/Invoke-Scenario5-MatchingRules.ps1`
 
@@ -595,10 +595,10 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 
 ```powershell
 # Individual steps
-./Invoke-Scenario5-MatchingRules.ps1 -Step ExactMatch -Template Small
-./Invoke-Scenario5-MatchingRules.ps1 -Step MultiAttributeMatch -Template Small
-./Invoke-Scenario5-MatchingRules.ps1 -Step NoMatch -Template Small
-./Invoke-Scenario5-MatchingRules.ps1 -Step AmbiguousMatch -Template Small
+./Invoke-Scenario5-MatchingRules.ps1 -Step Projection -Template Small
+./Invoke-Scenario5-MatchingRules.ps1 -Step Join -Template Small
+./Invoke-Scenario5-MatchingRules.ps1 -Step DuplicatePrevention -Template Small
+./Invoke-Scenario5-MatchingRules.ps1 -Step MultipleRules -Template Small
 
 # Run all steps sequentially
 ./Invoke-Scenario5-MatchingRules.ps1 -Step All -Template Small

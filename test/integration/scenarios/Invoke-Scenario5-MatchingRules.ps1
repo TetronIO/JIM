@@ -83,7 +83,7 @@ try {
     # Reset CSV to baseline state before running tests
     Write-Host "Resetting CSV test data to baseline..." -ForegroundColor Gray
     & "$PSScriptRoot/../Generate-TestCSV.ps1" -Template $Template -OutputPath "$PSScriptRoot/../../test-data"
-    Write-Host "  CSV test data reset to baseline" -ForegroundColor Green
+    Write-Host "  ✓ CSV test data reset to baseline" -ForegroundColor Green
 
     # Clean up test-specific AD users from previous test runs
     Write-Host "Cleaning up test-specific AD users from previous runs..." -ForegroundColor Gray
@@ -98,7 +98,7 @@ try {
             Write-Host "  - $user not found (already clean)" -ForegroundColor DarkGray
         }
     }
-    Write-Host "  AD cleanup complete ($deletedCount test users deleted)" -ForegroundColor Green
+    Write-Host "  ✓ AD cleanup complete ($deletedCount test users deleted)" -ForegroundColor Green
 
     # Setup scenario configuration (reuse Scenario 1 setup)
     $config = & "$PSScriptRoot/../Setup-Scenario1.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template
@@ -107,7 +107,7 @@ try {
         throw "Failed to setup Scenario configuration"
     }
 
-    Write-Host "JIM configured for Scenario 5" -ForegroundColor Green
+    Write-Host "✓ JIM configured for Scenario 5" -ForegroundColor Green
     Write-Host "  CSV System ID: $($config.CSVSystemId)" -ForegroundColor Gray
     Write-Host "  LDAP System ID: $($config.LDAPSystemId)" -ForegroundColor Gray
 
@@ -160,10 +160,10 @@ try {
 
         # Run import and sync
         Write-Host "  Running import and sync..." -ForegroundColor Gray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
-        Start-Sleep -Seconds $WaitSeconds
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
-        Start-Sleep -Seconds $WaitSeconds
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "CSV Import (Projection)"
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Sync (Projection)"
 
         # Verify MVO was created
         $mvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "test.projection" -PageSize 10 -ErrorAction SilentlyContinue
@@ -171,7 +171,7 @@ try {
         if ($mvos -and $mvos.items) {
             $projectedMvo = $mvos.items | Where-Object { $_.displayName -match "Test Projection" }
             if ($projectedMvo) {
-                Write-Host "  MVO created with ID: $($projectedMvo.id)" -ForegroundColor Green
+                Write-Host "  ✓ MVO created with ID: $($projectedMvo.id)" -ForegroundColor Green
                 $testResults.Steps += @{ Name = "Projection"; Success = $true }
             } else {
                 Write-Host "  MVO not found with expected display name" -ForegroundColor Red
@@ -223,10 +223,10 @@ try {
 
         # Import from HR to create MVO
         Write-Host "  Creating MVO via HR import..." -ForegroundColor Gray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
-        Start-Sleep -Seconds $WaitSeconds
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
-        Start-Sleep -Seconds $WaitSeconds
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "CSV Import (Join - create MVO)"
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Sync (Join - create MVO)"
 
         # Get the MVO that was created
         $mvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "test.join" -PageSize 10 -ErrorAction SilentlyContinue
@@ -242,20 +242,20 @@ try {
 
             # Now export to AD (this will provision the user)
             Write-Host "  Exporting to AD..." -ForegroundColor Gray
-            Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId | Out-Null
-            Start-Sleep -Seconds $WaitSeconds
+            $exportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "LDAP Export (Join)"
 
             # Import from AD to confirm the CSO joins back to the same MVO
             Write-Host "  Importing from AD to verify join..." -ForegroundColor Gray
-            Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPImportProfileId | Out-Null
-            Start-Sleep -Seconds $WaitSeconds
+            $ldapImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $ldapImportResult.activityId -Name "LDAP Import (Join - confirm)"
 
             # Verify the MVO still has the same ID (not duplicated)
             $mvosAfter = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "test.join" -PageSize 10 -ErrorAction SilentlyContinue
             $matchingMvos = $mvosAfter.items | Where-Object { $_.displayName -match "Test Join" }
 
             if ($matchingMvos.Count -eq 1 -and $matchingMvos[0].id -eq $originalMvoId) {
-                Write-Host "  AD CSO joined to existing MVO (no duplicate created)" -ForegroundColor Green
+                Write-Host "  ✓ AD CSO joined to existing MVO (no duplicate created)" -ForegroundColor Green
                 $testResults.Steps += @{ Name = "Join"; Success = $true }
             }
             elseif ($matchingMvos.Count -gt 1) {
@@ -315,10 +315,10 @@ try {
 
         # Import first user
         Write-Host "  Creating first user with EmployeeId=$($testUser1.EmployeeId)..." -ForegroundColor Gray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
-        Start-Sleep -Seconds $WaitSeconds
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
-        Start-Sleep -Seconds $WaitSeconds
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "CSV Import (DuplicatePrevention - first user)"
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Sync (DuplicatePrevention - first user)"
 
         # Now add second user with same employeeId (simulating HR data error)
         $testUser2 = New-TestUser -Index 9004
@@ -353,10 +353,10 @@ try {
 
         # Import second user
         Write-Host "  Importing second user with SAME EmployeeId (simulating HR data error)..." -ForegroundColor Gray
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
-        Start-Sleep -Seconds $WaitSeconds
-        Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
-        Start-Sleep -Seconds $WaitSeconds
+        $importResult2 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult2.activityId -Name "CSV Import (DuplicatePrevention - second user)"
+        $syncResult2 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult2.activityId -Name "Full Sync (DuplicatePrevention - second user)"
 
         # Check results - we should have appropriate handling of this conflict
         $mvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "test.duplicate" -PageSize 20 -ErrorAction SilentlyContinue
@@ -431,7 +431,7 @@ try {
                             -SourceAttributeId $csvEmailAttr.id `
                             -TargetMetaverseAttributeId $mvEmailAttr.id `
                             -Order 1 | Out-Null
-                        Write-Host "  Secondary matching rule created" -ForegroundColor Green
+                        Write-Host "  ✓ Secondary matching rule created" -ForegroundColor Green
                     }
                     catch {
                         Write-Host "  Failed to create secondary matching rule: $_" -ForegroundColor Yellow
@@ -475,10 +475,10 @@ try {
 
                 # Import first user to create MVO
                 Write-Host "  Creating MVO with EmployeeId=$($testUser1.EmployeeId), Email=$($testUser1.Email)..." -ForegroundColor Gray
-                Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
-                Start-Sleep -Seconds $WaitSeconds
-                Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
-                Start-Sleep -Seconds $WaitSeconds
+                $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+                Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "CSV Import (MultipleRules - first user)"
+                $syncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+                Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Sync (MultipleRules - first user)"
 
                 # Verify MVO was created
                 $mvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "test.multirule" -PageSize 10 -ErrorAction SilentlyContinue
@@ -499,10 +499,10 @@ try {
                     docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
 
                     # Import to process deletion
-                    Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
-                    Start-Sleep -Seconds $WaitSeconds
-                    Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
-                    Start-Sleep -Seconds $WaitSeconds
+                    $delImportResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+                    Assert-ActivitySuccess -ActivityId $delImportResult.activityId -Name "CSV Import (MultipleRules - delete first)"
+                    $delSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+                    Assert-ActivitySuccess -ActivityId $delSyncResult.activityId -Name "Full Sync (MultipleRules - delete first)"
 
                     # Step 3: Create second user with DIFFERENT employeeId but SAME email
                     $testUser2 = New-TestUser -Index 9011
@@ -537,10 +537,10 @@ try {
 
                     # Import second user
                     Write-Host "  Importing second user with different EmployeeId=$($testUser2.EmployeeId), same Email=$($testUser2.Email)..." -ForegroundColor Gray
-                    Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId | Out-Null
-                    Start-Sleep -Seconds $WaitSeconds
-                    Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId | Out-Null
-                    Start-Sleep -Seconds $WaitSeconds
+                    $importResult2 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+                    Assert-ActivitySuccess -ActivityId $importResult2.activityId -Name "CSV Import (MultipleRules - second user)"
+                    $syncResult2 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+                    Assert-ActivitySuccess -ActivityId $syncResult2.activityId -Name "Full Sync (MultipleRules - second user)"
 
                     # Step 4: Verify the second CSO joined to the SAME MVO (via email rule)
                     $mvosAfter = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "test.multirule" -PageSize 10 -ErrorAction SilentlyContinue
@@ -553,7 +553,7 @@ try {
 
                     if ($matchingMvos.Count -eq 1 -and $originalStillExists) {
                         # Perfect - second CSO joined to existing MVO via email rule
-                        Write-Host "  SUCCESS: Second CSO joined to existing MVO via secondary matching rule (email)" -ForegroundColor Green
+                        Write-Host "  ✓ Second CSO joined to existing MVO via secondary matching rule (email)" -ForegroundColor Green
                         $testResults.Steps += @{ Name = "MultipleRules"; Success = $true }
                     }
                     elseif ($matchingMvos.Count -eq 2) {
@@ -586,7 +586,7 @@ try {
     Write-Host "Tests passed: $successCount" -ForegroundColor $(if ($successCount -eq $totalCount) { "Green" } else { "Yellow" })
 
     foreach ($stepResult in $testResults.Steps) {
-        $status = if ($stepResult.Success) { "" } else { "" }
+        $status = if ($stepResult.Success) { "✓" } else { "✗" }
         $color = if ($stepResult.Success) { "Green" } else { "Red" }
 
         Write-Host "$status $($stepResult.Name)" -ForegroundColor $color
@@ -603,18 +603,18 @@ try {
 
     if ($testResults.Success) {
         Write-Host ""
-        Write-Host " All tests passed" -ForegroundColor Green
+        Write-Host "✓ All tests passed" -ForegroundColor Green
         exit 0
     }
     else {
         Write-Host ""
-        Write-Host " Some tests failed" -ForegroundColor Red
+        Write-Host "✗ Some tests failed" -ForegroundColor Red
         exit 1
     }
 }
 catch {
     Write-Host ""
-    Write-Host " Scenario 5 failed: $_" -ForegroundColor Red
+    Write-Host "✗ Scenario 5 failed: $_" -ForegroundColor Red
     Write-Host "  Stack trace: $($_.ScriptStackTrace)" -ForegroundColor Gray
     $testResults.Error = $_.Exception.Message
     exit 1
