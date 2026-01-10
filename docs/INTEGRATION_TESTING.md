@@ -111,15 +111,6 @@ See [Data Scale Templates](#data-scale-templates) for detailed template specific
 - `Wait-SambaReady.ps1` - Checks if Samba AD is ready
 - `Setup-InfrastructureApiKey.ps1` - Creates API key for testing
 
-**Current Limitations:**
-- ✅ Progress bars implemented (see [#196](https://github.com/TetronIO/JIM/issues/196))
-- ✅ Samba AD optimised with pre-built images (~30 seconds startup, down from ~5 minutes)
-- ✅ **Automatic Samba image building** - custom image built automatically on first run if not present
-- ✅ **Multi-architecture support** (AMD64 and ARM64/Apple Silicon - no Rosetta emulation needed)
-- ✅ Unit tests all passing (617 tests)
-- ✅ Expression evaluation support implemented
-- ✅ Automated Samba AD readiness check
-
 ---
 
 ## Table of Contents
