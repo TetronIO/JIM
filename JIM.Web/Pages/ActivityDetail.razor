@@ -264,8 +264,6 @@
                   Class="mt-3 mb-5"
                   Outlined="true"
                   Elevation="0"
-                  OnRowClick="HandleRowClick"
-                  RowClass="cursor-pointer"
                   Loading="@_loading"
                   LoadingProgressColor="Color.Primary">
             <ToolBarContent>
@@ -280,11 +278,7 @@
                               Style="min-width: 300px;" />
             </ToolBarContent>
             <HeaderContent>
-                <MudTh>
-                    <MudTableSortLabel SortLabel="id" T="ActivityRunProfileExecutionItemHeader">
-                        <MudText Typo="Typo.button">Internal Id</MudText>
-                    </MudTableSortLabel>
-                </MudTh>
+                <MudTh Style="width: 1px;"></MudTh>
                 <MudTh>
                     <MudTableSortLabel SortLabel="externalid" T="ActivityRunProfileExecutionItemHeader">
                         <MudText Typo="Typo.button">External Id</MudText>
@@ -312,8 +306,15 @@
                 </MudTh>
             </HeaderContent>
             <RowTemplate>
-                <MudTd DataLabel="Internal Id"><MudLink Href="@($"/activity/sync/{context.Id}")">@context.Id</MudLink></MudTd>
-                <MudTd DataLabel="External Id" class="jim-text-code">@(!string.IsNullOrEmpty(context.ExternalIdValue) ? context.ExternalIdValue : "-")</MudTd>
+                <MudTd>
+                    <MudButton Variant="Variant.Outlined"
+                               Size="Size.Small"
+                               Color="Color.Primary"
+                               Href="@($"/activity/sync/{context.Id}")">
+                        View
+                    </MudButton>
+                </MudTd>
+                <MudTd DataLabel="External Id" Class="jim-text-code">@(!string.IsNullOrEmpty(context.ExternalIdValue) ? context.ExternalIdValue : "-")</MudTd>
                 <MudTd DataLabel="Display Name">@(!string.IsNullOrEmpty(context.DisplayName) ? context.DisplayName : "-")</MudTd>
                 <MudTd DataLabel="External Object Type">@(context.ConnectedSystemObjectType != null ? context.ConnectedSystemObjectType.ToString().SplitOnCapitalLetters() : "-")</MudTd>
                 <MudTd DataLabel="Change Type">
@@ -436,14 +437,6 @@
     {
         _selectedChangeTypes = selectedTypes;
         _table?.ReloadServerData();
-    }
-
-    private void HandleRowClick(TableRowClickEventArgs<ActivityRunProfileExecutionItemHeader> args)
-    {
-        if (_loading || args.Item == null)
-            return;
-
-        NavManager.NavigateTo($"/activity/sync/{args.Item.Id}");
     }
 
     /// <summary>
