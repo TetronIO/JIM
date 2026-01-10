@@ -32,8 +32,8 @@ public class PendingExport
     public int ConnectedSystemId { get; set; }
 
     /// <summary>
-    /// If the change type is delete or update, then we can link an existing connector space object.
-    /// If the change type is create, then there won't be a connector space object yet that we can link.
+    /// If the change type is delete or update, then we can link an existing Connected System Object.
+    /// If the change type is create, then there won't be a Connected System Object yet that we can link.
     /// </summary>
     public ConnectedSystemObject? ConnectedSystemObject { get; set; }
 

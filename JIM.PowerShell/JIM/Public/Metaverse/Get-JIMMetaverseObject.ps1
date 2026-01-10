@@ -146,8 +146,8 @@ function Get-JIMMetaverseObject {
                 $queryString = $queryParams -join '&'
                 $response = Invoke-JIMApi -Endpoint "/api/v1/metaverse/objects?$queryString"
 
-                # Handle paginated response
-                $objects = if ($response.items) { $response.items } else { $response }
+                # Handle paginated response - check property exists, not truthy (empty array is valid)
+                $objects = if ($null -ne $response.items) { $response.items } else { $response }
 
                 # Output each object individually for pipeline support
                 foreach ($obj in $objects) {

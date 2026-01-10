@@ -853,9 +853,8 @@ public abstract class SyncTaskProcessorBase
             {
                 throw new SyncJoinException(
                     ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin,
-                    $"Would have joined this Connector Space Object to a Metaverse Object ({mvo}), but that already has a join to CSO. " +
-                    $"Check the attributes on this object are not duplicated, and/or check your " +
-                    $"Object Matching Rules for uniqueness.");
+                    $"Cannot join this Connected System Object to Metaverse Object ({mvo}) - it already has a connector from this Connected System. " +
+                    $"Check for duplicate data in your source system, or review your Object Matching Rules for uniqueness.");
             }
 
             // Establish join! First rule to match, wins.

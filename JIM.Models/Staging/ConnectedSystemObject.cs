@@ -58,7 +58,7 @@ public class ConnectedSystemObject
     public ConnectedSystemObjectJoinType JoinType { get; set; } = ConnectedSystemObjectJoinType.NotJoined;
 
     /// <summary>
-    /// When this Connector Space Object was joined to the Metaverse.
+    /// When this Connected System Object was joined to the Metaverse.
     /// </summary>
     public DateTime? DateJoined { get; set; }
 

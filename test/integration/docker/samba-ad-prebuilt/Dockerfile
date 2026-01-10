@@ -11,7 +11,7 @@
 #   - Domain fully provisioned
 #   - TLS/LDAPS configured with self-signed certs
 #   - Password complexity disabled
-#   - Test OUs created (OU=TestUsers, OU=TestGroups)
+#   - Baseline OUs created (OU=Corp, OU=Users/Corp, OU=Groups/Corp, OU=TestUsers, OU=TestGroups)
 #   - SSH public key schema installed
 #   - NO test users/groups (added by Populate-SambaAD.ps1)
 #
