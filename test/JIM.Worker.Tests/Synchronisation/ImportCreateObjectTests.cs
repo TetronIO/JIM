@@ -561,4 +561,319 @@ public class ImportCreateObjectTests
 
         Assert.Pass();
     }
+
+    /// <summary>
+    /// Tests that when two objects in the same import batch have the same external ID,
+    /// BOTH objects are rejected with a DuplicateObject error. This ensures no "random winner"
+    /// based on file order - the data owner must fix the source data.
+    /// </summary>
+    [Test]
+    public async Task FullImportDuplicateExternalIdErrorsBothObjectsTestAsync()
+    {
+        // set up the Connected System Objects mock
+        var connectedSystemObjectData = new List<ConnectedSystemObject>();
+        var mockDbSetConnectedSystemObject = connectedSystemObjectData.BuildMockDbSet();
+        mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback((IEnumerable<ConnectedSystemObject> entities) => {
+            var connectedSystemObjects = entities as ConnectedSystemObject[] ?? entities.ToArray();
+            foreach (var entity in connectedSystemObjects)
+                entity.Id = Guid.NewGuid();
+            connectedSystemObjectData.AddRange(connectedSystemObjects);
+        });
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
+
+        // Use the same HR_ID for both objects - simulating a duplicate external ID in source data
+        var duplicateHrId = Guid.NewGuid();
+
+        // mock up a connector that will return two objects with the same external ID
+        var mockFileConnector = new MockFileConnector();
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.NotSet,
+            ObjectType = "SOURCE_USER",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            {
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { duplicateHrId },
+                    Type = AttributeDataType.Guid
+                },
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
+                    IntValues = new List<int> { 1 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { "First User" },
+                    Type = AttributeDataType.Text
+                }
+            }
+        });
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.NotSet,
+            ObjectType = "SOURCE_USER",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            {
+                new ()
+                {
+                    // Same HR_ID as first object - this is the duplicate
+                    Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { duplicateHrId },
+                    Type = AttributeDataType.Guid
+                },
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
+                    IntValues = new List<int> { 2 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { "Second User (Duplicate)" },
+                    Type = AttributeDataType.Text
+                }
+            }
+        });
+
+        // now execute Jim functionality we want to test...
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+
+        // NO CSOs should have been created - both objects should be rejected
+        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(0), "Expected no Connected System Objects to be created due to duplicate external ID error.");
+
+        // verify BOTH objects have DuplicateObject errors in the activity
+        Assert.That(activity.RunProfileExecutionItems, Is.Not.Empty, "Expected run profile execution items to be created.");
+        var duplicateErrors = activity.RunProfileExecutionItems
+            .Where(item => item.ErrorType == ActivityRunProfileExecutionItemErrorType.DuplicateObject)
+            .ToList();
+        Assert.That(duplicateErrors, Has.Count.EqualTo(2), "Expected TWO error items for duplicate objects - both should be rejected.");
+
+        // Verify error messages contain the external ID
+        foreach (var errorItem in duplicateErrors)
+        {
+            Assert.That(errorItem.ErrorMessage, Does.Contain("Duplicate external ID"), "Expected the error message to indicate duplicate external ID.");
+            Assert.That(errorItem.ErrorMessage, Does.Contain(duplicateHrId.ToString()), "Expected the error message to contain the duplicate external ID value.");
+        }
+
+        Assert.Pass();
+    }
+
+    /// <summary>
+    /// Tests that when three or more objects have the same external ID, all are rejected.
+    /// </summary>
+    [Test]
+    public async Task FullImportTripleDuplicateExternalIdErrorsAllObjectsTestAsync()
+    {
+        // set up the Connected System Objects mock
+        var connectedSystemObjectData = new List<ConnectedSystemObject>();
+        var mockDbSetConnectedSystemObject = connectedSystemObjectData.BuildMockDbSet();
+        mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback((IEnumerable<ConnectedSystemObject> entities) => {
+            var connectedSystemObjects = entities as ConnectedSystemObject[] ?? entities.ToArray();
+            foreach (var entity in connectedSystemObjects)
+                entity.Id = Guid.NewGuid();
+            connectedSystemObjectData.AddRange(connectedSystemObjects);
+        });
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
+
+        // Use the same HR_ID for all three objects
+        var duplicateHrId = Guid.NewGuid();
+
+        // mock up a connector that will return three objects with the same external ID
+        var mockFileConnector = new MockFileConnector();
+        for (var i = 1; i <= 3; i++)
+        {
+            mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+            {
+                ChangeType = ObjectChangeType.NotSet,
+                ObjectType = "SOURCE_USER",
+                Attributes = new List<ConnectedSystemImportObjectAttribute>()
+                {
+                    new ()
+                    {
+                        Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
+                        GuidValues = new List<Guid> { duplicateHrId },
+                        Type = AttributeDataType.Guid
+                    },
+                    new ()
+                    {
+                        Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
+                        IntValues = new List<int> { i },
+                        Type = AttributeDataType.Number
+                    },
+                    new ()
+                    {
+                        Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString(),
+                        StringValues = new List<string> { $"User {i}" },
+                        Type = AttributeDataType.Text
+                    }
+                }
+            });
+        }
+
+        // now execute Jim functionality we want to test...
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+
+        // NO CSOs should have been created
+        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(0), "Expected no Connected System Objects to be created due to triplicate external ID error.");
+
+        // verify ALL THREE objects have DuplicateObject errors
+        var duplicateErrors = activity.RunProfileExecutionItems
+            .Where(item => item.ErrorType == ActivityRunProfileExecutionItemErrorType.DuplicateObject)
+            .ToList();
+        Assert.That(duplicateErrors, Has.Count.EqualTo(3), "Expected THREE error items for triplicate objects - all should be rejected.");
+
+        Assert.Pass();
+    }
+
+    /// <summary>
+    /// Tests that unique objects are processed normally even when duplicates exist in the same batch.
+    /// Only the duplicates should be rejected, not the unique objects.
+    /// </summary>
+    [Test]
+    public async Task FullImportDuplicateDoesNotAffectUniqueObjectsTestAsync()
+    {
+        // set up the Connected System Objects mock
+        var connectedSystemObjectData = new List<ConnectedSystemObject>();
+        var mockDbSetConnectedSystemObject = connectedSystemObjectData.BuildMockDbSet();
+        mockDbSetConnectedSystemObject.Setup(set => set.AddRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback((IEnumerable<ConnectedSystemObject> entities) => {
+            var connectedSystemObjects = entities as ConnectedSystemObject[] ?? entities.ToArray();
+            foreach (var entity in connectedSystemObjects)
+                entity.Id = Guid.NewGuid();
+            connectedSystemObjectData.AddRange(connectedSystemObjects);
+        });
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(mockDbSetConnectedSystemObject.Object);
+
+        var duplicateHrId = Guid.NewGuid();
+        var uniqueHrId = Guid.NewGuid();
+
+        // mock up a connector with: unique object, duplicate #1, duplicate #2
+        var mockFileConnector = new MockFileConnector();
+
+        // First object - unique
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.NotSet,
+            ObjectType = "SOURCE_USER",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            {
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { uniqueHrId },
+                    Type = AttributeDataType.Guid
+                },
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
+                    IntValues = new List<int> { 100 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { "Unique User" },
+                    Type = AttributeDataType.Text
+                }
+            }
+        });
+
+        // Second object - duplicate #1
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.NotSet,
+            ObjectType = "SOURCE_USER",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            {
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { duplicateHrId },
+                    Type = AttributeDataType.Guid
+                },
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
+                    IntValues = new List<int> { 1 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { "Duplicate User 1" },
+                    Type = AttributeDataType.Text
+                }
+            }
+        });
+
+        // Third object - duplicate #2
+        mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.NotSet,
+            ObjectType = "SOURCE_USER",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>()
+            {
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.HR_ID.ToString(),
+                    GuidValues = new List<Guid> { duplicateHrId },
+                    Type = AttributeDataType.Guid
+                },
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString(),
+                    IntValues = new List<int> { 2 },
+                    Type = AttributeDataType.Number
+                },
+                new ()
+                {
+                    Name = MockSourceSystemAttributeNames.DISPLAY_NAME.ToString(),
+                    StringValues = new List<string> { "Duplicate User 2" },
+                    Type = AttributeDataType.Text
+                }
+            }
+        });
+
+        // now execute Jim functionality we want to test...
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
+
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var synchronisationImportTaskProcessor = new SyncImportTaskProcessor(Jim, mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
+        await synchronisationImportTaskProcessor.PerformFullImportAsync();
+
+        // Only ONE CSO should have been created (the unique one)
+        Assert.That(connectedSystemObjectData, Has.Count.EqualTo(1), "Expected exactly one Connected System Object to be created (the unique one).");
+
+        // Verify it's the unique object
+        var createdCso = connectedSystemObjectData[0];
+        var hrIdValue = createdCso.AttributeValues.FirstOrDefault(av =>
+            av.Attribute.Name == MockSourceSystemAttributeNames.HR_ID.ToString())?.GuidValue;
+        Assert.That(hrIdValue, Is.EqualTo(uniqueHrId), "Expected the created CSO to be the unique object, not a duplicate.");
+
+        // verify the two duplicates have DuplicateObject errors
+        var duplicateErrors = activity.RunProfileExecutionItems
+            .Where(item => item.ErrorType == ActivityRunProfileExecutionItemErrorType.DuplicateObject)
+            .ToList();
+        Assert.That(duplicateErrors, Has.Count.EqualTo(2), "Expected TWO error items for duplicate objects.");
+
+        Assert.Pass();
+    }
 }

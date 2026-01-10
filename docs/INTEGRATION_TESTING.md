@@ -586,8 +586,8 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 |------|-----------|-------------|--------|
 | 1 | **Projection** | New CSO with unique employeeId → projects to new MVO | ✅ Passing |
 | 2 | **Join** | CSO with matching employeeId → joins existing MVO (no duplicate created) | ✅ Passing |
-| 3 | **DuplicatePrevention** | Two CSV rows with same hrId → import deduplication | ⚠️ Known limitation (see #280) |
-| 4 | **MultipleRules** | First rule doesn't match → falls back to secondary matching rule | ⏳ Skipped (cascading from Test 3) |
+| 3 | **DuplicatePrevention** | Two CSV rows with same hrId → BOTH rejected with `DuplicateObject` error | ✅ Passing |
+| 4 | **MultipleRules** | First rule doesn't match → falls back to secondary matching rule | ⏳ Run separately |
 | 5 | **JoinConflict** | Two CSOs with different hrIds but same employeeId → `CouldNotJoinDueToExistingJoin` error | ✅ Passing |
 
 **Script**: `test/integration/scenarios/Invoke-Scenario5-MatchingRules.ps1`
@@ -597,8 +597,8 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 - This separates the external ID (for CSO identity) from the matching attribute (employeeId)
 - Enables testing both import deduplication (same hrId) and sync join conflict (same employeeId, different hrId)
 
-**Known Limitation** (Issue #280):
-Same-batch import deduplication does not work. When two CSV rows with identical external IDs are processed in the same import batch, JIM creates 2 CSOs instead of detecting the duplicate. This is a bug to be fixed separately.
+**Same-Batch Import Deduplication** (Fixed in Issue #280):
+When two CSV rows with identical external IDs are processed in the same import batch, JIM detects the duplicate and rejects BOTH objects with a `DuplicateObject` error. This "error both" approach ensures no "random winner" based on file order - the data owner must fix the source data.
 
 **Execution Model**:
 
@@ -611,8 +611,10 @@ Same-batch import deduplication does not work. When two CSV rows with identical 
 ./Invoke-Scenario5-MatchingRules.ps1 -Step Join -Template Small
 ./Invoke-Scenario5-MatchingRules.ps1 -Step JoinConflict -Template Small
 
-# Test known limitation (run in isolation)
+# Test duplicate detection (now runs in All mode)
 ./Invoke-Scenario5-MatchingRules.ps1 -Step DuplicatePrevention -Template Small
+
+# Test multiple matching rules (complex test - run separately)
 ./Invoke-Scenario5-MatchingRules.ps1 -Step MultipleRules -Template Small
 ```
 
@@ -1616,7 +1618,7 @@ JIM/
 | Scenario 2 | 🔧 Ready | Blocking bug fixed (PR #279) - uses objectGUID as external ID |
 | Scenario 3 | ⏳ Pending | Placeholder script exists |
 | Scenario 4 | ✅ Complete | Deletion rules - all tests passing |
-| Scenario 5 | ✅ Complete | Matching rules - 3/5 tests passing, 2 skipped due to known limitation (#280) |
+| Scenario 5 | ✅ Complete | Matching rules - 4/5 tests passing, 1 run separately (MultipleRules requires specific setup) |
 | Scenarios 6-8 | 📋 Defined | Entitlement Management scenarios (not yet implemented) |
 | Scenarios 9-11 | ⏳ Post-MVP | Database scenarios |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
@@ -1627,7 +1629,7 @@ JIM/
 
 2. **Test 5 JoinConflict** - Added new test that verifies `CouldNotJoinDueToExistingJoin` error when two CSOs with different external IDs (hrId) but the same matching attribute (employeeId) try to join the same MVO.
 
-3. **Known limitation documented** - Discovered and documented same-batch import deduplication bug (Issue #280). Tests 3 and 4 are now skipped in "All" mode to prevent cascading failures.
+3. **Known limitation documented** - Same-batch import deduplication bug (Issue #280) was discovered. Test 3 was skipped in "All" mode pending fix.
 
 4. **Terminology standardisation** - Replaced "Connector Space Object" with "Connected System Object" in error messages and comments throughout the codebase.
 
@@ -1787,6 +1789,7 @@ docker logs jim.web --tail 100
 
 | Version | Date       | Changes                                         |
 |---------|------------|-------------------------------------------------|
+| 2.3     | 2026-01-10 | Fixed Issue #280: Same-batch import deduplication. When duplicate external IDs detected in same batch, BOTH objects rejected with `DuplicateObject` error. Added unit tests. Test 3 now runs in All mode. |
 | 2.2     | 2026-01-10 | Scenario 5 matching rules complete. Added hrId (GUID) as external ID, Test 5 JoinConflict verifies CouldNotJoinDueToExistingJoin error. Documented same-batch import deduplication limitation (#280). |
 | 2.1     | 2026-01-10 | Scenario 2 blocker fixed (PR #279). Export now stores external ID with correct data type. Setup-Scenario2.ps1 updated to use objectGUID as external ID instead of sAMAccountName. |
 | 2.0     | 2025-12-21 | All 6 Scenario 1 tests passing. Fixed DN column removal (now expression-calculated), deletion rules configuration, Reconnection test property overrides, and Leaver test expectations for grace period. |

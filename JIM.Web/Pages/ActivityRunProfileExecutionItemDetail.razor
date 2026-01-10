@@ -13,28 +13,20 @@
 
 @if (_activityRunProfileExecutionItem != null)
 {
-    @* Status Banner *@
-    <MudPaper Class="pa-4 mb-4"
-              Style="@GetStatusBannerStyle()"
-              Elevation="0">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
-            <MudIcon Icon="@GetStatusIcon()" Size="Size.Large" />
-            <div>
-                <MudText Typo="Typo.h5" Style="color: inherit;">
-                    @GetStatusTitle()
-                </MudText>
-                <MudText Typo="Typo.body2" Style="color: inherit; opacity: 0.9;">
-                    @GetStatusDescription()
-                </MudText>
-            </div>
-        </MudStack>
-    </MudPaper>
-
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0 mb-4"></MudBreadcrumbs>
 
+    @* Page Title *@
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudText Typo="Typo.h5">@GetStatusTitle()</MudText>
+        <MudIcon Icon="@GetStatusIcon()" Size="Size.Large" Color="@GetStatusColor()" />
+    </MudStack>
+
     @* Summary Section *@
-    <MudText Typo="Typo.h6" Class="mb-3">
+    <MudText Typo="Typo.h6" Class="mb-2">
         Execution Summary
+    </MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+        @GetStatusDescription()
     </MudText>
     <MudPaper Class="pa-5 mb-5" Outlined="true">
         <MudGrid Spacing="3">
@@ -118,22 +110,26 @@
                 }
             </MudItem>
 
-            @* Change Type *@
-            <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.overline" Class="mud-text-secondary">Operation</MudText><br />
-                <MudChip T="string"
-                         Color="@Helpers.GetRunItemMudBlazorColorForType(_activityRunProfileExecutionItem.ObjectChangeType)"
-                         Variant="Variant.Filled"
-                         Size="Size.Medium"
-                         Icon="@GetChangeTypeIcon()"
-                         Class="ml-0 mt-1">
-                    @_activityRunProfileExecutionItem.ObjectChangeType.ToString().SplitOnCapitalLetters()
-                </MudChip>
-            </MudItem>
+            @* Change Type - hide when NotSet with error (rejected imports don't have an operation) *@
+            @if (!(_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.NotSet &&
+                   _activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet))
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Operation</MudText><br />
+                    <MudChip T="string"
+                             Color="@Helpers.GetRunItemMudBlazorColorForType(_activityRunProfileExecutionItem.ObjectChangeType)"
+                             Variant="Variant.Filled"
+                             Size="Size.Medium"
+                             Icon="@GetChangeTypeIcon()"
+                             Class="ml-0 mt-1">
+                        @_activityRunProfileExecutionItem.ObjectChangeType.ToString().SplitOnCapitalLetters()
+                    </MudChip>
+                </MudItem>
+            }
 
-            @* Connected System Object *@
+            @* Connected System Object / External ID - label changes based on context *@
             <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.overline" Class="mud-text-secondary">Connected System Object</MudText>
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">@GetObjectFieldLabel()</MudText>
                 @if (_activityRunProfileExecutionItem.ConnectedSystemObject != null)
                 {
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
@@ -157,14 +153,29 @@
                 }
                 else if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ExternalIdSnapshot))
                 {
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudTooltip Text="This object has been deleted. The external ID shown is preserved from when this operation was recorded.">
-                            <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.History">
-                                Deleted
-                            </MudChip>
-                        </MudTooltip>
-                        <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
-                    </MudStack>
+                    @* CSO doesn't exist but we have an external ID snapshot - differentiate between error (rejected) vs deleted *@
+                    @if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudTooltip Text="This object was not created due to an import error. The external ID shown is from the source data.">
+                                <MudChip T="string" Color="Color.Error" Size="Size.Small" Icon="@Icons.Material.Filled.Block">
+                                    Rejected
+                                </MudChip>
+                            </MudTooltip>
+                            <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudTooltip Text="This object has been deleted. The external ID shown is preserved from when this operation was recorded.">
+                                <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.History">
+                                    Deleted
+                                </MudChip>
+                            </MudTooltip>
+                            <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
+                        </MudStack>
+                    }
                 }
                 else
                 {
@@ -260,17 +271,16 @@
     @if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
     {
         <MudText Typo="Typo.h6" Class="mb-3">
-            <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Small" Class="mr-2" Style="vertical-align: middle;" />
             Error Details
         </MudText>
 
-        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-3">
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3 jim-alert-error">
             <MudText Typo="Typo.body1" Style="font-weight: 500;">
                 @_activityRunProfileExecutionItem.ErrorType.ToString()!.SplitOnCapitalLetters()
             </MudText>
             @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorMessage))
             {
-                <MudText Typo="Typo.body2" Class="mt-2">@_activityRunProfileExecutionItem.ErrorMessage</MudText>
+                <MudText Typo="Typo.body1" Class="mt-2">@_activityRunProfileExecutionItem.ErrorMessage</MudText>
             }
         </MudAlert>
 
@@ -333,29 +343,29 @@ else
             _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(connectedSystemId.Value);
     }
 
-    private string GetStatusBannerStyle()
+    private Color GetStatusColor()
     {
         if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
-            return $"background: {Colors.Red.Default}; color: {Colors.Shades.White};";
+            return Color.Error;
 
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations
-            ObjectChangeType.Added => $"background: {Colors.Green.Default}; color: {Colors.Shades.White};",
-            ObjectChangeType.Updated => $"background: {Colors.Teal.Default}; color: {Colors.Shades.White};",
-            ObjectChangeType.Deleted => $"background: {Colors.DeepOrange.Default}; color: {Colors.Shades.White};",
+            ObjectChangeType.Added => Color.Success,
+            ObjectChangeType.Updated => Color.Info,
+            ObjectChangeType.Deleted => Color.Warning,
             // Sync operations
-            ObjectChangeType.Projected => $"background: {Colors.Blue.Default}; color: {Colors.Shades.White};",
-            ObjectChangeType.Joined => $"background: {Colors.Purple.Default}; color: {Colors.Shades.White};",
-            ObjectChangeType.AttributeFlow => $"background: {Colors.Cyan.Default}; color: {Colors.Shades.White};",
-            ObjectChangeType.Disconnected => $"background: {Colors.Orange.Default}; color: {Colors.Shades.White};",
+            ObjectChangeType.Projected => Color.Primary,
+            ObjectChangeType.Joined => Color.Secondary,
+            ObjectChangeType.AttributeFlow => Color.Info,
+            ObjectChangeType.Disconnected => Color.Warning,
             // Export operations
-            ObjectChangeType.Provisioned => $"background: {Colors.Green.Default}; color: {Colors.Shades.White};",
-            ObjectChangeType.Exported => $"background: {Colors.Blue.Default}; color: {Colors.Shades.White};",
-            ObjectChangeType.Deprovisioned => $"background: {Colors.DeepOrange.Default}; color: {Colors.Shades.White};",
+            ObjectChangeType.Provisioned => Color.Success,
+            ObjectChangeType.Exported => Color.Primary,
+            ObjectChangeType.Deprovisioned => Color.Warning,
             // Other
-            ObjectChangeType.NoChange => $"background: {Colors.BlueGray.Default}; color: {Colors.Shades.White};",
-            _ => $"background: {Colors.Gray.Default}; color: {Colors.Shades.White};"
+            ObjectChangeType.NoChange => Color.Default,
+            _ => Color.Default
         };
     }
 
@@ -388,7 +398,7 @@ else
     private string GetStatusTitle()
     {
         if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
-            return "Synchronisation Failed";
+            return GetErrorPhaseTitle();
 
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
@@ -409,6 +419,61 @@ else
             ObjectChangeType.NoChange => "No Changes",
             _ => "Synchronisation Complete"
         };
+    }
+
+    /// <summary>
+    /// Returns an appropriate error title based on the error type (import vs sync vs export phase).
+    /// </summary>
+    private string GetErrorPhaseTitle()
+    {
+        return _activityRunProfileExecutionItem?.ErrorType switch
+        {
+            // Import-phase errors - object rejected before CSO creation
+            ActivityRunProfileExecutionItemErrorType.DuplicateObject => "Import Rejected",
+            ActivityRunProfileExecutionItemErrorType.MissingExternalIdAttributeValue => "Import Rejected",
+            ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes => "Import Rejected",
+            ActivityRunProfileExecutionItemErrorType.UnsupportedExternalIdAttributeType => "Import Rejected",
+            ActivityRunProfileExecutionItemErrorType.CsoCreationFailed => "Import Rejected",
+
+            // Sync-phase errors - CSO exists but sync failed
+            ActivityRunProfileExecutionItemErrorType.AmbiguousMatch => "Synchronisation Failed",
+            ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType => "Synchronisation Failed",
+            ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin => "Synchronisation Failed",
+            ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute => "Synchronisation Failed",
+            ActivityRunProfileExecutionItemErrorType.UnresolvedReference => "Synchronisation Failed",
+
+            // Export-phase errors
+            ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed => "Export Pending",
+            ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed => "Export Failed",
+
+            // Generic/unhandled
+            ActivityRunProfileExecutionItemErrorType.UnhandledError => "Operation Failed",
+            _ => "Synchronisation Failed"
+        };
+    }
+
+    /// <summary>
+    /// Returns the appropriate label for the object field based on context.
+    /// </summary>
+    private string GetObjectFieldLabel()
+    {
+        // If CSO exists, show "Connected System Object"
+        if (_activityRunProfileExecutionItem?.ConnectedSystemObject != null)
+            return "Connected System Object";
+
+        // If no CSO but has external ID snapshot
+        if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem?.ExternalIdSnapshot))
+        {
+            // If there's an error (rejected), show "External ID (from source data)" for clarity
+            if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+                return "External ID (from source data)";
+
+            // If no error but no CSO, it was deleted
+            return "External ID (Deleted)";
+        }
+
+        // Fallback
+        return "Connected System Object";
     }
 
     private string GetStatusDescription()
