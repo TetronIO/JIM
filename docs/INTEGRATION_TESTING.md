@@ -624,7 +624,9 @@ When two CSV rows with identical external IDs are processed in the same import b
 
 These scenarios test group management capabilities - a core ILM function where the system manages group memberships based on identity attributes.
 
-#### Scenario 6: Entitlement Management - JIM to AD
+#### Scenario 6: Entitlement Management - JIM to AD ⏸️ DEFERRED
+
+> **Status**: ⏸️ **DEFERRED** - This scenario requires proper design and implementation of Internally-managed MVOs (Metaverse Objects created within JIM rather than imported from a Connected System). Deferred until Internal MVO support is designed and implemented.
 
 **Purpose**: Validate JIM as the authoritative source for entitlement groups, provisioning them to AD with membership derived from person attributes.
 
@@ -669,7 +671,9 @@ These scenarios test group management capabilities - a core ILM function where t
 
 ---
 
-#### Scenario 7: Entitlement Management - Convert AD Group Authority to JIM
+#### Scenario 7: Entitlement Management - Convert AD Group Authority to JIM ⏸️ DEFERRED
+
+> **Status**: ⏸️ **DEFERRED** - This scenario requires proper design and implementation of Internally-managed MVOs. After import, groups would need to be marked as JIM-authoritative (Internal origin), which requires the same Internal MVO support as Scenario 6. Deferred until Internal MVO support is designed and implemented.
 
 **Purpose**: Validate importing existing AD groups into JIM and converting authority so JIM becomes the authoritative source. After conversion, any changes made directly in AD are overwritten by JIM.
 
@@ -1619,7 +1623,8 @@ JIM/
 | Scenario 3 | ⏳ Pending | Placeholder script exists |
 | Scenario 4 | ✅ Complete | Deletion rules - all tests passing |
 | Scenario 5 | ✅ Complete | Matching rules - 4/5 tests passing, 1 run separately (MultipleRules requires specific setup) |
-| Scenarios 6-8 | 📋 Defined | Entitlement Management scenarios (not yet implemented) |
+| Scenarios 6-7 | ⏸️ Deferred | Requires Internal MVO design (JIM-authoritative objects) |
+| Scenario 8 | 📋 Defined | Cross-domain entitlement sync (can proceed - syncs between external systems) |
 | Scenarios 9-11 | ⏳ Post-MVP | Database scenarios |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 
