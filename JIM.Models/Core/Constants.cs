@@ -138,6 +138,11 @@ public static class Constants
         /// https://docs.microsoft.com/en-us/windows/security/identity-protection/access-control/active-directory-security-groups#group-scope
         /// </summary>
         public static string GroupScope => "Group Scope";
+        /// <summary>
+        /// The AD groupType attribute as a numeric bitmask value.
+        /// Use this for direct mapping to/from AD groupType attribute.
+        /// </summary>
+        public static string GroupTypeFlags => "Group Type Flags";
         public static string Info => "Info";
         public static string ManagedBy => "Managed By";
         public static string Owners => "Owners";

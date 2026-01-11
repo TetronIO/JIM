@@ -150,6 +150,13 @@ public class JimDbContext : DbContext
             .WithOne(av => av.ConnectedSystemObjectChangeAttribute)
             .OnDelete(DeleteBehavior.Cascade); // let the db delete all dependent ConnectedSystemObjectChangeAttributeValue objects when the parent is deleted.
 
+        // When a CSO is deleted, set the ReferenceValueId to null in any change attribute values that reference it.
+        // This prevents FK violations when deleting CSOs that are referenced in historical change records.
+        modelBuilder.Entity<ConnectedSystemObjectChangeAttributeValue>()
+            .HasOne(cav => cav.ReferenceValue)
+            .WithMany()
+            .OnDelete(DeleteBehavior.SetNull);
+
         modelBuilder.Entity<ConnectedSystemObjectType>()
             .HasMany(csot => csot.Attributes)
             .WithOne(csa => csa.ConnectedSystemObjectType);

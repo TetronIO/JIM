@@ -522,9 +522,8 @@ public class SynchronisationController(
         if (container == null)
             return NotFound(ApiErrorResponse.NotFound($"Container with ID {containerId} not found."));
 
-        // Verify container belongs to the connected system (via partition or directly)
-        var belongsToSystem = (container.Partition?.ConnectedSystem?.Id == connectedSystemId) ||
-                              (container.ConnectedSystem?.Id == connectedSystemId);
+        // Verify container belongs to the connected system (via partition, directly, or through parent container chain)
+        var belongsToSystem = ContainerBelongsToConnectedSystem(container, connectedSystemId);
         if (!belongsToSystem)
             return NotFound(ApiErrorResponse.NotFound($"Container with ID {containerId} not found in connected system {connectedSystemId}."));
 
@@ -2618,6 +2617,36 @@ public class SynchronisationController(
             userType,
             serviceSettings.SSOUniqueIdentifierMetaverseAttribute,
             uniqueIdClaimValue);
+    }
+
+    /// <summary>
+    /// Checks if a container belongs to a connected system, traversing the parent container chain if necessary.
+    /// </summary>
+    /// <param name="container">The container to check.</param>
+    /// <param name="connectedSystemId">The connected system ID to check against.</param>
+    /// <returns>True if the container belongs to the connected system.</returns>
+    private static bool ContainerBelongsToConnectedSystem(ConnectedSystemContainer container, int connectedSystemId)
+    {
+        // Check if directly connected to the system
+        if (container.ConnectedSystem?.Id == connectedSystemId)
+            return true;
+
+        // Check if connected via partition
+        if (container.Partition?.ConnectedSystem?.Id == connectedSystemId)
+            return true;
+
+        // For nested containers, walk up the parent chain
+        var current = container.ParentContainer;
+        while (current != null)
+        {
+            if (current.ConnectedSystem?.Id == connectedSystemId)
+                return true;
+            if (current.Partition?.ConnectedSystem?.Id == connectedSystemId)
+                return true;
+            current = current.ParentContainer;
+        }
+
+        return false;
     }
 
     #endregion
