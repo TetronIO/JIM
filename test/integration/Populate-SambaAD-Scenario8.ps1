@@ -233,19 +233,15 @@ for ($i = 0; $i -lt $groups.Count; $i++) {
     $scopeArg = Get-ADGroupScopeString -Scope $group.Scope
     $typeArg = Get-ADGroupTypeString -Type $group.Type
 
-    # Create group with samba-tool
-    # Note: samba-tool group add creates groups in CN=Users by default
+    # Create group with samba-tool directly in Entitlements OU
     $result = docker exec $container samba-tool group add `
         $group.SAMAccountName `
         --description="$($group.Description)" `
         --group-scope="$scopeArg" `
-        --group-type="$typeArg" 2>&1
+        --group-type="$typeArg" `
+        --groupou="OU=Entitlements,OU=Corp" 2>&1
 
     if ($LASTEXITCODE -eq 0 -or $result -match "already exists") {
-        # Move to Entitlements OU
-        $groupDN = "CN=$($group.CN),CN=Users,$domainDN"
-        $targetDN = $entitlementsOU
-        docker exec $container samba-tool group move "$groupDN" "$targetDN" 2>&1 | Out-Null
 
         # Store created group info
         $createdGroup = @{
@@ -262,7 +258,7 @@ for ($i = 0; $i -lt $groups.Count; $i++) {
 
         # Set displayName attribute (samba-tool doesn't support this)
         $displayNameLdif = @"
-dn: CN=$($group.CN),CN=Users,$domainDN
+dn: CN=$($group.CN),$entitlementsOU
 changetype: modify
 replace: displayName
 displayName: $($group.DisplayName)
@@ -276,7 +272,7 @@ displayName: $($group.DisplayName)
         if ($group.MailEnabled -and $group.Mail) {
             # Use ldapmodify to set mail attribute
             $ldifContent = @"
-dn: CN=$($group.CN),CN=Users,$domainDN
+dn: CN=$($group.CN),$entitlementsOU
 changetype: modify
 replace: mail
 mail: $($group.Mail)
