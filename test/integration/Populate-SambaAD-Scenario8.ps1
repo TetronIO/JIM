@@ -48,7 +48,6 @@ Write-TestSection "Scenario 8: Populating Samba AD ($Instance) with $Template te
 
 # Get scales
 $groupScale = Get-Scenario8GroupScale -Template $Template
-$userScale = Get-TemplateScale -Template $Template
 
 # Define consistent company and department lists for Scenario 8
 # These must match the lists used in group creation to ensure membership filtering works
@@ -195,8 +194,6 @@ $userOperation = Start-TimedOperation -Name "Creating users" -TotalSteps $groupS
 
 for ($i = 0; $i -lt $groupScale.Users; $i++) {
     $user = New-TestUser -Index $i -Domain $domainSuffix
-
-    $userPrincipalName = "$($user.SamAccountName)@$domainSuffix"
 
     # Override company and department with Scenario 8 consistent values
     # This ensures membership filtering works correctly in group assignments
@@ -373,12 +370,14 @@ for ($g = 0; $g -lt $createdGroups.Count; $g++) {
     switch ($group.Category) {
         "Company" {
             # Company groups contain users from that company
-            $companyName = $group.Name  # Group name is already the company name
+            # Extract technical name from group name (e.g., "Company-NexusDynamics" -> "NexusDynamics")
+            $companyName = $group.Name -replace "^Company-", ""
             $candidates = $createdUsers | Where-Object { $_.Company -eq $companyName }
         }
         "Department" {
             # Department groups contain users from that department
-            $deptName = $group.Name  # Group name is already the department name
+            # Extract technical name from group name (e.g., "Dept-Human-Resources" -> "Human-Resources")
+            $deptName = $group.Name -replace "^Dept-", ""
             $candidates = $createdUsers | Where-Object { $_.Department -eq $deptName }
         }
         "Location" {
