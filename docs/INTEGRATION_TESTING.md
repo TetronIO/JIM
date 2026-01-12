@@ -43,6 +43,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync"         # APAC AD → EMEA AD sync
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario4-DeletionRules"           # Deletion rules testing
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario5-MatchingRules"           # Matching rules testing
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync"  # Group sync between domains
 
 # Run with a specific template size
 ./test/integration/Run-IntegrationTests.ps1 -Template Nano
@@ -55,8 +56,9 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Template XXLarge
 
 # Run only a specific test step (steps vary by scenario)
-./test/integration/Run-IntegrationTests.ps1 -Step Joiner                          # Scenario 1
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Step Provision  # Scenario 2
+./test/integration/Run-IntegrationTests.ps1 -Step Joiner                          # Scenario 1: Joiner, Mover, Leaver, Reconnection
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Step Provision  # Scenario 2: Provision, ForwardSync, ReverseSync
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync" -Step InitialSync  # Scenario 8: InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup
 
 # Combine scenario, template, and step
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Template Small -Step All
@@ -76,6 +78,7 @@ This single script handles everything:
 | `Scenario2-CrossDomainSync` | Quantum Dynamics APAC → EMEA directory sync | samba-ad-source, samba-ad-target |
 | `Scenario4-DeletionRules` | Deletion rules and grace period testing | samba-ad-primary |
 | `Scenario5-MatchingRules` | Object matching rules testing | samba-ad-primary |
+| `Scenario8-CrossDomainEntitlementSync` | Group synchronisation between APAC and EMEA domains | samba-ad-source, samba-ad-target |
 
 **Available Templates (`-Template` parameter):**
 
