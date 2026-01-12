@@ -80,8 +80,10 @@ internal class LdapConnectorImport
         // enumerate all selected partitions
         foreach (var selectedPartition in _connectedSystem.Partitions.Where(p => p.Selected))
         {
-            // enumerate all selected containers in this partition
-            foreach (var selectedContainer in ConnectedSystemUtilities.GetAllSelectedContainers(selectedPartition))
+            // enumerate top-level selected containers in this partition
+            // Use GetTopLevelSelectedContainers to avoid duplicates when both parent and child containers are selected
+            // (subtree search on parent already includes children)
+            foreach (var selectedContainer in ConnectedSystemUtilities.GetTopLevelSelectedContainers(selectedPartition))
             {
                 // we need to perform a query per object type, so that we can have distinct attribute lists per LDAP request
                 foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
@@ -162,7 +164,8 @@ internal class LdapConnectorImport
             // For AD, query objects where uSNChanged > previous HighestCommittedUSN
             foreach (var selectedPartition in _connectedSystem.Partitions.Where(p => p.Selected))
             {
-                foreach (var selectedContainer in ConnectedSystemUtilities.GetAllSelectedContainers(selectedPartition))
+                // Use GetTopLevelSelectedContainers to avoid duplicates when both parent and child containers are selected
+                foreach (var selectedContainer in ConnectedSystemUtilities.GetTopLevelSelectedContainers(selectedPartition))
                 {
                     foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
                     {
