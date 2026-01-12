@@ -810,15 +810,28 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
     {
-        var result = await Repository.Database.ConnectedSystemObjects
+        // DEBUG: Check for multiple matches (which would indicate duplicate CSOs with same external ID)
+        var allMatches = await Repository.Database.ConnectedSystemObjects
             .AsSplitQuery()
             .Include(cso => cso.Type)
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
-            .SingleOrDefaultAsync(x =>
+            .Where(x =>
                 x.ConnectedSystem.Id == connectedSystemId &&
-                x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.GuidValue == attributeValue));
+                x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.GuidValue == attributeValue))
+            .ToListAsync();
+
+        if (allMatches.Count > 1)
+        {
+            // Multiple CSOs with same external ID found - this indicates duplicate CSOs from previous imports
+            // Log warning and return the first one (this is a workaround until duplicates are cleaned)
+            var csoIds = string.Join(", ", allMatches.Select(x => x.Id));
+            Log.Warning("GetConnectedSystemObjectByAttributeAsync: Found {Count} Connected System Objects with same external ID {ExternalId} in connected system {ConnectedSystemId}. CSO IDs: {CsoIds}. Returning first match. This indicates duplicate CSOs that should be cleaned.",
+                allMatches.Count, attributeValue, connectedSystemId, csoIds);
+        }
+
+        var result = allMatches.FirstOrDefault();
 
         if (result == null)
         {

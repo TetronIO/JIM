@@ -542,7 +542,26 @@ public class SyncImportTaskProcessor
                 // If so, error BOTH objects - we don't pick a "random winner" based on file order.
                 // This forces the data owner to fix the source data.
                 var externalIdAttribute = csObjectType.Attributes.First(a => a.IsExternalId);
+
+                // DEBUG: Log what attributes are present in this import object
+                Log.Debug("ProcessImportObjectsAsync: Import object at index {Index}. ObjectType: {ObjectType}. Expected external ID attribute: {ExternalIdAttrName}. Available attributes: {Attributes}",
+                    importIndex, importObject.ObjectType, externalIdAttribute.Name,
+                    string.Join(", ", importObject.Attributes.Select(a => a.Name)));
+
                 var externalIdImportAttr = importObject.Attributes.SingleOrDefault(a => a.Name.Equals(externalIdAttribute.Name, StringComparison.OrdinalIgnoreCase));
+
+                // DEBUG: Log whether external ID attribute was found
+                if (externalIdImportAttr == null)
+                {
+                    Log.Warning("ProcessImportObjectsAsync: External ID attribute '{ExternalIdName}' NOT FOUND in import object at index {Index}. Available attributes: {Attributes}. SKIPPING DUPLICATE DETECTION.",
+                        externalIdAttribute.Name, importIndex, string.Join(", ", importObject.Attributes.Select(a => a.Name)));
+                }
+                else
+                {
+                    Log.Debug("ProcessImportObjectsAsync: External ID attribute '{ExternalIdName}' FOUND in import object at index {Index}.",
+                        externalIdAttribute.Name, importIndex);
+                }
+
                 if (externalIdImportAttr != null)
                 {
                     // Extract the external ID value as a string for tracking (works for all data types)
@@ -559,6 +578,10 @@ public class SyncImportTaskProcessor
                     {
                         // Composite key: objectTypeId:externalIdValue to handle multiple object types in same import
                         var duplicateKey = $"{csObjectType.Id}:{externalIdValue}";
+
+                        // DEBUG: Log the external ID value extracted
+                        Log.Debug("ProcessImportObjectsAsync: Extracted external ID value '{ExternalIdValue}' from import object at index {Index}. Duplicate key: {DuplicateKey}",
+                            externalIdValue, importIndex, duplicateKey);
 
                         // Snapshot the external ID for error reporting
                         activityRunProfileExecutionItem.ExternalIdSnapshot = externalIdValue;
@@ -790,6 +813,13 @@ public class SyncImportTaskProcessor
                 Log.Error(e, $"ProcessImportObjectsAsync: Unhandled {_connectedSystemRunProfile} sync error whilst processing import object {importObject}.");
             }
         }
+
+        // DEBUG: Summary statistics for duplicate detection
+        var duplicateCount = _activityRunProfileExecutionItems.Count(x => x.ErrorType == ActivityRunProfileExecutionItemErrorType.DuplicateObject);
+        var successCount = _activityRunProfileExecutionItems.Count(x => x.ErrorType == null);
+        var errorCount = _activityRunProfileExecutionItems.Count(x => x.ErrorType != null);
+        Log.Information("ProcessImportObjectsAsync: SUMMARY - Total objects: {Total}, Processed successfully: {Success}, Errors: {Errors}, Duplicates detected: {Duplicates}. Seen external IDs tracked: {SeenCount}",
+            connectedSystemImportResult.ImportObjects.Count, successCount, errorCount, duplicateCount, seenExternalIds.Count);
     }
 
     /// <summary>
