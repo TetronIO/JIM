@@ -1,5 +1,6 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
+using JIM.Application.Expressions;
 using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -53,6 +54,9 @@ public abstract class SyncTaskProcessorBase
 
     // Batch collection for deferred CSO deletions (avoid per-CSO database calls)
     protected readonly List<(ConnectedSystemObject Cso, ActivityRunProfileExecutionItem ExecutionItem)> _obsoleteCsosToDelete = [];
+
+    // Expression evaluator for expression-based sync rule mappings
+    protected readonly IExpressionEvaluator _expressionEvaluator = new DynamicExpressoEvaluator();
 
     protected SyncTaskProcessorBase(
         JimApplication jimApplication,
@@ -937,7 +941,7 @@ public abstract class SyncTaskProcessorBase
             if (syncRuleMapping.TargetMetaverseAttribute == null)
                 throw new InvalidDataException("SyncRuleMapping.TargetMetaverseAttribute must not be null.");
 
-            SyncRuleMappingProcessor.Process(connectedSystemObject, syncRuleMapping, _objectTypes);
+            SyncRuleMappingProcessor.Process(connectedSystemObject, syncRuleMapping, _objectTypes, _expressionEvaluator);
         }
     }
 

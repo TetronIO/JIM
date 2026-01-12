@@ -1,3 +1,4 @@
+using JIM.Application.Expressions;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -7,7 +8,11 @@ namespace JIM.Worker.Processors;
 
 public static class SyncRuleMappingProcessor
 {
-    public static void Process(ConnectedSystemObject connectedSystemObject, SyncRuleMapping syncRuleMapping, List<ConnectedSystemObjectType> connectedSystemObjectTypes)
+    public static void Process(
+        ConnectedSystemObject connectedSystemObject,
+        SyncRuleMapping syncRuleMapping,
+        List<ConnectedSystemObjectType> connectedSystemObjectTypes,
+        IExpressionEvaluator? expressionEvaluator = null)
     {
         if (connectedSystemObject.MetaverseObject == null)
         {
@@ -313,12 +318,207 @@ public static class SyncRuleMappingProcessor
                 }
             }
             else if (!string.IsNullOrWhiteSpace(source.Expression))
-                throw new NotImplementedException("Expression-based mappings not yet implemented in SyncRuleMappingProcessor. This will be implemented soon.");
+            {
+                // Process expression-based mapping
+                if (expressionEvaluator == null)
+                {
+                    Log.Warning("Process: Expression-based mapping requires an IExpressionEvaluator but none was provided. Expression: {Expression}", source.Expression);
+                    continue;
+                }
+
+                try
+                {
+                    // Build CSO attribute dictionary for expression evaluation
+                    var csAttributeDictionary = BuildCsoAttributeDictionary(connectedSystemObject, csoType);
+
+                    Log.Debug("Process: Evaluating expression for CSO {CsoId}. Expression: '{Expression}', Available attributes: [{Attributes}]",
+                        connectedSystemObject.Id, source.Expression, string.Join(", ", csAttributeDictionary.Keys));
+
+                    // Create expression context with CSO attributes (and empty MV attributes for inbound)
+                    var context = new ExpressionContext(
+                        metaverseAttributes: null,
+                        connectedSystemAttributes: csAttributeDictionary);
+
+                    // Evaluate the expression
+                    var result = expressionEvaluator.Evaluate(source.Expression, context);
+
+                    if (result == null)
+                    {
+                        Log.Debug("Process: Expression '{Expression}' for CSO {CsoId} returned null. Available attributes: [{Attributes}]",
+                            source.Expression, connectedSystemObject.Id, string.Join(", ", csAttributeDictionary.Keys));
+
+                        // If expression returns null, remove any existing MVO attribute value
+                        var mvoAttributeValuesToDelete = mvo.AttributeValues.Where(q => q.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id);
+                        mvo.PendingAttributeValueRemovals.AddRange(mvoAttributeValuesToDelete);
+                        continue;
+                    }
+
+                    // Convert the expression result to the appropriate MVO attribute value
+                    var existingMvoValue = mvo.AttributeValues.SingleOrDefault(
+                        mvoav => mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id);
+
+                    // Determine if the value has changed (result is non-null here due to check above)
+                    var resultString = result.ToString();
+                    var valueChanged = existingMvoValue == null ||
+                        !string.Equals(existingMvoValue.StringValue, resultString, StringComparison.Ordinal);
+
+                    if (valueChanged)
+                    {
+                        // Remove existing value if present
+                        if (existingMvoValue != null)
+                            mvo.PendingAttributeValueRemovals.Add(existingMvoValue);
+
+                        // Add the new value based on the target attribute type (result is non-null)
+                        var newMvoValue = CreateMvoAttributeValueFromExpressionResult(
+                            mvo, syncRuleMapping.TargetMetaverseAttribute, result!);
+
+                        if (newMvoValue != null)
+                        {
+                            mvo.PendingAttributeValueAdditions.Add(newMvoValue);
+                            Log.Debug("Process: Expression-based mapping set {AttributeName} to '{Value}' on MVO {MvoId}",
+                                syncRuleMapping.TargetMetaverseAttribute.Name, resultString, mvo.Id);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Process: Error evaluating expression '{Expression}' for CSO {CsoId}: {Error}",
+                        source.Expression, connectedSystemObject.Id, ex.Message);
+                }
+            }
             else if (source.MetaverseAttribute != null)
                 throw new InvalidDataException("SyncRuleMappingSource.MetaverseAttribute being populated is not supported for synchronisation operations. " +
                                                "This operation is focused on import flow, so Connected System to Metaverse Object.");
             else
                 throw new InvalidDataException("Expected ConnectedSystemAttribute or Expression to be populated in a SyncRuleMappingSource object.");
         }
+    }
+
+    /// <summary>
+    /// Builds a dictionary of attribute values from a Connected System Object for expression evaluation.
+    /// The dictionary keys are attribute names, and values are the attribute values.
+    /// </summary>
+    private static Dictionary<string, object?> BuildCsoAttributeDictionary(
+        ConnectedSystemObject connectedSystemObject,
+        ConnectedSystemObjectType csoType)
+    {
+        var attributes = new Dictionary<string, object?>();
+
+        foreach (var attributeValue in connectedSystemObject.AttributeValues)
+        {
+            // Find the attribute definition from the CSO type
+            var csotAttribute = csoType.Attributes.SingleOrDefault(a => a.Id == attributeValue.AttributeId);
+            if (csotAttribute == null)
+            {
+                Log.Warning("BuildCsoAttributeDictionary: CSO {CsoId} has attribute value with AttributeId={AttrId} but attribute not found in type definition",
+                    connectedSystemObject.Id, attributeValue.AttributeId);
+                continue;
+            }
+
+            var attributeName = csotAttribute.Name;
+
+            // Use the appropriate typed value based on the attribute type
+            object? value = csotAttribute.Type switch
+            {
+                AttributeDataType.Text => attributeValue.StringValue,
+                AttributeDataType.Number => attributeValue.IntValue,
+                AttributeDataType.LongNumber => attributeValue.LongValue,
+                AttributeDataType.DateTime => attributeValue.DateTimeValue,
+                AttributeDataType.Boolean => attributeValue.BoolValue,
+                AttributeDataType.Guid => attributeValue.GuidValue,
+                AttributeDataType.Binary => attributeValue.ByteValue,
+                AttributeDataType.Reference => attributeValue.ReferenceValue?.Id.ToString(),
+                _ => null
+            };
+
+            // For multi-valued attributes, we just take the first value for now
+            // TODO: Support multi-valued attribute access in expressions
+            if (!attributes.ContainsKey(attributeName))
+            {
+                attributes[attributeName] = value;
+            }
+        }
+
+        return attributes;
+    }
+
+    /// <summary>
+    /// Creates a MetaverseObjectAttributeValue from an expression result, handling type conversion.
+    /// </summary>
+    private static MetaverseObjectAttributeValue? CreateMvoAttributeValueFromExpressionResult(
+        MetaverseObject mvo,
+        MetaverseAttribute targetAttribute,
+        object result)
+    {
+        var newMvoValue = new MetaverseObjectAttributeValue
+        {
+            MetaverseObject = mvo,
+            Attribute = targetAttribute,
+            AttributeId = targetAttribute.Id
+        };
+
+        // Convert result to appropriate type based on target attribute type
+        switch (targetAttribute.Type)
+        {
+            case AttributeDataType.Text:
+                newMvoValue.StringValue = result?.ToString();
+                break;
+
+            case AttributeDataType.Number:
+                if (result is int intVal)
+                    newMvoValue.IntValue = intVal;
+                else if (result is long longVal)
+                    newMvoValue.IntValue = (int)longVal;
+                else if (int.TryParse(result?.ToString(), out var parsedInt))
+                    newMvoValue.IntValue = parsedInt;
+                else
+                {
+                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Number", result);
+                    return null;
+                }
+                break;
+
+            case AttributeDataType.DateTime:
+                if (result is DateTime dtVal)
+                    newMvoValue.DateTimeValue = dtVal;
+                else if (DateTime.TryParse(result?.ToString(), out var parsedDt))
+                    newMvoValue.DateTimeValue = parsedDt;
+                else
+                {
+                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to DateTime", result);
+                    return null;
+                }
+                break;
+
+            case AttributeDataType.Boolean:
+                if (result is bool boolVal)
+                    newMvoValue.BoolValue = boolVal;
+                else if (bool.TryParse(result?.ToString(), out var parsedBool))
+                    newMvoValue.BoolValue = parsedBool;
+                else
+                {
+                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Boolean", result);
+                    return null;
+                }
+                break;
+
+            case AttributeDataType.Guid:
+                if (result is Guid guidVal)
+                    newMvoValue.GuidValue = guidVal;
+                else if (Guid.TryParse(result?.ToString(), out var parsedGuid))
+                    newMvoValue.GuidValue = parsedGuid;
+                else
+                {
+                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Guid", result);
+                    return null;
+                }
+                break;
+
+            default:
+                Log.Warning("CreateMvoAttributeValueFromExpressionResult: Unsupported target attribute type {Type} for expression result", targetAttribute.Type);
+                return null;
+        }
+
+        return newMvoValue;
     }
 }
