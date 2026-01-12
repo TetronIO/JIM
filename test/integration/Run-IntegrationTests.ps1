@@ -276,6 +276,18 @@ if ($Scenario -like "*Scenario2*") {
     }
     Write-Success "Samba AD Source and Target started"
 }
+
+# Start Scenario 8 containers if running Scenario 8
+if ($Scenario -like "*Scenario8*") {
+    Write-Step "Starting Samba AD (Source and Target for Scenario 8)..."
+    $scenario8Result = docker compose -f docker-compose.integration-tests.yml --profile scenario8 up -d 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Failure "Failed to start Scenario 8 Samba AD containers"
+        Write-Host "${GRAY}$scenario8Result${NC}"
+        exit 1
+    }
+    Write-Success "Samba AD Source and Target started for Scenario 8"
+}
 $timings["3. Start Services"] = (Get-Date) - $step3Start
 
 # Step 4: Wait for services
@@ -298,8 +310,8 @@ else {
     Start-Sleep -Seconds 60
 }
 
-# Wait for Scenario 2 containers if applicable
-if ($Scenario -like "*Scenario2*") {
+# Wait for Scenario 2 or Scenario 8 containers if applicable
+if ($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") {
     Write-Step "Waiting for Samba AD Source to be ready..."
     $sourceReady = $false
     $elapsed = 0
