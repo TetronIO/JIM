@@ -192,6 +192,7 @@ for ($i = 0; $i -lt $groupScale.Users; $i++) {
             DisplayName = $user.DisplayName
             Department = $user.Department
             Title = $user.Title
+            Company = $user.Company
             DN = "CN=$($user.DisplayName),$usersOU"
         }
     }
@@ -202,6 +203,7 @@ for ($i = 0; $i -lt $groupScale.Users; $i++) {
             DisplayName = $user.DisplayName
             Department = $user.Department
             Title = $user.Title
+            Company = $user.Company
             DN = "CN=$($user.DisplayName),$usersOU"
         }
     }
@@ -304,31 +306,50 @@ Write-TestStep "Step 4" "Assigning group members"
 $totalMemberships = 0
 $membershipOperation = Start-TimedOperation -Name "Assigning memberships" -TotalSteps $createdGroups.Count
 
-# Simple membership assignment: distribute users across groups
-# Each group gets a subset of users based on their index
+# Intelligent membership assignment based on group category and user attributes
 for ($g = 0; $g -lt $createdGroups.Count; $g++) {
     $group = $createdGroups[$g]
-
-    # Calculate how many members this group should have
-    # Companies: ~60% of users, Departments: ~40%, Locations: ~30%, Projects: ~20%
-    $memberPercent = switch ($group.Category) {
-        "Company" { 0.6 }
-        "Department" { 0.4 }
-        "Location" { 0.3 }
-        "Project" { 0.2 }
-    }
-
-    $targetMembers = [Math]::Max(1, [Math]::Floor($createdUsers.Count * $memberPercent))
-    $targetMembers = [Math]::Min($targetMembers, $createdUsers.Count)
-
-    # Select users based on offset to distribute differently per group
-    $offset = ($g * 7) % $createdUsers.Count
     $memberCount = 0
 
-    for ($u = 0; $u -lt $targetMembers; $u++) {
-        $userIndex = ($offset + $u) % $createdUsers.Count
-        $user = $createdUsers[$userIndex]
+    # Select candidate users based on group category
+    $candidates = @()
 
+    switch ($group.Category) {
+        "Company" {
+            # Company groups contain users from that company
+            $companyName = $group.Name  # Group name is already the company name
+            $candidates = $createdUsers | Where-Object { $_.Company -eq $companyName }
+        }
+        "Department" {
+            # Department groups contain users from that department
+            $deptName = $group.Name  # Group name is already the department name
+            $candidates = $createdUsers | Where-Object { $_.Department -eq $deptName }
+        }
+        "Location" {
+            # Location groups: distribute users with location matching
+            # For now, use a percentage-based distribution (~30% of users)
+            $targetPercent = 0.3
+            $targetMembers = [Math]::Max(1, [Math]::Floor($createdUsers.Count * $targetPercent))
+            $offset = ($g * 7) % $createdUsers.Count
+            for ($u = 0; $u -lt $targetMembers; $u++) {
+                $userIndex = ($offset + $u) % $createdUsers.Count
+                $candidates += $createdUsers[$userIndex]
+            }
+        }
+        "Project" {
+            # Project groups: distribute users with project assignment (~20% of users)
+            $targetPercent = 0.2
+            $targetMembers = [Math]::Max(1, [Math]::Floor($createdUsers.Count * $targetPercent))
+            $offset = ($g * 11) % $createdUsers.Count
+            for ($u = 0; $u -lt $targetMembers; $u++) {
+                $userIndex = ($offset + $u) % $createdUsers.Count
+                $candidates += $createdUsers[$userIndex]
+            }
+        }
+    }
+
+    # Add selected candidates to the group
+    foreach ($user in $candidates) {
         $result = docker exec $container samba-tool group addmembers `
             $group.SAMAccountName `
             $user.SamAccountName 2>&1
