@@ -705,6 +705,54 @@ foreach ($mapping in $groupImportMappings) {
 }
 Write-Host "    ✓ Source group import mappings ($groupImportMappingsCreated new)" -ForegroundColor Green
 
+# Create expression-based import mappings for Group Type and Group Scope (derived from groupType flags)
+Write-Host "  Configuring group type/scope expression mappings..." -ForegroundColor Gray
+$groupTypeAttr = $mvAttributes | Where-Object { $_.name -eq "Group Type" }
+$groupScopeAttr = $mvAttributes | Where-Object { $_.name -eq "Group Scope" }
+$groupTypeFlagsAttr = $sourceGroupType.attributes | Where-Object { $_.name -eq "groupType" }
+
+if ($groupTypeAttr -and $groupTypeFlagsAttr) {
+    $groupTypeMapping = $existingSourceGroupImportMappings | Where-Object {
+        $_.targetMetaverseAttributeId -eq $groupTypeAttr.id
+    }
+    if (-not $groupTypeMapping) {
+        try {
+            # Expression to decode groupType flags to determine if Security or Distribution
+            # Bit 0x80000000 (-2147483648) set = Security group, otherwise = Distribution group
+            $expression = 'HasBit(cs["groupType"], -2147483648) ? "Security" : "Distribution"'
+            New-JIMSyncRuleMapping -SyncRuleId $sourceGroupImportRule.id `
+                -TargetMetaverseAttributeId $groupTypeAttr.id `
+                -Expression $expression | Out-Null
+            Write-Host "    ✓ Created Group Type mapping with expression" -ForegroundColor Green
+        }
+        catch {
+            Write-Host "    ⚠ Failed to create Group Type expression mapping: $_" -ForegroundColor Yellow
+        }
+    }
+}
+
+if ($groupScopeAttr -and $groupTypeFlagsAttr) {
+    $groupScopeMapping = $existingSourceGroupImportMappings | Where-Object {
+        $_.targetMetaverseAttributeId -eq $groupScopeAttr.id
+    }
+    if (-not $groupScopeMapping) {
+        try {
+            # Expression to decode groupType flags to determine scope (Global, Local, or Universal)
+            # Bit 0x00000001 (1) set = Domain Local group
+            # Bit 0x00000002 (2) set = Global group
+            # Bit 0x00000004 (4) set = Universal group (only in mixed/native mode)
+            $expression = 'HasBit(cs["groupType"], 1) ? "Domain Local" : (HasBit(cs["groupType"], 2) ? "Global" : "Universal")'
+            New-JIMSyncRuleMapping -SyncRuleId $sourceGroupImportRule.id `
+                -TargetMetaverseAttributeId $groupScopeAttr.id `
+                -Expression $expression | Out-Null
+            Write-Host "    ✓ Created Group Scope mapping with expression" -ForegroundColor Green
+        }
+        catch {
+            Write-Host "    ⚠ Failed to create Group Scope expression mapping: $_" -ForegroundColor Yellow
+        }
+    }
+}
+
 # Create group export mappings (MV -> Target)
 $existingTargetGroupExportMappings = Get-JIMSyncRuleMapping -SyncRuleId $targetGroupExportRule.id
 $groupExportMappingsCreated = 0
