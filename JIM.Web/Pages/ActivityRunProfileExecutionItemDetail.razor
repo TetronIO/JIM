@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = "User")]
 @using JIM.Application
 @using JIM.Models.Activities;
+@using JIM.Models.Core
 @using JIM.Models.Enums;
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
@@ -185,6 +186,193 @@
         </MudGrid>
     </MudPaper>
 
+    @* Projection Flow Visualisation - shown for Projected items *@
+    @if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Projected)
+    {
+        <MudText Typo="Typo.h6" Class="mb-3">Projection Details</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+            The following connected system object was projected to create a new metaverse object.
+        </MudText>
+
+        <MudGrid Spacing="3" Class="mb-5">
+            @* Source: Connected System Object Card *@
+            <MudItem xs="12" md="5">
+                <MudPaper Class="pa-4" Outlined="true" Style="height: 100%; border-left: 4px solid var(--mud-palette-info);">
+                    <MudStack Spacing="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Storage" Color="Color.Info" />
+                            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Source Object</MudText>
+                        </MudStack>
+
+                        @if (_activityRunProfileExecutionItem.ConnectedSystemObject != null)
+                        {
+                            var cso = _activityRunProfileExecutionItem.ConnectedSystemObject;
+
+                            @* Object Type *@
+                            <div>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Type</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-0">
+                                    @cso.Type.Name
+                                </MudChip>
+                            </div>
+
+                            @* External ID *@
+                            <div>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">External ID</MudText>
+                                <MudText Class="jim-text-code" Style="word-break: break-all;">
+                                    @(_externalIdAttributeValue?.ToStringNoName() ?? "-")
+                                </MudText>
+                            </div>
+
+                            @* Secondary External ID (if available) *@
+                            @if (cso.SecondaryExternalIdAttributeValue != null)
+                            {
+                                <div>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Secondary ID</MudText>
+                                    <MudText Class="jim-text-code" Style="word-break: break-all;">
+                                        @cso.SecondaryExternalIdAttributeValue.ToStringNoName()
+                                    </MudText>
+                                </div>
+                            }
+
+                            @* Display Name (if available) *@
+                            var csoDisplayName = cso.AttributeValues
+                                .FirstOrDefault(av => av.Attribute.Name.Equals("displayname", StringComparison.OrdinalIgnoreCase))?.StringValue;
+                            if (!string.IsNullOrEmpty(csoDisplayName))
+                            {
+                                <div>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Display Name</MudText>
+                                    <MudText>@csoDisplayName</MudText>
+                                </div>
+                            }
+
+                            <MudDivider Class="my-2" />
+
+                            <MudButton Variant="Variant.Text"
+                                       Color="Color.Primary"
+                                       Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.OpenInNew"
+                                       Href="@Utilities.GetConnectedSystemObjectHref(cso)">
+                                View Connected System Object
+                            </MudButton>
+                        }
+                        else
+                        {
+                            <MudText Class="mud-text-secondary">Source object data not available</MudText>
+                        }
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+
+            @* Arrow / Flow Indicator *@
+            <MudItem xs="12" md="2" Class="d-flex align-center justify-center">
+                <MudStack AlignItems="AlignItems.Center" Spacing="1">
+                    @* Desktop: horizontal arrow *@
+                    <MudHidden Breakpoint="Breakpoint.SmAndDown">
+                        <MudIcon Icon="@Icons.Material.Filled.ArrowForward"
+                                 Size="Size.Large"
+                                 Color="Color.Primary"
+                                 Style="font-size: 3rem;" />
+                        <MudChip T="string"
+                                 Size="Size.Small"
+                                 Color="Color.Primary"
+                                 Variant="Variant.Outlined">
+                            Projected
+                        </MudChip>
+                    </MudHidden>
+                    @* Mobile: vertical arrow *@
+                    <MudHidden Breakpoint="Breakpoint.MdAndUp">
+                        <MudIcon Icon="@Icons.Material.Filled.ArrowDownward"
+                                 Size="Size.Large"
+                                 Color="Color.Primary"
+                                 Style="font-size: 2.5rem;" />
+                        <MudChip T="string"
+                                 Size="Size.Small"
+                                 Color="Color.Primary"
+                                 Variant="Variant.Outlined">
+                            Projected
+                        </MudChip>
+                    </MudHidden>
+                </MudStack>
+            </MudItem>
+
+            @* Destination: Metaverse Object Card *@
+            <MudItem xs="12" md="5">
+                <MudPaper Class="pa-4" Outlined="true" Style="height: 100%; border-left: 4px solid var(--mud-palette-primary);">
+                    <MudStack Spacing="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Hub" Color="Color.Primary" />
+                            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Metaverse Object</MudText>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">New</MudChip>
+                        </MudStack>
+
+                        @if (_metaverseObject != null)
+                        {
+                            @* Object Type *@
+                            <div>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Type</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-0">
+                                    @_metaverseObject.Type.Name
+                                </MudChip>
+                            </div>
+
+                            @* Display Name (if available) *@
+                            @if (!string.IsNullOrEmpty(_metaverseObject.DisplayName))
+                            {
+                                <div>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Display Name</MudText>
+                                    <MudText Style="font-weight: 500;">@_metaverseObject.DisplayName</MudText>
+                                </div>
+                            }
+
+                            @* Preview of MVO Attributes (up to 5, excluding displayName) *@
+                            var previewAttributes = GetMvoAttributePreview();
+                            if (previewAttributes.Any())
+                            {
+                                <MudDivider Class="my-1" />
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-1">Attributes</MudText>
+                                foreach (var attr in previewAttributes)
+                                {
+                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Start" Class="mb-1">
+                                        <MudText Typo="Typo.body2" Class="jim-text-code" Style="min-width: 100px; flex-shrink: 0;">@attr.Name</MudText>
+                                        <MudText Typo="Typo.body2" Style="word-break: break-word;">@attr.DisplayValue</MudText>
+                                    </MudStack>
+                                }
+
+                                var totalAttributes = _metaverseObject.AttributeValues
+                                    .Where(av => !av.Attribute.Name.Equals(Constants.BuiltInAttributes.DisplayName, StringComparison.OrdinalIgnoreCase))
+                                    .Count();
+                                var remainingCount = totalAttributes - previewAttributes.Count();
+                                if (remainingCount > 0)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+                                        +@remainingCount more attribute@(remainingCount != 1 ? "s" : "")
+                                    </MudText>
+                                }
+                            }
+
+                            <MudDivider Class="my-2" />
+
+                            <MudButton Variant="Variant.Text"
+                                       Color="Color.Primary"
+                                       Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.OpenInNew"
+                                       Href="@Utilities.GetMetaverseObjectHref(_metaverseObject)">
+                                View Metaverse Object
+                            </MudButton>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true" Class="mt-2">
+                                The projected metaverse object may have been deleted.
+                            </MudAlert>
+                        }
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+
     @* Attribute Changes Section *@
     @if (_activityRunProfileExecutionItem.ConnectedSystemObjectChange != null)
     {
@@ -308,6 +496,7 @@ else
     private ConnectedSystemHeader? _connectedSystemHeader;
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private ConnectedSystemObjectAttributeValue? _externalIdAttributeValue;
+    private MetaverseObject? _metaverseObject;
 
     /// <summary>
     /// Helper record for flattened changes display in the table.
@@ -317,6 +506,16 @@ else
         ValueChangeType ChangeType,
         string? Value,
         ConnectedSystemObject? ReferenceValue);
+
+    /// <summary>
+    /// Helper record for MVO attribute preview display.
+    /// </summary>
+    private record MvoAttributePreview(string Name, string DisplayValue);
+
+    /// <summary>
+    /// Maximum number of attributes to show in the MVO preview.
+    /// </summary>
+    private const int MaxPreviewAttributes = 5;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -341,6 +540,53 @@ else
         var connectedSystemId = _activityRunProfileExecutionItem.GetConnectedSystemId();
         if (connectedSystemId != null)
             _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(connectedSystemId.Value);
+
+        // For projected items, get the MVO from the MetaverseObjectChange or fall back to CSO.MetaverseObject
+        // Note: MetaverseObjectChange is not currently populated during sync, so we primarily use CSO.MetaverseObject
+        if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Projected)
+        {
+            _metaverseObject = _activityRunProfileExecutionItem.MetaverseObjectChange?.MetaverseObject
+                ?? _activityRunProfileExecutionItem.ConnectedSystemObject?.MetaverseObject;
+        }
+    }
+
+    /// <summary>
+    /// Gets a preview of MVO attributes for display, excluding displayName and limiting multi-valued attributes.
+    /// </summary>
+    private IEnumerable<MvoAttributePreview> GetMvoAttributePreview()
+    {
+        if (_metaverseObject == null)
+            return Enumerable.Empty<MvoAttributePreview>();
+
+        return _metaverseObject.AttributeValues
+            .Where(av => !av.Attribute.Name.Equals(Constants.BuiltInAttributes.DisplayName, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(av => av.Attribute.Name)
+            .Take(MaxPreviewAttributes)
+            .Select(av => new MvoAttributePreview(
+                av.Attribute.Name,
+                FormatAttributeValue(av)
+            ));
+    }
+
+    /// <summary>
+    /// Formats an attribute value for preview display.
+    /// </summary>
+    private static string FormatAttributeValue(MetaverseObjectAttributeValue attributeValue)
+    {
+        // Use the built-in ToString() method which handles all value types
+        var result = attributeValue.ToString();
+        if (string.IsNullOrEmpty(result))
+            return "-";
+
+        // Remove the attribute name prefix if present (format is "AttributeName: Value")
+        if (attributeValue.Attribute != null)
+        {
+            var prefix = $"{attributeValue.Attribute.Name}: ";
+            if (result.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                result = result.Substring(prefix.Length);
+        }
+
+        return result;
     }
 
     private Color GetStatusColor()
@@ -407,7 +653,7 @@ else
             ObjectChangeType.Updated => "Object Updated",
             ObjectChangeType.Deleted => "Object Deleted from Source",
             // Sync operations
-            ObjectChangeType.Projected => "New Metaverse Object Projected",
+            ObjectChangeType.Projected => "Projected New Metaverse Object",
             ObjectChangeType.Joined => "Joined to Metaverse Object",
             ObjectChangeType.AttributeFlow => "Attributes Flowed",
             ObjectChangeType.Disconnected => "Disconnected from Metaverse",
@@ -492,7 +738,7 @@ else
             ObjectChangeType.Updated => $"The object ({objectDesc}) was updated with new attribute values.",
             ObjectChangeType.Deleted => $"The object ({objectDesc}) was deleted from the source system.",
             // Sync operations
-            ObjectChangeType.Projected => $"A new metaverse object was created for ({objectDesc}) via projection.",
+            ObjectChangeType.Projected => "A new metaverse object was created via projection.",
             ObjectChangeType.Joined => $"The object ({objectDesc}) was joined to an existing metaverse object.",
             ObjectChangeType.AttributeFlow => $"Attributes were flowed for ({objectDesc}) between staging and metaverse.",
             ObjectChangeType.Disconnected => $"The object ({objectDesc}) was disconnected from the metaverse.",

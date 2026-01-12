@@ -409,11 +409,21 @@ public class ActivityRepository : IActivityRepository
     {
         return await Repository.Database.ActivityRunProfileExecutionItems
             .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
+            // CSO includes
             .Include(q => q.ConnectedSystemObject)
             .ThenInclude(cso => cso!.AttributeValues)
             .ThenInclude(av => av.Attribute)
             .Include(q => q.ConnectedSystemObject)
             .ThenInclude(cso => cso!.Type)
+            // CSO -> MVO includes (for projected/joined CSOs to access the linked MVO)
+            .Include(q => q.ConnectedSystemObject)
+            .ThenInclude(cso => cso!.MetaverseObject)
+            .ThenInclude(mvo => mvo!.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Include(q => q.ConnectedSystemObject)
+            .ThenInclude(cso => cso!.MetaverseObject)
+            .ThenInclude(mvo => mvo!.Type)
+            // CSO change includes (for import updates/deletes)
             .Include(q => q.ConnectedSystemObjectChange)
             .ThenInclude(c => c!.AttributeChanges)
             .ThenInclude(ac => ac.Attribute)
@@ -428,6 +438,14 @@ public class ActivityRepository : IActivityRepository
             .ThenInclude(ac => ac.ValueChanges)
             .ThenInclude(vc => vc.ReferenceValue)
             .ThenInclude(rv => rv!.Type)
+            // MVO change includes (for future use when MetaverseObjectChange is populated during sync)
+            .Include(q => q.MetaverseObjectChange)
+            .ThenInclude(c => c!.MetaverseObject)
+            .ThenInclude(mvo => mvo!.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Include(q => q.MetaverseObjectChange)
+            .ThenInclude(c => c!.MetaverseObject)
+            .ThenInclude(mvo => mvo!.Type)
             .SingleOrDefaultAsync(q => q.Id == id);
     }
     #endregion
