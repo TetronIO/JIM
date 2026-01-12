@@ -38,7 +38,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("InitialSync", "ForwardSync", "DetectDrift", "ReassertState", "NewGroup", "DeleteGroup", "All")]
+    [ValidateSet("ImportToMV", "InitialSync", "ForwardSync", "DetectDrift", "ReassertState", "NewGroup", "DeleteGroup", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -179,6 +179,38 @@ try {
         $confirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetSyncProfile.id -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $confirmSyncResult.activityId -Name "Target Confirming Sync$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
+    }
+
+    # Test 0: ImportToMV (Import from Source and sync to Metaverse ONLY - no export)
+    if ($Step -eq "ImportToMV") {
+        Write-TestSection "Test 0: ImportToMV (Source → Metaverse Only)"
+
+        Write-Host "Importing from Source AD and projecting to Metaverse..." -ForegroundColor Gray
+        Write-Host "  (Stopping before export to allow review)" -ForegroundColor Yellow
+
+        # Step 1: Import from Source
+        Write-Host "    Importing from Source AD..." -ForegroundColor Gray
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceImportProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Source Full Import"
+        Start-Sleep -Seconds $WaitSeconds
+
+        # Step 2: Sync to Metaverse
+        Write-Host "    Syncing to metaverse..." -ForegroundColor Gray
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceSyncProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Source Full Sync"
+
+        Write-Host ""
+        Write-Host "✓ ImportToMV complete - objects should now be in the Metaverse" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "Next steps to review:" -ForegroundColor Cyan
+        Write-Host "  1. Check Metaverse for projected users and groups" -ForegroundColor Gray
+        Write-Host "  2. Verify attribute mappings are correct" -ForegroundColor Gray
+        Write-Host "  3. Run -Step InitialSync to continue with export to Target AD" -ForegroundColor Gray
+        Write-Host ""
+
+        $testResults.Steps += "ImportToMV"
+        $testResults.Success = $true
+        return
     }
 
     # Test 1: InitialSync (Import groups from Source, sync to Target)

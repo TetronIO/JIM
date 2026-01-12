@@ -174,10 +174,11 @@ for ($i = 0; $i -lt $groupScale.Users; $i++) {
 
     $userPrincipalName = "$($user.SamAccountName)@$domainSuffix"
 
-    # Create user with samba-tool
+    # Create user with samba-tool directly in the Users OU
     $result = docker exec $container samba-tool user create `
         $user.SamAccountName `
         "Password123!" `
+        --userou="OU=Users,OU=Corp" `
         --given-name="$($user.FirstName)" `
         --surname="$($user.LastName)" `
         --mail-address="$($user.Email)" `
@@ -185,11 +186,6 @@ for ($i = 0; $i -lt $groupScale.Users; $i++) {
         --job-title="$($user.Title)" 2>&1
 
     if ($LASTEXITCODE -eq 0) {
-        # Move to Users OU under Corp
-        $userDN = "CN=$($user.DisplayName),CN=Users,$domainDN"
-        $targetDN = $usersOU
-        docker exec $container samba-tool user move "$userDN" "$targetDN" 2>&1 | Out-Null
-
         $createdUsers += @{
             SamAccountName = $user.SamAccountName
             DisplayName = $user.DisplayName
