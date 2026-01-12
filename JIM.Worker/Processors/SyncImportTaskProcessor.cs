@@ -72,6 +72,12 @@ public class SyncImportTaskProcessor
         var externalIdsImported = new List<ExternalIdPair>();
         var totalObjectsImported = 0;
 
+        // Cross-page duplicate detection: Track external IDs seen across ALL pages of an import run.
+        // This is defence-in-depth for directory servers that may return duplicate objects across pages
+        // (e.g., Samba AD with faulty paging). Memory-efficient: ~124 bytes per object for string keys.
+        // Key format: "{objectTypeId}:{externalIdValue}" (same as per-page tracking)
+        var crossPageSeenExternalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Performing import");
         switch (_connector)
         {
@@ -147,7 +153,7 @@ public class SyncImportTaskProcessor
                     // process the results from this page
                     using (Diagnostics.Sync.StartSpan("ProcessImportObjects").SetTag("objectCount", result.ImportObjects.Count))
                     {
-                        await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+                        await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated, crossPageSeenExternalIds);
                     }
 
                     if (initialPage)
@@ -193,6 +199,8 @@ public class SyncImportTaskProcessor
 
                 using (Diagnostics.Sync.StartSpan("ProcessImportObjects").SetTag("objectCount", totalObjectsImported))
                 {
+                    // File-based imports are single-page, so crossPageSeenExternalIds is not needed
+                    // but we pass null for consistency with the method signature
                     await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
                 }
 
@@ -486,7 +494,7 @@ public class SyncImportTaskProcessor
         }
     }
 
-    private async Task ProcessImportObjectsAsync(ConnectedSystemImportResult connectedSystemImportResult, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    private async Task ProcessImportObjectsAsync(ConnectedSystemImportResult connectedSystemImportResult, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, HashSet<string>? crossPageSeenExternalIds = null)
     {
         if (_connectedSystem.ObjectTypes == null)
             throw new InvalidDataException("ProcessImportObjectsAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
@@ -585,6 +593,19 @@ public class SyncImportTaskProcessor
 
                         // Snapshot the external ID for error reporting
                         activityRunProfileExecutionItem.ExternalIdSnapshot = externalIdValue;
+
+                        // Cross-page duplicate detection (defence-in-depth)
+                        // This catches duplicates that span multiple pages, which can occur with
+                        // directory servers that don't properly support paging (e.g., Samba AD)
+                        if (crossPageSeenExternalIds != null && !crossPageSeenExternalIds.Add(duplicateKey))
+                        {
+                            // This external ID was already seen on a previous page
+                            activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
+                            activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found across import pages. This object was already processed on a previous page. This may indicate a directory server paging issue.";
+                            Log.Warning("ProcessImportObjectsAsync: Cross-page duplicate external ID '{ExternalId}' at index {Index}. Object was already imported on a previous page. Skipping.",
+                                externalIdValue, importIndex);
+                            continue;
+                        }
 
                         if (knownDuplicateExternalIds.Contains(duplicateKey))
                         {

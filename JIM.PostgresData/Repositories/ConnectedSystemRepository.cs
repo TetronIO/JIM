@@ -539,12 +539,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Include Type for sync processors that access CSO.Type.RemoveContributedAttributesOnObsoletion.
         if (returnAttributes)
         {
-            // Include Attribute navigation property for both CSO and MVO AttributeValues
+            // Include Attribute navigation property for both CSO and MVO AttributeValues.
+            // Also include ReferenceValue and ReferenceValue.MetaverseObject for reference attribute
+            // flow during sync - without these, SyncRuleMappingProcessor cannot resolve CSO references
+            // to MVO references and will silently skip them.
             query = Repository.Database.ConnectedSystemObjects
                 .AsSplitQuery()
                 .Include(cso => cso.Type)
                 .Include(cso => cso.AttributeValues)
                     .ThenInclude(av => av.Attribute)
+                .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.ReferenceValue)
+                    .ThenInclude(rv => rv!.MetaverseObject)
                 .Include(cso => cso.MetaverseObject)
                     .ThenInclude(mvo => mvo!.AttributeValues)
                     .ThenInclude(av => av.Attribute);
@@ -552,12 +558,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         else
         {
             // Include Attribute navigation for CSO AttributeValues (needed for DisplayNameOrId)
-            // and MVO Attribute (required for expression-based export mappings)
+            // and MVO Attribute (required for expression-based export mappings).
+            // Also include ReferenceValue and ReferenceValue.MetaverseObject for reference attribute
+            // flow during sync - without these, SyncRuleMappingProcessor cannot resolve CSO references
+            // to MVO references and will silently skip them.
             query = Repository.Database.ConnectedSystemObjects
                 .AsSplitQuery()
                 .Include(cso => cso.Type)
                 .Include(cso => cso.AttributeValues)
                     .ThenInclude(av => av.Attribute)
+                .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.ReferenceValue)
+                    .ThenInclude(rv => rv!.MetaverseObject)
                 .Include(cso => cso.MetaverseObject)
                     .ThenInclude(mvo => mvo!.AttributeValues)
                     .ThenInclude(av => av.Attribute);

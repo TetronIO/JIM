@@ -46,6 +46,20 @@ internal class LdapConnectorImport
             .SingleOrDefault(s => s.Setting.Name == SearchTimeoutSettingName);
         var searchTimeoutSeconds = searchTimeoutSetting?.IntValue ?? DefaultSearchTimeoutSeconds;
         _searchTimeout = TimeSpan.FromSeconds(searchTimeoutSeconds);
+
+        // If we have persisted connector data from a previous page, deserialise it to get capabilities
+        // This allows subsequent pages to know the directory capabilities without re-querying
+        if (!string.IsNullOrEmpty(persistedConnectorData) && paginationTokens.Count > 0)
+        {
+            try
+            {
+                _currentRootDse = JsonSerializer.Deserialize<LdapConnectorRootDse>(persistedConnectorData);
+            }
+            catch (JsonException ex)
+            {
+                _logger.Warning(ex, "LdapConnectorImport: Failed to deserialise persisted connector data for capability detection. Will re-query directory.");
+            }
+        }
     }
 
     internal ConnectedSystemImportResult GetFullImportObjects()
@@ -253,7 +267,8 @@ internal class LdapConnectorImport
         request.Attributes.AddRange(new[] {
             "DNSHostName",
             "HighestCommittedUSN",
-            "supportedCapabilities"
+            "supportedCapabilities",
+            "vendorName"
         });
 
         var response = (SearchResponse)_connection.SendRequest(request);
@@ -275,11 +290,23 @@ internal class LdapConnectorImport
             (capabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_OID) ||
              capabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_ADAM_OID));
 
+        // Get vendor name for capability detection
+        var vendorName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "vendorName");
+
+        // Determine paging support based on directory type
+        // Samba AD claims AD compatibility but doesn't properly support paged searches
+        // (it returns paging cookies but then returns the same results on subsequent pages)
+        var isSambaAd = vendorName != null &&
+            vendorName.Contains("Samba", StringComparison.OrdinalIgnoreCase);
+        var supportsPaging = isActiveDirectory && !isSambaAd;
+
         var rootDse = new LdapConnectorRootDse
         {
             DnsHostName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "DNSHostName"),
             HighestCommittedUsn = LdapConnectorUtilities.GetEntryAttributeLongValue(rootDseEntry, "HighestCommittedUSN"),
-            IsActiveDirectory = isActiveDirectory
+            IsActiveDirectory = isActiveDirectory,
+            VendorName = vendorName,
+            SupportsPaging = supportsPaging
         };
 
         // For non-AD directories, try to get the last change number from the changelog
@@ -288,8 +315,8 @@ internal class LdapConnectorImport
             rootDse.LastChangeNumber = QueryDirectoryForLastChangeNumber(0);
         }
 
-        _logger.Verbose("GetRootDseInformation: Got info. IsActiveDirectory={IsAd}, HighestUSN={Usn}, LastChangeNumber={ChangeNum}",
-            rootDse.IsActiveDirectory, rootDse.HighestCommittedUsn, rootDse.LastChangeNumber);
+        _logger.Information("GetRootDseInformation: Directory capabilities detected. IsActiveDirectory={IsAd}, VendorName={VendorName}, SupportsPaging={SupportsPaging}, HighestUSN={Usn}, LastChangeNumber={ChangeNum}",
+            rootDse.IsActiveDirectory, rootDse.VendorName ?? "(not set)", rootDse.SupportsPaging, rootDse.HighestCommittedUsn, rootDse.LastChangeNumber);
         return rootDse;
     }
 
@@ -302,7 +329,6 @@ internal class LdapConnectorImport
         }
 
         var stopwatch = Stopwatch.StartNew();
-        var lastRunsCookieLength = lastRunsCookie != null ? lastRunsCookie.Length.ToString() : "null";
         var ldapFilter = $"(objectClass={connectedSystemObjectType.Name})"; // todo: add in implicit support for returning containers/organisational units?
 
         // add user selected attributes
@@ -318,15 +344,27 @@ internal class LdapConnectorImport
         var queryAttributes = attributes.Distinct().ToArray();
 
         var searchRequest = new SearchRequest(connectedSystemContainer.ExternalId, ldapFilter, SearchScope.Subtree, queryAttributes);
-        var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize)
-        {
-            // Make paging non-critical so servers that don't support paging can ignore it
-            IsCritical = false
-        };
-        if (lastRunsCookie is { Length: > 0 })
-            pageResultRequestControl.Cookie = lastRunsCookie;
 
-        searchRequest.Controls.Add(pageResultRequestControl);
+        // Only add paging control if the directory supports it
+        // Samba AD claims AD compatibility but returns duplicate results when using paging cookies
+        var supportsPaging = _currentRootDse?.SupportsPaging ?? true; // Default to true for backwards compatibility
+        if (supportsPaging)
+        {
+            var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize)
+            {
+                // Make paging non-critical so servers that don't support paging can ignore it
+                IsCritical = false
+            };
+            if (lastRunsCookie is { Length: > 0 })
+                pageResultRequestControl.Cookie = lastRunsCookie;
+
+            searchRequest.Controls.Add(pageResultRequestControl);
+        }
+        else
+        {
+            _logger.Debug("GetFisoResults: Paging disabled for this directory (VendorName={VendorName}). Retrieving all results in single request.",
+                _currentRootDse?.VendorName ?? "unknown");
+        }
 
         SearchResponse searchResponse;
         try
@@ -342,8 +380,9 @@ internal class LdapConnectorImport
             return;
         }
 
-        // if there's more results, keep track of the paging cookie so we can keep requesting subsequent pages
-        if (searchResponse.Controls != null && searchResponse.Controls.SingleOrDefault(c => c is PageResultResponseControl) is PageResultResponseControl pageResultResponseControl && pageResultResponseControl.Cookie.Length > 0)
+        // Only track pagination tokens if paging is supported
+        // For directories without paging support, all results are returned in a single request
+        if (supportsPaging && searchResponse.Controls != null && searchResponse.Controls.SingleOrDefault(c => c is PageResultResponseControl) is PageResultResponseControl pageResultResponseControl && pageResultResponseControl.Cookie.Length > 0)
         {
             var tokenName = LdapConnectorUtilities.GetPaginationTokenName(connectedSystemContainer, connectedSystemObjectType);
             connectedSystemImportResult.PaginationTokens.Add(new ConnectedSystemPaginationToken(tokenName, pageResultResponseControl.Cookie));
@@ -388,15 +427,21 @@ internal class LdapConnectorImport
         var queryAttributes = attributes.Distinct().ToArray();
 
         var searchRequest = new SearchRequest(container.ExternalId, ldapFilter, SearchScope.Subtree, queryAttributes);
-        var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize)
-        {
-            // Make paging non-critical so servers that don't support paging can ignore it
-            IsCritical = false
-        };
-        if (lastRunsCookie is { Length: > 0 })
-            pageResultRequestControl.Cookie = lastRunsCookie;
 
-        searchRequest.Controls.Add(pageResultRequestControl);
+        // Only add paging control if the directory supports it
+        var supportsPaging = _currentRootDse?.SupportsPaging ?? true;
+        if (supportsPaging)
+        {
+            var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize)
+            {
+                // Make paging non-critical so servers that don't support paging can ignore it
+                IsCritical = false
+            };
+            if (lastRunsCookie is { Length: > 0 })
+                pageResultRequestControl.Cookie = lastRunsCookie;
+
+            searchRequest.Controls.Add(pageResultRequestControl);
+        }
 
         SearchResponse searchResponse;
         try
@@ -412,8 +457,8 @@ internal class LdapConnectorImport
             return;
         }
 
-        // Handle pagination
-        if (searchResponse.Controls != null &&
+        // Handle pagination - only if paging is supported
+        if (supportsPaging && searchResponse.Controls != null &&
             searchResponse.Controls.SingleOrDefault(c => c is PageResultResponseControl) is PageResultResponseControl pageResultResponseControl &&
             pageResultResponseControl.Cookie.Length > 0)
         {
