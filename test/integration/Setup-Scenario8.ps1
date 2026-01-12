@@ -402,13 +402,13 @@ Write-Host "  ✓ Set objectGUID as External ID for all object types" -Foregroun
 # Select required LDAP attributes for users
 $requiredUserAttributes = @(
     'objectGUID', 'sAMAccountName', 'givenName', 'sn', 'displayName', 'cn',
-    'mail', 'userPrincipalName', 'title', 'department', 'distinguishedName'
+    'mail', 'userPrincipalName', 'title', 'department', 'company', 'distinguishedName'
 )
 
 # Select required LDAP attributes for groups
 $requiredGroupAttributes = @(
     'objectGUID', 'sAMAccountName', 'cn', 'displayName', 'description',
-    'groupType', 'member', 'managedBy', 'mail', 'distinguishedName'
+    'groupType', 'member', 'managedBy', 'mail', 'company', 'distinguishedName'
 )
 
 # Select attributes for Source user

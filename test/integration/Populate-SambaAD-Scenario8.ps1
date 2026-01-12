@@ -50,6 +50,17 @@ Write-TestSection "Scenario 8: Populating Samba AD ($Instance) with $Template te
 $groupScale = Get-Scenario8GroupScale -Template $Template
 $userScale = Get-TemplateScale -Template $Template
 
+# Define consistent company and department lists for Scenario 8
+# These must match the lists used in group creation to ensure membership filtering works
+$scenario8CompanyNames = @(
+    "Subatomic", "NexusDynamics", "OrbitalSystems", "QuantumBridge", "StellarLogistics"
+)
+
+$scenario8DepartmentNames = @(
+    "Engineering", "Finance", "Human-Resources", "Information-Technology", "Legal",
+    "Marketing", "Operations", "Procurement", "Research-Development", "Sales"
+)
+
 # Container and domain mapping
 $containerMap = @{
     Source = @{
@@ -174,6 +185,11 @@ for ($i = 0; $i -lt $groupScale.Users; $i++) {
 
     $userPrincipalName = "$($user.SamAccountName)@$domainSuffix"
 
+    # Override company and department with Scenario 8 consistent values
+    # This ensures membership filtering works correctly in group assignments
+    $company = $scenario8CompanyNames[$i % $scenario8CompanyNames.Count]
+    $department = $scenario8DepartmentNames[$i % $scenario8DepartmentNames.Count]
+
     # Create user with samba-tool directly in the Users OU
     $result = docker exec $container samba-tool user create `
         $user.SamAccountName `
@@ -182,17 +198,17 @@ for ($i = 0; $i -lt $groupScale.Users; $i++) {
         --given-name="$($user.FirstName)" `
         --surname="$($user.LastName)" `
         --mail-address="$($user.Email)" `
-        --department="$($user.Department)" `
+        --department="$department" `
         --job-title="$($user.Title)" `
-        --company="$($user.Company)" 2>&1
+        --company="$company" 2>&1
 
     if ($LASTEXITCODE -eq 0) {
         $createdUsers += @{
             SamAccountName = $user.SamAccountName
             DisplayName = $user.DisplayName
-            Department = $user.Department
+            Department = $department
             Title = $user.Title
-            Company = $user.Company
+            Company = $company
             DN = "CN=$($user.DisplayName),$usersOU"
         }
     }
@@ -201,9 +217,9 @@ for ($i = 0; $i -lt $groupScale.Users; $i++) {
         $createdUsers += @{
             SamAccountName = $user.SamAccountName
             DisplayName = $user.DisplayName
-            Department = $user.Department
+            Department = $department
             Title = $user.Title
-            Company = $user.Company
+            Company = $company
             DN = "CN=$($user.DisplayName),$usersOU"
         }
     }
