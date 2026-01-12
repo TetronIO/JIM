@@ -153,7 +153,8 @@ public class ActivityRepository : IActivityRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = false,
-        IEnumerable<ObjectChangeType>? changeTypeFilter = null)
+        IEnumerable<ObjectChangeType>? changeTypeFilter = null,
+        IEnumerable<string>? objectTypeFilter = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -181,6 +182,19 @@ public class ActivityRepository : IActivityRepository
             if (changeTypes.Count > 0)
             {
                 query = query.Where(a => changeTypes.Contains(a.ObjectChangeType));
+            }
+        }
+
+        // Apply object type filter if specified
+        if (objectTypeFilter != null)
+        {
+            var objectTypes = objectTypeFilter.ToList();
+            if (objectTypes.Count > 0)
+            {
+                query = query.Where(a =>
+                    a.ConnectedSystemObject != null &&
+                    a.ConnectedSystemObject.Type != null &&
+                    objectTypes.Contains(a.ConnectedSystemObject.Type.Name));
             }
         }
 
@@ -322,12 +336,14 @@ public class ActivityRepository : IActivityRepository
             })
             .ToListAsync();
 
-        // Get distinct object types count (separate query as it needs DISTINCT)
-        var totalObjectTypes = await rpeiQuery
-            .Where(q => q.ConnectedSystemObject != null)
-            .Select(q => q.ConnectedSystemObject!.Type)
-            .Distinct()
-            .CountAsync();
+        // Get object type counts with names (separate query as it needs GROUP BY on type name)
+        var objectTypeCounts = await rpeiQuery
+            .Where(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Type != null)
+            .GroupBy(q => q.ConnectedSystemObject!.Type!.Name)
+            .Select(g => new { TypeName = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.TypeName, x => x.Count);
+
+        var totalObjectTypes = objectTypeCounts.Count;
 
         // Calculate totals from grouped data
         var totalObjectChangeCount = aggregateData.Sum(x => x.Count);
@@ -362,6 +378,7 @@ public class ActivityRepository : IActivityRepository
             TotalObjectChangeCount = totalObjectChangeCount,
             TotalObjectErrors = totalObjectErrors,
             TotalObjectTypes = totalObjectTypes,
+            ObjectTypeCounts = objectTypeCounts,
 
             // Import stats
             TotalCsoAdds = totalCsoAdds,

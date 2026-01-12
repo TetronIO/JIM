@@ -30,7 +30,8 @@ public interface IActivityRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = false,
-        IEnumerable<ObjectChangeType>? changeTypeFilter = null);
+        IEnumerable<ObjectChangeType>? changeTypeFilter = null,
+        IEnumerable<string>? objectTypeFilter = null);
 
     public Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId);
 

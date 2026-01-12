@@ -314,7 +314,7 @@ public class ActivitiesControllerTests
         _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemHeadersAsync(
                 It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(),
                 It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<IEnumerable<ObjectChangeType>?>()))
+                It.IsAny<IEnumerable<ObjectChangeType>?>(), It.IsAny<IEnumerable<string>?>()))
             .ReturnsAsync(pagedResult);
 
         var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
@@ -384,7 +384,7 @@ public class ActivitiesControllerTests
         _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemHeadersAsync(
                 It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(),
                 It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<IEnumerable<ObjectChangeType>?>()))
+                It.IsAny<IEnumerable<ObjectChangeType>?>(), It.IsAny<IEnumerable<string>?>()))
             .ReturnsAsync(pagedResult);
 
         var pagination = new PaginationRequest { Page = 1, PageSize = 20 };

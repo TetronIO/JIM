@@ -100,6 +100,12 @@ public class ActivityRunProfileExecutionStats
     /// Count of distinct object types processed.
     /// </summary>
     public int TotalObjectTypes { get; set; }
+
+    /// <summary>
+    /// Dictionary of object type names and their counts.
+    /// Key is the object type name, value is the count of objects of that type.
+    /// </summary>
+    public Dictionary<string, int> ObjectTypeCounts { get; set; } = new();
     #endregion
 
     #region NoChange Reason Stats
