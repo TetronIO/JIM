@@ -329,15 +329,23 @@
                             var previewAttributes = GetMvoAttributePreview();
                             if (previewAttributes.Any())
                             {
-                                <MudDivider Class="my-1" />
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-1">Attributes</MudText>
-                                foreach (var attr in previewAttributes)
-                                {
-                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Start" Class="mb-1">
-                                        <MudText Typo="Typo.body2" Class="jim-text-code" Style="min-width: 100px; flex-shrink: 0;">@attr.Name</MudText>
-                                        <MudText Typo="Typo.body2" Style="word-break: break-word;">@attr.DisplayValue</MudText>
-                                    </MudStack>
-                                }
+                                <MudDivider Class="my-2" />
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">Attributes</MudText>
+                                <MudSimpleTable Dense="true" Hover="true" Style="background: transparent;">
+                                    <tbody>
+                                        @foreach (var attr in previewAttributes)
+                                        {
+                                            <tr>
+                                                <td style="padding: 4px 12px 4px 0; border: none; vertical-align: top; white-space: nowrap;">
+                                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@attr.Name</MudText>
+                                                </td>
+                                                <td style="padding: 4px 0; border: none; vertical-align: top; word-break: break-word;">
+                                                    <MudText Typo="Typo.body2">@attr.DisplayValue</MudText>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
 
                                 var totalAttributes = _metaverseObject.AttributeValues
                                     .Where(av => !av.Attribute.Name.Equals(Constants.BuiltInAttributes.DisplayName, StringComparison.OrdinalIgnoreCase))
@@ -345,7 +353,7 @@
                                 var remainingCount = totalAttributes - previewAttributes.Count();
                                 if (remainingCount > 0)
                                 {
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
                                         +@remainingCount more attribute@(remainingCount != 1 ? "s" : "")
                                     </MudText>
                                 }
