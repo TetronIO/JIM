@@ -273,23 +273,23 @@ if ($sourceDomainPartition) {
     Set-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id -PartitionId $sourceDomainPartition.id -Selected $true | Out-Null
     Write-Host "    ✓ Selected partition: $($sourceDomainPartition.name)" -ForegroundColor Green
 
-    # Find and select Corp container and its children
+    # Find and select Corp container's children (Users and Entitlements)
+    # NOTE: We select ONLY the child containers, not the parent Corp container itself,
+    # to avoid importing objects twice. Selecting both parent and child causes duplicates.
     $corpContainer = Find-ContainerByName -Containers $sourceDomainPartition.containers -Name "Corp"
     if ($corpContainer) {
-        Set-JIMConnectedSystemContainer -ConnectedSystemId $sourceSystem.id -ContainerId $corpContainer.id -Selected $true | Out-Null
-        Write-Host "    ✓ Selected container: Corp" -ForegroundColor Green
-
-        # Select Users and Entitlements sub-containers
+        # Select Users sub-container
         $usersContainer = Find-ContainerByName -Containers $corpContainer.childContainers -Name "Users"
         if ($usersContainer) {
             Set-JIMConnectedSystemContainer -ConnectedSystemId $sourceSystem.id -ContainerId $usersContainer.id -Selected $true | Out-Null
-            Write-Host "    ✓ Selected container: Users" -ForegroundColor Green
+            Write-Host "    ✓ Selected container: OU=Users,OU=Corp" -ForegroundColor Green
         }
 
+        # Select Entitlements sub-container
         $entitlementsContainer = Find-ContainerByName -Containers $corpContainer.childContainers -Name "Entitlements"
         if ($entitlementsContainer) {
             Set-JIMConnectedSystemContainer -ConnectedSystemId $sourceSystem.id -ContainerId $entitlementsContainer.id -Selected $true | Out-Null
-            Write-Host "    ✓ Selected container: Entitlements" -ForegroundColor Green
+            Write-Host "    ✓ Selected container: OU=Entitlements,OU=Corp" -ForegroundColor Green
         }
     }
     else {
@@ -313,22 +313,23 @@ if ($targetDomainPartition) {
     Set-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id -PartitionId $targetDomainPartition.id -Selected $true | Out-Null
     Write-Host "    ✓ Selected partition: $($targetDomainPartition.name)" -ForegroundColor Green
 
-    # Find and select CorpManaged container and its children
+    # Find and select CorpManaged container's children (Users and Entitlements)
+    # NOTE: We select ONLY the child containers, not the parent CorpManaged container itself,
+    # to avoid importing objects twice. Selecting both parent and child causes duplicates.
     $corpManagedContainer = Find-ContainerByName -Containers $targetDomainPartition.containers -Name "CorpManaged"
     if ($corpManagedContainer) {
-        Set-JIMConnectedSystemContainer -ConnectedSystemId $targetSystem.id -ContainerId $corpManagedContainer.id -Selected $true | Out-Null
-        Write-Host "    ✓ Selected container: CorpManaged" -ForegroundColor Green
-
+        # Select Users sub-container
         $usersContainer = Find-ContainerByName -Containers $corpManagedContainer.childContainers -Name "Users"
         if ($usersContainer) {
             Set-JIMConnectedSystemContainer -ConnectedSystemId $targetSystem.id -ContainerId $usersContainer.id -Selected $true | Out-Null
-            Write-Host "    ✓ Selected container: Users" -ForegroundColor Green
+            Write-Host "    ✓ Selected container: OU=Users,OU=CorpManaged" -ForegroundColor Green
         }
 
+        # Select Entitlements sub-container
         $entitlementsContainer = Find-ContainerByName -Containers $corpManagedContainer.childContainers -Name "Entitlements"
         if ($entitlementsContainer) {
             Set-JIMConnectedSystemContainer -ConnectedSystemId $targetSystem.id -ContainerId $entitlementsContainer.id -Selected $true | Out-Null
-            Write-Host "    ✓ Selected container: Entitlements" -ForegroundColor Green
+            Write-Host "    ✓ Selected container: OU=Entitlements,OU=CorpManaged" -ForegroundColor Green
         }
     }
     else {
