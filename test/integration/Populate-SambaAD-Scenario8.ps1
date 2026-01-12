@@ -183,7 +183,8 @@ for ($i = 0; $i -lt $groupScale.Users; $i++) {
         --surname="$($user.LastName)" `
         --mail-address="$($user.Email)" `
         --department="$($user.Department)" `
-        --job-title="$($user.Title)" 2>&1
+        --job-title="$($user.Title)" `
+        --company="$($user.Company)" 2>&1
 
     if ($LASTEXITCODE -eq 0) {
         $createdUsers += @{

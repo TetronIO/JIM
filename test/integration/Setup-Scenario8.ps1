@@ -582,6 +582,7 @@ $userImportMappings = @(
     @{ LdapAttr = "mail"; MvAttr = "Email" }
     @{ LdapAttr = "title"; MvAttr = "Job Title" }
     @{ LdapAttr = "department"; MvAttr = "Department" }
+    @{ LdapAttr = "company"; MvAttr = "Company" }
 )
 
 $userExportMappings = @(
@@ -594,6 +595,7 @@ $userExportMappings = @(
     @{ MvAttr = "Email"; LdapAttr = "userPrincipalName" }
     @{ MvAttr = "Job Title"; LdapAttr = "title" }
     @{ MvAttr = "Department"; LdapAttr = "department" }
+    @{ MvAttr = "Company"; LdapAttr = "company" }
 )
 
 # Create user import mappings (Source -> MV)
@@ -668,6 +670,7 @@ $groupImportMappings = @(
     @{ LdapAttr = "mail"; MvAttr = "Email" }
     @{ LdapAttr = "member"; MvAttr = "Static Members" }
     @{ LdapAttr = "managedBy"; MvAttr = "Managed By" }
+    @{ LdapAttr = "company"; MvAttr = "Company" }
 )
 
 $groupExportMappings = @(
@@ -679,6 +682,7 @@ $groupExportMappings = @(
     @{ MvAttr = "Email"; LdapAttr = "mail" }
     @{ MvAttr = "Static Members"; LdapAttr = "member" }
     @{ MvAttr = "Managed By"; LdapAttr = "managedBy" }
+    @{ MvAttr = "Company"; LdapAttr = "company" }
 )
 
 # Create group import mappings (Source -> MV)
