@@ -52,14 +52,27 @@ $userScale = Get-TemplateScale -Template $Template
 
 # Define consistent company and department lists for Scenario 8
 # These must match the lists used in group creation to ensure membership filtering works
-$scenario8CompanyNames = @(
-    "Subatomic", "NexusDynamics", "OrbitalSystems", "QuantumBridge", "StellarLogistics"
-)
+# Keys are technical names (no spaces), values are display names (with spaces)
+$scenario8CompanyNames = @{
+    "Subatomic" = "Subatomic"
+    "NexusDynamics" = "Nexus Dynamics"
+    "OrbitalSystems" = "Orbital Systems"
+    "QuantumBridge" = "Quantum Bridge"
+    "StellarLogistics" = "Stellar Logistics"
+}
 
-$scenario8DepartmentNames = @(
-    "Engineering", "Finance", "Human-Resources", "Information-Technology", "Legal",
-    "Marketing", "Operations", "Procurement", "Research-Development", "Sales"
-)
+$scenario8DepartmentNames = @{
+    "Engineering" = "Engineering"
+    "Finance" = "Finance"
+    "Human-Resources" = "Human Resources"
+    "Information-Technology" = "Information Technology"
+    "Legal" = "Legal"
+    "Marketing" = "Marketing"
+    "Operations" = "Operations"
+    "Procurement" = "Procurement"
+    "Research-Development" = "Research & Development"
+    "Sales" = "Sales"
+}
 
 # Container and domain mapping
 $containerMap = @{
@@ -187,10 +200,15 @@ for ($i = 0; $i -lt $groupScale.Users; $i++) {
 
     # Override company and department with Scenario 8 consistent values
     # This ensures membership filtering works correctly in group assignments
-    $company = $scenario8CompanyNames[$i % $scenario8CompanyNames.Count]
-    $department = $scenario8DepartmentNames[$i % $scenario8DepartmentNames.Count]
+    # Use technical names (keys) for filtering, display names (values) for LDAP attributes
+    $companyTechnicalName = ($scenario8CompanyNames.Keys | Sort-Object)[$i % $scenario8CompanyNames.Count]
+    $departmentTechnicalName = ($scenario8DepartmentNames.Keys | Sort-Object)[$i % $scenario8DepartmentNames.Count]
+
+    $companyDisplayName = $scenario8CompanyNames[$companyTechnicalName]
+    $departmentDisplayName = $scenario8DepartmentNames[$departmentTechnicalName]
 
     # Create user with samba-tool directly in the Users OU
+    # LDAP stores display names (with spaces)
     $result = docker exec $container samba-tool user create `
         $user.SamAccountName `
         "Password123!" `
@@ -198,17 +216,20 @@ for ($i = 0; $i -lt $groupScale.Users; $i++) {
         --given-name="$($user.FirstName)" `
         --surname="$($user.LastName)" `
         --mail-address="$($user.Email)" `
-        --department="$department" `
+        --department="$departmentDisplayName" `
         --job-title="$($user.Title)" `
-        --company="$company" 2>&1
+        --company="$companyDisplayName" 2>&1
 
     if ($LASTEXITCODE -eq 0) {
+        # Store technical name for filtering, display name for tracking
         $createdUsers += @{
             SamAccountName = $user.SamAccountName
             DisplayName = $user.DisplayName
-            Department = $department
+            Department = $departmentTechnicalName
+            DepartmentDisplay = $departmentDisplayName
             Title = $user.Title
-            Company = $company
+            Company = $companyTechnicalName
+            CompanyDisplay = $companyDisplayName
             DN = "CN=$($user.DisplayName),$usersOU"
         }
     }
@@ -217,9 +238,11 @@ for ($i = 0; $i -lt $groupScale.Users; $i++) {
         $createdUsers += @{
             SamAccountName = $user.SamAccountName
             DisplayName = $user.DisplayName
-            Department = $department
+            Department = $departmentTechnicalName
+            DepartmentDisplay = $departmentDisplayName
             Title = $user.Title
-            Company = $company
+            Company = $companyTechnicalName
+            CompanyDisplay = $companyDisplayName
             DN = "CN=$($user.DisplayName),$usersOU"
         }
     }
@@ -248,6 +271,23 @@ $groupOperation = Start-TimedOperation -Name "Creating groups" -TotalSteps $grou
 for ($i = 0; $i -lt $groups.Count; $i++) {
     $group = $groups[$i]
 
+    # Format display names and descriptions for company and department groups
+    $displayName = $group.DisplayName
+    $description = $group.Description
+
+    if ($group.Category -eq "Company") {
+        # Format company group display name with spaces
+        $technicalName = $group.Name -replace "^Company-", ""  # Extract the company name part
+        $displayName = "Company-" + ($scenario8CompanyNames[$technicalName] -replace " ", " ")  # Preserve spaces
+        $description = "Company-wide group for $($scenario8CompanyNames[$technicalName])"
+    }
+    elseif ($group.Category -eq "Department") {
+        # Format department group display name with spaces
+        $technicalName = $group.Name -replace "^Dept-", ""  # Extract the department name part
+        $displayName = "Dept-" + ($scenario8DepartmentNames[$technicalName] -replace " ", " ")  # Preserve spaces
+        $description = "Department group for $($scenario8DepartmentNames[$technicalName])"
+    }
+
     # Convert scope and type to samba-tool format
     $scopeArg = Get-ADGroupScopeString -Scope $group.Scope
     $typeArg = Get-ADGroupTypeString -Type $group.Type
@@ -255,7 +295,7 @@ for ($i = 0; $i -lt $groups.Count; $i++) {
     # Create group with samba-tool directly in Entitlements OU
     $result = docker exec $container samba-tool group add `
         $group.SAMAccountName `
-        --description="$($group.Description)" `
+        --description="$description" `
         --group-scope="$scopeArg" `
         --group-type="$typeArg" `
         --groupou="OU=Entitlements,OU=Corp" 2>&1
@@ -280,7 +320,7 @@ for ($i = 0; $i -lt $groups.Count; $i++) {
 dn: CN=$($group.CN),$entitlementsOU
 changetype: modify
 replace: displayName
-displayName: $($group.DisplayName)
+displayName: $displayName
 "@
         $ldifFile = "/tmp/group_displayname_$i.ldif"
         docker exec $container bash -c "echo '$displayNameLdif' > $ldifFile" 2>&1 | Out-Null
