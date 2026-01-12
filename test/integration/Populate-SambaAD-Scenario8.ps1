@@ -403,8 +403,9 @@ for ($g = 0; $g -lt $createdGroups.Count; $g++) {
         }
     }
 
-    # Add selected candidates to the group
-    foreach ($user in $candidates) {
+    # Add selected candidates to the group (deduplicate first)
+    $uniqueCandidates = $candidates | Sort-Object -Property SamAccountName -Unique
+    foreach ($user in $uniqueCandidates) {
         $result = docker exec $container samba-tool group addmembers `
             $group.SAMAccountName `
             $user.SamAccountName 2>&1
