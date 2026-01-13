@@ -758,7 +758,7 @@ function Assert-ActivitySuccess {
     # Check if status is acceptable
     if ($status -in $acceptableStatuses) {
         Write-Host "  ✓ $Name completed successfully (Status: $status)" -ForegroundColor Green
-        return $true
+        return  # Success - no output (callers don't use return value)
     }
 
     # Activity did not complete successfully - gather diagnostic information
