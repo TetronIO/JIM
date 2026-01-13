@@ -359,7 +359,9 @@ else if (_syncRule != null)
             </DialogActions>
         </MudDialog>
     }
-    else if (_syncRule.MetaverseObjectType != null)
+
+    @* Scoping criteria are only applicable to export sync rules *@
+    @if (_syncRule.Id > 0 && _syncRule.Direction == SyncRuleDirection.Export && _syncRule.MetaverseObjectType != null)
     {
         <MudPaper Class="pa-4 mt-5" Outlined="true">
             <MudText Typo="Typo.h5">Metaverse Object Scope</MudText>
@@ -716,6 +718,9 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/connected-systems/sync
 
             _syncRuleNameOrCreate = _syncRule.Name;
             _breadcrumbs.Add(new BreadcrumbItem(_syncRule.Name, href: null, disabled: true));
+
+            // initialise scoping filter state based on existing criteria
+            _syncRuleScopingFiltered = _syncRule.ObjectScopingCriteriaGroups.Count > 0;
         }
         else
         {
