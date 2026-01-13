@@ -364,11 +364,11 @@ This tests the single-valued DN reference attribute sync, which uses the same re
 4. Trigger Confirming Import on Target AD
 
 **Validations**:
-- [ ] All groups from Source `OU=Entitlements` exist in Target `OU=Entitlements`
-- [ ] Group attributes match (displayName, description, groupType)
-- [ ] Member DNs correctly transformed to target domain
-- [ ] Member count matches between source and target groups
-- [ ] All group types synced correctly (security, distribution, various scopes)
+- [x] All groups from Source `OU=Entitlements` exist in Target `OU=Entitlements`
+- [x] Group attributes match (displayName, description, groupType)
+- [x] Member DNs correctly transformed to target domain
+- [x] Member count matches between source and target groups
+- [x] All group types synced correctly (security, distribution, various scopes)
 
 ### Step 2: ForwardSync
 
