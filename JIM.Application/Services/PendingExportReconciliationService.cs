@@ -82,9 +82,13 @@ public class PendingExportReconciliationService
         }
 
         // Only process exports that have been executed and are awaiting confirmation
-        if (pendingExport.Status != PendingExportStatus.Exported)
+        // This includes:
+        // - Exported: Just executed, awaiting first confirmation
+        // - ExportNotImported: Previously executed but some attributes weren't confirmed, awaiting re-confirmation
+        if (pendingExport.Status != PendingExportStatus.Exported &&
+            pendingExport.Status != PendingExportStatus.ExportNotImported)
         {
-            Log.Debug("ReconcileCsoAgainstPendingExport: PendingExport {ExportId} status is {Status}, not Exported. Skipping.",
+            Log.Debug("ReconcileCsoAgainstPendingExport: PendingExport {ExportId} status is {Status}, not awaiting confirmation. Skipping.",
                 pendingExport.Id, pendingExport.Status);
             return;
         }
@@ -93,8 +97,12 @@ public class PendingExportReconciliationService
             pendingExport.Id, pendingExport.AttributeValueChanges.Count, connectedSystemObject.Id);
 
         // Process each attribute change that is awaiting confirmation
+        // This includes:
+        // - ExportedPendingConfirmation: Just exported, awaiting first confirmation
+        // - ExportedNotConfirmed: Previously not confirmed, awaiting re-confirmation
         var changesAwaitingConfirmation = pendingExport.AttributeValueChanges
-            .Where(ac => ac.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation)
+            .Where(ac => ac.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation ||
+                         ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed)
             .ToList();
 
         foreach (var attrChange in changesAwaitingConfirmation)
