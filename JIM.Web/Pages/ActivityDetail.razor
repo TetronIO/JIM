@@ -154,6 +154,29 @@
                         <MudText Typo="Typo.button" Class="mud-text-secondary">Deleted</MudText>
                         <MudText Typo="Typo.h4" Color="Color.Error">@_activityRunProfileExecutionStats.TotalCsoDeletes.ToString("N0")</MudText>
                     </MudPaper>
+
+                    @* Pending export confirmation stats - shown during confirming import *@
+                    @if (_activityRunProfileExecutionStats.TotalPendingExportsConfirmed > 0)
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Green.Default}; min-width: 120px;")">
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">Exports Confirmed</MudText>
+                            <MudText Typo="Typo.h4" Color="Color.Success">@_activityRunProfileExecutionStats.TotalPendingExportsConfirmed.ToString("N0")</MudText>
+                        </MudPaper>
+                    }
+                    @if (_activityRunProfileExecutionStats.TotalPendingExportsRetrying > 0)
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Orange.Default}; min-width: 120px;")">
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">Exports Retrying</MudText>
+                            <MudText Typo="Typo.h4" Color="Color.Warning">@_activityRunProfileExecutionStats.TotalPendingExportsRetrying.ToString("N0")</MudText>
+                        </MudPaper>
+                    }
+                    @if (_activityRunProfileExecutionStats.TotalPendingExportsFailed > 0)
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" Style="@($"background-color: {Colors.Red.Default}; color: {Colors.Shades.White}; border-left: 4px solid {Colors.Red.Darken3}; min-width: 120px;")">
+                            <MudText Typo="Typo.button" Style="@($"color: {Colors.Shades.White};")">Exports Failed</MudText>
+                            <MudText Typo="Typo.h4" Style="@($"color: {Colors.Shades.White};")">@_activityRunProfileExecutionStats.TotalPendingExportsFailed.ToString("N0")</MudText>
+                        </MudPaper>
+                    }
                 }
 
                 @* Sync-specific cards *@
@@ -175,6 +198,15 @@
                         <MudText Typo="Typo.button" Class="mud-text-secondary">Disconnected</MudText>
                         <MudText Typo="Typo.h4" Color="Color.Warning">@_activityRunProfileExecutionStats.TotalDisconnections.ToString("N0")</MudText>
                     </MudPaper>
+
+                    @* Pending Exports - surfaced during sync to show what's awaiting confirmation *@
+                    @if (_activityRunProfileExecutionStats.TotalPendingExports > 0)
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Orange.Default}; min-width: 120px;")">
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">Pending Exports</MudText>
+                            <MudText Typo="Typo.h4" Color="Color.Warning">@_activityRunProfileExecutionStats.TotalPendingExports.ToString("N0")</MudText>
+                        </MudPaper>
+                    }
                 }
 
                 @* Export-specific cards *@
@@ -594,6 +626,10 @@
         if (_activityRunProfileExecutionStats.TotalDeprovisioned > 0)
             availableTypes.Add(ObjectChangeType.Deprovisioned);
 
+        // Pending export visibility (surfaced during sync)
+        if (_activityRunProfileExecutionStats.TotalPendingExports > 0)
+            availableTypes.Add(ObjectChangeType.PendingExport);
+
         // Note: NoChange RPEIs are filtered out from GetAvailableChangeTypes
         // as unchanged objects are shown separately via TotalUnchanged
 
@@ -620,6 +656,7 @@
             ObjectChangeType.Provisioned => _activityRunProfileExecutionStats.TotalProvisioned,
             ObjectChangeType.Exported => _activityRunProfileExecutionStats.TotalExported,
             ObjectChangeType.Deprovisioned => _activityRunProfileExecutionStats.TotalDeprovisioned,
+            ObjectChangeType.PendingExport => _activityRunProfileExecutionStats.TotalPendingExports,
             ObjectChangeType.NoChange => 0, // NoChange items shown via TotalUnchanged
             _ => 0
         };

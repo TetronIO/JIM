@@ -181,6 +181,10 @@ public static class Helpers
             ObjectChangeType.Exported => Color.Info,
             ObjectChangeType.Deprovisioned => Color.Error,
 
+            // Pending Export visibility
+            ObjectChangeType.PendingExport => Color.Warning,
+            ObjectChangeType.PendingExportConfirmed => Color.Success,
+
             // Other
             ObjectChangeType.NoChange => Color.Default,
             _ => Color.Default,
@@ -287,6 +291,8 @@ public static class Helpers
         return changeType switch
         {
             ObjectChangeType.AttributeFlow => "Attribute Flow",
+            ObjectChangeType.PendingExport => "Pending Export",
+            ObjectChangeType.PendingExportConfirmed => "Pending Export Confirmed",
             _ => changeType.ToString()
         };
     }
