@@ -1560,6 +1560,9 @@ public class SyncImportTaskProcessor
             await _jim.Activities.UpdateActivityAsync(_activity);
         }
 
+        // Store the confirmed count on the activity for stats reporting
+        _activity.PendingExportsConfirmed = exportsDeleted;
+
         if (totalConfirmed > 0 || totalRetry > 0 || totalFailed > 0)
         {
             Log.Information("ReconcilePendingExportsAsync: Reconciliation complete. Confirmed: {Confirmed}, Retry: {Retry}, Failed: {Failed}, Exports deleted: {Deleted}",

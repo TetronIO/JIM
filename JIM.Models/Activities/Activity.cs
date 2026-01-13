@@ -158,6 +158,16 @@ public class Activity
     public int TotalObjectErrors { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
+    // pending export reconciliation stats (for confirming imports)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Count of pending exports that were fully confirmed and deleted during a confirming import.
+    /// The exported attribute values matched the imported values.
+    /// </summary>
+    public int PendingExportsConfirmed { get; set; }
+
+    // -----------------------------------------------------------------------------------------------------------------
     // context specific properties
     // -----------------------------------------------------------------------------------------------------------------
 

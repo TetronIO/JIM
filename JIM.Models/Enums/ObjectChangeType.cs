@@ -75,5 +75,12 @@ public enum ObjectChangeType
     /// This surfaces unconfirmed exports (ExportNotImported status) so operators
     /// can see what changes will be made to connected systems.
     /// </summary>
-    PendingExport
+    PendingExport,
+
+    // Pending export reconciliation (surfaced during confirming import)
+    /// <summary>
+    /// A pending export was confirmed during the confirming import.
+    /// The exported attribute values matched the imported values.
+    /// </summary>
+    PendingExportConfirmed
 }

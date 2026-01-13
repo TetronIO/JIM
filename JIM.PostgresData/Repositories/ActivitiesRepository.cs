@@ -388,6 +388,13 @@ public class ActivityRepository : IActivityRepository
         // Pending export stats (surfaced during sync for operator visibility)
         var totalPendingExports = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.PendingExport).Sum(x => x.Count);
 
+        // Pending export reconciliation stats (populated during confirming import)
+        // TotalPendingExportsConfirmed is stored directly on the Activity (not derived from RPEIs)
+        var totalPendingExportsConfirmed = activity?.PendingExportsConfirmed ?? 0;
+        // Retrying and Failed are derived from error type counts (already calculated above)
+        errorTypeCounts.TryGetValue(ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed, out var totalPendingExportsRetrying);
+        errorTypeCounts.TryGetValue(ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed, out var totalPendingExportsFailed);
+
         // NoChange stats
         var noChangeItems = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.NoChange).ToList();
         var totalNoChanges = noChangeItems.Sum(x => x.Count);
@@ -422,6 +429,11 @@ public class ActivityRepository : IActivityRepository
 
             // Pending export stats
             TotalPendingExports = totalPendingExports,
+
+            // Pending export reconciliation stats
+            TotalPendingExportsConfirmed = totalPendingExportsConfirmed,
+            TotalPendingExportsRetrying = totalPendingExportsRetrying,
+            TotalPendingExportsFailed = totalPendingExportsFailed,
 
             // NoChange stats
 #pragma warning disable CS0618 // Type or member is obsolete

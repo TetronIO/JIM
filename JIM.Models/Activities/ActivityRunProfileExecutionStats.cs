@@ -76,6 +76,26 @@ public class ActivityRunProfileExecutionStats
     public int TotalPendingExports { get; set; }
     #endregion
 
+    #region Pending Export Reconciliation Stats (populated during confirming import)
+    /// <summary>
+    /// Count of pending exports that were fully confirmed and deleted.
+    /// The exported attribute values matched the imported values.
+    /// </summary>
+    public int TotalPendingExportsConfirmed { get; set; }
+
+    /// <summary>
+    /// Count of pending exports with unconfirmed attributes that will be retried.
+    /// Some attribute values did not match; they will be re-exported on the next export run.
+    /// </summary>
+    public int TotalPendingExportsRetrying { get; set; }
+
+    /// <summary>
+    /// Count of pending exports that failed after maximum retry attempts.
+    /// Manual intervention may be required to resolve these exports.
+    /// </summary>
+    public int TotalPendingExportsFailed { get; set; }
+    #endregion
+
     #region Shared Stats
     /// <summary>
     /// Total number of objects that were in scope for processing during the run.

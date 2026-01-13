@@ -393,6 +393,26 @@ public class ActivityRunProfileExecutionStatsDto
     public int TotalPendingExports { get; set; }
     #endregion
 
+    #region Pending Export Reconciliation Stats
+    /// <summary>
+    /// Number of pending exports that were fully confirmed and deleted.
+    /// The exported attribute values matched the imported values.
+    /// </summary>
+    public int TotalPendingExportsConfirmed { get; set; }
+
+    /// <summary>
+    /// Number of pending exports with unconfirmed attributes that will be retried.
+    /// Some attribute values did not match; they will be re-exported on the next export run.
+    /// </summary>
+    public int TotalPendingExportsRetrying { get; set; }
+
+    /// <summary>
+    /// Number of pending exports that failed after maximum retry attempts.
+    /// Manual intervention may be required to resolve these exports.
+    /// </summary>
+    public int TotalPendingExportsFailed { get; set; }
+    #endregion
+
     #region Aggregate Stats (for backward compatibility)
     /// <summary>
     /// Aggregate count of all "create" operations (CSO adds, projections, provisioning).
@@ -442,6 +462,11 @@ public class ActivityRunProfileExecutionStatsDto
 
             // Pending Exports
             TotalPendingExports = stats.TotalPendingExports,
+
+            // Pending Export Reconciliation
+            TotalPendingExportsConfirmed = stats.TotalPendingExportsConfirmed,
+            TotalPendingExportsRetrying = stats.TotalPendingExportsRetrying,
+            TotalPendingExportsFailed = stats.TotalPendingExportsFailed,
 
             // Aggregates (computed from model)
             TotalObjectCreates = stats.TotalObjectCreates,
