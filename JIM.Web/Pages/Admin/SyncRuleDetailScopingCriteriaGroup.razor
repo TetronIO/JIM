@@ -108,18 +108,36 @@
     <DialogContent>
         @if (_newSyncRuleScopingCriteria != null)
         {
-            <MudSelect T="MetaverseAttribute"
-                       @bind-Value="_newSyncRuleScopingCriteria.MetaverseAttribute"
-                       Label="Metaverse Attribute"
-                       Placeholder="Please select a Metaverse attribute"
-                       Required="true"
-                       Class="mt-5"
-                       Variant="Variant.Outlined">
-                @foreach (var metaverseAttribute in SyncRule.MetaverseObjectType.Attributes)
-                {
-                    <MudSelectItem Value="@metaverseAttribute">@(metaverseAttribute.Name)</MudSelectItem>
-                }
-            </MudSelect>
+            @if (SyncRule.Direction == SyncRuleDirection.Export)
+            {
+                <MudSelect T="MetaverseAttribute"
+                           @bind-Value="_newSyncRuleScopingCriteria.MetaverseAttribute"
+                           Label="Metaverse Attribute"
+                           Placeholder="Please select a Metaverse attribute"
+                           Required="true"
+                           Class="mt-5"
+                           Variant="Variant.Outlined">
+                    @foreach (var metaverseAttribute in SyncRule.MetaverseObjectType.Attributes)
+                    {
+                        <MudSelectItem Value="@metaverseAttribute">@(metaverseAttribute.Name)</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+            else
+            {
+                <MudSelect T="ConnectedSystemObjectTypeAttribute"
+                           @bind-Value="_newSyncRuleScopingCriteria.ConnectedSystemAttribute"
+                           Label="Connected System Attribute"
+                           Placeholder="Please select a Connected System attribute"
+                           Required="true"
+                           Class="mt-5"
+                           Variant="Variant.Outlined">
+                    @foreach (var csAttribute in SyncRule.ConnectedSystemObjectType.Attributes)
+                    {
+                        <MudSelectItem Value="@csAttribute">@(csAttribute.Name)</MudSelectItem>
+                    }
+                </MudSelect>
+            }
         }
 
         <MudSelect T="string"
@@ -138,9 +156,9 @@
             }
         </MudSelect>
 
-        @if (_newSyncRuleScopingCriteria is { MetaverseAttribute: not null })
+        @if (GetSelectedAttributeType() is { } attributeType)
         {
-            @switch (_newSyncRuleScopingCriteria.MetaverseAttribute.Type)
+            @switch (attributeType)
             {
                 case AttributeDataType.Text:
                     <MudTextField @bind-Value="_newSyncRuleScopingCriteria.StringValue" Required="true" Label="Text Value" Variant="Variant.Outlined" Class="mt-5"></MudTextField>
@@ -242,8 +260,17 @@
         if (_newSyncRuleScopingCriteria == null)
             return true;
 
-        if (_newSyncRuleScopingCriteria.MetaverseAttribute == null)
-            return true;
+        // Check appropriate attribute based on sync rule direction
+        if (SyncRule.Direction == SyncRuleDirection.Export)
+        {
+            if (_newSyncRuleScopingCriteria.MetaverseAttribute == null)
+                return true;
+        }
+        else
+        {
+            if (_newSyncRuleScopingCriteria.ConnectedSystemAttribute == null)
+                return true;
+        }
 
         if (_newSyncRuleScopingCriteria.ComparisonType == SearchComparisonType.NotSet)
             return true;
@@ -252,10 +279,25 @@
             string.IsNullOrEmpty(_newSyncRuleScopingCriteria.StringValue) &&
             !_newSyncRuleScopingCriteria.BoolValue.HasValue &&
             !_newSyncRuleScopingCriteria.DateTimeValue.HasValue &&
-            !_newSyncRuleScopingCriteria.GuidValue.HasValue)
+            !_newSyncRuleScopingCriteria.GuidValue.HasValue &&
+            !_newSyncRuleScopingCriteria.LongValue.HasValue)
             return true;
 
         return false;
+    }
+
+    /// <summary>
+    /// Gets the attribute data type for the currently selected attribute (MV or CS based on direction).
+    /// </summary>
+    private AttributeDataType? GetSelectedAttributeType()
+    {
+        if (_newSyncRuleScopingCriteria == null)
+            return null;
+
+        if (SyncRule.Direction == SyncRuleDirection.Export)
+            return _newSyncRuleScopingCriteria.MetaverseAttribute?.Type;
+
+        return _newSyncRuleScopingCriteria.ConnectedSystemAttribute?.Type;
     }
 
     private void HandleAddCriteriaButtonClick()

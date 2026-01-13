@@ -379,6 +379,8 @@ public class ActivityRepository : IActivityRepository
         var totalJoins = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Joined).Sum(x => x.Count);
         var totalAttributeFlows = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.AttributeFlow).Sum(x => x.Count);
         var totalDisconnections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Disconnected).Sum(x => x.Count);
+        var totalDisconnectedOutOfScope = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.DisconnectedOutOfScope).Sum(x => x.Count);
+        var totalOutOfScopeRetainJoin = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.OutOfScopeRetainJoin).Sum(x => x.Count);
 
         // Export stats
         var totalProvisioned = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Provisioned).Sum(x => x.Count);
@@ -421,6 +423,8 @@ public class ActivityRepository : IActivityRepository
             TotalJoins = totalJoins,
             TotalAttributeFlows = totalAttributeFlows,
             TotalDisconnections = totalDisconnections,
+            TotalDisconnectedOutOfScope = totalDisconnectedOutOfScope,
+            TotalOutOfScopeRetainJoin = totalOutOfScopeRetainJoin,
 
             // Export stats
             TotalProvisioned = totalProvisioned,

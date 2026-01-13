@@ -360,17 +360,28 @@ else if (_syncRule != null)
         </MudDialog>
     }
 
-    @* Scoping criteria are only applicable to export sync rules *@
-    @if (_syncRule.Id > 0 && _syncRule.Direction == SyncRuleDirection.Export && _syncRule.MetaverseObjectType != null)
+    @* Scoping criteria for Import and Export sync rules *@
+    @if (_syncRule.Id > 0 && _syncRule.MetaverseObjectType != null && _syncRule.ConnectedSystemObjectType != null)
     {
         <MudPaper Class="pa-4 mt-5" Outlined="true">
-            <MudText Typo="Typo.h5">Metaverse Object Scope</MudText>
-            <MudText Class="mt-5">
-                By default, all Metaverse objects of type '@_syncRule.MetaverseObjectType.Name' will be in scope of this
-                Synchronisation Rule, though to
-                have it apply to a subset of those objects, use a filter. i.e. you might only want this rule to apply to Staff,
-                not Contractors.
-            </MudText>
+            @if (_syncRule.Direction == SyncRuleDirection.Export)
+            {
+                <MudText Typo="Typo.h5">Metaverse Object Scope</MudText>
+                <MudText Class="mt-5">
+                    By default, all Metaverse objects of type '@_syncRule.MetaverseObjectType.Name' will be in scope of this
+                    Synchronisation Rule, though to have it apply to a subset of those objects, use a filter. i.e. you might
+                    only want this rule to apply to Staff, not Contractors.
+                </MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.h5">Connected System Object Scope</MudText>
+                <MudText Class="mt-5">
+                    By default, all Connected System objects of type '@_syncRule.ConnectedSystemObjectType.Name' will be in scope
+                    of this Synchronisation Rule. Use a filter to import only specific objects, e.g. only Active users, not Disabled.
+                </MudText>
+            }
+
             <MudRadioGroup @bind-Value="_syncRuleScopingFiltered" Class="mt-5">
                 <MudRadio Value="false">All Objects</MudRadio>
                 <MudRadio Value="true">Filtered</MudRadio>
@@ -378,6 +389,31 @@ else if (_syncRule != null)
 
             @if (_syncRuleScopingFiltered)
             {
+                @if (_syncRule.Direction == SyncRuleDirection.Import)
+                {
+                    <MudSelect T="InboundOutOfScopeAction" @bind-Value="_syncRule.InboundOutOfScopeAction"
+                               Label="When objects fall out of scope" Variant="Variant.Outlined" Class="mt-5">
+                        <MudSelectItem Value="InboundOutOfScopeAction.Disconnect">
+                            Disconnect from Metaverse
+                        </MudSelectItem>
+                        <MudSelectItem Value="InboundOutOfScopeAction.RemainJoined">
+                            Remain joined (stop attribute flow)
+                        </MudSelectItem>
+                    </MudSelect>
+                    <MudAlert Severity="Severity.Info" Class="mt-3" Variant="Variant.Text" Dense="true">
+                        @if (_syncRule.InboundOutOfScopeAction == InboundOutOfScopeAction.Disconnect)
+                        {
+                            <text>Objects that fall out of scope will be disconnected from their Metaverse object. This may trigger
+                            attribute removal and MVO deletion rules if it was the last connector.</text>
+                        }
+                        else
+                        {
+                            <text>Objects that fall out of scope will remain joined but attribute flow will stop. Use this for
+                            "once managed, always managed" scenarios.</text>
+                        }
+                    </MudAlert>
+                }
+
                 @if (_syncRule.ObjectScopingCriteriaGroups.Count == 0)
                 {
                     <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled"

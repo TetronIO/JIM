@@ -48,6 +48,17 @@ public class ActivityRunProfileExecutionStats
     /// Count of CSOs disconnected from MVOs.
     /// </summary>
     public int TotalDisconnections { get; set; }
+
+    /// <summary>
+    /// Count of CSOs disconnected from MVOs because they fell out of scope of import sync rule scoping criteria.
+    /// </summary>
+    public int TotalDisconnectedOutOfScope { get; set; }
+
+    /// <summary>
+    /// Count of CSOs that fell out of scope but remained joined (InboundOutOfScopeAction = RemainJoined).
+    /// Attribute flow stopped but join preserved ("once managed, always managed" pattern).
+    /// </summary>
+    public int TotalOutOfScopeRetainJoin { get; set; }
     #endregion
 
     #region Export Stats
@@ -170,6 +181,6 @@ public class ActivityRunProfileExecutionStats
     /// <summary>
     /// Aggregate count of all "delete" operations (CSO deletes, disconnections, deprovisioning).
     /// </summary>
-    public int TotalObjectDeletes => TotalCsoDeletes + TotalDisconnections + TotalDeprovisioned;
+    public int TotalObjectDeletes => TotalCsoDeletes + TotalDisconnections + TotalDisconnectedOutOfScope + TotalDeprovisioned;
     #endregion
 }

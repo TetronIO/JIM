@@ -517,14 +517,10 @@ public abstract class SyncTaskProcessorBase
             // Handle out of scope based on InboundOutOfScopeAction
             using (Diagnostics.Sync.StartSpan("HandleCsoOutOfScope"))
             {
-                var wasDisconnected = await HandleCsoOutOfScopeAsync(connectedSystemObject, importSyncRules);
-                if (wasDisconnected)
-                {
-                    // Return an update result indicating the CSO was disconnected
-                    return MetaverseObjectChangeResult.AttributeFlow(0, 0) with { HasChanges = true };
-                }
+                var outOfScopeResult = await HandleCsoOutOfScopeAsync(connectedSystemObject, importSyncRules);
+                // Return the result directly - it will be DisconnectedOutOfScope, OutOfScopeRetainJoin, or NoChanges
+                return outOfScopeResult;
             }
-            return MetaverseObjectChangeResult.NoChanges();
         }
 
         // do we need to join, or project the CSO to the Metaverse?
@@ -1039,8 +1035,8 @@ public abstract class SyncTaskProcessorBase
     /// Handles a CSO that has fallen out of scope for all import sync rules.
     /// If the CSO is currently joined to an MVO, applies the InboundOutOfScopeAction.
     /// </summary>
-    /// <returns>True if the CSO was disconnected from its MVO, false otherwise.</returns>
-    protected async Task<bool> HandleCsoOutOfScopeAsync(
+    /// <returns>A result indicating what happened (DisconnectedOutOfScope, OutOfScopeRetainJoin, or NoChanges).</returns>
+    protected async Task<MetaverseObjectChangeResult> HandleCsoOutOfScopeAsync(
         ConnectedSystemObject connectedSystemObject,
         List<SyncRule> importSyncRules)
     {
@@ -1048,7 +1044,7 @@ public abstract class SyncTaskProcessorBase
         if (connectedSystemObject.MetaverseObject == null)
         {
             Log.Verbose("HandleCsoOutOfScopeAsync: CSO {CsoId} is not joined, skipping out-of-scope processing", connectedSystemObject.Id);
-            return false;
+            return MetaverseObjectChangeResult.NoChanges();
         }
 
         // Find the first sync rule's InboundOutOfScopeAction (or default to Disconnect)
@@ -1064,7 +1060,7 @@ public abstract class SyncTaskProcessorBase
                 // No attribute flow will occur since CSO is out of scope
                 Log.Information("HandleCsoOutOfScopeAsync: CSO {CsoId} is out of scope but InboundOutOfScopeAction=RemainJoined. " +
                     "Join preserved, no attribute flow.", connectedSystemObject.Id);
-                return false;
+                return MetaverseObjectChangeResult.OutOfScopeRetainJoin();
 
             case InboundOutOfScopeAction.Disconnect:
             default:
@@ -1108,7 +1104,7 @@ public abstract class SyncTaskProcessorBase
                 {
                     await ProcessMvoDeletionRuleAsync(mvo);
                 }
-                return true;
+                return MetaverseObjectChangeResult.DisconnectedOutOfScope();
         }
     }
 

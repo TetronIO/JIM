@@ -1723,9 +1723,6 @@ public class SynchronisationController(
         if (syncRule == null)
             return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
 
-        if (syncRule.Direction != SyncRuleDirection.Export)
-            return BadRequest(ApiErrorResponse.BadRequest("Scoping criteria are only applicable to export sync rules."));
-
         var dtos = syncRule.ObjectScopingCriteriaGroups
             .Where(g => g.ParentGroup == null) // Only return root groups (children are nested)
             .Select(SyncRuleScopingCriteriaGroupDto.FromEntity);
@@ -1767,7 +1764,7 @@ public class SynchronisationController(
     /// <param name="request">The criteria group creation request.</param>
     /// <returns>The created scoping criteria group.</returns>
     /// <response code="201">Group created successfully.</response>
-    /// <response code="400">Invalid request or sync rule is not an export rule.</response>
+    /// <response code="400">Invalid request.</response>
     /// <response code="404">Sync rule not found.</response>
     [HttpPost("sync-rules/{syncRuleId:int}/scoping-criteria", Name = "CreateScopingCriteriaGroup")]
     [ProducesResponseType(typeof(SyncRuleScopingCriteriaGroupDto), StatusCodes.Status201Created)]
@@ -1785,9 +1782,6 @@ public class SynchronisationController(
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
             return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
-
-        if (syncRule.Direction != SyncRuleDirection.Export)
-            return BadRequest(ApiErrorResponse.BadRequest("Scoping criteria are only applicable to export sync rules."));
 
         if (!Enum.TryParse<SearchGroupType>(request.Type, true, out var groupType))
             return BadRequest(ApiErrorResponse.BadRequest($"Invalid group type '{request.Type}'. Valid values: All, Any."));

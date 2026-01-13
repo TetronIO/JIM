@@ -365,6 +365,16 @@ public class ActivityRunProfileExecutionStatsDto
     /// Number of CSOs disconnected from MVOs.
     /// </summary>
     public int TotalDisconnections { get; set; }
+
+    /// <summary>
+    /// Number of CSOs disconnected from MVOs because they fell out of scope of import sync rule scoping criteria.
+    /// </summary>
+    public int TotalDisconnectedOutOfScope { get; set; }
+
+    /// <summary>
+    /// Number of CSOs that fell out of scope but remained joined (InboundOutOfScopeAction = RemainJoined).
+    /// </summary>
+    public int TotalOutOfScopeRetainJoin { get; set; }
     #endregion
 
     #region Export Stats
@@ -454,6 +464,8 @@ public class ActivityRunProfileExecutionStatsDto
             TotalJoins = stats.TotalJoins,
             TotalAttributeFlows = stats.TotalAttributeFlows,
             TotalDisconnections = stats.TotalDisconnections,
+            TotalDisconnectedOutOfScope = stats.TotalDisconnectedOutOfScope,
+            TotalOutOfScopeRetainJoin = stats.TotalOutOfScopeRetainJoin,
 
             // Export
             TotalProvisioned = stats.TotalProvisioned,

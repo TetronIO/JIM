@@ -74,4 +74,24 @@ public readonly struct MetaverseObjectChangeResult
         HasChanges = true,
         ChangeType = ObjectChangeType.Disconnected
     };
+
+    /// <summary>
+    /// Creates a result indicating a CSO was disconnected because it fell out of scope
+    /// of import sync rule scoping criteria.
+    /// </summary>
+    public static MetaverseObjectChangeResult DisconnectedOutOfScope() => new()
+    {
+        HasChanges = true,
+        ChangeType = ObjectChangeType.DisconnectedOutOfScope
+    };
+
+    /// <summary>
+    /// Creates a result indicating a CSO fell out of scope but remained joined
+    /// (InboundOutOfScopeAction = RemainJoined).
+    /// </summary>
+    public static MetaverseObjectChangeResult OutOfScopeRetainJoin() => new()
+    {
+        HasChanges = true,
+        ChangeType = ObjectChangeType.OutOfScopeRetainJoin
+    };
 }
