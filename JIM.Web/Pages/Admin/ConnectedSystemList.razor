@@ -54,14 +54,12 @@
             </MudTooltip>
         </MudTd>
             <MudTd DataLabel="Action">
-                <MudButton Href="@Utilities.GetConnectedSystemObjectsHref(context)"
-                           Variant="Variant.Filled"
-                           StartIcon="@Icons.Material.Filled.List"
-                           Color="Color.Default"
-                           Size="Size.Small"
-                           DropShadow="false">
-                    Objects
-                </MudButton>
+                <MudTooltip Text="View Objects">
+                    <MudIconButton Href="@Utilities.GetConnectedSystemObjectsHref(context)"
+                                   Icon="@Icons.Material.Outlined.List"
+                                   Variant="Variant.Filled"
+                                   Size="Size.Small" />
+                </MudTooltip>
             </MudTd>
     </RowTemplate>
     <NoRecordsContent>

@@ -39,19 +39,20 @@
   - Fixed reference attribute resolution (member attribute now resolves to DN instead of MVO GUID)
   - Exports with reference attributes are now properly deferred until referenced objects exist
   - Users and groups successfully provisioned to Target AD
-  - Confirming import and sync verified
+  - Confirming import working - pending exports confirmed and cleared
+  - **Bugs Fixed**:
+    - `ExportExecutionServer`: Resolve references to secondary external ID (DN) for LDAP systems
+    - `PendingExportReconciliationService`: Process `ExportNotImported` status and `ExportedNotConfirmed` attribute changes during confirming import
+  - Related: Created issue #287 for pending export visibility improvements
 
 ### In Progress 🔄
 
 - **Remaining Test Steps**
   - ForwardSync (membership changes)
   - DetectDrift (drift detection)
-
-### Pending ⏳
-
-- ReassertState (state reassertion)
-- NewGroup (new group provisioning)
-- DeleteGroup (group deletion)
+  - ReassertState (state reassertion)
+  - NewGroup (new group provisioning)
+  - DeleteGroup (group deletion)
 
 ---
 

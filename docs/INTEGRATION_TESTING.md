@@ -1613,7 +1613,7 @@ JIM/
 
 ## Current Progress & Known Issues
 
-### Phase 1 Status (as of 2026-01-10) - ✅ COMPLETE
+### Phase 1 Status (as of 2026-01-13) - ✅ COMPLETE
 
 | Component | Status | Notes |
 |-----------|--------|-------|
@@ -1627,9 +1627,17 @@ JIM/
 | Scenario 4 | ✅ Complete | Deletion rules - all tests passing |
 | Scenario 5 | ✅ Complete | Matching rules - 4/5 tests passing, 1 run separately (MultipleRules requires specific setup) |
 | Scenarios 6-7 | ⏸️ Deferred | Requires Internal MVO design (JIM-authoritative objects) |
-| Scenario 8 | 📋 Defined | Cross-domain entitlement sync (can proceed - syncs between external systems) |
+| Scenario 8 | 🔄 In Progress | InitialSync complete (users & groups provisioned to Target AD). Remaining: ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup |
 | Scenarios 9-11 | ⏳ Post-MVP | Database scenarios |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
+
+### Completed Fixes (2026-01-13)
+
+1. **Scenario 8 reference attribute resolution** - Fixed export of `member` and `managedBy` attributes to LDAP systems. References are now resolved to the secondary external ID (Distinguished Name) instead of the primary external ID (objectGUID). This ensures LDAP syntax compliance for DN-type attributes.
+
+2. **Scenario 8 confirming import reconciliation** - Fixed `PendingExportReconciliationService` to process pending exports with `ExportNotImported` status and attribute changes with `ExportedNotConfirmed` status. Previously, these were skipped during confirming imports, leaving exports permanently unconfirmed.
+
+3. **Issue #287 created** - Documented need for pending export visibility improvements (sync should surface unconfirmed exports, confirming import should report confirmation stats).
 
 ### Completed Fixes (2026-01-10)
 
