@@ -67,6 +67,15 @@ public class ActivityRunProfileExecutionStats
     public int TotalDeprovisioned { get; set; }
     #endregion
 
+    #region Pending Export Stats (surfaced during sync)
+    /// <summary>
+    /// Count of pending exports staged for the next export run.
+    /// These are exports that were previously executed but not yet confirmed (ExportNotImported status),
+    /// giving operators visibility into what changes will be made to connected systems.
+    /// </summary>
+    public int TotalPendingExports { get; set; }
+    #endregion
+
     #region Shared Stats
     /// <summary>
     /// Total number of objects that were in scope for processing during the run.

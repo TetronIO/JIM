@@ -2,8 +2,10 @@ using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using Serilog;
 
@@ -76,6 +78,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 .GroupBy(pe => pe.ConnectedSystemObject!.Id)
                 .ToDictionary(g => g.Key, g => g.ToList());
             Log.Verbose("PerformFullSyncAsync: Loaded {Count} pending exports into lookup dictionary", allPendingExports.Count);
+
+            // Surface pending exports awaiting confirmation as RPEIs for operator visibility.
+            // This gives operators insight into what changes will be made on the next export run.
+            SurfacePendingExportsAsExecutionItems(allPendingExports);
         }
 
         // Pre-load export evaluation cache (export rules + CSO lookups) for O(1) access
@@ -187,5 +193,49 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         await UpdateDeltaSyncWatermarkAsync();
 
         syncSpan.SetSuccess();
+    }
+
+    /// <summary>
+    /// Creates ActivityRunProfileExecutionItems for pending exports that are awaiting confirmation.
+    /// This surfaces unconfirmed exports (ExportNotImported status) to the Activity so operators
+    /// can see what changes will be made to connected systems on the next export run.
+    /// </summary>
+    /// <param name="allPendingExports">All pending exports for this connected system.</param>
+    private void SurfacePendingExportsAsExecutionItems(List<PendingExport> allPendingExports)
+    {
+        // Filter to only pending exports that are awaiting confirmation (ExportNotImported)
+        // or are pending execution. These represent staged changes the operator should know about.
+        var pendingExportsToSurface = allPendingExports
+            .Where(pe => pe.Status == PendingExportStatus.ExportNotImported ||
+                         pe.Status == PendingExportStatus.Pending)
+            .ToList();
+
+        if (pendingExportsToSurface.Count == 0)
+        {
+            Log.Verbose("SurfacePendingExportsAsExecutionItems: No pending exports to surface.");
+            return;
+        }
+
+        Log.Information("SurfacePendingExportsAsExecutionItems: Surfacing {Count} pending exports as execution items for operator visibility.",
+            pendingExportsToSurface.Count);
+
+        foreach (var pendingExport in pendingExportsToSurface)
+        {
+            var executionItem = _activity.PrepareRunProfileExecutionItem();
+            executionItem.ObjectChangeType = ObjectChangeType.PendingExport;
+            executionItem.ConnectedSystemObject = pendingExport.ConnectedSystemObject;
+            executionItem.ConnectedSystemObjectId = pendingExport.ConnectedSystemObjectId;
+
+            // Capture the external ID snapshot for historical reference
+            if (pendingExport.ConnectedSystemObject != null)
+            {
+                executionItem.ExternalIdSnapshot = pendingExport.ConnectedSystemObject.ExternalIdAttributeValue?.StringValue;
+            }
+
+            _activity.RunProfileExecutionItems.Add(executionItem);
+        }
+
+        Log.Debug("SurfacePendingExportsAsExecutionItems: Created {Count} execution items for pending exports.",
+            pendingExportsToSurface.Count);
     }
 }

@@ -385,6 +385,9 @@ public class ActivityRepository : IActivityRepository
         var totalExported = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Exported).Sum(x => x.Count);
         var totalDeprovisioned = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deprovisioned).Sum(x => x.Count);
 
+        // Pending export stats (surfaced during sync for operator visibility)
+        var totalPendingExports = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.PendingExport).Sum(x => x.Count);
+
         // NoChange stats
         var noChangeItems = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.NoChange).ToList();
         var totalNoChanges = noChangeItems.Sum(x => x.Count);
@@ -416,6 +419,9 @@ public class ActivityRepository : IActivityRepository
             TotalProvisioned = totalProvisioned,
             TotalExported = totalExported,
             TotalDeprovisioned = totalDeprovisioned,
+
+            // Pending export stats
+            TotalPendingExports = totalPendingExports,
 
             // NoChange stats
 #pragma warning disable CS0618 // Type or member is obsolete

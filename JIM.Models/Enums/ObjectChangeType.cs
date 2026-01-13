@@ -67,5 +67,13 @@ public enum ObjectChangeType
     /// Indicates that export evaluation detected the CSO already has the target value(s),
     /// so no pending export was created. Used for tracking/reporting purposes.
     /// </summary>
-    NoChange
+    NoChange,
+
+    // Pending export visibility (surfaced during sync)
+    /// <summary>
+    /// A pending export exists that is staged for the next export run.
+    /// This surfaces unconfirmed exports (ExportNotImported status) so operators
+    /// can see what changes will be made to connected systems.
+    /// </summary>
+    PendingExport
 }

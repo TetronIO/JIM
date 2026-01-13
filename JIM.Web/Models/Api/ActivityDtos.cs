@@ -384,6 +384,15 @@ public class ActivityRunProfileExecutionStatsDto
     public int TotalDeprovisioned { get; set; }
     #endregion
 
+    #region Pending Export Stats
+    /// <summary>
+    /// Number of pending exports staged for the next export run.
+    /// These are exports that were previously executed but not yet confirmed,
+    /// giving operators visibility into what changes will be made to connected systems.
+    /// </summary>
+    public int TotalPendingExports { get; set; }
+    #endregion
+
     #region Aggregate Stats (for backward compatibility)
     /// <summary>
     /// Aggregate count of all "create" operations (CSO adds, projections, provisioning).
@@ -430,6 +439,9 @@ public class ActivityRunProfileExecutionStatsDto
             TotalProvisioned = stats.TotalProvisioned,
             TotalExported = stats.TotalExported,
             TotalDeprovisioned = stats.TotalDeprovisioned,
+
+            // Pending Exports
+            TotalPendingExports = stats.TotalPendingExports,
 
             // Aggregates (computed from model)
             TotalObjectCreates = stats.TotalObjectCreates,
