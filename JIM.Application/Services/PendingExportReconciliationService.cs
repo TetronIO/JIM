@@ -254,8 +254,14 @@ public class PendingExportReconciliationService
                 csoValues.Any(v => v.GuidValue == attrChange.GuidValue),
 
             AttributeDataType.Reference =>
-                !string.IsNullOrEmpty(attrChange.UnresolvedReferenceValue) &&
-                csoValues.Any(v => string.Equals(v.UnresolvedReferenceValue, attrChange.UnresolvedReferenceValue, StringComparison.Ordinal)),
+                // Reference attributes can be stored in two ways:
+                // 1. UnresolvedReferenceValue - the raw DN string (before or after resolution)
+                // 2. StringValue - set during export resolution (when UnresolvedReferenceValue is cleared)
+                // We need to check both the pending export value AND the CSO values to handle both cases
+                (!string.IsNullOrEmpty(attrChange.UnresolvedReferenceValue) &&
+                 csoValues.Any(v => string.Equals(v.UnresolvedReferenceValue, attrChange.UnresolvedReferenceValue, StringComparison.Ordinal))) ||
+                (!string.IsNullOrEmpty(attrChange.StringValue) &&
+                 csoValues.Any(v => string.Equals(v.UnresolvedReferenceValue, attrChange.StringValue, StringComparison.Ordinal))),
 
             _ => false
         };

@@ -840,6 +840,11 @@ public class ExportEvaluationServer
         }
 
         var csoId = csoForExport?.Id;
+
+        // Check if any attribute changes have unresolved reference values
+        // This is used to defer exports with reference attributes until the referenced objects have been exported
+        var hasUnresolvedReferences = attributeChanges.Any(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue));
+
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
@@ -849,8 +854,15 @@ public class ExportEvaluationServer
             Status = PendingExportStatus.Pending,
             SourceMetaverseObjectId = mvo.Id,
             AttributeValueChanges = attributeChanges,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            HasUnresolvedReferences = hasUnresolvedReferences
         };
+
+        if (hasUnresolvedReferences)
+        {
+            Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: PendingExport {ExportId} has {Count} unresolved reference(s), will be deferred for resolution",
+                pendingExport.Id, attributeChanges.Count(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue)));
+        }
 
         // Save immediately unless caller requested deferred saving for batch operations
         if (!deferSave)

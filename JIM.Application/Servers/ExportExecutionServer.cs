@@ -807,6 +807,8 @@ public class ExportExecutionServer
 
     /// <summary>
     /// Attempts to resolve unresolved reference attributes in a pending export.
+    /// For LDAP systems, references like 'member' need to be resolved to Distinguished Names (DN),
+    /// not the primary external ID (objectGUID). We use the secondary external ID when available.
     /// </summary>
     private async Task<bool> TryResolveReferencesAsync(PendingExport pendingExport, ConnectedSystem targetSystem)
     {
@@ -827,25 +829,40 @@ public class ExportExecutionServer
 
             if (referencedCso != null)
             {
-                // Resolved! Replace the unresolved reference with the CSO's external ID
+                // For reference attributes, prefer the secondary external ID (e.g., DN for LDAP)
+                // as this is what the connected system uses for references.
+                // Fall back to primary external ID if secondary is not available.
+                var secondaryExternalIdAttr = referencedCso.AttributeValues
+                    .FirstOrDefault(av => av.Attribute?.IsSecondaryExternalId == true);
+
                 var externalIdAttr = referencedCso.AttributeValues
                     .FirstOrDefault(av => av.Attribute?.IsExternalId == true);
 
-                if (externalIdAttr != null)
+                // Use secondary external ID (DN) if available, otherwise fall back to primary
+                var resolvedAttr = secondaryExternalIdAttr ?? externalIdAttr;
+
+                if (resolvedAttr != null)
                 {
-                    attrChange.StringValue = externalIdAttr.StringValue ??
-                                             externalIdAttr.GuidValue?.ToString() ??
-                                             externalIdAttr.IntValue?.ToString();
+                    attrChange.StringValue = resolvedAttr.StringValue ??
+                                             resolvedAttr.GuidValue?.ToString() ??
+                                             resolvedAttr.IntValue?.ToString();
                     attrChange.UnresolvedReferenceValue = null;
+
+                    Log.Debug("Resolved reference for MVO {MvoId} to {Value} using {IdType}",
+                        referencedMvoId,
+                        attrChange.StringValue,
+                        secondaryExternalIdAttr != null ? "secondary external ID (DN)" : "primary external ID");
                 }
                 else
                 {
+                    Log.Warning("Could not resolve reference for MVO {MvoId}: CSO {CsoId} has no external ID attribute",
+                        referencedMvoId, referencedCso.Id);
                     allResolved = false;
                 }
             }
             else
             {
-                // Still unresolved
+                // Still unresolved - CSO doesn't exist yet in target system
                 allResolved = false;
             }
         }

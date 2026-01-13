@@ -2,10 +2,56 @@
 
 | | |
 |---|---|
-| **Status** | **Planned** |
+| **Status** | **In Progress** |
 | **Milestone** | MVP |
 | **Related Issue** | [#173](https://github.com/TetronIO/JIM/issues/173) |
 | **Dependencies** | Source/Target AD containers (samba-ad-source, samba-ad-target) |
+
+---
+
+## Implementation Progress
+
+### Completed ✅
+
+- **Phase 1: Test Data Infrastructure** - Complete
+  - `Populate-SambaAD-Scenario8.ps1` - Populates users and groups in Source AD
+  - `Setup-Scenario8.ps1` - Configures JIM with Connected Systems, sync rules, and attribute mappings
+  - `Invoke-Scenario8-CrossDomainEntitlementSync.ps1` - Test scenario runner
+  - `Test-GroupHelpers.ps1` - Group helper functions for test data generation
+  - OU structure creation for both Source (Corp) and Target (CorpManaged)
+  - Support for Nano through XXLarge templates
+
+- **Phase 2: JIM Configuration** - Complete
+  - Source LDAP Connected System (Quantum Dynamics APAC)
+  - Target LDAP Connected System (Quantum Dynamics EMEA)
+  - User and Group object type selection with required attributes
+  - Import/Export sync rules for both users and groups
+  - Attribute flow mappings including DN expressions
+  - Matching rules (sAMAccountName → Account Name)
+  - Run profiles (Full Import, Full Sync, Export)
+
+- **Phase 3: ImportToMV Step** - Complete
+  - Successfully imports users and groups from Source AD
+  - Projects objects to Metaverse
+  - Users and Groups visible in Metaverse with correct attributes
+
+- **Phase 4: InitialSync Step** - Complete
+  - Fixed reference attribute resolution (member attribute now resolves to DN instead of MVO GUID)
+  - Exports with reference attributes are now properly deferred until referenced objects exist
+  - Users and groups successfully provisioned to Target AD
+  - Confirming import and sync verified
+
+### In Progress 🔄
+
+- **Remaining Test Steps**
+  - ForwardSync (membership changes)
+  - DetectDrift (drift detection)
+
+### Pending ⏳
+
+- ReassertState (state reassertion)
+- NewGroup (new group provisioning)
+- DeleteGroup (group deletion)
 
 ---
 

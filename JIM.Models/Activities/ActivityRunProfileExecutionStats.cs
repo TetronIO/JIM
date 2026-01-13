@@ -106,6 +106,13 @@ public class ActivityRunProfileExecutionStats
     /// Key is the object type name, value is the count of objects of that type.
     /// </summary>
     public Dictionary<string, int> ObjectTypeCounts { get; set; } = new();
+
+    /// <summary>
+    /// Dictionary of error type names and their counts.
+    /// Key is the error type enum value, value is the count of objects with that error type.
+    /// Only includes error types with count > 0 (excludes NotSet).
+    /// </summary>
+    public Dictionary<ActivityRunProfileExecutionItemErrorType, int> ErrorTypeCounts { get; set; } = new();
     #endregion
 
     #region NoChange Reason Stats

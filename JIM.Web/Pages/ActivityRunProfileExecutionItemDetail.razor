@@ -6,6 +6,7 @@
 @using JIM.Models.Enums;
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
+@using JIM.Models.Transactional
 @using JIM.Utilities;
 @inject JimApplication Jim
 @inject NavigationManager NavManager
@@ -488,6 +489,97 @@
                 </MudExpansionPanel>
             </MudExpansionPanels>
         }
+
+        @* Pending Export Details - shown for ExportNotConfirmed and ExportConfirmationFailed errors *@
+        @if (_pendingExport != null)
+        {
+            <MudText Typo="Typo.h6" Class="mb-3">Pending Export Details</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                @if (_activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed)
+                {
+                    <text>The following attribute changes were exported but have not yet been confirmed. They will be retried on the next export run.</text>
+                }
+                else
+                {
+                    <text>The following attribute changes failed to export after multiple attempts and may require manual intervention.</text>
+                }
+            </MudText>
+
+            <MudPaper Class="pa-4 mb-4" Outlined="true">
+                <MudGrid Spacing="3">
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Status</MudText>
+                        <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportStatusColor(_pendingExport.Status)" Size="Size.Small" Class="ml-0">
+                            @_pendingExport.Status.ToString().SplitOnCapitalLetters()
+                        </MudChip>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Retry Count</MudText>
+                        <MudText>
+                            @_pendingExport.ErrorCount / @_pendingExport.MaxRetries
+                            @if (_pendingExport.ErrorCount >= _pendingExport.MaxRetries)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="ml-2">Max Reached</MudChip>
+                            }
+                        </MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Last Attempted</MudText>
+                        <MudText>@(_pendingExport.LastAttemptedAt?.ToLocalTime().ToRelativeTime() ?? "-")</MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Created</MudText>
+                        <MudText>@_pendingExport.CreatedAt.ToLocalTime().ToRelativeTime()</MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+
+            @if (_pendingExport.AttributeValueChanges.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle1" Class="mb-2">
+                    Pending Attribute Changes (@_pendingExport.AttributeValueChanges.Count)
+                </MudText>
+                <MudTable Items="@_pendingExport.AttributeValueChanges" Hover="true" Dense="true" Outlined="true" Elevation="0" Class="mb-5">
+                    <HeaderContent>
+                        <MudTh Style="width: 25%;">Attribute</MudTh>
+                        <MudTh Style="width: 15%;">Change Type</MudTh>
+                        <MudTh Style="width: 20%;">Status</MudTh>
+                        <MudTh Style="width: 40%;">Value</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Attribute">
+                            <MudText Class="jim-text-code">@(context.Attribute?.Name ?? $"Attribute {context.AttributeId}")</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Change Type">
+                            <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportChangeTypeColor(context.ChangeType)" Size="Size.Small" Class="ml-0">
+                                @context.ChangeType
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Status">
+                            <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportAttributeStatusColor(context.Status)" Size="Size.Small" Class="ml-0">
+                                @context.Status.ToString().SplitOnCapitalLetters()
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Value">@GetPendingExportAttributeValue(context)</MudTd>
+                    </RowTemplate>
+                    <NoRecordsContent>
+                        <MudText Class="pa-4">No attribute changes recorded.</MudText>
+                    </NoRecordsContent>
+                </MudTable>
+            }
+
+            @* Link to full pending export details *@
+            @if (_connectedSystemHeader != null)
+            {
+                <MudButton Variant="Variant.Text"
+                           Color="Color.Primary"
+                           Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.OpenInNew"
+                           Href="@($"/admin/connected-systems/{_connectedSystemHeader.Id}/pending-exports/{_pendingExport.Id}")">
+                    View Full Pending Export Details
+                </MudButton>
+            }
+        }
     }
 }
 else
@@ -505,6 +597,7 @@ else
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private ConnectedSystemObjectAttributeValue? _externalIdAttributeValue;
     private MetaverseObject? _metaverseObject;
+    private PendingExport? _pendingExport;
 
     /// <summary>
     /// Helper record for flattened changes display in the table.
@@ -555,6 +648,15 @@ else
         {
             _metaverseObject = _activityRunProfileExecutionItem.MetaverseObjectChange?.MetaverseObject
                 ?? _activityRunProfileExecutionItem.ConnectedSystemObject?.MetaverseObject;
+        }
+
+        // For export-related errors, load the associated pending export to show detailed attribute status
+        if (_activityRunProfileExecutionItem.ErrorType is ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed
+            or ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed
+            && _activityRunProfileExecutionItem.ConnectedSystemObjectId.HasValue)
+        {
+            _pendingExport = await Jim.ConnectedSystems.GetPendingExportForObjectAsync(
+                _activityRunProfileExecutionItem.ConnectedSystemObjectId.Value);
         }
     }
 
@@ -797,4 +899,65 @@ else
                 vc.ReferenceValue
             )));
     }
+
+    #region Pending Export Helpers
+
+    private static Color GetPendingExportStatusColor(PendingExportStatus status)
+    {
+        return status switch
+        {
+            PendingExportStatus.Pending => Color.Default,
+            PendingExportStatus.Executing => Color.Info,
+            PendingExportStatus.Exported => Color.Success,
+            PendingExportStatus.ExportNotImported => Color.Warning,
+            PendingExportStatus.Failed => Color.Error,
+            _ => Color.Default,
+        };
+    }
+
+    private static Color GetPendingExportChangeTypeColor(PendingExportAttributeChangeType changeType)
+    {
+        return changeType switch
+        {
+            PendingExportAttributeChangeType.Add => Color.Primary,
+            PendingExportAttributeChangeType.Update => Color.Info,
+            PendingExportAttributeChangeType.Remove => Color.Warning,
+            PendingExportAttributeChangeType.RemoveAll => Color.Error,
+            _ => Color.Default,
+        };
+    }
+
+    private static Color GetPendingExportAttributeStatusColor(PendingExportAttributeChangeStatus status)
+    {
+        return status switch
+        {
+            PendingExportAttributeChangeStatus.Pending => Color.Default,
+            PendingExportAttributeChangeStatus.ExportedPendingConfirmation => Color.Info,
+            PendingExportAttributeChangeStatus.ExportedNotConfirmed => Color.Warning,
+            PendingExportAttributeChangeStatus.Failed => Color.Error,
+            _ => Color.Default,
+        };
+    }
+
+    private static string GetPendingExportAttributeValue(PendingExportAttributeValueChange change)
+    {
+        if (!string.IsNullOrEmpty(change.UnresolvedReferenceValue))
+            return $"[Unresolved Reference: {change.UnresolvedReferenceValue}]";
+
+        if (change.StringValue != null)
+            return change.StringValue;
+
+        if (change.DateTimeValue.HasValue)
+            return change.DateTimeValue.Value.ToLocalTime().ToFriendlyDate();
+
+        if (change.IntValue.HasValue)
+            return change.IntValue.Value.ToString();
+
+        if (change.ByteValue != null)
+            return $"[Binary data: {change.ByteValue.Length} bytes]";
+
+        return "[null]";
+    }
+
+    #endregion
 }

@@ -154,7 +154,8 @@ public class ActivityRepository : IActivityRepository
         string? sortBy = null,
         bool sortDescending = false,
         IEnumerable<ObjectChangeType>? changeTypeFilter = null,
-        IEnumerable<string>? objectTypeFilter = null)
+        IEnumerable<string>? objectTypeFilter = null,
+        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -195,6 +196,18 @@ public class ActivityRepository : IActivityRepository
                     a.ConnectedSystemObject != null &&
                     a.ConnectedSystemObject.Type != null &&
                     objectTypes.Contains(a.ConnectedSystemObject.Type.Name));
+            }
+        }
+
+        // Apply error type filter if specified
+        if (errorTypeFilter != null)
+        {
+            var errorTypes = errorTypeFilter.ToList();
+            if (errorTypes.Count > 0)
+            {
+                query = query.Where(a =>
+                    a.ErrorType != null &&
+                    errorTypes.Contains(a.ErrorType.Value));
             }
         }
 
@@ -345,6 +358,13 @@ public class ActivityRepository : IActivityRepository
 
         var totalObjectTypes = objectTypeCounts.Count;
 
+        // Get error type counts (separate query as it needs GROUP BY on error type)
+        var errorTypeCounts = await rpeiQuery
+            .Where(q => q.ErrorType != null && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+            .GroupBy(q => q.ErrorType!.Value)
+            .Select(g => new { ErrorType = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.ErrorType, x => x.Count);
+
         // Calculate totals from grouped data
         var totalObjectChangeCount = aggregateData.Sum(x => x.Count);
         var totalObjectErrors = aggregateData.Where(x => x.HasError).Sum(x => x.Count);
@@ -379,6 +399,7 @@ public class ActivityRepository : IActivityRepository
             TotalObjectErrors = totalObjectErrors,
             TotalObjectTypes = totalObjectTypes,
             ObjectTypeCounts = objectTypeCounts,
+            ErrorTypeCounts = errorTypeCounts,
 
             // Import stats
             TotalCsoAdds = totalCsoAdds,

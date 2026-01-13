@@ -79,6 +79,18 @@ function Assert-NotNull {
     Write-Host "✓ PASSED: $Message" -ForegroundColor Green
 }
 
+function Write-Failure {
+    <#
+    .SYNOPSIS
+        Write a failure message in red
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Message
+    )
+    Write-Host "✗ $Message" -ForegroundColor Red
+}
+
 function Write-TestSection {
     <#
     .SYNOPSIS
