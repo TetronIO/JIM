@@ -1242,8 +1242,18 @@ public class ExportEvaluationServer
                     else
                     {
                         // For Update operations, only include attributes that actually changed
-                        mvoValues = changedAttributes
-                            .Where(av => av.AttributeId == source.MetaverseAttribute.Id);
+                        var matchingChangedValues = changedAttributes
+                            .Where(av => av.AttributeId == source.MetaverseAttribute.Id)
+                            .ToList();
+
+                        Log.Debug("CreateAttributeValueChanges: Multi-valued Update for attr {AttrName} (Id={AttrId}): " +
+                            "changedAttributes has {TotalCount} items, {MatchCount} match this attribute. " +
+                            "removedAttributes has {RemovedCount} items",
+                            source.MetaverseAttribute.Name, source.MetaverseAttribute.Id,
+                            changedAttributes.Count, matchingChangedValues.Count,
+                            removedAttributes?.Count ?? 0);
+
+                        mvoValues = matchingChangedValues;
                     }
                 }
                 else
@@ -1297,6 +1307,10 @@ public class ExportEvaluationServer
                                 rv.GuidValue == mvoValue.GuidValue &&
                                 rv.BoolValue == mvoValue.BoolValue &&
                                 rv.DateTimeValue == mvoValue.DateTimeValue)) == true;
+
+                        Log.Debug("CreateAttributeValueChanges: Processing MVO value Id={MvoValueId}, RefValueId={RefValueId}, isRemoval={IsRemoval}",
+                            mvoValue.Id, mvoValue.ReferenceValueId, isRemoval);
+
                         attrChangeType = isRemoval
                             ? PendingExportAttributeChangeType.Remove
                             : PendingExportAttributeChangeType.Add;
@@ -1347,7 +1361,12 @@ public class ExportEvaluationServer
                     }
 
                     // No-net-change detection for direct attribute mappings
-                    if (canDetectNoNetChange)
+                    // Skip no-net-change detection for reference attributes with unresolved values.
+                    // The pending export stores MVO IDs as unresolved references, which get resolved to
+                    // Target CSO DNs during export execution. The CSO stores resolved DNs, so comparing
+                    // MVO IDs to DNs would incorrectly skip needed changes.
+                    var hasUnresolvedReference = !string.IsNullOrEmpty(attributeChange.UnresolvedReferenceValue);
+                    if (canDetectNoNetChange && !hasUnresolvedReference)
                     {
                         var cacheKey = (existingCso!.Id, attributeChange.AttributeId);
                         var existingCsoValues = csoAttributeCache![cacheKey];
