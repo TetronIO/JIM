@@ -794,6 +794,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         return await Repository.Database.ConnectedSystemObjects
             .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
+            .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
             .Include(cso => cso.AttributeValues)
@@ -802,6 +803,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.ReferenceValue)
             .ThenInclude(rv => rv!.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            // Include MetaverseObject for the detail view link
+            .Include(cso => cso.MetaverseObject)
+            .ThenInclude(mvo => mvo!.Type)
+            .Include(cso => cso.MetaverseObject)
+            .ThenInclude(mvo => mvo!.AttributeValues)
             .ThenInclude(av => av.Attribute)
             .SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
     }

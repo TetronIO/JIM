@@ -42,7 +42,7 @@ public abstract class SyncTaskProcessorBase
     // Batch collections for deferred MVO persistence and export evaluation
     protected readonly List<MetaverseObject> _pendingMvoCreates = [];
     protected readonly List<MetaverseObject> _pendingMvoUpdates = [];
-    protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> ChangedAttributes)> _pendingExportEvaluations = [];
+    protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> ChangedAttributes, HashSet<MetaverseObjectAttributeValue>? RemovedAttributes)> _pendingExportEvaluations = [];
 
     // Batch collections for deferred pending export operations (avoid per-CSO database calls)
     protected readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToCreate = [];
@@ -597,9 +597,13 @@ public abstract class SyncTaskProcessorBase
             var attributesRemoved = connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.Count;
 
             // Collect changed attributes BEFORE applying pending changes (we need them for export evaluation)
+            // Also capture removals separately so export can create Remove changes for multi-valued attributes
             var changedAttributes = connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions
                 .Concat(connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals)
                 .ToList();
+            var removedAttributes = connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.Count > 0
+                ? connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.ToHashSet()
+                : null;
 
             // Apply pending attribute value changes to the MVO
             ApplyPendingMetaverseObjectAttributeChanges(connectedSystemObject.MetaverseObject);
@@ -619,7 +623,7 @@ public abstract class SyncTaskProcessorBase
             // Queue for export evaluation after MVOs are persisted (need valid IDs for pending export FKs)
             if (changedAttributes.Count > 0)
             {
-                _pendingExportEvaluations.Add((connectedSystemObject.MetaverseObject, changedAttributes));
+                _pendingExportEvaluations.Add((connectedSystemObject.MetaverseObject, changedAttributes, removedAttributes));
             }
 
             // Return appropriate result based on what happened
@@ -651,7 +655,11 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     /// <param name="mvo">The Metaverse Object that changed (must have a valid Id assigned).</param>
     /// <param name="changedAttributes">The list of attribute values that changed.</param>
-    protected async Task EvaluateOutboundExportsAsync(MetaverseObject mvo, List<MetaverseObjectAttributeValue> changedAttributes)
+    /// <param name="removedAttributes">Optional set of attribute values that were removed (for multi-valued attr handling).</param>
+    protected async Task EvaluateOutboundExportsAsync(
+        MetaverseObject mvo,
+        List<MetaverseObjectAttributeValue> changedAttributes,
+        HashSet<MetaverseObjectAttributeValue>? removedAttributes = null)
     {
         if (_exportEvaluationCache == null)
         {
@@ -670,7 +678,8 @@ public abstract class SyncTaskProcessorBase
                 _connectedSystem,
                 _exportEvaluationCache,
                 _pageCsoAttributeCache,
-                deferSave: true);
+                deferSave: true,
+                removedAttributes: removedAttributes);
 
             // Aggregate no-net-change counts for statistics
             _totalCsoAlreadyCurrentCount += result.CsoAlreadyCurrentCount;
@@ -774,6 +783,12 @@ public abstract class SyncTaskProcessorBase
                 Log.Verbose("ProcessDeferredReferenceAttributes: CSO {CsoId} had {Adds} reference additions, {Removes} removals",
                     cso.Id, additionsFromReferences, removalsFromReferences);
 
+                // Capture removals BEFORE applying changes (they get cleared by ApplyPendingMetaverseObjectAttributeChanges)
+                // This is needed so export can create Remove changes for multi-valued reference attributes
+                var refRemovedAttributes = mvo.PendingAttributeValueRemovals.Count > 0
+                    ? mvo.PendingAttributeValueRemovals.ToHashSet()
+                    : null;
+
                 // Apply the reference attribute changes to the MVO
                 ApplyPendingMetaverseObjectAttributeChanges(mvo);
 
@@ -784,13 +799,25 @@ public abstract class SyncTaskProcessorBase
                 }
 
                 // Queue for export evaluation (reference changes may trigger exports)
-                var changedRefAttributes = mvo.AttributeValues
-                    .Where(av => av.ReferenceValue != null)
+                // Include all reference attributes as changed, with removals tracked separately
+                // Note: Check both ReferenceValue (navigation) and ReferenceValueId (FK) as navigation may not be loaded
+                var currentRefAttributes = mvo.AttributeValues
+                    .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
+                    .ToList();
+                var removedRefAttributesFiltered = refRemovedAttributes?
+                    .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
+                    .ToList() ?? [];
+
+                Log.Debug("ProcessDeferredReferenceAttributes: MVO {MvoId} has {CurrentCount} current ref attrs, {RemovedCount} removed ref attrs (from {TotalRemoved} total removals)",
+                    mvo.Id, currentRefAttributes.Count, removedRefAttributesFiltered.Count, refRemovedAttributes?.Count ?? 0);
+
+                var changedRefAttributes = currentRefAttributes
+                    .Concat(removedRefAttributesFiltered)
                     .Cast<MetaverseObjectAttributeValue>()
                     .ToList();
                 if (changedRefAttributes.Count > 0 && !_pendingExportEvaluations.Any(e => e.Mvo == mvo))
                 {
-                    _pendingExportEvaluations.Add((mvo, changedRefAttributes));
+                    _pendingExportEvaluations.Add((mvo, changedRefAttributes, refRemovedAttributes));
                 }
             }
         }
@@ -816,13 +843,13 @@ public abstract class SyncTaskProcessorBase
         using var span = Diagnostics.Sync.StartSpan("EvaluatePendingExports");
         span.SetTag("count", _pendingExportEvaluations.Count);
 
-        foreach (var (mvo, changedAttributes) in _pendingExportEvaluations)
+        foreach (var (mvo, changedAttributes, removedAttributes) in _pendingExportEvaluations)
         {
             using (Diagnostics.Sync.StartSpan("EvaluateSingleMvoExports")
                 .SetTag("mvoId", mvo.Id)
                 .SetTag("changedAttributeCount", changedAttributes.Count))
             {
-                await EvaluateOutboundExportsAsync(mvo, changedAttributes);
+                await EvaluateOutboundExportsAsync(mvo, changedAttributes, removedAttributes);
             }
         }
 
