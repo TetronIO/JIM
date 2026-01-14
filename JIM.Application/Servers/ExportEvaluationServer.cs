@@ -1432,12 +1432,37 @@ public class ExportEvaluationServer
     /// Checks if a pending change value matches an existing CSO attribute value.
     /// Used for multi-valued attribute comparison (Add/Remove operations).
     /// </summary>
+    /// <remarks>
+    /// Reference attributes (like group members) may have their DNs stored in different fields:
+    /// - Pending exports from sync store resolved DNs in StringValue
+    /// - CSO values from AD import store DNs in UnresolvedReferenceValue
+    /// This method handles cross-field comparison for these cases.
+    /// </remarks>
     private static bool ValuesMatch(
         PendingExportAttributeValueChange pendingChange,
         ConnectedSystemObjectAttributeValue existingValue)
     {
+        // For reference attributes, DNs may be stored in either StringValue or UnresolvedReferenceValue
+        // depending on where they came from (sync vs import). Check cross-field matches first.
+        // Only apply cross-field logic when one side has UnresolvedReferenceValue set (indicating a reference attribute).
+        var pendingHasUnresolvedRef = !string.IsNullOrEmpty(pendingChange.UnresolvedReferenceValue);
+        var existingHasUnresolvedRef = !string.IsNullOrEmpty(existingValue.UnresolvedReferenceValue);
+
+        if (pendingHasUnresolvedRef || existingHasUnresolvedRef)
+        {
+            // This is a reference attribute - DNs may be in different fields
+            var pendingDn = pendingChange.StringValue ?? pendingChange.UnresolvedReferenceValue;
+            var existingDn = existingValue.StringValue ?? existingValue.UnresolvedReferenceValue;
+
+            if (pendingDn != null && existingDn != null)
+            {
+                // DNs are case-insensitive in LDAP
+                return string.Equals(pendingDn, existingDn, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
         // Compare based on which value type is set
-        // String comparison
+        // String comparison (case-sensitive for regular attributes)
         if (pendingChange.StringValue != null || existingValue.StringValue != null)
         {
             return string.Equals(pendingChange.StringValue, existingValue.StringValue, StringComparison.Ordinal);
@@ -1465,7 +1490,7 @@ public class ExportEvaluationServer
             return pendingChange.ByteValue.SequenceEqual(existingValue.ByteValue);
         }
 
-        // Unresolved reference comparison
+        // Unresolved reference comparison (only if neither side used cross-field DN)
         if (pendingChange.UnresolvedReferenceValue != null || existingValue.UnresolvedReferenceValue != null)
         {
             return string.Equals(pendingChange.UnresolvedReferenceValue, existingValue.UnresolvedReferenceValue, StringComparison.Ordinal);
