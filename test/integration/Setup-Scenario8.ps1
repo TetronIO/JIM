@@ -884,11 +884,13 @@ Write-TestStep "Step 12" "Creating Run Profiles"
 $sourceProfiles = Get-JIMRunProfile -ConnectedSystemId $sourceSystem.id
 $targetProfiles = Get-JIMRunProfile -ConnectedSystemId $targetSystem.id
 
-# Source run profiles
-foreach ($profileName in @("Full Import", "Full Sync", "Export")) {
+# Source run profiles (Full + Delta)
+foreach ($profileName in @("Full Import", "Delta Import", "Full Sync", "Delta Sync", "Export")) {
     $runType = switch ($profileName) {
         "Full Import" { "FullImport" }
+        "Delta Import" { "DeltaImport" }
         "Full Sync" { "FullSynchronisation" }
+        "Delta Sync" { "DeltaSynchronisation" }
         "Export" { "Export" }
     }
     $profile = $sourceProfiles | Where-Object { $_.name -eq $profileName }
@@ -901,11 +903,13 @@ foreach ($profileName in @("Full Import", "Full Sync", "Export")) {
     }
 }
 
-# Target run profiles
-foreach ($profileName in @("Full Import", "Full Sync", "Export")) {
+# Target run profiles (Full + Delta)
+foreach ($profileName in @("Full Import", "Delta Import", "Full Sync", "Delta Sync", "Export")) {
     $runType = switch ($profileName) {
         "Full Import" { "FullImport" }
+        "Delta Import" { "DeltaImport" }
         "Full Sync" { "FullSynchronisation" }
+        "Delta Sync" { "DeltaSynchronisation" }
         "Export" { "Export" }
     }
     $profile = $targetProfiles | Where-Object { $_.name -eq $profileName }
@@ -947,8 +951,8 @@ Write-Host "  Users:  APAC AD -> Metaverse -> EMEA AD" -ForegroundColor Gray
 Write-Host "  Groups: APAC AD -> Metaverse -> EMEA AD" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Run Profiles Created:" -ForegroundColor Yellow
-Write-Host "  Quantum Dynamics APAC: Full Import, Full Sync, Export" -ForegroundColor Gray
-Write-Host "  Quantum Dynamics EMEA: Full Import, Full Sync, Export" -ForegroundColor Gray
+Write-Host "  Quantum Dynamics APAC: Full Import, Delta Import, Full Sync, Delta Sync, Export" -ForegroundColor Gray
+Write-Host "  Quantum Dynamics EMEA: Full Import, Delta Import, Full Sync, Delta Sync, Export" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "  1. Run Source Full Import to import users and groups" -ForegroundColor Gray

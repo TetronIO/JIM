@@ -1190,15 +1190,76 @@ public class SyncImportTaskProcessor
                         break;
 
                     case AttributeDataType.Reference:
-                        // find unresolved reference values on the cso that aren't on the imported object and remove them first
-                        // Note: Reference values are compared case-sensitively to preserve data fidelity from source systems
-                        var missingUnresolvedReferenceValues = connectedSystemObject.AttributeValues.Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.UnresolvedReferenceValue != null && !importedObjectAttribute.ReferenceValues.Any(i => i.Equals(av.UnresolvedReferenceValue, StringComparison.Ordinal))).ToList();
-                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingUnresolvedReferenceValues);
+                        // Reference attribute comparison must handle BOTH:
+                        // 1. Unresolved references: UnresolvedReferenceValue contains the raw reference string (e.g., DN)
+                        // 2. Resolved references: ReferenceValue points to the resolved CSO, whose secondary/primary
+                        //    external ID should be compared against the import string
+                        //
+                        // Note: Reference values are compared case-sensitively for unresolved refs (to preserve data fidelity)
+                        // and case-insensitively for resolved refs (since DNs may have case variations)
 
-                        // find imported unresolved reference values that aren't on the cso and add them
-                        var newUnresolvedReferenceValues = importedObjectAttribute.ReferenceValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.UnresolvedReferenceValue != null && av.UnresolvedReferenceValue.Equals(sv, StringComparison.Ordinal))).ToList();
-                        foreach (var newUnresolvedReferenceValue in newUnresolvedReferenceValues)
-                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, UnresolvedReferenceValue = newUnresolvedReferenceValue });
+                        // Get all existing CSO attribute values for this reference attribute
+                        var csoRefAttrValues = connectedSystemObject.AttributeValues
+                            .Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id)
+                            .ToList();
+
+                        // Debug logging to diagnose reference comparison
+                        Log.Debug("UpdateConnectedSystemObjectFromImportObject: Reference attribute '{AttrName}' for CSO {CsoId}. " +
+                            "Existing CSO values: {ExistingCount}, Import values: {ImportCount}",
+                            csoAttribute.Name, connectedSystemObject.Id, csoRefAttrValues.Count, importedObjectAttribute.ReferenceValues.Count);
+
+                        foreach (var existingRef in csoRefAttrValues.Take(3)) // Log first 3 for brevity
+                        {
+                            var refCsoId = existingRef.ReferenceValue?.Id.ToString() ?? "(null)";
+                            var secExtId = existingRef.ReferenceValue?.SecondaryExternalIdAttributeValue?.StringValue ?? "(null)";
+                            var unresolved = existingRef.UnresolvedReferenceValue ?? "(null)";
+                            Log.Debug("  Existing ref: ReferenceValueId={RefCsoId}, SecondaryExtId={SecExtId}, UnresolvedRef={Unresolved}",
+                                refCsoId, secExtId, unresolved);
+                        }
+
+                        // Helper: Check if an import reference string matches an existing CSO attribute value
+                        // This handles both unresolved references and resolved references
+                        static bool ImportRefMatchesCsoValue(string importRef, ConnectedSystemObjectAttributeValue av)
+                        {
+                            // Check unresolved reference (case-sensitive to preserve data fidelity)
+                            if (av.UnresolvedReferenceValue != null &&
+                                av.UnresolvedReferenceValue.Equals(importRef, StringComparison.Ordinal))
+                                return true;
+
+                            // Check resolved reference - compare against the referenced CSO's external ID
+                            // For LDAP, the secondary external ID is the DN which should match the import string
+                            if (av.ReferenceValue != null)
+                            {
+                                // Prefer secondary external ID (e.g., DN for LDAP) over primary (e.g., objectGUID)
+                                var refExternalId = av.ReferenceValue.SecondaryExternalIdAttributeValue?.StringValue
+                                                 ?? av.ReferenceValue.ExternalIdAttributeValue?.StringValue;
+                                // Use case-insensitive comparison for DNs since case may vary
+                                if (refExternalId != null &&
+                                    refExternalId.Equals(importRef, StringComparison.OrdinalIgnoreCase))
+                                    return true;
+                            }
+
+                            return false;
+                        }
+
+                        // Find CSO reference values that aren't in the import - mark for removal
+                        var missingReferenceValues = csoRefAttrValues
+                            .Where(av => (av.UnresolvedReferenceValue != null || av.ReferenceValue != null) &&
+                                        !importedObjectAttribute.ReferenceValues.Any(importRef => ImportRefMatchesCsoValue(importRef, av)))
+                            .ToList();
+                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingReferenceValues);
+
+                        // Find imported reference values that aren't on the CSO - mark for addition
+                        var newReferenceValues = importedObjectAttribute.ReferenceValues
+                            .Where(importRef => !csoRefAttrValues.Any(av => ImportRefMatchesCsoValue(importRef, av)))
+                            .ToList();
+
+                        Log.Debug("UpdateConnectedSystemObjectFromImportObject: Reference comparison result for '{AttrName}': " +
+                            "Removals={Removals}, Additions={Additions}",
+                            csoAttribute.Name, missingReferenceValues.Count, newReferenceValues.Count);
+
+                        foreach (var newRefValue in newReferenceValues)
+                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, UnresolvedReferenceValue = newRefValue });
                         break;
 
                     case AttributeDataType.Guid:
@@ -1345,8 +1406,9 @@ public class SyncImportTaskProcessor
             switch (externalIdAttribute.Type)
             {
                 case AttributeDataType.Text:
-                    referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.StringValue == referenceAttributeValue.UnresolvedReferenceValue) ??
-                                                      connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.StringValue == referenceAttributeValue.UnresolvedReferenceValue);
+                    // Use case-insensitive comparison for secondary external IDs (e.g., LDAP DNs are case-insensitive)
+                    referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue?.StringValue != null && cso.SecondaryExternalIdAttributeValue.StringValue.Equals(referenceAttributeValue.UnresolvedReferenceValue, StringComparison.OrdinalIgnoreCase)) ??
+                                                      connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue?.StringValue != null && cso.SecondaryExternalIdAttributeValue.StringValue.Equals(referenceAttributeValue.UnresolvedReferenceValue, StringComparison.OrdinalIgnoreCase));
                     break;
                 case AttributeDataType.Number:
                     if (int.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var intUnresolvedReferenceValue))
@@ -1383,8 +1445,29 @@ public class SyncImportTaskProcessor
             throw new InvalidDataException("externalIdAttributeToUse wasn't external or secondary external id");
         }
 
-        // no match, try and find a matching CSO in the database
-        referencedConnectedSystemObject ??= await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, externalIdAttribute.Id, referenceAttributeValue.UnresolvedReferenceValue);
+        // no match in-memory, try and find a matching CSO in the database
+        // IMPORTANT: For secondary external IDs, we must search across ALL object types because
+        // references can point to objects of different types (e.g., a group's member reference
+        // points to users, other groups, etc.). Each object type has its own attribute schema
+        // with different attribute IDs, so we can't use the source object's attribute ID.
+        if (referencedConnectedSystemObject == null)
+        {
+            if (externalIdAttribute.IsSecondaryExternalId && externalIdAttribute.Type == AttributeDataType.Text)
+            {
+                // Secondary external ID lookup needs to search across all object types
+                referencedConnectedSystemObject = await _jim.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(
+                    _connectedSystem.Id,
+                    referenceAttributeValue.UnresolvedReferenceValue);
+            }
+            else
+            {
+                // Primary external ID lookup can use the attribute ID (though it may also have cross-type issues)
+                referencedConnectedSystemObject = await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(
+                    _connectedSystem.Id,
+                    externalIdAttribute.Id,
+                    referenceAttributeValue.UnresolvedReferenceValue);
+            }
+        }
 
         if (referencedConnectedSystemObject != null)
         {

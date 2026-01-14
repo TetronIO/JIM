@@ -543,6 +543,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // Also include ReferenceValue and ReferenceValue.MetaverseObject for reference attribute
             // flow during sync - without these, SyncRuleMappingProcessor cannot resolve CSO references
             // to MVO references and will silently skip them.
+            // IMPORTANT: MVO AttributeValues must also include ReferenceValue so that reference comparison
+            // in SyncRuleMappingProcessor.ProcessReferenceAttribute can detect existing MVO reference values
+            // and avoid creating spurious "new" values for unchanged references.
             query = Repository.Database.ConnectedSystemObjects
                 .AsSplitQuery()
                 .Include(cso => cso.Type)
@@ -553,7 +556,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .ThenInclude(rv => rv!.MetaverseObject)
                 .Include(cso => cso.MetaverseObject)
                     .ThenInclude(mvo => mvo!.AttributeValues)
-                    .ThenInclude(av => av.Attribute);
+                    .ThenInclude(av => av.Attribute)
+                .Include(cso => cso.MetaverseObject)
+                    .ThenInclude(mvo => mvo!.AttributeValues)
+                    .ThenInclude(av => av.ReferenceValue);
         }
         else
         {
@@ -562,6 +568,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // Also include ReferenceValue and ReferenceValue.MetaverseObject for reference attribute
             // flow during sync - without these, SyncRuleMappingProcessor cannot resolve CSO references
             // to MVO references and will silently skip them.
+            // IMPORTANT: MVO AttributeValues must also include ReferenceValue so that reference comparison
+            // in SyncRuleMappingProcessor.ProcessReferenceAttribute can detect existing MVO reference values
+            // and avoid creating spurious "new" values for unchanged references.
             query = Repository.Database.ConnectedSystemObjects
                 .AsSplitQuery()
                 .Include(cso => cso.Type)
@@ -572,7 +581,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .ThenInclude(rv => rv!.MetaverseObject)
                 .Include(cso => cso.MetaverseObject)
                     .ThenInclude(mvo => mvo!.AttributeValues)
-                    .ThenInclude(av => av.Attribute);
+                    .ThenInclude(av => av.Attribute)
+                .Include(cso => cso.MetaverseObject)
+                    .ThenInclude(mvo => mvo!.AttributeValues)
+                    .ThenInclude(av => av.ReferenceValue);
         }
 
         // add the Connected System filter and order by Id for consistent pagination
@@ -698,13 +710,27 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Order by Id for consistent pagination - without ordering, Skip/Take can return inconsistent results.
         //
         // Include Type for sync processors that access CSO.Type.RemoveContributedAttributesOnObsoletion.
+        //
+        // IMPORTANT: Must include the same navigation properties as GetConnectedSystemObjectsAsync:
+        // - CSO AttributeValues.Attribute: For attribute name lookup during sync rule processing
+        // - CSO AttributeValues.ReferenceValue.MetaverseObject: For CSO reference → MVO reference resolution
+        // - MVO AttributeValues.ReferenceValue: For detecting existing MVO reference values during comparison
+        // Without these, SyncRuleMappingProcessor.ProcessReferenceAttribute cannot properly compare
+        // CSO reference values against existing MVO reference values.
         var query = Repository.Database.ConnectedSystemObjects
             .AsSplitQuery()
             .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+            .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.ReferenceValue)
+                .ThenInclude(rv => rv!.MetaverseObject)
             .Include(cso => cso.MetaverseObject)
                 .ThenInclude(mvo => mvo!.AttributeValues)
                 .ThenInclude(av => av.Attribute)
+            .Include(cso => cso.MetaverseObject)
+                .ThenInclude(mvo => mvo!.AttributeValues)
+                .ThenInclude(av => av.ReferenceValue)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
                          (cso.Created > modifiedSince ||
                           (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)))
@@ -782,16 +808,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
     {
+        // Use case-insensitive comparison for string attributes (e.g., DNs which are case-insensitive in LDAP)
+        var lowerAttributeValue = attributeValue.ToLowerInvariant();
         return await Repository.Database.ConnectedSystemObjects
             .AsSplitQuery()
             .Include(cso => cso.Type)
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
-            // External ID matching is case-sensitive to respect connected system identity
+            // Include resolved reference values and their attributes for delta import comparison
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.ReferenceValue)
+            .ThenInclude(refCso => refCso!.AttributeValues)
+            .ThenInclude(refAv => refAv.Attribute)
+            // Use case-insensitive comparison for string lookups (DNs, etc.)
             .SingleOrDefaultAsync(x =>
                 x.ConnectedSystem.Id == connectedSystemId &&
-                x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue == attributeValue));
+                x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue.ToLower() == lowerAttributeValue));
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
@@ -802,6 +835,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
+            // Include resolved reference values and their attributes for delta import comparison
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.ReferenceValue)
+            .ThenInclude(refCso => refCso!.AttributeValues)
+            .ThenInclude(refAv => refAv.Attribute)
             .SingleOrDefaultAsync(cso =>
                 cso.ConnectedSystem.Id == connectedSystemId &&
                 cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.IntValue == attributeValue));
@@ -815,6 +853,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
+            // Include resolved reference values and their attributes for delta import comparison
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.ReferenceValue)
+            .ThenInclude(refCso => refCso!.AttributeValues)
+            .ThenInclude(refAv => refAv.Attribute)
             .SingleOrDefaultAsync(cso =>
                 cso.ConnectedSystem.Id == connectedSystemId &&
                 cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.LongValue == attributeValue));
@@ -829,6 +872,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
+            // Include resolved reference values and their attributes for delta import comparison
+            // This enables comparing imported reference strings against existing resolved references
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.ReferenceValue)
+            .ThenInclude(refCso => refCso!.AttributeValues)
+            .ThenInclude(refAv => refAv.Attribute)
             .Where(x =>
                 x.ConnectedSystem.Id == connectedSystemId &&
                 x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.GuidValue == attributeValue))
@@ -883,6 +932,39 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.AttributeId == cso.SecondaryExternalIdAttributeId &&
                     av.StringValue != null &&
                     av.StringValue == secondaryExternalIdValue));
+    }
+
+    /// <summary>
+    /// Gets a Connected System Object by its secondary external ID attribute value across ALL object types.
+    /// This is used for reference resolution where the referenced object can be of any type
+    /// (e.g., a group's member reference can point to a user, another group, or other object types).
+    /// Uses case-insensitive comparison for LDAP DN compatibility.
+    /// </summary>
+    /// <param name="connectedSystemId">The connected system to search within.</param>
+    /// <param name="secondaryExternalIdValue">The secondary external ID value to search for (e.g., a DN).</param>
+    /// <returns>The matching CSO, or null if not found.</returns>
+    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(int connectedSystemId, string secondaryExternalIdValue)
+    {
+        // Use case-insensitive comparison for LDAP DNs and similar identifiers
+        var lowerValue = secondaryExternalIdValue.ToLowerInvariant();
+        return await Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
+            .Include(cso => cso.Type)
+            .ThenInclude(t => t.Attributes)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            // Include resolved reference values for delta import comparison
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.ReferenceValue)
+            .ThenInclude(refCso => refCso!.AttributeValues)
+            .ThenInclude(refAv => refAv.Attribute)
+            .SingleOrDefaultAsync(cso =>
+                cso.ConnectedSystemId == connectedSystemId &&
+                cso.SecondaryExternalIdAttributeId != null &&
+                cso.AttributeValues.Any(av =>
+                    av.AttributeId == cso.SecondaryExternalIdAttributeId &&
+                    av.StringValue != null &&
+                    av.StringValue.ToLower() == lowerValue));
     }
 
     public async Task<int> GetConnectedSystemObjectCountAsync()
@@ -1493,10 +1575,25 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
 
         // Build dictionary mapping CSO ID to pending export
-        // There should only be one pending export per CSO
-        return pendingExports
-            .Where(pe => pe.ConnectedSystemObject != null)
-            .ToDictionary(pe => pe.ConnectedSystemObject!.Id, pe => pe);
+        // There should only be one pending export per CSO - if duplicates exist, log warning and take the first
+        var filteredExports = pendingExports.Where(pe => pe.ConnectedSystemObject != null).ToList();
+        var result = new Dictionary<Guid, PendingExport>();
+
+        foreach (var pe in filteredExports)
+        {
+            var csoId = pe.ConnectedSystemObject!.Id;
+            if (result.ContainsKey(csoId))
+            {
+                // This is unexpected - indicates a bug in how pending exports are created
+                Log.Warning("GetPendingExportsByConnectedSystemObjectIdsAsync: Found duplicate pending export for CSO {CsoId}. " +
+                    "Existing PE: {ExistingPeId}, Duplicate PE: {DuplicatePeId}. Using first one.",
+                    csoId, result[csoId].Id, pe.Id);
+                continue;
+            }
+            result[csoId] = pe;
+        }
+
+        return result;
     }
 
     public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)

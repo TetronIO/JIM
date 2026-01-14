@@ -45,10 +45,24 @@
     - `PendingExportReconciliationService`: Process `ExportNotImported` status and `ExportedNotConfirmed` attribute changes during confirming import
   - Related: Created issue #287 for pending export visibility improvements
 
+- **Phase 5: ForwardSync Step** - Complete
+  - Test script implemented in `Invoke-Scenario8-CrossDomainEntitlementSync.ps1`
+  - **Uses Delta operations** (Delta Import, Delta Sync) for efficiency and to test delta functionality
+  - Adds users to a test group in Source AD
+  - Removes a user from the test group in Source AD
+  - Runs delta forward sync (Delta Import → Delta Sync → Export → Delta Confirming Import)
+  - Validates added users appear in Target AD group
+  - Validates removed user no longer in Target AD group
+  - Validates member count matches between Source and Target
+
+- **Run Profile Updates** - Complete
+  - Added Delta Import and Delta Sync profiles to Setup-Scenario8.ps1
+  - InitialSync uses Full Import/Sync (first-time population)
+  - ForwardSync uses Delta Import/Sync (incremental changes)
+
 ### In Progress 🔄
 
 - **Remaining Test Steps**
-  - ForwardSync (membership changes)
   - DetectDrift (drift detection)
   - ReassertState (state reassertion)
   - NewGroup (new group provisioning)
@@ -376,16 +390,17 @@ This tests the single-valued DN reference attribute sync, which uses the same re
 
 **Actions**:
 1. Add 2 users to an existing group in Source AD
-2. Remove 1 user from a different group in Source AD
+2. Remove 1 user from the same group in Source AD
 3. Trigger Full Import on Source AD
 4. Trigger Full Sync
 5. Trigger Export on Target AD
+6. Trigger Confirming Import on Target AD
 
 **Validations**:
-- [ ] Added members appear in Target AD group
-- [ ] Removed member no longer in Target AD group
-- [ ] Other group memberships unchanged
-- [ ] Activity shows expected changes
+- [x] Added members appear in Target AD group
+- [x] Removed member no longer in Target AD group
+- [x] Member count matches between Source and Target
+- [x] Activity shows expected changes
 
 ### Step 3: DetectDrift
 

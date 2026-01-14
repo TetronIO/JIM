@@ -666,12 +666,13 @@ public class ExportEvaluationTests
         Assert.That(pendingProvisioningCso.Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning),
             "Existing CSO should remain in PendingProvisioning state");
 
-        // If a pending export is created, it should be an Update (since CSO exists)
+        // If a pending export is created, it should be Create (PendingProvisioning means object doesn't exist in target yet)
         if (result.Count > 0)
         {
-            Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Update),
-                "PendingExport should be Update when CSO exists (even in PendingProvisioning)");
-            Assert.That(result[0].ConnectedSystemObject?.Id, Is.EqualTo(pendingProvisioningCso.Id),
+            Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Create),
+                "PendingExport should be Create when CSO is PendingProvisioning (object doesn't exist in target system yet)");
+            // Check FK property (not navigation property, which isn't populated to avoid EF Core issues)
+            Assert.That(result[0].ConnectedSystemObjectId, Is.EqualTo(pendingProvisioningCso.Id),
                 "PendingExport should reference the existing PendingProvisioning CSO");
         }
     }

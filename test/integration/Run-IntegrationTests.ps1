@@ -161,32 +161,86 @@ Set-Location $repoRoot
 $step0Start = Get-Date
 Write-Section "Step 0: Checking Samba AD Images"
 
-# Check if the pre-built Samba AD image exists locally
+$buildScript = Join-Path $scriptRoot "docker" "samba-ad-prebuilt" "Build-SambaImages.ps1"
+
+# Check if the pre-built Samba AD primary image exists locally
 $sambaImageTag = "ghcr.io/tetronio/jim-samba-ad:primary"
 $imageExists = docker images -q $sambaImageTag 2>$null
 
 if (-not $imageExists) {
     Write-Warning "Pre-built Samba AD image not found locally: $sambaImageTag"
-    Write-Step "Building Samba AD image (this takes ~30 seconds, but only needs to be done once)..."
+    Write-Step "Building Samba AD Primary image (this takes ~2-3 minutes, but only needs to be done once)..."
 
-    $buildScript = Join-Path $scriptRoot "docker" "samba-ad-prebuilt" "Build-SambaImages.ps1"
     if (-not (Test-Path $buildScript)) {
         Write-Failure "Build script not found: $buildScript"
         exit 1
     }
 
-    # Build only the Primary image (that's all we need for most scenarios)
     & $buildScript -Images Primary
     if ($LASTEXITCODE -ne 0) {
-        Write-Failure "Failed to build Samba AD image"
+        Write-Failure "Failed to build Samba AD Primary image"
         exit 1
     }
 
-    Write-Success "Samba AD image built successfully"
+    Write-Success "Samba AD Primary image built successfully"
 }
 else {
-    Write-Success "Samba AD image found: $sambaImageTag"
+    Write-Success "Samba AD Primary image found: $sambaImageTag"
 }
+
+# For Scenario 2 and Scenario 8, also check for Source and Target images
+if ($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") {
+    # Check Source image
+    $sourceImageTag = "ghcr.io/tetronio/jim-samba-ad:source"
+    $sourceExists = docker images -q $sourceImageTag 2>$null
+
+    if (-not $sourceExists) {
+        Write-Warning "Pre-built Samba AD Source image not found locally: $sourceImageTag"
+        Write-Step "Building Samba AD Source image (this takes ~2-3 minutes, but only needs to be done once)..."
+
+        if (-not (Test-Path $buildScript)) {
+            Write-Failure "Build script not found: $buildScript"
+            exit 1
+        }
+
+        & $buildScript -Images Source
+        if ($LASTEXITCODE -ne 0) {
+            Write-Failure "Failed to build Samba AD Source image"
+            exit 1
+        }
+
+        Write-Success "Samba AD Source image built successfully"
+    }
+    else {
+        Write-Success "Samba AD Source image found: $sourceImageTag"
+    }
+
+    # Check Target image
+    $targetImageTag = "ghcr.io/tetronio/jim-samba-ad:target"
+    $targetExists = docker images -q $targetImageTag 2>$null
+
+    if (-not $targetExists) {
+        Write-Warning "Pre-built Samba AD Target image not found locally: $targetImageTag"
+        Write-Step "Building Samba AD Target image (this takes ~2-3 minutes, but only needs to be done once)..."
+
+        if (-not (Test-Path $buildScript)) {
+            Write-Failure "Build script not found: $buildScript"
+            exit 1
+        }
+
+        & $buildScript -Images Target
+        if ($LASTEXITCODE -ne 0) {
+            Write-Failure "Failed to build Samba AD Target image"
+            exit 1
+        }
+
+        Write-Success "Samba AD Target image built successfully"
+    }
+    else {
+        Write-Success "Samba AD Target image found: $targetImageTag"
+    }
+}
+
 $timings["0. Check Samba Image"] = (Get-Date) - $step0Start
 
 # Step 1: Reset (unless skipped)

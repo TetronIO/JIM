@@ -1989,6 +1989,15 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(connectedSystemId, objectTypeId, secondaryExternalIdValue);
     }
 
+    /// <summary>
+    /// Gets a Connected System Object by its secondary external ID attribute value across ALL object types.
+    /// This is used for reference resolution where the referenced object can be of any type.
+    /// </summary>
+    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(int connectedSystemId, string secondaryExternalIdValue)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(connectedSystemId, secondaryExternalIdValue);
+    }
+
     public async Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectIdByAttributeValueAsync(connectedSystemId , connectedSystemAttributeId, attributeValue);

@@ -8,11 +8,22 @@ namespace JIM.Worker.Processors;
 
 public static class SyncRuleMappingProcessor
 {
+    /// <summary>
+    /// Processes a sync rule mapping to flow attribute values from CSO to MVO.
+    /// </summary>
+    /// <param name="connectedSystemObject">The source CSO.</param>
+    /// <param name="syncRuleMapping">The sync rule mapping defining the attribute flow.</param>
+    /// <param name="connectedSystemObjectTypes">Object types for attribute lookup.</param>
+    /// <param name="expressionEvaluator">Optional expression evaluator for expression-based mappings.</param>
+    /// <param name="skipReferenceAttributes">If true, skip reference attribute processing (deferred to second pass).</param>
+    /// <param name="onlyReferenceAttributes">If true, process ONLY reference attributes (for deferred second pass). Takes precedence over skipReferenceAttributes.</param>
     public static void Process(
         ConnectedSystemObject connectedSystemObject,
         SyncRuleMapping syncRuleMapping,
         List<ConnectedSystemObjectType> connectedSystemObjectTypes,
-        IExpressionEvaluator? expressionEvaluator = null)
+        IExpressionEvaluator? expressionEvaluator = null,
+        bool skipReferenceAttributes = false,
+        bool onlyReferenceAttributes = false)
     {
         if (connectedSystemObject.MetaverseObject == null)
         {
@@ -60,6 +71,10 @@ public static class SyncRuleMappingProcessor
                         // Process based on attribute type - MVA types process all values at once,
                         // SVA types process a single value
                         var sourceAttributeId = source.ConnectedSystemAttributeId!.Value;
+                        // If onlyReferenceAttributes is set, skip all non-reference types
+                        if (onlyReferenceAttributes && csotAttribute.Type != AttributeDataType.Reference)
+                            continue;
+
                         switch (csotAttribute.Type)
                         {
                             case AttributeDataType.Text:
@@ -79,7 +94,14 @@ public static class SyncRuleMappingProcessor
                                 break;
 
                             case AttributeDataType.Reference:
-                                ProcessReferenceAttribute(mvo, syncRuleMapping, source, connectedSystemObject, csoAttributeValues);
+                                // Reference attributes may need to be deferred when processing objects in the same page,
+                                // because group member references may point to user CSOs that haven't been processed yet.
+                                // By skipping references in the first pass and processing them after all CSOs have MVOs,
+                                // we ensure all referenced MVOs exist.
+                                if (!skipReferenceAttributes)
+                                {
+                                    ProcessReferenceAttribute(mvo, syncRuleMapping, source, connectedSystemObject, csoAttributeValues);
+                                }
                                 break;
 
                             case AttributeDataType.Guid:

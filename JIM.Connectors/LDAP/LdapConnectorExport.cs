@@ -282,6 +282,18 @@ internal class LdapConnectorExport
         var response = (ModifyResponse)_connection.SendRequest(modifyRequest);
         if (response.ResultCode != ResultCode.Success)
         {
+            // Handle "attribute or value exists" error gracefully for Add operations.
+            // This can happen when trying to add a member that already exists in a group.
+            // LDAP error code 20 = LDAP_TYPE_OR_VALUE_EXISTS
+            // Since the desired state (member is in group) is already achieved, treat as success.
+            if (response.ResultCode == ResultCode.AttributeOrValueExists)
+            {
+                _logger.Warning("LdapConnectorExport.ProcessUpdate: Some attribute values already exist at '{Dn}'. " +
+                    "This typically means a group member was already present. Treating as success. Error: {Error}",
+                    workingDn, response.ErrorMessage);
+                return wasRenamed ? ExportResult.Succeeded(null, workingDn) : ExportResult.Succeeded();
+            }
+
             throw new LdapException((int)response.ResultCode, response.ErrorMessage);
         }
 

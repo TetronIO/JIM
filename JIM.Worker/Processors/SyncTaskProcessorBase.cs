@@ -55,6 +55,12 @@ public abstract class SyncTaskProcessorBase
     // Batch collection for deferred CSO deletions (avoid per-CSO database calls)
     protected readonly List<(ConnectedSystemObject Cso, ActivityRunProfileExecutionItem ExecutionItem)> _obsoleteCsosToDelete = [];
 
+    // Batch collection for deferred reference attribute processing.
+    // Reference attributes must be processed AFTER all CSOs in the page have been processed (joined/projected)
+    // because group member references may point to user CSOs that come later in the processing order.
+    // By deferring reference attributes, we ensure all MVOs exist before resolving references.
+    protected readonly List<(ConnectedSystemObject Cso, List<SyncRule> SyncRules)> _pendingReferenceAttributeProcessing = [];
+
     // Expression evaluator for expression-based sync rule mappings
     protected readonly IExpressionEvaluator _expressionEvaluator = new DynamicExpressoEvaluator();
 
@@ -198,6 +204,17 @@ public abstract class SyncTaskProcessorBase
         // Create a copy to iterate over, since we may remove items from the original list during processing
         foreach (var pendingExport in pendingExportsForThisCso.ToList())
         {
+            // Skip pending exports that have not been exported yet.
+            // This method is for confirming whether already-exported changes were persisted.
+            // Pending exports with Status=Pending haven't been sent to the connector yet -
+            // comparing CSO attributes against unexported changes would incorrectly detect
+            // "partial success" and change ChangeType from Create to Update, causing exports to fail.
+            if (pendingExport.Status == JIM.Models.Transactional.PendingExportStatus.Pending)
+            {
+                Log.Verbose($"ProcessPendingExport: Skipping pending export {pendingExport.Id} - not yet exported (Status=Pending).");
+                continue;
+            }
+
             // Skip pending exports that are awaiting confirmation via PendingExportReconciliationService.
             // The "Exported" status means the export was successfully sent to the connector and is now
             // waiting for a confirming import to verify the values were persisted. The reconciliation
@@ -553,15 +570,27 @@ public abstract class SyncTaskProcessorBase
         // are we joined yet?
         if (connectedSystemObject.MetaverseObject != null)
         {
+            // Get the inbound sync rules for this CSO type
+            var inboundSyncRules = activeSyncRules
+                .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId)
+                .ToList();
+
             // process sync rules to see if we need to flow any attribute updates from the CSO to the MVO.
+            // IMPORTANT: Skip reference attributes in the first pass. Reference attributes (e.g., group members)
+            // may point to CSOs that haven't been processed yet (processed later in this page).
+            // Reference attributes will be processed in a second pass after all CSOs have MVOs.
             using (Diagnostics.Sync.StartSpan("ProcessInboundAttributeFlow"))
             {
-                foreach (var inboundSyncRule in activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
+                foreach (var inboundSyncRule in inboundSyncRules)
                 {
-                    // evaluate inbound attribute flow rules
-                    ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule);
+                    // evaluate inbound attribute flow rules, skipping reference attributes
+                    ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule, skipReferenceAttributes: true);
                 }
             }
+
+            // Queue this CSO for deferred reference attribute processing
+            // This ensures reference attributes are processed after all CSOs in the page have MVOs
+            _pendingReferenceAttributeProcessing.Add((connectedSystemObject, inboundSyncRules));
 
             // Count actual attribute changes that were queued
             var attributesAdded = connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions.Count;
@@ -700,6 +729,79 @@ public abstract class SyncTaskProcessorBase
         }
 
         span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Processes deferred reference attributes for all CSOs queued during the current page.
+    /// This is the second pass of attribute flow processing - reference attributes are deferred
+    /// because they may reference CSOs that are processed later in the same page.
+    /// By processing references after all CSOs have MVOs, we ensure all referenced MVOs exist.
+    /// </summary>
+    /// <returns>The total number of reference attribute changes (additions + removals).</returns>
+    protected int ProcessDeferredReferenceAttributes()
+    {
+        if (_pendingReferenceAttributeProcessing.Count == 0)
+            return 0;
+
+        using var span = Diagnostics.Sync.StartSpan("ProcessDeferredReferenceAttributes");
+        span.SetTag("count", _pendingReferenceAttributeProcessing.Count);
+
+        var totalChanges = 0;
+
+        foreach (var (cso, syncRules) in _pendingReferenceAttributeProcessing)
+        {
+            if (cso.MetaverseObject == null)
+                continue;
+
+            var mvo = cso.MetaverseObject;
+            var beforeAdditions = mvo.PendingAttributeValueAdditions.Count;
+            var beforeRemovals = mvo.PendingAttributeValueRemovals.Count;
+
+            // Process ONLY reference attributes (onlyReferenceAttributes = true)
+            // This is more efficient than re-processing all attributes
+            foreach (var syncRule in syncRules)
+            {
+                ProcessInboundAttributeFlow(cso, syncRule, skipReferenceAttributes: false, onlyReferenceAttributes: true);
+            }
+
+            // Count changes from reference attribute processing
+            var additionsFromReferences = mvo.PendingAttributeValueAdditions.Count - beforeAdditions;
+            var removalsFromReferences = mvo.PendingAttributeValueRemovals.Count - beforeRemovals;
+
+            if (additionsFromReferences > 0 || removalsFromReferences > 0)
+            {
+                totalChanges += additionsFromReferences + removalsFromReferences;
+                Log.Verbose("ProcessDeferredReferenceAttributes: CSO {CsoId} had {Adds} reference additions, {Removes} removals",
+                    cso.Id, additionsFromReferences, removalsFromReferences);
+
+                // Apply the reference attribute changes to the MVO
+                ApplyPendingMetaverseObjectAttributeChanges(mvo);
+
+                // Queue MVO for update if not already pending creation (new MVOs will be created with all attributes)
+                if (mvo.Id != Guid.Empty && !_pendingMvoUpdates.Contains(mvo))
+                {
+                    _pendingMvoUpdates.Add(mvo);
+                }
+
+                // Queue for export evaluation (reference changes may trigger exports)
+                var changedRefAttributes = mvo.AttributeValues
+                    .Where(av => av.ReferenceValue != null)
+                    .Cast<MetaverseObjectAttributeValue>()
+                    .ToList();
+                if (changedRefAttributes.Count > 0 && !_pendingExportEvaluations.Any(e => e.Mvo == mvo))
+                {
+                    _pendingExportEvaluations.Add((mvo, changedRefAttributes));
+                }
+            }
+        }
+
+        Log.Verbose("ProcessDeferredReferenceAttributes: Processed {Count} CSOs, {Changes} total reference changes",
+            _pendingReferenceAttributeProcessing.Count, totalChanges);
+
+        _pendingReferenceAttributeProcessing.Clear();
+        span.SetSuccess();
+
+        return totalChanges;
     }
 
     /// <summary>
@@ -919,9 +1021,11 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     /// <param name="connectedSystemObject">The source Connected System Object to map values from.</param>
     /// <param name="syncRule">The Sync Rule to use to determine which attributes, and how should be assigned to the Metaverse Object.</param>
+    /// <param name="skipReferenceAttributes">If true, skip reference attributes (they will be processed in a second pass after all MVOs exist).</param>
+    /// <param name="onlyReferenceAttributes">If true, process ONLY reference attributes (for deferred second pass). Takes precedence over skipReferenceAttributes.</param>
     /// <exception cref="InvalidDataException">Can be thrown if a Sync Rule Mapping Source is not properly formed.</exception>
     /// <exception cref="NotImplementedException">Will be thrown whilst Functions have not been implemented, but are being used in the Sync Rule.</exception>
-    protected void ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule)
+    protected void ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule, bool skipReferenceAttributes = false, bool onlyReferenceAttributes = false)
     {
         if (connectedSystemObject.MetaverseObject == null)
         {
@@ -937,7 +1041,7 @@ public abstract class SyncTaskProcessorBase
             if (syncRuleMapping.TargetMetaverseAttribute == null)
                 throw new InvalidDataException("SyncRuleMapping.TargetMetaverseAttribute must not be null.");
 
-            SyncRuleMappingProcessor.Process(connectedSystemObject, syncRuleMapping, _objectTypes, _expressionEvaluator);
+            SyncRuleMappingProcessor.Process(connectedSystemObject, syncRuleMapping, _objectTypes, _expressionEvaluator, skipReferenceAttributes, onlyReferenceAttributes);
         }
     }
 

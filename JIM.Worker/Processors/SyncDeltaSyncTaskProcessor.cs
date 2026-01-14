@@ -152,6 +152,12 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 }
             }
 
+            // Process deferred reference attributes after all CSOs in this page have been processed.
+            // Reference attributes (e.g., group members) may point to CSOs that are processed later in the same page.
+            // By deferring reference attributes, we ensure all MVOs exist before resolving references.
+            // This enables a single sync run to fully reconcile all objects including references.
+            ProcessDeferredReferenceAttributes();
+
             // Batch persist all MVOs collected during this page.
             // See SyncFullSyncTaskProcessor for design notes on why progress updates
             // cannot be decoupled from batch persistence boundaries.

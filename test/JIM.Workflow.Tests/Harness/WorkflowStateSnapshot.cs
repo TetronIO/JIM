@@ -264,6 +264,7 @@ public class PendingExportSnapshot
     public PendingExportStatus Status { get; }
     public int AttributeChangeCount { get; }
     public IReadOnlyList<string> AttributeNames { get; }
+    public IReadOnlyList<PendingExportAttributeValueChangeSnapshot> AttributeValueChanges { get; }
 
     public PendingExportSnapshot(PendingExport pe)
     {
@@ -278,6 +279,61 @@ public class PendingExportSnapshot
         AttributeNames = pe.AttributeValueChanges
             .Select(avc => avc.Attribute?.Name ?? $"Attr_{avc.AttributeId}")
             .ToList();
+        AttributeValueChanges = pe.AttributeValueChanges
+            .Select(avc => new PendingExportAttributeValueChangeSnapshot(avc))
+            .ToList();
+    }
+}
+
+/// <summary>
+/// Immutable snapshot of a Pending Export Attribute Value Change.
+/// </summary>
+public class PendingExportAttributeValueChangeSnapshot
+{
+    public Guid Id { get; }
+    public int AttributeId { get; }
+    public PendingExportAttributeChangeType ChangeType { get; }
+    public string? StringValue { get; }
+    public int? IntValue { get; }
+    public Guid? GuidValue { get; }
+    public DateTime? DateTimeValue { get; }
+    public string? UnresolvedReferenceValue { get; }
+    public PendingExportAttributeValueChangeSnapshot? Attribute { get; }
+
+    /// <summary>
+    /// Convenience property for accessing attribute details through the snapshot.
+    /// Note: This creates a lightweight "attribute info" for test assertions.
+    /// </summary>
+    public AttributeInfo? AttributeInfo { get; }
+
+    public PendingExportAttributeValueChangeSnapshot(PendingExportAttributeValueChange avc)
+    {
+        Id = avc.Id;
+        AttributeId = avc.AttributeId;
+        ChangeType = avc.ChangeType;
+        StringValue = avc.StringValue;
+        IntValue = avc.IntValue;
+        GuidValue = avc.GuidValue;
+        DateTimeValue = avc.DateTimeValue;
+        UnresolvedReferenceValue = avc.UnresolvedReferenceValue;
+
+        if (avc.Attribute != null)
+        {
+            AttributeInfo = new AttributeInfo(avc.Attribute.Name);
+        }
+    }
+}
+
+/// <summary>
+/// Lightweight attribute info for test assertions.
+/// </summary>
+public class AttributeInfo
+{
+    public string Name { get; }
+
+    public AttributeInfo(string name)
+    {
+        Name = name;
     }
 }
 

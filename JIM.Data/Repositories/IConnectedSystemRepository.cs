@@ -184,6 +184,16 @@ public interface IConnectedSystemRepository
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue);
 
     /// <summary>
+    /// Gets a Connected System Object by its secondary external ID attribute value across ALL object types.
+    /// This is used for reference resolution where the referenced object can be of any type
+    /// (e.g., a group's member reference can point to a user, another group, or other object types).
+    /// </summary>
+    /// <param name="connectedSystemId">The connected system to search within.</param>
+    /// <param name="secondaryExternalIdValue">The secondary external ID value to search for (e.g., a DN).</param>
+    /// <returns>The matching CSO, or null if not found.</returns>
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(int connectedSystemId, string secondaryExternalIdValue);
+
+    /// <summary>
     /// Retrieves all the Connected System Object Types for a given Connected System.
     /// Includes Attributes.
     /// </summary>

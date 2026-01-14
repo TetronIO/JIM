@@ -511,6 +511,20 @@ public class ObjectTypeBuilder
         return WithAttribute(name, AttributeDataType.Guid);
     }
 
+    public ObjectTypeBuilder WithReferenceAttribute(string name, bool isMultiValued = false)
+    {
+        _attributes.Add(new ConnectedSystemObjectTypeAttribute
+        {
+            Name = name,
+            Type = AttributeDataType.Reference,
+            IsExternalId = false,
+            IsSecondaryExternalId = false,
+            Selected = true,
+            AttributePlurality = isMultiValued ? AttributePlurality.MultiValued : AttributePlurality.SingleValued
+        });
+        return this;
+    }
+
     public ConnectedSystemObjectType Build()
     {
         return new ConnectedSystemObjectType
@@ -575,6 +589,11 @@ public class MetaverseObjectTypeBuilder
     public MetaverseObjectTypeBuilder WithBinaryAttribute(string name)
     {
         return WithAttribute(name, AttributeDataType.Binary);
+    }
+
+    public MetaverseObjectTypeBuilder WithReferenceAttribute(string name, bool isMultiValued = false)
+    {
+        return WithAttribute(name, AttributeDataType.Reference, isMultiValued ? AttributePlurality.MultiValued : AttributePlurality.SingleValued);
     }
 
     public List<MetaverseAttribute> GetAttributes() => _attributes;

@@ -176,13 +176,15 @@ public class FullSyncTests
         var employeeNumberAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER);
 
         // create a pending export for updating this CSO with attribute changes
+        // Status is ExportNotImported to simulate an export that has already been sent
+        // and is now being confirmed via a confirming sync
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
             ConnectedSystemId = connectedSystem.Id,
             ConnectedSystem = connectedSystem,
             ConnectedSystemObject = cso,
-            Status = PendingExportStatus.Pending,
+            Status = PendingExportStatus.ExportNotImported,
             ChangeType = PendingExportChangeType.Update,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
             {
@@ -267,14 +269,15 @@ public class FullSyncTests
         var employeeNumberAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER);
         var roleAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.ROLE);
 
-        // create a pending export with 3 attribute changes
+        // create a pending export with 3 attribute changes that has already been exported
+        // (ExportNotImported means it was exported but not all changes were confirmed)
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
             ConnectedSystemId = connectedSystem.Id,
             ConnectedSystem = connectedSystem,
             ConnectedSystemObject = cso,
-            Status = PendingExportStatus.Pending,
+            Status = PendingExportStatus.ExportNotImported,
             ChangeType = PendingExportChangeType.Update,
             ErrorCount = 0,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
@@ -328,7 +331,7 @@ public class FullSyncTests
         Assert.That(PendingExportsData.Count, Is.EqualTo(1), "Expected one pending export before sync.");
         Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(3), "Expected 3 attribute changes before sync.");
         Assert.That(pendingExport.ErrorCount, Is.EqualTo(0), "Expected ErrorCount to be 0 before sync.");
-        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Pending), "Expected Status to be Pending before sync.");
+        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.ExportNotImported), "Expected Status to be ExportNotImported before sync (already exported, awaiting confirmation).");
 
         // setup mock to handle pending export deletion (shouldn't be called for partial match)
         var deleteCallCount = 0;
