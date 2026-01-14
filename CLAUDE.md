@@ -419,8 +419,11 @@ Instead, use the main integration test runner which handles setup, environment m
 # From repository root, run in PowerShell (not bash/zsh)
 cd /workspaces/JIM
 
-# Run the complete test suite (Scenario 1 with default Nano template)
+# Interactive menu - select scenario with arrow keys (↑/↓) and press Enter
 ./test/integration/Run-IntegrationTests.ps1
+
+# Run a specific scenario directly
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory
 
 # Run with a specific template size (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
 ./test/integration/Run-IntegrationTests.ps1 -Template Small

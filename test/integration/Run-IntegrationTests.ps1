@@ -10,8 +10,11 @@
     4. Creates an infrastructure API key
     5. Runs the specified test scenario
 
+    When run without parameters, displays an interactive menu to select a scenario
+    using arrow keys.
+
 .PARAMETER Scenario
-    The test scenario to run. Default: "Scenario1-HRToIdentityDirectory"
+    The test scenario to run. If not specified, an interactive menu will be displayed.
     Available scenarios are in test/integration/scenarios/
 
 .PARAMETER Template
@@ -34,7 +37,7 @@
 .EXAMPLE
     ./Run-IntegrationTests.ps1
 
-    Runs the default scenario (Scenario1-HRToIdentityDirectory) with Nano template.
+    Displays an interactive menu to select a scenario, then runs it with Nano template.
 
 .EXAMPLE
     ./Run-IntegrationTests.ps1 -Template Small
@@ -64,7 +67,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [string]$Scenario = "Scenario1-HRToIdentityDirectory",
+    [string]$Scenario,
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
@@ -100,6 +103,123 @@ $NC = "$ESC[0m"
 # Script root
 $scriptRoot = $PSScriptRoot
 $repoRoot = (Get-Item $scriptRoot).Parent.Parent.FullName
+
+# Interactive scenario selection function
+function Show-ScenarioMenu {
+    # Discover available scenarios
+    $scenariosPath = Join-Path $scriptRoot "scenarios"
+    $scenarioFiles = Get-ChildItem $scenariosPath -Filter "Invoke-*.ps1" | Sort-Object Name
+
+    if ($scenarioFiles.Count -eq 0) {
+        Write-Host "${RED}No scenario scripts found in $scenariosPath${NC}"
+        exit 1
+    }
+
+    # Build scenario list with descriptions
+    $scenarios = @()
+    foreach ($file in $scenarioFiles) {
+        $scenarioName = $file.BaseName -replace '^Invoke-', ''
+
+        # Extract description from script comments
+        $description = ""
+        $content = Get-Content $file.FullName -TotalCount 20
+        foreach ($line in $content) {
+            if ($line -match '^\s*#\s*(.+)') {
+                $comment = $Matches[1].Trim()
+                if ($comment -and $comment -notmatch '^\.SYNOPSIS|^\.DESCRIPTION|^\.PARAMETER|^\.EXAMPLE|^<#|^#>') {
+                    $description = $comment
+                    break
+                }
+            }
+        }
+
+        if (-not $description) {
+            # Default descriptions based on scenario name
+            $description = switch -Wildcard ($scenarioName) {
+                "*Scenario1*" { "HR to Identity Directory synchronisation" }
+                "*Scenario2*" { "Cross-domain synchronisation (APAC ↔ EMEA)" }
+                "*Scenario3*" { "Global Address List (GAL) synchronisation" }
+                "*Scenario4*" { "Deletion rules and tombstone handling" }
+                "*Scenario5*" { "Matching rules and join logic" }
+                "*Scenario8*" { "Cross-domain entitlement synchronisation" }
+                default { "Integration test scenario" }
+            }
+        }
+
+        $scenarios += @{
+            Name = $scenarioName
+            Description = $description
+        }
+    }
+
+    $selectedIndex = 0
+    $exitMenu = $false
+
+    # Hide cursor
+    [Console]::CursorVisible = $false
+
+    try {
+        while (-not $exitMenu) {
+            Clear-Host
+
+            Write-Host ""
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host "${CYAN}  JIM Integration Test - Scenario Selection${NC}"
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host ""
+            Write-Host "${GRAY}Use ↑/↓ arrow keys to navigate, Enter to select, Esc to exit${NC}"
+            Write-Host ""
+
+            # Display menu options
+            for ($i = 0; $i -lt $scenarios.Count; $i++) {
+                $scenario = $scenarios[$i]
+
+                if ($i -eq $selectedIndex) {
+                    Write-Host "${GREEN}► $($scenario.Name)${NC}"
+                    Write-Host "${GRAY}  $($scenario.Description)${NC}"
+                }
+                else {
+                    Write-Host "  $($scenario.Name)"
+                    Write-Host "${GRAY}  $($scenario.Description)${NC}"
+                }
+                Write-Host ""
+            }
+
+            # Wait for key press
+            $key = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
+            switch ($key.VirtualKeyCode) {
+                38 { # Up arrow
+                    $selectedIndex = [Math]::Max(0, $selectedIndex - 1)
+                }
+                40 { # Down arrow
+                    $selectedIndex = [Math]::Min($scenarios.Count - 1, $selectedIndex + 1)
+                }
+                13 { # Enter
+                    $exitMenu = $true
+                }
+                27 { # Escape
+                    Write-Host ""
+                    Write-Host "${YELLOW}Cancelled by user${NC}"
+                    [Console]::CursorVisible = $true
+                    exit 0
+                }
+            }
+        }
+    }
+    finally {
+        # Restore cursor
+        [Console]::CursorVisible = $true
+    }
+
+    Clear-Host
+    return $scenarios[$selectedIndex].Name
+}
+
+# If no scenario specified, show interactive menu
+if (-not $Scenario) {
+    $Scenario = Show-ScenarioMenu
+}
 
 function Write-Banner {
     param([string]$Title)
