@@ -1093,18 +1093,6 @@ public class ExportEvaluationServer
         var isCreateOperation = changeType == PendingExportChangeType.Create;
         csoAlreadyCurrentCount = 0;
 
-        // Debug: Log what we received
-        Log.Debug("CreateAttributeValueChanges: MVO {MvoId}, changedAttributes count={ChangedCount}, removedAttributes count={RemovedCount}",
-            mvo.Id, changedAttributes.Count, removedAttributes?.Count ?? 0);
-        if (removedAttributes != null && removedAttributes.Count > 0)
-        {
-            foreach (var removed in removedAttributes)
-            {
-                Log.Debug("CreateAttributeValueChanges: Removed attribute: AttrId={AttrId}, RefValueId={RefValueId}, RefValue.Id={RefValueMvoId}",
-                    removed.AttributeId, removed.ReferenceValueId, removed.ReferenceValue?.Id);
-            }
-        }
-
         // For no-net-change detection, we need both the CSO and the attribute cache
         var canDetectNoNetChange = !isCreateOperation && existingCso != null && csoAttributeCache != null;
 
@@ -1281,9 +1269,6 @@ public class ExportEvaluationServer
                 }
 
                 // Process each attribute value (supports multi-valued attributes)
-                Log.Debug("CreateAttributeValueChanges: Processing {Count} mvoValues for attribute {AttrName} (isMultiValued={IsMultiValued})",
-                    mvoValues.Count(), source.MetaverseAttribute?.Name ?? "expression", isMultiValued);
-
                 foreach (var mvoValue in mvoValues)
                 {
                     // Note: We only set AttributeId here (not the Attribute navigation property)
@@ -1312,10 +1297,6 @@ public class ExportEvaluationServer
                                 rv.GuidValue == mvoValue.GuidValue &&
                                 rv.BoolValue == mvoValue.BoolValue &&
                                 rv.DateTimeValue == mvoValue.DateTimeValue)) == true;
-
-                        Log.Debug("CreateAttributeValueChanges: MVA value - Id={MvoValueId}, AttrId={AttrId}, RefValueId={RefValueId}, RefValue.Id={RefMvoId}, isRemoval={IsRemoval}",
-                            mvoValue.Id, mvoValue.AttributeId, mvoValue.ReferenceValueId, mvoValue.ReferenceValue?.Id, isRemoval);
-
                         attrChangeType = isRemoval
                             ? PendingExportAttributeChangeType.Remove
                             : PendingExportAttributeChangeType.Add;

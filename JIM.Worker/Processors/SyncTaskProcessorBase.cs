@@ -783,6 +783,14 @@ public abstract class SyncTaskProcessorBase
                 Log.Verbose("ProcessDeferredReferenceAttributes: CSO {CsoId} had {Adds} reference additions, {Removes} removals",
                     cso.Id, additionsFromReferences, removalsFromReferences);
 
+                // Create RPEI for reference attribute flow changes
+                // This is needed because ProcessConnectedSystemObjectAsync returns before reference
+                // attributes are processed (they're deferred to ensure all MVOs exist first)
+                var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+                runProfileExecutionItem.ConnectedSystemObject = cso;
+                runProfileExecutionItem.ObjectChangeType = ObjectChangeType.AttributeFlow;
+                _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
                 // Capture removals BEFORE applying changes (they get cleared by ApplyPendingMetaverseObjectAttributeChanges)
                 // This is needed so export can create Remove changes for multi-valued reference attributes
                 var refRemovedAttributes = mvo.PendingAttributeValueRemovals.Count > 0
@@ -807,9 +815,6 @@ public abstract class SyncTaskProcessorBase
                 var removedRefAttributesFiltered = refRemovedAttributes?
                     .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
                     .ToList() ?? [];
-
-                Log.Debug("ProcessDeferredReferenceAttributes: MVO {MvoId} has {CurrentCount} current ref attrs, {RemovedCount} removed ref attrs (from {TotalRemoved} total removals)",
-                    mvo.Id, currentRefAttributes.Count, removedRefAttributesFiltered.Count, refRemovedAttributes?.Count ?? 0);
 
                 var changedRefAttributes = currentRefAttributes
                     .Concat(removedRefAttributesFiltered)
