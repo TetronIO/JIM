@@ -1613,7 +1613,7 @@ JIM/
 
 ## Current Progress & Known Issues
 
-### Phase 1 Status (as of 2026-01-13) - ✅ COMPLETE
+### Phase 1 Status (as of 2026-01-15) - ✅ COMPLETE
 
 | Component | Status | Notes |
 |-----------|--------|-------|
@@ -1622,14 +1622,20 @@ JIM/
 | PowerShell Module | ✅ Complete | All cmdlets for Scenario 1 |
 | Setup-Scenario1.ps1 | ✅ Complete | Automated JIM configuration with deletion rules |
 | Invoke-Scenario1 | ✅ Complete | All 6 tests passing (Joiner, Mover, Mover-Rename, Mover-Move, Leaver, Reconnection) |
-| Scenario 2 | 🔧 Ready | Blocking bug fixed (PR #279) - uses objectGUID as external ID |
+| Scenario 2 | ✅ Complete | All 4 tests passing (Provision, ForwardSync, TargetImport, Conflict). Test 3 fixed to validate unidirectional sync. |
 | Scenario 3 | ⏳ Pending | Placeholder script exists |
 | Scenario 4 | ✅ Complete | Deletion rules - all tests passing |
 | Scenario 5 | ✅ Complete | Matching rules - 4/5 tests passing, 1 run separately (MultipleRules requires specific setup) |
 | Scenarios 6-7 | ⏸️ Deferred | Requires Internal MVO design (JIM-authoritative objects) |
-| Scenario 8 | 🔄 In Progress | InitialSync complete (users & groups provisioned to Target AD). Remaining: ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup |
+| Scenario 8 | 🔄 In Progress | InitialSync & ForwardSync complete. Remaining: DetectDrift, ReassertState, NewGroup, DeleteGroup |
 | Scenarios 9-11 | ⏳ Post-MVP | Database scenarios |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
+
+### Completed Fixes (2026-01-15)
+
+1. **Scenario 2 TargetImport test** - Fixed test logic to validate unidirectional sync behaviour. Test now correctly expects that objects created directly in Target AD should NOT project to Metaverse (because Target import rule has `ProjectToMetaverse=false`). This is the intended design where Source is authoritative.
+
+2. **Import summary statistics** - Fixed misleading error count in `ProcessImportObjectsAsync` summary. RPEIs with `ErrorType = NotSet` were incorrectly counted as errors. Now correctly treats both `null` and `NotSet` as successful.
 
 ### Completed Fixes (2026-01-13)
 

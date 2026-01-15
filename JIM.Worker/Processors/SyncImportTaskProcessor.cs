@@ -836,9 +836,10 @@ public class SyncImportTaskProcessor
         }
 
         // DEBUG: Summary statistics for duplicate detection
+        // Note: ErrorType == null or NotSet means success; any other value is an actual error
         var duplicateCount = _activityRunProfileExecutionItems.Count(x => x.ErrorType == ActivityRunProfileExecutionItemErrorType.DuplicateObject);
-        var successCount = _activityRunProfileExecutionItems.Count(x => x.ErrorType == null);
-        var errorCount = _activityRunProfileExecutionItems.Count(x => x.ErrorType != null);
+        var successCount = _activityRunProfileExecutionItems.Count(x => x.ErrorType == null || x.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet);
+        var errorCount = _activityRunProfileExecutionItems.Count(x => x.ErrorType != null && x.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
         Log.Information("ProcessImportObjectsAsync: SUMMARY - Total objects: {Total}, Processed successfully: {Success}, Errors: {Errors}, Duplicates detected: {Duplicates}. Seen external IDs tracked: {SeenCount}",
             connectedSystemImportResult.ImportObjects.Count, successCount, errorCount, duplicateCount, seenExternalIds.Count);
     }
