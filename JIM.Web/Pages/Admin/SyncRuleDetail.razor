@@ -182,7 +182,7 @@ else if (_syncRule != null)
             }
         </MudForm>
         <MudTooltip Text="Synchronisation Rules will not be evaluated when disabled. This allows to either prepare a rule in advance of it being needed, or to temporarily stop a sync rule from being evaluated."
-                    Placement="Placement.Bottom">
+                    Placement="Placement.Top">
             <MudSwitch Class="mt-5" @bind-Value="@_syncRule.Enabled" Color="Color.Primary" Label="Enabled?" />
         </MudTooltip>
     </MudPaper>

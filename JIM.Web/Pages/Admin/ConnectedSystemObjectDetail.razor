@@ -40,7 +40,7 @@
             <MudDivider Vertical="true" FlexItem="true" Class="my-1" />
 
             @* Created *@
-            <MudTooltip Text="@ConnectedSystemObject.Created.ToFriendlyDate()" Arrow="true" Placement="Placement.Bottom">
+            <MudTooltip Text="@ConnectedSystemObject.Created.ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">Created:</MudText>
                     <MudText Typo="Typo.body2">@ConnectedSystemObject.Created.ToRelativeTime()</MudText>
@@ -51,7 +51,7 @@
             @if (ConnectedSystemObject.LastUpdated.HasValue)
             {
                 <MudDivider Vertical="true" FlexItem="true" Class="my-1" />
-                <MudTooltip Text="@ConnectedSystemObject.LastUpdated.Value.ToFriendlyDate()" Arrow="true" Placement="Placement.Bottom">
+                <MudTooltip Text="@ConnectedSystemObject.LastUpdated.Value.ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                         <MudText Typo="Typo.body2" Class="mud-text-secondary">Updated:</MudText>
                         <MudText Typo="Typo.body2">@ConnectedSystemObject.LastUpdated.Value.ToRelativeTime()</MudText>

@@ -49,7 +49,7 @@
         <MudTd DataLabel="Pending Exports (%)">@context.PendingExportObjectsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.PendingExportObjectsCount))</MudTd>
         <MudTd DataLabel="Connector">@context.ConnectorName</MudTd>
         <MudTd DataLabel="Created">
-            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Bottom">
+            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                 @context.Created.ToLocalTime().ToRelativeTime()
             </MudTooltip>
         </MudTd>

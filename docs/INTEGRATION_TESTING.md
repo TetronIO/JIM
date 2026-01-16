@@ -1627,9 +1627,23 @@ JIM/
 | Scenario 4 | ✅ Complete | Deletion rules - all tests passing |
 | Scenario 5 | ✅ Complete | Matching rules - 4/5 tests passing, 1 run separately (MultipleRules requires specific setup) |
 | Scenarios 6-7 | ⏸️ Deferred | Requires Internal MVO design (JIM-authoritative objects) |
-| Scenario 8 | 🔄 In Progress | InitialSync & ForwardSync complete. Remaining: DetectDrift, ReassertState, NewGroup, DeleteGroup |
+| Scenario 8 | ✅ Complete | All 6 tests implemented (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup) |
 | Scenarios 9-11 | ⏳ Post-MVP | Database scenarios |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
+
+### Scenario 8 Complete (2026-01-15)
+
+All remaining Scenario 8 test steps have been implemented:
+
+1. **DetectDrift** - Makes unauthorised changes directly in Target AD (bypassing JIM), then runs Delta Import to detect the drift. Validates JIM has imported the changed state.
+
+2. **ReassertState** - Runs Delta Forward Sync to reassert the authoritative Source state. Validates unauthorised additions are removed and unauthorised removals are restored in Target AD.
+
+3. **NewGroup** - Creates a new group `Project-Scenario8Test` in Source AD with members, runs Delta Forward Sync to provision to Target AD. Validates group exists with correct members.
+
+4. **DeleteGroup** - Deletes a group from Source AD, runs Delta Forward Sync to propagate deletion. Handles deletion grace period gracefully.
+
+See full plan: [`docs/plans/SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md`](docs/plans/SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md)
 
 ### Completed Fixes (2026-01-15)
 

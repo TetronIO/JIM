@@ -102,7 +102,7 @@
         <MudTd DataLabel="Last Used">
             @if (context.LastUsedAt.HasValue)
             {
-                <MudTooltip Text="@($"{context.LastUsedAt.Value.ToLocalTime().ToFriendlyDate()} from IP: {context.LastUsedFromIp ?? "Unknown"}")" Arrow="true" Placement="Placement.Bottom">
+                <MudTooltip Text="@($"{context.LastUsedAt.Value.ToLocalTime().ToFriendlyDate()} from IP: {context.LastUsedFromIp ?? "Unknown"}")" Arrow="true" Placement="Placement.Top">
                     @context.LastUsedAt.Value.ToLocalTime().ToRelativeTime()
                 </MudTooltip>
             }
@@ -117,21 +117,21 @@
                 @if (context.ExpiresAt.Value < DateTime.UtcNow)
                 {
                     <MudTooltip Text="@context.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()"
-                        Arrow="true" Placement="Placement.Bottom">
+                        Arrow="true" Placement="Placement.Top">
                         <MudChip T="string" Variant="Variant.Text" Color="Color.Error">Expired</MudChip>
                     </MudTooltip>
                 }
                 else if (context.ExpiresAt.Value < DateTime.UtcNow.AddDays(7))
                 {
                     <MudTooltip Text="@context.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()"
-                        Arrow="true" Placement="Placement.Bottom">
+                        Arrow="true" Placement="Placement.Top">
                         <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">@((context.ExpiresAt.Value - DateTime.UtcNow).Humanize(precision: 2, minUnit: Humanizer.Localisation.TimeUnit.Minute))</MudChip>
                     </MudTooltip>
                 }
                 else
                 {
                     <MudTooltip Text="@context.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()"
-                        Arrow="true" Placement="Placement.Bottom">
+                        Arrow="true" Placement="Placement.Top">
                         @context.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()
                     </MudTooltip>
                 }

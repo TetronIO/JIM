@@ -93,7 +93,7 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Time" Style="@GetRowStyle(context)">
-            <MudTooltip Text="@context.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff")" Arrow="true">
+            <MudTooltip Text="@context.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff")" Arrow="true" Placement="Placement.Top">
                 <span class="jim-text-code">@context.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff")</span>
             </MudTooltip>
         </MudTd>
