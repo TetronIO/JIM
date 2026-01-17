@@ -195,8 +195,8 @@ When multiple connected systems import values for the same MVO attribute, we nee
 
 Without explicit priority, the result depends on sync execution order - unpredictable and error-prone.
 
-**MIM 2016 limitation:**
-In MIM, attribute precedence uses fallback logic where if the top-priority source doesn't provide a value, it falls back to the next source. This is problematic when you want to **assert null** - i.e., explicitly say "this attribute should have no value" from the authoritative source, without falling back.
+**Traditional ILM limitation:**
+Many identity management systems use fallback logic where if the top-priority source doesn't provide a value, the system automatically falls back to the next source. This is problematic when you want to **assert null** - i.e., explicitly say "this attribute should have no value" from the authoritative source, without falling back to a secondary source.
 
 ---
 
@@ -215,7 +215,7 @@ Each connected system has a **priority number** (1 = highest). For any MVO attri
 
 Each import attribute flow has a **numerical priority** for that specific MVO attribute. When multiple systems contribute to the same attribute, evaluate in priority order.
 
-**Design intent:** Similar to MIM 2016's attribute precedence, but with additional control over null handling.
+**Design intent:** Similar to traditional attribute precedence systems, but with additional control over null handling.
 
 ---
 
@@ -264,7 +264,7 @@ MVO Attribute: department
 
 1. **Granular control** - Different attributes can have different priority orders, even from the same connected system
 
-2. **Addresses MIM limitation** - The "Null is a value" option solves the frustrating MIM behaviour where you couldn't assert null from an authoritative source
+2. **Addresses traditional ILM limitation** - The "Null is a value" option solves a common frustration with traditional identity management systems where you couldn't assert null from an authoritative source
 
 3. **Operational flexibility** - Admins can reorder priorities at any time without removing/recreating sync rules. This is valuable for staged configuration changes ahead of business change windows.
 

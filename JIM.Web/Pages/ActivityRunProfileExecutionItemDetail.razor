@@ -383,6 +383,36 @@
         </MudGrid>
     }
 
+    @* Deletion Impact Section - shown for CSO deletions *@
+    @if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
+    {
+        <MudText Typo="Typo.h6" Class="mb-3">Metaverse Impact</MudText>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+            <MudText Typo="Typo.body2">
+                When a connected system object is deleted from the source system, JIM processes
+                the deletion according to the configured object deletion rules:
+            </MudText>
+            <MudList T="string" Dense="true" Class="mt-2">
+                <MudListItem Icon="@Icons.Material.Filled.Link">
+                    <MudText Typo="Typo.body2">
+                        If the CSO was joined to a metaverse object, the join is broken (disconnected).
+                    </MudText>
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Hub">
+                    <MudText Typo="Typo.body2">
+                        If this was the <strong>last connector</strong> to the metaverse object, the MVO deletion rule is evaluated.
+                    </MudText>
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Schedule">
+                    <MudText Typo="Typo.body2">
+                        If a grace period is configured, the MVO is marked for deletion after that period.
+                        During the grace period, a new connector can reconnect to prevent deletion.
+                    </MudText>
+                </MudListItem>
+            </MudList>
+        </MudAlert>
+    }
+
     @* Attribute Changes Section *@
     @if (_activityRunProfileExecutionItem.ConnectedSystemObjectChange != null)
     {
