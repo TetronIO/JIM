@@ -4,13 +4,15 @@
 
 ## ⚠️ CRITICAL REQUIREMENTS ⚠️
 
-**YOU MUST BUILD AND TEST BEFORE EVERY COMMIT AND PR:**
+**YOU MUST BUILD AND TEST BEFORE EVERY COMMIT AND PR (for .NET code):**
 
 1. **ALWAYS** run `dotnet build JIM.sln` - Build must succeed with zero errors
 2. **ALWAYS** run `dotnet test JIM.sln` - All tests must pass
 3. **NEVER** commit code that hasn't been built and tested locally
 4. **NEVER** create a PR without verifying build and tests pass
 5. **NEVER** assume tests will pass without running them
+
+**EXCEPTION: Scripts (.ps1, .sh, etc.) do not require dotnet build/test.** Only .NET code changes (C#, Razor, etc.) require running the build pipeline.
 
 **YOU MUST WRITE UNIT TESTS FOR NEW FUNCTIONALITY:**
 

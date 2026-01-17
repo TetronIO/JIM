@@ -10,8 +10,8 @@
     4. Creates an infrastructure API key
     5. Runs the specified test scenario
 
-    When run without parameters, displays an interactive menu to select a scenario
-    using arrow keys.
+    When run without parameters, displays interactive menus to select a scenario
+    and template size using arrow keys.
 
 .PARAMETER Scenario
     The test scenario to run. If not specified, an interactive menu will be displayed.
@@ -37,12 +37,12 @@
 .EXAMPLE
     ./Run-IntegrationTests.ps1
 
-    Displays an interactive menu to select a scenario, then runs it with Nano template.
+    Displays interactive menus to select a scenario and template size.
 
 .EXAMPLE
     ./Run-IntegrationTests.ps1 -Template Small
 
-    Runs with a larger test data set.
+    Displays scenario menu, then runs with Small template (skips template menu).
 
 .EXAMPLE
     ./Run-IntegrationTests.ps1 -Step Joiner
@@ -216,9 +216,146 @@ function Show-ScenarioMenu {
     return $scenarios[$selectedIndex].Name
 }
 
+# Interactive template selection function
+function Show-TemplateMenu {
+    # Define templates with descriptions
+    $templates = @(
+        @{
+            Name = "Nano"
+            Users = 3
+            Groups = 1
+            Description = "Minimal data for quick iteration"
+            Time = "~10 sec"
+        }
+        @{
+            Name = "Micro"
+            Users = 10
+            Groups = 3
+            Description = "Quick smoke tests"
+            Time = "~30 sec"
+        }
+        @{
+            Name = "Small"
+            Users = 100
+            Groups = 20
+            Description = "Small business scenarios"
+            Time = "~2 min"
+        }
+        @{
+            Name = "Medium"
+            Users = 1000
+            Groups = 100
+            Description = "Medium enterprise"
+            Time = "~5 min"
+        }
+        @{
+            Name = "MediumLarge"
+            Users = 5000
+            Groups = 250
+            Description = "Growing enterprise"
+            Time = "~10 min"
+        }
+        @{
+            Name = "Large"
+            Users = 10000
+            Groups = 500
+            Description = "Large enterprise"
+            Time = "~15 min"
+        }
+        @{
+            Name = "XLarge"
+            Users = 100000
+            Groups = 2000
+            Description = "Very large enterprise"
+            Time = "~1 hour"
+        }
+        @{
+            Name = "XXLarge"
+            Users = 1000000
+            Groups = 10000
+            Description = "Stress testing"
+            Time = "~4 hours"
+        }
+    )
+
+    $selectedIndex = 0
+    $exitMenu = $false
+
+    # Hide cursor
+    [Console]::CursorVisible = $false
+
+    try {
+        while (-not $exitMenu) {
+            Clear-Host
+
+            Write-Host ""
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host "${CYAN}  JIM Integration Test - Template Size Selection${NC}"
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host ""
+            Write-Host "${GRAY}Use ↑/↓ arrow keys to navigate, Enter to select, Esc to exit${NC}"
+            Write-Host ""
+
+            # Display menu options
+            for ($i = 0; $i -lt $templates.Count; $i++) {
+                $template = $templates[$i]
+                $userCount = $template.Users.ToString("N0")
+                $groupCount = $template.Groups.ToString("N0")
+                $stats = "$userCount users, $groupCount groups"
+
+                if ($i -eq $selectedIndex) {
+                    Write-Host "${GREEN}► $($template.Name)${NC} ${GRAY}($stats)${NC}"
+                    Write-Host "${GRAY}  $($template.Description) - $($template.Time)${NC}"
+                }
+                else {
+                    Write-Host "  $($template.Name) ${GRAY}($stats)${NC}"
+                    Write-Host "${GRAY}  $($template.Description) - $($template.Time)${NC}"
+                }
+                Write-Host ""
+            }
+
+            # Wait for key press
+            $key = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
+            switch ($key.VirtualKeyCode) {
+                38 { # Up arrow
+                    $selectedIndex = [Math]::Max(0, $selectedIndex - 1)
+                }
+                40 { # Down arrow
+                    $selectedIndex = [Math]::Min($templates.Count - 1, $selectedIndex + 1)
+                }
+                13 { # Enter
+                    $exitMenu = $true
+                }
+                27 { # Escape
+                    Write-Host ""
+                    Write-Host "${YELLOW}Cancelled by user${NC}"
+                    [Console]::CursorVisible = $true
+                    exit 0
+                }
+            }
+        }
+    }
+    finally {
+        # Restore cursor
+        [Console]::CursorVisible = $true
+    }
+
+    Clear-Host
+    return $templates[$selectedIndex].Name
+}
+
+# Track if user explicitly set Template parameter
+$TemplateWasExplicitlySet = $PSBoundParameters.ContainsKey('Template')
+
 # If no scenario specified, show interactive menu
 if (-not $Scenario) {
     $Scenario = Show-ScenarioMenu
+
+    # Also show template menu if Template wasn't explicitly provided
+    if (-not $TemplateWasExplicitlySet) {
+        $Template = Show-TemplateMenu
+    }
 }
 
 function Write-Banner {
