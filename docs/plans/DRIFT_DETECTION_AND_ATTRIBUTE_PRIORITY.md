@@ -38,19 +38,21 @@ In a typical unidirectional sync (Source AD → Target AD):
 
 ### Current Behaviour
 
-When Target AD delta-sync runs today:
+When Target AD sync runs today (full or delta):
 
-1. Delta-import imports the changed CSO values (the drifted state)
-2. Delta-sync processes the CSO, updates MVO if import rules exist
+1. Import stage imports CSO values (the drifted state)
+2. Sync stage processes the CSO, updates MVO if import rules exist
 3. **No re-evaluation** of what Target should look like
 4. Drift persists until next Source change triggers export evaluation
 
 ### Desired Behaviour
 
-1. Delta-import imports the drifted state ✓ (works today)
-2. Delta-sync processes the CSO ✓ (works today)
+1. Import stage imports the drifted state ✓ (works today)
+2. Sync stage processes the CSO ✓ (works today)
 3. **NEW**: Re-evaluate export rules to compare expected vs actual state
 4. **NEW**: Stage pending exports to correct any drift
+
+> **Note**: This behaviour applies to both full sync and delta sync operations. The trigger is the inbound sync processing of a CSO, regardless of whether it came from a full import or delta import.
 
 ---
 
@@ -60,21 +62,21 @@ When Target AD delta-sync runs today:
 
 #### Option 1: Always Re-evaluate Export Rules on Inbound Sync
 
-When delta-sync processes a CSO from a system that has export rules targeting it, automatically re-evaluate those export rules.
+When inbound sync processes a CSO from a system that has export rules targeting it, automatically re-evaluate those export rules.
 
 **Flow:**
 ```
-Target delta-import → imports drifted group membership
-Target delta-sync   → processes CSO
-                    → For each export rule targeting this object type:
-                        → Calculate expected state from MVO + sync rules
-                        → Compare expected vs actual
-                        → Stage corrective pending exports if different
+Target import → imports drifted group membership
+Target sync   → processes CSO
+              → For each export rule targeting this object type:
+                  → Calculate expected state from MVO + sync rules
+                  → Compare expected vs actual
+                  → Stage corrective pending exports if different
 ```
 
 **Pros:**
 - Automatic - no user intervention needed
-- Efficient - only evaluates CSOs that actually changed
+- Efficient - only evaluates CSOs that actually changed (delta) or all CSOs (full)
 - Fits naturally into existing sync flow
 
 **Cons:**
@@ -130,7 +132,9 @@ New run profile step type that explicitly checks for and corrects drift.
 
 ---
 
-### Decision: Option 2 - EnforceState Flag
+### Analysis: Option 2 - EnforceState Flag
+
+> **Status**: Under evaluation - not yet finalised
 
 **Rationale:**
 
@@ -138,9 +142,9 @@ New run profile step type that explicitly checks for and corrects drift.
 
 2. **Opt-Out Available**: For advanced scenarios where drift is intentional (e.g., emergency access), users can disable enforcement on specific rules.
 
-3. **Efficient**: Only processes CSOs that actually changed during delta-import.
+3. **Efficient**: For delta sync, only processes CSOs that actually changed. For full sync, processes all CSOs in scope (comprehensive drift detection).
 
-4. **Fits Existing Architecture**: Hooks naturally into the delta-sync processing loop.
+4. **Fits Existing Architecture**: Hooks naturally into the sync processing loop (both full and delta).
 
 ---
 
@@ -150,8 +154,10 @@ With `EnforceState` flag:
 
 | Trigger | EnforceState = true (default) | EnforceState = false |
 |---------|------------------------------|---------------------|
-| Target delta-import + sync (drift detected) | Export rules re-evaluated → pending exports staged | CSO values updated, no export evaluation |
-| Source delta-import + sync (Source change) | Export rules evaluated → pending exports staged | Export rules evaluated → pending exports staged |
+| Target import + sync (drift detected) | Export rules re-evaluated → pending exports staged | CSO values updated, no export evaluation |
+| Source import + sync (Source change) | Export rules evaluated → pending exports staged | Export rules evaluated → pending exports staged |
+
+> **Note**: This behaviour applies identically to both full sync and delta sync. The difference is scope: delta sync processes only changed CSOs, while full sync processes all CSOs in scope.
 
 **Key insight**: With `EnforceState = false`, drift is still eventually corrected when Source changes that object. The flag controls whether correction is **immediate** (on Target sync) or **deferred** (on next Source sync).
 
@@ -264,7 +270,9 @@ Implicit priority based on sync rule configuration:
 
 ---
 
-### Decision: Option D (Implicit) + Option B (Explicit Override)
+### Analysis: Option D (Implicit) + Option B (Explicit Override)
+
+> **Status**: Under evaluation - not yet finalised
 
 **Default behaviour (zero-config):**
 - If a system has import rules for an attribute, it's a valid contributor
@@ -274,18 +282,20 @@ Implicit priority based on sync rule configuration:
 - On import rules, optional `Authority` setting to handle conflicts when multiple systems import the same attribute
 - Values: `Authoritative`, `Fallback`, or explicit priority number
 
-This provides:
+This approach would provide:
 1. **Zero-config sensible default** - works for common unidirectional scenarios
 2. **Explicit control when needed** - for complex multi-source scenarios
 
 ---
 
-## Recommended Design
+## Proposed Design
+
+> **Status**: Under evaluation - not yet finalised. The design below reflects the currently preferred options but requires further review before implementation.
 
 ### Summary
 
-| Aspect | Decision |
-|--------|----------|
+| Aspect | Proposed Approach |
+|--------|-------------------|
 | Drift detection trigger | On inbound delta-sync, when CSO has export rules targeting it |
 | Drift detection control | `EnforceState` flag on export rules, **default: true** |
 | Attribute authority (default) | Implicit from rule configuration: import rule = contributor, export-only = recipient |
@@ -341,10 +351,12 @@ public enum AttributeAuthority
 
 ### Sync Engine Changes
 
-#### Delta Sync Processing (Simplified)
+#### Inbound Sync Processing (Simplified)
+
+> **Note**: This logic applies to both `SyncFullSyncTaskProcessor` and `SyncDeltaSyncTaskProcessor` via the shared `SyncTaskProcessorBase`.
 
 ```csharp
-// In DeltaSyncTaskProcessor, after processing inbound CSO changes:
+// In SyncTaskProcessorBase, after processing inbound CSO changes:
 
 async Task ProcessCsoChangesAsync(ConnectedSystemObject cso, MetaverseObject mvo)
 {
@@ -436,6 +448,8 @@ Authority: [Authoritative ▼]  (optional, defaults to Authoritative)
 
 ## Implementation Plan
 
+> **Status**: This implementation plan is contingent on finalising the design decisions above. Tasks listed here are preliminary and may change based on the outcome of the design review.
+
 ### Phase 1: Schema and Model Changes
 
 - [ ] **1.1** Add `EnforceState` property to `SyncRule` model (default: true)
@@ -451,9 +465,10 @@ Authority: [Authoritative ▼]  (optional, defaults to Authoritative)
   - `IsSystemAuthoritativeForAttribute(system, attribute, mvo)`
   - `CalculateExpectedValue(mvo, attributeFlow)`
 
-- [ ] **2.2** Integrate into `SyncDeltaSyncTaskProcessor`
+- [ ] **2.2** Integrate into `SyncTaskProcessorBase` (shared by full and delta sync)
   - After processing inbound attribute flows, call drift detection
   - Stage pending exports for any detected drift
+  - Works identically for both full sync and delta sync
 
 - [ ] **2.3** Add performance optimisations
   - Cache export rule lookups per sync run
