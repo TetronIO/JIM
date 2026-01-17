@@ -1,16 +1,16 @@
 # Drift Detection and Attribute Priority Design Document
 
-> **Status**: Design
+> **Status**: Approved - Ready for Implementation
 > **Last Updated**: 2026-01-17
 
 ## Overview
 
-This document explores two related design challenges:
+This document defines designs for two related but distinct challenges:
 
-1. **Drift Detection & Remediation**: How JIM should detect and correct unauthorised changes made directly in target systems
-2. **Attribute Priority**: How JIM determines which source "wins" when multiple systems can contribute to the same attribute
+1. **Drift Detection & Remediation** (Outbound Sync): How JIM detects and corrects unauthorised changes made directly in target systems
+2. **Attribute Priority** (Inbound Sync): How JIM determines which source "wins" when multiple systems contribute to the same MVO attribute
 
-These concepts are intertwined: drift detection requires knowing which system is authoritative for each attribute, otherwise we cannot distinguish between "drift to correct" and "legitimate update to accept".
+**Relationship:** Drift detection needs to know whether a system is a legitimate contributor to an attribute (has import rules) or just a recipient (only has export rules). If a system is a contributor, changes from that system are not "drift" - they're legitimate updates subject to attribute priority resolution.
 
 ---
 
@@ -171,11 +171,12 @@ With `EnforceState` flag:
 
 ## Attribute Priority
 
+> **Scope**: Attribute priority is an **inbound sync** concern - it determines which source system's value wins when multiple systems contribute to the same MVO attribute. This is distinct from drift detection, which is an **outbound sync** concern.
+
 ### Current State
 
 **Existing Infrastructure:**
 - `ContributedBySystem` property already exists on `MetaverseObjectAttributeValue` ([MetaverseObjectAttributeValue.cs:45](../JIM.Models/Core/MetaverseObjectAttributeValue.cs#L45)) - tracks which connected system contributed each attribute value
-- This provides the foundation for implicit priority detection
 
 **Current Behaviour (Temporary):**
 As noted in [SyncRuleMappingProcessor.cs:56](../JIM.Worker/Processors/SyncRuleMappingProcessor.cs#L56):
@@ -185,129 +186,95 @@ This "last-writer-wins" behaviour is intentionally temporary and will be replace
 
 ### The Problem
 
-Drift detection requires knowing **who is authoritative** for each attribute. Consider:
+When multiple connected systems import values for the same MVO attribute, we need a deterministic way to decide which value wins.
 
-**Simple case (unidirectional):**
-- Source imports `department` to MVO (authoritative)
-- Target exports `department` from MVO (recipient)
-- Target changes `department` → **drift**, correct it ✓
+**Example scenario:**
+- HR System imports `department` with value "Engineering"
+- Corporate Directory imports `department` with value "IT Services"
+- Which value should the MVO have?
 
-**Complex case (bidirectional attributes):**
-- Source imports `department` to MVO (authoritative for department)
-- Target imports `telephoneNumber` to MVO (authoritative for telephoneNumber - user self-service)
-- Target changes `department` → **drift**, correct it ✓
-- Target changes `telephoneNumber` → **legitimate update**, accept it ✓
+Without explicit priority, the result depends on sync execution order - unpredictable and error-prone.
 
-Without attribute priority, we cannot distinguish these cases.
+**MIM 2016 limitation:**
+In MIM, attribute precedence uses fallback logic where if the top-priority source doesn't provide a value, it falls back to the next source. This is problematic when you want to **assert null** - i.e., explicitly say "this attribute should have no value" from the authoritative source, without falling back.
 
 ---
 
 ### Design Options Considered
 
-#### Option A: Source Priority Ranking
+#### Option A: System-Level Priority Ranking
 
 Each connected system has a **priority number** (1 = highest). For any MVO attribute, the highest-priority source that provides a value wins.
 
-```
-Source AD:    Priority 1 (authoritative)
-Target AD:    Priority 2
-HR System:    Priority 1 (same as Source for different attributes)
-```
-
-**Enforcement logic:**
-- On Target inbound sync, for each attribute:
-  - Is there a higher-priority source for this attribute?
-  - Yes → enforce that source's value (correct drift)
-  - No → accept Target's value (legitimate update)
-
 **Pros:** Simple mental model, system-wide
-**Cons:** Coarse - can't have different priorities per attribute on same system
+**Cons:** Too coarse - can't have different priorities per attribute on the same system. Ruled out.
 
 ---
 
-#### Option B: Attribute-Level Authority
+#### Option B: Per-Attribute Numerical Priority
 
-Each **attribute flow** (import rule) declares its authority level.
+Each import attribute flow has a **numerical priority** for that specific MVO attribute. When multiple systems contribute to the same attribute, evaluate in priority order.
 
-```yaml
-SyncRule: "HR to MVO"
-  AttributeFlows:
-    - employeeId:      Authority: Authoritative  # HR always wins
-    - department:      Authority: Authoritative
-    - telephoneNumber: Authority: Fallback       # Only if no other source
-
-SyncRule: "Target AD to MVO"
-  AttributeFlows:
-    - telephoneNumber: Authority: Authoritative  # User self-service wins
-    - department:      Authority: None           # Never import, receive only
-```
-
-**Authority levels:**
-- `Authoritative` - This source wins for this attribute
-- `Fallback` - Use if no authoritative source provides a value
-- `None` - Don't import (export-only attribute for this system)
-
-**Pros:** Granular control, explicit design
-**Cons:** More configuration, potential conflicts if two sources both claim Authoritative
+**Design intent:** Similar to MIM 2016's attribute precedence, but with additional control over null handling.
 
 ---
 
 #### Option C: Attribute Ownership Model
 
-Each MVO attribute has **one owner** (connected system). Only the owner can update it; others receive it.
-
-```
-MVO Attribute        Owner
-─────────────────────────────
-employeeId           HR System
-department           HR System
-telephoneNumber      Target AD (self-service)
-manager              Source AD
-```
+Each MVO attribute has **one owner** (connected system). Only the owner can update it.
 
 **Pros:** Crystal clear - no conflicts possible
-**Cons:** Inflexible - what if ownership needs to change based on conditions?
+**Cons:** Too inflexible - doesn't support fallback scenarios or staged configuration changes. Ruled out.
 
 ---
 
-#### Option D: Implicit Priority from Rule Configuration
+### Decision: Option B - Per-Attribute Numerical Priority ✓
 
-Implicit priority based on sync rule configuration:
-- If a system has an **import rule** for an attribute → it's a contributor
-- If a system has an **export rule** for an attribute → it's a recipient
-- Contributors outrank recipients for that attribute
+> **Status**: APPROVED
 
-**Enforcement logic:**
-- Target changes `department`
-- Does Target have an import rule for `department`? No → drift, correct it
-- Target changes `telephoneNumber`
-- Does Target have an import rule for `telephoneNumber`? Yes → legitimate, accept it
+**Core Design:**
 
-**Pros:** No new configuration - inferred from existing rules
-**Cons:** Implicit behaviour might surprise users; no handling for multiple contributors
+1. **Numerical priority per attribute contribution** - Each import sync rule mapping that targets an MVO attribute has a priority number (1 = highest priority, larger numbers = lower priority)
 
----
+2. **Default behaviour (fallback chain)** - Evaluate contributing systems in priority order; use the first non-null value found
 
-### Analysis: Option D (Implicit) + Option B (Explicit Override)
+3. **Advanced option: "Null is a value"** - When enabled on a specific contribution, if that system contributes null/absent, stop evaluation immediately (no fallback). This allows explicitly asserting "no value" from the authoritative source.
 
-> **Status**: Under evaluation - not yet finalised
+**Example Configuration:**
 
-**Default behaviour (zero-config):**
-- If a system has import rules for an attribute, it's a valid contributor
-- If it only has export rules, it's a recipient → enforce desired state
+```
+MVO Attribute: department
+┌──────────────────────────────────────────────────────────────────┐
+│ Priority │ Connected System │ Null Handling                     │
+├──────────┼──────────────────┼───────────────────────────────────┤
+│    1     │ HR System        │ ☑ Null is a value (no fallback)   │
+│    2     │ Corporate Dir    │ ☐ Null is a value                 │
+│    3     │ Self-Service AD  │ ☐ Null is a value                 │
+└──────────────────────────────────────────────────────────────────┘
+```
 
-**Advanced override (when needed):**
-- On import rules, optional `Authority` setting to handle conflicts when multiple systems import the same attribute
-- Values: `Authoritative`, `Fallback`, or explicit priority number
+**Behaviour with above configuration:**
+- If HR System provides "Engineering" → MVO gets "Engineering" (priority 1 wins)
+- If HR System provides null and "Null is a value" is checked → MVO gets null (no fallback)
+- If HR System provides null and "Null is a value" is unchecked → check Corporate Dir (priority 2)
+- If Corporate Dir provides "IT Services" → MVO gets "IT Services"
+- And so on down the chain...
 
-This approach would provide:
-1. **Zero-config sensible default** - works for common unidirectional scenarios
-2. **Explicit control when needed** - for complex multi-source scenarios
+**Rationale:**
 
-**Alignment with existing code:**
-- The existing `ContributedBySystem` property provides the foundation for tracking which system contributed each value
-- Option D's implicit detection aligns with this - we can determine authority by checking if a system has import rules for the attribute
-- This approach minimises new configuration while leveraging existing infrastructure
+1. **Granular control** - Different attributes can have different priority orders, even from the same connected system
+
+2. **Addresses MIM limitation** - The "Null is a value" option solves the frustrating MIM behaviour where you couldn't assert null from an authoritative source
+
+3. **Operational flexibility** - Admins can reorder priorities at any time without removing/recreating sync rules. This is valuable for staged configuration changes ahead of business change windows.
+
+4. **Explicit over implicit** - Priority is explicitly configured, not inferred from rule order or other implicit factors
+
+**Design Decisions:**
+
+- **Default priority**: When a new import mapping is created, assign the next available priority number (lowest priority)
+- **Default null handling**: "Null is a value" = false (fallback behaviour, matching traditional ILM expectations)
+- **UI placement**: Priority management should be accessible from both the sync rule page and a dedicated "Attribute Priority" view (see UI section below)
 
 ---
 
@@ -317,12 +284,17 @@ This approach would provide:
 
 | Aspect | Approach | Status |
 |--------|----------|--------|
+| **Drift Detection** | | |
 | Drift detection trigger | On inbound sync, when CSO has export rules targeting it | ✓ Approved |
 | Drift detection control | `EnforceState` flag on **export** sync rules, **default: true**, hidden in Advanced Options UI | ✓ Approved |
-| Attribute authority (default) | Implicit from rule configuration: import rule = contributor, export-only = recipient | Under evaluation |
-| Attribute authority (advanced) | Explicit `Authority` property on import attribute flows | Under evaluation |
+| **Attribute Priority** | | |
+| Priority model | Per-attribute numerical priority on import mappings | ✓ Approved |
+| Default behaviour | Fallback chain - use first non-null value in priority order | ✓ Approved |
+| Null handling | "Null is a value" flag per contribution (default: false) | ✓ Approved |
 
 ### Schema Changes
+
+#### Drift Detection (Export Sync Rules)
 
 ```csharp
 public class SyncRule
@@ -333,46 +305,79 @@ public class SyncRule
     /// When true (default), inbound changes from the target system will trigger
     /// re-evaluation of this export rule to detect and remediate drift.
     /// Set to false to allow drift (e.g., for emergency access scenarios).
+    /// Only applicable to export sync rules.
     /// </summary>
     public bool EnforceState { get; set; } = true;
 }
+```
 
-public class SyncRuleAttributeMapping
+#### Attribute Priority (Import Sync Rule Mappings)
+
+```csharp
+public class SyncRuleMapping
 {
     // ... existing properties ...
 
     /// <summary>
-    /// Authority level for this attribute flow. Only applicable for import rules.
-    /// When multiple systems import the same attribute, the highest authority wins.
-    /// Default: Authoritative (for import rules)
+    /// Priority for this attribute contribution when multiple systems import
+    /// to the same MVO attribute. Lower numbers = higher priority (1 is highest).
+    /// Only applicable to import sync rules.
     /// </summary>
-    public AttributeAuthority? Authority { get; set; }
-}
-
-public enum AttributeAuthority
-{
-    /// <summary>
-    /// This source is authoritative for this attribute. If multiple sources
-    /// claim Authoritative, a priority number determines the winner.
-    /// </summary>
-    Authoritative = 0,
+    public int Priority { get; set; } = int.MaxValue; // Default: lowest priority
 
     /// <summary>
-    /// Use this source's value only if no Authoritative source provides a value.
+    /// When true, if this source contributes null/absent for this attribute,
+    /// stop evaluation immediately without falling back to lower-priority sources.
+    /// When false (default), null values are skipped and evaluation continues
+    /// to the next priority level.
     /// </summary>
-    Fallback = 1,
-
-    /// <summary>
-    /// Never import this attribute from this source (export-only).
-    /// Useful when a bidirectional rule should only export certain attributes.
-    /// </summary>
-    None = 2
+    public bool NullIsValue { get; set; } = false;
 }
 ```
 
+**Note:** The `Priority` value is scoped to the target MVO attribute. When a new import mapping is created targeting an MVO attribute that already has contributors, the system should assign the next available priority number (max existing priority + 1).
+
 ### Sync Engine Changes
 
-#### Inbound Sync Processing (Simplified)
+#### Attribute Priority Resolution (Inbound Sync)
+
+```csharp
+/// <summary>
+/// Resolves the winning value for an MVO attribute when multiple systems contribute.
+/// Called during inbound sync processing.
+/// </summary>
+object? ResolveAttributeValue(string mvoAttributeName, MetaverseObjectType objectType)
+{
+    // Get all import mappings targeting this MVO attribute, ordered by priority
+    var contributions = GetImportMappingsForAttribute(mvoAttributeName, objectType)
+        .OrderBy(m => m.Priority)
+        .ToList();
+
+    foreach (var contribution in contributions)
+    {
+        var value = GetContributedValue(contribution);
+
+        if (value != null)
+        {
+            // Non-null value found - use it
+            return value;
+        }
+
+        if (contribution.NullIsValue)
+        {
+            // Null contributed and "Null is a value" is enabled - stop here
+            return null;
+        }
+
+        // Null contributed but fallback is allowed - continue to next priority
+    }
+
+    // No value found from any contributor
+    return null;
+}
+```
+
+#### Drift Detection (Outbound Sync)
 
 > **Note**: This logic applies to both `SyncFullSyncTaskProcessor` and `SyncDeltaSyncTaskProcessor` via the shared `SyncTaskProcessorBase`.
 
@@ -381,10 +386,10 @@ public enum AttributeAuthority
 
 async Task ProcessCsoChangesAsync(ConnectedSystemObject cso, MetaverseObject mvo)
 {
-    // 1. Process inbound attribute flows (existing logic)
+    // 1. Process inbound attribute flows with priority resolution
     await ProcessInboundAttributeFlowsAsync(cso, mvo);
 
-    // 2. NEW: Evaluate drift and enforce state if applicable
+    // 2. Evaluate drift and enforce state if applicable
     await EvaluateAndEnforceDriftAsync(cso, mvo);
 }
 
@@ -397,10 +402,11 @@ async Task EvaluateAndEnforceDriftAsync(ConnectedSystemObject cso, MetaverseObje
     {
         foreach (var attrFlow in exportRule.AttributeFlows)
         {
-            // Check if this system is authoritative for this attribute
-            if (IsSystemAuthoritativeForAttribute(cso.ConnectedSystem, attrFlow.TargetAttribute, mvo))
+            // Check if this system has any import rules for this attribute
+            // (i.e., is it a legitimate contributor?)
+            if (HasImportRuleForAttribute(cso.ConnectedSystem, attrFlow.TargetAttribute, mvo.ObjectType))
             {
-                // System contributed this value legitimately - don't enforce
+                // System is a contributor for this attribute - don't treat as drift
                 continue;
             }
 
@@ -417,30 +423,17 @@ async Task EvaluateAndEnforceDriftAsync(ConnectedSystemObject cso, MetaverseObje
     }
 }
 
-bool IsSystemAuthoritativeForAttribute(ConnectedSystem system, string attributeName, MetaverseObject mvo)
+bool HasImportRuleForAttribute(ConnectedSystem system, string attributeName, MetaverseObjectType objectType)
 {
-    // Check if this system has an import rule for this attribute
-    var importRules = GetImportRulesForSystem(system, mvo.ObjectType);
-
-    foreach (var rule in importRules)
-    {
-        var attrFlow = rule.AttributeFlows.FirstOrDefault(f => f.TargetAttribute == attributeName);
-        if (attrFlow != null)
-        {
-            // System has an import rule for this attribute
-            var authority = attrFlow.Authority ?? AttributeAuthority.Authoritative;
-            return authority != AttributeAuthority.None;
-        }
-    }
-
-    // No import rule = not a contributor = not authoritative
-    return false;
+    // Simple check: does this system have any import mapping for this attribute?
+    return GetImportMappingsForAttribute(attributeName, objectType)
+        .Any(m => m.SyncRule.ConnectedSystemId == system.Id);
 }
 ```
 
 ### UI Changes
 
-#### Export Sync Rule Configuration
+#### 1. Export Sync Rule Configuration (Drift Detection)
 
 The `EnforceState` setting should be hidden in an **Advanced Options** section that is collapsed by default. Most users will never need to modify this setting.
 
@@ -463,119 +456,259 @@ The `EnforceState` setting should be hidden in an **Advanced Options** section t
 
 **Rationale for hiding:** This is an edge-case control. Exposing it prominently would confuse users and invite accidental misconfiguration. The default (`true`) is correct for the vast majority of use cases.
 
-#### Import Attribute Flow Configuration (Advanced)
+---
 
-For each attribute mapping in an import rule, add optional authority dropdown:
+#### 2. Attribute Priority Management
+
+Attribute priority needs UI in two places:
+
+##### 2a. Dedicated Attribute Priority Page
+
+**Location:** Metaverse → Attribute Priority (new navigation item)
+
+This page provides a centralised view of all MVO attributes that have multiple contributors, allowing admins to manage priority across the entire system.
 
 ```
-Attribute: telephoneNumber
-Source: telephoneNumber
-Target: telephoneNumber
-Authority: [Authoritative ▼]  (optional, defaults to Authoritative)
-           ├─ Authoritative - This source wins for this attribute
-           ├─ Fallback - Use only if no other source provides a value
-           └─ None - Do not import (export-only)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Attribute Priority                                                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│ Object Type: [Person ▼]                                                     │
+│                                                                             │
+│ ┌─────────────────────────────────────────────────────────────────────────┐ │
+│ │ Attributes with Multiple Contributors                                   │ │
+│ ├─────────────────────────────────────────────────────────────────────────┤ │
+│ │                                                                         │ │
+│ │ ▼ department (3 contributors)                                          │ │
+│ │   ┌───────────────────────────────────────────────────────────────────┐ │ │
+│ │   │ ↕ │ Pri │ Connected System    │ Sync Rule        │ Null Handling  │ │ │
+│ │   ├───┼─────┼─────────────────────┼──────────────────┼────────────────┤ │ │
+│ │   │ ☰ │  1  │ HR System           │ HR Import        │ ☑ Null=Value   │ │ │
+│ │   │ ☰ │  2  │ Corporate Directory │ CorpDir Import   │ ☐ Null=Value   │ │ │
+│ │   │ ☰ │  3  │ Self-Service AD     │ SelfServ Import  │ ☐ Null=Value   │ │ │
+│ │   └───────────────────────────────────────────────────────────────────┘ │ │
+│ │                                                                         │ │
+│ │ ▶ telephoneNumber (2 contributors)                                      │ │
+│ │ ▶ manager (2 contributors)                                              │ │
+│ │ ▶ displayName (2 contributors)                                          │ │
+│ │                                                                         │ │
+│ │ ─────────────────────────────────────────────────────────────────────── │ │
+│ │ Attributes with Single Contributor (no priority needed)                 │ │
+│ │ employeeId (HR System), mail (Exchange), ...                            │ │
+│ │                                                                         │ │
+│ └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│                                                        [Save Changes]       │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+**UX Features:**
+- **Drag-and-drop reordering** (☰ handle) - Drag rows to change priority order
+- **Expandable sections** - Click attribute name to expand/collapse contributor list
+- **Inline editing** - Toggle "Null is a value" checkbox directly in the table
+- **Visual grouping** - Separate "multiple contributors" (needs attention) from "single contributor" (no priority needed)
+- **Object type filter** - Dropdown to switch between Person, Group, etc.
+
+##### 2b. Import Sync Rule Mapping Editor
+
+When editing an import sync rule mapping, show priority context if the target MVO attribute has multiple contributors.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Attribute Mapping                                                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│ Source Attribute: [department ▼]                                            │
+│ Target Attribute: [department ▼]                                            │
+│                                                                             │
+│ ┌─────────────────────────────────────────────────────────────────────────┐ │
+│ │ ⚠ This attribute has 3 contributors. Current priority: 2 of 3          │ │
+│ │                                                                         │ │
+│ │   1. HR System (HR Import rule)                                         │ │
+│ │   2. Corporate Directory ← this mapping                                 │ │
+│ │   3. Self-Service AD (SelfServ Import rule)                             │ │
+│ │                                                                         │ │
+│ │   [Manage Priority →]                                                   │ │
+│ └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│ ▶ Advanced Options                                                          │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │ ☐ Null is a value (no fallback)                                     │   │
+│   │                                                                     │   │
+│   │   When enabled, if this source contributes null/empty for this      │   │
+│   │   attribute, the MVO attribute will be set to null without          │   │
+│   │   checking lower-priority contributors.                             │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│                                                    [Cancel]  [Save]         │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**UX Features:**
+- **Priority context panel** - Shows where this mapping sits in the priority chain (only shown if multiple contributors exist)
+- **Link to central management** - "Manage Priority →" button navigates to the Attribute Priority page, filtered to this attribute
+- **Advanced options accordion** - "Null is a value" checkbox hidden by default since it's an edge case
+
+##### 2c. Sync Rule Summary View
+
+In the sync rule list/summary view, indicate if any mappings have priority considerations:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Sync Rules                                                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Name                    │ Direction │ Object Type │ Mappings │ Priority     │
+├─────────────────────────┼───────────┼─────────────┼──────────┼──────────────┤
+│ HR Import               │ Import    │ Person      │ 12       │ 🔵 3 attrs   │
+│ Corporate Dir Import    │ Import    │ Person      │ 8        │ 🔵 2 attrs   │
+│ AD Export               │ Export    │ Person      │ 10       │ —            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Legend: 🔵 = This rule contributes to N attributes that have multiple contributors
+```
+
+---
+
+#### 3. UI Implementation Notes
+
+**MudBlazor Components to Use:**
+- `MudExpansionPanel` - For Advanced Options sections and attribute groups
+- `MudTable` with `@ref` for drag-and-drop - For priority reordering (or MudDropZone)
+- `MudCheckBox` - For Null is a value toggle
+- `MudAlert` - For the priority context info panel
+- `MudSelect` - For object type filter
+
+**State Management:**
+- Priority changes should be tracked as pending until "Save Changes" is clicked
+- Visual indicator (e.g., asterisk or colour change) for modified but unsaved rows
+- Warn before navigating away with unsaved changes
+
+**Validation:**
+- Prevent duplicate priority numbers within the same attribute
+- Auto-renumber priorities when drag-drop reorders items
 
 ---
 
 ## Implementation Plan
 
-> **Status**: Drift detection (Option 2) is approved and ready for implementation. Attribute priority design is still under evaluation.
+> **Status**: Both drift detection and attribute priority designs are approved and ready for implementation.
 
 ### Phase 1: Schema and Model Changes
 
 - [ ] **1.1** Add `EnforceState` property to `SyncRule` model (default: true)
-- [ ] **1.2** Add `AttributeAuthority` enum
-- [ ] **1.3** Add `Authority` property to `SyncRuleAttributeMapping` model
+- [ ] **1.2** Add `Priority` property to `SyncRuleMapping` model (default: int.MaxValue)
+- [ ] **1.3** Add `NullIsValue` property to `SyncRuleMapping` model (default: false)
 - [ ] **1.4** Create database migration
 - [ ] **1.5** Update API DTOs for sync rule configuration
+- [ ] **1.6** Add API endpoint to get/set attribute priority order
 
-### Phase 2: Drift Detection Logic
+### Phase 2: Attribute Priority Logic
 
-- [ ] **2.1** Create `DriftDetectionService` in `JIM.Application/Services/`
+- [ ] **2.1** Create `AttributePriorityService` in `JIM.Application/Services/`
+  - `ResolveAttributeValueAsync(mvoAttributeName, objectType, contributions)`
+  - `GetContributorsForAttributeAsync(mvoAttributeName, objectType)`
+  - `UpdatePriorityOrderAsync(mvoAttributeName, objectType, orderedContributions)`
+
+- [ ] **2.2** Integrate into inbound sync processing (`SyncRuleMappingProcessor`)
+  - Replace "last-writer-wins" with priority-based resolution
+  - Respect `NullIsValue` flag when evaluating contributions
+
+- [ ] **2.3** Auto-assign priority on new import mapping creation
+  - Query existing contributors for target attribute
+  - Assign next available priority number (max + 1)
+
+### Phase 3: Drift Detection Logic
+
+- [ ] **3.1** Create `DriftDetectionService` in `JIM.Application/Services/`
   - `EvaluateDriftAsync(cso, mvo, exportRules)`
-  - `IsSystemAuthoritativeForAttribute(system, attribute, mvo)`
-  - `CalculateExpectedValue(mvo, attributeFlow)`
+  - `HasImportRuleForAttribute(system, attribute, objectType)`
 
-- [ ] **2.2** Integrate into `SyncTaskProcessorBase` (shared by full and delta sync)
+- [ ] **3.2** Integrate into `SyncTaskProcessorBase` (shared by full and delta sync)
   - After processing inbound attribute flows, call drift detection
   - Stage pending exports for any detected drift
-  - Works identically for both full sync and delta sync
 
-- [ ] **2.3** Add performance optimisations
-  - Cache export rule lookups per sync run
+- [ ] **3.3** Add performance optimisations
+  - Cache export rule and import mapping lookups per sync run
   - Batch pending export creation
-
-### Phase 3: Attribute Priority Logic
-
-- [ ] **3.1** Create `AttributePriorityService` in `JIM.Application/Services/`
-  - `GetAuthoritativeSystemForAttribute(mvoObjectType, attributeName)`
-  - `ResolveAttributeConflict(attribute, contributors)`
-
-- [ ] **3.2** Integrate into inbound sync processing
-  - When multiple systems provide values for same attribute, apply priority rules
-
-- [ ] **3.3** Handle priority conflicts
-  - Log warning when multiple Authoritative sources exist for same attribute
-  - Use system priority as tiebreaker (future enhancement)
 
 ### Phase 4: UI Updates
 
-- [ ] **4.1** Add "Advanced Options" expandable section to export sync rule configuration page (collapsed by default)
-- [ ] **4.2** Add `EnforceState` checkbox inside "Advanced Options" section with appropriate help text
-- [ ] **4.3** Add `Authority` dropdown to import attribute flow configuration (pending attribute priority decision)
-- [ ] **4.4** Add validation warnings for conflicting authority configurations
-- [ ] **4.5** Update sync rule documentation/help text
+#### Drift Detection UI
+- [ ] **4.1** Add "Advanced Options" expandable section to export sync rule configuration page
+- [ ] **4.2** Add `EnforceState` checkbox inside "Advanced Options" section
+
+#### Attribute Priority UI
+- [ ] **4.3** Create Attribute Priority page (Metaverse → Attribute Priority)
+  - Object type dropdown filter
+  - Expandable attribute groups with contributor tables
+  - Drag-and-drop priority reordering
+  - Inline "Null is a value" checkbox
+- [ ] **4.4** Add priority context panel to import sync rule mapping editor
+  - Shows current priority position when multiple contributors exist
+  - "Manage Priority →" link to central page
+- [ ] **4.5** Add "Advanced Options" section to import mapping editor with "Null is a value" checkbox
+- [ ] **4.6** Add priority indicator column to sync rule list view
 
 ### Phase 5: Testing
 
-- [ ] **5.1** Unit tests for `DriftDetectionService`
-  - Drift detected when target changes authoritative attribute
-  - No drift when target changes own authoritative attribute
-  - EnforceState = false skips drift detection
+- [ ] **5.1** Unit tests for `AttributePriorityService`
+  - Single contributor returns that value
+  - Multiple contributors respect priority order
+  - NullIsValue=true stops fallback
+  - NullIsValue=false continues to next priority
 
-- [ ] **5.2** Unit tests for `AttributePriorityService`
-  - Authoritative beats Fallback
-  - Multiple Authoritative uses system priority
-  - None authority prevents import
+- [ ] **5.2** Unit tests for `DriftDetectionService`
+  - Drift detected when non-contributor system changes attribute
+  - No drift flagged when contributor system changes attribute
+  - EnforceState=false skips drift detection
 
-- [ ] **5.3** Integration tests (Scenario 8)
-  - Update DetectDrift test to expect passing once implemented
-  - Add tests for bidirectional attribute scenarios
+- [ ] **5.3** Integration tests
+  - Update Scenario 8 DetectDrift test
+  - Add multi-source priority resolution tests
+  - Add NullIsValue behaviour tests
 
 ### Phase 6: Documentation
 
-- [ ] **6.1** Update DEVELOPER_GUIDE.md with drift detection concepts
-- [ ] **6.2** Add user documentation for EnforceState and Authority settings
-- [ ] **6.3** Add troubleshooting guide for drift-related issues
+- [ ] **6.1** Update DEVELOPER_GUIDE.md with attribute priority and drift detection concepts
+- [ ] **6.2** Add user documentation for Attribute Priority page
+- [ ] **6.3** Add user documentation for EnforceState and NullIsValue settings
+- [ ] **6.4** Add troubleshooting guide for priority and drift-related issues
 
 ---
 
 ## Open Questions
 
+### Drift Detection
+
 1. **What happens when EnforceState = true but the export fails?**
    - Should drift persist until next successful export?
    - Should we track "drift detected but not yet corrected" state?
 
-2. **Should there be a system-level default for EnforceState?**
-   - Per-system setting that applies to all export rules for that system?
-   - Would reduce configuration burden for simple scenarios
-
-3. **How do we handle the transition period during initial sync?**
+2. **How do we handle the transition period during initial sync?**
    - When Target objects exist before JIM manages them
    - First sync might detect massive "drift" that's actually initial state
    - Need "initial reconciliation" mode vs "ongoing enforcement" mode?
 
-4. **Should we support conditional enforcement?**
-   - E.g., "Enforce state only for groups matching pattern X"
-   - Or "Enforce state during business hours only"
-   - Probably post-MVP complexity
-
-5. **Notification/alerting for drift?**
+3. **Notification/alerting for drift?**
    - Should JIM alert admins when drift is detected (before correcting)?
    - Useful for security monitoring
    - Could be Activity-based or separate alerting system
+
+### Attribute Priority
+
+4. **Priority assignment for bulk import rule creation**
+   - When creating a sync rule with many attribute mappings, how should priorities be assigned?
+   - Option: All mappings from same rule get same base priority, then order by attribute name?
+   - Option: Interactive priority assignment during rule creation wizard?
+
+5. **Priority conflict warnings**
+   - Should we warn when a new mapping creates a multi-contributor situation?
+   - Or just show the priority context panel and let admins manage as needed?
+
+6. **Cross-object-type attribute priority**
+   - Currently scoped per object type (Person, Group, etc.)
+   - Is there ever a need for global priority configuration?
+   - Probably not - keep scoped to object type for simplicity
 
 ---
 

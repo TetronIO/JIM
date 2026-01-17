@@ -818,34 +818,58 @@ else
 
     private string GetStatusDescription()
     {
-        // Get the external ID or a descriptive fallback
+        // Get the external ID if available
         var externalId = _externalIdAttributeValue?.ToStringNoName()
             ?? _activityRunProfileExecutionItem?.ExternalIdSnapshot;
 
-        // Build a descriptive object reference - avoid "object (object)" when we have no specific ID
-        var objectDesc = !string.IsNullOrEmpty(externalId) ? externalId : "this object";
+        // Only include the identifier in parentheses if we have a specific external ID
+        var hasExternalId = !string.IsNullOrEmpty(externalId);
 
         if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
-            return $"An error occurred while synchronising {objectDesc}.";
+            return hasExternalId
+                ? $"An error occurred while synchronising the connected system object ({externalId})."
+                : "An error occurred while synchronising the connected system object.";
 
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations
-            ObjectChangeType.Added => $"A new connected system object ({objectDesc}) was imported and added to the staging area.",
-            ObjectChangeType.Updated => $"The connected system object ({objectDesc}) was updated with new attribute values.",
-            ObjectChangeType.Deleted => $"The connected system object ({objectDesc}) was deleted from the source system.",
+            ObjectChangeType.Added => hasExternalId
+                ? $"A new connected system object ({externalId}) was imported and added to the staging area."
+                : "A new connected system object was imported and added to the staging area.",
+            ObjectChangeType.Updated => hasExternalId
+                ? $"The connected system object ({externalId}) was updated with new attribute values."
+                : "The connected system object was updated with new attribute values.",
+            ObjectChangeType.Deleted => hasExternalId
+                ? $"The connected system object ({externalId}) was deleted from the source system."
+                : "The connected system object was deleted from the source system.",
             // Sync operations
             ObjectChangeType.Projected => "A new metaverse object was created via projection from the connected system object.",
-            ObjectChangeType.Joined => $"The connected system object ({objectDesc}) was joined to an existing metaverse object.",
-            ObjectChangeType.AttributeFlow => $"Attributes were flowed for ({objectDesc}) between the connected system object and metaverse.",
-            ObjectChangeType.Disconnected => $"The connected system object ({objectDesc}) was disconnected from the metaverse.",
+            ObjectChangeType.Joined => hasExternalId
+                ? $"The connected system object ({externalId}) was joined to an existing metaverse object."
+                : "The connected system object was joined to an existing metaverse object.",
+            ObjectChangeType.AttributeFlow => hasExternalId
+                ? $"Attributes were flowed for the connected system object ({externalId})."
+                : "Attributes were flowed between the connected system object and metaverse.",
+            ObjectChangeType.Disconnected => hasExternalId
+                ? $"The connected system object ({externalId}) was disconnected from the metaverse."
+                : "The connected system object was disconnected from the metaverse.",
             // Export operations
-            ObjectChangeType.Provisioned => $"A new connected system object ({objectDesc}) was provisioned in the target system.",
-            ObjectChangeType.Exported => $"The connected system object ({objectDesc}) was exported with updated attributes.",
-            ObjectChangeType.Deprovisioned => $"The connected system object ({objectDesc}) was deprovisioned from the target system.",
+            ObjectChangeType.Provisioned => hasExternalId
+                ? $"A new connected system object ({externalId}) was provisioned in the target system."
+                : "A new connected system object was provisioned in the target system.",
+            ObjectChangeType.Exported => hasExternalId
+                ? $"The connected system object ({externalId}) was exported with updated attributes."
+                : "The connected system object was exported with updated attributes.",
+            ObjectChangeType.Deprovisioned => hasExternalId
+                ? $"The connected system object ({externalId}) was deprovisioned from the target system."
+                : "The connected system object was deprovisioned from the target system.",
             // Other
-            ObjectChangeType.NoChange => $"The connected system object ({objectDesc}) was already up to date.",
-            _ => $"Synchronisation completed for {objectDesc}."
+            ObjectChangeType.NoChange => hasExternalId
+                ? $"The connected system object ({externalId}) was already up to date."
+                : "The connected system object was already up to date.",
+            _ => hasExternalId
+                ? $"Synchronisation completed for the connected system object ({externalId})."
+                : "Synchronisation completed for the connected system object."
         };
     }
 
