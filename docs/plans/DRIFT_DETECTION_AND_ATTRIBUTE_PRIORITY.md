@@ -19,7 +19,7 @@ These concepts are intertwined: drift detection requires knowing which system is
 1. [Problem Statement](#problem-statement)
 2. [Drift Detection](#drift-detection)
 3. [Attribute Priority](#attribute-priority)
-4. [Recommended Design](#recommended-design)
+4. [Design](#design)
 5. [Implementation Plan](#implementation-plan)
 6. [Open Questions](#open-questions)
 
@@ -132,9 +132,9 @@ New run profile step type that explicitly checks for and corrects drift.
 
 ---
 
-### Analysis: Option 2 - EnforceState Flag
+### Decision: Option 2 - EnforceState Flag ✓
 
-> **Status**: Under evaluation - not yet finalised
+> **Status**: APPROVED
 
 **Rationale:**
 
@@ -145,6 +145,12 @@ New run profile step type that explicitly checks for and corrects drift.
 3. **Efficient**: For delta sync, only processes CSOs that actually changed. For full sync, processes all CSOs in scope (comprehensive drift detection).
 
 4. **Fits Existing Architecture**: Hooks naturally into the sync processing loop (both full and delta).
+
+**Design Decisions:**
+
+- **Applies to export sync rules only** - Import rules define what flows into the metaverse; the concept of "enforcing state" doesn't apply to imports. Drift detection is inherently about ensuring targets match what authoritative sources dictate.
+- **Default: `EnforceState = true`** - The common case is that administrators want drift corrected automatically.
+- **UI: Hidden in "Advanced" section** - This is an edge-case control for unusual scenarios (e.g., emergency access patterns). Most users should never need to see or change it. The setting should be placed in an expandable "Advanced Options" panel or similar UX pattern that is collapsed by default.
 
 ---
 
@@ -164,6 +170,18 @@ With `EnforceState` flag:
 ---
 
 ## Attribute Priority
+
+### Current State
+
+**Existing Infrastructure:**
+- `ContributedBySystem` property already exists on `MetaverseObjectAttributeValue` ([MetaverseObjectAttributeValue.cs:45](../JIM.Models/Core/MetaverseObjectAttributeValue.cs#L45)) - tracks which connected system contributed each attribute value
+- This provides the foundation for implicit priority detection
+
+**Current Behaviour (Temporary):**
+As noted in [SyncRuleMappingProcessor.cs:56](../JIM.Worker/Processors/SyncRuleMappingProcessor.cs#L56):
+> *"NOTE: attribute priority has not been implemented yet and will come in a later effort. For now, all mappings will be applied, meaning if there are multiple mappings to a MVO attribute, the last to be processed will win."*
+
+This "last-writer-wins" behaviour is intentionally temporary and will be replaced by proper priority resolution.
 
 ### The Problem
 
@@ -286,20 +304,23 @@ This approach would provide:
 1. **Zero-config sensible default** - works for common unidirectional scenarios
 2. **Explicit control when needed** - for complex multi-source scenarios
 
+**Alignment with existing code:**
+- The existing `ContributedBySystem` property provides the foundation for tracking which system contributed each value
+- Option D's implicit detection aligns with this - we can determine authority by checking if a system has import rules for the attribute
+- This approach minimises new configuration while leveraging existing infrastructure
+
 ---
 
-## Proposed Design
-
-> **Status**: Under evaluation - not yet finalised. The design below reflects the currently preferred options but requires further review before implementation.
+## Design
 
 ### Summary
 
-| Aspect | Proposed Approach |
-|--------|-------------------|
-| Drift detection trigger | On inbound delta-sync, when CSO has export rules targeting it |
-| Drift detection control | `EnforceState` flag on export rules, **default: true** |
-| Attribute authority (default) | Implicit from rule configuration: import rule = contributor, export-only = recipient |
-| Attribute authority (advanced) | Explicit `Authority` property on import attribute flows |
+| Aspect | Approach | Status |
+|--------|----------|--------|
+| Drift detection trigger | On inbound sync, when CSO has export rules targeting it | ✓ Approved |
+| Drift detection control | `EnforceState` flag on **export** sync rules, **default: true**, hidden in Advanced Options UI | ✓ Approved |
+| Attribute authority (default) | Implicit from rule configuration: import rule = contributor, export-only = recipient | Under evaluation |
+| Attribute authority (advanced) | Explicit `Authority` property on import attribute flows | Under evaluation |
 
 ### Schema Changes
 
@@ -421,14 +442,26 @@ bool IsSystemAuthoritativeForAttribute(ConnectedSystem system, string attributeN
 
 #### Export Sync Rule Configuration
 
-Add checkbox to export rule configuration page:
+The `EnforceState` setting should be hidden in an **Advanced Options** section that is collapsed by default. Most users will never need to modify this setting.
+
+**UX Pattern:** Expandable panel or accordion section labelled "Advanced Options" at the bottom of the export sync rule configuration page.
 
 ```
-☑ Enforce desired state (remediate drift)
-
-When enabled, changes made directly in the target system that conflict
-with the authoritative source will be automatically corrected.
+▶ Advanced Options
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ ☑ Enforce desired state (remediate drift)                       │
+  │                                                                 │
+  │   When enabled, changes made directly in the target system      │
+  │   that conflict with the authoritative source will be           │
+  │   automatically corrected during sync operations.               │
+  │                                                                 │
+  │   Disable this only for special scenarios where you             │
+  │   intentionally want to allow direct changes in the target      │
+  │   system (e.g., emergency access patterns).                     │
+  └─────────────────────────────────────────────────────────────────┘
 ```
+
+**Rationale for hiding:** This is an edge-case control. Exposing it prominently would confuse users and invite accidental misconfiguration. The default (`true`) is correct for the vast majority of use cases.
 
 #### Import Attribute Flow Configuration (Advanced)
 
@@ -448,7 +481,7 @@ Authority: [Authoritative ▼]  (optional, defaults to Authoritative)
 
 ## Implementation Plan
 
-> **Status**: This implementation plan is contingent on finalising the design decisions above. Tasks listed here are preliminary and may change based on the outcome of the design review.
+> **Status**: Drift detection (Option 2) is approved and ready for implementation. Attribute priority design is still under evaluation.
 
 ### Phase 1: Schema and Model Changes
 
@@ -489,10 +522,11 @@ Authority: [Authoritative ▼]  (optional, defaults to Authoritative)
 
 ### Phase 4: UI Updates
 
-- [ ] **4.1** Add `EnforceState` checkbox to export sync rule configuration page
-- [ ] **4.2** Add `Authority` dropdown to import attribute flow configuration
-- [ ] **4.3** Add validation warnings for conflicting authority configurations
-- [ ] **4.4** Update sync rule documentation/help text
+- [ ] **4.1** Add "Advanced Options" expandable section to export sync rule configuration page (collapsed by default)
+- [ ] **4.2** Add `EnforceState` checkbox inside "Advanced Options" section with appropriate help text
+- [ ] **4.3** Add `Authority` dropdown to import attribute flow configuration (pending attribute priority decision)
+- [ ] **4.4** Add validation warnings for conflicting authority configurations
+- [ ] **4.5** Update sync rule documentation/help text
 
 ### Phase 5: Testing
 
