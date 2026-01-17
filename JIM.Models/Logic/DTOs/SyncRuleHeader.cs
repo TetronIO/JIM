@@ -32,6 +32,13 @@ public class SyncRuleHeader
     public bool Enabled { get; set; }
 
     /// <summary>
+    /// For Export rules: When true (default), inbound changes from the target system will trigger
+    /// re-evaluation of this export rule to detect and remediate drift.
+    /// Only applicable when Direction = Export.
+    /// </summary>
+    public bool EnforceState { get; set; }
+
+    /// <summary>
     /// Creates a header from a SyncRule entity.
     /// </summary>
     public static SyncRuleHeader FromEntity(SyncRule entity)
@@ -50,7 +57,8 @@ public class SyncRuleHeader
             Direction = entity.Direction,
             ProvisionToConnectedSystem = entity.ProvisionToConnectedSystem,
             ProjectToMetaverse = entity.ProjectToMetaverse,
-            Enabled = entity.Enabled
+            Enabled = entity.Enabled,
+            EnforceState = entity.EnforceState
         };
     }
 }

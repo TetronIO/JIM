@@ -1328,7 +1328,8 @@ public class SynchronisationController(
             Direction = request.Direction,
             ProjectToMetaverse = request.ProjectToMetaverse,
             ProvisionToConnectedSystem = request.ProvisionToConnectedSystem,
-            Enabled = request.Enabled
+            Enabled = request.Enabled,
+            EnforceState = request.EnforceState
         };
 
         var apiKey = await GetCurrentApiKeyAsync();
@@ -1395,6 +1396,9 @@ public class SynchronisationController(
 
         if (request.ProvisionToConnectedSystem.HasValue)
             syncRule.ProvisionToConnectedSystem = request.ProvisionToConnectedSystem.Value;
+
+        if (request.EnforceState.HasValue)
+            syncRule.EnforceState = request.EnforceState.Value;
 
         var apiKey = await GetCurrentApiKeyAsync();
         bool success;

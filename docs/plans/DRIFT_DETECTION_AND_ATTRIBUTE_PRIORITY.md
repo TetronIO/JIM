@@ -1,6 +1,6 @@
 # Drift Detection and Attribute Priority Design Document
 
-> **Status**: Approved - Ready for Implementation
+> **Status**: Drift Detection approved for implementation; Attribute Priority design approved but implementation deferred
 > **Last Updated**: 2026-01-17
 
 ## Overview
@@ -230,7 +230,7 @@ Each MVO attribute has **one owner** (connected system). Only the owner can upda
 
 ### Decision: Option B - Per-Attribute Numerical Priority ✓
 
-> **Status**: APPROVED
+> **Status**: DESIGN APPROVED - Implementation deferred
 
 **Core Design:**
 
@@ -285,12 +285,12 @@ MVO Attribute: department
 | Aspect | Approach | Status |
 |--------|----------|--------|
 | **Drift Detection** | | |
-| Drift detection trigger | On inbound sync, when CSO has export rules targeting it | ✓ Approved |
-| Drift detection control | `EnforceState` flag on **export** sync rules, **default: true**, hidden in Advanced Options UI | ✓ Approved |
+| Drift detection trigger | On inbound sync, when CSO has export rules targeting it | ✓ Ready for implementation |
+| Drift detection control | `EnforceState` flag on **export** sync rules, **default: true**, hidden in Advanced Options UI | ✓ Ready for implementation |
 | **Attribute Priority** | | |
-| Priority model | Per-attribute numerical priority on import mappings | ✓ Approved |
-| Default behaviour | Fallback chain - use first non-null value in priority order | ✓ Approved |
-| Null handling | "Null is a value" flag per contribution (default: false) | ✓ Approved |
+| Priority model | Per-attribute numerical priority on import mappings | Design approved, implementation deferred |
+| Default behaviour | Fallback chain - use first non-null value in priority order | Design approved, implementation deferred |
+| Null handling | "Null is a value" flag per contribution (default: false) | Design approved, implementation deferred |
 
 ### Schema Changes
 
@@ -591,88 +591,106 @@ Legend: 🔵 = This rule contributes to N attributes that have multiple contribu
 
 ## Implementation Plan
 
-> **Status**: Both drift detection and attribute priority designs are approved and ready for implementation.
+> **Status**: Drift detection implementation is complete (Phases 1-4). Documentation (Phase 5) is pending.
 
-### Phase 1: Schema and Model Changes
+### Drift Detection Implementation (Current Phase)
 
-- [ ] **1.1** Add `EnforceState` property to `SyncRule` model (default: true)
-- [ ] **1.2** Add `Priority` property to `SyncRuleMapping` model (default: int.MaxValue)
-- [ ] **1.3** Add `NullIsValue` property to `SyncRuleMapping` model (default: false)
-- [ ] **1.4** Create database migration
-- [ ] **1.5** Update API DTOs for sync rule configuration
-- [ ] **1.6** Add API endpoint to get/set attribute priority order
+#### Phase 1: Schema and Model Changes ✅
 
-### Phase 2: Attribute Priority Logic
+- [x] **1.1** Add `EnforceState` property to `SyncRule` model (default: true)
+  - Added to [SyncRule.cs](../../JIM.Models/Logic/SyncRule.cs)
+  - Added to [SyncRuleHeader.cs](../../JIM.Models/Logic/DTOs/SyncRuleHeader.cs)
+- [x] **1.2** Create database migration
+  - Created [20260117121840_AddEnforceStateToSyncRule.cs](../../JIM.PostgresData/Migrations/20260117121840_AddEnforceStateToSyncRule.cs)
+- [x] **1.3** Update API DTOs for sync rule configuration
+  - Updated [SyncRuleRequestDtos.cs](../../JIM.Web/Models/Api/SyncRuleRequestDtos.cs)
+  - Updated [SynchronisationController.cs](../../JIM.Web/Controllers/Api/SynchronisationController.cs)
 
-- [ ] **2.1** Create `AttributePriorityService` in `JIM.Application/Services/`
-  - `ResolveAttributeValueAsync(mvoAttributeName, objectType, contributions)`
-  - `GetContributorsForAttributeAsync(mvoAttributeName, objectType)`
-  - `UpdatePriorityOrderAsync(mvoAttributeName, objectType, orderedContributions)`
+#### Phase 2: Drift Detection Logic ✅
 
-- [ ] **2.2** Integrate into inbound sync processing (`SyncRuleMappingProcessor`)
-  - Replace "last-writer-wins" with priority-based resolution
-  - Respect `NullIsValue` flag when evaluating contributions
+- [x] **2.1** Create `DriftDetectionService` in `JIM.Application/Services/`
+  - Created [DriftDetectionService.cs](../../JIM.Application/Services/DriftDetectionService.cs)
+  - `EvaluateDriftAsync(cso, mvo, exportRules, importMappingCache)`
+  - `HasImportRuleForAttribute(connectedSystemId, mvoAttributeId, cache)`
+  - `BuildImportMappingCache(syncRules)` static helper
 
-- [ ] **2.3** Auto-assign priority on new import mapping creation
-  - Query existing contributors for target attribute
-  - Assign next available priority number (max + 1)
+- [x] **2.2** Integrate into `SyncTaskProcessorBase` (shared by full and delta sync)
+  - Added `BuildDriftDetectionCache()` method
+  - Added `EvaluateDriftAndEnforceStateAsync()` method
+  - Integrated into `ProcessMetaverseObjectChangesAsync()`
+  - Updated [SyncFullSyncTaskProcessor.cs](../../JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs)
+  - Updated [SyncDeltaSyncTaskProcessor.cs](../../JIM.Worker/Processors/SyncDeltaSyncTaskProcessor.cs)
 
-### Phase 3: Drift Detection Logic
+- [x] **2.3** Add performance optimisations
+  - Cache import mapping lookups per sync run (`_importMappingCache`)
+  - Cache export rules with EnforceState=true per sync run (`_driftDetectionExportRules`)
+  - Uses existing batched pending export creation infrastructure
 
-- [ ] **3.1** Create `DriftDetectionService` in `JIM.Application/Services/`
-  - `EvaluateDriftAsync(cso, mvo, exportRules)`
-  - `HasImportRuleForAttribute(system, attribute, objectType)`
+#### Phase 3: UI Updates ✅
 
-- [ ] **3.2** Integrate into `SyncTaskProcessorBase` (shared by full and delta sync)
-  - After processing inbound attribute flows, call drift detection
-  - Stage pending exports for any detected drift
+- [x] **3.1** Add "Advanced Options" expandable section to export sync rule configuration page
+  - Updated [SyncRuleDetail.razor](../../JIM.Web/Pages/Admin/SyncRuleDetail.razor)
+- [x] **3.2** Add `EnforceState` checkbox inside "Advanced Options" section with appropriate help text
+  - Displayed only for Export direction rules
+  - Includes tooltip and explanatory alert text
 
-- [ ] **3.3** Add performance optimisations
-  - Cache export rule and import mapping lookups per sync run
-  - Batch pending export creation
+#### Phase 4: Testing ✅
 
-### Phase 4: UI Updates
+- [x] **4.1** Unit tests for `DriftDetectionService`
+  - Created [DriftDetectionTests.cs](../../test/JIM.Worker.Tests/OutboundSync/DriftDetectionTests.cs)
+  - 12 unit tests covering:
+    - Drift detected when non-contributor system changes attribute
+    - No drift flagged when contributor system changes attribute
+    - EnforceState=false skips drift detection
+    - BuildImportMappingCache tests
+    - HasImportRuleForAttribute tests
 
-#### Drift Detection UI
-- [ ] **4.1** Add "Advanced Options" expandable section to export sync rule configuration page
-- [ ] **4.2** Add `EnforceState` checkbox inside "Advanced Options" section
+- [ ] **4.2** Integration tests
+  - Update Scenario 8 DetectDrift test to validate drift correction (pending)
 
-#### Attribute Priority UI
-- [ ] **4.3** Create Attribute Priority page (Metaverse → Attribute Priority)
-  - Object type dropdown filter
-  - Expandable attribute groups with contributor tables
-  - Drag-and-drop priority reordering
-  - Inline "Null is a value" checkbox
-- [ ] **4.4** Add priority context panel to import sync rule mapping editor
-  - Shows current priority position when multiple contributors exist
-  - "Manage Priority →" link to central page
-- [ ] **4.5** Add "Advanced Options" section to import mapping editor with "Null is a value" checkbox
-- [ ] **4.6** Add priority indicator column to sync rule list view
+#### Phase 5: Documentation (Pending)
 
-### Phase 5: Testing
+- [ ] **5.1** Update DEVELOPER_GUIDE.md with drift detection concepts
+- [ ] **5.2** Add user documentation for EnforceState setting
+- [ ] **5.3** Add troubleshooting guide for drift-related issues
 
-- [ ] **5.1** Unit tests for `AttributePriorityService`
-  - Single contributor returns that value
-  - Multiple contributors respect priority order
-  - NullIsValue=true stops fallback
-  - NullIsValue=false continues to next priority
+---
 
-- [ ] **5.2** Unit tests for `DriftDetectionService`
-  - Drift detected when non-contributor system changes attribute
-  - No drift flagged when contributor system changes attribute
-  - EnforceState=false skips drift detection
+### Attribute Priority Implementation (Deferred)
 
-- [ ] **5.3** Integration tests
-  - Update Scenario 8 DetectDrift test
-  - Add multi-source priority resolution tests
-  - Add NullIsValue behaviour tests
+> **Status**: Design approved, implementation deferred to a future phase.
 
-### Phase 6: Documentation
+#### Future Phase 1: Schema and Model Changes
 
-- [ ] **6.1** Update DEVELOPER_GUIDE.md with attribute priority and drift detection concepts
-- [ ] **6.2** Add user documentation for Attribute Priority page
-- [ ] **6.3** Add user documentation for EnforceState and NullIsValue settings
-- [ ] **6.4** Add troubleshooting guide for priority and drift-related issues
+- [ ] Add `Priority` property to `SyncRuleMapping` model (default: int.MaxValue)
+- [ ] Add `NullIsValue` property to `SyncRuleMapping` model (default: false)
+- [ ] Create database migration
+- [ ] Update API DTOs
+- [ ] Add API endpoint to get/set attribute priority order
+
+#### Future Phase 2: Attribute Priority Logic
+
+- [ ] Create `AttributePriorityService` in `JIM.Application/Services/`
+- [ ] Integrate into inbound sync processing (`SyncRuleMappingProcessor`)
+- [ ] Auto-assign priority on new import mapping creation
+
+#### Future Phase 3: UI Updates
+
+- [ ] Create Attribute Priority page (Metaverse → Attribute Priority)
+- [ ] Add priority context panel to import sync rule mapping editor
+- [ ] Add "Advanced Options" section to import mapping editor with "Null is a value" checkbox
+- [ ] Add priority indicator column to sync rule list view
+
+#### Future Phase 4: Testing
+
+- [ ] Unit tests for `AttributePriorityService`
+- [ ] Integration tests for multi-source priority resolution
+- [ ] Integration tests for NullIsValue behaviour
+
+#### Future Phase 5: Documentation
+
+- [ ] Add user documentation for Attribute Priority page
+- [ ] Add user documentation for NullIsValue setting
 
 ---
 

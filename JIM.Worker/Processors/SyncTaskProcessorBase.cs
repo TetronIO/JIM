@@ -2,6 +2,7 @@ using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Expressions;
 using JIM.Application.Servers;
+using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -31,6 +32,13 @@ public abstract class SyncTaskProcessorBase
     protected List<ConnectedSystemObjectType>? _objectTypes;
     protected Dictionary<Guid, List<JIM.Models.Transactional.PendingExport>>? _pendingExportsByCsoId;
     protected ExportEvaluationServer.ExportEvaluationCache? _exportEvaluationCache;
+
+    // Cache for drift detection: maps (ConnectedSystemId, MvoAttributeId) to import mappings
+    // Used to check if a connected system is a legitimate contributor for an attribute
+    protected Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? _importMappingCache;
+
+    // Cache of export rules for drift detection (filtered to EnforceState = true)
+    protected List<SyncRule>? _driftDetectionExportRules;
 
     // Per-page CSO attribute cache for no-net-change detection (cleared between pages)
     // Uses ILookup to support multi-valued attributes where a single (CsoId, AttributeId) can have multiple values
@@ -624,6 +632,14 @@ public abstract class SyncTaskProcessorBase
             if (changedAttributes.Count > 0)
             {
                 _pendingExportEvaluations.Add((connectedSystemObject.MetaverseObject, changedAttributes, removedAttributes));
+            }
+
+            // Evaluate drift detection: check if the CSO has drifted from expected state
+            // This detects unauthorized changes made directly in the target system
+            // and stages corrective pending exports to remediate the drift
+            using (Diagnostics.Sync.StartSpan("EvaluateDrift"))
+            {
+                await EvaluateDriftAndEnforceStateAsync(connectedSystemObject, connectedSystemObject.MetaverseObject);
             }
 
             // Return appropriate result based on what happened
@@ -1277,5 +1293,81 @@ public abstract class SyncTaskProcessorBase
     {
         // ILookup is read-only, so we just set to null to release the reference
         _pageCsoAttributeCache = null;
+    }
+
+    /// <summary>
+    /// Builds the drift detection cache from sync rules.
+    /// This cache is used to efficiently determine if a connected system is a legitimate
+    /// contributor for an attribute (has import rules) vs. just a recipient (only export rules).
+    /// Call this once at the start of sync, after loading sync rules.
+    /// </summary>
+    /// <param name="syncRules">All sync rules for this connected system.</param>
+    protected void BuildDriftDetectionCache(List<SyncRule> syncRules)
+    {
+        using var span = Diagnostics.Sync.StartSpan("BuildDriftDetectionCache");
+
+        // Build import mapping cache for checking if system is a contributor
+        _importMappingCache = DriftDetectionService.BuildImportMappingCache(syncRules);
+
+        // Cache export rules with EnforceState = true for this connected system
+        _driftDetectionExportRules = syncRules
+            .Where(sr => sr.Enabled &&
+                        sr.Direction == SyncRuleDirection.Export &&
+                        sr.EnforceState &&
+                        sr.ConnectedSystemId == _connectedSystem.Id)
+            .ToList();
+
+        Log.Debug("BuildDriftDetectionCache: Built import mapping cache with {ImportMappings} entries, " +
+            "{ExportRules} export rules with EnforceState=true for system {SystemId}",
+            _importMappingCache.Count, _driftDetectionExportRules.Count, _connectedSystem.Id);
+
+        span.SetTag("importMappingCount", _importMappingCache.Count);
+        span.SetTag("enforceStateExportRuleCount", _driftDetectionExportRules.Count);
+        span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Evaluates drift for a CSO that has been imported/synced and stages corrective pending exports.
+    /// Only evaluates if drift detection is enabled (export rules with EnforceState = true exist).
+    /// </summary>
+    /// <param name="cso">The Connected System Object that was just processed.</param>
+    /// <param name="mvo">The Metaverse Object the CSO is joined to.</param>
+    protected async Task EvaluateDriftAndEnforceStateAsync(ConnectedSystemObject cso, MetaverseObject? mvo)
+    {
+        // Skip if no drift detection export rules exist
+        if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0)
+        {
+            return;
+        }
+
+        // Skip if CSO is not joined to an MVO
+        if (mvo == null && cso.MetaverseObject == null)
+        {
+            return;
+        }
+
+        var targetMvo = mvo ?? cso.MetaverseObject!;
+
+        using var span = Diagnostics.Sync.StartSpan("EvaluateDriftAndEnforceState");
+        span.SetTag("csoId", cso.Id);
+        span.SetTag("mvoId", targetMvo.Id);
+
+        var result = await _jim.DriftDetection.EvaluateDriftAsync(
+            cso,
+            targetMvo,
+            _driftDetectionExportRules,
+            _importMappingCache);
+
+        if (result.HasDrift)
+        {
+            Log.Information("EvaluateDriftAndEnforceStateAsync: Detected {DriftCount} drifted attributes on CSO {CsoId}, " +
+                "created {ExportCount} corrective pending exports",
+                result.DriftedAttributes.Count, cso.Id, result.CorrectiveExports.Count);
+
+            span.SetTag("driftedAttributeCount", result.DriftedAttributes.Count);
+            span.SetTag("correctiveExportCount", result.CorrectiveExports.Count);
+        }
+
+        span.SetSuccess();
     }
 }

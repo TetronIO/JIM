@@ -187,6 +187,36 @@ else if (_syncRule != null)
         </MudTooltip>
     </MudPaper>
 
+    @* Advanced Options - Only show for Export rules *@
+    @if (_syncRule.Direction == SyncRuleDirection.Export)
+    {
+        <MudExpansionPanels Class="mt-5">
+            <MudExpansionPanel Text="Advanced Options">
+                <TitleContent>
+                    <div class="d-flex align-center">
+                        <MudIcon Icon="@Icons.Material.Filled.Settings" Class="me-2" Size="Size.Small" />
+                        <MudText Typo="Typo.subtitle1">Advanced Options</MudText>
+                    </div>
+                </TitleContent>
+                <ChildContent>
+                    <MudStack Spacing="4" Class="pa-2">
+                        <MudTooltip Text="When enabled, changes made directly in the target system (drift) will be automatically corrected during the next sync run. Disable this only if you need to allow emergency manual changes in the target system."
+                                    Placement="Placement.Right">
+                            <MudSwitch @bind-Value="@_syncRule.EnforceState" Color="Color.Primary"
+                                       Label="Enforce State (Auto-correct drift)" />
+                        </MudTooltip>
+                        <MudAlert Severity="Severity.Normal" Variant="Variant.Text" Dense="true">
+                            <strong>Enforce State</strong> enables drift detection and automatic correction. When a target system
+                            attribute differs from what this export rule dictates, JIM will create a corrective pending export
+                            to restore the authoritative value. Disable this option only for scenarios where you need to allow
+                            temporary manual overrides in the target system (e.g., emergency access scenarios).
+                        </MudAlert>
+                    </MudStack>
+                </ChildContent>
+            </MudExpansionPanel>
+        </MudExpansionPanels>
+    }
+
     @if (_syncRule.Direction != SyncRuleDirection.NotSet)
     {
         <MudPaper Class="pa-4 mt-5" Outlined="true">
