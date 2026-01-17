@@ -333,6 +333,30 @@ public class WorkflowTestHarness : IDisposable
         return await ExecuteFullImportAsync(systemName);
     }
 
+    /// <summary>
+    /// Executes a delta sync for a connected system.
+    /// Used for incremental sync operations including drift detection.
+    /// </summary>
+    public async Task<Activity> ExecuteDeltaSyncAsync(string systemName)
+    {
+        var system = GetConnectedSystem(systemName);
+
+        var runProfile = await CreateRunProfileAsync(systemName, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        var activity = await CreateActivityAsync(system.Id, runProfile, ConnectedSystemRunType.DeltaSynchronisation);
+
+        var cts = new CancellationTokenSource();
+        var processor = new SyncDeltaSyncTaskProcessor(
+            _jim,
+            system,
+            runProfile,
+            activity,
+            cts);
+
+        await processor.PerformDeltaSyncAsync();
+
+        return await ReloadEntityAsync(activity);
+    }
+
     #endregion
 
     #region Snapshot Methods
@@ -624,6 +648,7 @@ public class SyncRuleBuilder
     private bool _enabled = true;
     private bool _projectToMetaverse = true;
     private bool _provisionToConnectedSystem = false;
+    private bool _enforceState = true;
     private readonly List<SyncRuleMapping> _attributeFlows = new();
     private readonly List<SyncRuleScopingCriteriaGroup> _scopingConditions = new();
 
@@ -648,6 +673,12 @@ public class SyncRuleBuilder
     public SyncRuleBuilder WithProvisioning(bool provision = true)
     {
         _provisionToConnectedSystem = provision;
+        return this;
+    }
+
+    public SyncRuleBuilder WithEnforceState(bool enforceState = true)
+    {
+        _enforceState = enforceState;
         return this;
     }
 
@@ -703,6 +734,7 @@ public class SyncRuleBuilder
             Name = _name,
             Direction = _direction,
             Enabled = _enabled,
+            EnforceState = _enforceState,
             ProjectToMetaverse = _projectToMetaverse,
             ProvisionToConnectedSystem = _provisionToConnectedSystem,
             AttributeFlowRules = _attributeFlows,
