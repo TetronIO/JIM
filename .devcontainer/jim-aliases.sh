@@ -39,7 +39,7 @@ Docker Builds (rebuild + start):
   jim-build-scheduler → Rebuild jim.scheduler + start
 
 Reset:
-  jim-reset          → Delete database & logs volumes
+  jim-reset          → Full reset (containers, images, volumes)
 
 Help:
   jim                → Show this help message
@@ -73,4 +73,4 @@ alias jim-build-worker='docker compose -f docker-compose.yml -f docker-compose.o
 alias jim-build-scheduler='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db build jim.scheduler && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d jim.scheduler'
 
 # Reset
-alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down && docker volume rm -f jim-db-volume jim-logs-volume && echo "JIM reset complete. Run jim-build to rebuild and start fresh."'
+alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down --rmi local --volumes && docker compose -f docker-compose.integration-tests.yml down --rmi local --volumes 2>/dev/null || true && docker volume rm -f jim-db-volume jim-logs-volume 2>/dev/null || true && echo "JIM reset complete. All containers, images, and volumes removed. Run jim-build to rebuild."'

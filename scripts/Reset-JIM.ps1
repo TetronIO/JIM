@@ -4,13 +4,14 @@
     Reset JIM to a clean state for integration testing
 
 .DESCRIPTION
-    Tears down all containers (JIM and external test systems), removes volumes,
-    and optionally restarts the environment ready for testing.
+    Tears down all containers (JIM and external test systems), removes volumes
+    and locally-built images, and optionally restarts the environment ready for testing.
 
     This script handles:
     - Stopping JIM containers (web, worker, scheduler, database)
     - Stopping external test system containers (Samba AD, etc.)
     - Removing all Docker volumes for a clean database state
+    - Removing locally-built Docker images (forces rebuild)
     - Optionally restarting the environment
 
 .PARAMETER Restart
@@ -105,6 +106,7 @@ Write-Host ""
 Write-Host "All data will be PERMANENTLY DELETED:" -ForegroundColor Red
 Write-Host "  - Database (Metaverse, Connected Systems, Activities)" -ForegroundColor Red
 Write-Host "  - Docker volumes" -ForegroundColor Red
+Write-Host "  - Docker images (locally built)" -ForegroundColor Red
 Write-Host "  - Test data in external systems" -ForegroundColor Red
 Write-Host ""
 
@@ -129,7 +131,7 @@ if (-not $ExternalOnly) {
     if (Test-Path $jimComposeOverride) {
         $jimComposeArgs += @("-f", $jimComposeOverride)
     }
-    $jimComposeArgs += @("--profile", "with-db", "down", "-v", "--remove-orphans")
+    $jimComposeArgs += @("--profile", "with-db", "down", "-v", "--rmi", "local", "--remove-orphans")
 
     docker compose @jimComposeArgs 2>&1 | ForEach-Object {
         if ($_ -match "error|Error|ERROR") {
@@ -140,7 +142,7 @@ if (-not $ExternalOnly) {
     }
 
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "  JIM containers stopped and volumes removed" -ForegroundColor Green
+        Write-Host "  JIM containers, volumes, and images removed" -ForegroundColor Green
     } else {
         Write-Host "  Warning: JIM teardown had issues (may already be stopped)" -ForegroundColor Yellow
     }
@@ -151,7 +153,7 @@ if (-not $ExternalOnly) {
 if (-not $JIMOnly) {
     Write-Host "[Step 2] Stopping external test system containers..." -ForegroundColor Cyan
 
-    docker compose -f $integrationCompose down -v --remove-orphans 2>&1 | ForEach-Object {
+    docker compose -f $integrationCompose down -v --rmi local --remove-orphans 2>&1 | ForEach-Object {
         if ($_ -match "error|Error|ERROR") {
             Write-Host "  $_" -ForegroundColor Red
         } else {
@@ -160,7 +162,7 @@ if (-not $JIMOnly) {
     }
 
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "  External test systems stopped and volumes removed" -ForegroundColor Green
+        Write-Host "  External test systems containers, volumes, and images removed" -ForegroundColor Green
     } else {
         Write-Host "  Warning: External systems teardown had issues (may already be stopped)" -ForegroundColor Yellow
     }
