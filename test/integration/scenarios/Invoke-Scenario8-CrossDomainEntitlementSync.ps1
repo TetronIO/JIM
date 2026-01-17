@@ -839,7 +839,6 @@ try {
         else {
             $validations += @{ Name = "Pending exports staged to correct drift"; Success = $false }
             Write-Host "    ✗ Expected at least $expectedMinPendingExports pending export(s) to correct drift, found $pendingExportCount" -ForegroundColor Red
-            Write-Host "    NOTE: JIM may not yet have this drift correction functionality (TDD)" -ForegroundColor Yellow
         }
 
         # Overall success if all validations passed
@@ -852,15 +851,7 @@ try {
             Write-Host "  Run ReassertState to execute the exports and verify correction" -ForegroundColor Gray
         }
         else {
-            # TDD: Test is correct but JIM doesn't have drift correction functionality yet
-            # Report as expected failure but don't throw - allow test suite to continue
-            Write-Host ""
-            Write-Host "⚠ DetectDrift test: EXPECTED FAILURE (TDD)" -ForegroundColor Yellow
-            Write-Host "  JIM does not yet have drift correction functionality." -ForegroundColor Yellow
-            Write-Host "  When implemented, Delta Sync on Target AD should:" -ForegroundColor Gray
-            Write-Host "    1. Compare imported CSO values against sync rule expectations" -ForegroundColor Gray
-            Write-Host "    2. Detect that Target state differs from authoritative Source state" -ForegroundColor Gray
-            Write-Host "    3. Stage pending exports to correct the drift" -ForegroundColor Gray
+            throw "DetectDrift validation failed - drift was not detected or corrective exports were not staged"
         }
 
         $testResults.Steps += "DetectDrift"
