@@ -124,7 +124,7 @@
                              Size="Size.Medium"
                              Icon="@GetChangeTypeIcon()"
                              Class="ml-0 mt-1">
-                        @_activityRunProfileExecutionItem.ObjectChangeType.ToString().SplitOnCapitalLetters()
+                        @GetOperationDisplayText()
                     </MudChip>
                 </MudItem>
             }
@@ -181,7 +181,8 @@
                 }
                 else
                 {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Not available</MudText>
+                    @* No CSO and no external ID snapshot - object was deleted or never existed *@
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">No longer available</MudText>
                 }
             </MudItem>
         </MudGrid>
@@ -396,7 +397,7 @@
         </MudStack>
 
         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-            The following attributes were modified during this synchronisation operation.
+            The following metaverse object attributes were modified during this synchronisation operation.
         </MudText>
 
         <MudTable Items="@GetFlattenedChanges()"
@@ -704,25 +705,8 @@ else
         if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
             return Color.Error;
 
-        return _activityRunProfileExecutionItem?.ObjectChangeType switch
-        {
-            // Import operations
-            ObjectChangeType.Added => Color.Success,
-            ObjectChangeType.Updated => Color.Info,
-            ObjectChangeType.Deleted => Color.Warning,
-            // Sync operations
-            ObjectChangeType.Projected => Color.Primary,
-            ObjectChangeType.Joined => Color.Secondary,
-            ObjectChangeType.AttributeFlow => Color.Info,
-            ObjectChangeType.Disconnected => Color.Warning,
-            // Export operations
-            ObjectChangeType.Provisioned => Color.Success,
-            ObjectChangeType.Exported => Color.Primary,
-            ObjectChangeType.Deprovisioned => Color.Warning,
-            // Other
-            ObjectChangeType.NoChange => Color.Default,
-            _ => Color.Default
-        };
+        // Use the same colour scheme as the Operation chip for consistency
+        return Helpers.GetRunItemMudBlazorColorForType(_activityRunProfileExecutionItem?.ObjectChangeType ?? ObjectChangeType.NotSet);
     }
 
     private string GetStatusIcon()
@@ -834,9 +818,12 @@ else
 
     private string GetStatusDescription()
     {
-        var objectDesc = _externalIdAttributeValue?.ToStringNoName()
-            ?? _activityRunProfileExecutionItem?.ExternalIdSnapshot
-            ?? "object";
+        // Get the external ID or a descriptive fallback
+        var externalId = _externalIdAttributeValue?.ToStringNoName()
+            ?? _activityRunProfileExecutionItem?.ExternalIdSnapshot;
+
+        // Build a descriptive object reference - avoid "object (object)" when we have no specific ID
+        var objectDesc = !string.IsNullOrEmpty(externalId) ? externalId : "this object";
 
         if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
             return $"An error occurred while synchronising {objectDesc}.";
@@ -844,20 +831,20 @@ else
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations
-            ObjectChangeType.Added => $"A new object ({objectDesc}) was imported and added to the staging area.",
-            ObjectChangeType.Updated => $"The object ({objectDesc}) was updated with new attribute values.",
-            ObjectChangeType.Deleted => $"The object ({objectDesc}) was deleted from the source system.",
+            ObjectChangeType.Added => $"A new connected system object ({objectDesc}) was imported and added to the staging area.",
+            ObjectChangeType.Updated => $"The connected system object ({objectDesc}) was updated with new attribute values.",
+            ObjectChangeType.Deleted => $"The connected system object ({objectDesc}) was deleted from the source system.",
             // Sync operations
-            ObjectChangeType.Projected => "A new metaverse object was created via projection.",
-            ObjectChangeType.Joined => $"The object ({objectDesc}) was joined to an existing metaverse object.",
-            ObjectChangeType.AttributeFlow => $"Attributes were flowed for ({objectDesc}) between staging and metaverse.",
-            ObjectChangeType.Disconnected => $"The object ({objectDesc}) was disconnected from the metaverse.",
+            ObjectChangeType.Projected => "A new metaverse object was created via projection from the connected system object.",
+            ObjectChangeType.Joined => $"The connected system object ({objectDesc}) was joined to an existing metaverse object.",
+            ObjectChangeType.AttributeFlow => $"Attributes were flowed for ({objectDesc}) between the connected system object and metaverse.",
+            ObjectChangeType.Disconnected => $"The connected system object ({objectDesc}) was disconnected from the metaverse.",
             // Export operations
-            ObjectChangeType.Provisioned => $"A new object ({objectDesc}) was provisioned in the target system.",
-            ObjectChangeType.Exported => $"The object ({objectDesc}) was exported with updated attributes.",
-            ObjectChangeType.Deprovisioned => $"The object ({objectDesc}) was deprovisioned from the target system.",
+            ObjectChangeType.Provisioned => $"A new connected system object ({objectDesc}) was provisioned in the target system.",
+            ObjectChangeType.Exported => $"The connected system object ({objectDesc}) was exported with updated attributes.",
+            ObjectChangeType.Deprovisioned => $"The connected system object ({objectDesc}) was deprovisioned from the target system.",
             // Other
-            ObjectChangeType.NoChange => $"The object ({objectDesc}) was already up to date.",
+            ObjectChangeType.NoChange => $"The connected system object ({objectDesc}) was already up to date.",
             _ => $"Synchronisation completed for {objectDesc}."
         };
     }
@@ -882,6 +869,32 @@ else
             // Other
             ObjectChangeType.NoChange => Icons.Material.Filled.CheckCircle,
             _ => Icons.Material.Filled.QuestionMark
+        };
+    }
+
+    /// <summary>
+    /// Returns a descriptive display text for the operation, clarifying what object type was affected.
+    /// </summary>
+    private string GetOperationDisplayText()
+    {
+        return _activityRunProfileExecutionItem?.ObjectChangeType switch
+        {
+            // Import operations - affect Connected System Objects
+            ObjectChangeType.Added => "CSO Added",
+            ObjectChangeType.Updated => "CSO Updated",
+            ObjectChangeType.Deleted => "CSO Deleted",
+            // Sync operations
+            ObjectChangeType.Projected => "Projected",
+            ObjectChangeType.Joined => "Joined",
+            ObjectChangeType.AttributeFlow => "Attribute Flow",
+            ObjectChangeType.Disconnected => "Disconnected",
+            // Export operations
+            ObjectChangeType.Provisioned => "Provisioned",
+            ObjectChangeType.Exported => "Exported",
+            ObjectChangeType.Deprovisioned => "Deprovisioned",
+            // Other
+            ObjectChangeType.NoChange => "No Change",
+            _ => _activityRunProfileExecutionItem?.ObjectChangeType.ToString()?.SplitOnCapitalLetters() ?? "Unknown"
         };
     }
 
