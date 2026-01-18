@@ -62,9 +62,18 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             activeSyncRules = await _jim.ConnectedSystems.GetSyncRulesAsync(_connectedSystem.Id, false);
         }
 
+        // Load ALL sync rules from ALL systems for drift detection import mapping cache.
+        // This is needed because drift detection must know which systems contribute to which MVO attributes
+        // to avoid false positives on export-only systems.
+        List<SyncRule> allSyncRules;
+        using (Diagnostics.Sync.StartSpan("LoadAllSyncRulesForDriftDetection"))
+        {
+            allSyncRules = await _jim.ConnectedSystems.GetSyncRulesAsync();
+        }
+
         // Build drift detection cache (import mapping cache + export rules with EnforceState=true)
         // This enables efficient drift detection during CSO processing
-        BuildDriftDetectionCache(activeSyncRules);
+        BuildDriftDetectionCache(allSyncRules, activeSyncRules);
 
         // get the schema for all object types upfront in this Connected System, so we can retrieve lightweight CSOs without this data.
         using (Diagnostics.Sync.StartSpan("LoadObjectTypes"))

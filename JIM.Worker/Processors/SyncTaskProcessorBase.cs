@@ -1314,23 +1314,28 @@ public abstract class SyncTaskProcessorBase
     /// contributor for an attribute (has import rules) vs. just a recipient (only export rules).
     /// Call this once at the start of sync, after loading sync rules.
     /// </summary>
-    /// <param name="syncRules">All sync rules for this connected system.</param>
-    protected void BuildDriftDetectionCache(List<SyncRule> syncRules)
+    /// <param name="allSyncRules">All sync rules from ALL connected systems (needed to build complete import mapping cache).</param>
+    /// <param name="currentSystemSyncRules">Sync rules for the current connected system being synced.</param>
+    protected void BuildDriftDetectionCache(List<SyncRule> allSyncRules, List<SyncRule> currentSystemSyncRules)
     {
         using var span = Diagnostics.Sync.StartSpan("BuildDriftDetectionCache");
 
-        // Build import mapping cache for checking if system is a contributor
-        _importMappingCache = DriftDetectionService.BuildImportMappingCache(syncRules);
+        // Build import mapping cache from ALL sync rules across ALL connected systems.
+        // This is critical for drift detection: we need to know which systems contribute to which MVO attributes
+        // so we can skip drift detection when the CSO's system is a legitimate contributor.
+        // Without all import rules, export-only systems would have an empty cache and incorrectly detect
+        // drift on attributes that are legitimately sourced from other systems.
+        _importMappingCache = DriftDetectionService.BuildImportMappingCache(allSyncRules);
 
-        // Cache export rules with EnforceState = true for this connected system
-        _driftDetectionExportRules = syncRules
+        // Cache export rules with EnforceState = true for THIS connected system only
+        _driftDetectionExportRules = currentSystemSyncRules
             .Where(sr => sr.Enabled &&
                         sr.Direction == SyncRuleDirection.Export &&
                         sr.EnforceState &&
                         sr.ConnectedSystemId == _connectedSystem.Id)
             .ToList();
 
-        Log.Debug("BuildDriftDetectionCache: Built import mapping cache with {ImportMappings} entries, " +
+        Log.Debug("BuildDriftDetectionCache: Built import mapping cache with {ImportMappings} entries from all systems, " +
             "{ExportRules} export rules with EnforceState=true for system {SystemId}",
             _importMappingCache.Count, _driftDetectionExportRules.Count, _connectedSystem.Id);
 

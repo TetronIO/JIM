@@ -225,6 +225,128 @@ public class DriftDetectionWorkflowTests
             "No pending exports when drifted attribute is not in export rules");
     }
 
+    /// <summary>
+    /// Verifies that drift detection on an export-only target system correctly identifies
+    /// source systems as contributors and does NOT create false positive drift correction exports.
+    ///
+    /// Scenario:
+    /// - HR is source system (has import rules → contributes to MVO)
+    /// - AD is target system (has ONLY export rules → receives from MVO, not a contributor)
+    /// - Initial sync creates MVOs from HR and pending exports to AD
+    /// - After confirming imports, AD CSOs have values from MVO
+    /// - Running full sync on AD should NOT flag these values as drift because HR is the contributor
+    ///
+    /// This test specifically covers the bug where BuildDriftDetectionCache only loaded sync rules
+    /// for the current system, causing the import mapping cache to be empty for export-only systems,
+    /// leading to false positive drift detection.
+    /// </summary>
+    [Test]
+    public async Task DriftNotDetected_ExportOnlyTargetSystem_FullSync_NoFalsePositiveExportsAsync()
+    {
+        // Arrange: Set up HR (source) -> MV -> AD (export-only target) scenario
+        await SetUpDriftDetectionScenarioAsync(enforceState: true);
+
+        // Step 1: Initial import from HR and sync to create MVOs
+        var hrConnector = _harness.GetConnector("HR");
+        hrConnector.QueueImportObjects(GenerateSourceUsers(5, "HR"));
+
+        await _harness.ExecuteFullImportAsync("HR");
+        await _harness.ExecuteFullSyncAsync("HR");
+        var afterInitialSync = await _harness.TakeSnapshotAsync("After Initial Sync");
+
+        // Should have 5 pending exports for AD
+        Assert.That(afterInitialSync.PendingExportCount, Is.EqualTo(5),
+            "Should have 5 pending exports after initial sync");
+
+        // Execute exports to AD
+        await _harness.ExecuteExportAsync("AD");
+
+        // Populate CSO attribute values from pending exports (simulating confirming import)
+        await PopulateCsoAttributeValuesFromPendingExportsAsync();
+
+        // Clear pending exports (mark as complete)
+        await ClearPendingExportsAsync();
+        var beforeFullSync = await _harness.TakeSnapshotAsync("Before Full Sync on AD");
+        Assert.That(beforeFullSync.PendingExportCount, Is.EqualTo(0),
+            "Should have no pending exports before full sync");
+
+        // Step 2: Run FULL SYNC on AD (export-only target system)
+        // This tests the fix: BuildDriftDetectionCache must load ALL sync rules from ALL systems
+        // to correctly identify HR as a contributor to the MVO attributes.
+        // Without the fix, the import mapping cache would be empty for AD (no import rules),
+        // causing drift detection to incorrectly flag ALL objects as drift.
+        await _harness.ExecuteFullSyncAsync("AD");
+        var afterFullSync = await _harness.TakeSnapshotAsync("After Full Sync on AD");
+
+        // Assert: NO drift correction exports should be created
+        // The values in AD CSOs match the MVO values (both came from HR), so there's no drift.
+        // The drift detection should correctly identify HR as the contributor and not flag this.
+        Assert.That(afterFullSync.PendingExportCount, Is.EqualTo(0),
+            "Should have NO pending exports - values match MVO (no drift). " +
+            "If there are pending exports, drift detection may not be correctly identifying contributors.");
+
+        // If there were pending exports (bug scenario), it would mean drift was incorrectly detected
+        // Additional verification: check there are no pending exports in database
+        var pendingExportCount = await _harness.DbContext.PendingExports.CountAsync();
+        Assert.That(pendingExportCount, Is.EqualTo(0),
+            "Database should have no pending exports - drift detection should not create false positives");
+    }
+
+    /// <summary>
+    /// Verifies that legitimate drift IS detected on export-only target systems when
+    /// values actually differ from what the MVO specifies.
+    ///
+    /// This is the positive test case - drift detection should work correctly.
+    /// </summary>
+    [Test]
+    public async Task DriftDetected_ExportOnlyTargetSystem_FullSync_CorrectivePendingExportsCreatedAsync()
+    {
+        // Arrange: Set up HR (source) -> MV -> AD (export-only target) scenario
+        await SetUpDriftDetectionScenarioAsync(enforceState: true);
+
+        // Step 1: Initial import from HR and sync to create MVOs
+        var hrConnector = _harness.GetConnector("HR");
+        hrConnector.QueueImportObjects(GenerateSourceUsers(3, "HR"));
+
+        await _harness.ExecuteFullImportAsync("HR");
+        await _harness.ExecuteFullSyncAsync("HR");
+
+        // Execute exports to AD and populate CSO values
+        await _harness.ExecuteExportAsync("AD");
+        await PopulateCsoAttributeValuesFromPendingExportsAsync();
+        await ClearPendingExportsAsync();
+
+        // Step 2: Simulate ACTUAL drift - modify AD CSO values to differ from MVO
+        // This represents an unauthorised change made directly in AD
+        await SimulateUnauthorisedCsoChangeAsync("AD", "cn", "Drifted Value");
+
+        // Step 3: Run full sync on AD - should detect the drift
+        await _harness.ExecuteFullSyncAsync("AD");
+        var afterFullSync = await _harness.TakeSnapshotAsync("After Full Sync with Drift");
+
+        // Assert: Corrective pending exports SHOULD be created for the drifted objects
+        Assert.That(afterFullSync.PendingExportCount, Is.GreaterThan(0),
+            "Should have pending exports to correct the drift");
+
+        // Verify the pending exports are corrective (Update type)
+        var pendingExports = await _harness.DbContext.PendingExports
+            .Include(pe => pe.AttributeValueChanges)
+            .ThenInclude(avc => avc.Attribute)
+            .ToListAsync();
+
+        Assert.That(pendingExports.All(pe => pe.ChangeType == PendingExportChangeType.Update),
+            "Drift correction exports should be Update type");
+
+        // Verify the exports would restore the original MVO value
+        foreach (var pe in pendingExports)
+        {
+            var cnChange = pe.AttributeValueChanges.FirstOrDefault(avc => avc.Attribute?.Name == "cn");
+            Assert.That(cnChange, Is.Not.Null, "cn attribute should be in the corrective export");
+            Assert.That(cnChange!.StringValue, Does.Contain("HR"),
+                "Corrective export should restore original value from MVO (sourced from HR)");
+        }
+    }
+
     #endregion
 
     #region Setup Helpers
