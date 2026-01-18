@@ -258,12 +258,6 @@ function Find-ContainerByName {
     return $null
 }
 
-# Re-import hierarchy to pick up OUs created by population script
-Write-Host "  Re-importing hierarchy to discover OUs..." -ForegroundColor Gray
-Import-JIMConnectedSystemHierarchy -Id $sourceSystem.id | Out-Null
-Import-JIMConnectedSystemHierarchy -Id $targetSystem.id | Out-Null
-Write-Host "  ✓ Hierarchy re-imported" -ForegroundColor Green
-
 # Configure Source partitions - select domain partition and Corp containers
 Write-Host "  Configuring Source LDAP partitions..." -ForegroundColor Gray
 $sourcePartitions = Get-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id
