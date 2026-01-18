@@ -20,7 +20,7 @@
     or where changes from the system are staged before being committed to the Metaverse within JIM.
 </MudText>
 
-@if (_connectedSystemHeader != null)
+@if (_connectedSystemHeader != null && _preferencesLoaded)
 {
     @* Status Filter Chips with Options Menu *@
     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-4 mb-2">Filter by status:</MudText>
@@ -236,6 +236,7 @@ else
     private string _externalIdColumnHeader = "External Id";
     private string _secondaryExternalIdColumnHeader = "Secondary External Id";
     private int _rowsPerPage = 10;
+    private bool _preferencesLoaded;
 
     // Status filter - by default, hide Obsolete CSOs to reduce noise
     // Users can click the Obsolete chip to see deleted objects
@@ -265,10 +266,19 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (!_preferencesLoaded)
         {
-            _rowsPerPage = await PreferenceService.GetRowsPerPageAsync();
-            StateHasChanged();
+            try
+            {
+                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
+                _rowsPerPage = preferredSize;
+                _preferencesLoaded = true;
+                StateHasChanged(); // Re-render to show the table now that preference is loaded
+            }
+            catch
+            {
+                // JS interop not yet available, will retry on next render
+            }
         }
     }
 

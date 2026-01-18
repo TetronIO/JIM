@@ -51,6 +51,8 @@
     </MudItem>
 </MudGrid>
 
+@if (_preferencesLoaded)
+{
 @* Object type filter *@
 <MudGrid Class="mt-5">
     <MudItem xs="6">
@@ -188,6 +190,7 @@
         <MudTablePager />
     </PagerContent>
 </MudTable>
+}
 
 @code {
     private MudTable<PendingDeletionItem>? _table;
@@ -196,6 +199,7 @@
     private int? _selectedObjectTypeId;
     private List<MetaverseObjectType> _objectTypes = new();
     private int _rowsPerPage = 10;
+    private bool _preferencesLoaded;
 
     // Summary counts
     private int _totalCount;
@@ -220,10 +224,19 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (!_preferencesLoaded)
         {
-            _rowsPerPage = await PreferenceService.GetRowsPerPageAsync();
-            StateHasChanged();
+            try
+            {
+                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
+                _rowsPerPage = preferredSize;
+                _preferencesLoaded = true;
+                StateHasChanged(); // Re-render to show the table now that preference is loaded
+            }
+            catch
+            {
+                // JS interop not yet available, will retry on next render
+            }
         }
     }
 

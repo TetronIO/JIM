@@ -1657,6 +1657,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         return await Repository.Database.ConnectedSystemObjectAttributeValues
             .Include(av => av.Attribute)
+            .Include(av => av.ReferenceValue) // Include referenced CSO for no-net-change detection on reference attributes
             .Where(av => ids.Contains(av.ConnectedSystemObject.Id))
             .ToListAsync();
     }

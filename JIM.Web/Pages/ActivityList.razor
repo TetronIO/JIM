@@ -22,6 +22,8 @@
     @_pageDescription
 </MudText>
 
+@if (_preferencesLoaded)
+{
 <MudTable @ref="_table" T="Activity" ServerData="ServerReload" @bind-CurrentPage="_currentPage" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
     Class="mt-5" Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer" Loading="@_loading"
     LoadingProgressColor="Color.Primary">
@@ -212,6 +214,7 @@
         <MudTablePager />
     </PagerContent>
 </MudTable>
+}
 
 @code {
     private MudTable<Activity>? _table;
@@ -225,6 +228,7 @@
     private string _currentPath = "";
     private int _currentPage;
     private int _rowsPerPage = 10;
+    private bool _preferencesLoaded;
 
     protected override async Task OnInitializedAsync()
     {
@@ -236,10 +240,19 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (!_preferencesLoaded)
         {
-            _rowsPerPage = await PreferenceService.GetRowsPerPageAsync();
-            StateHasChanged();
+            try
+            {
+                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
+                _rowsPerPage = preferredSize;
+                _preferencesLoaded = true;
+                StateHasChanged(); // Re-render to show the table now that preference is loaded
+            }
+            catch
+            {
+                // JS interop not yet available, will retry on next render
+            }
         }
     }
 

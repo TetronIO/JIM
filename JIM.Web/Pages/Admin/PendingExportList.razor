@@ -19,7 +19,7 @@
     change and need to be synchronised to this target system.
 </MudText>
 
-@if (_connectedSystemHeader != null)
+@if (_connectedSystemHeader != null && _preferencesLoaded)
 {
     <MudGrid Class="mt-5">
         <MudItem xs="6">
@@ -191,6 +191,7 @@ else
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private bool _loading;
     private int _rowsPerPage = 10;
+    private bool _preferencesLoaded;
 
     protected override async Task OnInitializedAsync()
     {
@@ -212,10 +213,19 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (!_preferencesLoaded)
         {
-            _rowsPerPage = await PreferenceService.GetRowsPerPageAsync();
-            StateHasChanged();
+            try
+            {
+                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
+                _rowsPerPage = preferredSize;
+                _preferencesLoaded = true;
+                StateHasChanged(); // Re-render to show the table now that preference is loaded
+            }
+            catch
+            {
+                // JS interop not yet available, will retry on next render
+            }
         }
     }
 

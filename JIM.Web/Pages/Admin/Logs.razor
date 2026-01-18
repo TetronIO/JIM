@@ -262,6 +262,7 @@
     private System.Threading.Timer? _refreshTimer;
     private int _currentPage;
     private int _pageSize = 50;
+    private bool _preferencesLoaded;
     private bool _drawerOpen;
     private LogEntry? _selectedEntry;
 
@@ -296,17 +297,36 @@
         {
             // Hide the page footer to maximise viewing area for logs
             await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('jim-hide-footer')");
+        }
 
-            // Load the user's preferred page size and map to valid options for this page
-            var preferredSize = await PreferenceService.GetRowsPerPageAsync();
-            // Map to closest valid option (25, 50, 100) for this page
-            _pageSize = preferredSize switch
+        if (!_preferencesLoaded)
+        {
+            try
             {
-                <= 25 => 25,
-                <= 50 => 50,
-                _ => 100
-            };
-            StateHasChanged();
+                // Load the user's preferred page size and map to valid options for this page
+                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
+                // Map to closest valid option (25, 50, 100) for this page
+                var mappedSize = preferredSize switch
+                {
+                    <= 25 => 25,
+                    <= 50 => 50,
+                    _ => 100
+                };
+                if (mappedSize != _pageSize)
+                {
+                    _pageSize = mappedSize;
+                    _preferencesLoaded = true;
+                    StateHasChanged();
+                }
+                else
+                {
+                    _preferencesLoaded = true;
+                }
+            }
+            catch
+            {
+                // JS interop not yet available, will retry on next render
+            }
         }
     }
 

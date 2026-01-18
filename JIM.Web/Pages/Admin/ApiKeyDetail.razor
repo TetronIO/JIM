@@ -16,7 +16,7 @@
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">API Key:</span> @_apiKey?.Name</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-@if (_apiKey != null)
+@if (_apiKey != null && _preferencesLoaded)
 {
     <MudText Typo="Typo.h5" Class="mt-5">Details</MudText>
     <MudPaper Class="pa-5 mt-3" Outlined="true">
@@ -210,6 +210,7 @@ else if (!_loading)
     private string _searchString = "";
     private bool _loading = true;
     private int _rowsPerPage = 10;
+    private bool _preferencesLoaded;
 
     private List<BreadcrumbItem> _breadcrumbs = new();
 
@@ -230,10 +231,19 @@ else if (!_loading)
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (!_preferencesLoaded)
         {
-            _rowsPerPage = await PreferenceService.GetRowsPerPageAsync();
-            StateHasChanged();
+            try
+            {
+                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
+                _rowsPerPage = preferredSize;
+                _preferencesLoaded = true;
+                StateHasChanged(); // Re-render to show the table now that preference is loaded
+            }
+            catch
+            {
+                // JS interop not yet available, will retry on next render
+            }
         }
     }
 
