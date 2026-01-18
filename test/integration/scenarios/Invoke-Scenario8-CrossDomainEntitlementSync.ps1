@@ -193,26 +193,19 @@ try {
         Assert-ActivitySuccess -ActivityId $targetSyncResult.activityId -Name "Target Full Sync (join)$contextSuffix" -AllowWarnings
         Start-Sleep -Seconds $WaitSeconds
 
-        # Step 5: Full Sync Source again to re-evaluate exports
-        # Now that Target CSOs are properly joined, exports should be Update (not Create)
-        Write-Host "    Full syncing Source again (re-evaluate exports)..." -ForegroundColor Gray
-        $syncResult2 = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceFullSyncProfile.id -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $syncResult2.activityId -Name "Source Full Sync (re-evaluate)$contextSuffix"
-        Start-Sleep -Seconds $WaitSeconds
-
-        # Step 6: Export to Target
+        # Step 5: Export to Target
         Write-Host "    Exporting to Target AD..." -ForegroundColor Gray
         $exportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExportProfile.id -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "Target Export$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
-        # Step 7: Full Confirming Import from Target
+        # Step 6: Full Confirming Import from Target
         Write-Host "    Full confirming import in Target AD..." -ForegroundColor Gray
         $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetFullImportProfile.id -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "Target Full Confirming Import$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
-        # Step 8: Full Confirming Sync (informational only during initial sync)
+        # Step 7: Full Confirming Sync (informational only during initial sync)
         # Note: During initial sync with pre-existing objects, this may have CouldNotJoinDueToExistingJoin
         # errors because provisioning CSOs were created during Source Full Sync before real Target CSOs
         # could join. This is a known limitation of the provisioning model with pre-existing objects.

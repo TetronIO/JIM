@@ -1361,12 +1361,10 @@ public class ExportEvaluationServer
                     }
 
                     // No-net-change detection for direct attribute mappings
-                    // Skip no-net-change detection for reference attributes with unresolved values.
-                    // The pending export stores MVO IDs as unresolved references, which get resolved to
-                    // Target CSO DNs during export execution. The CSO stores resolved DNs, so comparing
-                    // MVO IDs to DNs would incorrectly skip needed changes.
-                    var hasUnresolvedReference = !string.IsNullOrEmpty(attributeChange.UnresolvedReferenceValue);
-                    if (canDetectNoNetChange && !hasUnresolvedReference)
+                    // Reference attributes: pending export stores MVO GUIDs in UnresolvedReferenceValue,
+                    // CSO stores resolved references via ReferenceValue.MetaverseObjectId. The ValuesMatch
+                    // method now compares these properly by extracting the MVO ID from both representations.
+                    if (canDetectNoNetChange)
                     {
                         var cacheKey = (existingCso!.Id, attributeChange.AttributeId);
                         var existingCsoValues = csoAttributeCache![cacheKey];
@@ -1442,23 +1440,35 @@ public class ExportEvaluationServer
         PendingExportAttributeValueChange pendingChange,
         ConnectedSystemObjectAttributeValue existingValue)
     {
-        // For reference attributes, DNs may be stored in either StringValue or UnresolvedReferenceValue
-        // depending on where they came from (sync vs import). Check cross-field matches first.
-        // Only apply cross-field logic when one side has UnresolvedReferenceValue set (indicating a reference attribute).
+        // For reference attributes, the pending export stores an MVO GUID in UnresolvedReferenceValue,
+        // while the CSO stores a resolved reference to another CSO (which has a MetaverseObjectId).
+        // Compare using the MVO ID that both ultimately represent.
         var pendingHasUnresolvedRef = !string.IsNullOrEmpty(pendingChange.UnresolvedReferenceValue);
-        var existingHasUnresolvedRef = !string.IsNullOrEmpty(existingValue.UnresolvedReferenceValue);
+        var existingHasResolvedRef = existingValue.ReferenceValue != null;
 
-        if (pendingHasUnresolvedRef || existingHasUnresolvedRef)
+        if (pendingHasUnresolvedRef)
         {
-            // This is a reference attribute - DNs may be in different fields
-            var pendingDn = pendingChange.StringValue ?? pendingChange.UnresolvedReferenceValue;
-            var existingDn = existingValue.StringValue ?? existingValue.UnresolvedReferenceValue;
+            // Pending export has an MVO GUID - compare with the MVO that the existing CSO reference points to
+            if (existingHasResolvedRef && existingValue.ReferenceValue!.MetaverseObjectId.HasValue)
+            {
+                // Compare MVO GUIDs
+                if (Guid.TryParse(pendingChange.UnresolvedReferenceValue, out var pendingMvoId))
+                {
+                    return pendingMvoId == existingValue.ReferenceValue.MetaverseObjectId.Value;
+                }
+            }
 
-            if (pendingDn != null && existingDn != null)
+            // Fallback: compare as DN strings if the pending export has a resolved DN
+            // (This handles cases where the pending export was created from an already-resolved reference)
+            var existingDn = existingValue.UnresolvedReferenceValue;
+            if (existingDn != null)
             {
                 // DNs are case-insensitive in LDAP
-                return string.Equals(pendingDn, existingDn, StringComparison.OrdinalIgnoreCase);
+                return string.Equals(pendingChange.UnresolvedReferenceValue, existingDn, StringComparison.OrdinalIgnoreCase);
             }
+
+            // No match possible - CSO doesn't have this reference
+            return false;
         }
 
         // Compare based on which value type is set

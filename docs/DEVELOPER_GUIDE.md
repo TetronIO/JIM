@@ -545,15 +545,17 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 - `jim` - List all available jim aliases
 - `jim-compile` - Build entire solution (dotnet build)
 - `jim-test` - Run all tests
-- `jim-db` - Start PostgreSQL (local debugging workflow)
-- `jim-db-stop` - Stop PostgreSQL
+- `jim-db` - Start PostgreSQL + Adminer (local debugging workflow)
+- `jim-db-stop` - Stop PostgreSQL + Adminer
 - `jim-migrate` - Apply EF Core migrations
-- `jim-stack` - Start Docker stack (no build, uses existing images)
+- `jim-stack` - Start Docker stack (no dev tools, production-like)
+- `jim-stack-dev` - Start Docker stack + Adminer
 - `jim-stack-logs` - View Docker stack logs
 - `jim-stack-down` - Stop Docker stack
 
 **Docker Builds** (rebuild and start services):
-- `jim-build` - Build all services + start
+- `jim-build` - Build all services + start (no dev tools)
+- `jim-build-dev` - Build all services + start + Adminer
 - `jim-build-web` - Build jim.web + start
 - `jim-build-worker` - Build jim.worker + start
 - `jim-build-scheduler` - Build jim.scheduler + start
@@ -562,13 +564,14 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 - `jim-reset` - Reset JIM (delete database and logs volumes)
 
 **Development Workflows**:
-1. **Local Debugging** (Recommended): Use `jim-db` to start database, then F5 to debug services locally
-2. **Full Stack**: Use `jim-stack` to run all services in containers for integration testing
+1. **Local Debugging** (Recommended): Use `jim-db` to start database + Adminer, then F5 to debug services locally
+2. **Full Stack**: Use `jim-stack` (production-like) or `jim-stack-dev` (with Adminer) to run all services in containers
 
 **Technical Details**:
 - PostgreSQL memory settings automatically optimised for Codespaces constraints
-- Port forwarding configured for Web + API (5200) and Adminer (8080)
+- Port forwarding configured for Web + API (5200), Adminer (8080) when using dev tools
 - Custom docker-compose override: `docker-compose.override.codespaces.yml`
+- Dev tools (Adminer) separated into `docker-compose.dev-tools.yml` (not included in production releases)
 
 ## Environment Configuration
 
@@ -614,7 +617,9 @@ JIM uses standard OIDC claims (`sub`, `name`, `given_name`, `family_name`, `pref
 - **jim.worker**: Background task processor
 - **jim.scheduler**: Scheduled job execution
 - **jim.database**: PostgreSQL 18
-- **adminer**: Database admin UI (port 8080)
+
+**Development Tools** (via `docker-compose.dev-tools.yml`, not included in production):
+- **adminer**: Database admin UI (port 8080) - use `jim-stack-dev` or `jim-db` to start
 
 ### Docker Compose
 - Base: `docker-compose.yml`

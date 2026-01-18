@@ -136,17 +136,19 @@ Synchronisation operations are the core of JIM. Data integrity and reliability a
 - `jim` - List all available jim aliases
 - `jim-compile` - Build entire solution (dotnet build)
 - `jim-test` - Run all tests
-- `jim-db` - Start PostgreSQL (for local debugging)
-- `jim-db-stop` - Stop PostgreSQL
+- `jim-db` - Start PostgreSQL + Adminer (for local debugging)
+- `jim-db-stop` - Stop PostgreSQL + Adminer
 - `jim-migrate` - Apply migrations
 
 **Docker Stack Management:**
-- `jim-stack` - Start Docker stack (no build, uses existing images)
+- `jim-stack` - Start Docker stack (no dev tools, production-like)
+- `jim-stack-dev` - Start Docker stack + Adminer
 - `jim-stack-logs` - View Docker stack logs
 - `jim-stack-down` - Stop Docker stack
 
 **Docker Builds (rebuild and start services):**
-- `jim-build` - Build all services + start
+- `jim-build` - Build all services + start (no dev tools)
+- `jim-build-dev` - Build all services + start + Adminer
 - `jim-build-web` - Build jim.web + start
 - `jim-build-worker` - Build jim.worker + start
 - `jim-build-scheduler` - Build jim.scheduler + start
@@ -155,8 +157,8 @@ Synchronisation operations are the core of JIM. Data integrity and reliability a
 - `jim-reset` - Reset JIM (delete database & logs volumes)
 
 **Docker (Manual Commands):**
-- `docker compose -f db.yml up -d` - Start database only (same as jim-db)
-- `docker compose -f db.yml down` - Stop database
+- `docker compose -f db.yml up -d` - Start database + Adminer (same as jim-db)
+- `docker compose -f db.yml down` - Stop database + Adminer
 - `docker compose logs [service]` - View service logs
 
 **IMPORTANT - Rebuilding Containers After Code Changes:**
@@ -164,7 +166,7 @@ When running the Docker stack and you make code changes to JIM.Web, JIM.Worker, 
 - `jim-build-web` - Rebuild and restart jim.web service
 - `jim-build-worker` - Rebuild and restart jim.worker service
 - `jim-build-scheduler` - Rebuild and restart jim.scheduler service
-- `jim-build-stack` - Rebuild and restart all services
+- `jim-build-dev` - Rebuild and restart all services + Adminer
 
 Blazor pages, API controllers, and other compiled code require container rebuilds. Simply refreshing the browser will not show changes.
 
@@ -404,9 +406,9 @@ var systems = await jim.ConnectedSystems.GetAllAsync();
 4. Services: Web + API (https://localhost:7000), Swagger at `/api/swagger`
 
 **Workflow 2 - Full Docker Stack:**
-1. Start all services: `jim-stack`
+1. Start all services: `jim-stack` (or `jim-stack-dev` for Adminer)
 2. Access containerized services
-3. Services: Web + API (http://localhost:5200), Swagger at `/api/swagger`
+3. Services: Web + API (http://localhost:5200), Swagger at `/api/swagger`, Adminer at http://localhost:8080 (if using jim-stack-dev)
 
 **Use Workflow 1** for active development and debugging.
 **Use Workflow 2** for integration testing or production-like environment.

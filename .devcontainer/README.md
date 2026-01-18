@@ -152,17 +152,17 @@ jim-worker         # Run background worker
 
 ### Database (Local Development)
 ```bash
-jim-db             # Start PostgreSQL only (for local debugging)
-jim-db-stop        # Stop PostgreSQL
+jim-db             # Start PostgreSQL + Adminer (for local debugging)
+jim-db-stop        # Stop PostgreSQL + Adminer
 jim-db-logs        # View database logs
-jim-adminer        # Get Adminer URL
 jim-migrate        # Apply migrations
 jim-migration [N]  # Create new migration
 ```
 
 ### Docker Stack Management
 ```bash
-jim-stack          # Start Docker stack (no build, uses existing images)
+jim-stack          # Start Docker stack (production-like, no dev tools)
+jim-stack-dev      # Start Docker stack + Adminer
 jim-stack-logs     # View all Docker service logs
 jim-stack-down     # Stop all Docker services
 ```

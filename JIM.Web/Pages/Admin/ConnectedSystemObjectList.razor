@@ -6,9 +6,11 @@
 @using JIM.Models.Tasking
 @using JIM.Models.Utility
 @using JIM.Utilities
+@using JIM.Web.Services
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
+@inject IUserPreferenceService PreferenceService
 
 <PageTitle>Connected System Objects: @_connectedSystemHeader?.Name</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System Objects:</span> @_connectedSystemHeader?.Name</MudText>
@@ -45,6 +47,8 @@
     <MudTable @ref="_table"
               T="ConnectedSystemObjectHeader"
               ServerData="ServerReload"
+              RowsPerPage="@_rowsPerPage"
+              RowsPerPageChanged="OnRowsPerPageChanged"
               Hover="true"
               Dense="true"
               Breakpoint="Breakpoint.Sm"
@@ -231,6 +235,7 @@ else
     private bool _hasSecondaryExternalId;
     private string _externalIdColumnHeader = "External Id";
     private string _secondaryExternalIdColumnHeader = "Secondary External Id";
+    private int _rowsPerPage = 10;
 
     // Status filter - by default, hide Obsolete CSOs to reduce noise
     // Users can click the Obsolete chip to see deleted objects
@@ -256,6 +261,21 @@ else
             new(_connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(_connectedSystemHeader)),
             new("Objects", href: null, disabled: true)
         };
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _rowsPerPage = await PreferenceService.GetRowsPerPageAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnRowsPerPageChanged(int newSize)
+    {
+        _rowsPerPage = newSize;
+        await PreferenceService.SetRowsPerPageAsync(newSize);
     }
 
     private async Task<TableData<ConnectedSystemObjectHeader>> ServerReload(TableState state, CancellationToken token)

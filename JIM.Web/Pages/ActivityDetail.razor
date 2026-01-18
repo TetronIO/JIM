@@ -9,8 +9,10 @@
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Utility;
 @using JIM.Utilities;
+@using JIM.Web.Services
 @inject JimApplication Jim
 @inject NavigationManager NavManager
+@inject IUserPreferenceService PreferenceService
 
 <PageTitle>Activity: @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters(): @GetTargetDisplayText()</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Activity:</span> @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters(): <span class="mud-primary-text">@GetTargetDisplayText()</span></MudText>
@@ -341,6 +343,8 @@
         <MudTable @ref="_table"
                   T="ActivityRunProfileExecutionItemHeader"
                   ServerData="ServerReload"
+                  RowsPerPage="@_rowsPerPage"
+                  RowsPerPageChanged="OnRowsPerPageChanged"
                   Hover="true"
                   Dense="true"
                   Breakpoint="Breakpoint.Sm"
@@ -442,6 +446,7 @@
     private ActivityRunProfileExecutionStats? _activityRunProfileExecutionStats;
     private string _searchString = "";
     private bool _loading;
+    private int _rowsPerPage = 10;
 
     // Change type filter - when chips are selected, the table reloads with the filter applied
     private IReadOnlyCollection<ObjectChangeType> _selectedChangeTypes = new List<ObjectChangeType>();
@@ -478,6 +483,21 @@
 
         if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute)
             _activityRunProfileExecutionStats = await Jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _rowsPerPage = await PreferenceService.GetRowsPerPageAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnRowsPerPageChanged(int newSize)
+    {
+        _rowsPerPage = newSize;
+        await PreferenceService.SetRowsPerPageAsync(newSize);
     }
 
     private async Task<TableData<ActivityRunProfileExecutionItemHeader>> ServerReload(TableState state, CancellationToken token)

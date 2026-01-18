@@ -2,10 +2,12 @@
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application.Services
 @using JIM.Web.Models.Api
+@using JIM.Web.Services
 @using System.Text.Json
 @inject LogReaderService LogReader
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
+@inject IUserPreferenceService PreferenceService
 @implements IAsyncDisposable
 
 <PageTitle>Logs</PageTitle>
@@ -294,6 +296,17 @@
         {
             // Hide the page footer to maximise viewing area for logs
             await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('jim-hide-footer')");
+
+            // Load the user's preferred page size and map to valid options for this page
+            var preferredSize = await PreferenceService.GetRowsPerPageAsync();
+            // Map to closest valid option (25, 50, 100) for this page
+            _pageSize = preferredSize switch
+            {
+                <= 25 => 25,
+                <= 50 => 50,
+                _ => 100
+            };
+            StateHasChanged();
         }
     }
 
@@ -352,10 +365,11 @@
         _currentPage = Math.Max(0, Math.Min(page, TotalPages - 1));
     }
 
-    private void OnPageSizeChanged(int newSize)
+    private async Task OnPageSizeChanged(int newSize)
     {
         _pageSize = newSize;
         _currentPage = 0;
+        await PreferenceService.SetRowsPerPageAsync(newSize);
     }
 
     private static Color GetLevelColor(string level)

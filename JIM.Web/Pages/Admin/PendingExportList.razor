@@ -6,8 +6,10 @@
 @using JIM.Models.Transactional.DTOs
 @using JIM.Models.Utility
 @using JIM.Utilities
+@using JIM.Web.Services
 @inject JimApplication Jim
 @inject NavigationManager NavManager
+@inject IUserPreferenceService PreferenceService
 
 <PageTitle>Pending Exports: @_connectedSystemHeader?.Name</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Pending Exports:</span> @_connectedSystemHeader?.Name</MudText>
@@ -37,6 +39,8 @@
     <MudTable @ref="_table"
               T="PendingExportHeader"
               ServerData="ServerReload"
+              RowsPerPage="@_rowsPerPage"
+              RowsPerPageChanged="OnRowsPerPageChanged"
               Hover="true"
               Dense="true"
               Breakpoint="Breakpoint.Sm"
@@ -186,6 +190,7 @@ else
     private IEnumerable<PendingExportStatus> _statusFilters = new HashSet<PendingExportStatus>();
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private bool _loading;
+    private int _rowsPerPage = 10;
 
     protected override async Task OnInitializedAsync()
     {
@@ -203,6 +208,21 @@ else
             new(_connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(_connectedSystemHeader)),
             new("Pending Exports", href: null, disabled: true)
         };
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _rowsPerPage = await PreferenceService.GetRowsPerPageAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnRowsPerPageChanged(int newSize)
+    {
+        _rowsPerPage = newSize;
+        await PreferenceService.SetRowsPerPageAsync(newSize);
     }
 
     private async Task<TableData<PendingExportHeader>> ServerReload(TableState state, CancellationToken token)
