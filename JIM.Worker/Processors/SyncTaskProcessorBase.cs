@@ -803,8 +803,11 @@ public abstract class SyncTaskProcessorBase
                 // If no RPEI exists, we need to create one because reference attribute changes are still
                 // real changes that should be visible to operators. This handles the case where ONLY
                 // reference attributes changed (e.g., group membership updated during delta sync).
+                // Note: Check both ConnectedSystemObjectId (FK) and ConnectedSystemObject (navigation property)
+                // because the FK may not be set yet for newly created RPEIs that haven't been saved.
                 var existingRpei = _activity.RunProfileExecutionItems
-                    .FirstOrDefault(r => r.ConnectedSystemObjectId == cso.Id);
+                    .FirstOrDefault(r => r.ConnectedSystemObjectId == cso.Id ||
+                                        (r.ConnectedSystemObject != null && r.ConnectedSystemObject.Id == cso.Id));
 
                 if (existingRpei == null)
                 {
