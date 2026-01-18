@@ -156,7 +156,7 @@
             }
         </MudSelect>
 
-        @if (GetSelectedAttributeType() is { } attributeType)
+        @if (GetSelectedAttributeType() is { } attributeType && _newSyncRuleScopingCriteria != null)
         {
             @switch (attributeType)
             {

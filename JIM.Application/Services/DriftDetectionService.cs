@@ -99,6 +99,15 @@ public class DriftDetectionService
             return result;
         }
 
+        // Skip drift detection for CSOs that haven't completed their initial export yet.
+        // PendingProvisioning CSOs are newly created via provisioning and haven't been confirmed,
+        // so there's nothing to "drift" from - they haven't received their expected values yet.
+        if (cso.Status == ConnectedSystemObjectStatus.PendingProvisioning)
+        {
+            Log.Debug("EvaluateDriftAsync: CSO {CsoId} is in PendingProvisioning status, skipping drift detection", cso.Id);
+            return result;
+        }
+
         // Use the provided MVO or fall back to the CSO's joined MVO
         var targetMvo = mvo ?? cso.MetaverseObject!;
 
@@ -296,6 +305,8 @@ public class DriftDetectionService
 
     /// <summary>
     /// Gets the actual value of a CSO attribute.
+    /// For reference attributes, returns the MVO ID that the referenced CSO is joined to,
+    /// enabling comparison with the expected MVO reference ID.
     /// </summary>
     private static object? GetActualValue(ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute attribute)
     {
@@ -315,7 +326,10 @@ public class DriftDetectionService
             AttributeDataType.Boolean => csoAttrValue.BoolValue,
             AttributeDataType.Guid => csoAttrValue.GuidValue,
             AttributeDataType.Binary => csoAttrValue.ByteValue,
-            AttributeDataType.Reference => csoAttrValue.UnresolvedReferenceValue,
+            // For references, return the MVO ID that the referenced CSO is joined to.
+            // This enables comparison with the expected MVO reference ID from GetExpectedValue.
+            // The referenced CSO's MetaverseObjectId tells us which MVO it represents.
+            AttributeDataType.Reference => csoAttrValue.ReferenceValue?.MetaverseObjectId,
             _ => null
         };
     }

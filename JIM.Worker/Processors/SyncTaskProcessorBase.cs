@@ -799,13 +799,10 @@ public abstract class SyncTaskProcessorBase
                 Log.Verbose("ProcessDeferredReferenceAttributes: CSO {CsoId} had {Adds} reference additions, {Removes} removals",
                     cso.Id, additionsFromReferences, removalsFromReferences);
 
-                // Create RPEI for reference attribute flow changes
-                // This is needed because ProcessConnectedSystemObjectAsync returns before reference
-                // attributes are processed (they're deferred to ensure all MVOs exist first)
-                var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
-                runProfileExecutionItem.ConnectedSystemObject = cso;
-                runProfileExecutionItem.ObjectChangeType = ObjectChangeType.AttributeFlow;
-                _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+                // Note: We do NOT create a new RPEI here. Reference attribute processing is part of
+                // the original projection/join operation - the RPEI was already created when the CSO
+                // was initially processed. Reference resolution is just an internal phase of sync,
+                // not a separate operation. One RPEI per CSO is the correct behaviour.
 
                 // Capture removals BEFORE applying changes (they get cleared by ApplyPendingMetaverseObjectAttributeChanges)
                 // This is needed so export can create Remove changes for multi-valued reference attributes

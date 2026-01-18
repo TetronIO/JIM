@@ -513,7 +513,7 @@ else if (_syncRule != null)
                                     @bind-Value="_attributeFlowMappingSource.ConnectedSystemAttribute" Label="Connected System Attribute"
                                     Placeholder="Please select the source Connected System attribute" Required="true" Class="mt-5"
                                     Variant="Variant.Outlined">
-                                    @foreach (var connectedSystemAttribute in _syncRule.ConnectedSystemObjectType.Attributes)
+                                    @foreach (var connectedSystemAttribute in _syncRule.ConnectedSystemObjectType!.Attributes)
                                     {
                                         <MudSelectItem Value="@connectedSystemAttribute">@connectedSystemAttribute.Name <span
                                                 style="@($"color:{Colors.Gray.Darken1};")">(@connectedSystemAttribute.Type :
@@ -572,7 +572,7 @@ else if (_syncRule != null)
                             @bind-Value="_attributeFlowMapping.TargetConnectedSystemAttribute" Label="Connected System Attribute"
                             Placeholder="Please select the target Connected System attribute" Required="true" Class="mt-5"
                             Variant="Variant.Outlined">
-                            @foreach (var connectedSystemAttribute in _syncRule.ConnectedSystemObjectType.Attributes)
+                            @foreach (var connectedSystemAttribute in _syncRule.ConnectedSystemObjectType!.Attributes)
                             {
                                 <MudSelectItem Disabled="IsAttributeFlowTargetDisabled(connectedSystemAttribute)"
                                     Value="@connectedSystemAttribute">
