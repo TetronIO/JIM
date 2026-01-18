@@ -434,6 +434,16 @@ public class WorkflowTestHarness : IDisposable
         if (idProperty != null)
         {
             var id = idProperty.GetValue(entity);
+
+            // Special handling for Activity to include RunProfileExecutionItems
+            if (typeof(T) == typeof(Activity) && id is Guid activityId)
+            {
+                var activity = await _dbContext.Set<Activity>()
+                    .Include(a => a.RunProfileExecutionItems)
+                    .FirstOrDefaultAsync(a => a.Id == activityId);
+                return (activity as T) ?? entity;
+            }
+
             var reloaded = await _dbContext.Set<T>().FindAsync(id);
             return reloaded ?? entity;
         }

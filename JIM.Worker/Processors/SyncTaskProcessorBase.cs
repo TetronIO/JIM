@@ -799,10 +799,23 @@ public abstract class SyncTaskProcessorBase
                 Log.Verbose("ProcessDeferredReferenceAttributes: CSO {CsoId} had {Adds} reference additions, {Removes} removals",
                     cso.Id, additionsFromReferences, removalsFromReferences);
 
-                // Note: We do NOT create a new RPEI here. Reference attribute processing is part of
-                // the original projection/join operation - the RPEI was already created when the CSO
-                // was initially processed. Reference resolution is just an internal phase of sync,
-                // not a separate operation. One RPEI per CSO is the correct behaviour.
+                // Check if an RPEI already exists for this CSO (from projection/join/non-reference attribute flow).
+                // If no RPEI exists, we need to create one because reference attribute changes are still
+                // real changes that should be visible to operators. This handles the case where ONLY
+                // reference attributes changed (e.g., group membership updated during delta sync).
+                var existingRpei = _activity.RunProfileExecutionItems
+                    .FirstOrDefault(r => r.ConnectedSystemObjectId == cso.Id);
+
+                if (existingRpei == null)
+                {
+                    // No RPEI exists for this CSO - create one for the reference attribute flow
+                    var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+                    runProfileExecutionItem.ConnectedSystemObject = cso;
+                    runProfileExecutionItem.ObjectChangeType = ObjectChangeType.AttributeFlow;
+                    _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+                    Log.Debug("ProcessDeferredReferenceAttributes: Created RPEI for CSO {CsoId} with reference-only changes",
+                        cso.Id);
+                }
 
                 // Capture removals BEFORE applying changes (they get cleared by ApplyPendingMetaverseObjectAttributeChanges)
                 // This is needed so export can create Remove changes for multi-valued reference attributes

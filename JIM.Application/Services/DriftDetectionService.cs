@@ -1,3 +1,4 @@
+using JIM.Application.Expressions;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -23,6 +24,7 @@ namespace JIM.Application.Services;
 public class DriftDetectionService
 {
     private readonly JimApplication _jim;
+    private readonly IExpressionEvaluator _expressionEvaluator;
 
     /// <summary>
     /// Result of drift detection for a single CSO.
@@ -74,6 +76,7 @@ public class DriftDetectionService
     public DriftDetectionService(JimApplication jim)
     {
         _jim = jim;
+        _expressionEvaluator = new DynamicExpressoEvaluator();
     }
 
     /// <summary>
@@ -132,6 +135,10 @@ public class DriftDetectionService
         Log.Debug("EvaluateDriftAsync: Evaluating {RuleCount} export rules for drift detection on CSO {CsoId}",
             applicableExportRules.Count, cso.Id);
 
+        // Build the MVO attribute dictionary once for all expression evaluations
+        // This avoids repeatedly iterating through MVO attributes for each expression
+        Dictionary<string, object?>? mvAttributeDictionary = null;
+
         foreach (var exportRule in applicableExportRules)
         {
             // Check each attribute flow mapping in the export rule
@@ -153,10 +160,33 @@ public class DriftDetectionService
                     var mvoAttributeId = source.MetaverseAttribute?.Id ?? 0;
 
                     // Skip if this system has import rules for this attribute (not drift - legitimate change)
-                    if (mvoAttributeId > 0 && HasImportRuleForAttribute(
+                    var isContributor = mvoAttributeId > 0 && HasImportRuleForAttribute(
                         cso.ConnectedSystemId,
                         mvoAttributeId,
-                        importMappingsByAttribute))
+                        importMappingsByAttribute);
+
+                    // For expression-based mappings, check if the system is a contributor for any
+                    // MVO attribute referenced in the expression. If so, skip drift detection because
+                    // the expression output depends on attributes that this system legitimately contributes to.
+                    if (!isContributor && !string.IsNullOrWhiteSpace(source.Expression))
+                    {
+                        isContributor = IsContributorForExpressionAttributes(
+                            cso.ConnectedSystemId,
+                            source.Expression,
+                            importMappingsByAttribute);
+                    }
+
+                    Log.Debug("EvaluateDriftAsync: Contributor check for CSO {CsoId}, attribute {AttrName}: " +
+                        "mvoAttributeId={MvoAttrId}, csoConnectedSystemId={CsoSystemId}, isContributor={IsContributor}, " +
+                        "hasExpression={HasExpression}, cacheKeys=[{CacheKeys}]",
+                        cso.Id, mapping.TargetConnectedSystemAttribute.Name,
+                        mvoAttributeId, cso.ConnectedSystemId, isContributor,
+                        !string.IsNullOrWhiteSpace(source.Expression),
+                        importMappingsByAttribute != null
+                            ? string.Join(", ", importMappingsByAttribute.Keys.Select(k => $"({k.ConnectedSystemId},{k.MvoAttributeId})"))
+                            : "null");
+
+                    if (isContributor)
                     {
                         Log.Debug("EvaluateDriftAsync: Skipping attribute {AttrName} for CSO {CsoId} - system is a contributor (has import rules)",
                             mapping.TargetConnectedSystemAttribute.Name, cso.Id);
@@ -164,7 +194,9 @@ public class DriftDetectionService
                     }
 
                     // Calculate expected value from MVO based on export rule
-                    var expectedValue = GetExpectedValue(targetMvo, source);
+                    // Build MVO attribute dictionary lazily (only when needed for expressions)
+                    mvAttributeDictionary ??= BuildAttributeDictionary(targetMvo);
+                    var expectedValue = GetExpectedValue(targetMvo, source, mvAttributeDictionary);
 
                     // Get actual value from CSO
                     var actualValue = GetActualValue(cso, mapping.TargetConnectedSystemAttribute);
@@ -228,6 +260,70 @@ public class DriftDetectionService
     }
 
     /// <summary>
+    /// Checks if a connected system is a contributor for any MVO attribute referenced in an expression.
+    /// Expressions may reference MVO attributes using mv["attributeName"] syntax. If the system has
+    /// import rules for any of those attributes, it's considered a contributor and drift detection
+    /// should be skipped for this expression-based mapping.
+    /// </summary>
+    /// <param name="connectedSystemId">The connected system ID to check.</param>
+    /// <param name="expression">The expression to analyse for MVO attribute references.</param>
+    /// <param name="importMappingsByAttribute">The import mapping cache.</param>
+    /// <returns>True if the system is a contributor for any attribute referenced in the expression.</returns>
+    private static bool IsContributorForExpressionAttributes(
+        int connectedSystemId,
+        string expression,
+        Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute)
+    {
+        if (importMappingsByAttribute == null || importMappingsByAttribute.Count == 0)
+            return false;
+
+        // Find all mv["attributeName"] patterns in the expression
+        // Pattern matches: mv["someAttribute"] or mv['someAttribute']
+        var regex = new System.Text.RegularExpressions.Regex(@"mv\[""([^""]+)""\]|mv\['([^']+)'\]");
+        var matches = regex.Matches(expression);
+
+        if (matches.Count == 0)
+        {
+            Log.Debug("IsContributorForExpressionAttributes: No MVO attribute references found in expression: {Expression}",
+                expression);
+            return false;
+        }
+
+        // Check if the system is a contributor for any referenced attribute
+        foreach (System.Text.RegularExpressions.Match match in matches)
+        {
+            // Group 1 is for double quotes, Group 2 is for single quotes
+            var attributeName = !string.IsNullOrEmpty(match.Groups[1].Value)
+                ? match.Groups[1].Value
+                : match.Groups[2].Value;
+
+            // Look for this attribute in the import mapping cache by name
+            foreach (var kvp in importMappingsByAttribute)
+            {
+                if (kvp.Key.ConnectedSystemId == connectedSystemId)
+                {
+                    // Check if any of the mappings for this system target this attribute
+                    foreach (var mapping in kvp.Value)
+                    {
+                        if (mapping.TargetMetaverseAttribute?.Name == attributeName)
+                        {
+                            Log.Debug("IsContributorForExpressionAttributes: System {SystemId} is a contributor " +
+                                "for attribute {AttrName} referenced in expression: {Expression}",
+                                connectedSystemId, attributeName, expression);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        Log.Debug("IsContributorForExpressionAttributes: System {SystemId} is NOT a contributor for any attributes " +
+            "referenced in expression: {Expression}",
+            connectedSystemId, expression);
+        return false;
+    }
+
+    /// <summary>
     /// Builds a lookup dictionary of import mappings by (ConnectedSystemId, MvoAttributeId).
     /// Call this once at the start of a sync run for efficient drift detection.
     /// </summary>
@@ -264,18 +360,39 @@ public class DriftDetectionService
 
     /// <summary>
     /// Gets the expected value for a CSO attribute based on the MVO and export rule source.
+    /// Supports both direct attribute mappings and expression-based mappings.
     /// </summary>
-    private static object? GetExpectedValue(MetaverseObject mvo, SyncRuleMappingSource source)
+    /// <param name="mvo">The Metaverse Object to get the expected value from.</param>
+    /// <param name="source">The sync rule mapping source defining the attribute or expression.</param>
+    /// <param name="mvAttributeDictionary">Pre-built dictionary of MVO attribute values for expression evaluation.</param>
+    private object? GetExpectedValue(MetaverseObject mvo, SyncRuleMappingSource source, Dictionary<string, object?> mvAttributeDictionary)
     {
         // Handle expression-based mappings
         if (!string.IsNullOrWhiteSpace(source.Expression))
         {
-            // For now, skip expression evaluation in drift detection
-            // This would require the same expression evaluator infrastructure used in ExportEvaluationServer
-            // TODO: Add expression support when needed
-            Log.Debug("GetExpectedValue: Expression-based mapping not yet supported for drift detection: '{Expression}'",
-                source.Expression);
-            return null;
+            try
+            {
+                Log.Debug("GetExpectedValue: Evaluating expression for drift detection. " +
+                    "Expression: '{Expression}', Available attributes: [{Attributes}]",
+                    source.Expression, string.Join(", ", mvAttributeDictionary.Keys));
+
+                var context = new ExpressionContext(mvAttributeDictionary, null);
+                var result = _expressionEvaluator.Evaluate(source.Expression, context);
+
+                if (result == null)
+                {
+                    Log.Debug("GetExpectedValue: Expression '{Expression}' for MVO {MvoId} returned null",
+                        source.Expression, mvo.Id);
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "GetExpectedValue: Failed to evaluate expression '{Expression}' for drift detection",
+                    source.Expression);
+                return null;
+            }
         }
 
         // Handle direct attribute mapping
@@ -301,6 +418,50 @@ public class DriftDetectionService
             AttributeDataType.Reference => mvoAttrValue.ReferenceValue?.Id,
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Builds a dictionary of attribute values from a Metaverse Object for expression evaluation.
+    /// The dictionary keys are attribute names, and values are the attribute values.
+    /// </summary>
+    private static Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo)
+    {
+        var attributes = new Dictionary<string, object?>();
+
+        if (mvo.Type == null)
+        {
+            Log.Warning("BuildAttributeDictionary: MVO {MvoId} has null Type, cannot build attribute dictionary", mvo.Id);
+            return attributes;
+        }
+
+        foreach (var attributeValue in mvo.AttributeValues)
+        {
+            if (attributeValue.Attribute == null)
+            {
+                Log.Warning("BuildAttributeDictionary: MVO {MvoId} has attribute value with AttributeId={AttrId} but Attribute navigation property is null",
+                    mvo.Id, attributeValue.AttributeId);
+                continue;
+            }
+
+            var attributeName = attributeValue.Attribute.Name;
+
+            // Use the appropriate typed value based on the attribute type
+            object? value = attributeValue.Attribute.Type switch
+            {
+                AttributeDataType.Text => attributeValue.StringValue,
+                AttributeDataType.Number => attributeValue.IntValue,
+                AttributeDataType.DateTime => attributeValue.DateTimeValue,
+                AttributeDataType.Boolean => attributeValue.BoolValue,
+                AttributeDataType.Guid => attributeValue.GuidValue,
+                AttributeDataType.Binary => attributeValue.ByteValue,
+                AttributeDataType.Reference => attributeValue.ReferenceValue?.Id.ToString(),
+                _ => null
+            };
+
+            attributes[attributeName] = value;
+        }
+
+        return attributes;
     }
 
     /// <summary>
