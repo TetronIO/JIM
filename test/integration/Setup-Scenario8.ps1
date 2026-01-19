@@ -669,7 +669,7 @@ $groupImportMappings = @(
 
 $groupExportMappings = @(
     @{ MvAttr = "Account Name"; LdapAttr = "sAMAccountName" }
-    @{ MvAttr = "Display Name"; LdapAttr = "cn" }
+    @{ MvAttr = "Common Name"; LdapAttr = "cn" }
     @{ MvAttr = "Display Name"; LdapAttr = "displayName" }
     @{ MvAttr = "Description"; LdapAttr = "description" }
     @{ MvAttr = "Group Type Flags"; LdapAttr = "groupType" }
@@ -774,14 +774,15 @@ foreach ($mapping in $groupExportMappings) {
     }
 }
 
-# Group DN expression for target
+# Group DN expression for target - uses Common Name (cn) not Display Name
+# This ensures the target DN matches the source cn even if displayName differs
 $targetGroupDnAttr = $targetGroupType.attributes | Where-Object { $_.name -eq 'distinguishedName' }
 if ($targetGroupDnAttr) {
     $dnMappingExists = $existingTargetGroupExportMappings | Where-Object { $_.targetConnectedSystemAttributeId -eq $targetGroupDnAttr.id }
     if (-not $dnMappingExists) {
         New-JIMSyncRuleMapping -SyncRuleId $targetGroupExportRule.id `
             -TargetConnectedSystemAttributeId $targetGroupDnAttr.id `
-            -Expression '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Entitlements,OU=CorpManaged,DC=targetdomain,DC=local"' | Out-Null
+            -Expression '"CN=" + EscapeDN(mv["Common Name"]) + ",OU=Entitlements,OU=CorpManaged,DC=targetdomain,DC=local"' | Out-Null
         $groupExportMappingsCreated++
     }
 }
