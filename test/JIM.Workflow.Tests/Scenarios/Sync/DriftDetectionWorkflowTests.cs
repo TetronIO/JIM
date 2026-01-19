@@ -1305,4 +1305,227 @@ public class DriftDetectionWorkflowTests
     }
 
     #endregion
+
+    #region Repository Navigation Property Loading Tests
+
+    /// <summary>
+    /// Verifies that GetConnectedSystemObjectsModifiedSinceAsync loads MVO.Type navigation property.
+    /// This is critical for drift detection which filters export rules by MVO type.
+    /// This test should FAIL until the repository fix is applied (Phase 3).
+    /// </summary>
+    [Test]
+    public async Task Repository_GetConnectedSystemObjectsModifiedSinceAsync_LoadsMvoTypeAsync()
+    {
+        // Arrange: Set up a basic scenario with a CSO joined to an MVO
+        await _harness.CreateConnectedSystemAsync("TestSystem");
+        await _harness.CreateObjectTypeAsync("TestSystem", "User", t => t
+            .WithGuidExternalId("objectGUID")
+            .WithStringAttribute("displayName"));
+
+        var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
+            .WithStringAttribute("displayName"));
+
+        // Get attributes for sync rule
+        var testUserType = _harness.GetObjectType("TestSystem", "User");
+        var csoDisplayName = testUserType.Attributes.First(a => a.Name == "displayName");
+        var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
+
+        await _harness.CreateSyncRuleAsync(
+            "Test Import",
+            "TestSystem",
+            "User",
+            personType,
+            SyncRuleDirection.Import,
+            r => r
+                .WithProjection()
+                .WithAttributeFlow(mvDisplayName, csoDisplayName));
+
+        // Import data to create CSO and MVO
+        var connector = _harness.GetConnector("TestSystem");
+        connector.QueueImportObjects(new List<ConnectedSystemImportObject>
+        {
+            new()
+            {
+                ChangeType = ObjectChangeType.NotSet,
+                ObjectType = "User",
+                Attributes = new List<ConnectedSystemImportObjectAttribute>
+                {
+                    new() { Name = "objectGUID", GuidValues = new List<Guid> { Guid.NewGuid() } },
+                    new() { Name = "displayName", StringValues = new List<string> { "Test User" } }
+                }
+            }
+        });
+
+        await _harness.ExecuteFullImportAsync("TestSystem");
+        await _harness.ExecuteFullSyncAsync("TestSystem");
+
+        // Verify setup: CSO should be joined to MVO
+        var system = _harness.GetConnectedSystem("TestSystem");
+        var allCsos = await _harness.DbContext.ConnectedSystemObjects
+            .Where(cso => cso.ConnectedSystemId == system.Id)
+            .ToListAsync();
+        Assert.That(allCsos.Count, Is.EqualTo(1), "Setup: Should have one CSO");
+
+        // Mark CSO as modified so delta query returns it
+        var cso = allCsos.First();
+        cso.LastUpdated = DateTime.UtcNow;
+        await _harness.DbContext.SaveChangesAsync();
+
+        // Act: Call the repository method that delta sync uses
+        var watermark = DateTime.UtcNow.AddHours(-1);
+        var pagedResult = await _harness.Repository.ConnectedSystems.GetConnectedSystemObjectsModifiedSinceAsync(
+            system.Id,
+            watermark,
+            page: 1,
+            pageSize: 100);
+
+        // Assert: Verify CSO is returned and has MVO.Type loaded
+        Assert.That(pagedResult.Results.Count, Is.EqualTo(1), "Should return one CSO");
+
+        var loadedCso = pagedResult.Results.First();
+        Assert.That(loadedCso.MetaverseObject, Is.Not.Null, "CSO should have MVO loaded");
+        Assert.That(loadedCso.MetaverseObject!.Type, Is.Not.Null,
+            "MVO.Type navigation property should be loaded - this is required for drift detection export rule filtering");
+        Assert.That(loadedCso.MetaverseObject.Type!.Name, Is.EqualTo("Person"),
+            "MVO.Type should be the Person type we created");
+    }
+
+    /// <summary>
+    /// Verifies that delta sync drift detection can find applicable export rules when MVO.Type is loaded.
+    /// This is an end-to-end test that should FAIL until the repository fix is applied.
+    /// </summary>
+    [Test]
+    public async Task DeltaSync_WithExportRuleAndDrift_CreatesCorrectiveExportAsync()
+    {
+        // Arrange: Set up Source (import/contributor) -> Target (export-only) scenario
+        // This mirrors the real-world Scenario 8 setup
+
+        // Source system (contributor)
+        await _harness.CreateConnectedSystemAsync("Source");
+        await _harness.CreateObjectTypeAsync("Source", "User", t => t
+            .WithGuidExternalId("objectGUID")
+            .WithStringAttribute("cn"));
+
+        // Target system (export-only, non-contributor)
+        await _harness.CreateConnectedSystemAsync("Target");
+        await _harness.CreateObjectTypeAsync("Target", "User", t => t
+            .WithGuidExternalId("objectGUID")
+            .WithStringAttribute("cn")
+            .WithStringAttribute("distinguishedName"));
+
+        var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
+            .WithStringAttribute("cn"));
+
+        // Get attributes for sync rules
+        var sourceUserType = _harness.GetObjectType("Source", "User");
+        var targetUserType = _harness.GetObjectType("Target", "User");
+
+        var mvCn = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "cn");
+        var sourceCn = sourceUserType.Attributes.First(a => a.Name == "cn");
+        var targetCn = targetUserType.Attributes.First(a => a.Name == "cn");
+        var targetDn = targetUserType.Attributes.First(a => a.Name == "distinguishedName");
+
+        // Source import rule - contributes to MVO
+        await _harness.CreateSyncRuleAsync(
+            "Source Import",
+            "Source",
+            "User",
+            personType,
+            SyncRuleDirection.Import,
+            r => r
+                .WithProjection()
+                .WithAttributeFlow(mvCn, sourceCn));
+
+        // Target export rule - receives from MVO, with EnforceState=true for drift detection
+        await _harness.CreateSyncRuleAsync(
+            "Target Export",
+            "Target",
+            "User",
+            personType,
+            SyncRuleDirection.Export,
+            r => r
+                .WithProvisioning()
+                .WithEnforceState(true)
+                .WithAttributeFlow(mvCn, targetCn)
+                .WithExpressionFlow("\"CN=\" + mv[\"cn\"] + \",OU=Users,DC=test,DC=local\"", targetDn));
+
+        // Step 1: Import from Source, sync to create MVO, export to Target
+        var sourceConnector = _harness.GetConnector("Source");
+        sourceConnector.QueueImportObjects(new List<ConnectedSystemImportObject>
+        {
+            new()
+            {
+                ChangeType = ObjectChangeType.NotSet,
+                ObjectType = "User",
+                Attributes = new List<ConnectedSystemImportObjectAttribute>
+                {
+                    new() { Name = "objectGUID", GuidValues = new List<Guid> { Guid.NewGuid() } },
+                    new() { Name = "cn", StringValues = new List<string> { "Original Value" } }
+                }
+            }
+        });
+
+        await _harness.ExecuteFullImportAsync("Source");
+        await _harness.ExecuteFullSyncAsync("Source");
+
+        // Execute exports and simulate confirming import
+        await _harness.ExecuteExportAsync("Target");
+        await PopulateCsoAttributeValuesFromPendingExportsAsync();
+        await ClearPendingExportsAsync();
+
+        var beforeDrift = await _harness.TakeSnapshotAsync("Before Drift");
+        Assert.That(beforeDrift.PendingExportCount, Is.EqualTo(0), "Setup: No pending exports before drift");
+
+        // Step 2: Simulate unauthorised change directly in Target (drift)
+        var targetSystem = _harness.GetConnectedSystem("Target");
+        var targetCsos = await _harness.DbContext.ConnectedSystemObjects
+            .Include(c => c.AttributeValues)
+            .Where(c => c.ConnectedSystemId == targetSystem.Id)
+            .ToListAsync();
+
+        Assert.That(targetCsos.Count, Is.EqualTo(1), "Should have one Target CSO");
+        var targetCso = targetCsos.First();
+
+        // Find or create the cn attribute value and change it (simulating drift)
+        var cnAttrValue = targetCso.AttributeValues
+            .FirstOrDefault(av => av.AttributeId == targetCn.Id);
+        if (cnAttrValue == null)
+        {
+            cnAttrValue = new ConnectedSystemObjectAttributeValue
+            {
+                ConnectedSystemObject = targetCso,
+                AttributeId = targetCn.Id
+            };
+            _harness.DbContext.ConnectedSystemObjectAttributeValues.Add(cnAttrValue);
+        }
+        cnAttrValue.StringValue = "Drifted Value"; // Different from MVO's "Original Value"
+        targetCso.LastUpdated = DateTime.UtcNow;
+        await _harness.DbContext.SaveChangesAsync();
+
+        // Step 3: Run delta sync on Target to detect drift
+        await _harness.ExecuteDeltaSyncAsync("Target");
+        var afterDriftDetection = await _harness.TakeSnapshotAsync("After Drift Detection");
+
+        // Assert: Corrective pending export should be created
+        Assert.That(afterDriftDetection.PendingExportCount, Is.GreaterThan(0),
+            "Drift detection should create corrective pending export(s) - " +
+            "if this fails, check that MVO.Type is loaded in GetConnectedSystemObjectsModifiedSinceAsync");
+
+        // Verify the pending export has the correct expected value
+        var pendingExports = await _harness.DbContext.PendingExports
+            .Include(pe => pe.AttributeValueChanges)
+            .Where(pe => pe.ConnectedSystemId == targetSystem.Id)
+            .ToListAsync();
+
+        Assert.That(pendingExports.Count, Is.EqualTo(1), "Should have one corrective pending export");
+
+        var correctiveExport = pendingExports.First();
+        var cnChange = correctiveExport.AttributeValueChanges
+            .FirstOrDefault(avc => avc.AttributeId == targetCn.Id);
+        Assert.That(cnChange, Is.Not.Null, "Should have cn attribute change");
+        Assert.That(cnChange!.StringValue, Is.EqualTo("Original Value"),
+            "Corrective export should restore original MVO value");
+    }
+
+    #endregion
 }

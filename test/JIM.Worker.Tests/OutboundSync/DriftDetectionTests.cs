@@ -509,5 +509,419 @@ public class DriftDetectionTests
         Assert.That(result.HasDrift, Is.False);
     }
 
+    /// <summary>
+    /// Tests that when MVO.Type is null (navigation property not loaded), drift detection
+    /// logs a warning and returns an empty result rather than silently failing to find rules.
+    /// This test validates the defensive check added in Phase 4 of the fix.
+    /// </summary>
+    [Test]
+    public async Task EvaluateDriftAsync_WhenMvoTypeIsNull_ReturnsEmptyResultAsync()
+    {
+        // Arrange
+        var mvo = CreateTestMvo();
+        mvo.Type = null!; // Simulate navigation property not loaded (as happens in delta sync bug)
+
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = DisplayNameMvAttr,
+            AttributeId = DisplayNameMvAttr.Id,
+            StringValue = "John Doe"
+        });
+
+        var cso = CreateTestCso(mvo);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso,
+            Attribute = DisplayNameCsoAttr,
+            AttributeId = DisplayNameCsoAttr.Id,
+            StringValue = "Jane Doe" // Different from MVO - would be drift if Type was loaded
+        });
+        mvo.ConnectedSystemObjects.Add(cso);
+
+        var exportRule = CreateExportRule(enforceState: true);
+
+        // Act
+        var result = await Jim.DriftDetection.EvaluateDriftAsync(
+            cso,
+            mvo,
+            new List<SyncRule> { exportRule },
+            null);
+
+        // Assert - Should return empty result (not detect drift) when MVO.Type is null
+        // This is defensive behaviour - better to not detect drift than to crash or behave unexpectedly
+        Assert.That(result.HasDrift, Is.False, "When MVO.Type is null, drift detection should return empty result");
+        Assert.That(result.DriftedAttributes.Count, Is.EqualTo(0));
+    }
+
+    /// <summary>
+    /// Tests that when MVO.Type is properly loaded, the export rule filtering correctly
+    /// matches rules by MetaverseObjectTypeId. This validates the fix works when the
+    /// repository correctly loads the navigation property.
+    /// </summary>
+    [Test]
+    public async Task EvaluateDriftAsync_WhenMvoTypeIsLoaded_FindsApplicableExportRulesAsync()
+    {
+        // Arrange
+        var mvo = CreateTestMvo();
+        // Ensure MVO.Type is loaded (as it should be after the fix)
+        Assert.That(mvo.Type, Is.Not.Null, "Test setup: MVO.Type should be set");
+        Assert.That(mvo.Type.Id, Is.EqualTo(MvoUserType.Id), "Test setup: MVO.Type.Id should match");
+
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = DisplayNameMvAttr,
+            AttributeId = DisplayNameMvAttr.Id,
+            StringValue = "John Doe"
+        });
+
+        var cso = CreateTestCso(mvo);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso,
+            Attribute = DisplayNameCsoAttr,
+            AttributeId = DisplayNameCsoAttr.Id,
+            StringValue = "Jane Doe" // Different from MVO - drift!
+        });
+        mvo.ConnectedSystemObjects.Add(cso);
+
+        var exportRule = CreateExportRule(enforceState: true);
+        // Ensure export rule MetaverseObjectTypeId matches MVO.Type.Id
+        Assert.That(exportRule.MetaverseObjectTypeId, Is.EqualTo(mvo.Type.Id),
+            "Test setup: Export rule should target the same MVO type");
+
+        // Act
+        var result = await Jim.DriftDetection.EvaluateDriftAsync(
+            cso,
+            mvo,
+            new List<SyncRule> { exportRule },
+            null);
+
+        // Assert - Should find the applicable export rule and detect drift
+        Assert.That(result.HasDrift, Is.True, "Drift detection should find applicable export rules when MVO.Type is loaded");
+        Assert.That(result.DriftedAttributes.Count, Is.EqualTo(1));
+        Assert.That(result.DriftedAttributes[0].ExpectedValue, Is.EqualTo("John Doe"));
+        Assert.That(result.DriftedAttributes[0].ActualValue, Is.EqualTo("Jane Doe"));
+    }
+
+    /// <summary>
+    /// Tests that when MVO.Type.Id doesn't match the export rule's MetaverseObjectTypeId,
+    /// the rule is correctly filtered out and no drift is detected.
+    /// This validates the export rule filtering logic.
+    /// </summary>
+    [Test]
+    public async Task EvaluateDriftAsync_WhenMvoTypeIdDoesNotMatch_DoesNotFindRulesAsync()
+    {
+        // Arrange
+        var mvo = CreateTestMvo();
+        Assert.That(mvo.Type, Is.Not.Null, "Test setup: MVO.Type should be set");
+
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = DisplayNameMvAttr,
+            AttributeId = DisplayNameMvAttr.Id,
+            StringValue = "John Doe"
+        });
+
+        var cso = CreateTestCso(mvo);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso,
+            Attribute = DisplayNameCsoAttr,
+            AttributeId = DisplayNameCsoAttr.Id,
+            StringValue = "Jane Doe" // Different - but rule won't match
+        });
+        mvo.ConnectedSystemObjects.Add(cso);
+
+        var exportRule = CreateExportRule(enforceState: true);
+        // Set export rule to target a DIFFERENT MVO type
+        exportRule.MetaverseObjectTypeId = 999;
+
+        // Act
+        var result = await Jim.DriftDetection.EvaluateDriftAsync(
+            cso,
+            mvo,
+            new List<SyncRule> { exportRule },
+            null);
+
+        // Assert - Should not find any applicable rules
+        Assert.That(result.HasDrift, Is.False, "Export rule with different MVO type ID should not match");
+        Assert.That(result.DriftedAttributes.Count, Is.EqualTo(0));
+    }
+
+    #endregion
+
+    #region Multi-Valued Attribute Drift Tests
+
+    /// <summary>
+    /// Tests that drift detection correctly handles multi-valued attributes (like group membership).
+    /// When the CSO has extra values not in the MVO, drift should be detected and corrective
+    /// exports should remove the extra values.
+    /// </summary>
+    [Test]
+    public async Task EvaluateDriftAsync_WithMultiValuedAttribute_ExtraValueInCso_DetectsDriftAsync()
+    {
+        // Arrange - Create a multi-valued attribute (like 'member' for groups)
+        var memberMvAttr = new MetaverseAttribute
+        {
+            Id = 5000,
+            Name = "Static Members",
+            Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued
+        };
+        MvoUserType.Attributes.Add(memberMvAttr);
+
+        var memberCsoAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 5001,
+            Name = "member",
+            Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued,
+            ConnectedSystemObjectType = TargetUserType
+        };
+        TargetUserType.Attributes.Add(memberCsoAttr);
+
+        // Create referenced MVOs (group members)
+        var member1Mvo = CreateTestMvo();
+        var member2Mvo = CreateTestMvo();
+        var member3Mvo = CreateTestMvo(); // Extra member - not expected
+
+        // Create the group MVO with expected members (member1 and member2)
+        var groupMvo = CreateTestMvo();
+        groupMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = groupMvo,
+            Attribute = memberMvAttr,
+            AttributeId = memberMvAttr.Id,
+            ReferenceValue = member1Mvo
+        });
+        groupMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = groupMvo,
+            Attribute = memberMvAttr,
+            AttributeId = memberMvAttr.Id,
+            ReferenceValue = member2Mvo
+        });
+
+        // Create CSOs for the members
+        var member1Cso = CreateTestCso(member1Mvo);
+        member1Mvo.ConnectedSystemObjects.Add(member1Cso);
+        var member2Cso = CreateTestCso(member2Mvo);
+        member2Mvo.ConnectedSystemObjects.Add(member2Cso);
+        var member3Cso = CreateTestCso(member3Mvo);
+        member3Mvo.ConnectedSystemObjects.Add(member3Cso);
+
+        // Create group CSO with actual members (includes extra member3 - drift!)
+        var groupCso = CreateTestCso(groupMvo);
+        groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = groupCso,
+            Attribute = memberCsoAttr,
+            AttributeId = memberCsoAttr.Id,
+            ReferenceValue = member1Cso
+        });
+        groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = groupCso,
+            Attribute = memberCsoAttr,
+            AttributeId = memberCsoAttr.Id,
+            ReferenceValue = member2Cso
+        });
+        groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = groupCso,
+            Attribute = memberCsoAttr,
+            AttributeId = memberCsoAttr.Id,
+            ReferenceValue = member3Cso // Extra member - drift!
+        });
+        groupMvo.ConnectedSystemObjects.Add(groupCso);
+
+        // Create export rule for the member attribute
+        var memberMapping = new SyncRuleMapping
+        {
+            Id = 3000,
+            TargetConnectedSystemAttribute = memberCsoAttr,
+            TargetConnectedSystemAttributeId = memberCsoAttr.Id
+        };
+        memberMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 30000,
+            MetaverseAttribute = memberMvAttr,
+            MetaverseAttributeId = memberMvAttr.Id
+        });
+
+        var exportRule = new SyncRule
+        {
+            Id = 300,
+            Name = "Export Group Members",
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            EnforceState = true,
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            ConnectedSystemObjectTypeId = TargetUserType.Id,
+            ConnectedSystemObjectType = TargetUserType,
+            MetaverseObjectTypeId = MvoUserType.Id,
+            MetaverseObjectType = MvoUserType,
+            AttributeFlowRules = new List<SyncRuleMapping> { memberMapping }
+        };
+        SyncRulesData.Add(exportRule);
+
+        // Act
+        var result = await Jim.DriftDetection.EvaluateDriftAsync(
+            groupCso,
+            groupMvo,
+            new List<SyncRule> { exportRule },
+            null);
+
+        // Assert - Should detect drift due to extra member
+        Assert.That(result.HasDrift, Is.True, "Should detect drift when CSO has extra member not in MVO");
+        Assert.That(result.DriftedAttributes.Count, Is.EqualTo(1));
+        Assert.That(result.DriftedAttributes[0].Attribute.Name, Is.EqualTo("member"));
+
+        // The expected value should be a HashSet with 2 members
+        var expectedSet = result.DriftedAttributes[0].ExpectedValue as HashSet<object>;
+        Assert.That(expectedSet, Is.Not.Null);
+        Assert.That(expectedSet!.Count, Is.EqualTo(2), "Expected 2 members in MVO");
+
+        // The actual value should be a HashSet with 3 members
+        var actualSet = result.DriftedAttributes[0].ActualValue as HashSet<object>;
+        Assert.That(actualSet, Is.Not.Null);
+        Assert.That(actualSet!.Count, Is.EqualTo(3), "Actual has 3 members in CSO (including drift)");
+    }
+
+    /// <summary>
+    /// Tests that drift detection correctly handles multi-valued attributes when the CSO
+    /// is missing values that should be present. This simulates an unauthorised removal.
+    /// </summary>
+    [Test]
+    public async Task EvaluateDriftAsync_WithMultiValuedAttribute_MissingValueInCso_DetectsDriftAsync()
+    {
+        // Arrange - Create a multi-valued attribute
+        var memberMvAttr = new MetaverseAttribute
+        {
+            Id = 6000,
+            Name = "Static Members",
+            Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued
+        };
+        // Replace any existing attribute with same name
+        MvoUserType.Attributes.RemoveAll(a => a.Name == "Static Members");
+        MvoUserType.Attributes.Add(memberMvAttr);
+
+        var memberCsoAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 6001,
+            Name = "member",
+            Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued,
+            ConnectedSystemObjectType = TargetUserType
+        };
+        // Replace any existing attribute with same name
+        TargetUserType.Attributes.RemoveAll(a => a.Name == "member");
+        TargetUserType.Attributes.Add(memberCsoAttr);
+
+        // Create referenced MVOs (group members)
+        var member1Mvo = CreateTestMvo();
+        var member2Mvo = CreateTestMvo();
+
+        // Create the group MVO with expected members (member1 and member2)
+        var groupMvo = CreateTestMvo();
+        groupMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = groupMvo,
+            Attribute = memberMvAttr,
+            AttributeId = memberMvAttr.Id,
+            ReferenceValue = member1Mvo
+        });
+        groupMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = groupMvo,
+            Attribute = memberMvAttr,
+            AttributeId = memberMvAttr.Id,
+            ReferenceValue = member2Mvo
+        });
+
+        // Create CSOs for the members
+        var member1Cso = CreateTestCso(member1Mvo);
+        member1Mvo.ConnectedSystemObjects.Add(member1Cso);
+        var member2Cso = CreateTestCso(member2Mvo);
+        member2Mvo.ConnectedSystemObjects.Add(member2Cso);
+
+        // Create group CSO with actual members - MISSING member2 (drift!)
+        var groupCso = CreateTestCso(groupMvo);
+        groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = groupCso,
+            Attribute = memberCsoAttr,
+            AttributeId = memberCsoAttr.Id,
+            ReferenceValue = member1Cso
+        });
+        // Note: member2Cso is NOT added - simulates unauthorised removal
+        groupMvo.ConnectedSystemObjects.Add(groupCso);
+
+        // Create export rule for the member attribute
+        var memberMapping = new SyncRuleMapping
+        {
+            Id = 4000,
+            TargetConnectedSystemAttribute = memberCsoAttr,
+            TargetConnectedSystemAttributeId = memberCsoAttr.Id
+        };
+        memberMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 40000,
+            MetaverseAttribute = memberMvAttr,
+            MetaverseAttributeId = memberMvAttr.Id
+        });
+
+        var exportRule = new SyncRule
+        {
+            Id = 400,
+            Name = "Export Group Members",
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            EnforceState = true,
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            ConnectedSystemObjectTypeId = TargetUserType.Id,
+            ConnectedSystemObjectType = TargetUserType,
+            MetaverseObjectTypeId = MvoUserType.Id,
+            MetaverseObjectType = MvoUserType,
+            AttributeFlowRules = new List<SyncRuleMapping> { memberMapping }
+        };
+        SyncRulesData.Add(exportRule);
+
+        // Act
+        var result = await Jim.DriftDetection.EvaluateDriftAsync(
+            groupCso,
+            groupMvo,
+            new List<SyncRule> { exportRule },
+            null);
+
+        // Assert - Should detect drift due to missing member
+        Assert.That(result.HasDrift, Is.True, "Should detect drift when CSO is missing a member from MVO");
+        Assert.That(result.DriftedAttributes.Count, Is.EqualTo(1));
+        Assert.That(result.DriftedAttributes[0].Attribute.Name, Is.EqualTo("member"));
+
+        // The expected value should be a HashSet with 2 members
+        var expectedSet = result.DriftedAttributes[0].ExpectedValue as HashSet<object>;
+        Assert.That(expectedSet, Is.Not.Null);
+        Assert.That(expectedSet!.Count, Is.EqualTo(2), "Expected 2 members in MVO");
+
+        // The actual value should be a HashSet with only 1 member
+        var actualSet = result.DriftedAttributes[0].ActualValue as HashSet<object>;
+        Assert.That(actualSet, Is.Not.Null);
+        Assert.That(actualSet!.Count, Is.EqualTo(1), "Actual has only 1 member in CSO (missing one due to drift)");
+    }
+
     #endregion
 }

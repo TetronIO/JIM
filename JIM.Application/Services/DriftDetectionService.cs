@@ -114,15 +114,28 @@ public class DriftDetectionService
         // Use the provided MVO or fall back to the CSO's joined MVO
         var targetMvo = mvo ?? cso.MetaverseObject!;
 
+        // Defensive check: ensure MVO.Type is loaded (required for export rule filtering)
+        // If Type is null, the navigation property wasn't included in the repository query.
+        // This prevents silent failures where no export rules would match.
+        if (targetMvo.Type == null)
+        {
+            Log.Warning("EvaluateDriftAsync: MVO {MvoId} has null Type - navigation property not loaded. " +
+                "Drift detection cannot filter by MVO type. CSO: {CsoId}. " +
+                "Ensure GetConnectedSystemObjectsModifiedSinceAsync includes MVO.Type",
+                targetMvo.Id, cso.Id);
+            return result;
+        }
+
         // Filter to only export rules that:
         // 1. Target this CSO's connected system
         // 2. Have EnforceState = true
         // 3. Match this CSO's object type
+        // Note: targetMvo.Type is guaranteed non-null by defensive check above
         var applicableExportRules = exportRules
             .Where(r => r.EnforceState &&
                        r.ConnectedSystemId == cso.ConnectedSystemId &&
                        r.ConnectedSystemObjectTypeId == cso.TypeId &&
-                       r.MetaverseObjectTypeId == targetMvo.Type?.Id)
+                       r.MetaverseObjectTypeId == targetMvo.Type.Id)
             .ToList();
 
         if (applicableExportRules.Count == 0)
