@@ -658,15 +658,15 @@ else
             return;
         }
 
+        _activity = await Jim.Activities.GetActivityAsync(_activityRunProfileExecutionItem.ActivityId);
+
         _breadcrumbs = new List<BreadcrumbItem>
         {
             new("Home", href: "/", icon: Icons.Material.Filled.Home),
             new("Activity", href: "/activity"),
-            new("Activity Detail", href: $"/activity/{_activityRunProfileExecutionItem.ActivityId}"),
+            new(_activity?.TargetName ?? "Activity Detail", href: $"/activity/{_activityRunProfileExecutionItem.ActivityId}"),
             new("Item Details", href: null, disabled: true)
         };
-
-        _activity = await Jim.Activities.GetActivityAsync(_activityRunProfileExecutionItem.ActivityId);
         _externalIdAttributeValue = _activityRunProfileExecutionItem.GetExternalIdAttributeValue();
 
         var connectedSystemId = _activityRunProfileExecutionItem.GetConnectedSystemId();
