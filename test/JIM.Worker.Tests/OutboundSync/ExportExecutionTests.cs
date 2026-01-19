@@ -1065,5 +1065,203 @@ public class ExportExecutionTests
             "Export attempt count should be 1");
     }
 
+    /// <summary>
+    /// Tests that ErrorCount is incremented exactly once when an export fails.
+    /// This verifies the fix for a bug where ErrorCount was being incremented twice:
+    /// once in the connector's catch block and once in ExportExecutionServer.MarkExportFailed.
+    /// The connector should only return ExportResult.Failed() without modifying ErrorCount.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_WhenExportFails_ErrorCountIsIncrementedExactlyOnceAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvo = MetaverseObjectsData[0];
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        // Create a CSO
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            Status = ConnectedSystemObjectStatus.Normal,
+            DateJoined = DateTime.UtcNow,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(cso);
+
+        // Create a pending export with ErrorCount = 0 (first attempt)
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            SourceMetaverseObjectId = mvo.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            CreatedAt = DateTime.UtcNow,
+            ErrorCount = 0, // Starting at 0 - this is the first attempt
+            MaxRetries = 3,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "Updated Name"
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+
+        // Mock connector that returns a failure
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Failing Connector");
+        mockExportConnector.Setup(c => c.Export(It.IsAny<IList<PendingExport>>()))
+            .Returns(new List<ExportResult>
+            {
+                ExportResult.Failed("LDAP error: The object exists. Attribute member already exists")
+            });
+
+        // Track pending export updates
+        PendingExport? updatedPendingExport = null;
+        MockDbSetPendingExports.Setup(set => set.Update(It.IsAny<PendingExport>()))
+            .Callback((PendingExport pe) =>
+            {
+                updatedPendingExport = pe;
+            });
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert - Export should have failed
+        Assert.That(result.FailedCount, Is.EqualTo(1), "One export should have failed");
+        Assert.That(result.SuccessCount, Is.EqualTo(0), "No exports should have succeeded");
+
+        // Assert - ErrorCount should be incremented exactly once (from 0 to 1)
+        Assert.That(pendingExport.ErrorCount, Is.EqualTo(1),
+            "ErrorCount should be incremented exactly once (from 0 to 1). " +
+            "If this is 2, it indicates a double-increment bug where both the connector and " +
+            "ExportExecutionServer are incrementing ErrorCount.");
+
+        // Assert - Status should be Pending (still retrying, not Failed)
+        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Pending),
+            "Status should be Pending while retries remain");
+
+        // Assert - Error message should be captured
+        Assert.That(pendingExport.LastErrorMessage, Is.Not.Null.And.Contains("LDAP error"),
+            "Error message should be captured from ExportResult");
+
+        // Assert - ProcessedExportItems should report ErrorCount = 1
+        Assert.That(result.ProcessedExportItems.Count, Is.EqualTo(1), "Should have one processed export item");
+        Assert.That(result.ProcessedExportItems[0].ErrorCount, Is.EqualTo(1),
+            "ProcessedExportItem should report ErrorCount = 1 for activity tracking");
+    }
+
+    /// <summary>
+    /// Tests that ErrorCount continues to increment correctly on repeated failures.
+    /// Each failure should increment ErrorCount by exactly 1.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_RepeatedFailures_ErrorCountIncrementsCorrectlyAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvo = MetaverseObjectsData[0];
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        // Create a CSO
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            Status = ConnectedSystemObjectStatus.Normal,
+            DateJoined = DateTime.UtcNow,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(cso);
+
+        // Create a pending export that has already failed once (ErrorCount = 1)
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            SourceMetaverseObjectId = mvo.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            CreatedAt = DateTime.UtcNow.AddHours(-1),
+            ErrorCount = 1, // Already failed once
+            MaxRetries = 5,
+            NextRetryAt = null, // Due for retry
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "Updated Name"
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+
+        // Mock connector that returns a failure
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Failing Connector");
+        mockExportConnector.Setup(c => c.Export(It.IsAny<IList<PendingExport>>()))
+            .Returns(new List<ExportResult>
+            {
+                ExportResult.Failed("Connection timeout")
+            });
+
+        // Track pending export updates
+        MockDbSetPendingExports.Setup(set => set.Update(It.IsAny<PendingExport>()))
+            .Callback((PendingExport pe) => { });
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert - ErrorCount should be incremented from 1 to 2
+        Assert.That(pendingExport.ErrorCount, Is.EqualTo(2),
+            "ErrorCount should be incremented from 1 to 2 (exactly once per failure)");
+
+        // Assert - Status should still be Pending (retries remain)
+        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Pending),
+            "Status should be Pending while retries remain");
+
+        // Assert - ProcessedExportItems should report ErrorCount = 2
+        Assert.That(result.ProcessedExportItems[0].ErrorCount, Is.EqualTo(2),
+            "ProcessedExportItem should report the current ErrorCount for activity tracking");
+    }
+
     #endregion
 }

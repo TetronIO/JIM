@@ -40,11 +40,9 @@ public abstract class SyncTaskProcessorBase
     // Cache of export rules for drift detection (filtered to EnforceState = true)
     protected List<SyncRule>? _driftDetectionExportRules;
 
-    // Per-page CSO attribute cache for no-net-change detection (cleared between pages)
-    // Uses ILookup to support multi-valued attributes where a single (CsoId, AttributeId) can have multiple values
-    protected ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? _pageCsoAttributeCache;
-
     // Aggregate no-net-change counts for the entire sync run
+    // Note: Target CSO attribute values for no-net-change detection are now pre-loaded in ExportEvaluationCache
+    // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
     protected int _totalCsoAlreadyCurrentCount;
 
     // Batch collections for deferred MVO persistence and export evaluation
@@ -684,7 +682,7 @@ public abstract class SyncTaskProcessorBase
         }
 
         // Evaluate export rules for MVOs that are IN scope, using cached data for O(1) lookups
-        // Uses no-net-change detection to skip pending exports when CSO already has current values
+        // Uses no-net-change detection (against target CSO attributes in cache) to skip pending exports when CSO already has current values
         // Pending exports and provisioning CSOs are deferred (deferSave=true) and collected for batch saving
         using (Diagnostics.Sync.StartSpan("EvaluateExportRules"))
         {
@@ -693,7 +691,6 @@ public abstract class SyncTaskProcessorBase
                 changedAttributes,
                 _connectedSystem,
                 _exportEvaluationCache,
-                _pageCsoAttributeCache,
                 deferSave: true,
                 removedAttributes: removedAttributes);
 
@@ -1271,41 +1268,6 @@ public abstract class SyncTaskProcessorBase
                 }
                 return MetaverseObjectChangeResult.DisconnectedOutOfScope();
         }
-    }
-
-    /// <summary>
-    /// Loads CSO attribute values for the specified CSO IDs into the per-page cache.
-    /// This cache is used during export evaluation for no-net-change detection.
-    /// Memory is bounded to page size × average attributes per CSO.
-    /// Uses ILookup to support multi-valued attributes where a single (CsoId, AttributeId) can have multiple values.
-    /// </summary>
-    /// <param name="csoIds">The IDs of CSOs in the current page.</param>
-    protected async Task LoadPageCsoAttributeCacheAsync(IEnumerable<Guid> csoIds)
-    {
-        using var span = Diagnostics.Sync.StartSpan("LoadPageCsoAttributeCache");
-
-        var attributeValues = await _jim.Repository.ConnectedSystems
-            .GetCsoAttributeValuesByCsoIdsAsync(csoIds);
-
-        // Use ToLookup to support multi-valued attributes (e.g., group membership)
-        // where a single (CsoId, AttributeId) key can have multiple values
-        _pageCsoAttributeCache = attributeValues
-            .ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId));
-
-        span.SetTag("cacheSize", attributeValues.Count);
-        Log.Verbose("LoadPageCsoAttributeCacheAsync: Loaded {Count} CSO attribute values into per-page cache",
-            attributeValues.Count);
-
-        span.SetSuccess();
-    }
-
-    /// <summary>
-    /// Clears the per-page CSO attribute cache to free memory between pages.
-    /// </summary>
-    protected void ClearPageCsoAttributeCache()
-    {
-        // ILookup is read-only, so we just set to null to release the reference
-        _pageCsoAttributeCache = null;
     }
 
     /// <summary>

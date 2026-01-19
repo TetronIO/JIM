@@ -127,8 +127,8 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 csoPagedResult = await _jim.ConnectedSystems.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize, returnAttributes: false);
             }
 
-            // Load CSO attribute values for this page (for no-net-change detection during export evaluation)
-            await LoadPageCsoAttributeCacheAsync(csoPagedResult.Results.Select(cso => cso.Id));
+            // Note: Target CSO attribute values for no-net-change detection are pre-loaded in ExportEvaluationCache
+            // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
 
             int processedInPage = 0;
             using (Diagnostics.Sync.StartSpan("ProcessCsoLoop").SetTag("csoCount", csoPagedResult.Results.Count))
@@ -188,9 +188,6 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 
             // batch delete obsolete CSOs
             await FlushObsoleteCsoOperationsAsync();
-
-            // Clear per-page CSO attribute cache to free memory
-            ClearPageCsoAttributeCache();
 
             // Update progress with page completion - this persists ObjectsProcessed to database
             using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))

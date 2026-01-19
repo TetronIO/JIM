@@ -65,20 +65,29 @@ public class ExportEvaluationServer
         public Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject> CsoLookup { get; }
 
         /// <summary>
+        /// Pre-loaded target CSO attribute values for no-net-change detection during export evaluation.
+        /// Uses ILookup to support multi-valued attributes where a single (CsoId, AttributeId) can have multiple values.
+        /// </summary>
+        public ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue> CsoAttributeValues { get; }
+
+        /// <summary>
         /// Creates a new export evaluation cache with pre-loaded data.
         /// </summary>
         public ExportEvaluationCache(
             Dictionary<int, List<SyncRule>> exportRulesByMvoTypeId,
-            Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject> csoLookup)
+            Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject> csoLookup,
+            ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue> csoAttributeValues)
         {
             ExportRulesByMvoTypeId = exportRulesByMvoTypeId;
             CsoLookup = csoLookup;
+            CsoAttributeValues = csoAttributeValues;
         }
     }
 
     /// <summary>
     /// Builds a cache of export rules and CSO lookups for optimised batch evaluation.
     /// Call this once at the start of sync, then pass the cache to evaluation methods.
+    /// Also loads target CSO attribute values for no-net-change detection during export evaluation.
     /// </summary>
     /// <param name="sourceConnectedSystemId">The source system ID (to exclude from export evaluation via Q3).</param>
     /// <param name="preloadedSyncRules">Optional pre-loaded sync rules to avoid redundant database query.</param>
@@ -110,10 +119,22 @@ public class ExportEvaluationServer
         var csoLookup = await Application.Repository.ConnectedSystems
             .GetConnectedSystemObjectsByTargetSystemsAsync(targetSystemIds);
 
-        Log.Debug("BuildExportEvaluationCacheAsync: Cached {RuleCount} export rules across {TypeCount} MVO types, {CsoCount} CSOs for {SystemCount} target systems",
-            exportRules.Count, exportRulesByMvoTypeId.Count, csoLookup.Count, targetSystemIds.Count);
+        // Load target CSO attribute values for no-net-change detection during export evaluation.
+        // This is critical for preventing duplicate ADD operations on multi-valued attributes
+        // (e.g., group members that already exist in the target system).
+        var targetCsoIds = csoLookup.Values.Select(cso => cso.Id).ToList();
+        var csoAttributeValues = await Application.Repository.ConnectedSystems
+            .GetCsoAttributeValuesByCsoIdsAsync(targetCsoIds);
 
-        return new ExportEvaluationCache(exportRulesByMvoTypeId, csoLookup);
+        // Use ToLookup to support multi-valued attributes (e.g., group membership)
+        // where a single (CsoId, AttributeId) key can have multiple values
+        var csoAttributeValueLookup = csoAttributeValues
+            .ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId));
+
+        Log.Debug("BuildExportEvaluationCacheAsync: Cached {RuleCount} export rules across {TypeCount} MVO types, {CsoCount} CSOs with {AttrCount} attribute values for {SystemCount} target systems",
+            exportRules.Count, exportRulesByMvoTypeId.Count, csoLookup.Count, csoAttributeValues.Count, targetSystemIds.Count);
+
+        return new ExportEvaluationCache(exportRulesByMvoTypeId, csoLookup, csoAttributeValueLookup);
     }
 
     /// <summary>
@@ -290,15 +311,15 @@ public class ExportEvaluationServer
     }
 
     /// <summary>
-    /// Evaluates export rules with no-net-change detection using per-page CSO attribute cache.
+    /// Evaluates export rules with no-net-change detection using target CSO attribute cache.
     /// Returns an ExportEvaluationResult that includes both pending exports and no-net-change statistics.
+    /// No-net-change detection uses target CSO attributes from cache.CsoAttributeValues to avoid creating
+    /// duplicate ADD operations for multi-valued attributes (e.g., group members that already exist).
     /// </summary>
     /// <param name="mvo">The Metaverse Object that changed.</param>
     /// <param name="changedAttributes">The attributes that changed on the MVO.</param>
     /// <param name="sourceSystem">The connected system that caused this change (for Q3 circular prevention).</param>
-    /// <param name="cache">The pre-loaded cache from BuildExportEvaluationCacheAsync.</param>
-    /// <param name="csoAttributeCache">Per-page cache of CSO attribute values for no-net-change detection.
-    /// Uses ILookup to support multi-valued attributes where a single (CsoId, AttributeId) can have multiple values.</param>
+    /// <param name="cache">The pre-loaded cache from BuildExportEvaluationCacheAsync (includes target CSO attributes).</param>
     /// <param name="deferSave">When true, pending exports are not saved to the database. The caller is responsible
     /// for batch saving the pending exports returned in the result. Default is false for backwards compatibility.</param>
     /// <param name="removedAttributes">Optional set of attribute values that were removed (for multi-valued attr handling).</param>
@@ -308,7 +329,6 @@ public class ExportEvaluationServer
         List<MetaverseObjectAttributeValue> changedAttributes,
         ConnectedSystem? sourceSystem,
         ExportEvaluationCache cache,
-        ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? csoAttributeCache,
         bool deferSave = false,
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null)
     {
@@ -360,7 +380,7 @@ public class ExportEvaluationServer
                 .SetTag("targetSystem", exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString()))
             {
                 var (pendingExport, provisioningCso, csoAlreadyCurrentCount) = await CreateOrUpdatePendingExportWithNoNetChangeAsync(
-                    mvo, exportRule, changedAttributes, cache, csoAttributeCache, deferSave, removedAttributes);
+                    mvo, exportRule, changedAttributes, cache, deferSave, removedAttributes);
 
                 result.CsoAlreadyCurrentCount += csoAlreadyCurrentCount;
 
@@ -796,12 +816,12 @@ public class ExportEvaluationServer
     /// <summary>
     /// Creates or updates a pending export with no-net-change detection.
     /// Returns both the pending export (if created) and the count of attributes skipped due to no-net-change.
+    /// Uses cache.CsoAttributeValues for no-net-change detection against target CSO attributes.
     /// </summary>
     /// <param name="mvo">The Metaverse Object that changed.</param>
     /// <param name="exportRule">The export rule to evaluate.</param>
     /// <param name="changedAttributes">The attributes that changed on the MVO.</param>
-    /// <param name="cache">The pre-loaded cache from BuildExportEvaluationCacheAsync.</param>
-    /// <param name="csoAttributeCache">Per-page cache of CSO attribute values for no-net-change detection.</param>
+    /// <param name="cache">The pre-loaded cache from BuildExportEvaluationCacheAsync (includes target CSO attributes).</param>
     /// <param name="deferSave">When true, pending exports and provisioning CSOs are not saved to the database
     /// and the caller is responsible for batch saving. Default is false for backwards compatibility.</param>
     /// <param name="removedAttributes">Optional set of attribute values that were removed (for multi-valued attr handling).</param>
@@ -811,7 +831,6 @@ public class ExportEvaluationServer
         SyncRule exportRule,
         List<MetaverseObjectAttributeValue> changedAttributes,
         ExportEvaluationCache cache,
-        ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue>? csoAttributeCache,
         bool deferSave = false,
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null)
     {
@@ -869,7 +888,10 @@ public class ExportEvaluationServer
             changeType = PendingExportChangeType.Update;
         }
 
-        // Create attribute value changes with no-net-change detection
+        // Create attribute value changes with no-net-change detection.
+        // Use cache.CsoAttributeValues which contains TARGET CSO attribute values (loaded at sync start).
+        // The csoAttributeCache parameter (from sync processor) contains SOURCE CSO values which is incorrect
+        // for detecting no-net-change on exports to target systems.
         List<PendingExportAttributeValueChange> attributeChanges;
         int csoAlreadyCurrentCount;
         using (var attrSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("CreateAttributeValueChanges"))
@@ -878,7 +900,7 @@ public class ExportEvaluationServer
             attrSpan.SetTag("changeType", changeType.ToString());
 
             attributeChanges = CreateAttributeValueChanges(mvo, exportRule, changedAttributes, changeType,
-                existingCso: existingCso, csoAttributeCache: csoAttributeCache, out csoAlreadyCurrentCount,
+                existingCso: existingCso, csoAttributeCache: cache.CsoAttributeValues, out csoAlreadyCurrentCount,
                 removedAttributes: removedAttributes);
 
             attrSpan.SetTag("changeCount", attributeChanges.Count);
