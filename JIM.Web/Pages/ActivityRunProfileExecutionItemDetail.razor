@@ -1,4 +1,4 @@
-@page "/activity/sync/{Id:guid}"
+@page "/activity/item/{Id:guid}"
 @attribute [Authorize(Roles = "User")]
 @using JIM.Application
 @using JIM.Models.Activities;
@@ -11,7 +11,7 @@
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
-<PageTitle>Sync Details: @(_externalIdAttributeValue?.ToStringNoName() ?? _activityRunProfileExecutionItem?.Id.ToString())</PageTitle>
+<PageTitle>Item Details: @(_externalIdAttributeValue?.ToStringNoName() ?? _activityRunProfileExecutionItem?.Id.ToString())</PageTitle>
 
 @if (_activityRunProfileExecutionItem != null)
 {
@@ -663,7 +663,7 @@ else
             new("Home", href: "/", icon: Icons.Material.Filled.Home),
             new("Activity", href: "/activity"),
             new("Activity Detail", href: $"/activity/{_activityRunProfileExecutionItem.ActivityId}"),
-            new("Sync Details", href: null, disabled: true)
+            new("Item Details", href: null, disabled: true)
         };
 
         _activity = await Jim.Activities.GetActivityAsync(_activityRunProfileExecutionItem.ActivityId);
