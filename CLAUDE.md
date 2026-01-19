@@ -290,6 +290,14 @@ public async Task GetObjectAsync_WithValidId_ReturnsObject()
 - Test output appears in the test results under "Standard Output Messages"
 - **IMPORTANT**: Remove all debug statements before committing
 
+**⚠️ CRITICAL: EF Core In-Memory Database Limitation:**
+- Unit and workflow tests use EF Core's in-memory database which **auto-tracks navigation properties**
+- This MASKS bugs where `.Include()` statements are missing from repository queries
+- **Integration tests are the ONLY reliable way to verify navigation property loading**
+- When modifying repository queries, ALWAYS run integration tests to verify `.Include()` chains are correct
+- Add defensive null checks with logging for navigation properties to catch missing `.Include()` at runtime
+- See `docs/TESTING_STRATEGY.md` for full details and real-world example (Drift Detection bug January 2026)
+
 ## Design Principles
 
 **Minimise Environment Variables:**
