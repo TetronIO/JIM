@@ -54,30 +54,28 @@
 
         @if (_deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected)
         {
-            <MudGrid Class="mt-4">
-                <MudItem xs="12" sm="6">
-                    <MudText Typo="Typo.subtitle2" Class="mb-2">Authoritative Sources</MudText>
-                    @if (_contributingSystems.Any())
+            <div class="mt-4">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Authoritative Sources</MudText>
+                @if (_contributingSystems.Any())
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                        Select the connected systems that are authoritative sources for this object type.
+                        When ANY of these systems disconnects, the metaverse object will be scheduled for deletion.
+                    </MudText>
+                    @foreach (var system in _contributingSystems)
                     {
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-                            Select the connected systems that are authoritative sources for this object type.
-                            When ANY of these systems disconnects, the metaverse object will be scheduled for deletion.
-                        </MudText>
-                        @foreach (var system in _contributingSystems)
-                        {
-                            <MudCheckBox T="bool" Value="@_selectedAuthoritativeSources.Contains(system.Id)"
-                                ValueChanged="@((bool val) => ToggleAuthoritativeSource(system.Id, val))"
-                                Label="@system.Name" Color="Color.Primary" />
-                        }
+                        <MudCheckBox T="bool" Value="@_selectedAuthoritativeSources.Contains(system.Id)"
+                            ValueChanged="@((bool val) => ToggleAuthoritativeSource(system.Id, val))"
+                            Label="@system.Name" Color="Color.Primary" />
                     }
-                    else
-                    {
-                        <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true">
-                            No contributing systems found. Create inbound sync rules for this object type to enable authoritative source selection.
-                        </MudAlert>
-                    }
-                </MudItem>
-            </MudGrid>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true">
+                        No contributing systems found. Create inbound sync rules for this object type to enable authoritative source selection.
+                    </MudAlert>
+                }
+            </div>
         }
 
         <MudStack Row="true" Class="mt-5" Spacing="2">

@@ -44,7 +44,9 @@ public class MetaverseRepository : IMetaverseRepository
             Created = t.Created,
             AttributesCount = t.Attributes.Count,
             BuiltIn = t.BuiltIn,
-            HasPredefinedSearches = t.PredefinedSearches.Count > 0
+            HasPredefinedSearches = t.PredefinedSearches.Count > 0,
+            DeletionRule = t.DeletionRule,
+            DeletionGracePeriodDays = t.DeletionGracePeriodDays
         }).ToListAsync();
 
         return metaverseObjectTypeHeaders;

@@ -176,14 +176,39 @@ When an MVO is deleted, downstream CSOs need to be handled. This is controlled b
 |---------|--------|-------|
 | `DeletionRule.Manual` | ✅ Implemented | MVOs are protected from automatic deletion |
 | `DeletionRule.WhenLastConnectorDisconnected` (all CSOs) | ✅ Implemented | Works when all CSOs disconnect |
-| `DeletionTriggerConnectedSystemIds` | ❌ Not Implemented | Property exists but logic not in `ProcessMvoDeletionRuleAsync` |
+| `DeletionRule.WhenAuthoritativeSourceDisconnected` enum | ✅ Implemented | Enum value added with API/UI support |
+| `DeletionTriggerConnectedSystemIds` UI | ✅ Implemented | Admin UI for selecting authoritative sources |
+| `DeletionTriggerConnectedSystemIds` backend logic | ✅ Implemented | Logic in `ProcessMvoDeletionRuleAsync` |
 | `DeletionGracePeriodDays` | ✅ Implemented | Grace period is respected by housekeeping |
 | Internal Origin Protection | ✅ Implemented | Internal MVOs are skipped |
 | Deprovisioning on MVO Deletion | ✅ Implemented | Delete exports created for Provisioned CSOs |
 
-## Implementation Gap
+### Recently Completed (January 2026)
 
-The `DeletionTriggerConnectedSystemIds` feature is defined in the model but **not implemented** in `ProcessMvoDeletionRuleAsync()`. The current implementation only checks `remainingCsoCount == 0`.
+1. **`WhenAuthoritativeSourceDisconnected` enum value** - Added to `MetaverseObjectDeletionRule` enum in `CoreEnums.cs`
+2. **API support** - `MetaverseController.UpdateObjectTypeAsync()` validates that `WhenAuthoritativeSourceDisconnected` requires at least one authoritative source
+3. **PowerShell support** - `Set-JIMMetaverseObjectType` cmdlet accepts the new enum value
+4. **Admin UI - Detail page** - `MetaverseObjectTypeDetail.razor` shows deletion rules configuration with:
+   - Dropdown for selecting deletion rule (Manual, When Last Connector Disconnected, When Authoritative Source Disconnected)
+   - Grace period input field
+   - Checkboxes for selecting authoritative sources (only visible when `WhenAuthoritativeSourceDisconnected` is selected)
+   - Only "contributing systems" (systems with inbound sync rules for this object type) appear as selectable authoritative sources
+5. **Admin UI - List view** - `SchemaObjectTypeList.razor` shows deletion rule column with coloured chips and tooltips
+
+## Implementation Status: Complete ✅
+
+All deletion rule features are now fully implemented:
+- `WhenAuthoritativeSourceDisconnected` enum value
+- `DeletionTriggerConnectedSystemIds` model properties
+- API validation for authoritative source requirements
+- PowerShell cmdlet support
+- Admin UI for configuration
+- Backend logic in `SyncTaskProcessorBase.ProcessMvoDeletionRuleAsync()`
+
+**Backend implementation details**: When a CSO is disconnected (obsolete or out-of-scope), `ProcessMvoDeletionRuleAsync()` evaluates the MVO type's deletion rule:
+- `Manual`: No automatic deletion
+- `WhenLastConnectorDisconnected`: Mark for deletion only when all CSOs are disconnected
+- `WhenAuthoritativeSourceDisconnected`: Mark for deletion when ANY authoritative source disconnects, regardless of remaining CSOs
 
 ### Required Changes
 
@@ -266,7 +291,13 @@ The following GitHub issues define additional deletion rule features. This secti
 
 **Description**: Delete MVO when specific "authoritative" connected systems disconnect, regardless of whether other CSOs remain connected.
 
-**Current State**: Property exists in model (`DeletionTriggerConnectedSystemIds`), but logic is **not implemented** in `ProcessMvoDeletionRuleAsync()`.
+**Current State**:
+- ✅ `WhenAuthoritativeSourceDisconnected` enum value added
+- ✅ `DeletionTriggerConnectedSystemIds` property exists in model
+- ✅ API validation ensures authoritative sources are specified when rule is selected
+- ✅ PowerShell cmdlet supports the new enum value
+- ✅ Admin UI allows configuration of deletion rules and authoritative source selection
+- ❌ Backend logic **not implemented** in `ProcessMvoDeletionRuleAsync()` - this is the remaining work
 
 **Use Cases**:
 - HR → AD sync: Delete identity when HR (source of truth) removes employee, even if AD CSO exists
@@ -430,7 +461,8 @@ MetaverseObjectType:
 #### Phase 1: MVP (Current Sprint)
 | Feature | Issue | Status |
 |---------|-------|--------|
-| DeletionTriggerConnectedSystemIds | #115 | **In Progress** |
+| `WhenAuthoritativeSourceDisconnected` enum + UI | #115 | ✅ **Complete** |
+| `DeletionTriggerConnectedSystemIds` backend logic | #115 | **In Progress** |
 
 #### Phase 2: Post-MVP (Near-term)
 | Feature | Issue | Rationale |

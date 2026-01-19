@@ -1,6 +1,7 @@
 ﻿@page "/admin/schema"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application
+@using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @inject JimApplication Jim
 
@@ -21,14 +22,23 @@
     <HeaderContent>
         <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.AttributesCount)"><MudText Typo="Typo.button">Attributes</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.HasPredefinedSearches)"><MudText Typo="Typo.button">Has Predefined Searches?</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.DeletionRule)"><MudText Typo="Typo.button">Deletion Rule</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.HasPredefinedSearches)"><MudText Typo="Typo.button">Predefined Searches?</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name"><MudLink Href="@("/admin/schema/object-types/"+context.Id)">@context.Name</MudLink></MudTd>
         <MudTd DataLabel="Attributes">@context.AttributesCount</MudTd>
-        <MudTd DataLabel="Has Predefined Searches?">@(context.HasPredefinedSearches ? "Yes" : "No")</MudTd>
+        <MudTd DataLabel="Deletion Rule">
+            @{
+                var (label, color, icon) = GetDeletionRuleDisplay(context.DeletionRule);
+            }
+            <MudTooltip Text="@GetDeletionRuleTooltip(context)" Arrow="true" Placement="Placement.Top">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@color" Icon="@icon">@label</MudChip>
+            </MudTooltip>
+        </MudTd>
+        <MudTd DataLabel="Predefined Searches?">@(context.HasPredefinedSearches ? "Yes" : "No")</MudTd>
         <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
         <MudTd DataLabel="Created">
             <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -49,5 +59,31 @@
     protected override async Task OnInitializedAsync()
     {
         _metaverseObjectTypeHeaders = await Jim.Metaverse.GetMetaverseObjectTypeHeadersAsync();
+    }
+
+    private (string Label, Color Color, string Icon) GetDeletionRuleDisplay(MetaverseObjectDeletionRule rule)
+    {
+        return rule switch
+        {
+            MetaverseObjectDeletionRule.Manual => ("Manual", Color.Default, Icons.Material.Filled.Block),
+            MetaverseObjectDeletionRule.WhenLastConnectorDisconnected => ("Auto", Color.Warning, Icons.Material.Filled.LinkOff),
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected => ("Authoritative Source", Color.Error, Icons.Material.Filled.Star),
+            _ => ("Unknown", Color.Default, Icons.Material.Filled.Help)
+        };
+    }
+
+    private string GetDeletionRuleTooltip(MetaverseObjectTypeHeader header)
+    {
+        var gracePeriod = header.DeletionGracePeriodDays.HasValue && header.DeletionGracePeriodDays.Value > 0
+            ? $" ({header.DeletionGracePeriodDays} day grace period)"
+            : " (immediate)";
+
+        return header.DeletionRule switch
+        {
+            MetaverseObjectDeletionRule.Manual => "Manual deletion only - objects are never automatically deleted",
+            MetaverseObjectDeletionRule.WhenLastConnectorDisconnected => $"Delete when all connectors disconnect{gracePeriod}",
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected => $"Delete when authoritative source disconnects{gracePeriod}",
+            _ => "Unknown deletion rule"
+        };
     }
 }

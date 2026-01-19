@@ -546,6 +546,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // IMPORTANT: MVO AttributeValues must also include ReferenceValue so that reference comparison
             // in SyncRuleMappingProcessor.ProcessReferenceAttribute can detect existing MVO reference values
             // and avoid creating spurious "new" values for unchanged references.
+            // IMPORTANT: MVO Type must be included for deletion rule evaluation in ProcessMvoDeletionRuleAsync.
             query = Repository.Database.ConnectedSystemObjects
                 .AsSplitQuery()
                 .Include(cso => cso.Type)
@@ -554,6 +555,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .Include(cso => cso.AttributeValues)
                     .ThenInclude(av => av.ReferenceValue)
                     .ThenInclude(rv => rv!.MetaverseObject)
+                .Include(cso => cso.MetaverseObject)
+                    .ThenInclude(mvo => mvo!.Type)
                 .Include(cso => cso.MetaverseObject)
                     .ThenInclude(mvo => mvo!.AttributeValues)
                     .ThenInclude(av => av.Attribute)
@@ -571,6 +574,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // IMPORTANT: MVO AttributeValues must also include ReferenceValue so that reference comparison
             // in SyncRuleMappingProcessor.ProcessReferenceAttribute can detect existing MVO reference values
             // and avoid creating spurious "new" values for unchanged references.
+            // IMPORTANT: MVO Type must be included for deletion rule evaluation in ProcessMvoDeletionRuleAsync.
             query = Repository.Database.ConnectedSystemObjects
                 .AsSplitQuery()
                 .Include(cso => cso.Type)
@@ -579,6 +583,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .Include(cso => cso.AttributeValues)
                     .ThenInclude(av => av.ReferenceValue)
                     .ThenInclude(rv => rv!.MetaverseObject)
+                .Include(cso => cso.MetaverseObject)
+                    .ThenInclude(mvo => mvo!.Type)
                 .Include(cso => cso.MetaverseObject)
                     .ThenInclude(mvo => mvo!.AttributeValues)
                     .ThenInclude(av => av.Attribute)

@@ -388,6 +388,12 @@ public abstract class SyncTaskProcessorBase
         // InboundOutOfScopeAction = Disconnect (default) - break the join and handle MVO deletion rules
         var mvo = connectedSystemObject.MetaverseObject;
         var connectedSystemId = connectedSystemObject.ConnectedSystemId;
+        var mvoId = mvo.Id;
+
+        // Query remaining CSO count BEFORE breaking the join so the count includes all current connectors.
+        // Then subtract 1 to exclude this CSO which is about to be disconnected.
+        var totalCsoCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
+        var remainingCsoCount = Math.Max(0, totalCsoCount - 1);
 
         // Check if we should remove contributed attributes based on the object type setting
         if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion)
@@ -405,7 +411,6 @@ public abstract class SyncTaskProcessorBase
         }
 
         // Break the CSO-MVO join
-        var mvoId = mvo.Id;
         mvo.ConnectedSystemObjects.Remove(connectedSystemObject);
         connectedSystemObject.MetaverseObject = null;
         connectedSystemObject.MetaverseObjectId = null;
@@ -416,13 +421,8 @@ public abstract class SyncTaskProcessorBase
         // Queue the CSO for batch deletion (deletion will happen at end of page processing)
         _obsoleteCsosToDelete.Add((connectedSystemObject, runProfileExecutionItem));
 
-        // Check if this was the last connector by querying the database for remaining CSOs
-        // (the in-memory collection may not reflect CSOs from other connected systems)
-        var remainingCsoCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
-        if (remainingCsoCount == 0)
-        {
-            await ProcessMvoDeletionRuleAsync(mvo);
-        }
+        // Evaluate MVO deletion rule based on type configuration
+        await ProcessMvoDeletionRuleAsync(mvo, connectedSystemId, remainingCsoCount);
 
         return runProfileExecutionItem;
     }
@@ -450,15 +450,29 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Processes the MVO deletion rule when the last connector is disconnected.
+    /// Processes the MVO deletion rule when a connector is disconnected.
+    /// Handles three deletion rules:
+    /// - Manual: No automatic deletion
+    /// - WhenLastConnectorDisconnected: Delete when ALL CSOs are disconnected
+    /// - WhenAuthoritativeSourceDisconnected: Delete when ANY authoritative source disconnects
     /// Following industry-standard identity management practices, this method NEVER deletes the MVO directly.
     /// Instead, it sets LastConnectorDisconnectedDate and lets housekeeping handle actual deletion.
     /// </summary>
-    protected async Task ProcessMvoDeletionRuleAsync(MetaverseObject mvo)
+    /// <param name="mvo">The Metaverse Object to evaluate for deletion.</param>
+    /// <param name="disconnectingSystemId">The ID of the Connected System whose CSO was disconnected.</param>
+    /// <param name="remainingCsoCount">The count of remaining CSOs still joined to the MVO.</param>
+    protected async Task ProcessMvoDeletionRuleAsync(MetaverseObject mvo, int disconnectingSystemId, int remainingCsoCount)
     {
         if (mvo.Type == null)
         {
             Log.Warning($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} has no Type set. Cannot determine deletion rule.");
+            return;
+        }
+
+        // Only apply to Projected MVOs (Internal MVOs like admin accounts are protected)
+        if (mvo.Origin == MetaverseObjectOrigin.Internal)
+        {
+            Log.Verbose($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} has Origin=Internal. Protected from automatic deletion.");
             return;
         }
 
@@ -470,35 +484,75 @@ public abstract class SyncTaskProcessorBase
                 break;
 
             case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
-                // Only apply to Projected MVOs (Internal MVOs like admin accounts are protected)
-                if (mvo.Origin == MetaverseObjectOrigin.Internal)
+                // Only delete when ALL CSOs are disconnected
+                if (remainingCsoCount > 0)
                 {
-                    Log.Verbose($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} has Origin=Internal. Protected from automatic deletion.");
+                    Log.Verbose($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} has {remainingCsoCount} remaining connector(s). Not marking for deletion yet.");
                     break;
                 }
 
-                // Record when the last connector was disconnected
-                // This timestamp is used by housekeeping to determine when the grace period expires
-                mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
+                await MarkMvoForDeletionAsync(mvo, "last connector disconnected");
+                break;
 
-                if (mvo.Type.DeletionGracePeriodDays.HasValue && mvo.Type.DeletionGracePeriodDays.Value > 0)
+            case MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected:
+                // Delete when ANY authoritative source disconnects
+                var triggerIds = mvo.Type.DeletionTriggerConnectedSystemIds;
+                if (triggerIds == null || triggerIds.Count == 0)
                 {
-                    Log.Information($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} marked for deletion (disconnected at {mvo.LastConnectorDisconnectedDate}). Eligible after {mvo.Type.DeletionGracePeriodDays.Value} days.");
+                    // No authoritative sources configured - fall back to last connector behaviour
+                    Log.Warning($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} has DeletionRule=WhenAuthoritativeSourceDisconnected but no DeletionTriggerConnectedSystemIds configured. " +
+                        "Falling back to WhenLastConnectorDisconnected behaviour.");
+                    if (remainingCsoCount == 0)
+                    {
+                        await MarkMvoForDeletionAsync(mvo, "last connector disconnected (no authoritative sources configured)");
+                    }
+                    break;
+                }
+
+                // Check if the disconnecting system is an authoritative source
+                if (triggerIds.Contains(disconnectingSystemId))
+                {
+                    Log.Information($"ProcessMvoDeletionRuleAsync: Authoritative source (system ID {disconnectingSystemId}) disconnected from MVO {mvo.Id}. " +
+                        "Triggering deletion even though {RemainingCount} connector(s) remain.", remainingCsoCount);
+                    await MarkMvoForDeletionAsync(mvo, $"authoritative source (system ID {disconnectingSystemId}) disconnected");
                 }
                 else
                 {
-                    // No grace period - housekeeping will delete immediately on next run
-                    Log.Information($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} marked for deletion (disconnected at {mvo.LastConnectorDisconnectedDate}). No grace period configured - will be deleted by housekeeping.");
+                    Log.Verbose($"ProcessMvoDeletionRuleAsync: System ID {disconnectingSystemId} disconnected from MVO {mvo.Id} but is not an authoritative source. " +
+                        "Authoritative sources: [{AuthSources}]. Not marking for deletion.", string.Join(", ", triggerIds));
                 }
-
-                // Persist the LastConnectorDisconnectedDate
-                await _jim.Metaverse.UpdateMetaverseObjectAsync(mvo);
                 break;
 
             default:
                 Log.Warning($"ProcessMvoDeletionRuleAsync: Unknown DeletionRule {mvo.Type.DeletionRule} for MVO {mvo.Id}.");
                 break;
         }
+    }
+
+    /// <summary>
+    /// Marks an MVO for deletion by setting LastConnectorDisconnectedDate.
+    /// Housekeeping will handle actual deletion after the grace period expires.
+    /// </summary>
+    /// <param name="mvo">The Metaverse Object to mark for deletion.</param>
+    /// <param name="reason">A description of why the MVO is being marked for deletion (for logging).</param>
+    private async Task MarkMvoForDeletionAsync(MetaverseObject mvo, string reason)
+    {
+        // Record when deletion was triggered
+        // This timestamp is used by housekeeping to determine when the grace period expires
+        mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
+
+        if (mvo.Type!.DeletionGracePeriodDays.HasValue && mvo.Type.DeletionGracePeriodDays.Value > 0)
+        {
+            Log.Information($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} marked for deletion ({reason}). Eligible after {mvo.Type.DeletionGracePeriodDays.Value} days.");
+        }
+        else
+        {
+            // No grace period - housekeeping will delete immediately on next run
+            Log.Information($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} marked for deletion ({reason}). No grace period configured - will be deleted by housekeeping.");
+        }
+
+        // Persist the LastConnectorDisconnectedDate
+        await _jim.Metaverse.UpdateMetaverseObjectAsync(mvo);
     }
 
     /// <summary>
@@ -1233,6 +1287,11 @@ public abstract class SyncTaskProcessorBase
                 var mvo = connectedSystemObject.MetaverseObject;
                 var mvoId = mvo.Id;
 
+                // Query remaining CSO count BEFORE breaking the join so the count includes all current connectors.
+                // Then subtract 1 to exclude this CSO which is about to be disconnected.
+                var totalCsoCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
+                var remainingCsoCount = Math.Max(0, totalCsoCount - 1);
+
                 // Check if we should remove contributed attributes based on the object type setting
                 if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion)
                 {
@@ -1260,12 +1319,9 @@ public abstract class SyncTaskProcessorBase
                 ApplyPendingMetaverseObjectAttributeChanges(mvo);
                 await _jim.Metaverse.UpdateMetaverseObjectAsync(mvo);
 
-                // Check if this was the last connector
-                var remainingCsoCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
-                if (remainingCsoCount == 0)
-                {
-                    await ProcessMvoDeletionRuleAsync(mvo);
-                }
+                // Evaluate MVO deletion rule based on type configuration
+                await ProcessMvoDeletionRuleAsync(mvo, _connectedSystem.Id, remainingCsoCount);
+
                 return MetaverseObjectChangeResult.DisconnectedOutOfScope();
         }
     }

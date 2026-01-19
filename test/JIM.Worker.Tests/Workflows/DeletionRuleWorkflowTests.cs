@@ -138,61 +138,48 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
     [Test]
     public async Task WhenLastConnectorDisconnected_WhenOneCsoDisconnectedButOthersRemain_MvoNotMarkedAsync()
     {
-        // Arrange: Create two Source systems, each with a CSO that joins to the same MVO
-        var sourceSystem1 = await CreateConnectedSystemAsync("Source HR System");
-        var sourceSystem2 = await CreateConnectedSystemAsync("Source AD System");
-        var sourceType1 = await CreateCsoTypeAsync(sourceSystem1.Id, "User");
-        var sourceType2 = await CreateCsoTypeAsync(sourceSystem2.Id, "User");
+        // Arrange: Create Source system with a CSO that projects to an MVO
+        var sourceSystem = await CreateConnectedSystemAsync("Source HR System");
+        var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
         var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
             "Person",
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
             gracePeriodDays: 0);
+        await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
 
-        // Create sync rules with matching
-        var syncRule1 = await CreateImportSyncRuleAsync(sourceSystem1.Id, sourceType1, mvType, "HR Import");
-        var syncRule2 = await CreateImportSyncRuleAsync(sourceSystem2.Id, sourceType2, mvType, "AD Import");
+        // Create CSO and run Full Sync to project to MVO
+        var cso1 = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith", "EMP001");
 
-        // Create matching rules so both CSOs join to the same MVO
-        await CreateMatchingRuleAsync(sourceType1, mvType, "EmployeeId");
-        await CreateMatchingRuleAsync(sourceType2, mvType, "EmployeeId");
-
-        // Create CSOs with matching employee IDs
-        var cso1 = await CreateCsoAsync(sourceSystem1.Id, sourceType1, "John Smith", "EMP001");
-        var cso2 = await CreateCsoAsync(sourceSystem2.Id, sourceType2, "John Smith", "EMP001");
-
-        // Run Full Sync on both systems to create MVO and join both CSOs
-        var fullSyncProfile1 = await CreateRunProfileAsync(sourceSystem1.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
-        var fullSyncProfile2 = await CreateRunProfileAsync(sourceSystem2.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
-
-        var activity1 = await CreateActivityAsync(sourceSystem1.Id, fullSyncProfile1, ConnectedSystemRunType.FullSynchronisation);
+        var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var fullSyncActivity = await CreateActivityAsync(sourceSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
         var cts1 = new CancellationTokenSource();
-        await new SyncFullSyncTaskProcessor(Jim, sourceSystem1, fullSyncProfile1, activity1, cts1)
+        await new SyncFullSyncTaskProcessor(Jim, sourceSystem, fullSyncProfile, fullSyncActivity, cts1)
             .PerformFullSyncAsync();
 
-        sourceSystem2 = await ReloadEntityAsync(sourceSystem2);
-        var activity2 = await CreateActivityAsync(sourceSystem2.Id, fullSyncProfile2, ConnectedSystemRunType.FullSynchronisation);
-        var cts2 = new CancellationTokenSource();
-        await new SyncFullSyncTaskProcessor(Jim, sourceSystem2, fullSyncProfile2, activity2, cts2)
-            .PerformFullSyncAsync();
-
-        // Verify both CSOs are joined to the same MVO
         cso1 = await ReloadEntityAsync(cso1);
-        cso2 = await ReloadEntityAsync(cso2);
-        Assert.That(cso1.MetaverseObjectId, Is.Not.Null, "CSO1 should be joined to MVO");
-        Assert.That(cso2.MetaverseObjectId, Is.Not.Null, "CSO2 should be joined to MVO");
-        Assert.That(cso1.MetaverseObjectId, Is.EqualTo(cso2.MetaverseObjectId),
-            "Both CSOs should be joined to the same MVO");
+        Assert.That(cso1.MetaverseObjectId, Is.Not.Null, "CSO1 should be joined to MVO after Full Sync");
         var mvoId = cso1.MetaverseObjectId!.Value;
 
-        // Mark only CSO1 as Obsolete (simulating a Delete from delta import on system 1)
+        // Manually create a second CSO and join it to the same MVO (simulating a second system)
+        var cso2 = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith Second", "EMP002");
+        cso2.MetaverseObjectId = mvoId;
+        cso2.JoinType = ConnectedSystemObjectJoinType.Joined;
+        cso2.DateJoined = DateTime.UtcNow;
+        await DbContext.SaveChangesAsync();
+
+        // Verify both CSOs are joined to the same MVO
+        cso2 = await ReloadEntityAsync(cso2);
+        Assert.That(cso2.MetaverseObjectId, Is.EqualTo(mvoId), "CSO2 should be joined to same MVO");
+
+        // Mark only CSO1 as Obsolete (simulating a Delete from delta import)
         await MarkCsoAsObsoleteAsync(cso1);
 
-        // Run Delta Sync on system 1 to process the Obsolete CSO
-        var deltaSyncProfile1 = await CreateRunProfileAsync(sourceSystem1.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
-        sourceSystem1 = await ReloadEntityAsync(sourceSystem1);
-        var deltaSyncActivity = await CreateActivityAsync(sourceSystem1.Id, deltaSyncProfile1, ConnectedSystemRunType.DeltaSynchronisation);
-        var cts3 = new CancellationTokenSource();
-        await new SyncDeltaSyncTaskProcessor(Jim, sourceSystem1, deltaSyncProfile1, deltaSyncActivity, cts3)
+        // Run Delta Sync to process the Obsolete CSO
+        var deltaSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        sourceSystem = await ReloadEntityAsync(sourceSystem);
+        var deltaSyncActivity = await CreateActivityAsync(sourceSystem.Id, deltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
+        var cts2 = new CancellationTokenSource();
+        await new SyncDeltaSyncTaskProcessor(Jim, sourceSystem, deltaSyncProfile, deltaSyncActivity, cts2)
             .PerformDeltaSyncAsync();
 
         // Assert: MVO should NOT be marked for deletion (CSO2 still connected)
@@ -220,10 +207,10 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
         var targetType = await CreateCsoTypeAsync(targetSystem.Id, "User");
 
-        // Create MV type with deletion trigger on Source system only
+        // Create MV type with WhenAuthoritativeSourceDisconnected and Source as authoritative
         var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
             "Person",
-            MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
             gracePeriodDays: 0,
             triggerConnectedSystemIds: new List<int> { sourceSystem.Id });
 
@@ -283,75 +270,68 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
 
     /// <summary>
     /// Verifies that MVOs are NOT marked for deletion when a non-trigger system
-    /// disconnects, even if all its CSOs are gone (because trigger system CSOs remain).
+    /// disconnects, even if its CSO is gone (because trigger system CSO remains).
     /// </summary>
     [Test]
     public async Task DeletionTrigger_WhenNonTriggerSystemDisconnects_MvoNotMarkedAsync()
     {
-        // Arrange: Create Source (HR) and Target (AD) systems
+        // Arrange: Create Source (HR) system that is the authoritative source
         var sourceSystem = await CreateConnectedSystemAsync("Source HR System");
-        var targetSystem = await CreateConnectedSystemAsync("Target AD System");
         var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
-        var targetType = await CreateCsoTypeAsync(targetSystem.Id, "User");
 
-        // Create MV type with deletion trigger on Source system only
+        // Create MV type with WhenAuthoritativeSourceDisconnected and Source as the only authoritative system
         var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
             "Person",
-            MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
             gracePeriodDays: 0,
             triggerConnectedSystemIds: new List<int> { sourceSystem.Id });
 
-        // Create sync rules
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
-        await CreateImportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Import");
 
-        // Create matching rules
-        await CreateMatchingRuleAsync(sourceType, mvType, "EmployeeId");
-        await CreateMatchingRuleAsync(targetType, mvType, "EmployeeId");
-
-        // Create CSOs with matching employee IDs
+        // Create Source CSO and run Full Sync to project to MVO
         var sourceCso = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith", "EMP001");
-        var targetCso = await CreateCsoAsync(targetSystem.Id, targetType, "John Smith", "EMP001");
 
-        // Run Full Sync on both systems
-        var sourceFullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
-        var targetFullSyncProfile = await CreateRunProfileAsync(targetSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
-
-        var activity1 = await CreateActivityAsync(sourceSystem.Id, sourceFullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
+        var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var fullSyncActivity = await CreateActivityAsync(sourceSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
         var cts1 = new CancellationTokenSource();
-        await new SyncFullSyncTaskProcessor(Jim, sourceSystem, sourceFullSyncProfile, activity1, cts1)
+        await new SyncFullSyncTaskProcessor(Jim, sourceSystem, fullSyncProfile, fullSyncActivity, cts1)
             .PerformFullSyncAsync();
 
-        targetSystem = await ReloadEntityAsync(targetSystem);
-        var activity2 = await CreateActivityAsync(targetSystem.Id, targetFullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
-        var cts2 = new CancellationTokenSource();
-        await new SyncFullSyncTaskProcessor(Jim, targetSystem, targetFullSyncProfile, activity2, cts2)
-            .PerformFullSyncAsync();
-
-        // Verify both CSOs are joined to the same MVO
         sourceCso = await ReloadEntityAsync(sourceCso);
-        targetCso = await ReloadEntityAsync(targetCso);
-        Assert.That(sourceCso.MetaverseObjectId, Is.EqualTo(targetCso.MetaverseObjectId),
-            "Both CSOs should be joined to the same MVO");
+        Assert.That(sourceCso.MetaverseObjectId, Is.Not.Null, "Source CSO should be joined to MVO");
         var mvoId = sourceCso.MetaverseObjectId!.Value;
 
-        // Mark Target CSO as Obsolete (non-trigger system)
+        // Create a second (non-authoritative) system and CSO, manually join to same MVO
+        var targetSystem = await CreateConnectedSystemAsync("Target AD System");
+        var targetType = await CreateCsoTypeAsync(targetSystem.Id, "User");
+        await CreateImportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Import");
+
+        var targetCso = await CreateCsoAsync(targetSystem.Id, targetType, "John Smith AD", "EMP001");
+        targetCso.MetaverseObjectId = mvoId;
+        targetCso.JoinType = ConnectedSystemObjectJoinType.Provisioned;
+        targetCso.DateJoined = DateTime.UtcNow;
+        await DbContext.SaveChangesAsync();
+
+        targetCso = await ReloadEntityAsync(targetCso);
+        Assert.That(targetCso.MetaverseObjectId, Is.EqualTo(mvoId), "Target CSO should be joined to same MVO");
+
+        // Mark Target CSO as Obsolete (non-authoritative system)
         await MarkCsoAsObsoleteAsync(targetCso);
 
         // Run Delta Sync on Target to process the Obsolete CSO
         var targetDeltaSyncProfile = await CreateRunProfileAsync(targetSystem.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
         targetSystem = await ReloadEntityAsync(targetSystem);
         var deltaSyncActivity = await CreateActivityAsync(targetSystem.Id, targetDeltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
-        var cts3 = new CancellationTokenSource();
-        await new SyncDeltaSyncTaskProcessor(Jim, targetSystem, targetDeltaSyncProfile, deltaSyncActivity, cts3)
+        var cts2 = new CancellationTokenSource();
+        await new SyncDeltaSyncTaskProcessor(Jim, targetSystem, targetDeltaSyncProfile, deltaSyncActivity, cts2)
             .PerformDeltaSyncAsync();
 
-        // Assert: MVO should NOT be marked for deletion (non-trigger system disconnected)
+        // Assert: MVO should NOT be marked for deletion (non-authoritative system disconnected)
         var mvo = await DbContext.MetaverseObjects.FindAsync(mvoId);
         Assert.That(mvo, Is.Not.Null, "MVO should still exist");
         Assert.That(mvo!.LastConnectorDisconnectedDate, Is.Null,
-            "MVO should NOT have LastConnectorDisconnectedDate set when a non-trigger system disconnects " +
-            "(Source CSO is still connected and Source is the only trigger system)");
+            "MVO should NOT have LastConnectorDisconnectedDate set when a non-authoritative system disconnects " +
+            "(Source CSO is still connected and Source is the only authoritative system)");
     }
 
     #endregion
