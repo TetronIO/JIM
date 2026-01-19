@@ -51,7 +51,7 @@
                         }
                         else if (attributeValue.Attribute.Type == AttributeDataType.Reference && attributeValue.ReferenceValue != null)
                         {
-                            <MudLink Href="@Utilities.GetMetaverseObjectHref(attributeValue.ReferenceValue)">@attributeValue.ReferenceValue.DisplayName</MudLink>
+                            <MudLink Href="@Utilities.GetMetaverseObjectHref(attributeValue.ReferenceValue)">@(attributeValue.ReferenceValue.DisplayName ?? attributeValue.ReferenceValue.Id.ToString())</MudLink>
                         }
                     </MudField>
                 </MudItem>

@@ -150,6 +150,7 @@ public class MetaverseRepository : IMetaverseRepository
             Include(mo => mo.AttributeValues).
             ThenInclude(av => av.ReferenceValue).
             ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
+            ThenInclude(rvav => rvav.Attribute).
             Include(mo => mo.AttributeValues).
             ThenInclude(av => av.ReferenceValue).
             ThenInclude(rv => rv!.Type).
@@ -165,6 +166,7 @@ public class MetaverseRepository : IMetaverseRepository
             .Include(mo => mo.AttributeValues)
                 .ThenInclude(av => av.ReferenceValue)
                     .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+                        .ThenInclude(rvav => rvav.Attribute)
             .Select(d => new MetaverseObjectHeader
             {
                 Id = d.Id,
