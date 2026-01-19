@@ -427,7 +427,7 @@
         </MudStack>
 
         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-            The following metaverse object attributes were modified during this synchronisation operation.
+            @GetAttributeChangesDescription()
         </MudText>
 
         <MudTable Items="@GetFlattenedChanges()"
@@ -965,6 +965,24 @@ else
                 vc.ReferenceValue == null ? vc.ToString() : null,
                 vc.ReferenceValue
             )));
+    }
+
+    /// <summary>
+    /// Returns the appropriate description for the attribute changes section based on operation type.
+    /// Import operations (Added/Updated/Deleted) affect Connected System Objects.
+    /// Sync and export operations affect Metaverse Objects.
+    /// </summary>
+    private string GetAttributeChangesDescription()
+    {
+        return _activityRunProfileExecutionItem?.ObjectChangeType switch
+        {
+            // Import operations - changes are to Connected System Object attributes
+            ObjectChangeType.Added or ObjectChangeType.Updated or ObjectChangeType.Deleted =>
+                "The following Connected System Object attributes were modified during this import operation.",
+
+            // Sync and export operations - changes flow to/from Metaverse Object
+            _ => "The following Metaverse Object attributes were modified during this synchronisation operation."
+        };
     }
 
     #region Pending Export Helpers
