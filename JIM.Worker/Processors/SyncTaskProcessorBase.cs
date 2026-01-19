@@ -1346,6 +1346,13 @@ public abstract class SyncTaskProcessorBase
 
             span.SetTag("driftedAttributeCount", result.DriftedAttributes.Count);
             span.SetTag("correctiveExportCount", result.CorrectiveExports.Count);
+
+            // Create RPEI for drift correction to provide visibility in Activity UI
+            // This shows that the delta sync detected unauthorised changes and staged corrective exports
+            var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+            runProfileExecutionItem.ConnectedSystemObject = cso;
+            runProfileExecutionItem.ObjectChangeType = ObjectChangeType.DriftCorrection;
+            _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
         }
 
         span.SetSuccess();

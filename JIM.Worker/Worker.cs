@@ -521,9 +521,10 @@ public class Worker : BackgroundService
         activity.TotalObjectUpdates = rpeis.Count(r =>
             r.ObjectChangeType is ObjectChangeType.Updated or ObjectChangeType.Joined or ObjectChangeType.Exported);
 
-        // Flows: AttributeFlow (sync only) - data flowing through existing connections
+        // Flows: AttributeFlow, DriftCorrection (sync only) - data flowing through existing connections
+        // DriftCorrection is included as it represents corrective attribute changes being staged for export
         activity.TotalObjectFlows = rpeis.Count(r =>
-            r.ObjectChangeType is ObjectChangeType.AttributeFlow);
+            r.ObjectChangeType is ObjectChangeType.AttributeFlow or ObjectChangeType.DriftCorrection);
 
         // Deletes: Deleted (import), Disconnected (sync), Deprovisioned (export)
         activity.TotalObjectDeletes = rpeis.Count(r =>

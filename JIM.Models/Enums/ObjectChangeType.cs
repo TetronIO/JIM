@@ -60,6 +60,13 @@ public enum ObjectChangeType
     /// </summary>
     OutOfScopeRetainJoin,
 
+    /// <summary>
+    /// Drift was detected during delta sync: the CSO attribute values in the target system
+    /// differed from the expected values on the MVO. A corrective pending export was created
+    /// to restore the expected state. This provides visibility into drift enforcement.
+    /// </summary>
+    DriftCorrection,
+
     // Export operations
     /// <summary>
     /// New CSO created in target system (provisioning).

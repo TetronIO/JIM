@@ -59,6 +59,12 @@ public class ActivityRunProfileExecutionStats
     /// Attribute flow stopped but join preserved ("once managed, always managed" pattern).
     /// </summary>
     public int TotalOutOfScopeRetainJoin { get; set; }
+
+    /// <summary>
+    /// Count of CSOs where drift was detected and corrective pending exports were created.
+    /// Drift occurs when target system attributes differ from expected MVO values.
+    /// </summary>
+    public int TotalDriftCorrections { get; set; }
     #endregion
 
     #region Export Stats

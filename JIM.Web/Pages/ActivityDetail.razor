@@ -201,6 +201,15 @@
                         <MudText Typo="Typo.h4" Color="Color.Warning">@_activityRunProfileExecutionStats.TotalDisconnections.ToString("N0")</MudText>
                     </MudPaper>
 
+                    @* Drift Corrections - shown when drift was detected and corrective exports staged *@
+                    @if (_activityRunProfileExecutionStats.TotalDriftCorrections > 0)
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Orange.Default}; min-width: 120px;")">
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">Drift Correction</MudText>
+                            <MudText Typo="Typo.h4" Color="Color.Warning">@_activityRunProfileExecutionStats.TotalDriftCorrections.ToString("N0")</MudText>
+                        </MudPaper>
+                    }
+
                     @* Pending Exports - surfaced during sync to show what's awaiting confirmation *@
                     @if (_activityRunProfileExecutionStats.TotalPendingExports > 0)
                     {
@@ -647,6 +656,8 @@
             availableTypes.Add(ObjectChangeType.AttributeFlow);
         if (_activityRunProfileExecutionStats.TotalDisconnections > 0)
             availableTypes.Add(ObjectChangeType.Disconnected);
+        if (_activityRunProfileExecutionStats.TotalDriftCorrections > 0)
+            availableTypes.Add(ObjectChangeType.DriftCorrection);
 
         // Export operations
         if (_activityRunProfileExecutionStats.TotalProvisioned > 0)
@@ -683,6 +694,7 @@
             ObjectChangeType.Joined => _activityRunProfileExecutionStats.TotalJoins,
             ObjectChangeType.AttributeFlow => _activityRunProfileExecutionStats.TotalAttributeFlows,
             ObjectChangeType.Disconnected => _activityRunProfileExecutionStats.TotalDisconnections,
+            ObjectChangeType.DriftCorrection => _activityRunProfileExecutionStats.TotalDriftCorrections,
             ObjectChangeType.Provisioned => _activityRunProfileExecutionStats.TotalProvisioned,
             ObjectChangeType.Exported => _activityRunProfileExecutionStats.TotalExported,
             ObjectChangeType.Deprovisioned => _activityRunProfileExecutionStats.TotalDeprovisioned,
