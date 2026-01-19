@@ -196,7 +196,7 @@ public class DriftDetectionService
                     // Calculate expected value from MVO based on export rule
                     // Build MVO attribute dictionary lazily (only when needed for expressions)
                     mvAttributeDictionary ??= BuildAttributeDictionary(targetMvo);
-                    var expectedValue = GetExpectedValue(targetMvo, source, mvAttributeDictionary);
+                    var expectedValue = GetExpectedValue(targetMvo, source, mvAttributeDictionary, mapping.TargetConnectedSystemAttribute);
 
                     // Get actual value from CSO
                     var actualValue = GetActualValue(cso, mapping.TargetConnectedSystemAttribute);
@@ -359,13 +359,15 @@ public class DriftDetectionService
     }
 
     /// <summary>
-    /// Gets the expected value for a CSO attribute based on the MVO and export rule source.
+    /// Gets the expected value(s) for a CSO attribute based on the MVO and export rule source.
     /// Supports both direct attribute mappings and expression-based mappings.
+    /// For multi-valued attributes, returns a HashSet containing all values.
     /// </summary>
     /// <param name="mvo">The Metaverse Object to get the expected value from.</param>
     /// <param name="source">The sync rule mapping source defining the attribute or expression.</param>
     /// <param name="mvAttributeDictionary">Pre-built dictionary of MVO attribute values for expression evaluation.</param>
-    private object? GetExpectedValue(MetaverseObject mvo, SyncRuleMappingSource source, Dictionary<string, object?> mvAttributeDictionary)
+    /// <param name="targetCsoAttribute">The target CSO attribute - used to determine plurality for consistent comparison.</param>
+    private object? GetExpectedValue(MetaverseObject mvo, SyncRuleMappingSource source, Dictionary<string, object?> mvAttributeDictionary, ConnectedSystemObjectTypeAttribute targetCsoAttribute)
     {
         // Handle expression-based mappings
         if (!string.IsNullOrWhiteSpace(source.Expression))
@@ -399,23 +401,65 @@ public class DriftDetectionService
         if (source.MetaverseAttribute == null)
             return null;
 
-        var mvoAttrValue = mvo.AttributeValues
-            .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id);
+        // Use the TARGET CSO attribute's plurality to determine how to return values.
+        // This ensures consistency with GetActualValue() which also uses CSO attribute plurality.
+        // MVO and CSO attributes may have different plurality settings for the same logical attribute.
+        var isMultiValued = targetCsoAttribute.AttributePlurality == AttributePlurality.MultiValued;
 
-        if (mvoAttrValue == null)
-            return null;
-
-        // Return the typed value based on the attribute type
-        return source.MetaverseAttribute.Type switch
+        if (isMultiValued)
         {
-            AttributeDataType.Text => mvoAttrValue.StringValue,
-            AttributeDataType.Number => mvoAttrValue.IntValue,
-            AttributeDataType.LongNumber => mvoAttrValue.LongValue,
-            AttributeDataType.DateTime => mvoAttrValue.DateTimeValue,
-            AttributeDataType.Boolean => mvoAttrValue.BoolValue,
-            AttributeDataType.Guid => mvoAttrValue.GuidValue,
-            AttributeDataType.Binary => mvoAttrValue.ByteValue,
-            AttributeDataType.Reference => mvoAttrValue.ReferenceValue?.Id,
+            // Get ALL values for this attribute
+            var mvoAttrValues = mvo.AttributeValues
+                .Where(av => av.AttributeId == source.MetaverseAttribute.Id)
+                .ToList();
+
+            if (mvoAttrValues.Count == 0)
+                return new HashSet<object>(); // Empty set
+
+            // Return a HashSet of all values for set comparison
+            var valueSet = new HashSet<object>();
+            foreach (var av in mvoAttrValues)
+            {
+                var value = GetTypedValueFromMvoAttributeValue(av, source.MetaverseAttribute.Type);
+                if (value != null)
+                {
+                    valueSet.Add(value);
+                }
+            }
+
+            Log.Debug("GetExpectedValue: Multi-valued attribute {AttrName} for MVO {MvoId} has {Count} expected values",
+                source.MetaverseAttribute.Name, mvo.Id, valueSet.Count);
+
+            return valueSet;
+        }
+        else
+        {
+            // Single-valued attribute - use FirstOrDefault
+            var mvoAttrValue = mvo.AttributeValues
+                .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id);
+
+            if (mvoAttrValue == null)
+                return null;
+
+            return GetTypedValueFromMvoAttributeValue(mvoAttrValue, source.MetaverseAttribute.Type);
+        }
+    }
+
+    /// <summary>
+    /// Extracts the typed value from an MVO attribute value based on the attribute data type.
+    /// </summary>
+    private static object? GetTypedValueFromMvoAttributeValue(MetaverseObjectAttributeValue av, AttributeDataType type)
+    {
+        return type switch
+        {
+            AttributeDataType.Text => av.StringValue,
+            AttributeDataType.Number => av.IntValue,
+            AttributeDataType.LongNumber => av.LongValue,
+            AttributeDataType.DateTime => av.DateTimeValue,
+            AttributeDataType.Boolean => av.BoolValue,
+            AttributeDataType.Guid => av.GuidValue,
+            AttributeDataType.Binary => av.ByteValue,
+            AttributeDataType.Reference => av.ReferenceValue?.Id,
             _ => null
         };
     }
@@ -465,40 +509,124 @@ public class DriftDetectionService
     }
 
     /// <summary>
-    /// Gets the actual value of a CSO attribute.
+    /// Gets the actual value(s) of a CSO attribute.
     /// For reference attributes, returns the MVO ID that the referenced CSO is joined to,
     /// enabling comparison with the expected MVO reference ID.
+    /// For multi-valued attributes, returns a HashSet containing all values.
     /// </summary>
     private static object? GetActualValue(ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute attribute)
     {
-        var csoAttrValue = cso.AttributeValues
-            .FirstOrDefault(av => av.AttributeId == attribute.Id);
+        // Check if this is a multi-valued attribute
+        var isMultiValued = attribute.AttributePlurality == AttributePlurality.MultiValued;
 
-        if (csoAttrValue == null)
-            return null;
-
-        // Return the typed value based on the attribute type
-        return attribute.Type switch
+        if (isMultiValued)
         {
-            AttributeDataType.Text => csoAttrValue.StringValue,
-            AttributeDataType.Number => csoAttrValue.IntValue,
-            AttributeDataType.LongNumber => csoAttrValue.LongValue,
-            AttributeDataType.DateTime => csoAttrValue.DateTimeValue,
-            AttributeDataType.Boolean => csoAttrValue.BoolValue,
-            AttributeDataType.Guid => csoAttrValue.GuidValue,
-            AttributeDataType.Binary => csoAttrValue.ByteValue,
+            // Get ALL values for this attribute
+            var csoAttrValues = cso.AttributeValues
+                .Where(av => av.AttributeId == attribute.Id)
+                .ToList();
+
+            if (csoAttrValues.Count == 0)
+                return new HashSet<object>(); // Empty set
+
+            // Return a HashSet of all values for set comparison
+            var valueSet = new HashSet<object>();
+            foreach (var av in csoAttrValues)
+            {
+                var value = GetTypedValueFromCsoAttributeValue(av, attribute.Type);
+                if (value != null)
+                {
+                    valueSet.Add(value);
+                }
+            }
+
+            Log.Debug("GetActualValue: Multi-valued attribute {AttrName} for CSO {CsoId} has {Count} actual values",
+                attribute.Name, cso.Id, valueSet.Count);
+
+            return valueSet;
+        }
+        else
+        {
+            // Single-valued attribute - use FirstOrDefault
+            var csoAttrValue = cso.AttributeValues
+                .FirstOrDefault(av => av.AttributeId == attribute.Id);
+
+            if (csoAttrValue == null)
+                return null;
+
+            return GetTypedValueFromCsoAttributeValue(csoAttrValue, attribute.Type);
+        }
+    }
+
+    /// <summary>
+    /// Extracts the typed value from a CSO attribute value based on the attribute data type.
+    /// For reference attributes, returns the MVO ID that the referenced CSO is joined to.
+    /// </summary>
+    private static object? GetTypedValueFromCsoAttributeValue(ConnectedSystemObjectAttributeValue av, AttributeDataType type)
+    {
+        return type switch
+        {
+            AttributeDataType.Text => av.StringValue,
+            AttributeDataType.Number => av.IntValue,
+            AttributeDataType.LongNumber => av.LongValue,
+            AttributeDataType.DateTime => av.DateTimeValue,
+            AttributeDataType.Boolean => av.BoolValue,
+            AttributeDataType.Guid => av.GuidValue,
+            AttributeDataType.Binary => av.ByteValue,
             // For references, return the MVO ID that the referenced CSO is joined to.
             // This enables comparison with the expected MVO reference ID from GetExpectedValue.
             // The referenced CSO's MetaverseObjectId tells us which MVO it represents.
-            AttributeDataType.Reference => csoAttrValue.ReferenceValue?.MetaverseObjectId,
+            AttributeDataType.Reference => av.ReferenceValue?.MetaverseObjectId,
             _ => null
         };
     }
 
     /// <summary>
     /// Compares two attribute values for equality.
+    /// Handles both single values and HashSets (for multi-valued attributes).
     /// </summary>
     private static bool ValuesEqual(object? expected, object? actual)
+    {
+        if (expected == null && actual == null)
+            return true;
+
+        if (expected == null || actual == null)
+            return false;
+
+        // Handle HashSet comparison (for multi-valued attributes)
+        if (expected is HashSet<object> expectedSet && actual is HashSet<object> actualSet)
+        {
+            // Compare sets by checking if they contain the same elements
+            if (expectedSet.Count != actualSet.Count)
+            {
+                Log.Debug("ValuesEqual: Multi-valued attribute sets have different counts. Expected: {ExpectedCount}, Actual: {ActualCount}",
+                    expectedSet.Count, actualSet.Count);
+                return false;
+            }
+
+            // Check if all expected values are in the actual set
+            foreach (var expectedValue in expectedSet)
+            {
+                var found = actualSet.Any(actualValue => SingleValueEquals(expectedValue, actualValue));
+                if (!found)
+                {
+                    Log.Debug("ValuesEqual: Expected value {ExpectedValue} not found in actual set",
+                        FormatValueForLog(expectedValue));
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        // Handle single value comparison
+        return SingleValueEquals(expected, actual);
+    }
+
+    /// <summary>
+    /// Compares two single values for equality.
+    /// </summary>
+    private static bool SingleValueEquals(object? expected, object? actual)
     {
         if (expected == null && actual == null)
             return true;
@@ -530,6 +658,7 @@ public class DriftDetectionService
     /// <summary>
     /// Creates corrective pending exports for drifted attributes.
     /// Uses the existing ExportEvaluation infrastructure to ensure consistency.
+    /// For multi-valued attributes, creates atomic ADD/REMOVE changes for the specific differences.
     /// </summary>
     private async Task<List<PendingExport>> CreateCorrectiveExportsAsync(
         ConnectedSystemObject cso,
@@ -553,16 +682,69 @@ public class DriftDetectionService
 
             foreach (var drifted in attributes)
             {
-                var change = new PendingExportAttributeValueChange
-                {
-                    Id = Guid.NewGuid(),
-                    AttributeId = drifted.Attribute.Id,
-                    ChangeType = PendingExportAttributeChangeType.Update
-                };
+                // Check if this is a multi-valued attribute
+                var isMultiValued = drifted.Attribute.AttributePlurality == AttributePlurality.MultiValued;
 
-                // Set the expected value on the change
-                SetAttributeChangeValue(change, drifted.ExpectedValue, drifted.Attribute.Type);
-                attributeChanges.Add(change);
+                if (isMultiValued)
+                {
+                    // For multi-valued attributes, compute the diff between expected and actual
+                    var expectedSet = drifted.ExpectedValue as HashSet<object> ?? [];
+                    var actualSet = drifted.ActualValue as HashSet<object> ?? [];
+
+                    // Find values to ADD (in expected but not in actual)
+                    foreach (var expectedValue in expectedSet)
+                    {
+                        var existsInActual = actualSet.Any(av => SingleValueEquals(expectedValue, av));
+                        if (!existsInActual)
+                        {
+                            var addChange = new PendingExportAttributeValueChange
+                            {
+                                Id = Guid.NewGuid(),
+                                AttributeId = drifted.Attribute.Id,
+                                ChangeType = PendingExportAttributeChangeType.Add
+                            };
+                            SetAttributeChangeValue(addChange, expectedValue, drifted.Attribute.Type);
+                            attributeChanges.Add(addChange);
+
+                            Log.Debug("CreateCorrectiveExportsAsync: Adding value {Value} to attribute {AttrName}",
+                                FormatValueForLog(expectedValue), drifted.Attribute.Name);
+                        }
+                    }
+
+                    // Find values to REMOVE (in actual but not in expected)
+                    foreach (var actualValue in actualSet)
+                    {
+                        var existsInExpected = expectedSet.Any(ev => SingleValueEquals(ev, actualValue));
+                        if (!existsInExpected)
+                        {
+                            var removeChange = new PendingExportAttributeValueChange
+                            {
+                                Id = Guid.NewGuid(),
+                                AttributeId = drifted.Attribute.Id,
+                                ChangeType = PendingExportAttributeChangeType.Remove
+                            };
+                            SetAttributeChangeValue(removeChange, actualValue, drifted.Attribute.Type);
+                            attributeChanges.Add(removeChange);
+
+                            Log.Debug("CreateCorrectiveExportsAsync: Removing value {Value} from attribute {AttrName}",
+                                FormatValueForLog(actualValue), drifted.Attribute.Name);
+                        }
+                    }
+                }
+                else
+                {
+                    // For single-valued attributes, use Update
+                    var change = new PendingExportAttributeValueChange
+                    {
+                        Id = Guid.NewGuid(),
+                        AttributeId = drifted.Attribute.Id,
+                        ChangeType = PendingExportAttributeChangeType.Update
+                    };
+
+                    // Set the expected value on the change
+                    SetAttributeChangeValue(change, drifted.ExpectedValue, drifted.Attribute.Type);
+                    attributeChanges.Add(change);
+                }
             }
 
             if (attributeChanges.Count == 0)

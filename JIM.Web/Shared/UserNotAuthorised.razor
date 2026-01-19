@@ -3,6 +3,7 @@
 @using JIM.Models.Core
 @using Microsoft.AspNetCore.Components.Authorization
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
 @inject JimApplication Jim
 
 <div class="not-authorised-container">
@@ -75,13 +76,37 @@
         @if (_isInUsersRole)
         {
             <MudAlert Severity="Severity.Info" Class="mt-4" Variant="Variant.Outlined">
-                <MudText>You're signed in, but you're missing a specific role required for this page.</MudText>
+                <MudText>You're signed in, but you don't have permission to access this page.</MudText>
             </MudAlert>
+
+            <MudExpansionPanels Class="mt-4" Elevation="0">
+                <MudExpansionPanel Text="Technical Details" MaxHeight="500">
+                    <MudSimpleTable Hover="true" Dense="true" Class="mt-2">
+                        <tbody>
+                            <tr>
+                                <td><strong>User</strong></td>
+                                <td><code>@_userName</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Your Roles</strong></td>
+                                <td><code>@_userRoles</code></td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+
+                    <MudDivider Class="my-3"/>
+
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        <strong>Administrator Note:</strong> This user is authenticated and exists in JIM,
+                        but lacks the required role for this page. Check the user's role assignments.
+                    </MudText>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
         }
         else
         {
             <MudAlert Severity="Severity.Warning" Class="mt-4" Variant="Variant.Outlined">
-                <MudText>We authenticated you successfully, but couldn't find your account in our database.</MudText>
+                <MudText>You've been authenticated, but your account couldn't be found in JIM.</MudText>
             </MudAlert>
 
             <MudExpansionPanels Class="mt-4" Elevation="0">
@@ -282,16 +307,35 @@
     private string? _ssoClaimType;
     private string? _ssoAttributeName;
     private string? _userUniqueIdClaimValue;
+    private string? _userRoles;
     private bool _isInUsersRole;
+    private bool _isAuthenticated;
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
-        if (user?.Identity == null)
-            return;
 
-        _userName = user.Identity.Name;
+        // Check if the user is actually authenticated
+        _isAuthenticated = user?.Identity?.IsAuthenticated == true;
+
+        // If not authenticated (session expired), redirect to re-authenticate
+        // Navigate to the home page which will trigger the OIDC challenge
+        if (!_isAuthenticated)
+        {
+            // Force a full page navigation to trigger authentication
+            NavigationManager.NavigateTo("/", forceLoad: true);
+            return;
+        }
+
+        _userName = user!.Identity!.Name;
+
+        // Get the user's roles for display
+        var roles = user.Claims
+            .Where(c => c.Type == System.Security.Claims.ClaimTypes.Role || c.Type == "role")
+            .Select(c => c.Value)
+            .ToList();
+        _userRoles = roles.Count > 0 ? string.Join(", ", roles) : "(none)";
 
         var serviceSettings = await Jim.ServiceSettings.GetServiceSettingsAsync();
         if (serviceSettings == null)
