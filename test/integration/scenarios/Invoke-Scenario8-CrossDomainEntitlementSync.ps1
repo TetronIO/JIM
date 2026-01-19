@@ -945,14 +945,31 @@ try {
         Write-Host "    Target $driftGroup1 members (before): $targetGroup1MemberCountBefore" -ForegroundColor Gray
         Write-Host "    Target $driftGroup2 members (before): $targetGroup2MemberCountBefore" -ForegroundColor Gray
 
-        # Step 4.3: Run Delta Forward Sync to reassert state from Source to Target
-        # This will:
-        # 1. Delta Import from Source (picks up any Source changes, but mainly re-confirms state)
-        # 2. Delta Sync (evaluates export rules against MVOs)
-        # 3. Export to Target (corrects the drift by reasserting Source membership)
-        # 4. Delta Confirming Import (confirms the exports)
-        Write-Host "  Running delta forward sync to reassert state..." -ForegroundColor Gray
-        Invoke-DeltaForwardSync -Context "ReassertState"
+        # Step 4.3: Execute the corrective exports to reassert state
+        # Drift detection has already created the pending exports - we just need to:
+        # 1. Export to Target (executes the corrective pending exports)
+        # 2. Confirming Import (confirms the exports were applied)
+        # 3. Delta Sync (clears pending export state)
+        # Note: No need to re-import/sync from Source - the MVO state is already correct
+        Write-Host "  Executing corrective exports to reassert state..." -ForegroundColor Gray
+
+        # Export to Target
+        Write-Host "    Exporting corrections to Target AD..." -ForegroundColor Gray
+        $exportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExportProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "Target Export (reassert state)"
+        Start-Sleep -Seconds $WaitSeconds
+
+        # Confirming Import
+        Write-Host "    Running confirming import on Target AD..." -ForegroundColor Gray
+        $confirmResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaImportProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $confirmResult.activityId -Name "Target Confirming Import (reassert state)"
+        Start-Sleep -Seconds $WaitSeconds
+
+        # Delta Sync to confirm exports
+        Write-Host "    Running delta sync on Target AD (confirm exports)..." -ForegroundColor Gray
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaSyncProfile.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Target Delta Sync (confirm exports)"
+        Start-Sleep -Seconds $WaitSeconds
 
         # Step 4.4: Validate state reassertion
         Write-Host "  Validating state reassertion..." -ForegroundColor Gray
