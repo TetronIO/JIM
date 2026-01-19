@@ -36,21 +36,24 @@ Deletion rules are configured on the `MetaverseObjectType` entity:
 | `DeletionGracePeriodDays` | int? | Days to wait before actual deletion (null/0 = immediate) |
 | `DeletionTriggerConnectedSystemIds` | List<int> | Specific systems that trigger deletion when they disconnect |
 
-### DeletionRule Values
+### DeletionRule Enum Values
 
 | Value | Behaviour |
 |-------|-----------|
 | `Manual` | MVO is never automatically deleted. Must be manually deleted by admin. |
-| `WhenLastConnectorDisconnected` | MVO is marked for deletion when connector disconnections meet the trigger criteria. |
+| `WhenLastConnectorDisconnected` | MVO is deleted when **ALL** CSOs are disconnected. |
+| `WhenAuthoritativeSourceDisconnected` | MVO is deleted when **ANY** selected authoritative source disconnects (requires selecting at least one source). |
 
-### DeletionTriggerConnectedSystemIds Behaviour
+### DeletionTriggerConnectedSystemIds (Required for WhenAuthoritativeSourceDisconnected)
 
-This property controls **which** system disconnections trigger deletion:
+When `DeletionRule = WhenAuthoritativeSourceDisconnected`, you must specify which systems are authoritative:
 
 | Configuration | Behaviour |
 |--------------|-----------|
-| Empty list `[]` | MVO is deleted only when **ALL** CSOs are disconnected (legacy behaviour) |
-| Specific IDs `[1, 2]` | MVO is deleted when **ANY** of the specified systems disconnect, regardless of whether other CSOs remain |
+| One system `[1]` | MVO is deleted when that specific system disconnects |
+| Multiple systems `[1, 2]` | MVO is deleted when **ANY** of the specified systems disconnect |
+
+**Note**: Only "contributing systems" (systems with inbound sync rules for this object type) can be selected as authoritative sources.
 
 #### Example: HR → AD Synchronisation
 
@@ -59,14 +62,14 @@ Source System: HR (ID: 1) - Authoritative source
 Target System: AD (ID: 2) - Provisioned target
 
 Configuration:
-  DeletionRule: WhenLastConnectorDisconnected
+  DeletionRule: WhenAuthoritativeSourceDisconnected
   DeletionGracePeriodDays: 0
-  DeletionTriggerConnectedSystemIds: [1]  // Only HR triggers deletion
+  DeletionTriggerConnectedSystemIds: [1]  // HR is the authoritative source
 
 Scenario: User deleted from HR
   1. HR CSO becomes Obsolete (via delta import detecting deletion)
   2. Sync processes Obsolete CSO, disconnects it from MVO
-  3. Deletion rule evaluates: HR (system ID 1) is in trigger list
+  3. Deletion rule evaluates: HR (system ID 1) is an authoritative source
   4. MVO.LastConnectorDisconnectedDate is set (marking MVO for deletion)
   5. AD CSO is still connected, but deletion is triggered because HR is authoritative
   6. Housekeeping runs:
@@ -83,9 +86,9 @@ System 2: Cloud AD (ID: 2) - Secondary authoritative source
 System 3: Application DB (ID: 3) - Target only
 
 Configuration:
-  DeletionRule: WhenLastConnectorDisconnected
+  DeletionRule: WhenAuthoritativeSourceDisconnected
   DeletionGracePeriodDays: 7
-  DeletionTriggerConnectedSystemIds: [1, 2]  // Either AD can trigger
+  DeletionTriggerConnectedSystemIds: [1, 2]  // Either AD is authoritative
 
 Behaviour:
   - Deletion is triggered if user is deleted from Corporate AD OR Cloud AD
@@ -101,11 +104,11 @@ MVO deletion is a **two-stage process** for safety and auditability:
 
 When a CSO is disconnected from an MVO, `ProcessMvoDeletionRuleAsync()` evaluates:
 
-1. Is `DeletionRule` set to `WhenLastConnectorDisconnected`?
+1. Is `DeletionRule` NOT `Manual`?
 2. Is the MVO `Origin` set to `Projected` (not `Internal`)?
-3. Does the disconnection meet the trigger criteria?
-   - If `DeletionTriggerConnectedSystemIds` is empty: Are ALL CSOs now disconnected?
-   - If `DeletionTriggerConnectedSystemIds` has values: Is the disconnecting system in the list?
+3. Does the disconnection meet the trigger criteria based on `DeletionRule`?
+   - `WhenLastConnectorDisconnected`: Are ALL CSOs now disconnected?
+   - `WhenAuthoritativeSourceDisconnected`: Is the disconnecting system in `DeletionTriggerConnectedSystemIds`?
 
 If all conditions are met:
 - Set `MVO.LastConnectorDisconnectedDate = DateTime.UtcNow`
@@ -117,7 +120,7 @@ The worker's `PerformHousekeepingAsync()` runs periodically (max every 60 second
 
 1. Queries for MVOs eligible for deletion:
    - `Origin = Projected`
-   - `DeletionRule = WhenLastConnectorDisconnected`
+   - `DeletionRule` is NOT `Manual`
    - `LastConnectorDisconnectedDate` is set
    - Grace period has elapsed (or no grace period configured)
    - No CSOs remain connected (for safety)
@@ -241,6 +244,224 @@ Tests to be fixed/added:
 Location: `test/integration/scenarios/Invoke-Scenario8-CrossDomainEntitlementSync.ps1`
 
 The DeleteGroup test validates end-to-end deletion flow from Source AD deletion through to Target AD deprovisioning.
+
+## Related GitHub Issues
+
+The following GitHub issues define additional deletion rule features. This section provides a consolidated analysis of all proposed deletion options, their usefulness for ILM products, and implementation priorities.
+
+### Issue Summary
+
+| Issue | Title | Status | Priority |
+|-------|-------|--------|----------|
+| #115 | WhenAuthoritativeSourceDisconnected (DeletionTriggerConnectedSystemIds) | Open | **P1 - Critical** |
+| #116 | ExcludedFromLastConnectorCheck | Open | P3 - Low |
+| #117 | Soft Delete / Recycle Bin | Open | P2 - Medium |
+| #118 | Conditional MVO Deletion (Attribute-Based) | Open | P2 - Medium |
+| #119 | Authoritative Source Hierarchy | Open | P3 - Low |
+| #126 | CSO Deletion Behaviour Options | Open | P2 - Medium |
+
+---
+
+### #115: Authoritative Source Triggers (DeletionTriggerConnectedSystemIds)
+
+**Description**: Delete MVO when specific "authoritative" connected systems disconnect, regardless of whether other CSOs remain connected.
+
+**Current State**: Property exists in model (`DeletionTriggerConnectedSystemIds`), but logic is **not implemented** in `ProcessMvoDeletionRuleAsync()`.
+
+**Use Cases**:
+- HR → AD sync: Delete identity when HR (source of truth) removes employee, even if AD CSO exists
+- Multi-domain sync: Delete when primary domain removes user, propagate to secondary domains
+
+**ILM Value Assessment**: ⭐⭐⭐⭐⭐ **Essential**
+- This is the **core Leaver scenario** for any identity management system
+- Without this, JIM cannot properly deprovision target systems when source systems remove identities
+- Every ILM deployment requires distinguishing "source" vs "target" systems
+
+**Implementation Priority**: **P1 - Critical (MVP Blocker)**
+- Required for Scenario 8 integration test to pass
+- Fundamental to JML (Joiner-Mover-Leaver) lifecycle support
+- Property already exists - only logic implementation needed
+
+---
+
+### #116: Excluded Systems (ExcludedFromLastConnectorCheck)
+
+**Description**: Exclude specific connected systems from the "last connector" check. MVO deletion only considers non-excluded systems.
+
+**Use Cases**:
+- ServiceDesk creates shadow accounts that shouldn't prevent deletion
+- Audit/logging systems that create read-only connector records
+- Legacy systems being phased out
+
+**ILM Value Assessment**: ⭐⭐ **Niche**
+- Inverse of #115 - solves same problem from opposite direction
+- Less intuitive than explicitly specifying authoritative sources
+- Only useful when you have many source systems and want to exclude a few
+
+**Implementation Priority**: **P3 - Low (Post-MVP)**
+- #115 covers most use cases more intuitively
+- Can be implemented later if customers request it
+- Not blocking any known scenarios
+
+---
+
+### #117: Soft Delete / Recycle Bin
+
+**Description**: Instead of immediately deleting MVOs, move them to a "soft deleted" state with configurable retention period before permanent deletion.
+
+**Use Cases**:
+- Compliance requirements for data retention
+- Recovery from accidental deletions or sync errors
+- "Undo" capability for admin mistakes
+- Regulatory hold requirements
+
+**ILM Value Assessment**: ⭐⭐⭐⭐ **High Value**
+- Common feature in enterprise identity systems
+- Addresses real customer concerns about data loss
+- Provides safety net beyond grace periods
+- Required for some compliance scenarios (GDPR right to erasure with retention)
+
+**Implementation Priority**: **P2 - Medium (Post-MVP)**
+- Not blocking current functionality
+- Grace periods provide partial coverage for accidental deletion
+- Significant implementation effort (new status, queries, UI, cleanup job)
+- Should be implemented before GA for enterprise customers
+
+**Proposed Design**:
+```
+MetaverseObject:
+  - Status: Active | SoftDeleted
+  - SoftDeletedDate: DateTime?
+  - PermanentDeletionDate: DateTime? (calculated)
+
+MetaverseObjectType:
+  - SoftDeleteRetentionDays: int? (null = no soft delete, 0 = immediate)
+```
+
+---
+
+### #118: Conditional Deletion (Attribute-Based)
+
+**Description**: Only proceed with MVO deletion if specified attribute conditions are met.
+
+**Use Cases**:
+- "Only delete if EmployeeStatus != 'Active'" - prevents deleting active employees
+- "Only delete if AccountDisabled == true" - ensures accounts are disabled first
+- "Only delete if TerminationDate < Today - 90 days" - business date retention
+
+**ILM Value Assessment**: ⭐⭐⭐ **Medium-High**
+- Adds business logic layer to deletion decisions
+- Prevents accidental deletion of active identities
+- Useful for complex HR integration scenarios
+- Can enforce "disable before delete" patterns
+
+**Implementation Priority**: **P2 - Medium (Post-MVP)**
+- Grace periods handle most "oops" scenarios
+- Adds complexity to deletion evaluation
+- Expression evaluation already exists (DynamicExpresso) - can reuse
+- Nice-to-have for sophisticated deployments
+
+**Proposed Design**:
+```
+MetaverseObjectType:
+  - DeletionConditionExpression: string?
+    Examples:
+    - "mv[\"EmployeeStatus\"] != \"Active\""
+    - "mv[\"TerminationDate\"] < DateTime.UtcNow.AddDays(-90)"
+```
+
+---
+
+### #119: Authoritative Source Hierarchy
+
+**Description**: Extend authoritative sources to support priority ordering and AND/OR logic (e.g., "delete only when ALL authoritative sources are gone" vs "delete when ANY is gone").
+
+**Use Cases**:
+- "Delete only when BOTH HR AND AD are disconnected" - redundant source validation
+- Multiple HR systems with different authority levels
+- Complex enterprise scenarios with regional HR systems
+
+**ILM Value Assessment**: ⭐⭐ **Niche**
+- Most deployments have a single authoritative source
+- Adds significant complexity to deletion logic
+- Edge case for very large enterprises
+- #115's "ANY in list triggers" covers most practical scenarios
+
+**Implementation Priority**: **P3 - Low (Post-MVP, if requested)**
+- #115 covers 90%+ of use cases
+- Complex to explain to admins
+- Can be added later if customers demonstrate need
+- Consider if #115 + conditional deletion (#118) covers these scenarios
+
+---
+
+### #126: CSO Deletion Behaviour Options
+
+**Description**: Configurable behaviour for what happens to target system CSOs when MVO is deleted.
+
+**Current State**: MVP uses `JoinType = Provisioned` check - only provisioned CSOs are deleted, matched CSOs are disconnected.
+
+**Proposed Options**:
+| Option | Behaviour |
+|--------|-----------|
+| `ProvisionedOnly` | Only delete CSOs that JIM created (safest default) |
+| `AllJoined` | Delete all joined CSOs regardless of JoinType |
+| `DisconnectOnly` | Never delete - just disconnect from MVO |
+
+**Use Cases**:
+- AD cleanup: Delete all accounts JIM manages, not just ones it created
+- Application integration: Leave orphaned accounts for manual review
+- Compliance: Keep audit trail by preserving CSO records
+
+**ILM Value Assessment**: ⭐⭐⭐ **Medium**
+- Current default (`ProvisionedOnly`) is correct for most scenarios
+- `DisconnectOnly` useful for cautious deployments
+- `AllJoined` dangerous - needs clear warnings
+
+**Implementation Priority**: **P2 - Medium (Post-MVP)**
+- Current behaviour is reasonable default
+- Can be added when customers need more control
+- Related to scope fallout behaviour (separate concern)
+
+---
+
+### Implementation Roadmap
+
+#### Phase 1: MVP (Current Sprint)
+| Feature | Issue | Status |
+|---------|-------|--------|
+| DeletionTriggerConnectedSystemIds | #115 | **In Progress** |
+
+#### Phase 2: Post-MVP (Near-term)
+| Feature | Issue | Rationale |
+|---------|-------|-----------|
+| Soft Delete / Recycle Bin | #117 | Enterprise compliance |
+| Conditional Deletion | #118 | Business rule enforcement |
+| CSO Deletion Behaviour | #126 | Admin control |
+
+#### Phase 3: Future (If Requested)
+| Feature | Issue | Rationale |
+|---------|-------|-----------|
+| Excluded Systems | #116 | Niche use case |
+| Source Hierarchy | #119 | Complex enterprise only |
+
+---
+
+### Decision Matrix
+
+When choosing which deletion features to prioritise, consider:
+
+| Criterion | #115 | #116 | #117 | #118 | #119 | #126 |
+|-----------|------|------|------|------|------|------|
+| Blocks MVP scenarios | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Common ILM requirement | ✅ | ❌ | ✅ | ⚠️ | ❌ | ⚠️ |
+| Implementation complexity | Low | Low | High | Medium | High | Low |
+| Risk if not implemented | High | Low | Medium | Low | Low | Low |
+| Customer requests | Yes | No | Yes | Maybe | No | Maybe |
+
+**Legend**: ✅ Yes | ⚠️ Partial | ❌ No
+
+---
 
 ## Related Documentation
 

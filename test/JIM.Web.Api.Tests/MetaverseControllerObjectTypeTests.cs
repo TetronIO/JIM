@@ -310,5 +310,119 @@ public class MetaverseControllerObjectTypeTests
         Assert.That(dto.DeletionGracePeriodDays, Is.EqualTo(30));
     }
 
+    [Test]
+    public async Task UpdateObjectTypeAsync_WhenAuthoritativeSourceDisconnected_WithTriggerIds_Succeeds()
+    {
+        var objectType = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "User",
+            PluralName = "Users",
+            DeletionRule = MetaverseObjectDeletionRule.Manual,
+            DeletionTriggerConnectedSystemIds = new List<int>()
+        };
+
+        var connectedSystem = new JIM.Models.Staging.ConnectedSystem { Id = 1, Name = "HR" };
+
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false))
+            .ReturnsAsync(objectType);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemAsync(1))
+            .ReturnsAsync(connectedSystem);
+        _mockMetaverseRepo.Setup(r => r.UpdateMetaverseObjectTypeAsync(It.IsAny<MetaverseObjectType>()))
+            .Returns(Task.CompletedTask);
+
+        var request = new UpdateMetaverseObjectTypeRequest
+        {
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            DeletionTriggerConnectedSystemIds = new List<int> { 1 }
+        };
+
+        var result = await _controller.UpdateObjectTypeAsync(1, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+    }
+
+    [Test]
+    public async Task UpdateObjectTypeAsync_WhenAuthoritativeSourceDisconnected_WithoutTriggerIds_ReturnsBadRequest()
+    {
+        var objectType = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "User",
+            PluralName = "Users",
+            DeletionRule = MetaverseObjectDeletionRule.Manual,
+            DeletionTriggerConnectedSystemIds = new List<int>()
+        };
+
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false))
+            .ReturnsAsync(objectType);
+
+        var request = new UpdateMetaverseObjectTypeRequest
+        {
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
+        };
+
+        var result = await _controller.UpdateObjectTypeAsync(1, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var badRequest = result as BadRequestObjectResult;
+        var error = badRequest!.Value as ApiErrorResponse;
+        Assert.That(error!.Message, Does.Contain("authoritative source"));
+    }
+
+    [Test]
+    public async Task UpdateObjectTypeAsync_WhenAuthoritativeSourceDisconnected_WithEmptyTriggerIds_ReturnsBadRequest()
+    {
+        var objectType = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "User",
+            PluralName = "Users",
+            DeletionRule = MetaverseObjectDeletionRule.Manual,
+            DeletionTriggerConnectedSystemIds = new List<int>()
+        };
+
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false))
+            .ReturnsAsync(objectType);
+
+        var request = new UpdateMetaverseObjectTypeRequest
+        {
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            DeletionTriggerConnectedSystemIds = new List<int>()
+        };
+
+        var result = await _controller.UpdateObjectTypeAsync(1, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task UpdateObjectTypeAsync_WhenAuthoritativeSourceDisconnected_UseExistingTriggerIds_Succeeds()
+    {
+        // Test that changing to WhenAuthoritativeSourceDisconnected works when trigger IDs are already set
+        var objectType = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "User",
+            PluralName = "Users",
+            DeletionRule = MetaverseObjectDeletionRule.Manual,
+            DeletionTriggerConnectedSystemIds = new List<int> { 1, 2 }
+        };
+
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false))
+            .ReturnsAsync(objectType);
+        _mockMetaverseRepo.Setup(r => r.UpdateMetaverseObjectTypeAsync(It.IsAny<MetaverseObjectType>()))
+            .Returns(Task.CompletedTask);
+
+        var request = new UpdateMetaverseObjectTypeRequest
+        {
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
+        };
+
+        var result = await _controller.UpdateObjectTypeAsync(1, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+    }
+
     #endregion
 }

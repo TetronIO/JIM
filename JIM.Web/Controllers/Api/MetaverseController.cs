@@ -116,6 +116,15 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             objectType.DeletionTriggerConnectedSystemIds = request.DeletionTriggerConnectedSystemIds;
         }
 
+        // Validate WhenAuthoritativeSourceDisconnected requires at least one trigger system
+        var effectiveDeletionRule = request.DeletionRule ?? objectType.DeletionRule;
+        var effectiveTriggerIds = request.DeletionTriggerConnectedSystemIds ?? objectType.DeletionTriggerConnectedSystemIds;
+        if (effectiveDeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected &&
+            (effectiveTriggerIds == null || effectiveTriggerIds.Count == 0))
+        {
+            return BadRequest(ApiErrorResponse.BadRequest("WhenAuthoritativeSourceDisconnected deletion rule requires at least one authoritative source to be specified in DeletionTriggerConnectedSystemIds."));
+        }
+
         await _application.Metaverse.UpdateMetaverseObjectTypeAsync(objectType);
 
         _logger.LogInformation("Updated metaverse object type: {Id} ({Name}) - DeletionRule: {DeletionRule}, GracePeriod: {GracePeriod}",

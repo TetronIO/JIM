@@ -56,9 +56,10 @@ public class UpdateMetaverseObjectTypeRequest
     public int? DeletionGracePeriodDays { get; set; }
 
     /// <summary>
-    /// Optional list of connected system IDs that trigger MVO deletion when disconnected.
+    /// List of connected system IDs that are authoritative sources for deletion.
+    /// Required when DeletionRule is WhenAuthoritativeSourceDisconnected.
     /// When set: Delete MVO if ANY of these specific systems disconnect.
-    /// When empty/null: Delete MVO only when ALL connectors are disconnected.
+    /// Ignored when DeletionRule is Manual or WhenLastConnectorDisconnected.
     /// </summary>
     public List<int>? DeletionTriggerConnectedSystemIds { get; set; }
 }
