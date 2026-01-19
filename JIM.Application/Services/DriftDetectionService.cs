@@ -829,6 +829,19 @@ public class DriftDetectionService
         if (value is byte[] bytes)
             return $"(binary, {bytes.Length} bytes)";
 
+        // Format HashSet values as a list for readability
+        if (value is HashSet<object> hashSet)
+        {
+            if (hashSet.Count == 0)
+                return "(empty set)";
+
+            var formattedValues = hashSet.Select(v => v?.ToString() ?? "(null)").Take(5);
+            var result = string.Join(", ", formattedValues);
+            if (hashSet.Count > 5)
+                result += $"... (+{hashSet.Count - 5} more)";
+            return $"[{result}] ({hashSet.Count} values)";
+        }
+
         return value.ToString() ?? "(null)";
     }
 }

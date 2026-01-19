@@ -507,7 +507,9 @@ if (-not $SkipReset) {
 
     Write-Step "Stopping all containers and removing volumes..."
     docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down -v 2>&1 | Out-Null
-    docker compose -f docker-compose.integration-tests.yml down -v 2>&1 | Out-Null
+    # Use --profile to stop containers from all scenarios (scenario2, scenario8, etc.)
+    # Without specifying profiles, containers started with profiles won't be stopped
+    docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down -v 2>&1 | Out-Null
 
     # Also remove any orphan integration test volumes that might have different names
     # This ensures a completely clean state even if volume naming has changed
