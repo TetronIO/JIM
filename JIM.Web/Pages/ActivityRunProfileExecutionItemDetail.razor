@@ -664,7 +664,7 @@ else
         {
             new("Home", href: "/", icon: Icons.Material.Filled.Home),
             new("Activity", href: "/activity"),
-            new(_activity?.TargetName ?? "Activity Detail", href: $"/activity/{_activityRunProfileExecutionItem.ActivityId}"),
+            new(_activity?.DisplayName ?? "Activity Detail", href: $"/activity/{_activityRunProfileExecutionItem.ActivityId}"),
             new("Item Details", href: null, disabled: true)
         };
         _externalIdAttributeValue = _activityRunProfileExecutionItem.GetExternalIdAttributeValue();

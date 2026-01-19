@@ -1,4 +1,5 @@
-﻿using JIM.Models.Core;
+﻿using System.ComponentModel.DataAnnotations.Schema;
+using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 namespace JIM.Models.Activities;
@@ -108,6 +109,20 @@ public class Activity
     /// This is a point-in-time copy, not kept in sync with the referenced entity.
     /// </summary>
     public string? TargetContext { get; set; }
+
+    /// <summary>
+    /// Gets a formatted display name combining TargetContext and TargetName.
+    /// Returns "Context → Name" if both are present, otherwise just the name, or "(no name)" if neither.
+    /// </summary>
+    [NotMapped]
+    public string DisplayName
+    {
+        get
+        {
+            var name = !string.IsNullOrEmpty(TargetName) ? TargetName : "(no name)";
+            return !string.IsNullOrEmpty(TargetContext) ? $"{TargetContext} → {name}" : name;
+        }
+    }
 
     /// <summary>
     /// Used to calculate a progress bar.
