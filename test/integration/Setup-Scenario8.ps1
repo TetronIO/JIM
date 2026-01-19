@@ -918,9 +918,39 @@ foreach ($profileName in @("Full Import", "Delta Import", "Full Sync", "Delta Sy
 }
 
 # ============================================================================
-# Step 13: Restart Worker
+# Step 13: Configure Deletion Rules
 # ============================================================================
-Write-TestStep "Step 13" "Restarting JIM.Worker to reload schema"
+Write-TestStep "Step 13" "Configuring Deletion Rules"
+
+# Configure Group deletion rule - delete from Target when deleted from Source
+# This enables the DeleteGroup test to work properly
+Write-Host "  Configuring Group deletion rule..." -ForegroundColor Gray
+
+# Get current Group object type settings
+$mvGroupTypeCurrent = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "Group" }
+
+if ($mvGroupTypeCurrent) {
+    # Configure deletion rule:
+    # - DeletionRule: WhenLastConnectorDisconnected - triggers deletion when connector disconnects
+    # - DeletionGracePeriodDays: 0 - immediate deletion (no grace period)
+    # - DeletionTriggerConnectedSystemIds: Source system only - triggers when Source disconnects
+    #   This means when a group is deleted from Source AD (APAC), the MVO is deleted,
+    #   which in turn triggers deprovisioning (deletion) from Target AD (EMEA)
+    Set-JIMMetaverseObjectType -Id $mvGroupTypeCurrent.id `
+        -DeletionRule WhenLastConnectorDisconnected `
+        -DeletionGracePeriodDays 0 `
+        -DeletionTriggerConnectedSystemIds @($sourceSystem.id) | Out-Null
+
+    Write-Host "  ✓ Group deletion rule configured (immediate deletion when Source disconnects)" -ForegroundColor Green
+}
+else {
+    Write-Host "  ⚠ Could not find Group metaverse object type" -ForegroundColor Yellow
+}
+
+# ============================================================================
+# Step 14: Restart Worker
+# ============================================================================
+Write-TestStep "Step 14" "Restarting JIM.Worker to reload schema"
 
 docker restart jim.worker > $null
 if ($LASTEXITCODE -eq 0) {
@@ -944,6 +974,9 @@ Write-Host ""
 Write-Host "Sync Rules Created:" -ForegroundColor Yellow
 Write-Host "  Users:  APAC AD -> Metaverse -> EMEA AD" -ForegroundColor Gray
 Write-Host "  Groups: APAC AD -> Metaverse -> EMEA AD" -ForegroundColor Gray
+Write-Host ""
+Write-Host "Deletion Rules Configured:" -ForegroundColor Yellow
+Write-Host "  Groups: Immediate deletion when Source (APAC) disconnects" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Run Profiles Created:" -ForegroundColor Yellow
 Write-Host "  Quantum Dynamics APAC: Full Import, Delta Import, Full Sync, Delta Sync, Export" -ForegroundColor Gray
