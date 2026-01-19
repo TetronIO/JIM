@@ -196,6 +196,17 @@ internal class LdapConnectorImport
                         GetDeltaResultsUsingUsn(result, selectedContainer, selectedObjectType, _previousRootDse.HighestCommittedUsn.Value, lastRunsCookie);
                     }
                 }
+
+                // Query deleted objects (tombstones) for this partition
+                // AD moves deleted objects to CN=Deleted Objects,<partition DN>
+                // We query this container separately with the Show Deleted Objects control
+                if (_cancellationToken.IsCancellationRequested)
+                {
+                    _logger.Debug("GetDeltaImportObjects: Cancellation requested before querying deleted objects. Stopping");
+                    return result;
+                }
+
+                GetDeletedObjectsUsingUsn(result, selectedPartition, _previousRootDse.HighestCommittedUsn.Value);
             }
         }
         else
@@ -479,6 +490,174 @@ internal class LdapConnectorImport
         stopwatch.Stop();
         _logger.Debug("GetDeltaResultsUsingUsn: Found {Count} changed objects for type '{ObjectType}' in container '{Container}' (USN > {Usn}) in {Elapsed}",
             searchResponse.Entries.Count, objectType.Name, container.Name, previousUsn, stopwatch.Elapsed);
+    }
+
+    /// <summary>
+    /// Gets deleted objects (tombstones) from the AD Deleted Objects container using USN-based change tracking.
+    /// This enables delta imports to detect deletions that occurred since the last import.
+    ///
+    /// When AD deletes an object, it:
+    /// 1. Moves the object to CN=Deleted Objects,&lt;partition DN&gt;
+    /// 2. Sets isDeleted=TRUE
+    /// 3. Strips most attributes, keeping only objectGUID, objectSid, distinguishedName (mangled), lastKnownParent
+    /// 4. Updates uSNChanged
+    ///
+    /// We use the LDAP_SERVER_SHOW_DELETED_OID control to query this container.
+    /// </summary>
+    private void GetDeletedObjectsUsingUsn(ConnectedSystemImportResult result, ConnectedSystemPartition partition, long previousUsn)
+    {
+        if (_cancellationToken.IsCancellationRequested)
+        {
+            _logger.Debug("GetDeletedObjectsUsingUsn: Cancellation requested. Stopping");
+            return;
+        }
+
+        if (_connectedSystem.ObjectTypes == null)
+        {
+            _logger.Warning("GetDeletedObjectsUsingUsn: ObjectTypes is null. Cannot query deleted objects.");
+            return;
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+
+        // Build the Deleted Objects container DN for this partition
+        // Format: CN=Deleted Objects,<partition DN>
+        var deletedObjectsDn = $"CN=Deleted Objects,{partition.ExternalId}";
+
+        // Build filter for deleted objects changed since last USN
+        // We use (isDeleted=TRUE) to only get tombstones, combined with USN filter
+        var ldapFilter = $"(&(isDeleted=TRUE)(uSNChanged>={previousUsn + 1}))";
+
+        // Request minimal attributes needed to identify the deleted object
+        // Most attributes are stripped from tombstones, but objectGUID is preserved
+        // and is the recommended external ID for LDAP connector
+        var queryAttributes = new[] { "objectGUID", "objectClass", "isDeleted", "lastKnownParent", "distinguishedName" };
+
+        var searchRequest = new SearchRequest(deletedObjectsDn, ldapFilter, SearchScope.Subtree, queryAttributes);
+
+        // Add the Show Deleted Objects control - this is required to search the Deleted Objects container
+        var showDeletedControl = new DirectoryControl(
+            LdapConnectorConstants.LDAP_SERVER_SHOW_DELETED_OID,
+            null,
+            true,  // IsCritical - server must support this for the query to work
+            true); // ServerSide
+        searchRequest.Controls.Add(showDeletedControl);
+
+        SearchResponse searchResponse;
+        try
+        {
+            searchResponse = (SearchResponse)_connection.SendRequest(searchRequest, _searchTimeout);
+        }
+        catch (DirectoryOperationException ex)
+        {
+            // The Show Deleted Objects control may not be supported by all directories
+            // (e.g., some Samba AD configurations). Log and continue without failing the import.
+            _logger.Warning("GetDeletedObjectsUsingUsn: Failed to query Deleted Objects container. " +
+                "The directory may not support the Show Deleted Objects control. Error: {Message}", ex.Message);
+            return;
+        }
+        catch (LdapException ex) when (ex.ErrorCode == 32) // NoSuchObject
+        {
+            // The Deleted Objects container may not exist in some configurations
+            _logger.Debug("GetDeletedObjectsUsingUsn: Deleted Objects container not found at {Dn}. Skipping deletion detection.", deletedObjectsDn);
+            return;
+        }
+
+        if (_cancellationToken.IsCancellationRequested)
+        {
+            _logger.Debug("GetDeletedObjectsUsingUsn: Cancellation requested after search. Stopping");
+            return;
+        }
+
+        // Process each deleted object (tombstone)
+        var deletedCount = 0;
+        foreach (SearchResultEntry entry in searchResponse.Entries)
+        {
+            if (_cancellationToken.IsCancellationRequested)
+            {
+                _logger.Debug("GetDeletedObjectsUsingUsn: Cancellation requested during processing. Stopping");
+                return;
+            }
+
+            // Get the objectGUID - this is the stable identifier for matching to existing CSOs
+            var objectGuid = LdapConnectorUtilities.GetEntryAttributeGuidValues(entry, "objectGUID")?.FirstOrDefault();
+            if (objectGuid == null || objectGuid == Guid.Empty)
+            {
+                _logger.Warning("GetDeletedObjectsUsingUsn: Deleted object has no objectGUID. DN: {Dn}", entry.DistinguishedName);
+                continue;
+            }
+
+            // Determine the object type from objectClass
+            // Tombstones retain their objectClass hierarchy
+            var objectClasses = LdapConnectorUtilities.GetEntryAttributeStringValues(entry, "objectClass");
+            if (objectClasses == null || objectClasses.Count == 0)
+            {
+                _logger.Warning("GetDeletedObjectsUsingUsn: Deleted object has no objectClass. DN: {Dn}", entry.DistinguishedName);
+                continue;
+            }
+
+            // Find the matching object type from our schema
+            ConnectedSystemObjectType? objectType = null;
+            foreach (var objectClass in objectClasses)
+            {
+                objectType = _connectedSystem.ObjectTypes.FirstOrDefault(ot =>
+                    ot.Selected && ot.Name.Equals(objectClass, StringComparison.OrdinalIgnoreCase));
+                if (objectType != null)
+                    break;
+            }
+
+            if (objectType == null)
+            {
+                // This tombstone is for an object type we're not importing - skip it
+                _logger.Verbose("GetDeletedObjectsUsingUsn: Skipping deleted object with unselected object type. Classes: {Classes}", string.Join(",", objectClasses));
+                continue;
+            }
+
+            // Create an import object with Delete change type
+            var importObject = new ConnectedSystemImportObject
+            {
+                ObjectType = objectType.Name,
+                ChangeType = ObjectChangeType.Deleted
+            };
+
+            // Add the objectGUID as an attribute so JIM can match this to the existing CSO
+            // The external ID attribute for the LDAP connector is typically objectGUID
+            var guidAttribute = objectType.Attributes.FirstOrDefault(a => a.IsExternalId && a.Type == AttributeDataType.Guid);
+            if (guidAttribute != null)
+            {
+                importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute
+                {
+                    Name = guidAttribute.Name,
+                    Type = AttributeDataType.Guid,
+                    GuidValues = new List<Guid> { objectGuid.Value }
+                });
+            }
+            else
+            {
+                // Fallback: try to add objectGUID directly if it's a selected attribute
+                var objectGuidAttr = objectType.Attributes.FirstOrDefault(a =>
+                    a.Name.Equals("objectGUID", StringComparison.OrdinalIgnoreCase));
+                if (objectGuidAttr != null)
+                {
+                    importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute
+                    {
+                        Name = "objectGUID",
+                        Type = AttributeDataType.Guid,
+                        GuidValues = new List<Guid> { objectGuid.Value }
+                    });
+                }
+            }
+
+            result.ImportObjects.Add(importObject);
+            deletedCount++;
+
+            _logger.Debug("GetDeletedObjectsUsingUsn: Detected deleted {ObjectType} with objectGUID {Guid}",
+                objectType.Name, objectGuid);
+        }
+
+        stopwatch.Stop();
+        _logger.Information("GetDeletedObjectsUsingUsn: Found {Count} deleted objects in partition '{Partition}' (USN > {Usn}) in {Elapsed}",
+            deletedCount, partition.Name, previousUsn, stopwatch.Elapsed);
     }
 
     /// <summary>
