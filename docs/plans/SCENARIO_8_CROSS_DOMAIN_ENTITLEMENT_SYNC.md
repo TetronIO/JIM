@@ -27,7 +27,7 @@
   - User and Group object type selection with required attributes
   - Import/Export sync rules for both users and groups
   - Attribute flow mappings including DN expressions
-  - Matching rules (sAMAccountName → Account Name)
+  - Matching rules (sAMAccountName -> Account Name)
   - Run profiles (Full Import, Full Sync, Export)
 
 - **Phase 3: ImportToMV Step** - Complete
@@ -50,7 +50,7 @@
   - **Uses Delta operations** (Delta Import, Delta Sync) for efficiency and to test delta functionality
   - Adds users to a test group in Source AD
   - Removes a user from the test group in Source AD
-  - Runs delta forward sync (Delta Import → Delta Sync → Export → Delta Confirming Import)
+  - Runs delta forward sync (Delta Import -> Delta Sync -> Export -> Delta Confirming Import)
   - Validates added users appear in Target AD group
   - Validates removed user no longer in Target AD group
   - Validates member count matches between Source and Target
@@ -169,7 +169,7 @@ Target AD member:  CN=John Smith,OU=Users,OU=CorpManaged,DC=targetdomain,DC=loca
 **Prerequisites**: Users must be synced between domains first so that:
 1. User MVOs exist in the metaverse
 2. User CSOs exist in the target system
-3. Export can calculate correct target DNs from MVO→CSO mappings
+3. Export can calculate correct target DNs from MVO->CSO mappings
 
 > **Note**: Scenario 8 is self-contained and will populate and sync its own users as part of the test setup, before syncing groups.
 
@@ -563,7 +563,7 @@ function Get-Scenario8GroupScale {
 
 #### 2.2 Attribute Flow Mappings
 
-**Import (Source → Metaverse):**
+**Import (Source -> Metaverse):**
 
 | Source Attribute | Metaverse Attribute | Flow Type |
 |------------------|---------------------|-----------|
@@ -577,7 +577,7 @@ function Get-Scenario8GroupScale {
 | mail | Email | Direct |
 | mailNickname | Mail Nickname | Direct |
 
-**Export (Metaverse → Target):**
+**Export (Metaverse -> Target):**
 
 | Metaverse Attribute | Target Attribute | Flow Type |
 |---------------------|------------------|-----------|

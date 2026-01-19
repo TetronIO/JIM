@@ -39,8 +39,8 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1
 
 # Run a specific scenario
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario1-HRToIdentityDirectory"   # HR CSV → AD provisioning
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync"         # APAC AD → EMEA AD sync
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario1-HRToIdentityDirectory"   # HR CSV -> AD provisioning
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync"         # APAC AD -> EMEA AD sync
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario4-DeletionRules"           # Deletion rules testing
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario5-MatchingRules"           # Matching rules testing
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync"  # Group sync between domains
@@ -74,8 +74,8 @@ This single script handles everything:
 
 | Scenario | Description | Containers Used |
 |----------|-------------|-----------------|
-| `Scenario1-HRToIdentityDirectory` | HR CSV → Subatomic AD provisioning (Joiner/Mover/Leaver) | samba-ad-primary |
-| `Scenario2-CrossDomainSync` | Quantum Dynamics APAC → EMEA directory sync | samba-ad-source, samba-ad-target |
+| `Scenario1-HRToIdentityDirectory` | HR CSV -> Subatomic AD provisioning (Joiner/Mover/Leaver) | samba-ad-primary |
+| `Scenario2-CrossDomainSync` | Quantum Dynamics APAC -> EMEA directory sync | samba-ad-source, samba-ad-target |
 | `Scenario4-DeletionRules` | Deletion rules and grace period testing | samba-ad-primary |
 | `Scenario5-MatchingRules` | Object matching rules testing | samba-ad-primary |
 | `Scenario8-CrossDomainEntitlementSync` | Group synchronisation between APAC and EMEA domains | samba-ad-source, samba-ad-target |
@@ -142,41 +142,41 @@ Integration tests require a complete environment reset between runs to ensure re
 For developers running tests locally in a DevContainer or development environment:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         LOCAL DEVELOPMENT LIFECYCLE                         │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  1. STAND UP                     2. POPULATE                                │
-│  ┌─────────────────────────┐     ┌─────────────────────────┐                │
-│  │ # Start external systems│     │ # Populate test data    │                │
-│  │ docker compose -f       │     │ ./Populate-SambaAD.ps1  │                │
-│  │   docker-compose.       │ ──▶ │   -Template Small       │                │
-│  │   integration-tests.yml │     │ ./Generate-TestCSV.ps1  │                │
-│  │   up -d                 │     │   -Template Small       │                │
-│  └─────────────────────────┘     └─────────────────────────┘                │
-│                                            │                                │
-│                                            ▼                                │
-│  3. CONFIGURE JIM                4. EXECUTE TESTS                           │
-│  ┌─────────────────────────┐     ┌─────────────────────────┐                │
-│  │ # Configure via API     │     │ # Run scenario steps    │                │
-│  │ ./Setup-Scenario1.ps1   │ ──▶ │ ./Invoke-Scenario1...   │                │
-│  │   -ApiKey $key          │     │   -Step All             │                │
-│  │                         │     │   -Template Small       │                │
-│  └─────────────────────────┘     └─────────────────────────┘                │
-│                                            │                                │
-│                                            ▼                                │
-│  5. RESET (for next run)                                                    │
-│  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │ # Reset BOTH external systems AND JIM database                      │    │
-│  │ docker compose -f docker-compose.integration-tests.yml down -v      │    │
-│  │ docker compose -f docker-compose.yml down -v  # Reset JIM's DB      │    │
-│  │                                                                     │    │
-│  │ # Then stand up fresh for next test run                             │    │
-│  │ docker compose -f docker-compose.yml up -d    # JIM stack           │    │
-│  │ docker compose -f docker-compose.integration-tests.yml up -d        │    │
-│  └─────────────────────────────────────────────────────────────────────┘    │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
++-----------------------------------------------------------------------------+
+|                         LOCAL DEVELOPMENT LIFECYCLE                         |
++-----------------------------------------------------------------------------+
+|                                                                             |
+|  1. STAND UP                     2. POPULATE                                |
+|  +-------------------------+     +-------------------------+                |
+|  | # Start external systems|     | # Populate test data    |                |
+|  | docker compose -f       |     | ./Populate-SambaAD.ps1  |                |
+|  |   docker-compose.       | --> |   -Template Small       |                |
+|  |   integration-tests.yml |     | ./Generate-TestCSV.ps1  |                |
+|  |   up -d                 |     |   -Template Small       |                |
+|  +-------------------------+     +-------------------------+                |
+|                                            |                                |
+|                                            v                                |
+|  3. CONFIGURE JIM                4. EXECUTE TESTS                           |
+|  +-------------------------+     +-------------------------+                |
+|  | # Configure via API     |     | # Run scenario steps    |                |
+|  | ./Setup-Scenario1.ps1   | --> | ./Invoke-Scenario1...   |                |
+|  |   -ApiKey $key          |     |   -Step All             |                |
+|  |                         |     |   -Template Small       |                |
+|  +-------------------------+     +-------------------------+                |
+|                                            |                                |
+|                                            v                                |
+|  5. RESET (for next run)                                                    |
+|  +---------------------------------------------------------------------+    |
+|  | # Reset BOTH external systems AND JIM database                      |    |
+|  | docker compose -f docker-compose.integration-tests.yml down -v      |    |
+|  | docker compose -f docker-compose.yml down -v  # Reset JIM's DB      |    |
+|  |                                                                     |    |
+|  | # Then stand up fresh for next test run                             |    |
+|  | docker compose -f docker-compose.yml up -d    # JIM stack           |    |
+|  | docker compose -f docker-compose.integration-tests.yml up -d        |    |
+|  +---------------------------------------------------------------------+    |
+|                                                                             |
++-----------------------------------------------------------------------------+
 ```
 
 **Key Commands:**
@@ -196,37 +196,37 @@ For developers running tests locally in a DevContainer or development environmen
 For automated testing in GitHub Actions:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                            CI/CD PIPELINE LIFECYCLE                          │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │ WORKFLOW TRIGGER (Manual via workflow_dispatch)                      │   │
-│  │ - Select Template: Micro / Small / Medium / Large / XLarge / XXLarge │   │
-│  │ - Select Phase: 1 (MVP) or 2 (Post-MVP)                              │   │
-│  └──────────────────────────────────────────────────────────────────────┘   │
-│                                     │                                       │
-│                                     ▼                                       │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐              │
-│  │ 1. STAND UP     │  │ 2. BUILD JIM    │  │ 3. CONFIGURE    │              │
-│  │ - JIM stack     │─▶│ - dotnet build  │─▶│ - Setup scripts │              │
-│  │ - External sys  │  │ - Wait ready    │  │ - Populate data │              │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘              │
-│                                                    │                        │
-│                                                    ▼                        │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐              │
-│  │ 6. TEAR DOWN    │  │ 5. COLLECT      │  │ 4. EXECUTE      │              │
-│  │ (always runs)   │◀─│ - Test results  │◀─│ - Run scenarios │              │
-│  │ - down -v ALL   │  │ - Upload artefacts│ │ - Validate      │              │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘              │
-│         │                                                                   │
-│         ▼                                                                   │
-│  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │ CLEAN STATE: Runner is fresh for next workflow run                   │   │
-│  │ No persistent volumes = automatic reset                              │   │
-│  └──────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
++-----------------------------------------------------------------------------+
+|                            CI/CD PIPELINE LIFECYCLE                         |
++-----------------------------------------------------------------------------+
+|                                                                             |
+|  +----------------------------------------------------------------------+   |
+|  | WORKFLOW TRIGGER (Manual via workflow_dispatch)                      |   |
+|  | - Select Template: Micro / Small / Medium / Large / XLarge / XXLarge |   |
+|  | - Select Phase: 1 (MVP) or 2 (Post-MVP)                              |   |
+|  +----------------------------------------------------------------------+   |
+|                                     |                                       |
+|                                     v                                       |
+|  +-----------------+  +-----------------+  +-----------------+              |
+|  | 1. STAND UP     |  | 2. BUILD JIM    |  | 3. CONFIGURE    |              |
+|  | - JIM stack     |->| - dotnet build  |->| - Setup scripts |              |
+|  | - External sys  |  | - Wait ready    |  | - Populate data |              |
+|  +-----------------+  +-----------------+  +-----------------+              |
+|                                                    |                        |
+|                                                    v                        |
+|  +-----------------+  +-----------------+  +-----------------+              |
+|  | 6. TEAR DOWN    |  | 5. COLLECT      |  | 4. EXECUTE      |              |
+|  | (always runs)   |<-| - Test results  |<-| - Run scenarios |              |
+|  | - down -v ALL   |  | - Upload artefacts| | - Validate      |              |
+|  +-----------------+  +-----------------+  +-----------------+              |
+|         |                                                                   |
+|         v                                                                   |
+|  +----------------------------------------------------------------------+   |
+|  | CLEAN STATE: Runner is fresh for next workflow run                   |   |
+|  | No persistent volumes = automatic reset                              |   |
+|  +----------------------------------------------------------------------+   |
+|                                                                             |
++-----------------------------------------------------------------------------+
 ```
 
 **CI/CD Characteristics:**
@@ -419,12 +419,12 @@ All templates generate realistic enterprise data following normal distribution p
 
 | Step | Test Case | Description |
 |------|-----------|-------------|
-| 1 | **Joiner** | User added to HR CSV → provisioned to AD with correct attributes and group memberships |
-| 2a | **Mover** | User title changed in CSV → attribute updated in AD (no DN impact) |
-| 2b | **Mover-Rename** | User name changed in CSV → DN renamed in AD (same container) |
-| 2c | **Mover-Move** | User department changed in CSV (Admin→Finance) → DN recalculated with new OU, LDAP move operation executed |
-| 3 | **Leaver** | User removed from CSV → deprovisioned from AD (respecting deletion rules) |
-| 4 | **Reconnection** | User re-added to CSV within grace period → scheduled deletion cancelled |
+| 1 | **Joiner** | User added to HR CSV -> provisioned to AD with correct attributes and group memberships |
+| 2a | **Mover** | User title changed in CSV -> attribute updated in AD (no DN impact) |
+| 2b | **Mover-Rename** | User name changed in CSV -> DN renamed in AD (same container) |
+| 2c | **Mover-Move** | User department changed in CSV (Admin->Finance) -> DN recalculated with new OU, LDAP move operation executed |
+| 3 | **Leaver** | User removed from CSV -> deprovisioned from AD (respecting deletion rules) |
+| 4 | **Reconnection** | User re-added to CSV within grace period -> scheduled deletion cancelled |
 
 **Script**: `test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1`
 
@@ -462,7 +462,7 @@ Each test step is triggered via a `-Step` parameter. This allows JIM to complete
 | `-Step Joiner` | Creates test user(s) in HR CSV | User exists in AD with correct attributes |
 | `-Step Mover` | Modifies title in CSV | Title attribute updated in AD (no DN change) |
 | `-Step Mover-Rename` | Changes user name in CSV | DN renamed in AD (CN component changed) |
-| `-Step Mover-Move` | Changes department (Admin→Finance) | User moved from OU=Admin to OU=Finance via LDAP move operation |
+| `-Step Mover-Move` | Changes department (Admin->Finance) | User moved from OU=Admin to OU=Finance via LDAP move operation |
 | `-Step Leaver` | Removes user from HR CSV | User disabled/deleted in AD per deletion rules |
 | `-Step Reconnection` | Re-adds user to CSV | Scheduled deletion cancelled, user remains active |
 | `-Step All` | Runs all steps sequentially | Full lifecycle validated |
@@ -483,9 +483,9 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 
 | Step | Test Case | Description |
 |------|-----------|-------------|
-| 1 | **Provision** | User created in Source AD → provisioned to Target AD |
-| 2 | **ForwardSync** | Attributes changed in Source AD → flow to Target AD |
-| 3 | **DetectDrift** | Attributes manually changed in Target AD → JIM detects drift |
+| 1 | **Provision** | User created in Source AD -> provisioned to Target AD |
+| 2 | **ForwardSync** | Attributes changed in Source AD -> flow to Target AD |
+| 3 | **DetectDrift** | Attributes manually changed in Target AD -> JIM detects drift |
 | 4 | **ReassertState** | JIM reasserts expected state from Source AD to Target AD |
 
 **Script**: `test/integration/scenarios/Invoke-Scenario2-CrossDomainSync.ps1`
@@ -517,9 +517,9 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 
 | Step | Test Case | Description |
 |------|-----------|-------------|
-| 1 | **Export** | Users in AD → exported to CSV with selected attributes only |
-| 2 | **Update** | User attributes modified in AD → CSV updated |
-| 3 | **Delete** | User deleted in AD → removed from CSV |
+| 1 | **Export** | Users in AD -> exported to CSV with selected attributes only |
+| 2 | **Update** | User attributes modified in AD -> CSV updated |
+| 3 | **Delete** | User deleted in AD -> removed from CSV |
 
 **Script**: `test/integration/scenarios/Invoke-Scenario3-GALSYNC.ps1`
 
@@ -549,12 +549,12 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 
 | Step | Test Case | Description |
 |------|-----------|-------------|
-| 1 | **LeaverGracePeriod** | User removed from CSV → MVO enters grace period, not immediately deleted |
-| 2 | **Reconnection** | User re-added within grace period → MVO preserved, grace period cleared |
-| 3 | **SourceDeletion** | Authoritative source record deleted → triggers MVO deletion rule processing |
-| 4 | **AdminProtection** | Admin accounts with Origin=Internal → protected from auto-deletion |
-| 5 | **InboundScopeFilter** | Scoping criteria on import sync rule → filters CSOs by department |
-| 6 | **OutboundScopeFilter** | Scoping criteria on export sync rule → filters MVOs for export |
+| 1 | **LeaverGracePeriod** | User removed from CSV -> MVO enters grace period, not immediately deleted |
+| 2 | **Reconnection** | User re-added within grace period -> MVO preserved, grace period cleared |
+| 3 | **SourceDeletion** | Authoritative source record deleted -> triggers MVO deletion rule processing |
+| 4 | **AdminProtection** | Admin accounts with Origin=Internal -> protected from auto-deletion |
+| 5 | **InboundScopeFilter** | Scoping criteria on import sync rule -> filters CSOs by department |
+| 6 | **OutboundScopeFilter** | Scoping criteria on export sync rule -> filters MVOs for export |
 
 **Script**: `test/integration/scenarios/Invoke-Scenario4-DeletionRules.ps1`
 
@@ -587,11 +587,11 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 
 | Step | Test Case | Description | Status |
 |------|-----------|-------------|--------|
-| 1 | **Projection** | New CSO with unique employeeId → projects to new MVO | ✅ Passing |
-| 2 | **Join** | CSO with matching employeeId → joins existing MVO (no duplicate created) | ✅ Passing |
-| 3 | **DuplicatePrevention** | Two CSV rows with same hrId → BOTH rejected with `DuplicateObject` error | ✅ Passing |
-| 4 | **MultipleRules** | First rule doesn't match → falls back to secondary matching rule | ⏳ Run separately |
-| 5 | **JoinConflict** | Two CSOs with different hrIds but same employeeId → `CouldNotJoinDueToExistingJoin` error | ✅ Passing |
+| 1 | **Projection** | New CSO with unique employeeId -> projects to new MVO | ✅ Passing |
+| 2 | **Join** | CSO with matching employeeId -> joins existing MVO (no duplicate created) | ✅ Passing |
+| 3 | **DuplicatePrevention** | Two CSV rows with same hrId -> BOTH rejected with `DuplicateObject` error | ✅ Passing |
+| 4 | **MultipleRules** | First rule doesn't match -> falls back to secondary matching rule | ⏳ Run separately |
+| 5 | **JoinConflict** | Two CSOs with different hrIds but same employeeId -> `CouldNotJoinDueToExistingJoin` error | ✅ Passing |
 
 **Script**: `test/integration/scenarios/Invoke-Scenario5-MatchingRules.ps1`
 
@@ -648,12 +648,12 @@ These scenarios test group management capabilities - a core ILM function where t
 
 | Step | Test Case | Description |
 |------|-----------|-------------|
-| 1 | **CreateGroups** | Groups created in JIM via API → provisioned to AD with calculated membership |
-| 2 | **UpdateMembership** | User department changes in HR → membership updated (removed from old group, added to new) |
-| 3 | **DetectDrift** | Admin manually adds/removes member in AD → JIM detects drift on next sync |
+| 1 | **CreateGroups** | Groups created in JIM via API -> provisioned to AD with calculated membership |
+| 2 | **UpdateMembership** | User department changes in HR -> membership updated (removed from old group, added to new) |
+| 3 | **DetectDrift** | Admin manually adds/removes member in AD -> JIM detects drift on next sync |
 | 4 | **ReassertState** | JIM reasserts expected membership, overwriting unauthorised AD changes |
-| 5 | **DeleteGroup** | Group deleted from JIM MV → group deleted from AD |
-| 6 | **DeleteMember** | User deleted from JIM MV → user removed from all group memberships in AD |
+| 5 | **DeleteGroup** | Group deleted from JIM MV -> group deleted from AD |
+| 6 | **DeleteMember** | User deleted from JIM MV -> user removed from all group memberships in AD |
 
 **Script**: `test/integration/scenarios/Invoke-Scenario6-EntitlementJIMToAD.ps1`
 
@@ -693,8 +693,8 @@ These scenarios test group management capabilities - a core ILM function where t
 |------|-----------|-------------|
 | 1 | **ImportGroups** | Existing AD groups imported into JIM metaverse with current membership |
 | 2 | **ConvertAuthority** | Groups marked as JIM-authoritative (export sync rule enabled) |
-| 3 | **UpdateViaJIM** | Membership changed via JIM API → changes exported to AD |
-| 4 | **DetectDrift** | Admin manually modifies group in AD → JIM detects drift |
+| 3 | **UpdateViaJIM** | Membership changed via JIM API -> changes exported to AD |
+| 4 | **DetectDrift** | Admin manually modifies group in AD -> JIM detects drift |
 | 5 | **ReassertState** | JIM overwrites AD changes, reasserting JIM-managed membership |
 
 **Script**: `test/integration/scenarios/Invoke-Scenario7-ConvertADGroupAuthority.ps1`
@@ -731,12 +731,12 @@ These scenarios test group management capabilities - a core ILM function where t
 
 | Step | Test Case | Description |
 |------|-----------|-------------|
-| 1 | **InitialSync** | Groups and membership imported from AD1 → provisioned to AD2 |
-| 2 | **ForwardSync** | Group membership changed in AD1 → changes flow to AD2 |
-| 3 | **DetectDrift** | Admin manually modifies group in AD2 → JIM detects drift |
+| 1 | **InitialSync** | Groups and membership imported from AD1 -> provisioned to AD2 |
+| 2 | **ForwardSync** | Group membership changed in AD1 -> changes flow to AD2 |
+| 3 | **DetectDrift** | Admin manually modifies group in AD2 -> JIM detects drift |
 | 4 | **ReassertState** | JIM reasserts AD1 membership to AD2, overwriting AD2 changes |
-| 5 | **NewGroup** | New group created in AD1 → provisioned to AD2 |
-| 6 | **DeleteGroup** | Group deleted from AD1 → deleted from AD2 |
+| 5 | **NewGroup** | New group created in AD1 -> provisioned to AD2 |
+| 6 | **DeleteGroup** | Group deleted from AD1 -> deleted from AD2 |
 
 **Script**: `test/integration/scenarios/Invoke-Scenario8-CrossDomainEntitlementSync.ps1`
 
@@ -773,10 +773,10 @@ These scenarios test group management capabilities - a core ILM function where t
 
 | Step | Test Case | Description |
 |------|-----------|-------------|
-| 1 | **InitialLoad** | Both sources → metaverse → both targets |
-| 2 | **JoinRules** | Matching employeeID across sources → single metaverse object |
+| 1 | **InitialLoad** | Both sources -> metaverse -> both targets |
+| 2 | **JoinRules** | Matching employeeID across sources -> single metaverse object |
 | 3 | **Precedence** | SQL Server authoritative for email/phone, Oracle for department/title |
-| 4 | **DataTypes** | VARCHAR, NVARCHAR, DATE, DATETIME, INT, BIT → correct mapping |
+| 4 | **DataTypes** | VARCHAR, NVARCHAR, DATE, DATETIME, INT, BIT -> correct mapping |
 
 **Script**: `test/integration/scenarios/Invoke-Scenario9-MultiSourceAggregation.ps1`
 
@@ -1358,7 +1358,7 @@ Following extensive optimization work (see [GitHub Issue #190](https://github.co
   - FullSync: 34.5s (8 runs, avg 4.3s)
   - FullImport: 13.8s (8 runs, avg 1.7s)
   - Export: 30.1s (7 runs, avg 4.3s)
-- **Performance improvement**: 192x faster than original baseline (4 users/minute → ~768 users/minute)
+- **Performance improvement**: 192x faster than original baseline (4 users/minute -> ~768 users/minute)
 
 **Key Optimizations:**
 1. Eliminated O(N×M) query complexity through pre-loaded caching
@@ -1943,7 +1943,7 @@ For many debugging and development scenarios, **Workflow Tests** provide a faste
 
 **When to use Workflow Tests:**
 - Debugging sync logic issues (e.g., issue #234)
-- Testing multi-step scenarios (import → sync → export → confirming import)
+- Testing multi-step scenarios (import -> sync -> export -> confirming import)
 - Validating state transitions (CSO status changes, PendingExport reconciliation)
 - Fast iteration during development
 

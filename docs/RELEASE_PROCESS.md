@@ -86,21 +86,21 @@ The release bundle (`jim-release-X.Y.Z.tar.gz`) contains:
 
 ```
 jim-release-X.Y.Z/
-├── images/
-│   ├── jim-web.tar           # Docker image for web/API service
-│   ├── jim-worker.tar        # Docker image for worker service
-│   └── jim-scheduler.tar     # Docker image for scheduler service
-├── compose/
-│   ├── docker-compose.yml    # Main compose file
-│   └── .env.example          # Environment template
-├── powershell/
-│   └── JIM/                   # PowerShell module directory
-├── docs/
-│   ├── README.md
-│   ├── CHANGELOG.md
-│   └── docs/                  # Full documentation
-├── checksums.sha256          # SHA256 checksums for verification
-└── INSTALL.md                # Installation instructions
++-- images/
+|   +-- jim-web.tar           # Docker image for web/API service
+|   +-- jim-worker.tar        # Docker image for worker service
+|   +-- jim-scheduler.tar     # Docker image for scheduler service
++-- compose/
+|   +-- docker-compose.yml    # Main compose file
+|   +-- .env.example          # Environment template
++-- powershell/
+|   +-- JIM/                   # PowerShell module directory
++-- docs/
+|   +-- README.md
+|   +-- CHANGELOG.md
+|   +-- docs/                  # Full documentation
++-- checksums.sha256          # SHA256 checksums for verification
++-- INSTALL.md                # Installation instructions
 ```
 
 ### Deploying in an Air-Gapped Environment

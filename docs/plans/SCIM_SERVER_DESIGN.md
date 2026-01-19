@@ -75,7 +75,7 @@ Traditional JIM connectors **pull** data from systems. A SCIM server **receives*
 │  │                                                                 │    │
 │  │                    Unified Inbound Sync Engine                  │    │
 │  │                                                                 │    │
-│  │   StagingObject → Join/Project → MVO Update → Pending Exports   │    │
+│  │   StagingObject -> Join/Project -> MVO Update -> Pending Exports   │    │
 │  │                                                                 │    │
 │  └─────────────────────────────────────────────────────────────────┘    │
 │                                                                         │
@@ -132,8 +132,8 @@ Connected System: "Okta HR"
 │       └── externalId (string)
 │
 └── Sync Rules:
-    ├── "SCIM User → MV Person" (Import)
-    └── "SCIM Group → MV Group" (Import)
+    ├── "SCIM User -> MV Person" (Import)
+    └── "SCIM Group -> MV Group" (Import)
 ```
 
 ### The ScimServerConnector Class
@@ -305,7 +305,7 @@ public class ScimAuthenticator : IScimAuthenticator
 
 ## Request Processing Flow
 
-### SCIM POST /Users → MVO Creation
+### SCIM POST /Users -> MVO Creation
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -329,7 +329,7 @@ public class ScimAuthenticator : IScimAuthenticator
 │     │     return 401 Unauthorized                                 │     │
 │     └─────────────────────────────────────────────────────────────┘     │
 │                                                                         │
-│  4. Map SCIM User → StagingObject                                       │
+│  4. Map SCIM User -> StagingObject                                       │
 │     ┌─────────────────────────────────────────────────────────────┐     │
 │     │ stagingObject = new StagingObject                           │     │
 │     │ {                                                           │     │
@@ -351,7 +351,7 @@ public class ScimAuthenticator : IScimAuthenticator
 │                                                                         │
 │  6. Sync Engine Does:                                                   │
 │     ├── Find/create CSO for this external ID                            │
-│     ├── Evaluate join rules → find/create MVO                           │
+│     ├── Evaluate join rules -> find/create MVO                           │
 │     ├── Apply attribute flow rules                                      │
 │     ├── Update MVO attributes                                           │
 │     └── Create Pending Exports (per Option A decision)                  │
@@ -367,7 +367,7 @@ public class ScimAuthenticator : IScimAuthenticator
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### SCIM PATCH /Users/{id} → MVO Update
+### SCIM PATCH /Users/{id} -> MVO Update
 
 ```csharp
 [HttpPatch("Users/{userId}")]
@@ -399,7 +399,7 @@ public async Task<IActionResult> PatchUser(
 }
 ```
 
-### SCIM DELETE /Users/{id} → CSO Disconnection
+### SCIM DELETE /Users/{id} -> CSO Disconnection
 
 ```csharp
 [HttpDelete("Users/{userId}")]
@@ -457,12 +457,12 @@ Sync Rule: "SCIM User to MV Person"
 ├── Join Rules:
 │   └── SCIM.userName = MV.Username
 └── Attribute Flow:
-    ├── SCIM.displayName → MV.Display Name
-    ├── SCIM.givenName → MV.First Name
-    ├── SCIM.familyName → MV.Last Name
-    ├── SCIM.email → MV.Email Address
-    ├── SCIM.department → MV.Department
-    └── SCIM.active → MV.Account Enabled
+    ├── SCIM.displayName -> MV.Display Name
+    ├── SCIM.givenName -> MV.First Name
+    ├── SCIM.familyName -> MV.Last Name
+    ├── SCIM.email -> MV.Email Address
+    ├── SCIM.department -> MV.Department
+    └── SCIM.active -> MV.Account Enabled
 ```
 
 ---
@@ -654,7 +654,7 @@ public async Task<IActionResult> BulkOperation(Guid systemId, ScimBulkRequest re
     // 3. Topological sort - dependencies first
     var sorted = TopologicalSort(graph);
 
-    // 4. Execute in order, tracking bulkId → SCIM ID
+    // 4. Execute in order, tracking bulkId -> SCIM ID
     var bulkIdToScimId = new Dictionary<string, string>();
     var results = new List<ScimBulkOperationResult>();
 
@@ -776,7 +776,7 @@ PATCH operation has 5 operations, 2 fail.
 - Authentication validation
 
 ### Integration Tests
-- Full request flow: SCIM request → CSO → MVO → Pending Export
+- Full request flow: SCIM request -> CSO -> MVO -> Pending Export
 - Sync rule application
 - Error handling
 

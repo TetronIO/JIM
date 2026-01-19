@@ -763,6 +763,10 @@ public class DriftDetectionService
             if (attributeChanges.Count == 0)
                 continue;
 
+            // Check if any attribute changes have unresolved reference values
+            // This is used to defer exports with reference attributes until the referenced objects have been exported
+            var hasUnresolvedReferences = attributeChanges.Any(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue));
+
             // Create the pending export
             var pendingExport = new PendingExport
             {
@@ -773,8 +777,15 @@ public class DriftDetectionService
                 Status = PendingExportStatus.Pending,
                 SourceMetaverseObjectId = mvo.Id,
                 AttributeValueChanges = attributeChanges,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                HasUnresolvedReferences = hasUnresolvedReferences
             };
+
+            if (hasUnresolvedReferences)
+            {
+                Log.Debug("CreateCorrectiveExportsAsync: PendingExport {ExportId} has {Count} unresolved reference(s), will be deferred for resolution",
+                    pendingExport.Id, attributeChanges.Count(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue)));
+            }
 
             await _jim.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
             pendingExports.Add(pendingExport);

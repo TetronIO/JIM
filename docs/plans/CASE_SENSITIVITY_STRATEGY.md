@@ -273,7 +273,7 @@ New-JIMScopingCriteria -SyncRuleId $ruleId `
 
 | Task | Files Modified | Description |
 |------|----------------|-------------|
-| Standardise StringComparison | `SyncImportTaskProcessor.cs`, `ServiceSettingsRepository.cs`, `ConnectedSystemObject.cs` | Changed `CurrentCultureIgnoreCase` → `OrdinalIgnoreCase`, `InvariantCultureIgnoreCase` → `Ordinal` |
+| Standardise StringComparison | `SyncImportTaskProcessor.cs`, `ServiceSettingsRepository.cs`, `ConnectedSystemObject.cs` | Changed `CurrentCultureIgnoreCase` -> `OrdinalIgnoreCase`, `InvariantCultureIgnoreCase` -> `Ordinal` |
 | External ID case-sensitive | `ConnectedSystemRepository.cs` | Removed `.ToLower()` patterns from external ID lookups |
 | ObjectMatchingRule.CaseSensitive | `ObjectMatchingRule.cs` | Added property with `true` default |
 | SyncRuleScopingCriteria.CaseSensitive | `SyncRuleScopingCriteria.cs` | Added property with `true` default |

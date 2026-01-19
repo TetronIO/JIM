@@ -6,9 +6,9 @@ JIM employs a three-tier testing approach to ensure quality at different levels 
 
 ```
 Integration Tests (Full System)
-         ↑
+         ^
    Workflow Tests (Multi-Component)
-         ↑
+         ^
     Unit Tests (Single Component)
 ```
 
@@ -50,7 +50,7 @@ public async Task GetConnectedSystemObjectsModifiedSinceAsync_WithModifiedCsos_R
 - ✅ Testing error handling
 
 **What Unit Tests Miss**:
-- ❌ Integration between components (e.g., Full Sync → Delta Sync watermark handoff)
+- ❌ Integration between components (e.g., Full Sync -> Delta Sync watermark handoff)
 - ❌ Multi-step workflows
 - ❌ End-to-end business processes
 
@@ -66,7 +66,7 @@ public async Task GetConnectedSystemObjectsModifiedSinceAsync_WithModifiedCsos_R
 - Test multiple components working together
 - Focus on workflow correctness and component integration
 
-**Example**: Testing Full Sync → Delta Sync watermark workflow
+**Example**: Testing Full Sync -> Delta Sync watermark workflow
 
 ```csharp
 [Test]
@@ -100,7 +100,7 @@ public async Task FullSyncThenDeltaSync_WithOneModifiedCso_ProcessesOnlyModified
 ```
 
 **What Workflow Tests Are Good At**:
-- ✅ Testing multi-step workflows (Import → Sync → Export)
+- ✅ Testing multi-step workflows (Import -> Sync -> Export)
 - ✅ Testing component integration (Full Sync sets watermark, Delta Sync uses it)
 - ✅ Testing business process correctness
 - ✅ Catching orchestration bugs (like the watermark bug)
@@ -156,7 +156,7 @@ public async Task FullSyncThenDeltaSync_WithOneModifiedCso_ProcessesOnlyModified
 - ✅ Unit tests verified watermark property existed
 - ❌ Unit tests didn't verify Full Sync **sets** the watermark
 - ❌ Unit tests didn't verify Delta Sync **uses** the watermark
-- ❌ Unit tests didn't test the workflow: Full Sync → Delta Sync
+- ❌ Unit tests didn't test the workflow: Full Sync -> Delta Sync
 
 **Why Integration Tests Caught It**:
 - ✅ Integration test ran Full Sync then Delta Sync in sequence
@@ -164,7 +164,7 @@ public async Task FullSyncThenDeltaSync_WithOneModifiedCso_ProcessesOnlyModified
 - ❌ But integration tests are slow and expensive to run
 
 **How Workflow Tests Would Have Caught It**:
-- ✅ Workflow test would run Full Sync → Delta Sync
+- ✅ Workflow test would run Full Sync -> Delta Sync
 - ✅ Workflow test would assert `ObjectsProcessed == 1`, not `100`
 - ✅ Workflow test runs in seconds, not minutes
 - ✅ Workflow test provides clear failure message
@@ -205,7 +205,7 @@ public async Task FullSyncThenDeltaSync_WithOneModifiedCso_ProcessesOnlyModified
 
 > **Implementation**: Workflow tests are now implemented in [`test/JIM.Worker.Tests/Workflows/`](../test/JIM.Worker.Tests/Workflows/):
 > - [`WorkflowTestBase.cs`](../test/JIM.Worker.Tests/Workflows/WorkflowTestBase.cs) - Base class with in-memory database setup and helper methods
-> - [`SyncWorkflowTests.cs`](../test/JIM.Worker.Tests/Workflows/SyncWorkflowTests.cs) - Tests for Full Sync → Delta Sync workflows
+> - [`SyncWorkflowTests.cs`](../test/JIM.Worker.Tests/Workflows/SyncWorkflowTests.cs) - Tests for Full Sync -> Delta Sync workflows
 >
 > These tests caught the watermark bug and now ensure it doesn't regress.
 
@@ -273,10 +273,10 @@ public class SyncWorkflowTests : WorkflowTestBase
 
 1. ✅ Keep existing unit tests (they test individual components well)
 2. ⚠️ Add workflow tests for critical business processes:
-   - Delta Sync (Full → Delta → verify only modified CSOs processed)
-   - Projection (CSO → MVO → verify join established)
-   - Export Evaluation (MVO change → PendingExport created)
-   - Deletion Rules (Last connector disconnects → MVO scheduled for deletion)
+   - Delta Sync (Full -> Delta -> verify only modified CSOs processed)
+   - Projection (CSO -> MVO -> verify join established)
+   - Export Evaluation (MVO change -> PendingExport created)
+   - Deletion Rules (Last connector disconnects -> MVO scheduled for deletion)
 3. ✅ Keep integration tests for system-level scenarios
 
 ## ⚠️ CRITICAL: EF Core In-Memory Database Limitations ⚠️

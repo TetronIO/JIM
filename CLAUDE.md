@@ -186,6 +186,61 @@ Blazor pages, API controllers, and other compiled code require container rebuild
 - Connectors: `JIM.Connectors/` or new connector project
 - Tests: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `JIM.Worker.Tests/`
 
+## ASCII Diagrams
+
+When creating ASCII diagrams in documentation or code comments, use only reliably monospaced characters to ensure proper alignment across all fonts and terminals.
+
+### Arrows
+
+| Use         | Instead of    | Example                        |
+|-------------|---------------|--------------------------------|
+| `->` `-->`  | `→` `⟶` `>`   | `[Box A] --> [Box B]`          |
+| `<-` `<--`  | `←` `⟵` `<`   | `[Box A] <-- [Box B]`          |
+| `<->` `<-->` | `↔` `⟷`      | `[Box A] <--> [Box B]`         |
+| `v`         | `↓` `▼`       | Downward flow indicator        |
+| `^`         | `↑` `▲`       | Upward flow indicator          |
+
+### Box Drawing
+
+| Use | Instead of | Purpose         |
+|-----|------------|-----------------|
+| `+` | `┌` `┐` `└` `┘` `├` `┤` `┬` `┴` `┼` | Corners and junctions |
+| `-` | `─` `═`    | Horizontal lines |
+| `|` | `│` `║`    | Vertical lines   |
+
+### Bullet Points in Diagrams
+
+| Use | Instead of | Example           |
+|-----|------------|-------------------|
+| `-` | `•` `*`    | `- List item`     |
+
+### Example Diagram
+
+```
++-------------------+      +----------------+      +-------------------+
+|   Source Systems  |      |    Metaverse   |      |    Target Systems |
+|                   |----->|                |----->|                   |
+|  - HR System      |      |  - Identity    |      |  - Active Dir     |
+|  - Badge System   |      |    Objects     |      |  - ServiceNow     |
++-------------------+      +----------------+      +-------------------+
+         |                         |                         |
+         v                         v                         v
+     IMPORT                    SYNC                      EXPORT
+```
+
+### Workflow Diagrams
+
+```
++---------------+
+|   Step One    |  Description of step
++-------+-------+
+        |
+        v
++---------------+
+|   Step Two    |  Description of step
++---------------+
+```
+
 ## Code Style & Conventions
 
 **IMPORTANT Rules:**

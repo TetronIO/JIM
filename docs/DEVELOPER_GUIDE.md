@@ -749,21 +749,21 @@ The JIM PowerShell module (`JIM.PowerShell/JIM/`) provides cmdlets for scripting
 
 ```
 JIM.PowerShell/
-└── JIM/
-    ├── JIM.psd1              # Module manifest
-    ├── JIM.psm1              # Module loader
-    ├── Public/               # Exported cmdlets
-    │   ├── Activities/       # Get-JIMActivity, Get-JIMActivityItem
-    │   ├── ApiKeys/          # *-JIMApiKey cmdlets
-    │   ├── Certificates/     # *-JIMCertificate cmdlets
-    │   ├── Connection/       # Connect-JIM, Disconnect-JIM, Test-JIMConnection
-    │   ├── ConnectedSystems/ # *-JIMConnectedSystem cmdlets
-    │   ├── DataGeneration/   # *-JIMDataGeneration* cmdlets
-    │   ├── Metaverse/        # *-JIMMetaverse* cmdlets
-    │   ├── RunProfiles/      # *-JIMRunProfile cmdlets
-    │   └── SyncRules/        # *-JIMSyncRule cmdlets
-    ├── Private/              # Internal helper functions
-    └── Tests/                # Pester tests
++-- JIM/
+    +-- JIM.psd1              # Module manifest
+    +-- JIM.psm1              # Module loader
+    +-- Public/               # Exported cmdlets
+    |   +-- Activities/       # Get-JIMActivity, Get-JIMActivityItem
+    |   +-- ApiKeys/          # *-JIMApiKey cmdlets
+    |   +-- Certificates/     # *-JIMCertificate cmdlets
+    |   +-- Connection/       # Connect-JIM, Disconnect-JIM, Test-JIMConnection
+    |   +-- ConnectedSystems/ # *-JIMConnectedSystem cmdlets
+    |   +-- DataGeneration/   # *-JIMDataGeneration* cmdlets
+    |   +-- Metaverse/        # *-JIMMetaverse* cmdlets
+    |   +-- RunProfiles/      # *-JIMRunProfile cmdlets
+    |   +-- SyncRules/        # *-JIMSyncRule cmdlets
+    +-- Private/              # Internal helper functions
+    +-- Tests/                # Pester tests
 ```
 
 ### Loading the Module in Devcontainer

@@ -29,7 +29,7 @@ This document defines designs for two related but distinct challenges:
 
 ### The Drift Scenario
 
-In a typical unidirectional sync (Source AD → Target AD):
+In a typical unidirectional sync (Source AD -> Target AD):
 
 1. Source AD is **authoritative** for group membership
 2. Target AD **receives** group membership via JIM exports
@@ -66,12 +66,12 @@ When inbound sync processes a CSO from a system that has export rules targeting 
 
 **Flow:**
 ```
-Target import → imports drifted group membership
-Target sync   → processes CSO
-              → For each export rule targeting this object type:
-                  → Calculate expected state from MVO + sync rules
-                  → Compare expected vs actual
-                  → Stage corrective pending exports if different
+Target import -> imports drifted group membership
+Target sync   -> processes CSO
+              -> For each export rule targeting this object type:
+                  -> Calculate expected state from MVO + sync rules
+                  -> Compare expected vs actual
+                  -> Stage corrective pending exports if different
 ```
 
 **Pros:**
@@ -105,7 +105,7 @@ When enabled, inbound sync from that connected system triggers re-evaluation of 
 
 #### Option 3: Authoritative Direction on Sync Rules
 
-Mark the sync rule pair with an authoritative direction: `Source→Target` (unidirectional) or `Bidirectional`.
+Mark the sync rule pair with an authoritative direction: `Source->Target` (unidirectional) or `Bidirectional`.
 
 **Pros:**
 - Clear conceptual model at the rule level
@@ -160,8 +160,8 @@ With `EnforceState` flag:
 
 | Trigger | EnforceState = true (default) | EnforceState = false |
 |---------|------------------------------|---------------------|
-| Target import + sync (drift detected) | Export rules re-evaluated → pending exports staged | CSO values updated, no export evaluation |
-| Source import + sync (Source change) | Export rules evaluated → pending exports staged | Export rules evaluated → pending exports staged |
+| Target import + sync (drift detected) | Export rules re-evaluated -> pending exports staged | CSO values updated, no export evaluation |
+| Source import + sync (Source change) | Export rules evaluated -> pending exports staged | Export rules evaluated -> pending exports staged |
 
 > **Note**: This behaviour applies identically to both full sync and delta sync. The difference is scope: delta sync processes only changed CSOs, while full sync processes all CSOs in scope.
 
@@ -244,20 +244,20 @@ Each MVO attribute has **one owner** (connected system). Only the owner can upda
 
 ```
 MVO Attribute: department
-┌──────────────────────────────────────────────────────────────────┐
-│ Priority │ Connected System │ Null Handling                     │
-├──────────┼──────────────────┼───────────────────────────────────┤
-│    1     │ HR System        │ ☑ Null is a value (no fallback)   │
-│    2     │ Corporate Dir    │ ☐ Null is a value                 │
-│    3     │ Self-Service AD  │ ☐ Null is a value                 │
-└──────────────────────────────────────────────────────────────────┘
++------------------------------------------------------------------+
+| Priority | Connected System | Null Handling                      |
++----------+------------------+------------------------------------+
+|    1     | HR System        | [x] Null is a value (no fallback)  |
+|    2     | Corporate Dir    | [ ] Null is a value                |
+|    3     | Self-Service AD  | [ ] Null is a value                |
++----------+------------------+------------------------------------+
 ```
 
 **Behaviour with above configuration:**
-- If HR System provides "Engineering" → MVO gets "Engineering" (priority 1 wins)
-- If HR System provides null and "Null is a value" is checked → MVO gets null (no fallback)
-- If HR System provides null and "Null is a value" is unchecked → check Corporate Dir (priority 2)
-- If Corporate Dir provides "IT Services" → MVO gets "IT Services"
+- If HR System provides "Engineering" -> MVO gets "Engineering" (priority 1 wins)
+- If HR System provides null and "Null is a value" is checked -> MVO gets null (no fallback)
+- If HR System provides null and "Null is a value" is unchecked -> check Corporate Dir (priority 2)
+- If Corporate Dir provides "IT Services" -> MVO gets "IT Services"
 - And so on down the chain...
 
 **Rationale:**
@@ -440,18 +440,18 @@ The `EnforceState` setting should be hidden in an **Advanced Options** section t
 **UX Pattern:** Expandable panel or accordion section labelled "Advanced Options" at the bottom of the export sync rule configuration page.
 
 ```
-▶ Advanced Options
-  ┌─────────────────────────────────────────────────────────────────┐
-  │ ☑ Enforce desired state (remediate drift)                       │
-  │                                                                 │
-  │   When enabled, changes made directly in the target system      │
-  │   that conflict with the authoritative source will be           │
-  │   automatically corrected during sync operations.               │
-  │                                                                 │
-  │   Disable this only for special scenarios where you             │
-  │   intentionally want to allow direct changes in the target      │
-  │   system (e.g., emergency access patterns).                     │
-  └─────────────────────────────────────────────────────────────────┘
+> Advanced Options
+  +-----------------------------------------------------------------+
+  | [x] Enforce desired state (remediate drift)                     |
+  |                                                                 |
+  |   When enabled, changes made directly in the target system      |
+  |   that conflict with the authoritative source will be           |
+  |   automatically corrected during sync operations.               |
+  |                                                                 |
+  |   Disable this only for special scenarios where you             |
+  |   intentionally want to allow direct changes in the target      |
+  |   system (e.g., emergency access patterns).                     |
+  +-----------------------------------------------------------------+
 ```
 
 **Rationale for hiding:** This is an edge-case control. Exposing it prominently would confuse users and invite accidental misconfiguration. The default (`true`) is correct for the vast majority of use cases.
@@ -464,46 +464,46 @@ Attribute priority needs UI in two places:
 
 ##### 2a. Dedicated Attribute Priority Page
 
-**Location:** Metaverse → Attribute Priority (new navigation item)
+**Location:** Metaverse -> Attribute Priority (new navigation item)
 
 This page provides a centralised view of all MVO attributes that have multiple contributors, allowing admins to manage priority across the entire system.
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Attribute Priority                                                          │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│ Object Type: [Person ▼]                                                     │
-│                                                                             │
-│ ┌─────────────────────────────────────────────────────────────────────────┐ │
-│ │ Attributes with Multiple Contributors                                   │ │
-│ ├─────────────────────────────────────────────────────────────────────────┤ │
-│ │                                                                         │ │
-│ │ ▼ department (3 contributors)                                          │ │
-│ │   ┌───────────────────────────────────────────────────────────────────┐ │ │
-│ │   │ ↕ │ Pri │ Connected System    │ Sync Rule        │ Null Handling  │ │ │
-│ │   ├───┼─────┼─────────────────────┼──────────────────┼────────────────┤ │ │
-│ │   │ ☰ │  1  │ HR System           │ HR Import        │ ☑ Null=Value   │ │ │
-│ │   │ ☰ │  2  │ Corporate Directory │ CorpDir Import   │ ☐ Null=Value   │ │ │
-│ │   │ ☰ │  3  │ Self-Service AD     │ SelfServ Import  │ ☐ Null=Value   │ │ │
-│ │   └───────────────────────────────────────────────────────────────────┘ │ │
-│ │                                                                         │ │
-│ │ ▶ telephoneNumber (2 contributors)                                      │ │
-│ │ ▶ manager (2 contributors)                                              │ │
-│ │ ▶ displayName (2 contributors)                                          │ │
-│ │                                                                         │ │
-│ │ ─────────────────────────────────────────────────────────────────────── │ │
-│ │ Attributes with Single Contributor (no priority needed)                 │ │
-│ │ employeeId (HR System), mail (Exchange), ...                            │ │
-│ │                                                                         │ │
-│ └─────────────────────────────────────────────────────────────────────────┘ │
-│                                                                             │
-│                                                        [Save Changes]       │
-└─────────────────────────────────────────────────────────────────────────────┘
++-----------------------------------------------------------------------------+
+| Attribute Priority                                                          |
++-----------------------------------------------------------------------------+
+|                                                                             |
+| Object Type: [Person v]                                                     |
+|                                                                             |
+| +-------------------------------------------------------------------------+ |
+| | Attributes with Multiple Contributors                                   | |
+| +-------------------------------------------------------------------------+ |
+| |                                                                         | |
+| | v department (3 contributors)                                           | |
+| |   +-------------------------------------------------------------------+ | |
+| |   | # | Pri | Connected System    | Sync Rule        | Null Handling | | |
+| |   +---+-----+---------------------+------------------+---------------+ | |
+| |   | = |  1  | HR System           | HR Import        | [x] Null=Value| | |
+| |   | = |  2  | Corporate Directory | CorpDir Import   | [ ] Null=Value| | |
+| |   | = |  3  | Self-Service AD     | SelfServ Import  | [ ] Null=Value| | |
+| |   +-------------------------------------------------------------------+ | |
+| |                                                                         | |
+| | > telephoneNumber (2 contributors)                                      | |
+| | > manager (2 contributors)                                              | |
+| | > displayName (2 contributors)                                          | |
+| |                                                                         | |
+| | ----------------------------------------------------------------------- | |
+| | Attributes with Single Contributor (no priority needed)                 | |
+| | employeeId (HR System), mail (Exchange), ...                            | |
+| |                                                                         | |
+| +-------------------------------------------------------------------------+ |
+|                                                                             |
+|                                                        [Save Changes]       |
++-----------------------------------------------------------------------------+
 ```
 
 **UX Features:**
-- **Drag-and-drop reordering** (☰ handle) - Drag rows to change priority order
+- **Drag-and-drop reordering** (= handle) - Drag rows to change priority order
 - **Expandable sections** - Click attribute name to expand/collapse contributor list
 - **Inline editing** - Toggle "Null is a value" checkbox directly in the table
 - **Visual grouping** - Separate "multiple contributors" (needs attention) from "single contributor" (no priority needed)
@@ -514,39 +514,39 @@ This page provides a centralised view of all MVO attributes that have multiple c
 When editing an import sync rule mapping, show priority context if the target MVO attribute has multiple contributors.
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Attribute Mapping                                                           │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│ Source Attribute: [department ▼]                                            │
-│ Target Attribute: [department ▼]                                            │
-│                                                                             │
-│ ┌─────────────────────────────────────────────────────────────────────────┐ │
-│ │ ⚠ This attribute has 3 contributors. Current priority: 2 of 3          │ │
-│ │                                                                         │ │
-│ │   1. HR System (HR Import rule)                                         │ │
-│ │   2. Corporate Directory ← this mapping                                 │ │
-│ │   3. Self-Service AD (SelfServ Import rule)                             │ │
-│ │                                                                         │ │
-│ │   [Manage Priority →]                                                   │ │
-│ └─────────────────────────────────────────────────────────────────────────┘ │
-│                                                                             │
-│ ▶ Advanced Options                                                          │
-│   ┌─────────────────────────────────────────────────────────────────────┐   │
-│   │ ☐ Null is a value (no fallback)                                     │   │
-│   │                                                                     │   │
-│   │   When enabled, if this source contributes null/empty for this      │   │
-│   │   attribute, the MVO attribute will be set to null without          │   │
-│   │   checking lower-priority contributors.                             │   │
-│   └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│                                                    [Cancel]  [Save]         │
-└─────────────────────────────────────────────────────────────────────────────┘
++-----------------------------------------------------------------------------+
+| Attribute Mapping                                                           |
++-----------------------------------------------------------------------------+
+|                                                                             |
+| Source Attribute: [department v]                                            |
+| Target Attribute: [department v]                                            |
+|                                                                             |
+| +-------------------------------------------------------------------------+ |
+| | [!] This attribute has 3 contributors. Current priority: 2 of 3         | |
+| |                                                                         | |
+| |   1. HR System (HR Import rule)                                         | |
+| |   2. Corporate Directory <- this mapping                                | |
+| |   3. Self-Service AD (SelfServ Import rule)                             | |
+| |                                                                         | |
+| |   [Manage Priority ->]                                                  | |
+| +-------------------------------------------------------------------------+ |
+|                                                                             |
+| > Advanced Options                                                          |
+|   +-----------------------------------------------------------------------+ |
+|   | [ ] Null is a value (no fallback)                                     | |
+|   |                                                                       | |
+|   |   When enabled, if this source contributes null/empty for this        | |
+|   |   attribute, the MVO attribute will be set to null without            | |
+|   |   checking lower-priority contributors.                               | |
+|   +-----------------------------------------------------------------------+ |
+|                                                                             |
+|                                                    [Cancel]  [Save]         |
++-----------------------------------------------------------------------------+
 ```
 
 **UX Features:**
 - **Priority context panel** - Shows where this mapping sits in the priority chain (only shown if multiple contributors exist)
-- **Link to central management** - "Manage Priority →" button navigates to the Attribute Priority page, filtered to this attribute
+- **Link to central management** - "Manage Priority ->" button navigates to the Attribute Priority page, filtered to this attribute
 - **Advanced options accordion** - "Null is a value" checkbox hidden by default since it's an edge case
 
 ##### 2c. Sync Rule Summary View
@@ -554,17 +554,17 @@ When editing an import sync rule mapping, show priority context if the target MV
 In the sync rule list/summary view, indicate if any mappings have priority considerations:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Sync Rules                                                                  │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ Name                    │ Direction │ Object Type │ Mappings │ Priority     │
-├─────────────────────────┼───────────┼─────────────┼──────────┼──────────────┤
-│ HR Import               │ Import    │ Person      │ 12       │ 🔵 3 attrs   │
-│ Corporate Dir Import    │ Import    │ Person      │ 8        │ 🔵 2 attrs   │
-│ AD Export               │ Export    │ Person      │ 10       │ —            │
-└─────────────────────────────────────────────────────────────────────────────┘
++-----------------------------------------------------------------------------+
+| Sync Rules                                                                  |
++-----------------------------------------------------------------------------+
+| Name                    | Direction | Object Type | Mappings | Priority     |
++-------------------------+-----------+-------------+----------+--------------+
+| HR Import               | Import    | Person      | 12       | [*] 3 attrs  |
+| Corporate Dir Import    | Import    | Person      | 8        | [*] 2 attrs  |
+| AD Export               | Export    | Person      | 10       | -            |
++-------------------------+-----------+-------------+----------+--------------+
 
-Legend: 🔵 = This rule contributes to N attributes that have multiple contributors
+Legend: [*] = This rule contributes to N attributes that have multiple contributors
 ```
 
 ---
@@ -676,7 +676,7 @@ Legend: 🔵 = This rule contributes to N attributes that have multiple contribu
 
 #### Future Phase 3: UI Updates
 
-- [ ] Create Attribute Priority page (Metaverse → Attribute Priority)
+- [ ] Create Attribute Priority page (Metaverse -> Attribute Priority)
 - [ ] Add priority context panel to import sync rule mapping editor
 - [ ] Add "Advanced Options" section to import mapping editor with "Null is a value" checkbox
 - [ ] Add priority indicator column to sync rule list view

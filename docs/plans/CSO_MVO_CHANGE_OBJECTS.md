@@ -128,7 +128,7 @@ Reusable component for both CSO and MVO detail pages:
 │   ├── Initiator (user/sync rule/API key)
 │   ├── Expandable attribute changes
 │   │   ├── Attribute name
-│   │   ├── Old value → New value
+│   │   ├── Old value -> New value
 │   │   └── Change type (Add/Remove)
 │   └── Link to Activity/RPEI if available
 └── Export to CSV/JSON option

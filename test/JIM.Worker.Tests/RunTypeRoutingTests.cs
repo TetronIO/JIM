@@ -67,34 +67,6 @@ public class RunTypeRoutingTests
     }
 
     /// <summary>
-    /// Validates that DeltaImport uses an import processor, not a sync processor.
-    /// This is a regression test for a bug where DeltaImport fell through to FullSynchronisation.
-    /// </summary>
-    [Test]
-    public void DeltaImport_ShouldUseImportProcessor_NotSyncProcessorAsync()
-    {
-        // This test exists because of a bug where the switch statement in Worker.cs had:
-        //   case ConnectedSystemRunType.DeltaImport:
-        //   case ConnectedSystemRunType.FullSynchronisation:
-        //       // Both fell through to SyncFullSyncTaskProcessor - WRONG!
-        //
-        // DeltaImport MUST use SyncImportTaskProcessor because:
-        // 1. It needs to actually import objects from the connector (via IConnectorImportUsingCalls/Files)
-        // 2. It needs to create ActivityRunProfileExecutionItems for imported objects
-        // 3. The connector's ImportAsync method checks runProfile.RunType to determine delta vs full
-
-        // The correct routing is:
-        // - FullImport -> SyncImportTaskProcessor.PerformFullImportAsync()
-        // - DeltaImport -> SyncImportTaskProcessor.PerformFullImportAsync() (same processor, connector handles delta mode)
-        // - FullSynchronisation -> SyncFullSyncTaskProcessor.PerformFullSyncAsync()
-        // - DeltaSynchronisation -> SyncDeltaSyncTaskProcessor.PerformDeltaSyncAsync()
-        // - Export -> SyncExportTaskProcessor.PerformExportAsync()
-
-        Assert.Pass("This test documents the expected behaviour. " +
-            "The actual routing is in Worker.cs and should match the above specification.");
-    }
-
-    /// <summary>
     /// Validates that all ConnectedSystemRunType values are handled in the Worker.
     /// </summary>
     [Test]
