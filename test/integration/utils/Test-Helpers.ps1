@@ -977,24 +977,24 @@ function Get-ActivityChangeCount {
         return 0
     }
 
-    return switch ($ChangeType) {
-        'Added' { $stats.totalCsoAdds }
-        'Updated' { $stats.totalCsoUpdates }
-        'Deleted' { $stats.totalCsoDeletes }
-        'Projected' { $stats.totalProjections }
-        'Joined' { $stats.totalJoins }
-        'AttributeFlow' { $stats.totalAttributeFlows }
-        'Disconnected' { $stats.totalDisconnections }
-        'DisconnectedOutOfScope' { $stats.totalDisconnectedOutOfScope }
-        'OutOfScopeRetainJoin' { $stats.totalOutOfScopeRetainJoin }
-        'DriftCorrection' { $stats.totalDriftCorrections }
-        'Provisioned' { $stats.totalProvisioned }
-        'Exported' { $stats.totalExported }
-        'Deprovisioned' { $stats.totalDeprovisioned }
-        'NoChange' { $stats.totalUnchanged }
-        'PendingExport' { $stats.totalPendingExports }
-        'PendingExportConfirmed' { $stats.totalPendingExportsConfirmed }
-        default { 0 }
+    switch ($ChangeType) {
+        'Added' { return $stats.totalCsoAdds }
+        'Updated' { return $stats.totalCsoUpdates }
+        'Deleted' { return $stats.totalCsoDeletes }
+        'Projected' { return $stats.totalProjections }
+        'Joined' { return $stats.totalJoins }
+        'AttributeFlow' { return $stats.totalAttributeFlows }
+        'Disconnected' { return $stats.totalDisconnections }
+        'DisconnectedOutOfScope' { return $stats.totalDisconnectedOutOfScope }
+        'OutOfScopeRetainJoin' { return $stats.totalOutOfScopeRetainJoin }
+        'DriftCorrection' { return $stats.totalDriftCorrections }
+        'Provisioned' { return $stats.totalProvisioned }
+        'Exported' { return $stats.totalExported }
+        'Deprovisioned' { return $stats.totalDeprovisioned }
+        'NoChange' { return $stats.totalUnchanged }
+        'PendingExport' { return $stats.totalPendingExports }
+        'PendingExportConfirmed' { return $stats.totalPendingExportsConfirmed }
+        default { return 0 }
     }
 }
 
