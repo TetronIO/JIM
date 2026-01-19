@@ -70,9 +70,20 @@ if (importObject.ChangeType == ObjectChangeType.Delete)
 When developing custom connectors:
 
 1. **Create/Update hints are optional** - JIM will determine the correct action based on existing data
-2. **Delete must be explicit** - If your connector can detect deletions (e.g., via a changelog), set `ChangeType = ObjectChangeType.Delete`
+2. **Delete must be explicit** - If your connector can detect deletions (e.g., via a changelog or tombstone query), set `ChangeType = ObjectChangeType.Delete`
 3. **Full imports don't require Delete** - JIM automatically detects deletions by comparing import results to existing objects
 4. **Delta imports require Delete** - Without explicit Delete change types, objects removed from the source won't be detected
+
+### LDAP Connector Deletion Detection
+
+The built-in LDAP connector supports delta import deletion detection for Active Directory:
+
+- **AD Tombstones**: When objects are deleted in AD, they're moved to `CN=Deleted Objects,<partition>` with `isDeleted=TRUE`
+- **Show Deleted Control**: The connector uses `LDAP_SERVER_SHOW_DELETED_OID` (1.2.840.113556.1.4.417) to query tombstones
+- **USN-based filtering**: Only tombstones with `uSNChanged` greater than the previous watermark are returned
+- **Object matching**: Uses `objectGUID` (preserved on tombstones) to match deleted objects to existing CSOs
+
+This enables delta imports to detect deletions without requiring a full import.
 
 ### Example: Delta Import with Deletions
 

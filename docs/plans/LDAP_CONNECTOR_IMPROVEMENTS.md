@@ -239,9 +239,10 @@ Hidden = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Delta Import | Not Implemented | `SupportsDeltaImport = false` |
-| Export | Not Implemented | `SupportsExport = false` - MVP item |
-| Secure Connection (LDAPS) | Commented Out | Code exists but disabled |
+| Delta Import | ✅ Implemented | USN-based for AD, changelog-based for non-AD |
+| Delta Import Deletion Detection | ✅ Implemented | Queries AD Deleted Objects container with Show Deleted control |
+| Export | ✅ Implemented | Create, update, delete/disable in AD |
+| Secure Connection (LDAPS) | ✅ Implemented | Configurable via settings |
 | User-Selected External ID | Not Supported | Uses objectGUID by default |
 
 ---
@@ -294,6 +295,9 @@ Hidden = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags
   - Updated `LdapConnectorRootDse` to track both USN and changelog positions
   - Added `GetDeltaImportObjects()`, `GetDeltaResultsUsingUsn()`, `GetDeltaResultsUsingChangelog()` methods
   - Added `GetEntryAttributeLongValue()` utility for 64-bit USN values
+  - **Deletion detection**: Queries `CN=Deleted Objects,<partition>` with `LDAP_SERVER_SHOW_DELETED_OID` control
+  - Matches tombstones to existing CSOs using `objectGUID` (stable identifier preserved on tombstones)
+  - Gracefully handles directories that don't support the Show Deleted control (e.g., some Samba AD configurations)
 - [x] **5.2** Add LDAPS (secure connection) support
   - Added "Use Secure Connection (LDAPS)?" checkbox setting
   - Added "Certificate Validation" dropdown (Full Validation / Skip Validation)
