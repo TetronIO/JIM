@@ -23,7 +23,7 @@ The deletion rule system handles the **Leaver** scenario automatically.
 1. **Authoritative Source Control**: Deletion should be triggered by changes in authoritative source systems, not by changes in target systems
 2. **Configurable Behaviour**: Administrators should be able to configure different deletion behaviours for different object types
 3. **Grace Periods**: Support for delayed deletion to allow for corrections/reversals
-4. **Protection of Admin Accounts**: Internal/admin accounts created directly in JIM should never be automatically deleted
+4. **Protection of Internally Managed Objects**: Objects created directly in JIM (not projected from a Connected System) should never be automatically deleted
 5. **Auditability**: All deletion decisions should be logged for compliance
 
 ## Deletion Rule Configuration
