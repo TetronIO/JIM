@@ -127,24 +127,24 @@ This is an edge case that only occurs when a connected system has **both import 
 ┌─────────────────────────────────────────────────────────────────┐
 │  Sync Rules for AD:                                             │
 │                                                                 │
-│  Import Rule: ad.title -> mvo.title                              │
-│  Export Rule: mvo.title -> ad.title                              │
+│  Import Rule: ad.title -> mvo.title                             │
+│  Export Rule: mvo.title -> ad.title                             │
 │                                                                 │
 │  WITHOUT prevention:                                            │
 │  1. Admin changes title in AD to "Senior Engineer"              │
-│  2. Import: ad.title -> mvo.title                                │
-│  3. Export eval: mvo.title changed -> PendingExport to AD        │
+│  2. Import: ad.title -> mvo.title                               │
+│  3. Export eval: mvo.title changed -> PendingExport to AD       │
 │  4. Export: writes same value back to AD (wasteful)             │
-│  5. Next import: may detect "change" -> loop continues           │
+│  5. Next import: may detect "change" -> loop continues          │
 │                                                                 │
 │  WITH prevention (Option A):                                    │
 │  1. Admin changes title in AD to "Senior Engineer"              │
-│  2. Import: ad.title -> mvo.title                                │
+│  2. Import: ad.title -> mvo.title                               │
 │     mvo.title.ContributedBySystem = AD  ← tracked!              │
 │  3. Export eval for AD:                                         │
-│     ContributedBySystem (AD) == TargetSystem (AD) -> SKIP        │
+│     ContributedBySystem (AD) == TargetSystem (AD) -> SKIP       │
 │  4. Export eval for other systems:                              │
-│     ContributedBySystem (AD) != TargetSystem -> create export    │
+│     ContributedBySystem (AD) != TargetSystem -> create export   │
 │  5. No circular sync, no wasted exports                         │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -404,7 +404,7 @@ The decision to evaluate exports **immediately when MVO changes** (Q1 Option A) 
 │  │ Scheduled   │──┐                                                         │
 │  │ Full/Delta  │  │                                                         │
 │  └─────────────┘  │         ┌──────────────┐      ┌─────────────────┐       │
-│                   ├────────▶│   Inbound   │─────▶│ Pending Exports │       │
+│                   ├────────>│   Inbound    │─────>│ Pending Exports │       │
 │  ┌─────────────┐  │         │   Sync       │      │    Created      │       │
 │  │ Webhook/    │  │         │  (Same code) │      └────────┬────────┘       │
 │  │ Notification│──┤         └──────────────┘               │                │
@@ -502,10 +502,10 @@ Q1 Option A (evaluate exports immediately) creates challenges when:
 │                                                                         │
 │  PHASE 2: EXPORT EXECUTION (Separate concern)                           │
 │  ─────────────────────────────────────────────                          │
-│  -> Dependency graph evaluation happens HERE                             │
-│  -> Ordering/sequencing happens HERE                                     │
-│  -> Reference resolution (MVO ID -> target system ID) happens HERE        │
-│  -> Can be batched, ordered, multi-pass                                  │
+│  -> Dependency graph evaluation happens HERE                            │
+│  -> Ordering/sequencing happens HERE                                    │
+│  -> Reference resolution (MVO ID -> target system ID) happens HERE      │
+│  -> Can be batched, ordered, multi-pass                                 │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -551,7 +551,7 @@ For scheduled export runs processing many pending exports:
 │  ┌─────────────────────────────────────────────────────────────────┐    │
 │  │ PASS 2: Reference Resolution (Parallel)                         │    │
 │  │                                                                 │    │
-│  │ • Resolve MVO references -> Target system IDs (e.g., AD DN)      │    │
+│  │ • Resolve MVO references -> Target system IDs (e.g., AD DN)     │    │
 │  │ • Update manager attributes                                     │    │
 │  │ • Update group memberships                                      │    │
 │  │                                                                 │    │
@@ -620,7 +620,7 @@ For immediate export of a single object (e.g., after SCIM push):
 │                                               │                         │
 │                                               ▼                         │
 │                                         Create DeferredReference        │
-│                                         (Alice.manager -> Bob)           │
+│                                         (Alice.manager -> Bob)          │
 │                                               │                         │
 │                                               ▼                         │
 │                                         When Bob exported later,        │

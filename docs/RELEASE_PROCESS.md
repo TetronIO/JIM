@@ -94,11 +94,11 @@ jim-release-X.Y.Z/
 |   +-- docker-compose.yml    # Main compose file
 |   +-- .env.example          # Environment template
 +-- powershell/
-|   +-- JIM/                   # PowerShell module directory
+|   +-- JIM/                  # PowerShell module directory
 +-- docs/
 |   +-- README.md
 |   +-- CHANGELOG.md
-|   +-- docs/                  # Full documentation
+|   +-- docs/                 # Full documentation
 +-- checksums.sha256          # SHA256 checksums for verification
 +-- INSTALL.md                # Installation instructions
 ```

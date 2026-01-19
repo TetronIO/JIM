@@ -481,11 +481,11 @@ This page provides a centralised view of all MVO attributes that have multiple c
 | |                                                                         | |
 | | v department (3 contributors)                                           | |
 | |   +-------------------------------------------------------------------+ | |
-| |   | # | Pri | Connected System    | Sync Rule        | Null Handling | | |
-| |   +---+-----+---------------------+------------------+---------------+ | |
-| |   | = |  1  | HR System           | HR Import        | [x] Null=Value| | |
-| |   | = |  2  | Corporate Directory | CorpDir Import   | [ ] Null=Value| | |
-| |   | = |  3  | Self-Service AD     | SelfServ Import  | [ ] Null=Value| | |
+| |   | # | Pri | Connected System    | Sync Rule        | Null Handling  | | |
+| |   +---+-----+---------------------+------------------+----------------+ | |
+| |   | = |  1  | HR System           | HR Import        | [x] Null=Value | | |
+| |   | = |  2  | Corporate Directory | CorpDir Import   | [ ] Null=Value | | |
+| |   | = |  3  | Self-Service AD     | SelfServ Import  | [ ] Null=Value | | |
 | |   +-------------------------------------------------------------------+ | |
 | |                                                                         | |
 | | > telephoneNumber (2 contributors)                                      | |

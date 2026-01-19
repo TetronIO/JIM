@@ -52,34 +52,34 @@ SCIM (System for Cross-domain Identity Management) is a standard protocol (RFC 7
 Traditional JIM connectors **pull** data from systems. A SCIM server **receives** data pushed by external systems. However, it still fits the Connected System model:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    JIM INBOUND DATA SOURCES                             │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ┌─────────────────────┐          ┌─────────────────────┐               │
-│  │  Traditional        │          │  SCIM Server        │               │
-│  │  Connectors         │          │  (Push-Based)       │               │
-│  │                     │          │                     │               │
-│  │  - LDAP             │          │  POST /scim/Users   │               │
-│  │  - CSV              │          │  PATCH /scim/Users  │               │
-│  │  - SQL              │          │  DELETE /scim/Users │               │
-│  │                     │          │                     │               │
-│  │  JIM initiates      │          │  External system    │               │
-│  │  connection         │          │  initiates request  │               │
-│  └──────────┬──────────┘          └──────────┬──────────┘               │
-│             │                                │                          │
-│             │    ┌───────────────────────────┘                          │
-│             │    │                                                      │
-│             ▼    ▼                                                      │
-│  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │                                                                 │    │
-│  │                    Unified Inbound Sync Engine                  │    │
-│  │                                                                 │    │
-│  │   StagingObject -> Join/Project -> MVO Update -> Pending Exports   │    │
-│  │                                                                 │    │
-│  └─────────────────────────────────────────────────────────────────┘    │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    JIM INBOUND DATA SOURCES                              │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌─────────────────────┐          ┌─────────────────────┐                │
+│  │  Traditional        │          │  SCIM Server        │                │
+│  │  Connectors         │          │  (Push-Based)       │                │
+│  │                     │          │                     │                │
+│  │  - LDAP             │          │  POST /scim/Users   │                │
+│  │  - CSV              │          │  PATCH /scim/Users  │                │
+│  │  - SQL              │          │  DELETE /scim/Users │                │
+│  │                     │          │                     │                │
+│  │  JIM initiates      │          │  External system    │                │
+│  │  connection         │          │  initiates request  │                │
+│  └──────────┬──────────┘          └──────────┬──────────┘                │
+│             │                                │                           │
+│             │    ┌───────────────────────────┘                           │
+│             │    │                                                       │
+│             ▼    ▼                                                       │
+│  ┌──────────────────────────────────────────────────────────────────┐    │
+│  │                                                                  │    │
+│  │                    Unified Inbound Sync Engine                   │    │
+│  │                                                                  │    │
+│  │   StagingObject -> Join/Project -> MVO Update -> Pending Exports │    │
+│  │                                                                  │    │
+│  └──────────────────────────────────────────────────────────────────┘    │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Architectural Principle: Reuse the Sync Engine
@@ -329,7 +329,7 @@ public class ScimAuthenticator : IScimAuthenticator
 │     │     return 401 Unauthorized                                 │     │
 │     └─────────────────────────────────────────────────────────────┘     │
 │                                                                         │
-│  4. Map SCIM User -> StagingObject                                       │
+│  4. Map SCIM User -> StagingObject                                      │
 │     ┌─────────────────────────────────────────────────────────────┐     │
 │     │ stagingObject = new StagingObject                           │     │
 │     │ {                                                           │     │
@@ -351,7 +351,7 @@ public class ScimAuthenticator : IScimAuthenticator
 │                                                                         │
 │  6. Sync Engine Does:                                                   │
 │     ├── Find/create CSO for this external ID                            │
-│     ├── Evaluate join rules -> find/create MVO                           │
+│     ├── Evaluate join rules -> find/create MVO                          │
 │     ├── Apply attribute flow rules                                      │
 │     ├── Update MVO attributes                                           │
 │     └── Create Pending Exports (per Option A decision)                  │
