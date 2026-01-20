@@ -225,11 +225,12 @@ This is the core **Leaver scenario** for multi-source identity management. When 
 **Steps**:
 1. Ensure a user exists with CSOs from all three systems joined to one MVO:
    ```powershell
-   $mvos = Search-JIMMetaverseObject -ObjectTypeName "User" `
-       -FilterAttribute "Employee ID" -FilterValue "EMP001" -FilterOperator Equals
-   $mvoId = $mvos.results[0].id
+   # Search by display name (use the employee's name or a unique identifier)
+   $mvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "John Smith"
+   $mvo = $mvos | Select-Object -First 1
+   $mvoId = $mvo.id
 
-   # Verify all CSOs are connected
+   # Re-fetch with full details to verify CSO connections
    $mvo = Get-JIMMetaverseObject -Id $mvoId
    Write-Host "Connected CSOs: $($mvo.connectedSystemObjects.Count)"
    ```

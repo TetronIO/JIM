@@ -1268,20 +1268,26 @@ try {
         # Step 6.4: Get MVO info BEFORE deletion sync (to verify it exists and get its ID)
         Write-Host "  Looking up Group MVO before deletion..." -ForegroundColor Gray
 
-        # Search for the group MVO by Account Name
-        $mvoSearchResult = Search-JIMMetaverseObject -ObjectTypeName "Group" -FilterAttribute "Account Name" -FilterValue $groupToDelete -FilterOperator Equals
+        # Search for the group MVO by display name (which is the group name)
+        $groupMvos = Get-JIMMetaverseObject -ObjectTypeName "Group" -Search $groupToDelete
         $groupMvo = $null
         $groupMvoId = $null
 
-        if ($mvoSearchResult -and $mvoSearchResult.objects -and $mvoSearchResult.objects.Count -gt 0) {
-            $groupMvo = $mvoSearchResult.objects[0]
-            $groupMvoId = $groupMvo.id
-            Write-Host "    ✓ Found Group MVO: $groupMvoId" -ForegroundColor Green
-            Write-Host "      Account Name: $($groupMvo.displayValues.'Account Name')" -ForegroundColor Gray
+        if ($groupMvos) {
+            # Get-JIMMetaverseObject returns individual objects, find exact match
+            $groupMvo = $groupMvos | Where-Object { $_.displayName -eq $groupToDelete } | Select-Object -First 1
+            if ($groupMvo) {
+                $groupMvoId = $groupMvo.id
+                Write-Host "    ✓ Found Group MVO: $groupMvoId" -ForegroundColor Green
+                Write-Host "      Display Name: $($groupMvo.displayName)" -ForegroundColor Gray
 
-            # Check if it's already marked for deletion (shouldn't be)
-            if ($groupMvo.lastConnectorDisconnectedDate) {
-                Write-Host "    ⚠ MVO already has LastConnectorDisconnectedDate set (unexpected)" -ForegroundColor Yellow
+                # Check if it's already marked for deletion (shouldn't be)
+                if ($groupMvo.lastConnectorDisconnectedDate) {
+                    Write-Host "    ⚠ MVO already has LastConnectorDisconnectedDate set (unexpected)" -ForegroundColor Yellow
+                }
+            }
+            else {
+                Write-Host "    ⚠ Could not find exact Group MVO match for '$groupToDelete'" -ForegroundColor Yellow
             }
         }
         else {
