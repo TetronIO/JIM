@@ -49,7 +49,14 @@ public enum MetaverseObjectDeletionRule
     /// The MVO will be deleted when the last Connected System Object is disconnected.
     /// If a grace period is configured on the MetaverseObjectType, deletion will be scheduled for after that period.
     /// </summary>
-    WhenLastConnectorDisconnected = 1
+    WhenLastConnectorDisconnected = 1,
+
+    /// <summary>
+    /// The MVO will be deleted when ANY of the specified authoritative sources (DeletionTriggerConnectedSystemIds) disconnect.
+    /// Requires at least one connected system to be specified in the MetaverseObjectType.DeletionTriggerConnectedSystemIds list.
+    /// If a grace period is configured on the MetaverseObjectType, deletion will be scheduled for after that period.
+    /// </summary>
+    WhenAuthoritativeSourceDisconnected = 2
 }
 
 /// <summary>

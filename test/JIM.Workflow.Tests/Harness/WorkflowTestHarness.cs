@@ -333,6 +333,30 @@ public class WorkflowTestHarness : IDisposable
         return await ExecuteFullImportAsync(systemName);
     }
 
+    /// <summary>
+    /// Executes a delta sync for a connected system.
+    /// Used for incremental sync operations including drift detection.
+    /// </summary>
+    public async Task<Activity> ExecuteDeltaSyncAsync(string systemName)
+    {
+        var system = GetConnectedSystem(systemName);
+
+        var runProfile = await CreateRunProfileAsync(systemName, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        var activity = await CreateActivityAsync(system.Id, runProfile, ConnectedSystemRunType.DeltaSynchronisation);
+
+        var cts = new CancellationTokenSource();
+        var processor = new SyncDeltaSyncTaskProcessor(
+            _jim,
+            system,
+            runProfile,
+            activity,
+            cts);
+
+        await processor.PerformDeltaSyncAsync();
+
+        return await ReloadEntityAsync(activity);
+    }
+
     #endregion
 
     #region Snapshot Methods
@@ -410,6 +434,16 @@ public class WorkflowTestHarness : IDisposable
         if (idProperty != null)
         {
             var id = idProperty.GetValue(entity);
+
+            // Special handling for Activity to include RunProfileExecutionItems
+            if (typeof(T) == typeof(Activity) && id is Guid activityId)
+            {
+                var activity = await _dbContext.Set<Activity>()
+                    .Include(a => a.RunProfileExecutionItems)
+                    .FirstOrDefaultAsync(a => a.Id == activityId);
+                return (activity as T) ?? entity;
+            }
+
             var reloaded = await _dbContext.Set<T>().FindAsync(id);
             return reloaded ?? entity;
         }
@@ -511,6 +545,20 @@ public class ObjectTypeBuilder
         return WithAttribute(name, AttributeDataType.Guid);
     }
 
+    public ObjectTypeBuilder WithReferenceAttribute(string name, bool isMultiValued = false)
+    {
+        _attributes.Add(new ConnectedSystemObjectTypeAttribute
+        {
+            Name = name,
+            Type = AttributeDataType.Reference,
+            IsExternalId = false,
+            IsSecondaryExternalId = false,
+            Selected = true,
+            AttributePlurality = isMultiValued ? AttributePlurality.MultiValued : AttributePlurality.SingleValued
+        });
+        return this;
+    }
+
     public ConnectedSystemObjectType Build()
     {
         return new ConnectedSystemObjectType
@@ -577,6 +625,11 @@ public class MetaverseObjectTypeBuilder
         return WithAttribute(name, AttributeDataType.Binary);
     }
 
+    public MetaverseObjectTypeBuilder WithReferenceAttribute(string name, bool isMultiValued = false)
+    {
+        return WithAttribute(name, AttributeDataType.Reference, isMultiValued ? AttributePlurality.MultiValued : AttributePlurality.SingleValued);
+    }
+
     public List<MetaverseAttribute> GetAttributes() => _attributes;
 
     public MetaverseObjectType Build()
@@ -605,6 +658,7 @@ public class SyncRuleBuilder
     private bool _enabled = true;
     private bool _projectToMetaverse = true;
     private bool _provisionToConnectedSystem = false;
+    private bool _enforceState = true;
     private readonly List<SyncRuleMapping> _attributeFlows = new();
     private readonly List<SyncRuleScopingCriteriaGroup> _scopingConditions = new();
 
@@ -629,6 +683,12 @@ public class SyncRuleBuilder
     public SyncRuleBuilder WithProvisioning(bool provision = true)
     {
         _provisionToConnectedSystem = provision;
+        return this;
+    }
+
+    public SyncRuleBuilder WithEnforceState(bool enforceState = true)
+    {
+        _enforceState = enforceState;
         return this;
     }
 
@@ -684,6 +744,7 @@ public class SyncRuleBuilder
             Name = _name,
             Direction = _direction,
             Enabled = _enabled,
+            EnforceState = _enforceState,
             ProjectToMetaverse = _projectToMetaverse,
             ProvisionToConnectedSystem = _provisionToConnectedSystem,
             AttributeFlowRules = _attributeFlows,

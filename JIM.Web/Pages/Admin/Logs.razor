@@ -2,10 +2,12 @@
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application.Services
 @using JIM.Web.Models.Api
+@using JIM.Web.Services
 @using System.Text.Json
 @inject LogReaderService LogReader
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
+@inject IUserPreferenceService PreferenceService
 @implements IAsyncDisposable
 
 <PageTitle>Logs</PageTitle>
@@ -30,8 +32,9 @@
                 MaxDate="DateTime.Today" Clearable="true" Placeholder="Today" />
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
-            <MudSelect T="string" @bind-Value="_selectedLevel" Label="Minimum Level" Variant="Variant.Outlined"
-                Dense="true" Clearable="true" Placeholder="All Levels">
+            <MudSelect T="string" @bind-SelectedValues="_selectedLevels" Label="Level(s)" Variant="Variant.Outlined"
+                Dense="true" Clearable="true" Placeholder="All Levels" MultiSelection="true"
+                MultiSelectionTextFunc="@(new Func<List<string>, string>(GetSelectedLevelsText))">
                 <MudSelectItem T="string" Value="@("Verbose")">Verbose</MudSelectItem>
                 <MudSelectItem T="string" Value="@("Debug")">Debug</MudSelectItem>
                 <MudSelectItem T="string" Value="@("Information")">Information</MudSelectItem>
@@ -93,7 +96,7 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Time" Style="@GetRowStyle(context)">
-            <MudTooltip Text="@context.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff")" Arrow="true">
+            <MudTooltip Text="@context.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff")" Arrow="true" Placement="Placement.Top">
                 <span class="jim-text-code">@context.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff")</span>
             </MudTooltip>
         </MudTd>
@@ -253,13 +256,14 @@
     private List<LogEntry>? _logEntries;
     private string? _selectedService;
     private DateTime? _selectedDate;
-    private string? _selectedLevel;
+    private IEnumerable<string> _selectedLevels = [];
     private string? _searchText;
     private bool _loading = true;
     private bool _autoRefresh;
     private System.Threading.Timer? _refreshTimer;
     private int _currentPage;
     private int _pageSize = 50;
+    private bool _preferencesLoaded;
     private bool _drawerOpen;
     private LogEntry? _selectedEntry;
 
@@ -294,6 +298,36 @@
         {
             // Hide the page footer to maximise viewing area for logs
             await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('jim-hide-footer')");
+        }
+
+        if (!_preferencesLoaded)
+        {
+            try
+            {
+                // Load the user's preferred page size and map to valid options for this page
+                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
+                // Map to closest valid option (25, 50, 100) for this page
+                var mappedSize = preferredSize switch
+                {
+                    <= 25 => 25,
+                    <= 50 => 50,
+                    _ => 100
+                };
+                if (mappedSize != _pageSize)
+                {
+                    _pageSize = mappedSize;
+                    _preferencesLoaded = true;
+                    StateHasChanged();
+                }
+                else
+                {
+                    _preferencesLoaded = true;
+                }
+            }
+            catch
+            {
+                // JS interop not yet available, will retry on next render
+            }
         }
     }
 
@@ -331,7 +365,7 @@
             _logEntries = await LogReader.GetLogEntriesAsync(
                 service: _selectedService,
                 date: _selectedDate,
-                minLevel: _selectedLevel,
+                levels: _selectedLevels,
                 search: _searchText,
                 limit: 500,
                 offset: 0);
@@ -352,10 +386,11 @@
         _currentPage = Math.Max(0, Math.Min(page, TotalPages - 1));
     }
 
-    private void OnPageSizeChanged(int newSize)
+    private async Task OnPageSizeChanged(int newSize)
     {
         _pageSize = newSize;
         _currentPage = 0;
+        await PreferenceService.SetRowsPerPageAsync(newSize);
     }
 
     private static Color GetLevelColor(string level)
@@ -370,6 +405,20 @@
             "Fatal" => Color.Error,
             _ => Color.Default
         };
+    }
+
+    private static string GetSelectedLevelsText(List<string> selectedLevels)
+    {
+        if (selectedLevels == null || selectedLevels.Count == 0)
+            return string.Empty;
+
+        if (selectedLevels.Count == 1)
+            return selectedLevels[0];
+
+        if (selectedLevels.Count == 6)
+            return "All Levels";
+
+        return $"{selectedLevels.Count} levels";
     }
 
     private static string GetRowStyle(LogEntry entry)

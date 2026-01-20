@@ -2,8 +2,12 @@
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application
 @using JIM.Models.Core
+@using JIM.Models.Logic
+@using JIM.Models.Staging
+@using JIM.Utilities
 @inject JimApplication Jim
 @inject NavigationManager NavManager
+@inject ISnackbar Snackbar
 
 <PageTitle>Metaverse Object Type: @_metaverseObjectType?.Name</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Metaverse Object Type:</span> @_metaverseObjectType?.Name</MudText>
@@ -29,15 +33,151 @@
         </MudGrid>
     </MudPaper>
 
+    <MudText Typo="Typo.h5" Class="mt-5">Deletion Rules</MudText>
+    <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">Configure when metaverse objects of this type should be automatically deleted.</MudText>
+
+    <MudPaper Class="pa-5 mt-5" Outlined="true">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="4">
+                <MudSelect T="MetaverseObjectDeletionRule" Label="Deletion Rule" @bind-Value="_deletionRule"
+                    Variant="Variant.Outlined" HelperText="@GetDeletionRuleHelperText()">
+                    <MudSelectItem Value="MetaverseObjectDeletionRule.Manual">Manual</MudSelectItem>
+                    <MudSelectItem Value="MetaverseObjectDeletionRule.WhenLastConnectorDisconnected">When Last Connector Disconnected</MudSelectItem>
+                    <MudSelectItem Value="MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected">When Authoritative Source Disconnected</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudNumericField T="int?" Label="Grace Period (Days)" @bind-Value="_gracePeriodDays"
+                    Variant="Variant.Outlined" Min="0" Max="3650"
+                    HelperText="Days to wait before deletion. 0 or empty for immediate." />
+            </MudItem>
+        </MudGrid>
+
+        @if (_deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected)
+        {
+            <div class="mt-4">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Authoritative Sources</MudText>
+                @if (_contributingSystems.Any())
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                        Select the connected systems that are authoritative sources for this object type.
+                        When ANY of these systems disconnects, the metaverse object will be scheduled for deletion.
+                    </MudText>
+                    @foreach (var system in _contributingSystems)
+                    {
+                        <MudCheckBox T="bool" Value="@_selectedAuthoritativeSources.Contains(system.Id)"
+                            ValueChanged="@((bool val) => ToggleAuthoritativeSource(system.Id, val))"
+                            Label="@system.Name" Color="Color.Primary" />
+                    }
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true">
+                        No contributing systems found. Create inbound sync rules for this object type to enable authoritative source selection.
+                    </MudAlert>
+                }
+            </div>
+        }
+
+        <MudStack Row="true" Class="mt-5" Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveDeletionRulesAsync"
+                Disabled="@(!CanSave())">
+                Save Changes
+            </MudButton>
+            <MudButton Variant="Variant.Text" OnClick="ResetDeletionRules">Reset</MudButton>
+        </MudStack>
+    </MudPaper>
+
     <MudText Typo="Typo.h5" Class="mt-5">Attributes</MudText>
     <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">These are the attributes bound to the metaverse object type:</MudText>
 
-    <MudPaper Class="pa-5 mt-5 mb-5" Outlined="true">
-        @foreach (var metaverseAttribute in _metaverseObjectType.Attributes)
-        {
-            <MudChip T="string" Variant="Variant.Filled" Color="Color.Primary">@metaverseAttribute.Name</MudChip>
-        }
-    </MudPaper>
+    @* Filter Chips Section *@
+    <MudStack Row="true" Spacing="6" Class="mt-3 mb-3 flex-wrap" AlignItems="AlignItems.Start">
+        @* Type Filter *@
+        <div>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Type:</MudText>
+            <MudChipSet T="AttributeDataType"
+                        SelectionMode="SelectionMode.MultiSelection"
+                        SelectedValues="_selectedTypes"
+                        SelectedValuesChanged="OnTypeFilterChanged">
+                @foreach (var type in GetAvailableTypes())
+                {
+                    <MudChip Value="@type.Key"
+                             Color="Color.Primary"
+                             Variant="@(_selectedTypes.Contains(type.Key) ? Variant.Filled : Variant.Outlined)"
+                             SelectedColor="Color.Primary">
+                        @type.Key.ToString().SplitOnCapitalLetters()
+                        <MudText Typo="Typo.caption" Class="ml-1">(@type.Value)</MudText>
+                    </MudChip>
+                }
+            </MudChipSet>
+        </div>
+
+        @* Plurality Filter *@
+        <div>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Plurality:</MudText>
+            <MudChipSet T="AttributePlurality"
+                        SelectionMode="SelectionMode.MultiSelection"
+                        SelectedValues="_selectedPluralities"
+                        SelectedValuesChanged="OnPluralityFilterChanged">
+                @foreach (var plurality in GetAvailablePluralities())
+                {
+                    <MudChip Value="@plurality.Key"
+                             Color="Color.Secondary"
+                             Variant="@(_selectedPluralities.Contains(plurality.Key) ? Variant.Filled : Variant.Outlined)"
+                             SelectedColor="Color.Secondary">
+                        @(plurality.Key == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                        <MudText Typo="Typo.caption" Class="ml-1">(@plurality.Value)</MudText>
+                    </MudChip>
+                }
+            </MudChipSet>
+        </div>
+
+        @* Built-in Filter *@
+        <div>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Built-in:</MudText>
+            <MudChipSet T="bool"
+                        SelectionMode="SelectionMode.MultiSelection"
+                        SelectedValues="_selectedBuiltIn"
+                        SelectedValuesChanged="OnBuiltInFilterChanged">
+                @foreach (var builtIn in GetAvailableBuiltIn())
+                {
+                    <MudChip Value="@builtIn.Key"
+                             Color="Color.Default"
+                             Variant="@(_selectedBuiltIn.Contains(builtIn.Key) ? Variant.Filled : Variant.Outlined)"
+                             SelectedColor="Color.Default">
+                        @(builtIn.Key ? "Yes" : "No")
+                        <MudText Typo="Typo.caption" Class="ml-1">(@builtIn.Value)</MudText>
+                    </MudChip>
+                }
+            </MudChipSet>
+        </div>
+    </MudStack>
+
+    <MudTable Items="@_metaverseObjectType.Attributes.OrderBy(a => a.Name)" Hover="true" Breakpoint="Breakpoint.Sm" Class="mb-5" SortLabel="Sort By" Elevation="0" Outlined="true" Filter="new Func<MetaverseAttribute, bool>(FilterAttributes)">
+        <ToolBarContent>
+            <MudSpacer />
+            <MudTextField @bind-Value="_attributeSearchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.Type)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.AttributePlurality)"><MudText Typo="Typo.button">Plurality</MudText></MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Type">@context.Type.ToString().SplitOnCapitalLetters()</MudTd>
+            <MudTd DataLabel="Plurality">@(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")</MudTd>
+            <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
+            <MudTd DataLabel="Created">
+                <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                    @context.Created.ToLocalTime().ToRelativeTime()
+                </MudTooltip>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
 }
 
 @code {
@@ -46,13 +186,29 @@
 
     private MetaverseObjectType? _metaverseObjectType;
     private List<BreadcrumbItem> _breadcrumbs = null!;
+    private string _attributeSearchString = "";
+
+    // Attribute filter state
+    private IReadOnlyCollection<AttributeDataType> _selectedTypes = new List<AttributeDataType>();
+    private IReadOnlyCollection<AttributePlurality> _selectedPluralities = new List<AttributePlurality>();
+    private IReadOnlyCollection<bool> _selectedBuiltIn = new List<bool>();
+
+    // Deletion rules state
+    private MetaverseObjectDeletionRule _deletionRule;
+    private int? _gracePeriodDays;
+    private HashSet<int> _selectedAuthoritativeSources = new();
+    private List<ConnectedSystem> _contributingSystems = new();
+
+    // Original values for change detection
+    private MetaverseObjectDeletionRule _originalDeletionRule;
+    private int? _originalGracePeriodDays;
+    private HashSet<int> _originalAuthoritativeSources = new();
 
     protected override async Task OnInitializedAsync()
     {
         _metaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeAsync(Id, true);
         if (_metaverseObjectType == null)
         {
-            // object type not found, redirect to index page
             NavManager.NavigateTo("../");
             return;
         }
@@ -63,5 +219,188 @@
             new("Schema", href: "/admin/schema/"),
             new(_metaverseObjectType.Name, href: null, disabled: true)
         };
+
+        // Load contributing systems (systems with inbound sync rules for this object type)
+        await LoadContributingSystemsAsync();
+
+        // Initialise deletion rules state
+        InitialiseDeletionRulesState();
+    }
+
+    private async Task LoadContributingSystemsAsync()
+    {
+        var allSyncRules = await Jim.Repository.ConnectedSystems.GetSyncRulesAsync();
+        var inboundRulesForType = allSyncRules
+            .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.MetaverseObjectTypeId == Id)
+            .ToList();
+
+        var connectedSystemIds = inboundRulesForType.Select(sr => sr.ConnectedSystemId).Distinct();
+        _contributingSystems = new List<ConnectedSystem>();
+
+        foreach (var csId in connectedSystemIds)
+        {
+            var cs = await Jim.ConnectedSystems.GetConnectedSystemAsync(csId);
+            if (cs != null)
+                _contributingSystems.Add(cs);
+        }
+    }
+
+    private void InitialiseDeletionRulesState()
+    {
+        if (_metaverseObjectType == null) return;
+
+        _deletionRule = _metaverseObjectType.DeletionRule;
+        _gracePeriodDays = _metaverseObjectType.DeletionGracePeriodDays;
+        _selectedAuthoritativeSources = new HashSet<int>(_metaverseObjectType.DeletionTriggerConnectedSystemIds ?? new List<int>());
+
+        // Store original values
+        _originalDeletionRule = _deletionRule;
+        _originalGracePeriodDays = _gracePeriodDays;
+        _originalAuthoritativeSources = new HashSet<int>(_selectedAuthoritativeSources);
+    }
+
+    private void ResetDeletionRules()
+    {
+        _deletionRule = _originalDeletionRule;
+        _gracePeriodDays = _originalGracePeriodDays;
+        _selectedAuthoritativeSources = new HashSet<int>(_originalAuthoritativeSources);
+    }
+
+    private void ToggleAuthoritativeSource(int systemId, bool selected)
+    {
+        if (selected)
+            _selectedAuthoritativeSources.Add(systemId);
+        else
+            _selectedAuthoritativeSources.Remove(systemId);
+    }
+
+    private string GetDeletionRuleHelperText()
+    {
+        return _deletionRule switch
+        {
+            MetaverseObjectDeletionRule.Manual => "Objects must be manually deleted by an administrator.",
+            MetaverseObjectDeletionRule.WhenLastConnectorDisconnected => "Delete when all connected system objects are disconnected.",
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected => "Delete when any selected authoritative source disconnects.",
+            _ => string.Empty
+        };
+    }
+
+    private bool CanSave()
+    {
+        // Check if WhenAuthoritativeSourceDisconnected requires at least one source selected
+        if (_deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected &&
+            !_selectedAuthoritativeSources.Any())
+        {
+            return false;
+        }
+
+        // Check if there are actual changes
+        return HasChanges();
+    }
+
+    private bool HasChanges()
+    {
+        if (_deletionRule != _originalDeletionRule) return true;
+        if (_gracePeriodDays != _originalGracePeriodDays) return true;
+        if (!_selectedAuthoritativeSources.SetEquals(_originalAuthoritativeSources)) return true;
+        return false;
+    }
+
+    private async Task SaveDeletionRulesAsync()
+    {
+        if (_metaverseObjectType == null) return;
+
+        try
+        {
+            // Update the object type
+            _metaverseObjectType.DeletionRule = _deletionRule;
+            _metaverseObjectType.DeletionGracePeriodDays = _gracePeriodDays == 0 ? null : _gracePeriodDays;
+            _metaverseObjectType.DeletionTriggerConnectedSystemIds = _deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
+                ? _selectedAuthoritativeSources.ToList()
+                : new List<int>();
+
+            await Jim.Metaverse.UpdateMetaverseObjectTypeAsync(_metaverseObjectType);
+
+            // Update original values to reflect saved state
+            _originalDeletionRule = _deletionRule;
+            _originalGracePeriodDays = _gracePeriodDays;
+            _originalAuthoritativeSources = new HashSet<int>(_selectedAuthoritativeSources);
+
+            Snackbar.Add("Deletion rules saved successfully.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save deletion rules: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private bool FilterAttributes(MetaverseAttribute attribute)
+    {
+        // Text search filter
+        if (!string.IsNullOrWhiteSpace(_attributeSearchString) &&
+            !attribute.Name.Contains(_attributeSearchString, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // Type filter
+        if (_selectedTypes.Count > 0 && !_selectedTypes.Contains(attribute.Type))
+            return false;
+
+        // Plurality filter
+        if (_selectedPluralities.Count > 0 && !_selectedPluralities.Contains(attribute.AttributePlurality))
+            return false;
+
+        // Built-in filter
+        if (_selectedBuiltIn.Count > 0 && !_selectedBuiltIn.Contains(attribute.BuiltIn))
+            return false;
+
+        return true;
+    }
+
+    private void OnTypeFilterChanged(IReadOnlyCollection<AttributeDataType> selectedTypes)
+    {
+        _selectedTypes = selectedTypes;
+    }
+
+    private void OnPluralityFilterChanged(IReadOnlyCollection<AttributePlurality> selectedPluralities)
+    {
+        _selectedPluralities = selectedPluralities;
+    }
+
+    private void OnBuiltInFilterChanged(IReadOnlyCollection<bool> selectedBuiltIn)
+    {
+        _selectedBuiltIn = selectedBuiltIn;
+    }
+
+    private IEnumerable<KeyValuePair<AttributeDataType, int>> GetAvailableTypes()
+    {
+        if (_metaverseObjectType == null)
+            return Enumerable.Empty<KeyValuePair<AttributeDataType, int>>();
+
+        return _metaverseObjectType.Attributes
+            .GroupBy(a => a.Type)
+            .Select(g => new KeyValuePair<AttributeDataType, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key.ToString());
+    }
+
+    private IEnumerable<KeyValuePair<AttributePlurality, int>> GetAvailablePluralities()
+    {
+        if (_metaverseObjectType == null)
+            return Enumerable.Empty<KeyValuePair<AttributePlurality, int>>();
+
+        return _metaverseObjectType.Attributes
+            .GroupBy(a => a.AttributePlurality)
+            .Select(g => new KeyValuePair<AttributePlurality, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key);
+    }
+
+    private IEnumerable<KeyValuePair<bool, int>> GetAvailableBuiltIn()
+    {
+        if (_metaverseObjectType == null)
+            return Enumerable.Empty<KeyValuePair<bool, int>>();
+
+        return _metaverseObjectType.Attributes
+            .GroupBy(a => a.BuiltIn)
+            .Select(g => new KeyValuePair<bool, int>(g.Key, g.Count()))
+            .OrderByDescending(x => x.Key); // Yes first, then No
     }
 }

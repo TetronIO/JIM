@@ -34,7 +34,7 @@ else if (_syncRule != null)
             @if (_syncRule.Id > 0)
             {
                 <div class="d-flex gap-2">
-                    <MudTooltip Text="@_syncRule.Created.ToLocalTime().ToFriendlyDate()" Placement="Placement.Top">
+                    <MudTooltip Text="@_syncRule.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                         <MudChip T="string" Variant="Variant.Text" Color="Color.Info">
                             Created @_syncRule.Created.ToLocalTime().ToRelativeTime()@if (_syncRule.CreatedBy != null)
                             {<text> by @_syncRule.CreatedBy.DisplayName</text>}
@@ -42,7 +42,7 @@ else if (_syncRule != null)
                     </MudTooltip>
                     @if (_syncRule.LastUpdated.HasValue)
                     {
-                        <MudTooltip Text="@_syncRule.LastUpdated.Value.ToLocalTime().ToFriendlyDate()" Placement="Placement.Top">
+                        <MudTooltip Text="@_syncRule.LastUpdated.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                             <MudChip T="string" Variant="Variant.Text" Color="Color.Info">
                                 Updated @_syncRule.LastUpdated.Value.ToLocalTime().ToRelativeTime()
                             </MudChip>
@@ -182,10 +182,40 @@ else if (_syncRule != null)
             }
         </MudForm>
         <MudTooltip Text="Synchronisation Rules will not be evaluated when disabled. This allows to either prepare a rule in advance of it being needed, or to temporarily stop a sync rule from being evaluated."
-                    Placement="Placement.Bottom">
+                    Arrow="true" Placement="Placement.Top">
             <MudSwitch Class="mt-5" @bind-Value="@_syncRule.Enabled" Color="Color.Primary" Label="Enabled?" />
         </MudTooltip>
     </MudPaper>
+
+    @* Advanced Options - Only show for Export rules *@
+    @if (_syncRule.Direction == SyncRuleDirection.Export)
+    {
+        <MudExpansionPanels Class="mt-5">
+            <MudExpansionPanel Text="Advanced Options">
+                <TitleContent>
+                    <div class="d-flex align-center">
+                        <MudIcon Icon="@Icons.Material.Filled.Settings" Class="me-2" Size="Size.Small" />
+                        <MudText Typo="Typo.subtitle1">Advanced Options</MudText>
+                    </div>
+                </TitleContent>
+                <ChildContent>
+                    <MudStack Spacing="4" Class="pa-2">
+                        <MudTooltip Text="When enabled, changes made directly in the target system (drift) will be automatically corrected during the next sync run. Disable this only if you need to allow emergency manual changes in the target system."
+                                    Arrow="true" Placement="Placement.Right">
+                            <MudSwitch @bind-Value="@_syncRule.EnforceState" Color="Color.Primary"
+                                       Label="Enforce State (Auto-correct drift)" />
+                        </MudTooltip>
+                        <MudAlert Severity="Severity.Normal" Variant="Variant.Text" Dense="true">
+                            <strong>Enforce State</strong> enables drift detection and automatic correction. When a target system
+                            attribute differs from what this export rule dictates, JIM will create a corrective pending export
+                            to restore the authoritative value. Disable this option only for scenarios where you need to allow
+                            temporary manual overrides in the target system (e.g., emergency access scenarios).
+                        </MudAlert>
+                    </MudStack>
+                </ChildContent>
+            </MudExpansionPanel>
+        </MudExpansionPanels>
+    }
 
     @if (_syncRule.Direction != SyncRuleDirection.NotSet)
     {
@@ -194,7 +224,7 @@ else if (_syncRule != null)
                 <MudText Typo="Typo.h5">Matching Rules</MudText>
                 @if (_syncRule.ConnectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.SyncRule)
                 {
-                    <MudTooltip Text="Matching rules are specific to this sync rule." Placement="Placement.Top">
+                    <MudTooltip Text="Matching rules are specific to this sync rule." Arrow="true" Placement="Placement.Top">
                         <MudChip T="string" Variant="Variant.Text" Text="Advanced Mode" Color="Color.Info" />
                     </MudTooltip>
                 }
@@ -253,7 +283,7 @@ else if (_syncRule != null)
                                     <MudItem xs="12" Class="d-flex align-center">
                                         <MudChip T="string">
                                             <AvatarContent>
-                                                <MudTooltip Text="Connected System Attribute">
+                                                <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
                                                     <MudAvatar>CS</MudAvatar>
                                                 </MudTooltip>
                                             </AvatarContent>
@@ -264,7 +294,7 @@ else if (_syncRule != null)
                                         </MudChip>
                                         <MudChip T="string">
                                             <AvatarContent>
-                                                <MudTooltip Text="Metaverse Attribute">
+                                                <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
                                                     <MudAvatar>MV</MudAvatar>
                                                 </MudTooltip>
                                             </AvatarContent>
@@ -359,16 +389,29 @@ else if (_syncRule != null)
             </DialogActions>
         </MudDialog>
     }
-    else if (_syncRule.MetaverseObjectType != null)
+
+    @* Scoping criteria for Import and Export sync rules *@
+    @if (_syncRule.Id > 0 && _syncRule.MetaverseObjectType != null && _syncRule.ConnectedSystemObjectType != null)
     {
         <MudPaper Class="pa-4 mt-5" Outlined="true">
-            <MudText Typo="Typo.h5">Metaverse Object Scope</MudText>
-            <MudText Class="mt-5">
-                By default, all Metaverse objects of type '@_syncRule.MetaverseObjectType.Name' will be in scope of this
-                Synchronisation Rule, though to
-                have it apply to a subset of those objects, use a filter. i.e. you might only want this rule to apply to Staff,
-                not Contractors.
-            </MudText>
+            @if (_syncRule.Direction == SyncRuleDirection.Export)
+            {
+                <MudText Typo="Typo.h5">Metaverse Object Scope</MudText>
+                <MudText Class="mt-5">
+                    By default, all Metaverse objects of type '@_syncRule.MetaverseObjectType.Name' will be in scope of this
+                    Synchronisation Rule, though to have it apply to a subset of those objects, use a filter. i.e. you might
+                    only want this rule to apply to Staff, not Contractors.
+                </MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.h5">Connected System Object Scope</MudText>
+                <MudText Class="mt-5">
+                    By default, all Connected System objects of type '@_syncRule.ConnectedSystemObjectType.Name' will be in scope
+                    of this Synchronisation Rule. Use a filter to import only specific objects, e.g. only Active users, not Disabled.
+                </MudText>
+            }
+
             <MudRadioGroup @bind-Value="_syncRuleScopingFiltered" Class="mt-5">
                 <MudRadio Value="false">All Objects</MudRadio>
                 <MudRadio Value="true">Filtered</MudRadio>
@@ -376,6 +419,31 @@ else if (_syncRule != null)
 
             @if (_syncRuleScopingFiltered)
             {
+                @if (_syncRule.Direction == SyncRuleDirection.Import)
+                {
+                    <MudSelect T="InboundOutOfScopeAction" @bind-Value="_syncRule.InboundOutOfScopeAction"
+                               Label="When objects fall out of scope" Variant="Variant.Outlined" Class="mt-5">
+                        <MudSelectItem Value="InboundOutOfScopeAction.Disconnect">
+                            Disconnect from Metaverse
+                        </MudSelectItem>
+                        <MudSelectItem Value="InboundOutOfScopeAction.RemainJoined">
+                            Remain joined (stop attribute flow)
+                        </MudSelectItem>
+                    </MudSelect>
+                    <MudAlert Severity="Severity.Info" Class="mt-3" Variant="Variant.Text" Dense="true">
+                        @if (_syncRule.InboundOutOfScopeAction == InboundOutOfScopeAction.Disconnect)
+                        {
+                            <text>Objects that fall out of scope will be disconnected from their Metaverse object. This may trigger
+                            attribute removal and MVO deletion rules if it was the last connector.</text>
+                        }
+                        else
+                        {
+                            <text>Objects that fall out of scope will remain joined but attribute flow will stop. Use this for
+                            "once managed, always managed" scenarios.</text>
+                        }
+                    </MudAlert>
+                }
+
                 @if (_syncRule.ObjectScopingCriteriaGroups.Count == 0)
                 {
                     <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled"
@@ -445,7 +513,7 @@ else if (_syncRule != null)
                                     @bind-Value="_attributeFlowMappingSource.ConnectedSystemAttribute" Label="Connected System Attribute"
                                     Placeholder="Please select the source Connected System attribute" Required="true" Class="mt-5"
                                     Variant="Variant.Outlined">
-                                    @foreach (var connectedSystemAttribute in _syncRule.ConnectedSystemObjectType.Attributes)
+                                    @foreach (var connectedSystemAttribute in _syncRule.ConnectedSystemObjectType!.Attributes)
                                     {
                                         <MudSelectItem Value="@connectedSystemAttribute">@connectedSystemAttribute.Name <span
                                                 style="@($"color:{Colors.Gray.Darken1};")">(@connectedSystemAttribute.Type :
@@ -504,7 +572,7 @@ else if (_syncRule != null)
                             @bind-Value="_attributeFlowMapping.TargetConnectedSystemAttribute" Label="Connected System Attribute"
                             Placeholder="Please select the target Connected System attribute" Required="true" Class="mt-5"
                             Variant="Variant.Outlined">
-                            @foreach (var connectedSystemAttribute in _syncRule.ConnectedSystemObjectType.Attributes)
+                            @foreach (var connectedSystemAttribute in _syncRule.ConnectedSystemObjectType!.Attributes)
                             {
                                 <MudSelectItem Disabled="IsAttributeFlowTargetDisabled(connectedSystemAttribute)"
                                     Value="@connectedSystemAttribute">
@@ -543,7 +611,7 @@ else if (_syncRule != null)
                 {
                     <MudChip T="string">
                         <AvatarContent>
-                            <MudTooltip Text="Metaverse Attribute">
+                            <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
                                 <MudAvatar Color="Color.Dark">MV</MudAvatar>
                             </MudTooltip>
                         </AvatarContent>
@@ -560,7 +628,7 @@ else if (_syncRule != null)
                         {
                             <MudChip T="string">
                                 <AvatarContent>
-                                    <MudTooltip Text="Connected System Attribute">
+                                    <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
                                         <MudAvatar Color="Color.Dark">CS</MudAvatar>
                                     </MudTooltip>
                                 </AvatarContent>
@@ -571,7 +639,7 @@ else if (_syncRule != null)
                         {
                             <MudChip T="string">
                                 <AvatarContent>
-                                    <MudTooltip Text="Expression">
+                                    <MudTooltip Text="Expression" Arrow="true" Placement="Placement.Top">
                                         <MudAvatar Color="Color.Secondary">Fx</MudAvatar>
                                     </MudTooltip>
                                 </AvatarContent>
@@ -590,7 +658,7 @@ else if (_syncRule != null)
                         {
                             <MudChip T="string">
                                 <AvatarContent>
-                                    <MudTooltip Text="Metaverse Attribute">
+                                    <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
                                         <MudAvatar Color="Color.Dark">MV</MudAvatar>
                                     </MudTooltip>
                                 </AvatarContent>
@@ -601,7 +669,7 @@ else if (_syncRule != null)
                         {
                             <MudChip T="string">
                                 <AvatarContent>
-                                    <MudTooltip Text="Expression">
+                                    <MudTooltip Text="Expression" Arrow="true" Placement="Placement.Top">
                                         <MudAvatar Color="Color.Secondary">Fx</MudAvatar>
                                     </MudTooltip>
                                 </AvatarContent>
@@ -618,7 +686,7 @@ else if (_syncRule != null)
 
                     <MudChip T="string">
                         <AvatarContent>
-                            <MudTooltip Text="Connected System Attribute">
+                            <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
                                 <MudAvatar Color="Color.Dark">CS</MudAvatar>
                             </MudTooltip>
                         </AvatarContent>
@@ -716,6 +784,9 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/connected-systems/sync
 
             _syncRuleNameOrCreate = _syncRule.Name;
             _breadcrumbs.Add(new BreadcrumbItem(_syncRule.Name, href: null, disabled: true));
+
+            // initialise scoping filter state based on existing criteria
+            _syncRuleScopingFiltered = _syncRule.ObjectScopingCriteriaGroups.Count > 0;
         }
         else
         {

@@ -78,6 +78,14 @@ public class SyncRule: IValidated
     public InboundOutOfScopeAction InboundOutOfScopeAction { get; set; } = InboundOutOfScopeAction.Disconnect;
 
     /// <summary>
+    /// For Export rules: When true (default), inbound changes from the target system will trigger
+    /// re-evaluation of this export rule to detect and remediate drift.
+    /// Set to false to allow drift (e.g., for emergency access scenarios).
+    /// Only applicable when Direction = Export.
+    /// </summary>
+    public bool EnforceState { get; set; } = true;
+
+    /// <summary>
     /// Contains all the logic that controls what attributes on a metaverse object should flow to what connected system object attribute,
     /// or visa-versa, depending on the sync rule direction.
     /// </summary>

@@ -2,8 +2,10 @@ using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using Serilog;
 
@@ -60,6 +62,19 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             activeSyncRules = await _jim.ConnectedSystems.GetSyncRulesAsync(_connectedSystem.Id, false);
         }
 
+        // Load ALL sync rules from ALL systems for drift detection import mapping cache.
+        // This is needed because drift detection must know which systems contribute to which MVO attributes
+        // to avoid false positives on export-only systems.
+        List<SyncRule> allSyncRules;
+        using (Diagnostics.Sync.StartSpan("LoadAllSyncRulesForDriftDetection"))
+        {
+            allSyncRules = await _jim.ConnectedSystems.GetSyncRulesAsync();
+        }
+
+        // Build drift detection cache (import mapping cache + export rules with EnforceState=true)
+        // This enables efficient drift detection during CSO processing
+        BuildDriftDetectionCache(allSyncRules, activeSyncRules);
+
         // get the schema for all object types upfront in this Connected System, so we can retrieve lightweight CSOs without this data.
         using (Diagnostics.Sync.StartSpan("LoadObjectTypes"))
         {
@@ -76,6 +91,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 .GroupBy(pe => pe.ConnectedSystemObject!.Id)
                 .ToDictionary(g => g.Key, g => g.ToList());
             Log.Verbose("PerformFullSyncAsync: Loaded {Count} pending exports into lookup dictionary", allPendingExports.Count);
+
+            // Surface pending exports awaiting confirmation as RPEIs for operator visibility.
+            // This gives operators insight into what changes will be made on the next export run.
+            SurfacePendingExportsAsExecutionItems(allPendingExports);
         }
 
         // Pre-load export evaluation cache (export rules + CSO lookups) for O(1) access
@@ -108,8 +127,8 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 csoPagedResult = await _jim.ConnectedSystems.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize, returnAttributes: false);
             }
 
-            // Load CSO attribute values for this page (for no-net-change detection during export evaluation)
-            await LoadPageCsoAttributeCacheAsync(csoPagedResult.Results.Select(cso => cso.Id));
+            // Note: Target CSO attribute values for no-net-change detection are pre-loaded in ExportEvaluationCache
+            // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
 
             int processedInPage = 0;
             using (Diagnostics.Sync.StartSpan("ProcessCsoLoop").SetTag("csoCount", csoPagedResult.Results.Count))
@@ -129,6 +148,12 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                     processedInPage++;
                 }
             }
+
+            // Process deferred reference attributes after all CSOs in this page have been processed.
+            // Reference attributes (e.g., group members) may point to CSOs that are processed later in the same page.
+            // By deferring reference attributes, we ensure all MVOs exist before resolving references.
+            // This enables a single sync run to fully reconcile all objects including references.
+            ProcessDeferredReferenceAttributes();
 
             // Batch persist all MVOs collected during this page.
             //
@@ -164,8 +189,8 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // batch delete obsolete CSOs
             await FlushObsoleteCsoOperationsAsync();
 
-            // Clear per-page CSO attribute cache to free memory
-            ClearPageCsoAttributeCache();
+            // batch delete MVOs marked for immediate deletion (0-grace-period)
+            await FlushPendingMvoDeletionsAsync();
 
             // Update progress with page completion - this persists ObjectsProcessed to database
             using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
@@ -187,5 +212,49 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         await UpdateDeltaSyncWatermarkAsync();
 
         syncSpan.SetSuccess();
+    }
+
+    /// <summary>
+    /// Creates ActivityRunProfileExecutionItems for pending exports that are awaiting confirmation.
+    /// This surfaces unconfirmed exports (ExportNotImported status) to the Activity so operators
+    /// can see what changes will be made to connected systems on the next export run.
+    /// </summary>
+    /// <param name="allPendingExports">All pending exports for this connected system.</param>
+    private void SurfacePendingExportsAsExecutionItems(List<PendingExport> allPendingExports)
+    {
+        // Filter to only pending exports that are awaiting confirmation (ExportNotImported)
+        // or are pending execution. These represent staged changes the operator should know about.
+        var pendingExportsToSurface = allPendingExports
+            .Where(pe => pe.Status == PendingExportStatus.ExportNotImported ||
+                         pe.Status == PendingExportStatus.Pending)
+            .ToList();
+
+        if (pendingExportsToSurface.Count == 0)
+        {
+            Log.Verbose("SurfacePendingExportsAsExecutionItems: No pending exports to surface.");
+            return;
+        }
+
+        Log.Information("SurfacePendingExportsAsExecutionItems: Surfacing {Count} pending exports as execution items for operator visibility.",
+            pendingExportsToSurface.Count);
+
+        foreach (var pendingExport in pendingExportsToSurface)
+        {
+            var executionItem = _activity.PrepareRunProfileExecutionItem();
+            executionItem.ObjectChangeType = ObjectChangeType.PendingExport;
+            executionItem.ConnectedSystemObject = pendingExport.ConnectedSystemObject;
+            executionItem.ConnectedSystemObjectId = pendingExport.ConnectedSystemObjectId;
+
+            // Capture the external ID snapshot for historical reference
+            if (pendingExport.ConnectedSystemObject != null)
+            {
+                executionItem.ExternalIdSnapshot = pendingExport.ConnectedSystemObject.ExternalIdAttributeValue?.StringValue;
+            }
+
+            _activity.RunProfileExecutionItems.Add(executionItem);
+        }
+
+        Log.Debug("SurfacePendingExportsAsExecutionItems: Created {Count} execution items for pending exports.",
+            pendingExportsToSurface.Count);
     }
 }

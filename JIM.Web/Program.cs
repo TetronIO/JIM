@@ -4,6 +4,7 @@ using JIM.Application;
 using JIM.Application.Expressions;
 using JIM.Application.Services;
 using JIM.Data;
+using JIM.Web.Services;
 using JIM.Models.Core;
 using JIM.PostgresData;
 using JIM.Web.Middleware.Api;
@@ -313,6 +314,9 @@ try
     {
         config.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.BottomCenter;
     });
+
+    // User preferences service for storing UI settings in browser localStorage
+    builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
 
     var app = builder.Build();
 

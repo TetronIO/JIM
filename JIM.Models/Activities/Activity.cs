@@ -1,4 +1,5 @@
-﻿using JIM.Models.Core;
+﻿using System.ComponentModel.DataAnnotations.Schema;
+using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 namespace JIM.Models.Activities;
@@ -110,6 +111,20 @@ public class Activity
     public string? TargetContext { get; set; }
 
     /// <summary>
+    /// Gets a formatted display name combining TargetContext and TargetName.
+    /// Returns "Context → Name" if both are present, otherwise just the name, or "(no name)" if neither.
+    /// </summary>
+    [NotMapped]
+    public string DisplayName
+    {
+        get
+        {
+            var name = !string.IsNullOrEmpty(TargetName) ? TargetName : "(no name)";
+            return !string.IsNullOrEmpty(TargetContext) ? $"{TargetContext} → {name}" : name;
+        }
+    }
+
+    /// <summary>
     /// Used to calculate a progress bar.
     /// </summary>
     public int ObjectsToProcess { get; set; }
@@ -156,6 +171,16 @@ public class Activity
     /// Populated when activity completes.
     /// </summary>
     public int TotalObjectErrors { get; set; }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // pending export reconciliation stats (for confirming imports)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Count of pending exports that were fully confirmed and deleted during a confirming import.
+    /// The exported attribute values matched the imported values.
+    /// </summary>
+    public int PendingExportsConfirmed { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
     // context specific properties

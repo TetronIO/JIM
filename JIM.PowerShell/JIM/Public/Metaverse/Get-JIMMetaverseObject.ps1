@@ -20,6 +20,14 @@ function Get-JIMMetaverseObject {
     .PARAMETER Search
         Search query to filter objects by display name (supports wildcards).
 
+    .PARAMETER AttributeName
+        Filter by a specific attribute name. Must be used with AttributeValue.
+        This performs an exact match (case-insensitive).
+
+    .PARAMETER AttributeValue
+        Filter by a specific attribute value. Must be used with AttributeName.
+        This performs an exact match (case-insensitive).
+
     .PARAMETER Attributes
         List of attribute names to include in the response. Use "*" for all attributes.
         DisplayName is always included by default.
@@ -59,6 +67,16 @@ function Get-JIMMetaverseObject {
         Searches for objects with display name matching "john*".
 
     .EXAMPLE
+        Get-JIMMetaverseObject -AttributeName "Account Name" -AttributeValue "jsmith"
+
+        Gets the Metaverse Object with Account Name equal to "jsmith".
+
+    .EXAMPLE
+        Get-JIMMetaverseObject -ObjectTypeName "Group" -AttributeName "Account Name" -AttributeValue "Project-Alpha"
+
+        Gets the Group with Account Name equal to "Project-Alpha".
+
+    .EXAMPLE
         Get-JIMMetaverseObject -Search "john*" -Attributes FirstName, LastName, Email
 
         Searches and includes specific attributes in the response.
@@ -88,6 +106,13 @@ function Get-JIMMetaverseObject {
         [Parameter(ParameterSetName = 'List')]
         [SupportsWildcards()]
         [string]$Search,
+
+        [Parameter(ParameterSetName = 'List')]
+        [ValidateNotNullOrEmpty()]
+        [string]$AttributeName,
+
+        [Parameter(ParameterSetName = 'List')]
+        [string]$AttributeValue,
 
         [Parameter(ParameterSetName = 'List')]
         [string[]]$Attributes,
@@ -124,6 +149,16 @@ function Get-JIMMetaverseObject {
             'List' {
                 Write-Verbose "Getting Metaverse Objects"
 
+                # Validate AttributeName and AttributeValue are used together
+                if ($AttributeName -and -not $PSBoundParameters.ContainsKey('AttributeValue')) {
+                    Write-Error "AttributeName requires AttributeValue to be specified"
+                    return
+                }
+                if ($PSBoundParameters.ContainsKey('AttributeValue') -and -not $AttributeName) {
+                    Write-Error "AttributeValue requires AttributeName to be specified"
+                    return
+                }
+
                 $queryParams = @(
                     "page=$Page",
                     "pageSize=$PageSize"
@@ -135,6 +170,11 @@ function Get-JIMMetaverseObject {
 
                 if ($Search) {
                     $queryParams += "search=$([System.Uri]::EscapeDataString($Search))"
+                }
+
+                if ($AttributeName) {
+                    $queryParams += "filterAttributeName=$([System.Uri]::EscapeDataString($AttributeName))"
+                    $queryParams += "filterAttributeValue=$([System.Uri]::EscapeDataString($AttributeValue))"
                 }
 
                 if ($Attributes) {

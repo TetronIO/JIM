@@ -140,6 +140,7 @@ internal class SeedingServer
         // group-specific attributes
         var groupScopeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.GroupScope, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var groupTypeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.GroupType, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
+        var groupTypeFlagsAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.GroupTypeFlags, AttributePlurality.SingleValued, AttributeDataType.Number, attributesToCreate);
         var managedByAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ManagedBy, AttributePlurality.SingleValued, AttributeDataType.Reference, attributesToCreate);
         var ownersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Owners, AttributePlurality.MultiValued, AttributeDataType.Reference, attributesToCreate);
         var staticMembersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.StaticMembers, AttributePlurality.MultiValued, AttributeDataType.Reference, attributesToCreate);
@@ -247,6 +248,7 @@ internal class SeedingServer
         }
 
         AddAttributeToObjectType(groupObjectType, accountNameAttribute);
+        AddAttributeToObjectType(groupObjectType, commonNameAttribute);
         AddAttributeToObjectType(groupObjectType, descriptionAttribute);
         AddAttributeToObjectType(groupObjectType, displayNameAttribute);
         AddAttributeToObjectType(groupObjectType, distinguishedNameAttribute);
@@ -268,6 +270,7 @@ internal class SeedingServer
         AddAttributeToObjectType(groupObjectType, extensionAttribute1Attribute9);
         AddAttributeToObjectType(groupObjectType, groupScopeAttribute);
         AddAttributeToObjectType(groupObjectType, groupTypeAttribute);
+        AddAttributeToObjectType(groupObjectType, groupTypeFlagsAttribute);
         AddAttributeToObjectType(groupObjectType, hideFromAddressListsAttribute);
         AddAttributeToObjectType(groupObjectType, infoAttribute);
         AddAttributeToObjectType(groupObjectType, mailNicknameAttribute);
@@ -409,7 +412,8 @@ internal class SeedingServer
             securityGroupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = displayNameAttribute, Position = 0 });
             securityGroupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = groupTypeAttribute, Position = 1 });
             securityGroupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = groupScopeAttribute, Position = 2 });
-            securityGroupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = statusAttribute, Position = 3 });
+            securityGroupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = emailAttribute, Position = 3 });
+            securityGroupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = statusAttribute, Position = 4 });
 
             securityGroupsPredefinedSearch.CriteriaGroups.Add(new PredefinedSearchCriteriaGroup {
                 Type = SearchGroupType.All,

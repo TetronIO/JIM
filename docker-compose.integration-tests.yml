@@ -91,6 +91,7 @@ services:
       - jim-network
     profiles:
       - scenario2
+      - scenario8
     healthcheck:
       test: ["CMD-SHELL", "/usr/local/samba/bin/smbclient -L localhost -U% -N || exit 1"]
       interval: 10s
@@ -129,6 +130,7 @@ services:
       - jim-network
     profiles:
       - scenario2
+      - scenario8
     healthcheck:
       test: ["CMD-SHELL", "/usr/local/samba/bin/smbclient -L localhost -U% -N || exit 1"]
       interval: 10s

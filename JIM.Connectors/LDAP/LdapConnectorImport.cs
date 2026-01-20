@@ -46,6 +46,20 @@ internal class LdapConnectorImport
             .SingleOrDefault(s => s.Setting.Name == SearchTimeoutSettingName);
         var searchTimeoutSeconds = searchTimeoutSetting?.IntValue ?? DefaultSearchTimeoutSeconds;
         _searchTimeout = TimeSpan.FromSeconds(searchTimeoutSeconds);
+
+        // If we have persisted connector data from a previous page, deserialise it to get capabilities
+        // This allows subsequent pages to know the directory capabilities without re-querying
+        if (!string.IsNullOrEmpty(persistedConnectorData) && paginationTokens.Count > 0)
+        {
+            try
+            {
+                _currentRootDse = JsonSerializer.Deserialize<LdapConnectorRootDse>(persistedConnectorData);
+            }
+            catch (JsonException ex)
+            {
+                _logger.Warning(ex, "LdapConnectorImport: Failed to deserialise persisted connector data for capability detection. Will re-query directory.");
+            }
+        }
     }
 
     internal ConnectedSystemImportResult GetFullImportObjects()
@@ -80,8 +94,10 @@ internal class LdapConnectorImport
         // enumerate all selected partitions
         foreach (var selectedPartition in _connectedSystem.Partitions.Where(p => p.Selected))
         {
-            // enumerate all selected containers in this partition
-            foreach (var selectedContainer in ConnectedSystemUtilities.GetAllSelectedContainers(selectedPartition))
+            // enumerate top-level selected containers in this partition
+            // Use GetTopLevelSelectedContainers to avoid duplicates when both parent and child containers are selected
+            // (subtree search on parent already includes children)
+            foreach (var selectedContainer in ConnectedSystemUtilities.GetTopLevelSelectedContainers(selectedPartition))
             {
                 // we need to perform a query per object type, so that we can have distinct attribute lists per LDAP request
                 foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
@@ -162,7 +178,8 @@ internal class LdapConnectorImport
             // For AD, query objects where uSNChanged > previous HighestCommittedUSN
             foreach (var selectedPartition in _connectedSystem.Partitions.Where(p => p.Selected))
             {
-                foreach (var selectedContainer in ConnectedSystemUtilities.GetAllSelectedContainers(selectedPartition))
+                // Use GetTopLevelSelectedContainers to avoid duplicates when both parent and child containers are selected
+                foreach (var selectedContainer in ConnectedSystemUtilities.GetTopLevelSelectedContainers(selectedPartition))
                 {
                     foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
                     {
@@ -179,6 +196,17 @@ internal class LdapConnectorImport
                         GetDeltaResultsUsingUsn(result, selectedContainer, selectedObjectType, _previousRootDse.HighestCommittedUsn.Value, lastRunsCookie);
                     }
                 }
+
+                // Query deleted objects (tombstones) for this partition
+                // AD moves deleted objects to CN=Deleted Objects,<partition DN>
+                // We query this container separately with the Show Deleted Objects control
+                if (_cancellationToken.IsCancellationRequested)
+                {
+                    _logger.Debug("GetDeltaImportObjects: Cancellation requested before querying deleted objects. Stopping");
+                    return result;
+                }
+
+                GetDeletedObjectsUsingUsn(result, selectedPartition, _previousRootDse.HighestCommittedUsn.Value);
             }
         }
         else
@@ -250,7 +278,8 @@ internal class LdapConnectorImport
         request.Attributes.AddRange(new[] {
             "DNSHostName",
             "HighestCommittedUSN",
-            "supportedCapabilities"
+            "supportedCapabilities",
+            "vendorName"
         });
 
         var response = (SearchResponse)_connection.SendRequest(request);
@@ -272,11 +301,23 @@ internal class LdapConnectorImport
             (capabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_OID) ||
              capabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_ADAM_OID));
 
+        // Get vendor name for capability detection
+        var vendorName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "vendorName");
+
+        // Determine paging support based on directory type
+        // Samba AD claims AD compatibility but doesn't properly support paged searches
+        // (it returns paging cookies but then returns the same results on subsequent pages)
+        var isSambaAd = vendorName != null &&
+            vendorName.Contains("Samba", StringComparison.OrdinalIgnoreCase);
+        var supportsPaging = isActiveDirectory && !isSambaAd;
+
         var rootDse = new LdapConnectorRootDse
         {
             DnsHostName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "DNSHostName"),
             HighestCommittedUsn = LdapConnectorUtilities.GetEntryAttributeLongValue(rootDseEntry, "HighestCommittedUSN"),
-            IsActiveDirectory = isActiveDirectory
+            IsActiveDirectory = isActiveDirectory,
+            VendorName = vendorName,
+            SupportsPaging = supportsPaging
         };
 
         // For non-AD directories, try to get the last change number from the changelog
@@ -285,8 +326,8 @@ internal class LdapConnectorImport
             rootDse.LastChangeNumber = QueryDirectoryForLastChangeNumber(0);
         }
 
-        _logger.Verbose("GetRootDseInformation: Got info. IsActiveDirectory={IsAd}, HighestUSN={Usn}, LastChangeNumber={ChangeNum}",
-            rootDse.IsActiveDirectory, rootDse.HighestCommittedUsn, rootDse.LastChangeNumber);
+        _logger.Information("GetRootDseInformation: Directory capabilities detected. IsActiveDirectory={IsAd}, VendorName={VendorName}, SupportsPaging={SupportsPaging}, HighestUSN={Usn}, LastChangeNumber={ChangeNum}",
+            rootDse.IsActiveDirectory, rootDse.VendorName ?? "(not set)", rootDse.SupportsPaging, rootDse.HighestCommittedUsn, rootDse.LastChangeNumber);
         return rootDse;
     }
 
@@ -299,7 +340,6 @@ internal class LdapConnectorImport
         }
 
         var stopwatch = Stopwatch.StartNew();
-        var lastRunsCookieLength = lastRunsCookie != null ? lastRunsCookie.Length.ToString() : "null";
         var ldapFilter = $"(objectClass={connectedSystemObjectType.Name})"; // todo: add in implicit support for returning containers/organisational units?
 
         // add user selected attributes
@@ -315,15 +355,27 @@ internal class LdapConnectorImport
         var queryAttributes = attributes.Distinct().ToArray();
 
         var searchRequest = new SearchRequest(connectedSystemContainer.ExternalId, ldapFilter, SearchScope.Subtree, queryAttributes);
-        var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize)
-        {
-            // Make paging non-critical so servers that don't support paging can ignore it
-            IsCritical = false
-        };
-        if (lastRunsCookie is { Length: > 0 })
-            pageResultRequestControl.Cookie = lastRunsCookie;
 
-        searchRequest.Controls.Add(pageResultRequestControl);
+        // Only add paging control if the directory supports it
+        // Samba AD claims AD compatibility but returns duplicate results when using paging cookies
+        var supportsPaging = _currentRootDse?.SupportsPaging ?? true; // Default to true for backwards compatibility
+        if (supportsPaging)
+        {
+            var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize)
+            {
+                // Make paging non-critical so servers that don't support paging can ignore it
+                IsCritical = false
+            };
+            if (lastRunsCookie is { Length: > 0 })
+                pageResultRequestControl.Cookie = lastRunsCookie;
+
+            searchRequest.Controls.Add(pageResultRequestControl);
+        }
+        else
+        {
+            _logger.Debug("GetFisoResults: Paging disabled for this directory (VendorName={VendorName}). Retrieving all results in single request.",
+                _currentRootDse?.VendorName ?? "unknown");
+        }
 
         SearchResponse searchResponse;
         try
@@ -339,8 +391,9 @@ internal class LdapConnectorImport
             return;
         }
 
-        // if there's more results, keep track of the paging cookie so we can keep requesting subsequent pages
-        if (searchResponse.Controls != null && searchResponse.Controls.SingleOrDefault(c => c is PageResultResponseControl) is PageResultResponseControl pageResultResponseControl && pageResultResponseControl.Cookie.Length > 0)
+        // Only track pagination tokens if paging is supported
+        // For directories without paging support, all results are returned in a single request
+        if (supportsPaging && searchResponse.Controls != null && searchResponse.Controls.SingleOrDefault(c => c is PageResultResponseControl) is PageResultResponseControl pageResultResponseControl && pageResultResponseControl.Cookie.Length > 0)
         {
             var tokenName = LdapConnectorUtilities.GetPaginationTokenName(connectedSystemContainer, connectedSystemObjectType);
             connectedSystemImportResult.PaginationTokens.Add(new ConnectedSystemPaginationToken(tokenName, pageResultResponseControl.Cookie));
@@ -385,15 +438,21 @@ internal class LdapConnectorImport
         var queryAttributes = attributes.Distinct().ToArray();
 
         var searchRequest = new SearchRequest(container.ExternalId, ldapFilter, SearchScope.Subtree, queryAttributes);
-        var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize)
-        {
-            // Make paging non-critical so servers that don't support paging can ignore it
-            IsCritical = false
-        };
-        if (lastRunsCookie is { Length: > 0 })
-            pageResultRequestControl.Cookie = lastRunsCookie;
 
-        searchRequest.Controls.Add(pageResultRequestControl);
+        // Only add paging control if the directory supports it
+        var supportsPaging = _currentRootDse?.SupportsPaging ?? true;
+        if (supportsPaging)
+        {
+            var pageResultRequestControl = new PageResultRequestControl(_connectedSystemRunProfile.PageSize)
+            {
+                // Make paging non-critical so servers that don't support paging can ignore it
+                IsCritical = false
+            };
+            if (lastRunsCookie is { Length: > 0 })
+                pageResultRequestControl.Cookie = lastRunsCookie;
+
+            searchRequest.Controls.Add(pageResultRequestControl);
+        }
 
         SearchResponse searchResponse;
         try
@@ -409,8 +468,8 @@ internal class LdapConnectorImport
             return;
         }
 
-        // Handle pagination
-        if (searchResponse.Controls != null &&
+        // Handle pagination - only if paging is supported
+        if (supportsPaging && searchResponse.Controls != null &&
             searchResponse.Controls.SingleOrDefault(c => c is PageResultResponseControl) is PageResultResponseControl pageResultResponseControl &&
             pageResultResponseControl.Cookie.Length > 0)
         {
@@ -431,6 +490,174 @@ internal class LdapConnectorImport
         stopwatch.Stop();
         _logger.Debug("GetDeltaResultsUsingUsn: Found {Count} changed objects for type '{ObjectType}' in container '{Container}' (USN > {Usn}) in {Elapsed}",
             searchResponse.Entries.Count, objectType.Name, container.Name, previousUsn, stopwatch.Elapsed);
+    }
+
+    /// <summary>
+    /// Gets deleted objects (tombstones) from the AD Deleted Objects container using USN-based change tracking.
+    /// This enables delta imports to detect deletions that occurred since the last import.
+    ///
+    /// When AD deletes an object, it:
+    /// 1. Moves the object to CN=Deleted Objects,&lt;partition DN&gt;
+    /// 2. Sets isDeleted=TRUE
+    /// 3. Strips most attributes, keeping only objectGUID, objectSid, distinguishedName (mangled), lastKnownParent
+    /// 4. Updates uSNChanged
+    ///
+    /// We use the LDAP_SERVER_SHOW_DELETED_OID control to query this container.
+    /// </summary>
+    private void GetDeletedObjectsUsingUsn(ConnectedSystemImportResult result, ConnectedSystemPartition partition, long previousUsn)
+    {
+        if (_cancellationToken.IsCancellationRequested)
+        {
+            _logger.Debug("GetDeletedObjectsUsingUsn: Cancellation requested. Stopping");
+            return;
+        }
+
+        if (_connectedSystem.ObjectTypes == null)
+        {
+            _logger.Warning("GetDeletedObjectsUsingUsn: ObjectTypes is null. Cannot query deleted objects.");
+            return;
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+
+        // Build the Deleted Objects container DN for this partition
+        // Format: CN=Deleted Objects,<partition DN>
+        var deletedObjectsDn = $"CN=Deleted Objects,{partition.ExternalId}";
+
+        // Build filter for deleted objects changed since last USN
+        // We use (isDeleted=TRUE) to only get tombstones, combined with USN filter
+        var ldapFilter = $"(&(isDeleted=TRUE)(uSNChanged>={previousUsn + 1}))";
+
+        // Request minimal attributes needed to identify the deleted object
+        // Most attributes are stripped from tombstones, but objectGUID is preserved
+        // and is the recommended external ID for LDAP connector
+        var queryAttributes = new[] { "objectGUID", "objectClass", "isDeleted", "lastKnownParent", "distinguishedName" };
+
+        var searchRequest = new SearchRequest(deletedObjectsDn, ldapFilter, SearchScope.Subtree, queryAttributes);
+
+        // Add the Show Deleted Objects control - this is required to search the Deleted Objects container
+        var showDeletedControl = new DirectoryControl(
+            LdapConnectorConstants.LDAP_SERVER_SHOW_DELETED_OID,
+            null,
+            true,  // IsCritical - server must support this for the query to work
+            true); // ServerSide
+        searchRequest.Controls.Add(showDeletedControl);
+
+        SearchResponse searchResponse;
+        try
+        {
+            searchResponse = (SearchResponse)_connection.SendRequest(searchRequest, _searchTimeout);
+        }
+        catch (DirectoryOperationException ex)
+        {
+            // The Show Deleted Objects control may not be supported by all directories
+            // (e.g., some Samba AD configurations). Log and continue without failing the import.
+            _logger.Warning("GetDeletedObjectsUsingUsn: Failed to query Deleted Objects container. " +
+                "The directory may not support the Show Deleted Objects control. Error: {Message}", ex.Message);
+            return;
+        }
+        catch (LdapException ex) when (ex.ErrorCode == 32) // NoSuchObject
+        {
+            // The Deleted Objects container may not exist in some configurations
+            _logger.Debug("GetDeletedObjectsUsingUsn: Deleted Objects container not found at {Dn}. Skipping deletion detection.", deletedObjectsDn);
+            return;
+        }
+
+        if (_cancellationToken.IsCancellationRequested)
+        {
+            _logger.Debug("GetDeletedObjectsUsingUsn: Cancellation requested after search. Stopping");
+            return;
+        }
+
+        // Process each deleted object (tombstone)
+        var deletedCount = 0;
+        foreach (SearchResultEntry entry in searchResponse.Entries)
+        {
+            if (_cancellationToken.IsCancellationRequested)
+            {
+                _logger.Debug("GetDeletedObjectsUsingUsn: Cancellation requested during processing. Stopping");
+                return;
+            }
+
+            // Get the objectGUID - this is the stable identifier for matching to existing CSOs
+            var objectGuid = LdapConnectorUtilities.GetEntryAttributeGuidValues(entry, "objectGUID")?.FirstOrDefault();
+            if (objectGuid == null || objectGuid == Guid.Empty)
+            {
+                _logger.Warning("GetDeletedObjectsUsingUsn: Deleted object has no objectGUID. DN: {Dn}", entry.DistinguishedName);
+                continue;
+            }
+
+            // Determine the object type from objectClass
+            // Tombstones retain their objectClass hierarchy
+            var objectClasses = LdapConnectorUtilities.GetEntryAttributeStringValues(entry, "objectClass");
+            if (objectClasses == null || objectClasses.Count == 0)
+            {
+                _logger.Warning("GetDeletedObjectsUsingUsn: Deleted object has no objectClass. DN: {Dn}", entry.DistinguishedName);
+                continue;
+            }
+
+            // Find the matching object type from our schema
+            ConnectedSystemObjectType? objectType = null;
+            foreach (var objectClass in objectClasses)
+            {
+                objectType = _connectedSystem.ObjectTypes.FirstOrDefault(ot =>
+                    ot.Selected && ot.Name.Equals(objectClass, StringComparison.OrdinalIgnoreCase));
+                if (objectType != null)
+                    break;
+            }
+
+            if (objectType == null)
+            {
+                // This tombstone is for an object type we're not importing - skip it
+                _logger.Verbose("GetDeletedObjectsUsingUsn: Skipping deleted object with unselected object type. Classes: {Classes}", string.Join(",", objectClasses));
+                continue;
+            }
+
+            // Create an import object with Delete change type
+            var importObject = new ConnectedSystemImportObject
+            {
+                ObjectType = objectType.Name,
+                ChangeType = ObjectChangeType.Deleted
+            };
+
+            // Add the objectGUID as an attribute so JIM can match this to the existing CSO
+            // The external ID attribute for the LDAP connector is typically objectGUID
+            var guidAttribute = objectType.Attributes.FirstOrDefault(a => a.IsExternalId && a.Type == AttributeDataType.Guid);
+            if (guidAttribute != null)
+            {
+                importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute
+                {
+                    Name = guidAttribute.Name,
+                    Type = AttributeDataType.Guid,
+                    GuidValues = new List<Guid> { objectGuid.Value }
+                });
+            }
+            else
+            {
+                // Fallback: try to add objectGUID directly if it's a selected attribute
+                var objectGuidAttr = objectType.Attributes.FirstOrDefault(a =>
+                    a.Name.Equals("objectGUID", StringComparison.OrdinalIgnoreCase));
+                if (objectGuidAttr != null)
+                {
+                    importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute
+                    {
+                        Name = "objectGUID",
+                        Type = AttributeDataType.Guid,
+                        GuidValues = new List<Guid> { objectGuid.Value }
+                    });
+                }
+            }
+
+            result.ImportObjects.Add(importObject);
+            deletedCount++;
+
+            _logger.Debug("GetDeletedObjectsUsingUsn: Detected deleted {ObjectType} with objectGUID {Guid}",
+                objectType.Name, objectGuid);
+        }
+
+        stopwatch.Stop();
+        _logger.Information("GetDeletedObjectsUsingUsn: Found {Count} deleted objects in partition '{Partition}' (USN > {Usn}) in {Elapsed}",
+            deletedCount, partition.Name, previousUsn, stopwatch.Elapsed);
     }
 
     /// <summary>

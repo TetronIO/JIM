@@ -82,21 +82,6 @@ services:
     networks:
       - jim-network
 
-  adminer:
-    container_name: jim.adminer
-    image: adminer
-    restart: always
-    ports:
-      - "8080:8080"
-    depends_on:
-      jim.database:
-        condition: service_healthy
-        required: false
-    profiles:
-      - with-db
-    networks:
-      - jim-network
-
   jim.database:
     container_name: jim.database
     image: postgres:18

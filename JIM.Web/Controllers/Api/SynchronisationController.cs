@@ -53,10 +53,12 @@ public class SynchronisationController(
     public async Task<IActionResult> GetConnectedSystemsAsync([FromQuery] PaginationRequest pagination)
     {
         _logger.LogTrace("Requested connected systems (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
-        var systems = await _application.ConnectedSystems.GetConnectedSystemsAsync();
-        var headers = systems.Select(ConnectedSystemHeader.FromEntity).AsQueryable();
+        // Use GetConnectedSystemHeadersAsync which correctly computes PendingExportObjectsCount via SQL COUNT subquery.
+        // The previous implementation used GetConnectedSystemsAsync().Select(FromEntity) which didn't load
+        // the PendingExports navigation property, resulting in PendingExportObjectsCount always being 0.
+        var headers = await _application.ConnectedSystems.GetConnectedSystemHeadersAsync();
 
-        var result = headers
+        var result = headers.AsQueryable()
             .ApplySortAndFilter(pagination)
             .ToPaginatedResponse(pagination);
 
@@ -522,9 +524,8 @@ public class SynchronisationController(
         if (container == null)
             return NotFound(ApiErrorResponse.NotFound($"Container with ID {containerId} not found."));
 
-        // Verify container belongs to the connected system (via partition or directly)
-        var belongsToSystem = (container.Partition?.ConnectedSystem?.Id == connectedSystemId) ||
-                              (container.ConnectedSystem?.Id == connectedSystemId);
+        // Verify container belongs to the connected system (via partition, directly, or through parent container chain)
+        var belongsToSystem = ContainerBelongsToConnectedSystem(container, connectedSystemId);
         if (!belongsToSystem)
             return NotFound(ApiErrorResponse.NotFound($"Container with ID {containerId} not found in connected system {connectedSystemId}."));
 
@@ -768,17 +769,21 @@ public class SynchronisationController(
     /// After importing the hierarchy, you can select which partitions and containers to include
     /// in import operations using the partition and container update endpoints.
     ///
-    /// **Note:** This operation is destructive - it will replace any existing partition/container configuration.
-    /// Any partition/container selections will be lost.
+    /// This operation uses a match-and-merge approach that preserves existing partition and container
+    /// selections where possible. Items are matched by their ExternalId (e.g., LDAP DN). The response
+    /// includes details about what changed: added items, removed items, renamed items, and moved containers.
+    ///
+    /// If any previously selected items were removed (no longer exist in the external system),
+    /// the `hasSelectedItemsRemoved` flag will be true in the response as a warning.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <returns>The updated connected system with imported hierarchy.</returns>
+    /// <returns>A result object describing what changed during the hierarchy refresh.</returns>
     /// <response code="200">Hierarchy imported successfully.</response>
     /// <response code="400">Hierarchy import failed (e.g., connection error, invalid settings).</response>
     /// <response code="404">Connected system not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/import-hierarchy", Name = "ImportConnectedSystemHierarchy")]
-    [ProducesResponseType(typeof(ConnectedSystemDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(HierarchyRefreshResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -802,18 +807,17 @@ public class SynchronisationController(
         try
         {
             // Call the appropriate overload based on authentication method
+            JIM.Models.Staging.DTOs.HierarchyRefreshResult result;
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey != null)
-                await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, apiKey);
+                result = await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, apiKey);
             else
-                await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, initiatedBy);
+                result = await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, initiatedBy);
 
-            _logger.LogInformation("Hierarchy imported for connected system: {Id} ({Name}), {Count} partitions",
-                connectedSystemId, connectedSystem.Name, connectedSystem.Partitions?.Count ?? 0);
+            _logger.LogInformation("Hierarchy imported for connected system: {Id} ({Name}). Summary: {Summary}",
+                connectedSystemId, connectedSystem.Name, result.GetSummary());
 
-            // Retrieve the updated system
-            var updated = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
-            return Ok(ConnectedSystemDetailDto.FromEntity(updated!));
+            return Ok(HierarchyRefreshResultDto.FromModel(result));
         }
         catch (Exception ex)
         {
@@ -1329,7 +1333,8 @@ public class SynchronisationController(
             Direction = request.Direction,
             ProjectToMetaverse = request.ProjectToMetaverse,
             ProvisionToConnectedSystem = request.ProvisionToConnectedSystem,
-            Enabled = request.Enabled
+            Enabled = request.Enabled,
+            EnforceState = request.EnforceState
         };
 
         var apiKey = await GetCurrentApiKeyAsync();
@@ -1396,6 +1401,9 @@ public class SynchronisationController(
 
         if (request.ProvisionToConnectedSystem.HasValue)
             syncRule.ProvisionToConnectedSystem = request.ProvisionToConnectedSystem.Value;
+
+        if (request.EnforceState.HasValue)
+            syncRule.EnforceState = request.EnforceState.Value;
 
         var apiKey = await GetCurrentApiKeyAsync();
         bool success;
@@ -1724,9 +1732,6 @@ public class SynchronisationController(
         if (syncRule == null)
             return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
 
-        if (syncRule.Direction != SyncRuleDirection.Export)
-            return BadRequest(ApiErrorResponse.BadRequest("Scoping criteria are only applicable to export sync rules."));
-
         var dtos = syncRule.ObjectScopingCriteriaGroups
             .Where(g => g.ParentGroup == null) // Only return root groups (children are nested)
             .Select(SyncRuleScopingCriteriaGroupDto.FromEntity);
@@ -1768,7 +1773,7 @@ public class SynchronisationController(
     /// <param name="request">The criteria group creation request.</param>
     /// <returns>The created scoping criteria group.</returns>
     /// <response code="201">Group created successfully.</response>
-    /// <response code="400">Invalid request or sync rule is not an export rule.</response>
+    /// <response code="400">Invalid request.</response>
     /// <response code="404">Sync rule not found.</response>
     [HttpPost("sync-rules/{syncRuleId:int}/scoping-criteria", Name = "CreateScopingCriteriaGroup")]
     [ProducesResponseType(typeof(SyncRuleScopingCriteriaGroupDto), StatusCodes.Status201Created)]
@@ -1786,9 +1791,6 @@ public class SynchronisationController(
         var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
         if (syncRule == null)
             return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
-
-        if (syncRule.Direction != SyncRuleDirection.Export)
-            return BadRequest(ApiErrorResponse.BadRequest("Scoping criteria are only applicable to export sync rules."));
 
         if (!Enum.TryParse<SearchGroupType>(request.Type, true, out var groupType))
             return BadRequest(ApiErrorResponse.BadRequest($"Invalid group type '{request.Type}'. Valid values: All, Any."));
@@ -2618,6 +2620,36 @@ public class SynchronisationController(
             userType,
             serviceSettings.SSOUniqueIdentifierMetaverseAttribute,
             uniqueIdClaimValue);
+    }
+
+    /// <summary>
+    /// Checks if a container belongs to a connected system, traversing the parent container chain if necessary.
+    /// </summary>
+    /// <param name="container">The container to check.</param>
+    /// <param name="connectedSystemId">The connected system ID to check against.</param>
+    /// <returns>True if the container belongs to the connected system.</returns>
+    private static bool ContainerBelongsToConnectedSystem(ConnectedSystemContainer container, int connectedSystemId)
+    {
+        // Check if directly connected to the system
+        if (container.ConnectedSystem?.Id == connectedSystemId)
+            return true;
+
+        // Check if connected via partition
+        if (container.Partition?.ConnectedSystem?.Id == connectedSystemId)
+            return true;
+
+        // For nested containers, walk up the parent chain
+        var current = container.ParentContainer;
+        while (current != null)
+        {
+            if (current.ConnectedSystem?.Id == connectedSystemId)
+                return true;
+            if (current.Partition?.ConnectedSystem?.Id == connectedSystemId)
+                return true;
+            current = current.ParentContainer;
+        }
+
+        return false;
     }
 
     #endregion

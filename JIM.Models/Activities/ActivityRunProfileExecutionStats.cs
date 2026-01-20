@@ -48,6 +48,23 @@ public class ActivityRunProfileExecutionStats
     /// Count of CSOs disconnected from MVOs.
     /// </summary>
     public int TotalDisconnections { get; set; }
+
+    /// <summary>
+    /// Count of CSOs disconnected from MVOs because they fell out of scope of import sync rule scoping criteria.
+    /// </summary>
+    public int TotalDisconnectedOutOfScope { get; set; }
+
+    /// <summary>
+    /// Count of CSOs that fell out of scope but remained joined (InboundOutOfScopeAction = RemainJoined).
+    /// Attribute flow stopped but join preserved ("once managed, always managed" pattern).
+    /// </summary>
+    public int TotalOutOfScopeRetainJoin { get; set; }
+
+    /// <summary>
+    /// Count of CSOs where drift was detected and corrective pending exports were created.
+    /// Drift occurs when target system attributes differ from expected MVO values.
+    /// </summary>
+    public int TotalDriftCorrections { get; set; }
     #endregion
 
     #region Export Stats
@@ -65,6 +82,35 @@ public class ActivityRunProfileExecutionStats
     /// Count of objects deprovisioned from target systems.
     /// </summary>
     public int TotalDeprovisioned { get; set; }
+    #endregion
+
+    #region Pending Export Stats (surfaced during sync)
+    /// <summary>
+    /// Count of pending exports staged for the next export run.
+    /// These are exports that were previously executed but not yet confirmed (ExportNotImported status),
+    /// giving operators visibility into what changes will be made to connected systems.
+    /// </summary>
+    public int TotalPendingExports { get; set; }
+    #endregion
+
+    #region Pending Export Reconciliation Stats (populated during confirming import)
+    /// <summary>
+    /// Count of pending exports that were fully confirmed and deleted.
+    /// The exported attribute values matched the imported values.
+    /// </summary>
+    public int TotalPendingExportsConfirmed { get; set; }
+
+    /// <summary>
+    /// Count of pending exports with unconfirmed attributes that will be retried.
+    /// Some attribute values did not match; they will be re-exported on the next export run.
+    /// </summary>
+    public int TotalPendingExportsRetrying { get; set; }
+
+    /// <summary>
+    /// Count of pending exports that failed after maximum retry attempts.
+    /// Manual intervention may be required to resolve these exports.
+    /// </summary>
+    public int TotalPendingExportsFailed { get; set; }
     #endregion
 
     #region Shared Stats
@@ -100,6 +146,19 @@ public class ActivityRunProfileExecutionStats
     /// Count of distinct object types processed.
     /// </summary>
     public int TotalObjectTypes { get; set; }
+
+    /// <summary>
+    /// Dictionary of object type names and their counts.
+    /// Key is the object type name, value is the count of objects of that type.
+    /// </summary>
+    public Dictionary<string, int> ObjectTypeCounts { get; set; } = new();
+
+    /// <summary>
+    /// Dictionary of error type names and their counts.
+    /// Key is the error type enum value, value is the count of objects with that error type.
+    /// Only includes error types with count > 0 (excludes NotSet).
+    /// </summary>
+    public Dictionary<ActivityRunProfileExecutionItemErrorType, int> ErrorTypeCounts { get; set; } = new();
     #endregion
 
     #region NoChange Reason Stats
@@ -128,6 +187,6 @@ public class ActivityRunProfileExecutionStats
     /// <summary>
     /// Aggregate count of all "delete" operations (CSO deletes, disconnections, deprovisioning).
     /// </summary>
-    public int TotalObjectDeletes => TotalCsoDeletes + TotalDisconnections + TotalDeprovisioned;
+    public int TotalObjectDeletes => TotalCsoDeletes + TotalDisconnections + TotalDisconnectedOutOfScope + TotalDeprovisioned;
     #endregion
 }

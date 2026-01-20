@@ -365,6 +365,16 @@ public class ActivityRunProfileExecutionStatsDto
     /// Number of CSOs disconnected from MVOs.
     /// </summary>
     public int TotalDisconnections { get; set; }
+
+    /// <summary>
+    /// Number of CSOs disconnected from MVOs because they fell out of scope of import sync rule scoping criteria.
+    /// </summary>
+    public int TotalDisconnectedOutOfScope { get; set; }
+
+    /// <summary>
+    /// Number of CSOs that fell out of scope but remained joined (InboundOutOfScopeAction = RemainJoined).
+    /// </summary>
+    public int TotalOutOfScopeRetainJoin { get; set; }
     #endregion
 
     #region Export Stats
@@ -382,6 +392,35 @@ public class ActivityRunProfileExecutionStatsDto
     /// Number of objects deprovisioned from target systems.
     /// </summary>
     public int TotalDeprovisioned { get; set; }
+    #endregion
+
+    #region Pending Export Stats
+    /// <summary>
+    /// Number of pending exports staged for the next export run.
+    /// These are exports that were previously executed but not yet confirmed,
+    /// giving operators visibility into what changes will be made to connected systems.
+    /// </summary>
+    public int TotalPendingExports { get; set; }
+    #endregion
+
+    #region Pending Export Reconciliation Stats
+    /// <summary>
+    /// Number of pending exports that were fully confirmed and deleted.
+    /// The exported attribute values matched the imported values.
+    /// </summary>
+    public int TotalPendingExportsConfirmed { get; set; }
+
+    /// <summary>
+    /// Number of pending exports with unconfirmed attributes that will be retried.
+    /// Some attribute values did not match; they will be re-exported on the next export run.
+    /// </summary>
+    public int TotalPendingExportsRetrying { get; set; }
+
+    /// <summary>
+    /// Number of pending exports that failed after maximum retry attempts.
+    /// Manual intervention may be required to resolve these exports.
+    /// </summary>
+    public int TotalPendingExportsFailed { get; set; }
     #endregion
 
     #region Aggregate Stats (for backward compatibility)
@@ -425,11 +464,21 @@ public class ActivityRunProfileExecutionStatsDto
             TotalJoins = stats.TotalJoins,
             TotalAttributeFlows = stats.TotalAttributeFlows,
             TotalDisconnections = stats.TotalDisconnections,
+            TotalDisconnectedOutOfScope = stats.TotalDisconnectedOutOfScope,
+            TotalOutOfScopeRetainJoin = stats.TotalOutOfScopeRetainJoin,
 
             // Export
             TotalProvisioned = stats.TotalProvisioned,
             TotalExported = stats.TotalExported,
             TotalDeprovisioned = stats.TotalDeprovisioned,
+
+            // Pending Exports
+            TotalPendingExports = stats.TotalPendingExports,
+
+            // Pending Export Reconciliation
+            TotalPendingExportsConfirmed = stats.TotalPendingExportsConfirmed,
+            TotalPendingExportsRetrying = stats.TotalPendingExportsRetrying,
+            TotalPendingExportsFailed = stats.TotalPendingExportsFailed,
 
             // Aggregates (computed from model)
             TotalObjectCreates = stats.TotalObjectCreates,

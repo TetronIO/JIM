@@ -20,6 +20,7 @@ public class JimApplication : IDisposable
     public CertificateServer Certificates { get; }
     public ConnectedSystemServer ConnectedSystems { get; }
     public DataGenerationServer DataGeneration { get; }
+    public DriftDetectionService DriftDetection { get; }
     public ExportEvaluationServer ExportEvaluation { get; }
     public ExportExecutionServer ExportExecution { get; }
     public ScopingEvaluationServer ScopingEvaluation { get; }
@@ -37,6 +38,7 @@ public class JimApplication : IDisposable
         Certificates = new CertificateServer(this);
         ConnectedSystems = new ConnectedSystemServer(this);
         DataGeneration = new DataGenerationServer(this);
+        DriftDetection = new DriftDetectionService(this);
         ExportEvaluation = new ExportEvaluationServer(this);
         ExportExecution = new ExportExecutionServer(this);
         ScopingEvaluation = new ScopingEvaluationServer();

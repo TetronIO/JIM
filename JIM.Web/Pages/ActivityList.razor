@@ -7,10 +7,12 @@
 @using JIM.Models.Staging
 @using JIM.Models.Utility;
 @using JIM.Utilities;
+@using JIM.Web.Services
 @using Microsoft.AspNetCore.Components.Authorization
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IUserPreferenceService PreferenceService
 
 <PageTitle>@_pageTitle</PageTitle>
 <MudText Typo="Typo.h4">@_pageTitle</MudText>
@@ -20,7 +22,9 @@
     @_pageDescription
 </MudText>
 
-<MudTable @ref="_table" T="Activity" ServerData="ServerReload" @bind-CurrentPage="_currentPage" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
+@if (_preferencesLoaded)
+{
+<MudTable @ref="_table" T="Activity" ServerData="ServerReload" @bind-CurrentPage="_currentPage" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
     Class="mt-5" Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer" Loading="@_loading"
     LoadingProgressColor="Color.Primary">
     <ToolBarContent>
@@ -97,7 +101,7 @@
                     <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                         @if (context.TotalObjectCreates > 0)
                         {
-                            <MudTooltip Text="@GetCreatesTooltip(context.ConnectedSystemRunType, context.TargetName)" Arrow="true" Placement="Placement.Bottom">
+                            <MudTooltip Text="@GetCreatesTooltip(context.ConnectedSystemRunType, context.TargetName)" Arrow="true" Placement="Placement.Top">
                                 <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text"
                                          Icon="@GetCreatesIcon(context.ConnectedSystemRunType, context.TargetName)" Class="px-2">
                                     @context.TotalObjectCreates
@@ -106,7 +110,7 @@
                         }
                         @if (context.TotalObjectUpdates > 0)
                         {
-                            <MudTooltip Text="@GetUpdatesTooltip(context.ConnectedSystemRunType, context.TargetName)" Arrow="true" Placement="Placement.Bottom">
+                            <MudTooltip Text="@GetUpdatesTooltip(context.ConnectedSystemRunType, context.TargetName)" Arrow="true" Placement="Placement.Top">
                                 <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text"
                                          Icon="@GetUpdatesIcon(context.ConnectedSystemRunType, context.TargetName)" Class="px-2">
                                     @context.TotalObjectUpdates
@@ -115,7 +119,7 @@
                         }
                         @if (context.TotalObjectFlows > 0)
                         {
-                            <MudTooltip Text="Attribute Flow" Arrow="true" Placement="Placement.Bottom">
+                            <MudTooltip Text="Attribute Flow" Arrow="true" Placement="Placement.Top">
                                 <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text"
                                          Icon="@Icons.Material.Filled.SwapHoriz" Class="px-2">
                                     @context.TotalObjectFlows
@@ -124,7 +128,7 @@
                         }
                         @if (context.TotalObjectDeletes > 0)
                         {
-                            <MudTooltip Text="@GetDeletesTooltip(context.ConnectedSystemRunType, context.TargetName)" Arrow="true" Placement="Placement.Bottom">
+                            <MudTooltip Text="@GetDeletesTooltip(context.ConnectedSystemRunType, context.TargetName)" Arrow="true" Placement="Placement.Top">
                                 <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Text"
                                          Icon="@GetDeletesIcon(context.ConnectedSystemRunType, context.TargetName)" Class="px-2">
                                     @context.TotalObjectDeletes
@@ -133,7 +137,7 @@
                         }
                         @if (context.TotalObjectErrors > 0)
                         {
-                            <MudTooltip Text="Errors" Arrow="true" Placement="Placement.Bottom">
+                            <MudTooltip Text="Errors" Arrow="true" Placement="Placement.Top">
                                 <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled"
                                          Icon="@Icons.Material.Filled.Error" Class="px-2">
                                     @context.TotalObjectErrors
@@ -145,7 +149,7 @@
                 else
                 {
                     @* Run profile execution completed with no changes *@
-                    <MudTooltip Text="No changes" Arrow="true" Placement="Placement.Bottom">
+                    <MudTooltip Text="No changes" Arrow="true" Placement="Placement.Top">
                         <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Text"
                                  Icon="@Icons.Material.Outlined.CheckCircle" Class="px-2">
                             0
@@ -158,7 +162,7 @@
                      && context.Status != ActivityStatus.InProgress)
             {
                 @* Data generation stats - only shows creates *@
-                <MudTooltip Text="Objects Generated" Arrow="true" Placement="Placement.Bottom">
+                <MudTooltip Text="Objects Generated" Arrow="true" Placement="Placement.Top">
                     <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text"
                              Icon="@Icons.Material.Filled.Add" Class="px-2">
                         @context.TotalObjectCreates
@@ -210,6 +214,7 @@
         <MudTablePager />
     </PagerContent>
 </MudTable>
+}
 
 @code {
     private MudTable<Activity>? _table;
@@ -222,6 +227,8 @@
     private List<BreadcrumbItem> _breadcrumbs = new();
     private string _currentPath = "";
     private int _currentPage;
+    private int _rowsPerPage = 10;
+    private bool _preferencesLoaded;
 
     protected override async Task OnInitializedAsync()
     {
@@ -229,6 +236,30 @@
         _currentPath = GetPathWithoutQuery(NavManager.Uri);
         _currentPage = GetPageFromUrl() - 1; // MudTable uses 0-indexed pages
         await UpdatePageStateAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_preferencesLoaded)
+        {
+            try
+            {
+                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
+                _rowsPerPage = preferredSize;
+                _preferencesLoaded = true;
+                StateHasChanged(); // Re-render to show the table now that preference is loaded
+            }
+            catch
+            {
+                // JS interop not yet available, will retry on next render
+            }
+        }
+    }
+
+    private async Task OnRowsPerPageChanged(int newSize)
+    {
+        _rowsPerPage = newSize;
+        await PreferenceService.SetRowsPerPageAsync(newSize);
     }
 
     private int GetPageFromUrl()

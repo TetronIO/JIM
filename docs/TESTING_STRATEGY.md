@@ -6,9 +6,9 @@ JIM employs a three-tier testing approach to ensure quality at different levels 
 
 ```
 Integration Tests (Full System)
-         ↑
+         ^
    Workflow Tests (Multi-Component)
-         ↑
+         ^
     Unit Tests (Single Component)
 ```
 
@@ -50,7 +50,7 @@ public async Task GetConnectedSystemObjectsModifiedSinceAsync_WithModifiedCsos_R
 - ✅ Testing error handling
 
 **What Unit Tests Miss**:
-- ❌ Integration between components (e.g., Full Sync → Delta Sync watermark handoff)
+- ❌ Integration between components (e.g., Full Sync -> Delta Sync watermark handoff)
 - ❌ Multi-step workflows
 - ❌ End-to-end business processes
 
@@ -66,7 +66,7 @@ public async Task GetConnectedSystemObjectsModifiedSinceAsync_WithModifiedCsos_R
 - Test multiple components working together
 - Focus on workflow correctness and component integration
 
-**Example**: Testing Full Sync → Delta Sync watermark workflow
+**Example**: Testing Full Sync -> Delta Sync watermark workflow
 
 ```csharp
 [Test]
@@ -100,7 +100,7 @@ public async Task FullSyncThenDeltaSync_WithOneModifiedCso_ProcessesOnlyModified
 ```
 
 **What Workflow Tests Are Good At**:
-- ✅ Testing multi-step workflows (Import → Sync → Export)
+- ✅ Testing multi-step workflows (Import -> Sync -> Export)
 - ✅ Testing component integration (Full Sync sets watermark, Delta Sync uses it)
 - ✅ Testing business process correctness
 - ✅ Catching orchestration bugs (like the watermark bug)
@@ -156,7 +156,7 @@ public async Task FullSyncThenDeltaSync_WithOneModifiedCso_ProcessesOnlyModified
 - ✅ Unit tests verified watermark property existed
 - ❌ Unit tests didn't verify Full Sync **sets** the watermark
 - ❌ Unit tests didn't verify Delta Sync **uses** the watermark
-- ❌ Unit tests didn't test the workflow: Full Sync → Delta Sync
+- ❌ Unit tests didn't test the workflow: Full Sync -> Delta Sync
 
 **Why Integration Tests Caught It**:
 - ✅ Integration test ran Full Sync then Delta Sync in sequence
@@ -164,7 +164,7 @@ public async Task FullSyncThenDeltaSync_WithOneModifiedCso_ProcessesOnlyModified
 - ❌ But integration tests are slow and expensive to run
 
 **How Workflow Tests Would Have Caught It**:
-- ✅ Workflow test would run Full Sync → Delta Sync
+- ✅ Workflow test would run Full Sync -> Delta Sync
 - ✅ Workflow test would assert `ObjectsProcessed == 1`, not `100`
 - ✅ Workflow test runs in seconds, not minutes
 - ✅ Workflow test provides clear failure message
@@ -205,7 +205,7 @@ public async Task FullSyncThenDeltaSync_WithOneModifiedCso_ProcessesOnlyModified
 
 > **Implementation**: Workflow tests are now implemented in [`test/JIM.Worker.Tests/Workflows/`](../test/JIM.Worker.Tests/Workflows/):
 > - [`WorkflowTestBase.cs`](../test/JIM.Worker.Tests/Workflows/WorkflowTestBase.cs) - Base class with in-memory database setup and helper methods
-> - [`SyncWorkflowTests.cs`](../test/JIM.Worker.Tests/Workflows/SyncWorkflowTests.cs) - Tests for Full Sync → Delta Sync workflows
+> - [`SyncWorkflowTests.cs`](../test/JIM.Worker.Tests/Workflows/SyncWorkflowTests.cs) - Tests for Full Sync -> Delta Sync workflows
 >
 > These tests caught the watermark bug and now ensure it doesn't regress.
 
@@ -273,11 +273,98 @@ public class SyncWorkflowTests : WorkflowTestBase
 
 1. ✅ Keep existing unit tests (they test individual components well)
 2. ⚠️ Add workflow tests for critical business processes:
-   - Delta Sync (Full → Delta → verify only modified CSOs processed)
-   - Projection (CSO → MVO → verify join established)
-   - Export Evaluation (MVO change → PendingExport created)
-   - Deletion Rules (Last connector disconnects → MVO scheduled for deletion)
+   - Delta Sync (Full -> Delta -> verify only modified CSOs processed)
+   - Projection (CSO -> MVO -> verify join established)
+   - Export Evaluation (MVO change -> PendingExport created)
+   - Deletion Rules (Last connector disconnects -> MVO scheduled for deletion)
 3. ✅ Keep integration tests for system-level scenarios
+
+## ⚠️ CRITICAL: EF Core In-Memory Database Limitations ⚠️
+
+> **This is a fundamental limitation that affects ALL unit and workflow tests using EF Core's in-memory provider.**
+
+### The Problem: Navigation Property Auto-Tracking
+
+EF Core's in-memory database provider **automatically tracks and loads navigation properties**, which masks bugs that would occur in production with PostgreSQL.
+
+**In PostgreSQL (production):**
+```csharp
+// Without explicit .Include(), navigation properties are NULL
+var cso = await context.ConnectedSystemObjects.FirstAsync(c => c.Id == id);
+// cso.MetaverseObject is NULL ❌
+// cso.MetaverseObject.Type is NULL ❌
+```
+
+**In EF Core In-Memory (tests):**
+```csharp
+// Navigation properties are auto-tracked and available WITHOUT .Include()
+var cso = await context.ConnectedSystemObjects.FirstAsync(c => c.Id == id);
+// cso.MetaverseObject is POPULATED ✅ (but shouldn't be!)
+// cso.MetaverseObject.Type is POPULATED ✅ (but shouldn't be!)
+```
+
+### Real-World Example: Drift Detection Bug (January 2026)
+
+**Bug**: `GetConnectedSystemObjectsModifiedSinceAsync()` was missing `.Include(cso => cso.MetaverseObject).ThenInclude(mvo => mvo.Type)`
+
+**Result in Production**:
+- `targetMvo.Type` was always `null`
+- Export rule filter `r.MetaverseObjectTypeId == targetMvo.Type?.Id` always evaluated to `false`
+- Drift detection found NO applicable export rules
+- NO corrective pending exports were created
+- **Scenario 8 integration test failed**
+
+**Result in Unit/Workflow Tests**:
+- All tests **PASSED** ✅
+- The in-memory database auto-tracked `MVO.Type`
+- The bug was completely invisible to our test suite
+
+### Implications for Testing
+
+| Test Type | Can Detect Missing `.Include()`? | Reliable for Navigation Properties? |
+|-----------|----------------------------------|-------------------------------------|
+| Unit Tests (mocked) | ❌ No - mocks return whatever you configure | ❌ No |
+| Workflow Tests (in-memory) | ❌ No - auto-tracking masks the bug | ❌ No |
+| Integration Tests (PostgreSQL) | ✅ Yes - real database behaviour | ✅ Yes |
+
+### What This Means
+
+1. **Unit and workflow tests CANNOT validate that repository queries load required navigation properties**
+2. **Integration tests are the ONLY reliable way to verify `.Include()` chains are correct**
+3. **Any bug involving missing navigation property loading will pass all unit/workflow tests**
+
+### Defensive Measures
+
+Because we cannot rely on unit/workflow tests to catch these bugs, we employ:
+
+1. **Defensive Null Checks with Logging**: Add explicit null checks before using navigation properties, with warning logs that identify the missing Include:
+   ```csharp
+   if (targetMvo.Type == null)
+   {
+       Log.Warning("MVO {MvoId} has null Type - navigation property not loaded. " +
+           "Ensure query includes MVO.Type", targetMvo.Id);
+       return result;
+   }
+   ```
+
+2. **Integration Test Coverage**: Critical code paths MUST have integration test coverage that exercises the actual PostgreSQL database
+
+3. **Code Review Focus**: Pay special attention to:
+   - New repository queries - verify all required `.Include()` chains
+   - Code that accesses navigation properties - verify the query loads them
+   - Changes to existing queries - verify no `.Include()` was accidentally removed
+
+4. **Documentation in Code**: Add comments explaining why navigation properties are needed:
+   ```csharp
+   .Include(cso => cso.MetaverseObject)
+       .ThenInclude(mvo => mvo!.Type) // Required for drift detection export rule filtering
+   ```
+
+### Summary
+
+**Integration tests are the ONLY proof of correct navigation property loading.** Unit and workflow tests provide value for logic correctness, but they fundamentally cannot detect missing `.Include()` statements due to EF Core in-memory provider behaviour. Always run integration tests before releasing changes that modify repository queries.
+
+---
 
 ## Summary
 
@@ -286,5 +373,7 @@ public class SyncWorkflowTests : WorkflowTestBase
 - **Integration Tests**: Slow, test full system, validate production-like behaviour
 
 The three tiers complement each other. The watermark bug demonstrates why we need all three levels - unit tests verify components work individually, workflow tests verify they work together, and integration tests verify the complete system works at scale.
+
+**⚠️ Critical Caveat**: Due to EF Core in-memory database limitations (see above), integration tests are the ONLY reliable way to verify navigation property loading. Unit and workflow tests will PASS even when `.Include()` statements are missing.
 
 **Action Item**: Implement workflow test infrastructure and add tests for critical sync workflows to prevent future orchestration bugs.

@@ -157,7 +157,7 @@ public class LogReaderServiceTests
     }
 
     [Test]
-    public async Task GetLogEntriesAsync_WithLevelFilter_FiltersCorrectly()
+    public async Task GetLogEntriesAsync_WithSingleLevelFilter_FiltersCorrectly()
     {
         var today = DateTime.UtcNow.Date;
         var fileName = $"jim.web.{today:yyyyMMdd}.log";
@@ -168,10 +168,44 @@ public class LogReaderServiceTests
             "{\"@t\":\"2026-01-04T10:00:03Z\",\"@l\":\"Error\",\"@m\":\"Error message\"}");
         await File.WriteAllTextAsync(Path.Combine(_testLogPath, fileName), logContent);
 
-        var entries = await _service.GetLogEntriesAsync(minLevel: "Warning", date: today);
+        var entries = await _service.GetLogEntriesAsync(levels: ["Warning"], date: today);
+
+        Assert.That(entries, Has.Count.EqualTo(1));
+        Assert.That(entries[0].Level, Is.EqualTo("Warning"));
+    }
+
+    [Test]
+    public async Task GetLogEntriesAsync_WithMultipleLevelFilter_FiltersCorrectly()
+    {
+        var today = DateTime.UtcNow.Date;
+        var fileName = $"jim.web.{today:yyyyMMdd}.log";
+        var logContent = string.Join("\n",
+            "{\"@t\":\"2026-01-04T10:00:00Z\",\"@l\":\"Debug\",\"@m\":\"Debug message\"}",
+            "{\"@t\":\"2026-01-04T10:00:01Z\",\"@l\":\"Information\",\"@m\":\"Info message\"}",
+            "{\"@t\":\"2026-01-04T10:00:02Z\",\"@l\":\"Warning\",\"@m\":\"Warning message\"}",
+            "{\"@t\":\"2026-01-04T10:00:03Z\",\"@l\":\"Error\",\"@m\":\"Error message\"}");
+        await File.WriteAllTextAsync(Path.Combine(_testLogPath, fileName), logContent);
+
+        var entries = await _service.GetLogEntriesAsync(levels: ["Warning", "Error"], date: today);
 
         Assert.That(entries, Has.Count.EqualTo(2));
         Assert.That(entries.Select(e => e.Level), Is.EquivalentTo(new[] { "Warning", "Error" }));
+    }
+
+    [Test]
+    public async Task GetLogEntriesAsync_WithEmptyLevelFilter_ReturnsAllLevels()
+    {
+        var today = DateTime.UtcNow.Date;
+        var fileName = $"jim.web.{today:yyyyMMdd}.log";
+        var logContent = string.Join("\n",
+            "{\"@t\":\"2026-01-04T10:00:00Z\",\"@l\":\"Debug\",\"@m\":\"Debug message\"}",
+            "{\"@t\":\"2026-01-04T10:00:01Z\",\"@l\":\"Information\",\"@m\":\"Info message\"}",
+            "{\"@t\":\"2026-01-04T10:00:02Z\",\"@l\":\"Warning\",\"@m\":\"Warning message\"}");
+        await File.WriteAllTextAsync(Path.Combine(_testLogPath, fileName), logContent);
+
+        var entries = await _service.GetLogEntriesAsync(levels: [], date: today);
+
+        Assert.That(entries, Has.Count.EqualTo(3));
     }
 
     [Test]

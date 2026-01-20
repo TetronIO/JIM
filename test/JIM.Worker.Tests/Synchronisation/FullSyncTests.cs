@@ -176,13 +176,15 @@ public class FullSyncTests
         var employeeNumberAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER);
 
         // create a pending export for updating this CSO with attribute changes
+        // Status is ExportNotImported to simulate an export that has already been sent
+        // and is now being confirmed via a confirming sync
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
             ConnectedSystemId = connectedSystem.Id,
             ConnectedSystem = connectedSystem,
             ConnectedSystemObject = cso,
-            Status = PendingExportStatus.Pending,
+            Status = PendingExportStatus.ExportNotImported,
             ChangeType = PendingExportChangeType.Update,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
             {
@@ -267,14 +269,15 @@ public class FullSyncTests
         var employeeNumberAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER);
         var roleAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.ROLE);
 
-        // create a pending export with 3 attribute changes
+        // create a pending export with 3 attribute changes that has already been exported
+        // (ExportNotImported means it was exported but not all changes were confirmed)
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
             ConnectedSystemId = connectedSystem.Id,
             ConnectedSystem = connectedSystem,
             ConnectedSystemObject = cso,
-            Status = PendingExportStatus.Pending,
+            Status = PendingExportStatus.ExportNotImported,
             ChangeType = PendingExportChangeType.Update,
             ErrorCount = 0,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
@@ -328,7 +331,7 @@ public class FullSyncTests
         Assert.That(PendingExportsData.Count, Is.EqualTo(1), "Expected one pending export before sync.");
         Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(3), "Expected 3 attribute changes before sync.");
         Assert.That(pendingExport.ErrorCount, Is.EqualTo(0), "Expected ErrorCount to be 0 before sync.");
-        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Pending), "Expected Status to be Pending before sync.");
+        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.ExportNotImported), "Expected Status to be ExportNotImported before sync (already exported, awaiting confirmation).");
 
         // setup mock to handle pending export deletion (shouldn't be called for partial match)
         var deleteCallCount = 0;
@@ -1924,17 +1927,16 @@ public class FullSyncTests
 
     /// <summary>
     /// Tests that when the DeletionRule is WhenLastConnectorDisconnected and there's no grace period,
-    /// the MVO is NOT deleted immediately during sync. Instead, LastConnectorDisconnectedDate is set
-    /// and housekeeping will delete it on the next run. This follows the deferred deletion architecture
-    /// where MVOs are never deleted during sync processing.
+    /// the MVO is deleted synchronously during sync. This follows the immediate deletion architecture
+    /// for 0-grace-period MVOs to provide responsive behaviour.
     /// </summary>
     [Test]
-    public async Task MvoMarkedForDeletionWhenLastConnectorDisconnectedNoGracePeriodTestAsync()
+    public async Task MvoDeletedSynchronouslyWhenLastConnectorDisconnectedNoGracePeriodTestAsync()
     {
         // set up: MVO with DeletionRule = WhenLastConnectorDisconnected, no grace period
         var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
         mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
-        mvoType.DeletionGracePeriodDays = null;
+        mvoType.DeletionGracePeriodDays = null;  // null = 0 = immediate deletion
 
         // configure sync rule to disconnect on obsoletion (required for deletion rule processing)
         var importSyncRule = SyncRulesData.Single(sr => sr.Id == 1);
@@ -1956,13 +1958,12 @@ public class FullSyncTests
 
         var initialMvoCount = MetaverseObjectsData.Count;
         var mvoId = mvo.Id;
-        var beforeSync = DateTime.UtcNow;
 
         // setup mock to handle CSO deletion
         MockDbSetConnectedSystemObjects.Setup(set => set.Remove(It.IsAny<ConnectedSystemObject>())).Callback(
             (ConnectedSystemObject entity) => ConnectedSystemObjectsData.Remove(entity));
 
-        // setup mock for MVO deletion (should NOT be called - deferred to housekeeping)
+        // setup mock for MVO deletion (SHOULD be called - synchronous deletion for 0-grace-period)
         MockDbSetMetaverseObjects.Setup(set => set.Remove(It.IsAny<MetaverseObject>())).Callback(
             (MetaverseObject entity) => MetaverseObjectsData.Remove(entity));
 
@@ -1973,17 +1974,9 @@ public class FullSyncTests
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem!, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
-        // verify MVO was NOT deleted during sync (deferred deletion architecture)
-        Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount), "Expected MVO to NOT be deleted during sync (deferred to housekeeping).");
-        Assert.That(MetaverseObjectsData.Any(m => m.Id == mvoId), Is.True, "Expected specific MVO to still exist.");
-
-        // verify LastConnectorDisconnectedDate was set (for housekeeping to process)
-        Assert.That(mvo.LastConnectorDisconnectedDate, Is.Not.Null, "Expected LastConnectorDisconnectedDate to be set.");
-        Assert.That(mvo.LastConnectorDisconnectedDate!.Value, Is.EqualTo(beforeSync).Within(TimeSpan.FromMinutes(1)),
-            "Expected LastConnectorDisconnectedDate to be approximately now.");
-
-        // With no grace period, DeletionEligibleDate is null (meaning immediately eligible for deletion)
-        Assert.That(mvo.DeletionEligibleDate, Is.Null, "Expected DeletionEligibleDate to be null when no grace period configured.");
+        // verify MVO WAS deleted during sync (synchronous deletion for 0-grace-period)
+        Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount - 1), "Expected MVO to be deleted synchronously during sync.");
+        Assert.That(MetaverseObjectsData.Any(m => m.Id == mvoId), Is.False, "Expected specific MVO to be deleted.");
     }
 
     /// <summary>
@@ -2373,6 +2366,225 @@ public class FullSyncTests
         // Assert - CSO should still be linked to same MVO
         Assert.That(provisionedCso.MetaverseObjectId, Is.EqualTo(mvo.Id),
             "CSO should remain linked to the same MVO");
+    }
+
+    #endregion
+
+    #region Pending Export Visibility Tests
+
+    /// <summary>
+    /// Tests that pending exports with ExportNotImported status are surfaced as
+    /// ActivityRunProfileExecutionItems during FullSync for operator visibility.
+    /// This enables operators to see what changes will be made on the next export run.
+    /// </summary>
+    [Test]
+    public async Task PendingExportsWithExportNotImportedStatusAreSurfacedAsExecutionItemsAsync()
+    {
+        // Arrange
+        var cso = ConnectedSystemObjectsData[0];
+        var connectedSystem = ConnectedSystemsData[0];
+        var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
+        var displayNameAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME);
+
+        // Create a pending export with ExportNotImported status (awaiting confirmation)
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = connectedSystem.Id,
+            ConnectedSystem = connectedSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.ExportNotImported,
+            ChangeType = PendingExportChangeType.Update,
+            ErrorCount = 1,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
+                    Attribute = displayNameAttr,
+                    StringValue = "Pending Update Value"
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+
+        // Setup mock for pending export operations
+        MockDbSetPendingExports.Setup(set => set.Remove(It.IsAny<PendingExport>())).Callback(
+            (PendingExport entity) => PendingExportsData.Remove(entity));
+        MockDbSetPendingExports.Setup(set => set.RemoveRange(It.IsAny<IEnumerable<PendingExport>>())).Callback(
+            (IEnumerable<PendingExport> entities) =>
+            {
+                foreach (var entity in entities.ToList())
+                    PendingExportsData.Remove(entity);
+            });
+
+        // Act - Run full sync
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(
+            q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(
+            Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // Assert - Verify that a PendingExport execution item was created
+        var pendingExportItems = activity.RunProfileExecutionItems
+            .Where(item => item.ObjectChangeType == JIM.Models.Enums.ObjectChangeType.PendingExport)
+            .ToList();
+
+        Assert.That(pendingExportItems.Count, Is.EqualTo(1),
+            "Expected one PendingExport execution item to be created for the ExportNotImported pending export.");
+
+        var executionItem = pendingExportItems.First();
+        Assert.That(executionItem.ConnectedSystemObjectId, Is.EqualTo(cso.Id),
+            "Expected execution item to reference the correct CSO.");
+    }
+
+    /// <summary>
+    /// Tests that pending exports with Pending status (not yet executed) are also
+    /// surfaced as ActivityRunProfileExecutionItems for operator visibility.
+    /// </summary>
+    [Test]
+    public async Task PendingExportsWithPendingStatusAreSurfacedAsExecutionItemsAsync()
+    {
+        // Arrange
+        var cso = ConnectedSystemObjectsData[0];
+        var connectedSystem = ConnectedSystemsData[0];
+        var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
+        var displayNameAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME);
+
+        // Create a pending export with Pending status (awaiting execution)
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = connectedSystem.Id,
+            ConnectedSystem = connectedSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
+                    Attribute = displayNameAttr,
+                    StringValue = "New Value To Export"
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+
+        // Setup mock for pending export operations
+        MockDbSetPendingExports.Setup(set => set.Remove(It.IsAny<PendingExport>())).Callback(
+            (PendingExport entity) => PendingExportsData.Remove(entity));
+        MockDbSetPendingExports.Setup(set => set.RemoveRange(It.IsAny<IEnumerable<PendingExport>>())).Callback(
+            (IEnumerable<PendingExport> entities) =>
+            {
+                foreach (var entity in entities.ToList())
+                    PendingExportsData.Remove(entity);
+            });
+
+        // Act - Run full sync
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(
+            q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(
+            Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // Assert - Verify that a PendingExport execution item was created
+        var pendingExportItems = activity.RunProfileExecutionItems
+            .Where(item => item.ObjectChangeType == JIM.Models.Enums.ObjectChangeType.PendingExport)
+            .ToList();
+
+        Assert.That(pendingExportItems.Count, Is.EqualTo(1),
+            "Expected one PendingExport execution item to be created for the Pending export.");
+    }
+
+    /// <summary>
+    /// Tests that pending exports with Exported status (awaiting confirmation via import)
+    /// are NOT surfaced as execution items during sync - they should only appear after
+    /// the confirming import has processed them.
+    /// </summary>
+    [Test]
+    public async Task PendingExportsWithExportedStatusAreNotSurfacedAsExecutionItemsAsync()
+    {
+        // Arrange
+        var cso = ConnectedSystemObjectsData[0];
+        var connectedSystem = ConnectedSystemsData[0];
+        var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
+        var displayNameAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME);
+
+        // Create a pending export with Exported status (awaiting confirmation)
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = connectedSystem.Id,
+            ConnectedSystem = connectedSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Exported,
+            ChangeType = PendingExportChangeType.Update,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
+                    Attribute = displayNameAttr,
+                    StringValue = "Value Being Confirmed"
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+
+        // Act - Run full sync
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(
+            q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(
+            Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // Assert - Verify that NO PendingExport execution item was created
+        var pendingExportItems = activity.RunProfileExecutionItems
+            .Where(item => item.ObjectChangeType == JIM.Models.Enums.ObjectChangeType.PendingExport)
+            .ToList();
+
+        Assert.That(pendingExportItems.Count, Is.EqualTo(0),
+            "Expected no PendingExport execution items for exports with Exported status.");
+    }
+
+    /// <summary>
+    /// Tests that when there are no pending exports, no execution items are created.
+    /// </summary>
+    [Test]
+    public async Task NoPendingExportsResultsInNoExecutionItemsAsync()
+    {
+        // Arrange - PendingExportsData is empty by default from SetUp
+
+        // Act - Run full sync
+        var activity = ActivitiesData.First();
+        var connectedSystem = ConnectedSystemsData[0];
+        var runProfile = ConnectedSystemRunProfilesData.Single(
+            q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(
+            Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // Assert - Verify that no PendingExport execution items were created
+        var pendingExportItems = activity.RunProfileExecutionItems
+            .Where(item => item.ObjectChangeType == JIM.Models.Enums.ObjectChangeType.PendingExport)
+            .ToList();
+
+        Assert.That(pendingExportItems.Count, Is.EqualTo(0),
+            "Expected no PendingExport execution items when there are no pending exports.");
     }
 
     #endregion

@@ -783,6 +783,15 @@ public static class TestUtilities
                         Name = MockTargetSystemAttributeNames.UserAccountControl.ToString(),
                         Type = AttributeDataType.Number,
                         Selected = true
+                    },
+                    new()
+                    {
+                        // Secondary external ID for LDAP systems - the Distinguished Name
+                        Id = (int)MockTargetSystemAttributeNames.DistinguishedName,
+                        Name = "distinguishedName",  // Use lowercase to match LDAP convention
+                        Type = AttributeDataType.Text,
+                        IsSecondaryExternalId = true,
+                        Selected = true
                     }
                 }
             },

@@ -111,20 +111,15 @@ body {
     color: var(--mud-palette-text-secondary);
 }
 
-.jim-drawer-container {
-    margin: 0 20px 0 20px;
+.jim-drawer-footer {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    margin: 0 6px;
     border-top-style: solid;
     border-top-width: 1px;
     border-top-color: var(--mud-palette-lines-default);
-    padding: 10px 0 10px 0;
-}
-
-.jim-drawer-container-small {
-    margin: 0 6px 0 6px;
-    border-top-style: solid;
-    border-top-width: 1px;
-    border-top-color: var(--mud-palette-lines-default);
-    padding: 5px 0 5px 0;
+    padding: 5px 0;
 }
 
 .jim-nowrap {
@@ -290,6 +285,34 @@ body {
 
 .jim-log-panel-open {
     transform: translateX(0);
+}
+
+/* Log panel expansion panels - remove extra margins and shadows to match Message box width */
+.jim-log-panel .mud-expand-panels {
+    margin: 0 !important;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 8px;
+}
+
+.jim-log-panel .mud-expand-panel {
+    margin: 0 !important;
+    box-shadow: none !important;
+}
+
+.jim-log-panel .mud-expand-panel::before {
+    box-shadow: none !important;
+}
+
+/* Remove default gutters (24px padding) from expansion panel content */
+.jim-log-panel .mud-expand-panel-content.mud-expand-panel-gutters {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+}
+
+/* Remove shadow from tables inside the log panel */
+.jim-log-panel .mud-table,
+.jim-log-panel .mud-simple-table {
+    box-shadow: none !important;
 }
 
 /* JSON syntax highlighting - define CSS custom properties for light/dark mode */

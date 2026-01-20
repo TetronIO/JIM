@@ -113,6 +113,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("ParentActivityId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("PendingExportsConfirmed")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -1030,6 +1033,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer");
 
                     b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("EnforceState")
                         .HasColumnType("boolean");
 
                     b.Property<int>("InboundOutOfScopeAction")
@@ -3114,6 +3120,7 @@ namespace JIM.PostgresData.Migrations
                     b.HasOne("JIM.Models.Staging.ConnectedSystemObject", "ReferenceValue")
                         .WithMany()
                         .HasForeignKey("ReferenceValueId")
+                        .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("FK_ConnectedSystemObjectChangeAttributeValues_ConnectedSystem~1");
 
                     b.Navigation("ConnectedSystemObjectChangeAttribute");

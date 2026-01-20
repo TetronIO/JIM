@@ -79,6 +79,18 @@ function Assert-NotNull {
     Write-Host "✓ PASSED: $Message" -ForegroundColor Green
 }
 
+function Write-Failure {
+    <#
+    .SYNOPSIS
+        Write a failure message in red
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Message
+    )
+    Write-Host "✗ $Message" -ForegroundColor Red
+}
+
 function Write-TestSection {
     <#
     .SYNOPSIS
@@ -746,7 +758,7 @@ function Assert-ActivitySuccess {
     # Check if status is acceptable
     if ($status -in $acceptableStatuses) {
         Write-Host "  ✓ $Name completed successfully (Status: $status)" -ForegroundColor Green
-        return $true
+        return  # Success - no output (callers don't use return value)
     }
 
     # Activity did not complete successfully - gather diagnostic information
@@ -803,6 +815,187 @@ function Assert-ActivitySuccess {
     }
 
     throw "Activity '$Name' did not complete successfully. Status: $status (ActivityId: $ActivityId)"
+}
+
+function Assert-ActivityHasChanges {
+    <#
+    .SYNOPSIS
+        Assert that an Activity has the expected number and type of changes
+
+    .DESCRIPTION
+        Validates that a JIM Activity recorded specific change types with expected counts.
+        This ensures that run profile executions actually processed the expected data,
+        not just that they completed successfully.
+
+    .PARAMETER ActivityId
+        The Activity ID (GUID) to validate
+
+    .PARAMETER Name
+        A friendly name for the operation (used in messages)
+
+    .PARAMETER ExpectedChangeType
+        The ObjectChangeType to look for (e.g., 'Added', 'Deleted', 'Updated', 'Projected', 'Provisioned', 'Deprovisioned')
+
+    .PARAMETER MinCount
+        Minimum number of changes expected (default: 1)
+
+    .PARAMETER MaxCount
+        Maximum number of changes expected (optional, no limit if not specified)
+
+    .PARAMETER ExactCount
+        Exact number of changes expected (overrides MinCount/MaxCount)
+
+    .EXAMPLE
+        Assert-ActivityHasChanges -ActivityId $importResult.activityId -Name "CSV Import" -ExpectedChangeType "Added" -MinCount 5
+
+        Validates that the import added at least 5 objects.
+
+    .EXAMPLE
+        Assert-ActivityHasChanges -ActivityId $syncResult.activityId -Name "Delta Sync" -ExpectedChangeType "Deleted" -ExactCount 1
+
+        Validates that exactly 1 deletion was processed.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ActivityId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Name,
+
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('Added', 'Updated', 'Deleted', 'Projected', 'Joined', 'AttributeFlow', 'Disconnected',
+                     'DisconnectedOutOfScope', 'OutOfScopeRetainJoin', 'DriftCorrection', 'Provisioned',
+                     'Exported', 'Deprovisioned', 'NoChange', 'PendingExport', 'PendingExportConfirmed')]
+        [string]$ExpectedChangeType,
+
+        [Parameter(Mandatory=$false)]
+        [int]$MinCount = 1,
+
+        [Parameter(Mandatory=$false)]
+        [int]$MaxCount = -1,
+
+        [Parameter(Mandatory=$false)]
+        [int]$ExactCount = -1
+    )
+
+    # Get activity stats to check change counts
+    $stats = Get-JIMActivityStats -ActivityId $ActivityId
+
+    if (-not $stats) {
+        throw "Could not retrieve statistics for Activity '$Name' (ID: $ActivityId)"
+    }
+
+    # Map change type to stats property
+    $actualCount = switch ($ExpectedChangeType) {
+        'Added' { $stats.totalCsoAdds }
+        'Updated' { $stats.totalCsoUpdates }
+        'Deleted' { $stats.totalCsoDeletes }
+        'Projected' { $stats.totalProjections }
+        'Joined' { $stats.totalJoins }
+        'AttributeFlow' { $stats.totalAttributeFlows }
+        'Disconnected' { $stats.totalDisconnections }
+        'DisconnectedOutOfScope' { $stats.totalDisconnectedOutOfScope }
+        'OutOfScopeRetainJoin' { $stats.totalOutOfScopeRetainJoin }
+        'DriftCorrection' { $stats.totalDriftCorrections }
+        'Provisioned' { $stats.totalProvisioned }
+        'Exported' { $stats.totalExported }
+        'Deprovisioned' { $stats.totalDeprovisioned }
+        'NoChange' { $stats.totalUnchanged }
+        'PendingExport' { $stats.totalPendingExports }
+        'PendingExportConfirmed' { $stats.totalPendingExportsConfirmed }
+        default { throw "Unknown change type: $ExpectedChangeType" }
+    }
+
+    # Validate count
+    if ($ExactCount -ge 0) {
+        # Exact count validation
+        if ($actualCount -ne $ExactCount) {
+            Write-Host "  ✗ $Name - Expected exactly $ExactCount $ExpectedChangeType changes, but got $actualCount" -ForegroundColor Red
+            throw "Activity '$Name' expected exactly $ExactCount $ExpectedChangeType changes, but got $actualCount (ActivityId: $ActivityId)"
+        }
+        Write-Host "  ✓ $Name - $actualCount $ExpectedChangeType changes (expected exactly $ExactCount)" -ForegroundColor Green
+    }
+    else {
+        # Min/Max validation
+        $failed = $false
+        $message = ""
+
+        if ($actualCount -lt $MinCount) {
+            $failed = $true
+            $message = "Expected at least $MinCount $ExpectedChangeType changes, but got $actualCount"
+        }
+        elseif ($MaxCount -ge 0 -and $actualCount -gt $MaxCount) {
+            $failed = $true
+            $message = "Expected at most $MaxCount $ExpectedChangeType changes, but got $actualCount"
+        }
+
+        if ($failed) {
+            Write-Host "  ✗ $Name - $message" -ForegroundColor Red
+            throw "Activity '$Name' $message (ActivityId: $ActivityId)"
+        }
+
+        $rangeMsg = if ($MaxCount -ge 0) { "$MinCount-$MaxCount" } else { "≥$MinCount" }
+        Write-Host "  ✓ $Name - $actualCount $ExpectedChangeType changes (expected $rangeMsg)" -ForegroundColor Green
+    }
+}
+
+function Get-ActivityChangeCount {
+    <#
+    .SYNOPSIS
+        Get the count of a specific change type from an activity
+
+    .DESCRIPTION
+        Returns the count of changes for a specific ObjectChangeType.
+        Useful when you need to check counts without asserting.
+
+    .PARAMETER ActivityId
+        The Activity ID (GUID) to query
+
+    .PARAMETER ChangeType
+        The ObjectChangeType to count
+
+    .EXAMPLE
+        $deletedCount = Get-ActivityChangeCount -ActivityId $importResult.activityId -ChangeType "Deleted"
+
+    .OUTPUTS
+        [int] The count of changes of the specified type
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ActivityId,
+
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('Added', 'Updated', 'Deleted', 'Projected', 'Joined', 'AttributeFlow', 'Disconnected',
+                     'DisconnectedOutOfScope', 'OutOfScopeRetainJoin', 'DriftCorrection', 'Provisioned',
+                     'Exported', 'Deprovisioned', 'NoChange', 'PendingExport', 'PendingExportConfirmed')]
+        [string]$ChangeType
+    )
+
+    $stats = Get-JIMActivityStats -ActivityId $ActivityId
+
+    if (-not $stats) {
+        return 0
+    }
+
+    switch ($ChangeType) {
+        'Added' { return $stats.totalCsoAdds }
+        'Updated' { return $stats.totalCsoUpdates }
+        'Deleted' { return $stats.totalCsoDeletes }
+        'Projected' { return $stats.totalProjections }
+        'Joined' { return $stats.totalJoins }
+        'AttributeFlow' { return $stats.totalAttributeFlows }
+        'Disconnected' { return $stats.totalDisconnections }
+        'DisconnectedOutOfScope' { return $stats.totalDisconnectedOutOfScope }
+        'OutOfScopeRetainJoin' { return $stats.totalOutOfScopeRetainJoin }
+        'DriftCorrection' { return $stats.totalDriftCorrections }
+        'Provisioned' { return $stats.totalProvisioned }
+        'Exported' { return $stats.totalExported }
+        'Deprovisioned' { return $stats.totalDeprovisioned }
+        'NoChange' { return $stats.totalUnchanged }
+        'PendingExport' { return $stats.totalPendingExports }
+        'PendingExportConfirmed' { return $stats.totalPendingExportsConfirmed }
+        default { return 0 }
+    }
 }
 
 # Functions are automatically available when dot-sourced

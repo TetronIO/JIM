@@ -87,7 +87,7 @@ public class LogReaderService
     /// </summary>
     /// <param name="service">Filter by service name (web, worker, scheduler). Null for all.</param>
     /// <param name="date">The date to retrieve logs for. Null for today.</param>
-    /// <param name="minLevel">Minimum log level. Null for all.</param>
+    /// <param name="levels">Specific log levels to include. Null or empty for all.</param>
     /// <param name="search">Text to search for in messages. Null for no filter.</param>
     /// <param name="limit">Maximum entries to return.</param>
     /// <param name="offset">Number of entries to skip.</param>
@@ -95,7 +95,7 @@ public class LogReaderService
     public async Task<List<LogEntry>> GetLogEntriesAsync(
         string? service = null,
         DateTime? date = null,
-        string? minLevel = null,
+        IEnumerable<string>? levels = null,
         string? search = null,
         int limit = 500,
         int offset = 0)
@@ -119,10 +119,11 @@ public class LogReaderService
         // Apply filters
         var filtered = entries.AsEnumerable();
 
-        if (!string.IsNullOrWhiteSpace(minLevel) && LogLevelPriority.TryGetValue(minLevel, out var minPriority))
+        var levelList = levels?.ToList();
+        if (levelList != null && levelList.Count > 0)
         {
-            filtered = filtered.Where(e =>
-                LogLevelPriority.TryGetValue(e.Level, out var priority) && priority >= minPriority);
+            var levelSet = new HashSet<string>(levelList, StringComparer.OrdinalIgnoreCase);
+            filtered = filtered.Where(e => levelSet.Contains(e.Level));
         }
 
         if (!string.IsNullOrWhiteSpace(search))

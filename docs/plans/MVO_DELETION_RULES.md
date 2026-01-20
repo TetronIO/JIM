@@ -216,18 +216,18 @@ API and PowerShell support:
 Integration tests needed for Object Matching Rules to validate all permutations:
 
 **Basic Matching Scenarios:**
-- Matching on employeeId, no existing MVO → CSO is projected to MV (new identity)
-- Matching on employeeId, existing MVO with same employeeId but no HR connector → CSO joins to existing MVO
-- Matching on employeeId, existing MVO with same employeeId AND existing HR connector → join fails (only one CSO per CS per MVO)
+- Matching on employeeId, no existing MVO -> CSO is projected to MV (new identity)
+- Matching on employeeId, existing MVO with same employeeId but no HR connector -> CSO joins to existing MVO
+- Matching on employeeId, existing MVO with same employeeId AND existing HR connector -> join fails (only one CSO per CS per MVO)
 
 **Multiple Matching Rules:**
-- First rule doesn't match, second rule does → second rule used for join
-- First and second rules don't match, third rule does → third rule used for join
-- No rules match → projection creates new MVO (if projection enabled)
-- No rules match → CSO remains disconnected (if projection disabled)
+- First rule doesn't match, second rule does -> second rule used for join
+- First and second rules don't match, third rule does -> third rule used for join
+- No rules match -> projection creates new MVO (if projection enabled)
+- No rules match -> CSO remains disconnected (if projection disabled)
 
 **Edge Cases:**
-- Matching rule matches multiple MVOs → ambiguous match handling
+- Matching rule matches multiple MVOs -> ambiguous match handling
 - Matching on multi-valued attribute
 - Matching with case sensitivity variations
 - Matching with null/empty attribute values

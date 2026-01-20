@@ -27,11 +27,6 @@ services:
       # Override JIM_DB_HOSTNAME from .env to use bundled database container
       - JIM_DB_HOSTNAME=jim.database
 
-  # Expose Adminer for database management
-  adminer:
-    ports:
-      - "8080:8080"
-
   # Codespaces has limited memory (~8GB total), so use much smaller PostgreSQL settings
   # statement_timeout=300000 (5 minutes) prevents runaway queries
   # log_min_duration_statement=500 (0.5 seconds) logs slow queries for dev analysis

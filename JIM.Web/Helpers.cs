@@ -175,11 +175,16 @@ public static class Helpers
             ObjectChangeType.Joined => Color.Secondary,
             ObjectChangeType.AttributeFlow => Color.Tertiary,
             ObjectChangeType.Disconnected => Color.Warning,
+            ObjectChangeType.DriftCorrection => Color.Warning,
 
             // Export
             ObjectChangeType.Provisioned => Color.Success,
             ObjectChangeType.Exported => Color.Info,
             ObjectChangeType.Deprovisioned => Color.Error,
+
+            // Pending Export visibility
+            ObjectChangeType.PendingExport => Color.Warning,
+            ObjectChangeType.PendingExportConfirmed => Color.Success,
 
             // Other
             ObjectChangeType.NoChange => Color.Default,
@@ -287,6 +292,9 @@ public static class Helpers
         return changeType switch
         {
             ObjectChangeType.AttributeFlow => "Attribute Flow",
+            ObjectChangeType.DriftCorrection => "Drift Correction",
+            ObjectChangeType.PendingExport => "Pending Export",
+            ObjectChangeType.PendingExportConfirmed => "Pending Export Confirmed",
             _ => changeType.ToString()
         };
     }

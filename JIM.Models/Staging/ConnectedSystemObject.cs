@@ -113,7 +113,7 @@ public class ConnectedSystemObject
 
             // this works well for LDAP systems, where DisplayName is a common attribute, but for other systems that are not so standards based
             // we may have to look at supporting a configurable attribute on the Connected System to use as the label.
-            var av = AttributeValues.SingleOrDefault(q => q.Attribute.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase));
+            var av = AttributeValues.SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true);
             if (av != null && !string.IsNullOrEmpty(av.StringValue))
                 return av.StringValue;
 
@@ -231,12 +231,12 @@ public class ConnectedSystemObject
 
     public ConnectedSystemObjectAttributeValue? GetAttributeValue(string attributeName)
     {
-        return AttributeValues.SingleOrDefault(q => q.Attribute.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase));
+        return AttributeValues.SingleOrDefault(q => q.Attribute?.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase) == true);
     }
 
     public List<ConnectedSystemObjectAttributeValue> GetAttributeValues(string attributeName)
     {
-        return AttributeValues.Where(q => q.Attribute.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase)).ToList();
+        return AttributeValues.Where(q => q.Attribute?.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase) == true).ToList();
     }
     
     public override string ToString()

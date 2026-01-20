@@ -33,10 +33,13 @@ Complete the implementation of change object tracking and lifecycle management f
 | `ConnectedSystemObjectChange` model | ✅ Complete | Created on CSO create/update/delete |
 | `MetaverseObjectChange` model | ⚠️ Schema only | Model exists but never instantiated |
 | RPEI detail view | ✅ Shows changes | Only place CSO changes are displayed |
+| RPEI detail view (CSO deletion) | ⚠️ Info only | Shows generic MVO impact info, cannot link to specific MVO |
 | `HistoryRetentionPeriod` setting | ✅ Defined | 30-day default, but not enforced |
 | JIM.Scheduler | ⚠️ Stub | Loop exists but no actual jobs |
 | CSO detail page | ⚠️ Partial | No change history section |
 | MVO detail page | ⚠️ Minimal | Only shows current attributes |
+
+**Note:** The RPEI detail view for CSO deletions currently shows an informational "Metaverse Impact" section explaining deletion rules, but cannot link to the specific MVO that was affected because `ActivityRunProfileExecutionItem.MetaverseObjectChange` is never populated. Phase 1 will enable this by creating MVO change records during CSO deletion/disconnection.
 
 ### Key Code Locations
 
@@ -60,6 +63,7 @@ Currently `MetaverseObjectChange` is never instantiated. We need to create these
 - **Sync operations** - When sync rules modify MVO attributes
 - **Direct MVO updates** - When admins edit MVOs via UI/API
 - **MVO deletion** - Capture final state before deletion
+- **CSO deletion causing disconnection** - When a CSO is deleted and triggers MVO disconnection (so the RPEI can link to the affected MVO)
 - **Group membership changes** - When group rules modify membership
 
 #### 2. Deleted Object Tracking
@@ -124,7 +128,7 @@ Reusable component for both CSO and MVO detail pages:
 │   ├── Initiator (user/sync rule/API key)
 │   ├── Expandable attribute changes
 │   │   ├── Attribute name
-│   │   ├── Old value → New value
+│   │   ├── Old value -> New value
 │   │   └── Change type (Add/Remove)
 │   └── Link to Activity/RPEI if available
 └── Export to CSV/JSON option

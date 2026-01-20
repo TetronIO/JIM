@@ -4,13 +4,14 @@
     Reset JIM to a clean state for integration testing
 
 .DESCRIPTION
-    Tears down all containers (JIM and external test systems), removes volumes,
-    and optionally restarts the environment ready for testing.
+    Tears down all containers (JIM and external test systems), removes volumes
+    and locally-built images, and optionally restarts the environment ready for testing.
 
     This script handles:
     - Stopping JIM containers (web, worker, scheduler, database)
     - Stopping external test system containers (Samba AD, etc.)
     - Removing all Docker volumes for a clean database state
+    - Removing locally-built Docker images (forces rebuild)
     - Optionally restarting the environment
 
 .PARAMETER Restart
@@ -105,6 +106,7 @@ Write-Host ""
 Write-Host "All data will be PERMANENTLY DELETED:" -ForegroundColor Red
 Write-Host "  - Database (Metaverse, Connected Systems, Activities)" -ForegroundColor Red
 Write-Host "  - Docker volumes" -ForegroundColor Red
+Write-Host "  - Docker images (locally built)" -ForegroundColor Red
 Write-Host "  - Test data in external systems" -ForegroundColor Red
 Write-Host ""
 
@@ -129,7 +131,7 @@ if (-not $ExternalOnly) {
     if (Test-Path $jimComposeOverride) {
         $jimComposeArgs += @("-f", $jimComposeOverride)
     }
-    $jimComposeArgs += @("--profile", "with-db", "down", "-v", "--remove-orphans")
+    $jimComposeArgs += @("--profile", "with-db", "down", "-v", "--rmi", "local", "--remove-orphans")
 
     docker compose @jimComposeArgs 2>&1 | ForEach-Object {
         if ($_ -match "error|Error|ERROR") {
@@ -140,7 +142,7 @@ if (-not $ExternalOnly) {
     }
 
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "  JIM containers stopped and volumes removed" -ForegroundColor Green
+        Write-Host "  JIM containers, volumes, and images removed" -ForegroundColor Green
     } else {
         Write-Host "  Warning: JIM teardown had issues (may already be stopped)" -ForegroundColor Yellow
     }
@@ -151,7 +153,7 @@ if (-not $ExternalOnly) {
 if (-not $JIMOnly) {
     Write-Host "[Step 2] Stopping external test system containers..." -ForegroundColor Cyan
 
-    docker compose -f $integrationCompose down -v --remove-orphans 2>&1 | ForEach-Object {
+    docker compose -f $integrationCompose down -v --rmi local --remove-orphans 2>&1 | ForEach-Object {
         if ($_ -match "error|Error|ERROR") {
             Write-Host "  $_" -ForegroundColor Red
         } else {
@@ -160,22 +162,72 @@ if (-not $JIMOnly) {
     }
 
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "  External test systems stopped and volumes removed" -ForegroundColor Green
+        Write-Host "  External test systems containers, volumes, and images removed" -ForegroundColor Green
     } else {
         Write-Host "  Warning: External systems teardown had issues (may already be stopped)" -ForegroundColor Yellow
     }
     Write-Host ""
 }
 
-# Step 3: Clean up any orphan networks
-Write-Host "[Step 3] Cleaning up Docker networks..." -ForegroundColor Cyan
+# Step 3: Remove all JIM-related Docker images (including pulled images)
+Write-Host "[Step 3] Removing JIM-related Docker images..." -ForegroundColor Cyan
+
+# Define image patterns to remove
+$imagePatterns = @(
+    "jim-web",
+    "jim-worker",
+    "jim-scheduler",
+    "jim-samba-ad",
+    "ghcr.io/tetronio/jim-samba-ad",
+    "postgres",
+    "adminer",
+    "diegogslomp/samba-ad-dc"
+)
+
+$removedImages = 0
+$failedImages = 0
+
+foreach ($pattern in $imagePatterns) {
+    # Find all images matching this pattern
+    $images = docker images --format "{{.Repository}}:{{.Tag}}" 2>$null | Where-Object { $_ -like "*$pattern*" }
+
+    foreach ($image in $images) {
+        if ($image -and $image -ne "<none>:<none>") {
+            Write-Host "  Removing image: $image" -ForegroundColor Gray
+            docker rmi $image 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                $removedImages++
+            } else {
+                $failedImages++
+                Write-Host "    Warning: Could not remove $image (may be in use)" -ForegroundColor Yellow
+            }
+        }
+    }
+}
+
+# Also remove any dangling images
+$danglingImages = docker images -q --filter "dangling=true" 2>$null
+if ($danglingImages) {
+    Write-Host "  Removing dangling images..." -ForegroundColor Gray
+    docker image prune -f 2>&1 | Out-Null
+}
+
+if ($removedImages -gt 0) {
+    Write-Host "  Removed $removedImages Docker image(s)" -ForegroundColor Green
+} else {
+    Write-Host "  No JIM-related images found to remove" -ForegroundColor Gray
+}
+Write-Host ""
+
+# Step 4: Clean up any orphan networks
+Write-Host "[Step 4] Cleaning up Docker networks..." -ForegroundColor Cyan
 docker network prune -f 2>&1 | Out-Null
 Write-Host "  Docker networks cleaned" -ForegroundColor Green
 Write-Host ""
 
-# Step 4: Optionally restart
+# Step 5: Optionally restart
 if ($Restart) {
-    Write-Host "[Step 4] Restarting environment..." -ForegroundColor Cyan
+    Write-Host "[Step 5] Restarting environment..." -ForegroundColor Cyan
     Write-Host ""
 
     # IMPORTANT: JIM must start first because it creates the jim-network.

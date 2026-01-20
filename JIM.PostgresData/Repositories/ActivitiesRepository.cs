@@ -153,7 +153,9 @@ public class ActivityRepository : IActivityRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = false,
-        IEnumerable<ObjectChangeType>? changeTypeFilter = null)
+        IEnumerable<ObjectChangeType>? changeTypeFilter = null,
+        IEnumerable<string>? objectTypeFilter = null,
+        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -181,6 +183,31 @@ public class ActivityRepository : IActivityRepository
             if (changeTypes.Count > 0)
             {
                 query = query.Where(a => changeTypes.Contains(a.ObjectChangeType));
+            }
+        }
+
+        // Apply object type filter if specified
+        if (objectTypeFilter != null)
+        {
+            var objectTypes = objectTypeFilter.ToList();
+            if (objectTypes.Count > 0)
+            {
+                query = query.Where(a =>
+                    a.ConnectedSystemObject != null &&
+                    a.ConnectedSystemObject.Type != null &&
+                    objectTypes.Contains(a.ConnectedSystemObject.Type.Name));
+            }
+        }
+
+        // Apply error type filter if specified
+        if (errorTypeFilter != null)
+        {
+            var errorTypes = errorTypeFilter.ToList();
+            if (errorTypes.Count > 0)
+            {
+                query = query.Where(a =>
+                    a.ErrorType != null &&
+                    errorTypes.Contains(a.ErrorType.Value));
             }
         }
 
@@ -322,12 +349,21 @@ public class ActivityRepository : IActivityRepository
             })
             .ToListAsync();
 
-        // Get distinct object types count (separate query as it needs DISTINCT)
-        var totalObjectTypes = await rpeiQuery
-            .Where(q => q.ConnectedSystemObject != null)
-            .Select(q => q.ConnectedSystemObject!.Type)
-            .Distinct()
-            .CountAsync();
+        // Get object type counts with names (separate query as it needs GROUP BY on type name)
+        var objectTypeCounts = await rpeiQuery
+            .Where(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Type != null)
+            .GroupBy(q => q.ConnectedSystemObject!.Type!.Name)
+            .Select(g => new { TypeName = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.TypeName, x => x.Count);
+
+        var totalObjectTypes = objectTypeCounts.Count;
+
+        // Get error type counts (separate query as it needs GROUP BY on error type)
+        var errorTypeCounts = await rpeiQuery
+            .Where(q => q.ErrorType != null && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+            .GroupBy(q => q.ErrorType!.Value)
+            .Select(g => new { ErrorType = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.ErrorType, x => x.Count);
 
         // Calculate totals from grouped data
         var totalObjectChangeCount = aggregateData.Sum(x => x.Count);
@@ -343,11 +379,24 @@ public class ActivityRepository : IActivityRepository
         var totalJoins = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Joined).Sum(x => x.Count);
         var totalAttributeFlows = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.AttributeFlow).Sum(x => x.Count);
         var totalDisconnections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Disconnected).Sum(x => x.Count);
+        var totalDisconnectedOutOfScope = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.DisconnectedOutOfScope).Sum(x => x.Count);
+        var totalOutOfScopeRetainJoin = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.OutOfScopeRetainJoin).Sum(x => x.Count);
+        var totalDriftCorrections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.DriftCorrection).Sum(x => x.Count);
 
         // Export stats
         var totalProvisioned = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Provisioned).Sum(x => x.Count);
         var totalExported = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Exported).Sum(x => x.Count);
         var totalDeprovisioned = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deprovisioned).Sum(x => x.Count);
+
+        // Pending export stats (surfaced during sync for operator visibility)
+        var totalPendingExports = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.PendingExport).Sum(x => x.Count);
+
+        // Pending export reconciliation stats (populated during confirming import)
+        // TotalPendingExportsConfirmed is stored directly on the Activity (not derived from RPEIs)
+        var totalPendingExportsConfirmed = activity?.PendingExportsConfirmed ?? 0;
+        // Retrying and Failed are derived from error type counts (already calculated above)
+        errorTypeCounts.TryGetValue(ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed, out var totalPendingExportsRetrying);
+        errorTypeCounts.TryGetValue(ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed, out var totalPendingExportsFailed);
 
         // NoChange stats
         var noChangeItems = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.NoChange).ToList();
@@ -362,6 +411,8 @@ public class ActivityRepository : IActivityRepository
             TotalObjectChangeCount = totalObjectChangeCount,
             TotalObjectErrors = totalObjectErrors,
             TotalObjectTypes = totalObjectTypes,
+            ObjectTypeCounts = objectTypeCounts,
+            ErrorTypeCounts = errorTypeCounts,
 
             // Import stats
             TotalCsoAdds = totalCsoAdds,
@@ -373,11 +424,22 @@ public class ActivityRepository : IActivityRepository
             TotalJoins = totalJoins,
             TotalAttributeFlows = totalAttributeFlows,
             TotalDisconnections = totalDisconnections,
+            TotalDisconnectedOutOfScope = totalDisconnectedOutOfScope,
+            TotalOutOfScopeRetainJoin = totalOutOfScopeRetainJoin,
+            TotalDriftCorrections = totalDriftCorrections,
 
             // Export stats
             TotalProvisioned = totalProvisioned,
             TotalExported = totalExported,
             TotalDeprovisioned = totalDeprovisioned,
+
+            // Pending export stats
+            TotalPendingExports = totalPendingExports,
+
+            // Pending export reconciliation stats
+            TotalPendingExportsConfirmed = totalPendingExportsConfirmed,
+            TotalPendingExportsRetrying = totalPendingExportsRetrying,
+            TotalPendingExportsFailed = totalPendingExportsFailed,
 
             // NoChange stats
 #pragma warning disable CS0618 // Type or member is obsolete
@@ -392,11 +454,21 @@ public class ActivityRepository : IActivityRepository
     {
         return await Repository.Database.ActivityRunProfileExecutionItems
             .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
+            // CSO includes
             .Include(q => q.ConnectedSystemObject)
             .ThenInclude(cso => cso!.AttributeValues)
             .ThenInclude(av => av.Attribute)
             .Include(q => q.ConnectedSystemObject)
             .ThenInclude(cso => cso!.Type)
+            // CSO -> MVO includes (for projected/joined CSOs to access the linked MVO)
+            .Include(q => q.ConnectedSystemObject)
+            .ThenInclude(cso => cso!.MetaverseObject)
+            .ThenInclude(mvo => mvo!.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Include(q => q.ConnectedSystemObject)
+            .ThenInclude(cso => cso!.MetaverseObject)
+            .ThenInclude(mvo => mvo!.Type)
+            // CSO change includes (for import updates/deletes)
             .Include(q => q.ConnectedSystemObjectChange)
             .ThenInclude(c => c!.AttributeChanges)
             .ThenInclude(ac => ac.Attribute)
@@ -411,6 +483,17 @@ public class ActivityRepository : IActivityRepository
             .ThenInclude(ac => ac.ValueChanges)
             .ThenInclude(vc => vc.ReferenceValue)
             .ThenInclude(rv => rv!.Type)
+            // For deletions, include the preserved object type to support deletion rule UI display
+            .Include(q => q.ConnectedSystemObjectChange)
+            .ThenInclude(c => c!.DeletedObjectType)
+            // MVO change includes (for future use when MetaverseObjectChange is populated during sync)
+            .Include(q => q.MetaverseObjectChange)
+            .ThenInclude(c => c!.MetaverseObject)
+            .ThenInclude(mvo => mvo!.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Include(q => q.MetaverseObjectChange)
+            .ThenInclude(c => c!.MetaverseObject)
+            .ThenInclude(mvo => mvo!.Type)
             .SingleOrDefaultAsync(q => q.Id == id);
     }
     #endregion

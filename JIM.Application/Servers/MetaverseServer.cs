@@ -331,7 +331,7 @@ public class MetaverseServer
     }
 
     /// <summary>
-    /// Gets a paginated list of metaverse objects with optional filtering by type and search query.
+    /// Gets a paginated list of metaverse objects with optional filtering by type, search query, or specific attribute value.
     /// </summary>
     /// <param name="page">The page number (1-based).</param>
     /// <param name="pageSize">The number of items per page.</param>
@@ -339,6 +339,8 @@ public class MetaverseServer
     /// <param name="searchQuery">Optional search query to filter by display name.</param>
     /// <param name="sortDescending">Whether to sort in descending order by created date.</param>
     /// <param name="attributes">Optional list of attribute names to include. DisplayName is always included.</param>
+    /// <param name="filterAttributeName">Optional attribute name to filter by (must be used with filterAttributeValue).</param>
+    /// <param name="filterAttributeValue">Optional attribute value to filter by (exact match, case-insensitive).</param>
     /// <returns>A paged result set of metaverse object headers.</returns>
     public async Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsAsync(
         int page = 1,
@@ -346,9 +348,12 @@ public class MetaverseServer
         int? objectTypeId = null,
         string? searchQuery = null,
         bool sortDescending = true,
-        IEnumerable<string>? attributes = null)
+        IEnumerable<string>? attributes = null,
+        string? filterAttributeName = null,
+        string? filterAttributeValue = null)
     {
-        return await Application.Repository.Metaverse.GetMetaverseObjectsAsync(page, pageSize, objectTypeId, searchQuery, sortDescending, attributes);
+        return await Application.Repository.Metaverse.GetMetaverseObjectsAsync(
+            page, pageSize, objectTypeId, searchQuery, sortDescending, attributes, filterAttributeName, filterAttributeValue);
     }
 
     /// <summary>

@@ -67,7 +67,7 @@ public class MetaverseObject
             if (AttributeValues.Count == 0)
                 return null;
 
-            var av = AttributeValues.SingleOrDefault(q => q.Attribute.Name == Constants.BuiltInAttributes.DisplayName);
+            var av = AttributeValues.SingleOrDefault(q => q.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
             if (av != null && !string.IsNullOrEmpty(av.StringValue))
                 return av.StringValue;
 
@@ -96,12 +96,12 @@ public class MetaverseObject
     #region public methods
     public MetaverseObjectAttributeValue? GetAttributeValue(string name)
     {
-        return AttributeValues.SingleOrDefault(q => q.Attribute.Name == name);
+        return AttributeValues.SingleOrDefault(q => q.Attribute?.Name == name);
     }
 
     public bool HasAttributeValue(string name)
     {
-        return AttributeValues.Any(q => q.Attribute.Name == name);
+        return AttributeValues.Any(q => q.Attribute?.Name == name);
     }
 
     public override string ToString()

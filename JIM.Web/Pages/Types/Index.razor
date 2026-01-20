@@ -7,17 +7,19 @@
 @using JIM.Models.Search
 @using JIM.Models.Utility
 @using JIM.Utilities
+@using JIM.Web.Services
 @inject JimApplication Jim
 @inject NavigationManager NavManager
+@inject IUserPreferenceService PreferenceService
 
 <PageTitle>@PageTitle</PageTitle>
 <MudText Typo="Typo.h4">@PageTitle</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Search, or browse for @ObjectTypeName</MudText>
 
-@if (_isInitialised && PredefinedSearch != null)
+@if (_isInitialised && _preferencesLoaded && PredefinedSearch != null)
 {
-    <MudTable @ref="_table" T="MetaverseObjectHeader" ServerData="ServerReload" @bind-CurrentPage="_currentPage" Hover="true"
+    <MudTable @ref="_table" T="MetaverseObjectHeader" ServerData="ServerReload" @bind-CurrentPage="_currentPage" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged" Hover="true"
         Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0" OnRowClick="HandleRowClick"
         RowClass="cursor-pointer" Loading="@_loading" LoadingProgressColor="Color.Primary">
         <ToolBarContent>
@@ -75,6 +77,8 @@ else if (_isInitialised)
 
     private MudTable<MetaverseObjectHeader>? _table;
     private string _searchString = "";
+    private int _rowsPerPage = 10;
+    private bool _preferencesLoaded;
     private bool _loading;
     private bool _isInitialised;
     private int _currentPage;
@@ -141,6 +145,30 @@ else if (_isInitialised)
 
         // Mark as initialised - now the table can render and load data
         _isInitialised = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_preferencesLoaded)
+        {
+            try
+            {
+                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
+                _rowsPerPage = preferredSize;
+                _preferencesLoaded = true;
+                StateHasChanged(); // Re-render to show the table now that preference is loaded
+            }
+            catch
+            {
+                // JS interop not yet available, will retry on next render
+            }
+        }
+    }
+
+    private async Task OnRowsPerPageChanged(int newSize)
+    {
+        _rowsPerPage = newSize;
+        await PreferenceService.SetRowsPerPageAsync(newSize);
     }
 
     private async Task<TableData<MetaverseObjectHeader>> ServerReload(TableState state, CancellationToken token)

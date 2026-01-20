@@ -20,15 +20,17 @@ function Set-JIMMetaverseObjectType {
         The deletion rule for objects of this type.
         - Manual: Objects are never automatically deleted
         - WhenLastConnectorDisconnected: Objects are deleted when all connectors are removed
+        - WhenAuthoritativeSourceDisconnected: Objects are deleted when any authoritative source disconnects (requires DeletionTriggerConnectedSystemIds)
 
     .PARAMETER DeletionGracePeriodDays
         Number of days to wait after deletion conditions are met before deleting.
         Set to 0 for immediate deletion when conditions are met.
 
     .PARAMETER DeletionTriggerConnectedSystemIds
-        Array of Connected System IDs that trigger deletion when disconnected.
+        Array of Connected System IDs that are authoritative sources for deletion.
+        Required when DeletionRule is WhenAuthoritativeSourceDisconnected.
         When set, the MVO is deleted if ANY of these systems disconnect.
-        When empty, the MVO is only deleted when ALL connectors disconnect.
+        Ignored when DeletionRule is Manual or WhenLastConnectorDisconnected.
 
     .PARAMETER PassThru
         If specified, returns the updated Object Type object.
@@ -52,7 +54,7 @@ function Set-JIMMetaverseObjectType {
         Updates from pipeline and returns the updated object.
 
     .EXAMPLE
-        Set-JIMMetaverseObjectType -Id 1 -DeletionTriggerConnectedSystemIds 1,2
+        Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenAuthoritativeSourceDisconnected -DeletionTriggerConnectedSystemIds 1,2
 
         Configure deletion to trigger when HR system (ID 1) or AD system (ID 2) disconnects.
 
@@ -74,7 +76,7 @@ function Set-JIMMetaverseObjectType {
         [PSCustomObject]$InputObject,
 
         [Parameter()]
-        [ValidateSet('Manual', 'WhenLastConnectorDisconnected')]
+        [ValidateSet('Manual', 'WhenLastConnectorDisconnected', 'WhenAuthoritativeSourceDisconnected')]
         [string]$DeletionRule,
 
         [Parameter()]
@@ -111,8 +113,9 @@ function Set-JIMMetaverseObjectType {
 
         # Map deletion rule string to enum integer value (MetaverseObjectDeletionRule enum)
         $deletionRuleMap = @{
-            'Manual'                        = 0
-            'WhenLastConnectorDisconnected' = 1
+            'Manual'                              = 0
+            'WhenLastConnectorDisconnected'       = 1
+            'WhenAuthoritativeSourceDisconnected' = 2
         }
 
         # Build update body

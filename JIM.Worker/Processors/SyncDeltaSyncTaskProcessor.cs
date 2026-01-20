@@ -79,6 +79,19 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             activeSyncRules = await _jim.ConnectedSystems.GetSyncRulesAsync(_connectedSystem.Id, false);
         }
 
+        // Load ALL sync rules from ALL systems for drift detection import mapping cache.
+        // This is needed because drift detection must know which systems contribute to which MVO attributes
+        // to avoid false positives on export-only systems.
+        List<SyncRule> allSyncRules;
+        using (Diagnostics.Sync.StartSpan("LoadAllSyncRulesForDriftDetection"))
+        {
+            allSyncRules = await _jim.ConnectedSystems.GetSyncRulesAsync();
+        }
+
+        // Build drift detection cache (import mapping cache + export rules with EnforceState=true)
+        // This enables efficient drift detection during CSO processing
+        BuildDriftDetectionCache(allSyncRules, activeSyncRules);
+
         // Get the schema for all object types upfront
         using (Diagnostics.Sync.StartSpan("LoadObjectTypes"))
         {
@@ -131,8 +144,8 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                     pageSize);
             }
 
-            // Load CSO attribute values for this page (for no-net-change detection during export evaluation)
-            await LoadPageCsoAttributeCacheAsync(csoPagedResult.Results.Select(cso => cso.Id));
+            // Note: Target CSO attribute values for no-net-change detection are pre-loaded in ExportEvaluationCache
+            // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
 
             int processedInPage = 0;
             using (Diagnostics.Sync.StartSpan("ProcessCsoLoop").SetTag("csoCount", csoPagedResult.Results.Count))
@@ -152,6 +165,12 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 }
             }
 
+            // Process deferred reference attributes after all CSOs in this page have been processed.
+            // Reference attributes (e.g., group members) may point to CSOs that are processed later in the same page.
+            // By deferring reference attributes, we ensure all MVOs exist before resolving references.
+            // This enables a single sync run to fully reconcile all objects including references.
+            ProcessDeferredReferenceAttributes();
+
             // Batch persist all MVOs collected during this page.
             // See SyncFullSyncTaskProcessor for design notes on why progress updates
             // cannot be decoupled from batch persistence boundaries.
@@ -166,8 +185,8 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             // batch delete obsolete CSOs
             await FlushObsoleteCsoOperationsAsync();
 
-            // Clear per-page CSO attribute cache to free memory
-            ClearPageCsoAttributeCache();
+            // batch delete MVOs marked for immediate deletion (0-grace-period)
+            await FlushPendingMvoDeletionsAsync();
 
             // Update progress with page completion - this persists ObjectsProcessed to database
             using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))

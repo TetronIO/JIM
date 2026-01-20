@@ -7,42 +7,44 @@ unset GITHUB_TOKEN
 
 # Compose file variables for cleaner aliases
 JIM_COMPOSE="docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db"
+JIM_COMPOSE_DEV="docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml -f docker-compose.dev-tools.yml --profile with-db"
 
 # Help - list all jim aliases
-alias jim='echo "📚 JIM Development Aliases:
+alias jim='echo "JIM Development Aliases:
 
 .NET Local Development:
-  jim-compile        → dotnet build JIM.sln
-  jim-test           → dotnet test JIM.sln
-  jim-pester         → Run PowerShell Pester tests
-  jim-clean          → dotnet clean && build
-  jim-web            → dotnet run --project JIM.Web
-  jim-worker         → dotnet run --project JIM.Worker
+  jim-compile        - dotnet build JIM.sln
+  jim-test           - dotnet test JIM.sln
+  jim-pester         - Run PowerShell Pester tests
+  jim-clean          - dotnet clean && build
+  jim-web            - dotnet run --project JIM.Web
+  jim-worker         - dotnet run --project JIM.Worker
 
 Database Management:
-  jim-migrate        → dotnet ef database update
-  jim-migration      → dotnet ef migrations add
-  jim-db             → Start PostgreSQL
-  jim-db-stop        → Stop PostgreSQL
-  jim-db-logs        → View database logs
-  jim-adminer        → Adminer URL
+  jim-migrate        - dotnet ef database update
+  jim-migration      - dotnet ef migrations add
+  jim-db             - Start PostgreSQL + Adminer
+  jim-db-stop        - Stop PostgreSQL + Adminer
+  jim-db-logs        - View database logs
 
 Docker Stack Management:
-  jim-stack          → Start Docker stack (no build)
-  jim-stack-logs     → View Docker stack logs
-  jim-stack-down     → Stop Docker stack
+  jim-stack          - Start Docker stack (no dev tools)
+  jim-stack-dev      - Start Docker stack + Adminer
+  jim-stack-logs     - View Docker stack logs
+  jim-stack-down     - Stop Docker stack
 
 Docker Builds (rebuild + start):
-  jim-build          → Rebuild all services + start
-  jim-build-web      → Rebuild jim.web + start
-  jim-build-worker   → Rebuild jim.worker + start
-  jim-build-scheduler → Rebuild jim.scheduler + start
+  jim-build          - Rebuild all services + start
+  jim-build-dev      - Rebuild all services + start + Adminer
+  jim-build-web      - Rebuild jim.web + start
+  jim-build-worker   - Rebuild jim.worker + start
+  jim-build-scheduler - Rebuild jim.scheduler + start
 
 Reset:
-  jim-reset          → Delete database & logs volumes
+  jim-reset          - Full reset (containers, images, volumes)
 
 Help:
-  jim                → Show this help message
+  jim                - Show this help message
 "'
 
 # .NET local development
@@ -59,18 +61,19 @@ alias jim-migration='dotnet ef migrations add --project JIM.PostgresData'
 alias jim-db='docker compose -f db.yml up -d'
 alias jim-db-stop='docker compose -f db.yml down'
 alias jim-db-logs='docker compose -f db.yml logs -f'
-alias jim-adminer='echo "Adminer running at http://localhost:8080"'
 
-# Docker stack management
+# Docker stack management (production-like, no dev tools)
 alias jim-stack='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d'
+alias jim-stack-dev='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml -f docker-compose.dev-tools.yml --profile with-db up -d'
 alias jim-stack-logs='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db logs -f'
-alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down && docker compose -f docker-compose.integration-tests.yml down 2>/dev/null || true'
+alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml -f docker-compose.dev-tools.yml --profile with-db down && docker compose -f docker-compose.integration-tests.yml down 2>/dev/null || true'
 
 # Docker builds (rebuild and start services)
 alias jim-build='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build'
+alias jim-build-dev='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml -f docker-compose.dev-tools.yml --profile with-db up -d --build'
 alias jim-build-web='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db build jim.web && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d jim.web'
 alias jim-build-worker='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db build jim.worker && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d jim.worker'
 alias jim-build-scheduler='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db build jim.scheduler && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d jim.scheduler'
 
-# Reset
-alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down && docker volume rm -f jim-db-volume jim-logs-volume && echo "JIM reset complete. Run jim-build to rebuild and start fresh."'
+# Reset (includes dev-tools compose to clean up adminer if it was used)
+alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml -f docker-compose.dev-tools.yml --profile with-db down --rmi local --volumes && docker compose -f docker-compose.integration-tests.yml down --rmi local --volumes 2>/dev/null || true && docker volume rm -f jim-db-volume jim-logs-volume 2>/dev/null || true && echo "JIM reset complete. All containers, images, and volumes removed. Run jim-build to rebuild."'

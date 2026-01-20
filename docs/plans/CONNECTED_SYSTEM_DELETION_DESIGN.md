@@ -19,24 +19,24 @@ When deleting a Connected System, these entities must be handled:
 
 ```
 ConnectedSystem
-├── ConnectedSystemObject (CSOs) [many]
-│   ├── ConnectedSystemObjectAttributeValue [cascade]
-│   ├── ConnectedSystemObjectChange [audit records]
-│   └── ActivityRunProfileExecutionItem [references]
-├── ConnectedSystemObjectType [schema]
-│   ├── ConnectedSystemObjectTypeAttribute [cascade]
-│   └── SyncRule.ConnectedSystemObjectTypeId [references]
-├── ConnectedSystemPartition
-│   └── ConnectedSystemContainer [cascade]
-├── ConnectedSystemRunProfile
-├── ConnectedSystemSettingValue [cascade]
-├── SyncRule [references this system]
-│   ├── SyncRuleMapping [cascade]
-│   ├── SyncRuleMappingSource [cascade]
-│   └── SyncRuleScopingCriteriaGroup [cascade]
-├── PendingExport
-├── Activity [references, nullable FK]
-└── WorkerTask (Sync/Clear tasks)
++-- ConnectedSystemObject (CSOs) [many]
+|   +-- ConnectedSystemObjectAttributeValue [cascade]
+|   +-- ConnectedSystemObjectChange [audit records]
+|   +-- ActivityRunProfileExecutionItem [references]
++-- ConnectedSystemObjectType [schema]
+|   +-- ConnectedSystemObjectTypeAttribute [cascade]
+|   +-- SyncRule.ConnectedSystemObjectTypeId [references]
++-- ConnectedSystemPartition
+|   +-- ConnectedSystemContainer [cascade]
++-- ConnectedSystemRunProfile
++-- ConnectedSystemSettingValue [cascade]
++-- SyncRule [references this system]
+|   +-- SyncRuleMapping [cascade]
+|   +-- SyncRuleMappingSource [cascade]
+|   +-- SyncRuleScopingCriteriaGroup [cascade]
++-- PendingExport
++-- Activity [references, nullable FK]
++-- WorkerTask (Sync/Clear tasks)
 ```
 
 ## Key Design Decisions
@@ -140,8 +140,8 @@ However, for MVP, we will NOT serialize deleted CSOs because:
    - Event-based operations (e.g., SCIM requests): Fail immediately with clear error
    - Manual sync requests: Reject with "system is being deleted" message
 3. **Handle in-flight sync**:
-   - If NO sync is currently running → proceed with deletion immediately
-   - If a sync IS running → queue the deletion as a worker task to execute after sync completes
+   - If NO sync is currently running -> proceed with deletion immediately
+   - If a sync IS running -> queue the deletion as a worker task to execute after sync completes
 4. **Rollback on error**: If deletion fails, restore status to Active
 
 **Why this approach**:
@@ -322,37 +322,37 @@ public async Task<ConnectedSystemDeletionPreview> GenerateDeletionPreviewAsync(i
 
 ```
 User clicks "Delete System"
-        │
-        ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Delete Connected System: "HR Source"                           │
-│                                                                 │
-│  ⚠ This action cannot be undone.                               │
-│                                                                 │
-│  ┌─ Preview Impact ─────────────────────────────────────────┐   │
-│  │  Objects to delete:                                      │   │
-│  │  • 12,847 Connected System Objects                       │   │
-│  │  • 3 Sync Rules                                          │   │
-│  │  • 2 Run Profiles                                        │   │
-│  │  • 15 Pending Exports                                    │   │
-│  │                                                          │   │
-│  │  Metaverse Impact:                                       │   │
-│  │  • 12,500 MVOs currently joined                          │   │
-│  │  • 8,200 MVOs have other connector links (safe)          │   │
-│  │  • 4,300 MVOs will be scheduled for deletion (30d grace) │   │
-│  │  • 0 MVOs will be immediately deleted                    │   │
-│  │                                                          │   │
-│  │  ⚠ 15 pending exports will be discarded                 │   │
-│  │                                                          │   │
-│  │  Estimated time: ~45 seconds (background job)            │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  [ ] Evaluate MVO deletion rules after disconnect               │
-│                                                                 │
-│  Type "HR Source" to confirm: [________________]                │
-│                                                                 │
-│                    [Cancel]  [Delete System]                    │
-└─────────────────────────────────────────────────────────────────┘
+        |
+        v
++-----------------------------------------------------------------+
+|  Delete Connected System: "HR Source"                           |
+|                                                                 |
+|  [!] This action cannot be undone.                              |
+|                                                                 |
+|  +-- Preview Impact ----------------------------------------+   |
+|  |  Objects to delete:                                      |   |
+|  |  - 12,847 Connected System Objects                       |   |
+|  |  - 3 Sync Rules                                          |   |
+|  |  - 2 Run Profiles                                        |   |
+|  |  - 15 Pending Exports                                    |   |
+|  |                                                          |   |
+|  |  Metaverse Impact:                                       |   |
+|  |  - 12,500 MVOs currently joined                          |   |
+|  |  - 8,200 MVOs have other connector links (safe)          |   |
+|  |  - 4,300 MVOs will be scheduled for deletion (30d grace) |   |
+|  |  - 0 MVOs will be immediately deleted                    |   |
+|  |                                                          |   |
+|  |  [!] 15 pending exports will be discarded                |   |
+|  |                                                          |   |
+|  |  Estimated time: ~45 seconds (background job)            |   |
+|  +----------------------------------------------------------+   |
+|                                                                 |
+|  [ ] Evaluate MVO deletion rules after disconnect               |
+|                                                                 |
+|  Type "HR Source" to confirm: [________________]                |
+|                                                                 |
+|                    [Cancel]  [Delete System]                    |
++-----------------------------------------------------------------+
 ```
 
 **Skip Preview Option:**
@@ -415,8 +415,8 @@ public async Task<DeletionResult> RequestDeleteConnectedSystemAsync(
     // 3. Pause any scheduled sync for this system
     // 4. Create activity for audit trail
     // 5. Handle concurrency (Q5):
-    //    - If NO sync running → execute deletion immediately
-    //    - If sync IS running → queue DeleteConnectedSystemWorkerTask
+    //    - If NO sync running -> execute deletion immediately
+    //    - If sync IS running -> queue DeleteConnectedSystemWorkerTask
     // 6. Delete in order (raw SQL for performance):
     //    a. PendingExports
     //    b. CSO attribute values, changes, then CSOs
@@ -463,10 +463,10 @@ Query params:
 **Example flow:**
 ```
 1. GET /api/connected-systems/5/deletion-preview
-   → Returns preview with counts and warnings
+   -> Returns preview with counts and warnings
 
 2. DELETE /api/connected-systems/5?confirmationName=HR%20Source
-   → Deletes the system (or queues background job)
+   -> Deletes the system (or queues background job)
 ```
 
 ### Phase 4: UI
@@ -570,14 +570,14 @@ DELETE FROM "ConnectedSystems" WHERE "Id" = @id;
    - Verify "Deleting" status is set atomically
    - Verify status is rolled back if deletion fails
 3. **Concurrency tests** (Q5):
-   - Attempt sync operation while system is in "Deleting" state → should fail
+   - Attempt sync operation while system is in "Deleting" state -> should fail
    - Verify SCIM/event requests fail with clear error when deleting
    - Verify deletion proceeds immediately if no sync running
    - Verify deletion is queued correctly if sync is running
    - Verify queued deletion executes after sync completes
    - Verify scheduled syncs are paused and don't start during deletion
    - Verify status is rolled back if deletion fails
-   - Concurrent deletion requests → handled idempotently
+   - Concurrent deletion requests -> handled idempotently
 4. **Performance tests**: Delete system with 10k, 100k CSOs
 
 ## Design Decisions Made
@@ -619,7 +619,7 @@ This is a significant gap based on real-world MIM migration experience. Example 
 1. Migrating from old HR system to new HR system
 2. Most attribute precedence switched to new system
 3. One or two attributes accidentally left with old system as priority
-4. Delete old system → those attributes recalled or shift to lower-priority contributor
+4. Delete old system -> those attributes recalled or shift to lower-priority contributor
 5. Changed attributes trigger exports to AD, causing account changes or disabling
 6. Business impact: users locked out, wrong data pushed to production systems
 
@@ -676,34 +676,34 @@ This analysis is expensive:
 ### UI Mockup
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│  Delete Connected System: "Old HR System"                      │
-│                                                                │
-│  ┌─ Basic Impact ───────────────────────────────────────────┐  │
-│  │  • 12,847 CSOs will be deleted                           │  │
-│  │  • 3 Sync Rules will be deleted                          │  │
-│  │  • 4,300 MVOs may be affected                            │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                                                                │
-│  [▶ Run Detailed Attribute Analysis]                           │
-│                                                                │
-│  ┌─ Attribute Impact (detailed) ────────────────────────────┐  │
-│  │  ⚠ 2,150 MVO attributes will be RECALLED (deleted)       │  │
-│  │  ⚠ 890 MVO attributes will CHANGE VALUE (precedence)     │  │
-│  │  ⚠ 1,200 exports to "Active Directory" will be triggered │  │
-│  │                                                          │  │
-│  │  Most impacted attributes:                               │  │
-│  │  • department: 800 MVOs affected (→ "New HR System")     │  │
-│  │  • manager: 650 MVOs affected (will be recalled)         │  │
-│  │  • costCenter: 540 MVOs affected (→ "New HR System")     │  │
-│  │                                                          │  │
-│  │  [View Sample MVOs] [Export Full Report]                 │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                                                                │
-│  Type "Old HR System" to confirm: [________________]           │
-│                                                                │
-│                    [Cancel]  [Delete System]                   │
-└────────────────────────────────────────────────────────────────┘
++----------------------------------------------------------------+
+|  Delete Connected System: "Old HR System"                      |
+|                                                                |
+|  +-- Basic Impact ----------------------------------------+    |
+|  |  - 12,847 CSOs will be deleted                         |    |
+|  |  - 3 Sync Rules will be deleted                        |    |
+|  |  - 4,300 MVOs may be affected                          |    |
+|  +--------------------------------------------------------+    |
+|                                                                |
+|  [> Run Detailed Attribute Analysis]                           |
+|                                                                |
+|  +-- Attribute Impact (detailed) -------------------------+    |
+|  |  [!] 2,150 MVO attributes will be RECALLED (deleted)   |    |
+|  |  [!] 890 MVO attributes will CHANGE VALUE (precedence) |    |
+|  |  [!] 1,200 exports to "Active Directory" triggered     |    |
+|  |                                                        |    |
+|  |  Most impacted attributes:                             |    |
+|  |  - department: 800 MVOs affected (-> "New HR System")  |    |
+|  |  - manager: 650 MVOs affected (will be recalled)       |    |
+|  |  - costCenter: 540 MVOs affected (-> "New HR System")  |    |
+|  |                                                        |    |
+|  |  [View Sample MVOs] [Export Full Report]               |    |
+|  +--------------------------------------------------------+    |
+|                                                                |
+|  Type "Old HR System" to confirm: [________________]           |
+|                                                                |
+|                    [Cancel]  [Delete System]                   |
++----------------------------------------------------------------+
 ```
 
 ### Implementation Phases

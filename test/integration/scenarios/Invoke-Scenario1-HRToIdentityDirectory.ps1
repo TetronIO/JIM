@@ -226,10 +226,11 @@ try {
     $baselineImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
     Assert-ActivitySuccess -ActivityId $baselineImportResult.activityId -Name "LDAP Full Import (baseline)"
 
-    # Run Delta Sync to process baseline imports and establish MVOs for existing AD objects
-    Write-Host "  Processing baseline imports..." -ForegroundColor DarkGray
-    $baselineSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
-    Assert-ActivitySuccess -ActivityId $baselineSyncResult.activityId -Name "LDAP Delta Sync (baseline)"
+    # Run Full Sync to process baseline imports and establish MVOs for existing AD objects
+    # NOTE: First sync after Full Import should always be Full Sync (initialisation best practice)
+    Write-Host "  Running Full Sync to initialise connector..." -ForegroundColor DarkGray
+    $baselineSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullSyncProfileId -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $baselineSyncResult.activityId -Name "LDAP Full Sync (baseline)"
     Write-Host "✓ Baseline state established" -ForegroundColor Green
 
     $stepTimings["0. Setup"] = (Get-Date) - $step0Start

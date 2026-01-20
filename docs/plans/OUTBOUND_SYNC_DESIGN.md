@@ -85,8 +85,8 @@ The export *execution* remains a separate concern - can be immediate, scheduled,
 ### Q2: How do we track CSO origin (provisioned vs joined)?
 
 When an MVO is deleted, we need to know:
-- CSOs that were **provisioned** by JIM → should create delete Pending Export
-- CSOs that **pre-existed** and were joined → should just break the join
+- CSOs that were **provisioned** by JIM -> should create delete Pending Export
+- CSOs that **pre-existed** and were joined -> should just break the join
 
 **Options:**
 
@@ -127,24 +127,24 @@ This is an edge case that only occurs when a connected system has **both import 
 ┌─────────────────────────────────────────────────────────────────┐
 │  Sync Rules for AD:                                             │
 │                                                                 │
-│  Import Rule: ad.title → mvo.title                              │
-│  Export Rule: mvo.title → ad.title                              │
+│  Import Rule: ad.title -> mvo.title                             │
+│  Export Rule: mvo.title -> ad.title                             │
 │                                                                 │
 │  WITHOUT prevention:                                            │
 │  1. Admin changes title in AD to "Senior Engineer"              │
-│  2. Import: ad.title → mvo.title                                │
-│  3. Export eval: mvo.title changed → PendingExport to AD        │
+│  2. Import: ad.title -> mvo.title                               │
+│  3. Export eval: mvo.title changed -> PendingExport to AD       │
 │  4. Export: writes same value back to AD (wasteful)             │
-│  5. Next import: may detect "change" → loop continues           │
+│  5. Next import: may detect "change" -> loop continues          │
 │                                                                 │
 │  WITH prevention (Option A):                                    │
 │  1. Admin changes title in AD to "Senior Engineer"              │
-│  2. Import: ad.title → mvo.title                                │
+│  2. Import: ad.title -> mvo.title                               │
 │     mvo.title.ContributedBySystem = AD  ← tracked!              │
 │  3. Export eval for AD:                                         │
-│     ContributedBySystem (AD) == TargetSystem (AD) → SKIP        │
+│     ContributedBySystem (AD) == TargetSystem (AD) -> SKIP       │
 │  4. Export eval for other systems:                              │
-│     ContributedBySystem (AD) != TargetSystem → create export    │
+│     ContributedBySystem (AD) != TargetSystem -> create export   │
 │  5. No circular sync, no wasted exports                         │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -287,6 +287,8 @@ When an MVO has attributes from multiple sources, which value gets exported?
 
 The MVO is the single source of truth. Attribute priority is an inbound concern; outbound sync simply exports the authoritative MVO value. There's no additional complexity needed here.
 
+> **See also**: [DRIFT_DETECTION_AND_ATTRIBUTE_PRIORITY.md](DRIFT_DETECTION_AND_ATTRIBUTE_PRIORITY.md) for the detailed design of how attribute priority is determined when multiple sources contribute to the same attribute (Issue #91).
+
 ---
 
 ### Q8: Parallelism and Concurrency Strategy
@@ -402,7 +404,7 @@ The decision to evaluate exports **immediately when MVO changes** (Q1 Option A) 
 │  │ Scheduled   │──┐                                                         │
 │  │ Full/Delta  │  │                                                         │
 │  └─────────────┘  │         ┌──────────────┐      ┌─────────────────┐       │
-│                   ├────────▶│   Inbound   │─────▶│ Pending Exports │       │
+│                   ├────────>│   Inbound    │─────>│ Pending Exports │       │
 │  ┌─────────────┐  │         │   Sync       │      │    Created      │       │
 │  │ Webhook/    │  │         │  (Same code) │      └────────┬────────┘       │
 │  │ Notification│──┤         └──────────────┘               │                │
@@ -479,7 +481,7 @@ public ExportExecutionMode ExportMode { get; set; }
 
 Q1 Option A (evaluate exports immediately) creates challenges when:
 - **Reference attributes** point to MVOs that don't exist in the target system yet
-- **Dependencies** between objects (manager→user, group→members) require sequencing
+- **Dependencies** between objects (manager->user, group->members) require sequencing
 - **Parallel processing** means we can't guarantee ordering during inbound sync
 
 **Key Insight**: Q1 Option A is about *when to evaluate and create Pending Exports*, not about *when/how to execute them*. This separation is our solution.
@@ -500,10 +502,10 @@ Q1 Option A (evaluate exports immediately) creates challenges when:
 │                                                                         │
 │  PHASE 2: EXPORT EXECUTION (Separate concern)                           │
 │  ─────────────────────────────────────────────                          │
-│  → Dependency graph evaluation happens HERE                             │
-│  → Ordering/sequencing happens HERE                                     │
-│  → Reference resolution (MVO ID → target system ID) happens HERE        │
-│  → Can be batched, ordered, multi-pass                                  │
+│  -> Dependency graph evaluation happens HERE                            │
+│  -> Ordering/sequencing happens HERE                                    │
+│  -> Reference resolution (MVO ID -> target system ID) happens HERE      │
+│  -> Can be batched, ordered, multi-pass                                 │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -549,7 +551,7 @@ For scheduled export runs processing many pending exports:
 │  ┌─────────────────────────────────────────────────────────────────┐    │
 │  │ PASS 2: Reference Resolution (Parallel)                         │    │
 │  │                                                                 │    │
-│  │ • Resolve MVO references → Target system IDs (e.g., AD DN)      │    │
+│  │ • Resolve MVO references -> Target system IDs (e.g., AD DN)     │    │
 │  │ • Update manager attributes                                     │    │
 │  │ • Update group memberships                                      │    │
 │  │                                                                 │    │
@@ -618,7 +620,7 @@ For immediate export of a single object (e.g., after SCIM push):
 │                                               │                         │
 │                                               ▼                         │
 │                                         Create DeferredReference        │
-│                                         (Alice.manager → Bob)           │
+│                                         (Alice.manager -> Bob)          │
 │                                               │                         │
 │                                               ▼                         │
 │                                         When Bob exported later,        │
@@ -833,7 +835,7 @@ Outbound sync should be triggered by:
     │  Full Sync confirms CSO matches
     ▼
 ┌─────────┐
-│Confirmed│ → Deleted
+│Confirmed│ -> Deleted
 │& Deleted│
 └─────────┘
 ```
@@ -884,7 +886,7 @@ Some attributes depend on others:
 
 ### 3. Reference Attributes
 If MVO.Manager references another MVO, and we're provisioning to AD:
-- We need to resolve MVO reference → CSO DN
+- We need to resolve MVO reference -> CSO DN
 - The referenced object must be provisioned first
 
 **Solution**: Two-pass export (objects first, then references)
@@ -963,24 +965,26 @@ Based on the design decisions above, this is the implementation plan for outboun
 
 **Goal**: Set up the data model foundations for outbound sync.
 
-- [ ] **1.1 Add enums to `PendingExportEnums.cs`**
+- [x] **1.1 Add enums to `PendingExportEnums.cs`**
   - `PendingExportStatus`: Pending, Executing, Failed, Exported
   - `SyncRunMode`: PreviewOnly, PreviewAndSync
 
-- [ ] **1.2 Enhance `PendingExport.cs`**
+- [x] **1.2 Enhance `PendingExport.cs`**
   - Add retry tracking: `MaxRetries`, `LastAttemptedAt`, `NextRetryAt`, `LastErrorMessage`
   - Add MVO reference: `SourceMetaverseObjectId`
   - Add flag: `HasUnresolvedReferences`
 
-- [ ] **1.3 Create `DeferredReference.cs`** (new model)
+- [x] **1.3 Create `DeferredReference.cs`** (new model)
   - Tracks references that couldn't be resolved during export
   - Fields: `SourceCsoId`, `AttributeName`, `TargetMvoId`, `TargetSystemId`, `CreatedAt`, `ResolvedAt`
 
-- [ ] **1.4 Create `ExportPreviewResult.cs`** (new model)
-  - Holds preview results for Q5 Preview mode
-  - Fields: `ProposedExports`, `ObjectsToCreate/Update/Delete`, `Warnings`, `Errors`
+- [ ] **1.4 Create `SyncPreviewResult.cs`** (new model) - Issue #288
+  - Holds comprehensive sync preview results for Q5 Preview mode
+  - Inbound: `ProjectedMvo`, `JoinedMvo`, `AttributeFlows`
+  - Outbound: `ProvisionedCsos`, `UpdatedCsos`, `DeletedCsos`, `PendingExports`
+  - Metadata: `Warnings`, `Errors`, `AffectedSyncRules`
 
-- [ ] **1.5 Update DbContext and create migration**
+- [x] **1.5 Update DbContext and create migration**
   - Add `DbSet<DeferredReference>`
   - Update PendingExport entity configuration
   - Run: `dotnet ef migrations add AddOutboundSyncModels --project JIM.PostgresData`
@@ -989,85 +993,88 @@ Based on the design decisions above, this is the implementation plan for outboun
 
 **Goal**: Implement Q1 decision - create PendingExports immediately when MVO changes.
 
-- [ ] **2.1 Create `ExportEvaluationServer.cs`** (new service in `JIM.Application/Servers/`)
+- [x] **2.1 Create `ExportEvaluationServer.cs`** (new service in `JIM.Application/Servers/`)
   - `EvaluateExportRulesAsync(mvo, changedAttributes)` - main entry point
-  - `IsMvoInScopeForExportRule(mvo, exportRule)` - scope checking
+  - `IsMvoInScopeForExportRule(mvo, exportRule)` - scope checking (via `ScopingEvaluationServer`)
   - `EvaluateAttributeForExport(...)` - implements Q3 circular sync prevention
   - `EvaluateMvoDeletionAsync(mvo)` - implements Q4 (only Provisioned CSOs)
   - `CreateProvisioningExport(...)` - implements Q2 (sets JoinType.Provisioned)
 
-- [ ] **2.2 Create `ScopingCriteriaEvaluator.cs`** (utility in `JIM.Worker/Processors/`)
+- [x] **2.2 Create `ScopingCriteriaEvaluator.cs`** (utility in `JIM.Worker/Processors/`)
+  - Implemented as `ScopingEvaluationServer.cs` in `JIM.Application/Servers/`
   - Evaluate if MVO matches sync rule scoping criteria groups
   - Handle AND/OR logic for criteria groups
 
-- [ ] **2.3 Create `OutboundSyncRuleMappingProcessor.cs`** (new processor)
-  - Mirror of `SyncRuleMappingProcessor.cs` but for export direction
-  - Maps MVO attributes → CSO attributes based on sync rule mappings
+- [x] **2.3 Create `OutboundSyncRuleMappingProcessor.cs`** (new processor)
+  - Implemented within `ExportEvaluationServer.cs` - maps MVO attributes -> CSO attributes
+  - Maps MVO attributes -> CSO attributes based on sync rule mappings
 
-- [ ] **2.4 Hook into `SyncFullSyncTaskProcessor.cs`**
-  - After MVO changes are applied, call `EvaluateOutboundExportsAsync()`
+- [x] **2.4 Hook into `SyncFullSyncTaskProcessor.cs`**
+  - Implemented in `SyncTaskProcessorBase.cs` calling `EvaluateExportRulesWithNoNetChangeDetectionAsync()`
   - Pass the source system to enable Q3 circular sync prevention
 
 ### Phase 3: Export Execution
 
 **Goal**: Process PendingExports via connectors using two-pass approach.
 
-- [ ] **3.1 Create `ExportExecutionServer.cs`** (new service in `JIM.Application/Servers/`)
-  - `ExecutePendingExportsAsync(targetSystem, activity)` - main entry point
-  - `ExecuteStructuralChangesAsync(...)` - Pass 1: creates/updates/deletes without references
-  - `ExecuteReferenceChangesAsync(...)` - Pass 2: resolves and applies reference attributes
-  - `ResolveReferenceForTargetSystemAsync(mvoId, targetSystem)` - MVO ID → target system ID
+- [x] **3.1 Create `ExportExecutionServer.cs`** (new service in `JIM.Application/Servers/`)
+  - `ExecuteExportsAsync(targetSystem, connector, runMode)` - main entry point
+  - Two-pass approach: immediate exports first, then deferred references
+  - `TryResolveReferencesAsync(...)` - MVO ID -> target system ID resolution
+  - Reference resolution prefers secondary external ID (DN) for LDAP systems
 
-- [ ] **3.2 Create `SyncExportTaskProcessor.cs`** (new processor in `JIM.Worker/Processors/`)
+- [x] **3.2 Create `SyncExportTaskProcessor.cs`** (new processor in `JIM.Worker/Processors/`)
   - Process Export run profile type
-  - Order exports by object type dependencies (Users before Groups)
+  - Supports SyncRunMode (PreviewOnly, PreviewAndSync)
   - Call connector export methods
 
-- [ ] **3.3 Add repository methods**
-  - `IConnectedSystemRepository`: `CreatePendingExportAsync`, `GetExecutablePendingExportsAsync`, `GetCsoByMvoIdAsync`
-  - `IConnectedSystemRepository`: Deferred reference CRUD operations
-  - Implement in `PostgresData/Repositories/ConnectedSystemRepository.cs`
+- [x] **3.3 Add repository methods**
+  - `IConnectedSystemRepository`: `CreatePendingExportAsync`, `GetPendingExportsAsync`, `UpdatePendingExportAsync`
+  - Batch operations: `UpdatePendingExportsAsync`, `DeletePendingExportsAsync`
+  - Implemented in `PostgresData/Repositories/ConnectedSystemRepository.cs`
 
 ### Phase 4: Preview Mode
 
 **Goal**: Implement Q5 decision - Preview Only and Preview + Sync modes.
 
-- [ ] **4.1 Create `ExportPreviewServer.cs`** (new service)
-  - `PreviewExportsForMvoAsync(mvo)` - preview for single object
-  - `PreviewExportsForSystemAsync(systemId)` - preview all pending exports
-  - `PreviewFullSyncAsync(system, runMode)` - preview full sync run
+- [ ] **4.1 Create `SyncPreviewServer.cs`** (new service) - Issue #288
+  - `PreviewSyncForCsoAsync(cso)` - preview full sync chain for a CSO (inbound + outbound)
+  - `PreviewSyncForMvoAsync(mvo)` - preview outbound sync from an MVO
+  - `PreviewFullSyncAsync(system)` - preview what a full sync run would produce
+  - Shows complete dependency graph: CSO -> MVO -> Export Rules -> Target CSOs
 
-- [ ] **4.2 Add `SyncRunMode` parameter to sync processors**
-  - Update `SyncFullSyncTaskProcessor` constructor
-  - When `PreviewOnly`, evaluate but don't persist or execute
+- [x] **4.2 Add `SyncRunMode` parameter to sync processors**
+  - Added to `SyncExportTaskProcessor` constructor
+  - `ExportExecutionServer.ExecuteExportsAsync` supports `SyncRunMode.PreviewOnly`
 
 ### Phase 5: Error Handling & Retry
 
 **Goal**: Implement Q6 decision - retry with backoff, then manual intervention.
 
-- [ ] **5.1 Create `ExportRetryService.cs`** (new service)
-  - `HandleExportFailureAsync(pendingExport, exception)` - determine if retry
-  - `CalculateNextRetryTime(errorCount)` - exponential backoff
-  - `MarkExportAsFailedAsync(pendingExport)` - mark for manual intervention
-  - `GetFailedExportsAsync()` - for admin dashboard
-  - `ResetFailedExportAsync(pendingExport)` - manual retry
+- [x] **5.1 Create `ExportRetryService.cs`** (new service)
+  - Implemented directly in `ExportExecutionServer.cs` instead of separate service
+  - `MarkExportFailedAsync(pendingExport, errorMessage)` - handles retry logic
+  - `CalculateNextRetryTime(errorCount)` - exponential backoff (2^n minutes, max 60)
+  - `GetFailedExportsCountAsync()` - for admin dashboard
+  - `RetryFailedExportsAsync()` - manual retry (resets error count)
 
-- [ ] **5.2 Update export processor with retry wrapper**
-  - Try/catch around export execution
-  - Call retry service on failure
+- [x] **5.2 Update export processor with retry wrapper**
+  - Try/catch around export execution in `ExecuteExportsViaConnectorAsync`
+  - Automatic retry with backoff, marks as Failed after max retries
 
 ### Phase 6: Wire Up & Test
 
 **Goal**: Register services and write comprehensive tests.
 
-- [ ] **6.1 Update `JimApplication.cs`**
-  - Add `ExportEvaluation`, `ExportExecution`, `ExportPreview`, `ExportRetry` servers
+- [x] **6.1 Update `JimApplication.cs`**
+  - Added `ExportEvaluation`, `ExportExecution` servers
+  - Preview and Retry functionality integrated into `ExportExecutionServer`
 
-- [ ] **6.2 Write unit tests**
+- [x] **6.2 Write unit tests**
   - `ExportEvaluationTests.cs` - export rule evaluation, scoping, Q3 circular prevention
   - `ExportExecutionTests.cs` - two-pass execution, reference resolution, deferred refs
-  - `ScopingCriteriaTests.cs` - AND/OR logic, comparison types
-  - `ExportRetryTests.cs` - backoff calculation, max retries, failure marking
+  - `ScopingEvaluationTests.cs` - AND/OR logic, comparison types
+  - Retry logic tested within `ExportExecutionTests.cs`
 
 ### Implementation Dependencies
 
@@ -1087,17 +1094,16 @@ Phase 4         Phase 5                              Phase 6
 
 ### Key Files Reference
 
-| New File | Location | Purpose |
-|----------|----------|---------|
-| `ExportEvaluationServer.cs` | `JIM.Application/Servers/` | Evaluates export rules, creates PendingExports |
-| `ExportExecutionServer.cs` | `JIM.Application/Servers/` | Executes exports via connectors |
-| `ExportPreviewServer.cs` | `JIM.Application/Servers/` | Generates previews without persisting |
-| `ExportRetryService.cs` | `JIM.Application/Servers/` | Handles retry logic and failure states |
-| `SyncExportTaskProcessor.cs` | `JIM.Worker/Processors/` | Processes Export run profile |
-| `OutboundSyncRuleMappingProcessor.cs` | `JIM.Worker/Processors/` | Maps MVO→CSO attributes |
-| `ScopingCriteriaEvaluator.cs` | `JIM.Worker/Processors/` | Evaluates scoping criteria |
-| `DeferredReference.cs` | `JIM.Models/Transactional/` | Tracks unresolved references |
-| `ExportPreviewResult.cs` | `JIM.Models/Transactional/` | Preview results container |
+| File | Location | Purpose | Status |
+|------|----------|---------|--------|
+| `ExportEvaluationServer.cs` | `JIM.Application/Servers/` | Evaluates export rules, creates PendingExports | ✅ Implemented |
+| `ExportExecutionServer.cs` | `JIM.Application/Servers/` | Executes exports via connectors (includes retry logic) | ✅ Implemented |
+| `SyncPreviewServer.cs` | `JIM.Application/Servers/` | Generates full sync previews (CSO->MVO->exports) | ❌ Not implemented (Issue #288) |
+| `SyncExportTaskProcessor.cs` | `JIM.Worker/Processors/` | Processes Export run profile | ✅ Implemented |
+| `ScopingEvaluationServer.cs` | `JIM.Application/Servers/` | Evaluates scoping criteria (AND/OR logic) | ✅ Implemented |
+| `DeferredReference.cs` | `JIM.Models/Transactional/` | Tracks unresolved references | ✅ Implemented |
+| `SyncPreviewResult.cs` | `JIM.Models/Transactional/` | Full sync preview results container | ❌ Not implemented (Issue #288) |
+| `ExportExecutionResult.cs` | `JIM.Models/Transactional/` | Export execution result with stats | ✅ Implemented |
 
 ---
 
@@ -1135,4 +1141,9 @@ Phase 4         Phase 5                              Phase 6
 - Issue #121: Implement outbound sync
 - Issue #25: Pending Exports report feature
 - Issue #91: MV attribute priority
+- Issue #288: Sync Preview Mode (What-If Analysis)
 - Existing code: `SyncFullSyncTaskProcessor`, `PendingExport` model
+
+### Related Design Documents
+
+- [DRIFT_DETECTION_AND_ATTRIBUTE_PRIORITY.md](DRIFT_DETECTION_AND_ATTRIBUTE_PRIORITY.md) - Extends this design with drift detection (re-evaluating exports on inbound sync) and attribute priority (determining authoritative source for multi-contributor scenarios)

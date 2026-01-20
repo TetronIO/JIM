@@ -10,8 +10,11 @@
     4. Creates an infrastructure API key
     5. Runs the specified test scenario
 
+    When run without parameters, displays interactive menus to select a scenario
+    and template size using arrow keys.
+
 .PARAMETER Scenario
-    The test scenario to run. Default: "Scenario1-HRToIdentityDirectory"
+    The test scenario to run. If not specified, an interactive menu will be displayed.
     Available scenarios are in test/integration/scenarios/
 
 .PARAMETER Template
@@ -34,12 +37,12 @@
 .EXAMPLE
     ./Run-IntegrationTests.ps1
 
-    Runs the default scenario (Scenario1-HRToIdentityDirectory) with Nano template.
+    Displays interactive menus to select a scenario and template size.
 
 .EXAMPLE
     ./Run-IntegrationTests.ps1 -Template Small
 
-    Runs with a larger test data set.
+    Displays scenario menu, then runs with Small template (skips template menu).
 
 .EXAMPLE
     ./Run-IntegrationTests.ps1 -Step Joiner
@@ -64,7 +67,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [string]$Scenario = "Scenario1-HRToIdentityDirectory",
+    [string]$Scenario,
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
@@ -100,6 +103,260 @@ $NC = "$ESC[0m"
 # Script root
 $scriptRoot = $PSScriptRoot
 $repoRoot = (Get-Item $scriptRoot).Parent.Parent.FullName
+
+# Interactive scenario selection function
+function Show-ScenarioMenu {
+    # Discover available scenarios
+    $scenariosPath = Join-Path $scriptRoot "scenarios"
+    $scenarioFiles = Get-ChildItem $scenariosPath -Filter "Invoke-*.ps1" | Sort-Object Name
+
+    if ($scenarioFiles.Count -eq 0) {
+        Write-Host "${RED}No scenario scripts found in $scenariosPath${NC}"
+        exit 1
+    }
+
+    # Build scenario list with descriptions
+    $scenarios = @()
+    foreach ($file in $scenarioFiles) {
+        $scenarioName = $file.BaseName -replace '^Invoke-', ''
+
+        # Extract description from script comments
+        $description = ""
+        $content = Get-Content $file.FullName -TotalCount 20
+        foreach ($line in $content) {
+            if ($line -match '^\s*#\s*(.+)') {
+                $comment = $Matches[1].Trim()
+                if ($comment -and $comment -notmatch '^\.SYNOPSIS|^\.DESCRIPTION|^\.PARAMETER|^\.EXAMPLE|^<#|^#>') {
+                    $description = $comment
+                    break
+                }
+            }
+        }
+
+        if (-not $description) {
+            # Default descriptions based on scenario name
+            $description = switch -Wildcard ($scenarioName) {
+                "*Scenario1*" { "HR to Identity Directory synchronisation" }
+                "*Scenario2*" { "Cross-domain synchronisation (APAC ↔ EMEA)" }
+                "*Scenario3*" { "Global Address List (GAL) synchronisation" }
+                "*Scenario4*" { "Deletion rules and tombstone handling" }
+                "*Scenario5*" { "Matching rules and join logic" }
+                "*Scenario8*" { "Cross-domain entitlement synchronisation" }
+                default { "Integration test scenario" }
+            }
+        }
+
+        $scenarios += @{
+            Name = $scenarioName
+            Description = $description
+        }
+    }
+
+    $selectedIndex = 0
+    $exitMenu = $false
+
+    # Hide cursor
+    [Console]::CursorVisible = $false
+
+    try {
+        while (-not $exitMenu) {
+            Clear-Host
+
+            Write-Host ""
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host "${CYAN}  JIM Integration Test - Scenario Selection${NC}"
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host ""
+            Write-Host "${GRAY}Use ↑/↓ arrow keys to navigate, Enter to select, Esc to exit${NC}"
+            Write-Host ""
+
+            # Display menu options
+            for ($i = 0; $i -lt $scenarios.Count; $i++) {
+                $scenario = $scenarios[$i]
+
+                if ($i -eq $selectedIndex) {
+                    Write-Host "${GREEN}► $($scenario.Name)${NC}"
+                    Write-Host "${GRAY}  $($scenario.Description)${NC}"
+                }
+                else {
+                    Write-Host "  $($scenario.Name)"
+                    Write-Host "${GRAY}  $($scenario.Description)${NC}"
+                }
+                Write-Host ""
+            }
+
+            # Wait for key press
+            $key = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
+            switch ($key.VirtualKeyCode) {
+                38 { # Up arrow
+                    $selectedIndex = [Math]::Max(0, $selectedIndex - 1)
+                }
+                40 { # Down arrow
+                    $selectedIndex = [Math]::Min($scenarios.Count - 1, $selectedIndex + 1)
+                }
+                13 { # Enter
+                    $exitMenu = $true
+                }
+                27 { # Escape
+                    Write-Host ""
+                    Write-Host "${YELLOW}Cancelled by user${NC}"
+                    [Console]::CursorVisible = $true
+                    exit 0
+                }
+            }
+        }
+    }
+    finally {
+        # Restore cursor
+        [Console]::CursorVisible = $true
+    }
+
+    Clear-Host
+    return $scenarios[$selectedIndex].Name
+}
+
+# Interactive template selection function
+function Show-TemplateMenu {
+    # Define templates with descriptions
+    $templates = @(
+        @{
+            Name = "Nano"
+            Users = 3
+            Groups = 1
+            Description = "Minimal data for quick iteration"
+            Time = "~10 sec"
+        }
+        @{
+            Name = "Micro"
+            Users = 10
+            Groups = 3
+            Description = "Quick smoke tests"
+            Time = "~30 sec"
+        }
+        @{
+            Name = "Small"
+            Users = 100
+            Groups = 20
+            Description = "Small business scenarios"
+            Time = "~2 min"
+        }
+        @{
+            Name = "Medium"
+            Users = 1000
+            Groups = 100
+            Description = "Medium enterprise"
+            Time = "~5 min"
+        }
+        @{
+            Name = "MediumLarge"
+            Users = 5000
+            Groups = 250
+            Description = "Growing enterprise"
+            Time = "~10 min"
+        }
+        @{
+            Name = "Large"
+            Users = 10000
+            Groups = 500
+            Description = "Large enterprise"
+            Time = "~15 min"
+        }
+        @{
+            Name = "XLarge"
+            Users = 100000
+            Groups = 2000
+            Description = "Very large enterprise"
+            Time = "~1 hour"
+        }
+        @{
+            Name = "XXLarge"
+            Users = 1000000
+            Groups = 10000
+            Description = "Stress testing"
+            Time = "~4 hours"
+        }
+    )
+
+    $selectedIndex = 0
+    $exitMenu = $false
+
+    # Hide cursor
+    [Console]::CursorVisible = $false
+
+    try {
+        while (-not $exitMenu) {
+            Clear-Host
+
+            Write-Host ""
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host "${CYAN}  JIM Integration Test - Template Size Selection${NC}"
+            Write-Host "${CYAN}$("=" * 70)${NC}"
+            Write-Host ""
+            Write-Host "${GRAY}Use ↑/↓ arrow keys to navigate, Enter to select, Esc to exit${NC}"
+            Write-Host ""
+
+            # Display menu options
+            for ($i = 0; $i -lt $templates.Count; $i++) {
+                $template = $templates[$i]
+                $userCount = $template.Users.ToString("N0")
+                $groupCount = $template.Groups.ToString("N0")
+                $stats = "$userCount users, $groupCount groups"
+
+                if ($i -eq $selectedIndex) {
+                    Write-Host "${GREEN}► $($template.Name)${NC} ${GRAY}($stats)${NC}"
+                    Write-Host "${GRAY}  $($template.Description) - $($template.Time)${NC}"
+                }
+                else {
+                    Write-Host "  $($template.Name) ${GRAY}($stats)${NC}"
+                    Write-Host "${GRAY}  $($template.Description) - $($template.Time)${NC}"
+                }
+                Write-Host ""
+            }
+
+            # Wait for key press
+            $key = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
+            switch ($key.VirtualKeyCode) {
+                38 { # Up arrow
+                    $selectedIndex = [Math]::Max(0, $selectedIndex - 1)
+                }
+                40 { # Down arrow
+                    $selectedIndex = [Math]::Min($templates.Count - 1, $selectedIndex + 1)
+                }
+                13 { # Enter
+                    $exitMenu = $true
+                }
+                27 { # Escape
+                    Write-Host ""
+                    Write-Host "${YELLOW}Cancelled by user${NC}"
+                    [Console]::CursorVisible = $true
+                    exit 0
+                }
+            }
+        }
+    }
+    finally {
+        # Restore cursor
+        [Console]::CursorVisible = $true
+    }
+
+    Clear-Host
+    return $templates[$selectedIndex].Name
+}
+
+# Track if user explicitly set Template parameter
+$TemplateWasExplicitlySet = $PSBoundParameters.ContainsKey('Template')
+
+# If no scenario specified, show interactive menu
+if (-not $Scenario) {
+    $Scenario = Show-ScenarioMenu
+
+    # Also show template menu if Template wasn't explicitly provided
+    if (-not $TemplateWasExplicitlySet) {
+        $Template = Show-TemplateMenu
+    }
+}
 
 function Write-Banner {
     param([string]$Title)
@@ -161,32 +418,86 @@ Set-Location $repoRoot
 $step0Start = Get-Date
 Write-Section "Step 0: Checking Samba AD Images"
 
-# Check if the pre-built Samba AD image exists locally
+$buildScript = Join-Path $scriptRoot "docker" "samba-ad-prebuilt" "Build-SambaImages.ps1"
+
+# Check if the pre-built Samba AD primary image exists locally
 $sambaImageTag = "ghcr.io/tetronio/jim-samba-ad:primary"
 $imageExists = docker images -q $sambaImageTag 2>$null
 
 if (-not $imageExists) {
     Write-Warning "Pre-built Samba AD image not found locally: $sambaImageTag"
-    Write-Step "Building Samba AD image (this takes ~30 seconds, but only needs to be done once)..."
+    Write-Step "Building Samba AD Primary image (this takes ~2-3 minutes, but only needs to be done once)..."
 
-    $buildScript = Join-Path $scriptRoot "docker" "samba-ad-prebuilt" "Build-SambaImages.ps1"
     if (-not (Test-Path $buildScript)) {
         Write-Failure "Build script not found: $buildScript"
         exit 1
     }
 
-    # Build only the Primary image (that's all we need for most scenarios)
     & $buildScript -Images Primary
     if ($LASTEXITCODE -ne 0) {
-        Write-Failure "Failed to build Samba AD image"
+        Write-Failure "Failed to build Samba AD Primary image"
         exit 1
     }
 
-    Write-Success "Samba AD image built successfully"
+    Write-Success "Samba AD Primary image built successfully"
 }
 else {
-    Write-Success "Samba AD image found: $sambaImageTag"
+    Write-Success "Samba AD Primary image found: $sambaImageTag"
 }
+
+# For Scenario 2 and Scenario 8, also check for Source and Target images
+if ($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") {
+    # Check Source image
+    $sourceImageTag = "ghcr.io/tetronio/jim-samba-ad:source"
+    $sourceExists = docker images -q $sourceImageTag 2>$null
+
+    if (-not $sourceExists) {
+        Write-Warning "Pre-built Samba AD Source image not found locally: $sourceImageTag"
+        Write-Step "Building Samba AD Source image (this takes ~2-3 minutes, but only needs to be done once)..."
+
+        if (-not (Test-Path $buildScript)) {
+            Write-Failure "Build script not found: $buildScript"
+            exit 1
+        }
+
+        & $buildScript -Images Source
+        if ($LASTEXITCODE -ne 0) {
+            Write-Failure "Failed to build Samba AD Source image"
+            exit 1
+        }
+
+        Write-Success "Samba AD Source image built successfully"
+    }
+    else {
+        Write-Success "Samba AD Source image found: $sourceImageTag"
+    }
+
+    # Check Target image
+    $targetImageTag = "ghcr.io/tetronio/jim-samba-ad:target"
+    $targetExists = docker images -q $targetImageTag 2>$null
+
+    if (-not $targetExists) {
+        Write-Warning "Pre-built Samba AD Target image not found locally: $targetImageTag"
+        Write-Step "Building Samba AD Target image (this takes ~2-3 minutes, but only needs to be done once)..."
+
+        if (-not (Test-Path $buildScript)) {
+            Write-Failure "Build script not found: $buildScript"
+            exit 1
+        }
+
+        & $buildScript -Images Target
+        if ($LASTEXITCODE -ne 0) {
+            Write-Failure "Failed to build Samba AD Target image"
+            exit 1
+        }
+
+        Write-Success "Samba AD Target image built successfully"
+    }
+    else {
+        Write-Success "Samba AD Target image found: $targetImageTag"
+    }
+}
+
 $timings["0. Check Samba Image"] = (Get-Date) - $step0Start
 
 # Step 1: Reset (unless skipped)
@@ -196,7 +507,9 @@ if (-not $SkipReset) {
 
     Write-Step "Stopping all containers and removing volumes..."
     docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down -v 2>&1 | Out-Null
-    docker compose -f docker-compose.integration-tests.yml down -v 2>&1 | Out-Null
+    # Use --profile to stop containers from all scenarios (scenario2, scenario8, etc.)
+    # Without specifying profiles, containers started with profiles won't be stopped
+    docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down -v 2>&1 | Out-Null
 
     # Also remove any orphan integration test volumes that might have different names
     # This ensures a completely clean state even if volume naming has changed
@@ -276,6 +589,18 @@ if ($Scenario -like "*Scenario2*") {
     }
     Write-Success "Samba AD Source and Target started"
 }
+
+# Start Scenario 8 containers if running Scenario 8
+if ($Scenario -like "*Scenario8*") {
+    Write-Step "Starting Samba AD (Source and Target for Scenario 8)..."
+    $scenario8Result = docker compose -f docker-compose.integration-tests.yml --profile scenario8 up -d 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Failure "Failed to start Scenario 8 Samba AD containers"
+        Write-Host "${GRAY}$scenario8Result${NC}"
+        exit 1
+    }
+    Write-Success "Samba AD Source and Target started for Scenario 8"
+}
 $timings["3. Start Services"] = (Get-Date) - $step3Start
 
 # Step 4: Wait for services
@@ -298,8 +623,8 @@ else {
     Start-Sleep -Seconds 60
 }
 
-# Wait for Scenario 2 containers if applicable
-if ($Scenario -like "*Scenario2*") {
+# Wait for Scenario 2 or Scenario 8 containers if applicable
+if ($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") {
     Write-Step "Waiting for Samba AD Source to be ready..."
     $sourceReady = $false
     $elapsed = 0

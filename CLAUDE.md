@@ -4,13 +4,15 @@
 
 ## ⚠️ CRITICAL REQUIREMENTS ⚠️
 
-**YOU MUST BUILD AND TEST BEFORE EVERY COMMIT AND PR:**
+**YOU MUST BUILD AND TEST BEFORE EVERY COMMIT AND PR (for .NET code):**
 
 1. **ALWAYS** run `dotnet build JIM.sln` - Build must succeed with zero errors
 2. **ALWAYS** run `dotnet test JIM.sln` - All tests must pass
 3. **NEVER** commit code that hasn't been built and tested locally
 4. **NEVER** create a PR without verifying build and tests pass
 5. **NEVER** assume tests will pass without running them
+
+**EXCEPTION: Scripts (.ps1, .sh, etc.) do not require dotnet build/test.** Only .NET code changes (C#, Razor, etc.) require running the build pipeline.
 
 **YOU MUST WRITE UNIT TESTS FOR NEW FUNCTIONALITY:**
 
@@ -47,6 +49,66 @@ If you cannot build/test locally due to environment constraints, you MUST:
 - Mark the PR as draft
 - Request manual review and testing before merge
 
+## ⚠️ SYNCHRONISATION INTEGRITY REQUIREMENTS ⚠️
+
+**SYNCHRONISATION INTEGRITY IS CRITICAL - PRIORITISE IT ABOVE ALL ELSE:**
+
+Synchronisation operations are the core of JIM. Data integrity and reliability are paramount. Customers depend on JIM to synchronise their identity data accurately without corruption or data loss.
+
+**Error Handling Philosophy:**
+1. **Fast/Hard Failures**: Better to stop and report an error than continue with corrupted state
+2. **Comprehensive Reporting**: ALL errors must be reported via RPEIs/Activities - no silent failures
+3. **Defensive Programming**: Anticipate edge cases (duplicates, missing data, type mismatches) and handle explicitly
+4. **Trust and Confidence**: Customers must be able to trust that JIM won't silently corrupt their data
+
+**Error Handling Requirements:**
+
+1. **Query Operations Must Be Explicit About Multiplicity:**
+   - NEVER use `First()` or `FirstOrDefault()` when you expect exactly one result and would not know what to do with multiple matches
+   - NEVER use `Single()` or `SingleOrDefault()` in sync operations without a try-catch that logs and fails the operation
+   - If a query might return multiple results, you MUST explicitly handle that case:
+     - Either validate that only one result exists before calling Single/SingleOrDefault
+     - Or use First/FirstOrDefault and log a warning about unexpected duplicates
+     - Or catch the exception and fail the activity with detailed error information
+   - Example: `GetConnectedSystemObjectByAttributeAsync()` should have caught and logged the "multiple matches" scenario
+
+2. **All Sync Operation Code Must Be Wrapped in Try-Catch:**
+   - Import, sync, and export operations must catch ALL exceptions
+   - Exceptions must be logged to RPEI.ErrorType and RPEI.ErrorMessage
+   - After catching, evaluate: should this fail the entire activity or just mark this object as errored?
+   - When in doubt, fail fast rather than continue with unknown state
+
+3. **Data Integrity Checks Before Operations:**
+   - Before creating/updating CSOs, verify no duplicates exist for the same external ID
+   - Before creating/updating MVOs, verify the connector space is in expected state
+   - Before exporting, verify reference resolution succeeded
+   - Log findings - silence is the enemy of debugging
+
+4. **Activity Completion Logic:**
+   - Activities with any UnhandledError RPEI items should fail the entire activity
+   - Do not treat UnhandledError the same as other error types - it indicates code/logic problems
+   - When processing multiple objects, continue collecting errors for all objects, then fail if any UnhandledErrors occurred
+   - Never silently skip objects due to exceptions - always fail the activity
+
+5. **Logging for Sync Operations:**
+   - Log summary statistics at the end of every batch operation (imports, syncs, exports)
+   - Include: Total objects, successfully processed, errored, and categorise error types
+   - For integrity issues (duplicates, mismatches), log CSO/MVO IDs so admins can investigate
+   - Use appropriate log levels: Debug for normal flow, Warning for unexpected but handled cases, Error for failures
+
+6. **Testing Edge Cases:**
+   - Unit tests MUST cover: normal case, empty results, single result, multiple results
+   - Unit tests MUST cover: null values, type mismatches, corrupt data states
+   - Integration tests MUST verify error reporting when edge cases occur
+   - Never assume data will always be in expected state
+
+7. **Code Review Focus for Sync Code:**
+   - Pay special attention to database queries and their cardinality assumptions
+   - Look for unhandled exceptions in sync loops
+   - Verify error handling logs include enough context for debugging
+   - Question whether a catch-all exception handler should fail the operation or continue
+   - Ask: "Could a customer's data be corrupted if this exception occurs?"
+
 ## Scripting
 
 **IMPORTANT: Use PowerShell for ALL scripts:**
@@ -74,17 +136,19 @@ If you cannot build/test locally due to environment constraints, you MUST:
 - `jim` - List all available jim aliases
 - `jim-compile` - Build entire solution (dotnet build)
 - `jim-test` - Run all tests
-- `jim-db` - Start PostgreSQL (for local debugging)
-- `jim-db-stop` - Stop PostgreSQL
+- `jim-db` - Start PostgreSQL + Adminer (for local debugging)
+- `jim-db-stop` - Stop PostgreSQL + Adminer
 - `jim-migrate` - Apply migrations
 
 **Docker Stack Management:**
-- `jim-stack` - Start Docker stack (no build, uses existing images)
+- `jim-stack` - Start Docker stack (no dev tools, production-like)
+- `jim-stack-dev` - Start Docker stack + Adminer
 - `jim-stack-logs` - View Docker stack logs
 - `jim-stack-down` - Stop Docker stack
 
 **Docker Builds (rebuild and start services):**
-- `jim-build` - Build all services + start
+- `jim-build` - Build all services + start (no dev tools)
+- `jim-build-dev` - Build all services + start + Adminer
 - `jim-build-web` - Build jim.web + start
 - `jim-build-worker` - Build jim.worker + start
 - `jim-build-scheduler` - Build jim.scheduler + start
@@ -93,8 +157,8 @@ If you cannot build/test locally due to environment constraints, you MUST:
 - `jim-reset` - Reset JIM (delete database & logs volumes)
 
 **Docker (Manual Commands):**
-- `docker compose -f db.yml up -d` - Start database only (same as jim-db)
-- `docker compose -f db.yml down` - Stop database
+- `docker compose -f db.yml up -d` - Start database + Adminer (same as jim-db)
+- `docker compose -f db.yml down` - Stop database + Adminer
 - `docker compose logs [service]` - View service logs
 
 **IMPORTANT - Rebuilding Containers After Code Changes:**
@@ -102,7 +166,7 @@ When running the Docker stack and you make code changes to JIM.Web, JIM.Worker, 
 - `jim-build-web` - Rebuild and restart jim.web service
 - `jim-build-worker` - Rebuild and restart jim.worker service
 - `jim-build-scheduler` - Rebuild and restart jim.scheduler service
-- `jim-build-stack` - Rebuild and restart all services
+- `jim-build-dev` - Rebuild and restart all services + Adminer
 
 Blazor pages, API controllers, and other compiled code require container rebuilds. Simply refreshing the browser will not show changes.
 
@@ -121,6 +185,61 @@ Blazor pages, API controllers, and other compiled code require container rebuild
 - Database repositories: `JIM.PostgresData/`
 - Connectors: `JIM.Connectors/` or new connector project
 - Tests: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `JIM.Worker.Tests/`
+
+## ASCII Diagrams
+
+When creating ASCII diagrams in documentation or code comments, use only reliably monospaced characters to ensure proper alignment across all fonts and terminals.
+
+### Arrows
+
+| Use         | Instead of    | Example                        |
+|-------------|---------------|--------------------------------|
+| `->` `-->`  | `→` `⟶` `>`   | `[Box A] --> [Box B]`          |
+| `<-` `<--`  | `←` `⟵` `<`   | `[Box A] <-- [Box B]`          |
+| `<->` `<-->` | `↔` `⟷`      | `[Box A] <--> [Box B]`         |
+| `v`         | `↓` `▼`       | Downward flow indicator        |
+| `^`         | `↑` `▲`       | Upward flow indicator          |
+
+### Box Drawing
+
+| Use | Instead of | Purpose         |
+|-----|------------|-----------------|
+| `+` | `┌` `┐` `└` `┘` `├` `┤` `┬` `┴` `┼` | Corners and junctions |
+| `-` | `─` `═`    | Horizontal lines |
+| `|` | `│` `║`    | Vertical lines   |
+
+### Bullet Points in Diagrams
+
+| Use | Instead of | Example           |
+|-----|------------|-------------------|
+| `-` | `•` `*`    | `- List item`     |
+
+### Example Diagram
+
+```
++-------------------+      +----------------+      +-------------------+
+|   Source Systems  |      |    Metaverse   |      |    Target Systems |
+|                   |----->|                |----->|                   |
+|  - HR System      |      |  - Identity    |      |  - Active Dir     |
+|  - Badge System   |      |    Objects     |      |  - ServiceNow     |
++-------------------+      +----------------+      +-------------------+
+         |                         |                         |
+         v                         v                         v
+     IMPORT                    SYNC                      EXPORT
+```
+
+### Workflow Diagrams
+
+```
++---------------+
+|   Step One    |  Description of step
++-------+-------+
+        |
+        v
++---------------+
+|   Step Two    |  Description of step
++---------------+
+```
 
 ## Code Style & Conventions
 
@@ -225,6 +344,14 @@ public async Task GetObjectAsync_WithValidId_ReturnsObject()
 - To diagnose issues, add temporary `Console.WriteLine()` statements to trace execution and inspect variable values
 - Test output appears in the test results under "Standard Output Messages"
 - **IMPORTANT**: Remove all debug statements before committing
+
+**⚠️ CRITICAL: EF Core In-Memory Database Limitation:**
+- Unit and workflow tests use EF Core's in-memory database which **auto-tracks navigation properties**
+- This MASKS bugs where `.Include()` statements are missing from repository queries
+- **Integration tests are the ONLY reliable way to verify navigation property loading**
+- When modifying repository queries, ALWAYS run integration tests to verify `.Include()` chains are correct
+- Add defensive null checks with logging for navigation properties to catch missing `.Include()` at runtime
+- See `docs/TESTING_STRATEGY.md` for full details and real-world example (Drift Detection bug January 2026)
 
 ## Design Principles
 
@@ -342,9 +469,9 @@ var systems = await jim.ConnectedSystems.GetAllAsync();
 4. Services: Web + API (https://localhost:7000), Swagger at `/api/swagger`
 
 **Workflow 2 - Full Docker Stack:**
-1. Start all services: `jim-stack`
+1. Start all services: `jim-stack` (or `jim-stack-dev` for Adminer)
 2. Access containerized services
-3. Services: Web + API (http://localhost:5200), Swagger at `/api/swagger`
+3. Services: Web + API (http://localhost:5200), Swagger at `/api/swagger`, Adminer at http://localhost:8080 (if using jim-stack-dev)
 
 **Use Workflow 1** for active development and debugging.
 **Use Workflow 2** for integration testing or production-like environment.
@@ -359,8 +486,11 @@ Instead, use the main integration test runner which handles setup, environment m
 # From repository root, run in PowerShell (not bash/zsh)
 cd /workspaces/JIM
 
-# Run the complete test suite (Scenario 1 with default Nano template)
+# Interactive menu - select scenario with arrow keys (↑/↓) and press Enter
 ./test/integration/Run-IntegrationTests.ps1
+
+# Run a specific scenario directly
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory
 
 # Run with a specific template size (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
 ./test/integration/Run-IntegrationTests.ps1 -Template Small
@@ -427,6 +557,24 @@ cd /workspaces/JIM
 - Verify PostgreSQL running: `docker compose ps`
 - Check `.env` connection string
 - Apply migrations if needed
+
+**Sync Activities Failing with UnhandledError:**
+- UnhandledError items in Activities indicate code/logic bugs, not data problems
+- Check worker logs for the full exception stack trace using: `docker compose logs jim.worker --tail=1000 | grep -A 5 "Unhandled.*sync error"`
+- Common causes:
+  - Query returning unexpected number of results (e.g., `SingleOrDefaultAsync` with duplicates) → Use explicit cardinality checks or try-catch
+  - Missing or null data where code expected values → Add defensive null checks before operations
+  - Type casting errors or invalid data states → Add data validation before operations
+- DO NOT silently ignore UnhandledErrors - they indicate data integrity risk
+- Investigate root cause before retrying sync
+- Example: "Sequence contains more than one element" → Duplicates exist, verify uniqueness constraint or add duplicate detection
+
+**Sync Statistics Not What Expected:**
+- Check log for summary statistics at end of import/sync/export (look for "SUMMARY - Total objects")
+- Verify Run Profile is selecting correct partition/container
+- Verify sync rules are correctly scoped to object types
+- Check for DuplicateObject errors - indicates deduplication is working
+- If all objects errored but Activity marked complete → Bug in error handling, report to dev
 
 ## Workflow Best Practices
 

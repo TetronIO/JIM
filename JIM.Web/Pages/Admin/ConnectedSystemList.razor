@@ -49,19 +49,17 @@
         <MudTd DataLabel="Pending Exports (%)">@context.PendingExportObjectsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.PendingExportObjectsCount))</MudTd>
         <MudTd DataLabel="Connector">@context.ConnectorName</MudTd>
         <MudTd DataLabel="Created">
-            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Bottom">
+            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                 @context.Created.ToLocalTime().ToRelativeTime()
             </MudTooltip>
         </MudTd>
             <MudTd DataLabel="Action">
-                <MudButton Href="@Utilities.GetConnectedSystemObjectsHref(context)"
-                           Variant="Variant.Filled"
-                           StartIcon="@Icons.Material.Filled.List"
-                           Color="Color.Default"
-                           Size="Size.Small"
-                           DropShadow="false">
-                    Objects
-                </MudButton>
+                <MudTooltip Text="View Objects" Arrow="true" Placement="Placement.Top">
+                    <MudIconButton Href="@Utilities.GetConnectedSystemObjectsHref(context)"
+                                   Icon="@Icons.Material.Outlined.List"
+                                   Variant="Variant.Filled"
+                                   Size="Size.Small" />
+                </MudTooltip>
             </MudTd>
     </RowTemplate>
     <NoRecordsContent>

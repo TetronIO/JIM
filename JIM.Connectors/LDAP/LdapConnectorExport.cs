@@ -65,21 +65,9 @@ internal class LdapConnectorExport
                 _logger.Error(ex, "LdapConnectorExport.Execute: Failed to process pending export {Id} ({ChangeType})",
                     pendingExport.Id, pendingExport.ChangeType);
 
-                pendingExport.ErrorCount++;
-                pendingExport.LastAttemptedAt = DateTime.UtcNow;
-                pendingExport.LastErrorMessage = ex.Message;
-
-                // Calculate next retry time using exponential backoff
-                var backoffMinutes = Math.Pow(2, pendingExport.ErrorCount);
-                pendingExport.NextRetryAt = DateTime.UtcNow.AddMinutes(backoffMinutes);
-
-                if (pendingExport.ErrorCount >= pendingExport.MaxRetries)
-                {
-                    pendingExport.Status = PendingExportStatus.Failed;
-                    _logger.Warning("LdapConnectorExport.Execute: Pending export {Id} has exceeded max retries and is now Failed",
-                        pendingExport.Id);
-                }
-
+                // Return failure result - ExportExecutionServer is responsible for updating
+                // ErrorCount, Status, and retry timing (Q6 decision). The connector should
+                // only report success or failure via ExportResult.
                 results.Add(ExportResult.Failed(ex.Message));
             }
         }
@@ -167,7 +155,13 @@ internal class LdapConnectorExport
         var response = (AddResponse)_connection.SendRequest(addRequest);
         if (response.ResultCode != ResultCode.Success)
         {
-            throw new LdapException((int)response.ResultCode, response.ErrorMessage);
+            // Build a more descriptive error message that includes the DN and attributes being added
+            var attrNames = string.Join(", ", addRequest.Attributes.Cast<DirectoryAttribute>().Select(a => $"'{a.Name}'"));
+            var errorDetail = $"LDAP add failed for DN '{dn}'. " +
+                $"Attributes: {attrNames}. " +
+                $"LDAP error ({(int)response.ResultCode}): {response.ErrorMessage}";
+
+            throw new LdapException((int)response.ResultCode, errorDetail);
         }
 
         _logger.Information("LdapConnectorExport.ProcessCreate: Successfully created object at '{Dn}'", dn);
@@ -282,7 +276,27 @@ internal class LdapConnectorExport
         var response = (ModifyResponse)_connection.SendRequest(modifyRequest);
         if (response.ResultCode != ResultCode.Success)
         {
-            throw new LdapException((int)response.ResultCode, response.ErrorMessage);
+            // Handle "attribute or value exists" error gracefully for Add operations.
+            // This can happen when trying to add a member that already exists in a group.
+            // LDAP error code 20 = LDAP_TYPE_OR_VALUE_EXISTS
+            // Since the desired state (member is in group) is already achieved, treat as success.
+            if (response.ResultCode == ResultCode.AttributeOrValueExists)
+            {
+                _logger.Warning("LdapConnectorExport.ProcessUpdate: Some attribute values already exist at '{Dn}'. " +
+                    "This typically means a group member was already present. Treating as success. Error: {Error}",
+                    workingDn, response.ErrorMessage);
+                return wasRenamed ? ExportResult.Succeeded(null, workingDn) : ExportResult.Succeeded();
+            }
+
+            // Build a more descriptive error message that includes the attributes being modified
+            var modifiedAttrs = string.Join(", ", modifyRequest.Modifications
+                .Cast<DirectoryAttributeModification>()
+                .Select(m => $"'{m.Name}' ({m.Operation})"));
+            var errorDetail = $"LDAP modify failed for DN '{workingDn}'. " +
+                $"Modified attributes: {modifiedAttrs}. " +
+                $"LDAP error ({(int)response.ResultCode}): {response.ErrorMessage}";
+
+            throw new LdapException((int)response.ResultCode, errorDetail);
         }
 
         _logger.Information("LdapConnectorExport.ProcessUpdate: Successfully updated object at '{Dn}' with {Count} modifications",

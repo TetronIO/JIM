@@ -5,16 +5,18 @@
 @using JIM.Models.Security
 @using JIM.Models.Utility
 @using JIM.Utilities
+@using JIM.Web.Services
 @using Humanizer
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
+@inject IUserPreferenceService PreferenceService
 
 <PageTitle>API Key: @_apiKey?.Name</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">API Key:</span> @_apiKey?.Name</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-@if (_apiKey != null)
+@if (_apiKey != null && _preferencesLoaded)
 {
     <MudText Typo="Typo.h5" Class="mt-5">Details</MudText>
     <MudPaper Class="pa-5 mt-3" Outlined="true">
@@ -126,7 +128,7 @@
         All activities initiated by this API key.
     </MudText>
 
-    <MudTable @ref="_table" T="Activity" ServerData="ServerReload" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
+    <MudTable @ref="_table" T="Activity" ServerData="ServerReload" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
         Class="mt-3" Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer" Loading="@_loading"
         LoadingProgressColor="Color.Primary">
         <ToolBarContent>
@@ -207,6 +209,8 @@ else if (!_loading)
     private MudTable<Activity>? _table;
     private string _searchString = "";
     private bool _loading = true;
+    private int _rowsPerPage = 10;
+    private bool _preferencesLoaded;
 
     private List<BreadcrumbItem> _breadcrumbs = new();
 
@@ -223,6 +227,30 @@ else if (!_loading)
             new("API Keys", href: "/admin/apikeys"),
             new(_apiKey?.Name ?? "Not Found", href: null, disabled: true)
         };
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_preferencesLoaded)
+        {
+            try
+            {
+                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
+                _rowsPerPage = preferredSize;
+                _preferencesLoaded = true;
+                StateHasChanged(); // Re-render to show the table now that preference is loaded
+            }
+            catch
+            {
+                // JS interop not yet available, will retry on next render
+            }
+        }
+    }
+
+    private async Task OnRowsPerPageChanged(int newSize)
+    {
+        _rowsPerPage = newSize;
+        await PreferenceService.SetRowsPerPageAsync(newSize);
     }
 
     private async Task<TableData<Activity>> ServerReload(TableState state, CancellationToken token)

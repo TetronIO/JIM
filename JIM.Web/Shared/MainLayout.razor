@@ -24,45 +24,24 @@
 
             <NavMenu DrawerOpen="@IsDrawerOpen"/>
 
-            <div class="@(IsDrawerOpen ? "jim-drawer-container" : "jim-drawer-container-small") mud-text-secondary">
-                @if (IsDrawerOpen)
-                {
-                    <MudButton
-                        Variant="Variant.Filled"
-                        StartIcon="@(IsDrawerPinned ? Icons.Material.Filled.PushPin : Icons.Material.Outlined.PushPin)"
-                        FullWidth="true"
-                        DropShadow="false"
-                        OnClick="@ToggleDrawerPinned">
-                        @(IsDrawerPinned ? "Unpin" : "Pin") menu
-                    </MudButton>
-                    <MudButton
-                        Variant="Variant.Filled"
-                        StartIcon="@(IsDarkMode  ? Icons.Material.Filled.WbSunny : Icons.Material.Filled.DarkMode)"
-                        FullWidth="true"
-                        DropShadow="false"
-                        Class="mt-2"
-                        OnClick="@(() => IsDarkMode = !IsDarkMode)">
-                        @(IsDarkMode ? "Light" : "Dark") mode
-                    </MudButton>
-                }
-                else
-                {
-                    <MudTooltip Text="@(IsDrawerPinned ? UnpinMenuText : PinMenuText)">
-                        <MudToggleIconButton Toggled="@IsDrawerPinned"
-                                             ToggledChanged="@(_ => ToggleDrawerPinned())"
-                                             Icon="@Icons.Material.Outlined.PushPin"
-                                             Color="@Color.Inherit"
-                                             ToggledIcon="@Icons.Material.Filled.PushPin"
-                                             ToggledColor="@Color.Inherit"/>
-                    </MudTooltip>
-                    <MudTooltip Text="@(IsDarkMode ? LightModeText : DarkModeText)">
-                        <MudToggleIconButton @bind-Toggled="@IsDarkMode"
-                                             Icon="@Icons.Material.Filled.WbSunny"
-                                             Color="@Color.Inherit"
-                                             ToggledIcon="@Icons.Material.Filled.DarkMode"
-                                             ToggledColor="@Color.Inherit"/>
-                    </MudTooltip>
-                }
+            <div class="jim-drawer-footer mud-text-secondary">
+                <MudTooltip Text="@(IsDrawerPinned ? UnpinMenuText : PinMenuText)" Arrow="true" Placement="Placement.Top">
+                    <MudToggleIconButton Toggled="@IsDrawerPinned"
+                                         ToggledChanged="@(_ => ToggleDrawerPinned())"
+                                         Icon="@Icons.Material.Outlined.PushPin"
+                                         Color="@Color.Inherit"
+                                         ToggledIcon="@Icons.Material.Filled.PushPin"
+                                         ToggledColor="@Color.Inherit"
+                                         Size="@Size.Small"/>
+                </MudTooltip>
+                <MudTooltip Text="@(IsDarkMode ? LightModeText : DarkModeText)" Arrow="true" Placement="Placement.Top">
+                    <MudToggleIconButton @bind-Toggled="@IsDarkMode"
+                                         Icon="@Icons.Material.Filled.WbSunny"
+                                         Color="@Color.Inherit"
+                                         ToggledIcon="@Icons.Material.Filled.DarkMode"
+                                         ToggledColor="@Color.Inherit"
+                                         Size="@Size.Small"/>
+                </MudTooltip>
             </div>
 
             

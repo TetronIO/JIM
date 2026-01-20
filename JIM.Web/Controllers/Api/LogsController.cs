@@ -68,8 +68,8 @@ public class LogsController(ILogger<LogsController> logger, LogReaderService log
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetLogEntriesAsync([FromQuery] LogQueryRequest request)
     {
-        _logger.LogTrace("Requested log entries (Service: {Service}, Date: {Date}, MinLevel: {MinLevel}, Search: {Search})",
-            request.Service, request.Date, request.MinLevel, request.Search);
+        _logger.LogTrace("Requested log entries (Service: {Service}, Date: {Date}, Levels: {Levels}, Search: {Search})",
+            request.Service, request.Date, request.Levels != null ? string.Join(",", request.Levels) : "all", request.Search);
 
         // Clamp limit to reasonable bounds
         var limit = Math.Clamp(request.Limit, 1, 5000);
@@ -78,7 +78,7 @@ public class LogsController(ILogger<LogsController> logger, LogReaderService log
         var entries = await _logReaderService.GetLogEntriesAsync(
             service: request.Service,
             date: request.Date,
-            minLevel: request.MinLevel,
+            levels: request.Levels,
             search: request.Search,
             limit: limit,
             offset: offset);

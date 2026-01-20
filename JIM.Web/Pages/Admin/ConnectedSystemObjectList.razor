@@ -6,9 +6,11 @@
 @using JIM.Models.Tasking
 @using JIM.Models.Utility
 @using JIM.Utilities
+@using JIM.Web.Services
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
+@inject IUserPreferenceService PreferenceService
 
 <PageTitle>Connected System Objects: @_connectedSystemHeader?.Name</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System Objects:</span> @_connectedSystemHeader?.Name</MudText>
@@ -18,7 +20,7 @@
     or where changes from the system are staged before being committed to the Metaverse within JIM.
 </MudText>
 
-@if (_connectedSystemHeader != null)
+@if (_connectedSystemHeader != null && _preferencesLoaded)
 {
     @* Status Filter Chips with Options Menu *@
     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-4 mb-2">Filter by status:</MudText>
@@ -45,6 +47,8 @@
     <MudTable @ref="_table"
               T="ConnectedSystemObjectHeader"
               ServerData="ServerReload"
+              RowsPerPage="@_rowsPerPage"
+              RowsPerPageChanged="OnRowsPerPageChanged"
               Hover="true"
               Dense="true"
               Breakpoint="Breakpoint.Sm"
@@ -124,7 +128,7 @@
             <MudTd DataLabel="External Id">
                 @if (!string.IsNullOrEmpty(context.PendingExternalId))
                 {
-                    <MudTooltip Text="Pending export - not yet confirmed">
+                    <MudTooltip Text="Pending export - not yet confirmed" Arrow="true" Placement="Placement.Top">
                         <MudText Typo="Typo.body2" Color="Color.Info">@context.PendingExternalId</MudText>
                     </MudTooltip>
                 }
@@ -142,7 +146,7 @@
                     }
                     else if (!string.IsNullOrEmpty(context.PendingSecondaryExternalId))
                     {
-                        <MudTooltip Text="Pending export - not yet confirmed">
+                        <MudTooltip Text="Pending export - not yet confirmed" Arrow="true" Placement="Placement.Top">
                             <MudText Typo="Typo.body2" Color="Color.Info">@context.PendingSecondaryExternalId</MudText>
                         </MudTooltip>
                     }
@@ -155,21 +159,21 @@
                 }
                 else if (!string.IsNullOrEmpty(context.PendingDisplayName))
                 {
-                    <MudTooltip Text="Pending export - not yet confirmed">
+                    <MudTooltip Text="Pending export - not yet confirmed" Arrow="true" Placement="Placement.Top">
                         <MudText Typo="Typo.body2" Color="Color.Info">@context.PendingDisplayName</MudText>
                     </MudTooltip>
                 }
             </MudTd>
             <MudTd DataLabel="Type">@context.TypeName</MudTd>
             <MudTd DataLabel="Created">
-                <MudTooltip Text="@context.Created.ToString("O")">
+                <MudTooltip Text="@context.Created.ToString("O")" Arrow="true" Placement="Placement.Top">
                     <MudText Typo="Typo.body2">@context.Created.ToLocalTime().ToRelativeTime()</MudText>
                 </MudTooltip>
             </MudTd>
             <MudTd DataLabel="Date Joined">
                 @if (context.DateJoined != null)
                 {
-                    <MudTooltip Text="@context.DateJoined.Value.ToString("O")">
+                    <MudTooltip Text="@context.DateJoined.Value.ToString("O")" Arrow="true" Placement="Placement.Top">
                         <MudText Typo="Typo.body2">@context.DateJoined.Value.ToLocalTime().ToRelativeTime()</MudText>
                     </MudTooltip>
                 }
@@ -231,6 +235,8 @@ else
     private bool _hasSecondaryExternalId;
     private string _externalIdColumnHeader = "External Id";
     private string _secondaryExternalIdColumnHeader = "Secondary External Id";
+    private int _rowsPerPage = 10;
+    private bool _preferencesLoaded;
 
     // Status filter - by default, hide Obsolete CSOs to reduce noise
     // Users can click the Obsolete chip to see deleted objects
@@ -256,6 +262,30 @@ else
             new(_connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(_connectedSystemHeader)),
             new("Objects", href: null, disabled: true)
         };
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_preferencesLoaded)
+        {
+            try
+            {
+                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
+                _rowsPerPage = preferredSize;
+                _preferencesLoaded = true;
+                StateHasChanged(); // Re-render to show the table now that preference is loaded
+            }
+            catch
+            {
+                // JS interop not yet available, will retry on next render
+            }
+        }
+    }
+
+    private async Task OnRowsPerPageChanged(int newSize)
+    {
+        _rowsPerPage = newSize;
+        await PreferenceService.SetRowsPerPageAsync(newSize);
     }
 
     private async Task<TableData<ConnectedSystemObjectHeader>> ServerReload(TableState state, CancellationToken token)

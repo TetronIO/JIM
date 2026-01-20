@@ -3,43 +3,339 @@
 @using JIM.Models.Core
 @using Microsoft.AspNetCore.Components.Authorization
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
 @inject JimApplication Jim
 
-<h1 class="display-6">Not Authorised</h1>
-<p>Apologies, you're not authorised to view that page.</p>
+<div class="not-authorised-container">
+    <div class="not-authorised-illustration">
+        <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" class="not-authorised-svg">
+            <!-- Background floating shapes -->
+            <circle class="float-shape shape-1" cx="50" cy="50" r="8" fill="var(--shape-tertiary)" opacity="0.6"/>
+            <circle class="float-shape shape-2" cx="350" cy="80" r="12" fill="var(--shape-secondary)" opacity="0.5"/>
+            <circle class="float-shape shape-3" cx="80" cy="220" r="6" fill="var(--shape-primary)" opacity="0.4"/>
+            <circle class="float-shape shape-4" cx="320" cy="250" r="10" fill="var(--shape-tertiary)" opacity="0.5"/>
 
-@if (_isInUsersRole)
-{
-    <p>It seems you're missing a specific role required for this page/resoure.</p>
-}
-else
-{
-    <p>We were able to authenticate you, but we couldn't find you in our database, so cannot give you access.</p>
+            <!-- Floating geometric shapes -->
+            <rect class="float-shape shape-5" x="30" y="130" width="16" height="16" rx="3" fill="var(--shape-secondary)" opacity="0.4" transform="rotate(45 38 138)"/>
+            <rect class="float-shape shape-6" x="360" y="180" width="12" height="12" rx="2" fill="var(--shape-primary)" opacity="0.5" transform="rotate(30 366 186)"/>
 
-    <h6>Technical Information</h6>
-    <ul>
-        <li>Token claim name value: @_userName</li>
-        <li>Token claim <span class="code">@_ssoClaimType</span> value: <span class="code">@_userUniqueIdClaimValue</span></li>
-    </ul>
+            <!-- Decorative triangles -->
+            <polygon class="float-shape shape-7" points="70,280 80,265 90,280" fill="var(--shape-tertiary)" opacity="0.4"/>
+            <polygon class="float-shape shape-8" points="330,40 340,25 350,40" fill="var(--shape-secondary)" opacity="0.5"/>
 
-    <p>Help for administrators: Could not map this claim to a Metaverse user. Please check the Metaverse user exists in JIM and has a value for the SSO Metaverse attribute <span class="code">@_ssoAttributeName</span></p>
-}
+            <!-- Main lock body -->
+            <g class="lock-group">
+                <!-- Lock shackle (the U-shaped part) -->
+                <path class="lock-shackle" d="M165 130 L165 100 C165 70, 235 70, 235 100 L235 130"
+                      stroke="var(--lock-shackle)" stroke-width="16" fill="none" stroke-linecap="round"/>
+
+                <!-- Lock body -->
+                <rect class="lock-body" x="145" y="125" width="110" height="85" rx="12" fill="var(--lock-body)"/>
+
+                <!-- Lock body highlight -->
+                <rect x="155" y="135" width="90" height="10" rx="5" fill="var(--lock-highlight)" opacity="0.3"/>
+
+                <!-- Keyhole -->
+                <circle cx="200" cy="165" r="12" fill="var(--keyhole-color)"/>
+                <rect x="195" y="165" width="10" height="25" rx="3" fill="var(--keyhole-color)"/>
+            </g>
+
+            <!-- Floating key -->
+            <g class="key-group">
+                <ellipse cx="290" cy="140" rx="18" ry="18" fill="none" stroke="var(--key-color)" stroke-width="8"/>
+                <rect x="305" y="136" width="45" height="8" rx="2" fill="var(--key-color)"/>
+                <rect x="335" y="144" width="8" height="12" rx="1" fill="var(--key-color)"/>
+                <rect x="345" y="144" width="5" height="8" rx="1" fill="var(--key-color)"/>
+            </g>
+
+            <!-- Small decorative keys -->
+            <g class="mini-key-1 float-shape">
+                <ellipse cx="100" cy="100" rx="8" ry="8" fill="none" stroke="var(--shape-secondary)" stroke-width="3" opacity="0.6"/>
+                <rect x="107" y="98" width="20" height="4" rx="1" fill="var(--shape-secondary)" opacity="0.6"/>
+            </g>
+
+            <!-- Sparkles/stars -->
+            <g class="sparkle sparkle-1">
+                <path d="M270 90 L273 96 L280 96 L275 101 L277 108 L270 104 L263 108 L265 101 L260 96 L267 96 Z" fill="var(--sparkle-color)"/>
+            </g>
+            <g class="sparkle sparkle-2">
+                <path d="M130 180 L132 184 L137 184 L133 187 L135 192 L130 189 L125 192 L127 187 L123 184 L128 184 Z" fill="var(--sparkle-color)" opacity="0.7"/>
+            </g>
+            <g class="sparkle sparkle-3">
+                <path d="M310 210 L312 214 L317 214 L313 217 L315 222 L310 219 L305 222 L307 217 L303 214 L308 214 Z" fill="var(--sparkle-color)" opacity="0.8"/>
+            </g>
+        </svg>
+    </div>
+
+    <div class="not-authorised-content">
+        <MudText Typo="Typo.h3" Class="not-authorised-title">Access Denied</MudText>
+        <MudText Typo="Typo.h6" Color="Color.Secondary" Class="not-authorised-subtitle">
+            Oops! It looks like you don't have the key to this door.
+        </MudText>
+
+        @if (_isInUsersRole)
+        {
+            <MudAlert Severity="Severity.Info" Class="mt-4" Variant="Variant.Outlined">
+                <MudText>You're signed in, but you don't have permission to access this page.</MudText>
+            </MudAlert>
+
+            <MudExpansionPanels Class="mt-4" Elevation="0">
+                <MudExpansionPanel Text="Technical Details" MaxHeight="500">
+                    <MudSimpleTable Hover="true" Dense="true" Class="mt-2">
+                        <tbody>
+                            <tr>
+                                <td><strong>User</strong></td>
+                                <td><code>@_userName</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Your Roles</strong></td>
+                                <td><code>@_userRoles</code></td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+
+                    <MudDivider Class="my-3"/>
+
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        <strong>Administrator Note:</strong> This user is authenticated and exists in JIM,
+                        but lacks the required role for this page. Check the user's role assignments.
+                    </MudText>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Warning" Class="mt-4" Variant="Variant.Outlined">
+                <MudText>You've been authenticated, but your account couldn't be found in JIM.</MudText>
+            </MudAlert>
+
+            <MudExpansionPanels Class="mt-4" Elevation="0">
+                <MudExpansionPanel Text="Technical Details" MaxHeight="500">
+                    <MudSimpleTable Hover="true" Dense="true" Class="mt-2">
+                        <tbody>
+                            <tr>
+                                <td><strong>Token Name</strong></td>
+                                <td><code>@_userName</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Claim Type</strong></td>
+                                <td><code>@_ssoClaimType</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Claim Value</strong></td>
+                                <td><code>@_userUniqueIdClaimValue</code></td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+
+                    <MudDivider Class="my-3"/>
+
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        <strong>Administrator Note:</strong> Could not map this claim to a Metaverse user.
+                        Please verify the user exists in JIM and has a value for the SSO attribute
+                        <code>@_ssoAttributeName</code>.
+                    </MudText>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        }
+
+        <div class="not-authorised-actions mt-5">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/" StartIcon="@Icons.Material.Filled.Home">
+                Go to Home
+            </MudButton>
+        </div>
+    </div>
+</div>
+
+<style>
+    :root {
+        --shape-primary: #3c94ff;
+        --shape-secondary: #7c4dff;
+        --shape-tertiary: #00bcd4;
+        --lock-body: #3c94ff;
+        --lock-shackle: #2979ff;
+        --lock-highlight: #ffffff;
+        --keyhole-color: #1a237e;
+        --key-color: #ffd54f;
+        --sparkle-color: #ffd54f;
+    }
+
+    .jim-dark-mode {
+        --shape-primary: #3c94ff;
+        --shape-secondary: #9575cd;
+        --shape-tertiary: #4dd0e1;
+        --lock-body: #3c94ff;
+        --lock-shackle: #5c9fff;
+        --lock-highlight: #ffffff;
+        --keyhole-color: #0d1b3d;
+        --key-color: #ffe082;
+        --sparkle-color: #ffe082;
+    }
+
+    .not-authorised-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 2rem;
+        min-height: 60vh;
+    }
+
+    .not-authorised-illustration {
+        width: 100%;
+        max-width: 400px;
+        margin-bottom: 2rem;
+    }
+
+    .not-authorised-svg {
+        width: 100%;
+        height: auto;
+    }
+
+    .not-authorised-content {
+        max-width: 600px;
+    }
+
+    .not-authorised-title {
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+    }
+
+    .not-authorised-subtitle {
+        margin-bottom: 1rem;
+    }
+
+    .not-authorised-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    /* Floating animation for shapes */
+    .float-shape {
+        animation: float 6s ease-in-out infinite;
+    }
+
+    .shape-1 { animation-delay: 0s; }
+    .shape-2 { animation-delay: 0.5s; }
+    .shape-3 { animation-delay: 1s; }
+    .shape-4 { animation-delay: 1.5s; }
+    .shape-5 { animation-delay: 2s; }
+    .shape-6 { animation-delay: 2.5s; }
+    .shape-7 { animation-delay: 3s; }
+    .shape-8 { animation-delay: 3.5s; }
+
+    @@keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+    }
+
+    /* Lock subtle animation */
+    .lock-group {
+        animation: lock-wobble 4s ease-in-out infinite;
+        transform-origin: center;
+    }
+
+    @@keyframes lock-wobble {
+        0%, 100% { transform: rotate(0deg); }
+        25% { transform: rotate(-2deg); }
+        75% { transform: rotate(2deg); }
+    }
+
+    /* Key floating animation */
+    .key-group {
+        animation: key-float 3s ease-in-out infinite;
+    }
+
+    @@keyframes key-float {
+        0%, 100% { transform: translate(0, 0) rotate(0deg); }
+        50% { transform: translate(-5px, -8px) rotate(-5deg); }
+    }
+
+    /* Mini key animation */
+    .mini-key-1 {
+        animation: mini-key-float 5s ease-in-out infinite;
+    }
+
+    @@keyframes mini-key-float {
+        0%, 100% { transform: translate(0, 0) rotate(0deg); }
+        50% { transform: translate(5px, -5px) rotate(10deg); }
+    }
+
+    /* Sparkle animation */
+    .sparkle {
+        animation: sparkle-pulse 2s ease-in-out infinite;
+    }
+
+    .sparkle-1 { animation-delay: 0s; }
+    .sparkle-2 { animation-delay: 0.7s; }
+    .sparkle-3 { animation-delay: 1.4s; }
+
+    @@keyframes sparkle-pulse {
+        0%, 100% { opacity: 0.3; transform: scale(0.8); }
+        50% { opacity: 1; transform: scale(1.2); }
+    }
+
+    /* Lock shackle subtle animation */
+    .lock-shackle {
+        animation: shackle-jiggle 5s ease-in-out infinite;
+        transform-origin: center bottom;
+    }
+
+    @@keyframes shackle-jiggle {
+        0%, 90%, 100% { transform: translateY(0); }
+        93% { transform: translateY(-3px); }
+        96% { transform: translateY(0); }
+    }
+
+    /* Responsive adjustments */
+    @@media (max-width: 600px) {
+        .not-authorised-container {
+            padding: 1rem;
+        }
+
+        .not-authorised-illustration {
+            max-width: 280px;
+        }
+    }
+</style>
 
 @code {
     private string? _userName;
     private string? _ssoClaimType;
     private string? _ssoAttributeName;
     private string? _userUniqueIdClaimValue;
+    private string? _userRoles;
     private bool _isInUsersRole;
+    private bool _isAuthenticated;
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
-        if (user?.Identity == null)
-            return;
 
-        _userName = user.Identity.Name;
+        // Check if the user is actually authenticated
+        _isAuthenticated = user?.Identity?.IsAuthenticated == true;
+
+        // If not authenticated (session expired), redirect to re-authenticate
+        // Navigate to the home page which will trigger the OIDC challenge
+        if (!_isAuthenticated)
+        {
+            // Force a full page navigation to trigger authentication
+            NavigationManager.NavigateTo("/", forceLoad: true);
+            return;
+        }
+
+        _userName = user!.Identity!.Name;
+
+        // Get the user's roles for display
+        var roles = user.Claims
+            .Where(c => c.Type == System.Security.Claims.ClaimTypes.Role || c.Type == "role")
+            .Select(c => c.Value)
+            .ToList();
+        _userRoles = roles.Count > 0 ? string.Join(", ", roles) : "(none)";
 
         var serviceSettings = await Jim.ServiceSettings.GetServiceSettingsAsync();
         if (serviceSettings == null)

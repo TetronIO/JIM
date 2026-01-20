@@ -53,6 +53,13 @@ public class CreateSyncRuleRequest
     /// Whether the sync rule is enabled.
     /// </summary>
     public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// For Export rules: When true (default), inbound changes from the target system will trigger
+    /// re-evaluation of this export rule to detect and remediate drift.
+    /// Only applicable when Direction = Export.
+    /// </summary>
+    public bool EnforceState { get; set; } = true;
 }
 
 /// <summary>
@@ -80,4 +87,11 @@ public class UpdateSyncRuleRequest
     /// Whether this rule should also cause objects to be provisioned to the Connected System (for Export rules).
     /// </summary>
     public bool? ProvisionToConnectedSystem { get; set; }
+
+    /// <summary>
+    /// For Export rules: When true (default), inbound changes from the target system will trigger
+    /// re-evaluation of this export rule to detect and remediate drift.
+    /// Only applicable when Direction = Export.
+    /// </summary>
+    public bool? EnforceState { get; set; }
 }

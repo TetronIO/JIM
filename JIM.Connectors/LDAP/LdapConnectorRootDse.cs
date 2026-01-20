@@ -28,4 +28,16 @@ internal class LdapConnectorRootDse
     /// Determines which delta import strategy to use.
     /// </summary>
     public bool IsActiveDirectory { get; set; }
+
+    /// <summary>
+    /// The vendor name of the directory server (e.g., "Samba Team", "Microsoft").
+    /// Used for capability detection when directories claim AD compatibility but have behavioural differences.
+    /// </summary>
+    public string? VendorName { get; set; }
+
+    /// <summary>
+    /// Indicates if the directory supports paged search results.
+    /// True AD supports paging; Samba AD claims support but returns duplicate results, so we disable it.
+    /// </summary>
+    public bool SupportsPaging { get; set; } = true;
 }

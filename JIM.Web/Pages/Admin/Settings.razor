@@ -102,12 +102,12 @@
                 <div class="d-flex justify-end gap-2">
                     @if (!settingContext.IsReadOnly)
                     {
-                        <MudTooltip Text="Edit">
+                        <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
                             <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => ShowEditDialog(settingContext)" />
                         </MudTooltip>
                         @if (settingContext.IsOverridden)
                         {
-                            <MudTooltip Text="Revert to Default">
+                            <MudTooltip Text="Revert to Default" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Outlined.RestartAlt" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => HandleRevertAsync(settingContext)" />
                             </MudTooltip>
                         }

@@ -12,6 +12,7 @@ public enum MockTargetSystemAttributeNames
     Mail = 5,
     Manager = 6,
     JobTitle = 7,
+    DistinguishedName = 8,
     EmployeeId = 10,
     UserAccountControl = 11,
     UserPrincipalName = 12

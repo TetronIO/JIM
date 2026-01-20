@@ -277,6 +277,22 @@ public class LdapConnectorTests
 
     #endregion
 
+    #region Hierarchy settings tests
+
+    [Test]
+    public void GetSettings_ContainsSkipHiddenPartitionsSetting()
+    {
+        var settings = _connector.GetSettings();
+        var skipHiddenSetting = settings.FirstOrDefault(s => s.Name == "Skip Hidden Partitions");
+
+        Assert.That(skipHiddenSetting, Is.Not.Null);
+        Assert.That(skipHiddenSetting!.Type, Is.EqualTo(ConnectedSystemSettingType.CheckBox));
+        Assert.That(skipHiddenSetting.DefaultCheckboxValue, Is.True); // Default to true for performance
+        Assert.That(skipHiddenSetting.Category, Is.EqualTo(ConnectedSystemSettingCategory.General));
+    }
+
+    #endregion
+
     #region Export settings tests
 
     [Test]

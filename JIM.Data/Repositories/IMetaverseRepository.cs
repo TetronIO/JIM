@@ -69,7 +69,7 @@ public interface IMetaverseRepository
         bool sortDescending = true);
 
     /// <summary>
-    /// Gets a paginated list of metaverse objects with optional filtering by type and search query.
+    /// Gets a paginated list of metaverse objects with optional filtering by type, search query, or specific attribute value.
     /// </summary>
     /// <param name="page">The page number (1-based).</param>
     /// <param name="pageSize">The number of items per page.</param>
@@ -77,6 +77,8 @@ public interface IMetaverseRepository
     /// <param name="searchQuery">Optional search query to filter by display name.</param>
     /// <param name="sortDescending">Whether to sort in descending order by created date.</param>
     /// <param name="attributes">Optional list of attribute names to include. Use "*" to include all attributes. DisplayName is always included.</param>
+    /// <param name="filterAttributeName">Optional attribute name to filter by (must be used with filterAttributeValue).</param>
+    /// <param name="filterAttributeValue">Optional attribute value to filter by (exact match, case-insensitive).</param>
     /// <returns>A paged result set of metaverse object headers.</returns>
     public Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsAsync(
         int page,
@@ -84,7 +86,9 @@ public interface IMetaverseRepository
         int? objectTypeId = null,
         string? searchQuery = null,
         bool sortDescending = true,
-        IEnumerable<string>? attributes = null);
+        IEnumerable<string>? attributes = null,
+        string? filterAttributeName = null,
+        string? filterAttributeValue = null);
 
     /// <summary>
     /// Attempts to find a single Metaverse Object using criteria from a SyncRuleMapping object and attribute values from a Connected System Object.

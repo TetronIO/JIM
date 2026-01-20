@@ -2,6 +2,7 @@
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Utility;
+
 namespace JIM.Data.Repositories;
 
 public interface IActivityRepository
@@ -30,7 +31,9 @@ public interface IActivityRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = false,
-        IEnumerable<ObjectChangeType>? changeTypeFilter = null);
+        IEnumerable<ObjectChangeType>? changeTypeFilter = null,
+        IEnumerable<string>? objectTypeFilter = null,
+        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null);
 
     public Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId);
 

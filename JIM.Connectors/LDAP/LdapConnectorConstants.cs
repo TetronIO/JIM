@@ -46,4 +46,11 @@ internal static class LdapConnectorConstants
     // Retry settings
     internal const int DEFAULT_MAX_RETRIES = 3;
     internal const int DEFAULT_RETRY_DELAY_MS = 1000;
+
+    /// <summary>
+    /// LDAP_SERVER_SHOW_DELETED_OID - Server control that allows searching for deleted (tombstone) objects.
+    /// When included in a search request, the directory returns objects from the Deleted Objects container.
+    /// Required for delta import deletion detection in Active Directory.
+    /// </summary>
+    internal const string LDAP_SERVER_SHOW_DELETED_OID = "1.2.840.113556.1.4.417";
 }

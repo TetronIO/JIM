@@ -20,7 +20,7 @@
     </MudText>
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-    <MudGrid Class="mt-5">
+    <MudGrid>
         <MudItem xs="12" md="6">
             <MudCard Outlined="true" Elevation="0">
                 <MudCardHeader>
@@ -29,7 +29,7 @@
                     </CardHeaderContent>
                 </MudCardHeader>
                 <MudCardContent>
-                    <MudSimpleTable Hover="true" Dense="true">
+                    <MudSimpleTable Hover="true" Dense="true" Elevation="0">
                         <tbody>
                             <tr>
                                 <td><strong>ID</strong></td>
@@ -61,7 +61,11 @@
                             </tr>
                             <tr>
                                 <td><strong>Created</strong></td>
-                                <td>@_pendingExport.CreatedAt.ToFriendlyDate()</td>
+                                <td>
+                                    <MudTooltip Text="@_pendingExport.CreatedAt.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                                        <MudText>@_pendingExport.CreatedAt.ToLocalTime().ToRelativeTime()</MudText>
+                                    </MudTooltip>
+                                </td>
                             </tr>
                             <tr>
                                 <td><strong>Has Unresolved References</strong></td>
@@ -90,16 +94,19 @@
                     </CardHeaderContent>
                 </MudCardHeader>
                 <MudCardContent>
-                    <MudSimpleTable Hover="true" Dense="true">
+                    <MudSimpleTable Hover="true" Dense="true" Elevation="0">
                         <tbody>
                             <tr>
                                 <td><strong>Target CSO</strong></td>
                                 <td>
                                     @if (_pendingExport.ConnectedSystemObject != null)
                                     {
-                                        <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId}/objects/{_pendingExport.ConnectedSystemObject.Id}")">
-                                            @GetCsoDisplayName()
-                                        </MudLink>
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudChip T="string" Color="Color.Default" Size="Size.Small">@_pendingExport.ConnectedSystemObject.Type.Name</MudChip>
+                                            <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId}/objects/{_pendingExport.ConnectedSystemObject.Id}")">
+                                                @GetCsoDisplayName()
+                                            </MudLink>
+                                        </MudStack>
                                     }
                                     else
                                     {
@@ -112,9 +119,12 @@
                                 <td>
                                     @if (_pendingExport.SourceMetaverseObject != null)
                                     {
-                                        <MudLink Href="@($"/admin/metaverse/objects/{_pendingExport.SourceMetaverseObjectId}")">
-                                            @GetMvoDisplayName()
-                                        </MudLink>
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudChip T="string" Color="Color.Default" Size="Size.Small">@_pendingExport.SourceMetaverseObject.Type.Name</MudChip>
+                                            <MudLink Href="@Utilities.GetMetaverseObjectHref(_pendingExport.SourceMetaverseObject)">
+                                                @GetMvoDisplayName()
+                                            </MudLink>
+                                        </MudStack>
                                     }
                                     else if (_pendingExport.SourceMetaverseObjectId.HasValue)
                                     {
@@ -317,10 +327,9 @@ else
         if (_pendingExport?.SourceMetaverseObject == null)
             return _pendingExport?.SourceMetaverseObjectId?.ToString() ?? "Unknown";
 
-        var displayNameAttr = _pendingExport.SourceMetaverseObject.AttributeValues?
-            .FirstOrDefault(av => av.Attribute?.Name?.ToLower() == "displayname");
-
-        return displayNameAttr?.StringValue ?? _pendingExport.SourceMetaverseObject.Id.ToString();
+        // Use the built-in DisplayName property which looks up the displayname attribute
+        return _pendingExport.SourceMetaverseObject.DisplayName
+            ?? _pendingExport.SourceMetaverseObject.Id.ToString();
     }
 
     private string GetAttributeValue(PendingExportAttributeValueChange change)

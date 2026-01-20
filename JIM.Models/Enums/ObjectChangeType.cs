@@ -46,6 +46,27 @@ public enum ObjectChangeType
     /// </summary>
     Disconnected,
 
+    /// <summary>
+    /// CSO disconnected from MVO because it fell out of scope of import sync rule scoping criteria.
+    /// This provides clear audit trail showing WHY the disconnection occurred, enabling the UI
+    /// to explain consequences (attribute removal, MVO deletion rules, etc).
+    /// </summary>
+    DisconnectedOutOfScope,
+
+    /// <summary>
+    /// CSO fell out of scope of import sync rule scoping criteria but remained joined
+    /// because InboundOutOfScopeAction was set to RemainJoined. Attribute flow has stopped
+    /// but the join is preserved ("once managed, always managed" pattern).
+    /// </summary>
+    OutOfScopeRetainJoin,
+
+    /// <summary>
+    /// Drift was detected during delta sync: the CSO attribute values in the target system
+    /// differed from the expected values on the MVO. A corrective pending export was created
+    /// to restore the expected state. This provides visibility into drift enforcement.
+    /// </summary>
+    DriftCorrection,
+
     // Export operations
     /// <summary>
     /// New CSO created in target system (provisioning).
@@ -67,5 +88,20 @@ public enum ObjectChangeType
     /// Indicates that export evaluation detected the CSO already has the target value(s),
     /// so no pending export was created. Used for tracking/reporting purposes.
     /// </summary>
-    NoChange
+    NoChange,
+
+    // Pending export visibility (surfaced during sync)
+    /// <summary>
+    /// A pending export exists that is staged for the next export run.
+    /// This surfaces unconfirmed exports (ExportNotImported status) so operators
+    /// can see what changes will be made to connected systems.
+    /// </summary>
+    PendingExport,
+
+    // Pending export reconciliation (surfaced during confirming import)
+    /// <summary>
+    /// A pending export was confirmed during the confirming import.
+    /// The exported attribute values matched the imported values.
+    /// </summary>
+    PendingExportConfirmed
 }

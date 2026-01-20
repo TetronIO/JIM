@@ -1,0 +1,30 @@
+# Development Tools
+# This compose file provides optional development tools like Adminer.
+# These tools are NOT included in production/release bundles.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.dev-tools.yml up -d
+#
+# Or use the alias:
+#   jim-stack-dev
+
+services:
+  adminer:
+    container_name: jim.adminer
+    image: adminer
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      jim.database:
+        condition: service_healthy
+        required: false
+    profiles:
+      - with-db
+    networks:
+      - jim-network
+
+networks:
+  jim-network:
+    external: true
+    name: jim-network

@@ -213,9 +213,15 @@ public class SyncExportTaskProcessor
             if (!exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))
             {
                 executionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
-                if (exportItem.ErrorCount > 0)
+                if (exportItem.ErrorCount > 1)
                 {
-                    executionItem.ErrorMessage = $"Export failed (attempt {exportItem.ErrorCount}): {exportItem.ErrorMessage}";
+                    // Export has been retried - show the retry count
+                    executionItem.ErrorMessage = $"Export failed after {exportItem.ErrorCount} attempts: {exportItem.ErrorMessage}";
+                }
+                else if (exportItem.ErrorCount == 1)
+                {
+                    // First failure - don't confuse users with "attempt 1"
+                    executionItem.ErrorMessage = $"Export failed: {exportItem.ErrorMessage}";
                 }
                 else
                 {

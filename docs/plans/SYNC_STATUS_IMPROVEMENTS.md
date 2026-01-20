@@ -449,7 +449,7 @@ No database migration required. The `ObjectChangeType` is stored as an integer, 
 
 ## Backward Compatibility
 
-- Existing API consumers will continue to work as base enum values (NotSet, Create→Add, Update, Delete, NoChange) retain their integer values
+- Existing API consumers will continue to work as base enum values (NotSet, Create->Add, Update, Delete, NoChange) retain their integer values
 - The `Create` enum value will be renamed to `Add` - this is a breaking change for any code referencing `ObjectChangeType.Create` directly
 - The `Obsolete` enum value will be removed from `ObjectChangeType` - existing RPEIs with this value will display as the integer value until re-imported
 - Legacy statistics properties marked `[Obsolete]` provide backward compatibility
@@ -476,18 +476,18 @@ No database migration required. The `ObjectChangeType` is stored as an integer, 
 - Filter query returns correct results
 
 ### Integration Tests
-- Full Import → verify Add/Update/Delete types and counts
-- Full Sync → verify Projected/Joined/AttributeFlow types and counts
-- Export → verify Provisioned/Exported/Deprovisioned types and counts
-- No-change scenario → verify no unnecessary RPEIs created
+- Full Import -> verify Add/Update/Delete types and counts
+- Full Sync -> verify Projected/Joined/AttributeFlow types and counts
+- Export -> verify Provisioned/Exported/Deprovisioned types and counts
+- No-change scenario -> verify no unnecessary RPEIs created
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `JIM.Models/Enums/ObjectChangeType.cs` | Add new enum values, rename Create→Add, remove Obsolete |
+| `JIM.Models/Enums/ObjectChangeType.cs` | Add new enum values, rename Create->Add, remove Obsolete |
 | `JIM.Worker/Models/MetaverseObjectChangeResult.cs` | Update factory methods |
-| `JIM.Worker/Processors/SyncImportTaskProcessor.cs` | Rename Create→Add, use Delete for deletions, add change detection |
+| `JIM.Worker/Processors/SyncImportTaskProcessor.cs` | Rename Create->Add, use Delete for deletions, add change detection |
 | `JIM.Worker/Processors/SyncTaskProcessorBase.cs` | Use new sync change types, use Delete for obsolete CSOs |
 | `JIM.Worker/Processors/SyncExportTaskProcessor.cs` | Use new export change types |
 | `JIM.Application/Servers/ActivityServer.cs` | Update stats model and query, add change type filter |
