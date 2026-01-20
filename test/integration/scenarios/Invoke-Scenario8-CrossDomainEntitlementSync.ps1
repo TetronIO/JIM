@@ -1268,30 +1268,39 @@ try {
         # Step 6.4: Get MVO info BEFORE deletion sync (to verify it exists and get its ID)
         Write-Host "  Looking up Group MVO before deletion..." -ForegroundColor Gray
 
-        # Search for the group MVO by display name (which is the group name)
-        $groupMvos = Get-JIMMetaverseObject -ObjectTypeName "Group" -Search $groupToDelete
-        $groupMvo = $null
+        # Search for the group MVO by Account Name (sAMAccountName) using the new attribute filter
+        # NOTE: We can't search by Display Name because groups created via samba-tool group add
+        # don't have the displayName LDAP attribute set - only sAMAccountName and cn are populated.
+        # We also request Account Name to be included in the response for display purposes
+        $groupMvo = Get-JIMMetaverseObject -ObjectTypeName "Group" -AttributeName "Account Name" -AttributeValue $groupToDelete -Attributes "Account Name" | Select-Object -First 1
         $groupMvoId = $null
 
-        if ($groupMvos) {
-            # Get-JIMMetaverseObject returns individual objects, find exact match
-            $groupMvo = $groupMvos | Where-Object { $_.displayName -eq $groupToDelete } | Select-Object -First 1
-            if ($groupMvo) {
-                $groupMvoId = $groupMvo.id
-                Write-Host "    ✓ Found Group MVO: $groupMvoId" -ForegroundColor Green
-                Write-Host "      Display Name: $($groupMvo.displayName)" -ForegroundColor Gray
+        if ($groupMvo) {
+            $groupMvoId = $groupMvo.id
+            Write-Host "    ✓ Found Group MVO: $groupMvoId" -ForegroundColor Green
+            # Note: Account Name is in the Attributes property (PSCustomObject from JSON)
+            # Access using dot notation with quotes for property names containing spaces
+            $accountName = if ($groupMvo.attributes -and $groupMvo.attributes.'Account Name') { $groupMvo.attributes.'Account Name' } else { $groupMvo.displayName }
+            Write-Host "      Account Name: $accountName" -ForegroundColor Gray
 
-                # Check if it's already marked for deletion (shouldn't be)
-                if ($groupMvo.lastConnectorDisconnectedDate) {
-                    Write-Host "    ⚠ MVO already has LastConnectorDisconnectedDate set (unexpected)" -ForegroundColor Yellow
-                }
-            }
-            else {
-                Write-Host "    ⚠ Could not find exact Group MVO match for '$groupToDelete'" -ForegroundColor Yellow
+            # Re-fetch the full MVO by ID to check lastConnectorDisconnectedDate
+            # (the list/filter endpoint returns headers without this property)
+            $groupMvoFull = Get-JIMMetaverseObject -Id $groupMvoId
+            if ($groupMvoFull -and $groupMvoFull.lastConnectorDisconnectedDate) {
+                Write-Host "    ⚠ MVO already has LastConnectorDisconnectedDate set (unexpected)" -ForegroundColor Yellow
             }
         }
         else {
-            Write-Host "    ⚠ Could not find Group MVO for '$groupToDelete'" -ForegroundColor Yellow
+            Write-Host "    ⚠ Could not find Group MVO with Account Name '$groupToDelete'" -ForegroundColor Yellow
+            # List available groups for debugging (include Account Name in response)
+            $allGroups = Get-JIMMetaverseObject -ObjectTypeName "Group" -Attributes "Account Name"
+            if ($allGroups) {
+                Write-Host "      Available groups:" -ForegroundColor Gray
+                $allGroups | Select-Object -First 5 | ForEach-Object {
+                    $name = if ($_.attributes -and $_.attributes.'Account Name') { $_.attributes.'Account Name' } else { $_.displayName }
+                    Write-Host "        - $name" -ForegroundColor Gray
+                }
+            }
         }
 
         # Step 6.5: Run forward sync to propagate the deletion
@@ -1302,6 +1311,8 @@ try {
         Write-Host "  Validating MVO deletion state..." -ForegroundColor Gray
 
         $validations = @()
+        $mvoDeleted = $false
+        $mvoMarkedForDeletion = $false
 
         if ($groupMvoId) {
             # Re-fetch the MVO to check its state after sync
@@ -1310,6 +1321,7 @@ try {
             if ($mvoAfterSync) {
                 # Check if LastConnectorDisconnectedDate is set (indicates MVO is marked for deletion)
                 if ($mvoAfterSync.lastConnectorDisconnectedDate) {
+                    $mvoMarkedForDeletion = $true
                     $validations += @{ Name = "MVO marked for deletion (LastConnectorDisconnectedDate set)"; Success = $true }
                     Write-Host "    ✓ MVO marked for deletion: LastConnectorDisconnectedDate = $($mvoAfterSync.lastConnectorDisconnectedDate)" -ForegroundColor Green
                     Write-Host "      This validates WhenAuthoritativeSourceDisconnected is working correctly" -ForegroundColor Cyan
@@ -1322,6 +1334,8 @@ try {
             }
             else {
                 # MVO was already deleted by housekeeping (immediate deletion with grace period = 0)
+                $mvoDeleted = $true
+                $mvoMarkedForDeletion = $true
                 $validations += @{ Name = "MVO marked for deletion (LastConnectorDisconnectedDate set)"; Success = $true }
                 Write-Host "    ✓ MVO already deleted by housekeeping (immediate deletion)" -ForegroundColor Green
             }
@@ -1330,20 +1344,73 @@ try {
             Write-Host "    ⚠ Skipping MVO validation (MVO ID not found)" -ForegroundColor Yellow
         }
 
-        # Step 6.7: Validate group is deleted from Target AD
-        Write-Host "  Validating group deletion in Target AD..." -ForegroundColor Gray
+        # Step 6.7: Wait for housekeeping to complete MVO deletion and Target AD deprovisioning
+        # Housekeeping runs every 60 seconds, so we need to wait and poll
+        Write-Host "  Waiting for housekeeping to complete deletion (max 90 seconds)..." -ForegroundColor Gray
 
-        docker exec $targetContainer samba-tool group show $groupToDelete 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
+        $maxWaitSeconds = 90
+        $pollIntervalSeconds = 10
+        $elapsedSeconds = 0
+        $targetGroupDeleted = $false
+
+        while ($elapsedSeconds -lt $maxWaitSeconds) {
+            # Check if MVO has been deleted (if we had an MVO ID)
+            if ($groupMvoId -and -not $mvoDeleted) {
+                $mvoCheck = Get-JIMMetaverseObject -Id $groupMvoId
+                if (-not $mvoCheck) {
+                    $mvoDeleted = $true
+                    Write-Host "    ✓ MVO deleted by housekeeping (after $elapsedSeconds seconds)" -ForegroundColor Green
+                }
+            }
+
+            # Check if group is deleted from Target AD
+            docker exec $targetContainer samba-tool group show $groupToDelete 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                $targetGroupDeleted = $true
+                Write-Host "    ✓ Group '$groupToDelete' deleted from Target AD (after $elapsedSeconds seconds)" -ForegroundColor Green
+                break
+            }
+
+            # If MVO is deleted and target group gone, we're done
+            if ($mvoDeleted -and $targetGroupDeleted) {
+                break
+            }
+
+            # Wait and poll again
+            if ($elapsedSeconds -lt $maxWaitSeconds) {
+                Write-Host "    ... waiting ($elapsedSeconds/$maxWaitSeconds seconds)" -ForegroundColor Gray
+                Start-Sleep -Seconds $pollIntervalSeconds
+                $elapsedSeconds += $pollIntervalSeconds
+            }
+        }
+
+        # Final validation of Target AD deletion
+        if ($targetGroupDeleted) {
             $validations += @{ Name = "Group deleted from Target AD"; Success = $true }
-            Write-Host "    ✓ Group '$groupToDelete' deleted from Target AD" -ForegroundColor Green
         }
         else {
-            # Group still exists - may be due to deletion grace period
-            $validations += @{ Name = "Group deleted from Target AD"; Success = $false }
-            Write-Host "    ✗ Group '$groupToDelete' still exists in Target AD" -ForegroundColor Red
-            Write-Host "      Note: Group may be pending deletion due to grace period" -ForegroundColor Yellow
-            Write-Host "      Check JIM UI for pending deletions" -ForegroundColor Yellow
+            # One more sync cycle might be needed - run export to Target
+            Write-Host "    Group still exists in Target AD after waiting. Running Target export..." -ForegroundColor Yellow
+            if ($targetExportProfile) {
+                Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExportProfile.id -Wait
+                Start-Sleep -Seconds 2
+
+                # Check one more time
+                docker exec $targetContainer samba-tool group show $groupToDelete 2>&1 | Out-Null
+                if ($LASTEXITCODE -ne 0) {
+                    $targetGroupDeleted = $true
+                    $validations += @{ Name = "Group deleted from Target AD"; Success = $true }
+                    Write-Host "    ✓ Group '$groupToDelete' deleted from Target AD after export" -ForegroundColor Green
+                }
+                else {
+                    $validations += @{ Name = "Group deleted from Target AD"; Success = $false }
+                    Write-Host "    ✗ Group '$groupToDelete' still exists in Target AD after export" -ForegroundColor Red
+                }
+            }
+            else {
+                $validations += @{ Name = "Group deleted from Target AD"; Success = $false }
+                Write-Host "    ✗ Group '$groupToDelete' still exists in Target AD (Target Export profile not available)" -ForegroundColor Red
+            }
         }
 
         # Verify group is no longer in Source AD (double-check)
@@ -1357,7 +1424,7 @@ try {
             Write-Host "    ✗ Group still exists in Source AD (deletion failed)" -ForegroundColor Red
         }
 
-        # Overall success if group is deleted from both (or at least Source)
+        # Overall success if group is deleted from both Source and Target
         $allValidationsPassed = @($validations | Where-Object { -not $_.Success }).Count -eq 0
 
         if ($allValidationsPassed) {
@@ -1370,25 +1437,23 @@ try {
             Write-Host "    - Housekeeping deprovisioned the group from Target AD" -ForegroundColor Gray
         }
         else {
-            # Check if only the Target deletion failed (may be due to grace period or timing)
+            # Check what failed
             $sourceDeleted = @($validations | Where-Object { $_.Name -eq "Group confirmed deleted from Source AD" -and $_.Success }).Count -gt 0
             $targetDeleted = @($validations | Where-Object { $_.Name -eq "Group deleted from Target AD" -and $_.Success }).Count -gt 0
-            $mvoMarked = @($validations | Where-Object { $_.Name -match "MVO marked for deletion" -and $_.Success }).Count -gt 0
 
-            if ($sourceDeleted -and $mvoMarked -and -not $targetDeleted) {
+            if ($sourceDeleted -and $mvoMarkedForDeletion -and -not $targetDeleted) {
                 Write-Host ""
-                Write-Host "⚠ DeleteGroup test partially complete" -ForegroundColor Yellow
+                Write-Host "✗ DeleteGroup test failed" -ForegroundColor Red
                 Write-Host "  Group deleted from Source AD" -ForegroundColor Gray
                 Write-Host "  MVO marked for deletion (WhenAuthoritativeSourceDisconnected working)" -ForegroundColor Green
-                Write-Host "  Group still exists in Target AD (may need additional export cycle)" -ForegroundColor Yellow
-                # Don't fail the test - this is expected behaviour, may need housekeeping to complete
+                Write-Host "  Group NOT deleted from Target AD (deprovisioning not working)" -ForegroundColor Red
+                throw "DeleteGroup test failed: Target AD deprovisioning did not complete"
             }
-            elseif ($sourceDeleted -and -not $targetDeleted) {
+            elseif (-not $mvoMarkedForDeletion) {
                 Write-Host ""
-                Write-Host "⚠ DeleteGroup test partially complete" -ForegroundColor Yellow
-                Write-Host "  Group deleted from Source AD, but still exists in Target AD" -ForegroundColor Yellow
-                Write-Host "  This may be expected if deletion grace period is configured" -ForegroundColor Yellow
-                # Don't fail the test - this is expected behaviour with deletion rules
+                Write-Host "✗ DeleteGroup test failed" -ForegroundColor Red
+                Write-Host "  MVO was NOT marked for deletion after authoritative source disconnect" -ForegroundColor Red
+                throw "DeleteGroup test failed: MVO was not marked for deletion"
             }
             else {
                 throw "DeleteGroup validation failed"

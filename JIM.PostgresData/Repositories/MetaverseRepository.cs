@@ -469,15 +469,25 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <summary>
-    /// Gets a paginated list of metaverse objects with optional filtering by type and search query.
+    /// Gets a paginated list of metaverse objects with optional filtering by type, search query, or specific attribute value.
     /// </summary>
+    /// <param name="page">The page number to retrieve (1-based).</param>
+    /// <param name="pageSize">The number of items per page (max 100).</param>
+    /// <param name="objectTypeId">Optional filter by object type ID.</param>
+    /// <param name="searchQuery">Optional search query that filters by display name (case-insensitive, supports partial match).</param>
+    /// <param name="sortDescending">Sort by created date descending (true) or ascending (false).</param>
+    /// <param name="attributes">Optional list of attribute names to include in the response. Use "*" for all attributes.</param>
+    /// <param name="filterAttributeName">Optional attribute name to filter by (must be used with filterAttributeValue).</param>
+    /// <param name="filterAttributeValue">Optional attribute value to filter by (exact match, case-insensitive).</param>
     public async Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsAsync(
         int page,
         int pageSize,
         int? objectTypeId = null,
         string? searchQuery = null,
         bool sortDescending = true,
-        IEnumerable<string>? attributes = null)
+        IEnumerable<string>? attributes = null,
+        string? filterAttributeName = null,
+        string? filterAttributeValue = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -528,6 +538,16 @@ public class MetaverseRepository : IMetaverseRepository
                     av.Attribute.Name == Constants.BuiltInAttributes.DisplayName &&
                     av.StringValue != null &&
                     EF.Functions.ILike(av.StringValue, $"%{searchQuery}%")));
+        }
+
+        // filter by specific attribute name and value (exact match, case-insensitive)
+        if (!string.IsNullOrWhiteSpace(filterAttributeName) && filterAttributeValue != null)
+        {
+            objects = objects.Where(q =>
+                q.AttributeValues.Any(av =>
+                    av.Attribute.Name == filterAttributeName &&
+                    av.StringValue != null &&
+                    EF.Functions.ILike(av.StringValue, filterAttributeValue)));
         }
 
         // apply sorting

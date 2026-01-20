@@ -352,14 +352,21 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     ///
     /// Use `?attributes=*` to include all attributes.
     ///
+    /// **Filtering:**
+    /// - `search` - Searches display name (partial match, case-insensitive)
+    /// - `filterAttributeName` + `filterAttributeValue` - Filters by specific attribute (exact match, case-insensitive)
+    ///
     /// Examples:
     /// - `?attributes=FirstName&amp;attributes=LastName&amp;attributes=Email` - Include specific attributes
     /// - `?attributes=*` - Include all attributes
+    /// - `?filterAttributeName=Account Name&amp;filterAttributeValue=jsmith` - Find by account name
     /// </remarks>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection).</param>
     /// <param name="objectTypeId">Optional object type ID to filter by.</param>
     /// <param name="search">Optional search query to filter by display name.</param>
     /// <param name="attributes">Optional list of attribute names to include in the response. Use "*" for all attributes. DisplayName is always included.</param>
+    /// <param name="filterAttributeName">Optional attribute name to filter by (must be used with filterAttributeValue).</param>
+    /// <param name="filterAttributeValue">Optional attribute value to filter by (exact match, case-insensitive).</param>
     /// <returns>A paginated list of metaverse object headers.</returns>
     [HttpGet("objects", Name = "GetObjects")]
     [ProducesResponseType(typeof(PaginatedResponse<MetaverseObjectHeaderDto>), StatusCodes.Status200OK)]
@@ -368,10 +375,13 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         [FromQuery] PaginationRequest pagination,
         [FromQuery] int? objectTypeId = null,
         [FromQuery] string? search = null,
-        [FromQuery] IEnumerable<string>? attributes = null)
+        [FromQuery] IEnumerable<string>? attributes = null,
+        [FromQuery] string? filterAttributeName = null,
+        [FromQuery] string? filterAttributeValue = null)
     {
-        _logger.LogDebug("Getting metaverse objects (Page: {Page}, PageSize: {PageSize}, TypeId: {TypeId}, Search: {Search}, Attributes: {Attributes})",
-            pagination.Page, pagination.PageSize, objectTypeId, search, attributes != null ? string.Join(",", attributes) : "DisplayName only");
+        _logger.LogDebug("Getting metaverse objects (Page: {Page}, PageSize: {PageSize}, TypeId: {TypeId}, Search: {Search}, FilterAttr: {FilterAttr}={FilterValue}, Attributes: {Attributes})",
+            pagination.Page, pagination.PageSize, objectTypeId, search, filterAttributeName, filterAttributeValue,
+            attributes != null ? string.Join(",", attributes) : "DisplayName only");
 
         var result = await _application.Metaverse.GetMetaverseObjectsAsync(
             page: pagination.Page,
@@ -379,7 +389,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             objectTypeId: objectTypeId,
             searchQuery: search,
             sortDescending: pagination.IsDescending,
-            attributes: attributes);
+            attributes: attributes,
+            filterAttributeName: filterAttributeName,
+            filterAttributeValue: filterAttributeValue);
 
         var headers = result.Results.Select(MetaverseObjectHeaderDto.FromHeader);
 

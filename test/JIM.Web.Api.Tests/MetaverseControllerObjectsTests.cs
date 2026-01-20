@@ -50,7 +50,7 @@ public class MetaverseControllerObjectsTests
             PageSize = 20
         };
         _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectsAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>()))
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .ReturnsAsync(pagedResult);
 
         var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
@@ -87,7 +87,7 @@ public class MetaverseControllerObjectsTests
             PageSize = 20
         };
         _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectsAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>()))
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .ReturnsAsync(pagedResult);
 
         var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
@@ -110,13 +110,13 @@ public class MetaverseControllerObjectsTests
             PageSize = 20
         };
         _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectsAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>()))
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .ReturnsAsync(pagedResult);
 
         var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
         await _controller.GetObjectsAsync(pagination, objectTypeId: 5);
 
-        _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectsAsync(1, 20, 5, It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>()), Times.Once);
+        _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectsAsync(1, 20, 5, It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string?>(), It.IsAny<string?>()), Times.Once);
     }
 
     [Test]
@@ -130,13 +130,13 @@ public class MetaverseControllerObjectsTests
             PageSize = 20
         };
         _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectsAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>()))
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .ReturnsAsync(pagedResult);
 
         var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
         await _controller.GetObjectsAsync(pagination, search: "john");
 
-        _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectsAsync(1, 20, It.IsAny<int?>(), "john", It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>()), Times.Once);
+        _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectsAsync(1, 20, It.IsAny<int?>(), "john", It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string?>(), It.IsAny<string?>()), Times.Once);
     }
 
     [Test]
@@ -150,7 +150,7 @@ public class MetaverseControllerObjectsTests
             PageSize = 15
         };
         _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectsAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>()))
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .ReturnsAsync(pagedResult);
 
         var pagination = new PaginationRequest { Page = 3, PageSize = 15 };
@@ -197,7 +197,7 @@ public class MetaverseControllerObjectsTests
             PageSize = 20
         };
         _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectsAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>()))
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .ReturnsAsync(pagedResult);
 
         var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
@@ -232,7 +232,7 @@ public class MetaverseControllerObjectsTests
             PageSize = 20
         };
         _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectsAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>()))
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .ReturnsAsync(pagedResult);
 
         var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
@@ -255,13 +255,13 @@ public class MetaverseControllerObjectsTests
             PageSize = 20
         };
         _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectsAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>()))
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .ReturnsAsync(pagedResult);
 
         var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
         await _controller.GetObjectsAsync(pagination, objectTypeId: 3, search: "admin");
 
-        _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectsAsync(1, 20, 3, "admin", It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>()), Times.Once);
+        _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectsAsync(1, 20, 3, "admin", It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string?>(), It.IsAny<string?>()), Times.Once);
     }
 
     [Test]
@@ -275,7 +275,7 @@ public class MetaverseControllerObjectsTests
             PageSize = 20
         };
         _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectsAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>()))
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .ReturnsAsync(pagedResult);
 
         var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
@@ -284,7 +284,8 @@ public class MetaverseControllerObjectsTests
 
         _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectsAsync(
             1, 20, It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(),
-            It.Is<IEnumerable<string>?>(attrs => attrs != null && attrs.Contains("FirstName") && attrs.Contains("LastName") && attrs.Contains("Email"))),
+            It.Is<IEnumerable<string>?>(attrs => attrs != null && attrs.Contains("FirstName") && attrs.Contains("LastName") && attrs.Contains("Email")),
+            It.IsAny<string?>(), It.IsAny<string?>()),
             Times.Once);
     }
 
@@ -299,7 +300,7 @@ public class MetaverseControllerObjectsTests
             PageSize = 20
         };
         _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectsAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>()))
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>?>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .ReturnsAsync(pagedResult);
 
         var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
@@ -308,7 +309,8 @@ public class MetaverseControllerObjectsTests
 
         _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectsAsync(
             1, 20, It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<bool>(),
-            It.Is<IEnumerable<string>?>(attrs => attrs != null && attrs.Contains("*"))),
+            It.Is<IEnumerable<string>?>(attrs => attrs != null && attrs.Contains("*")),
+            It.IsAny<string?>(), It.IsAny<string?>()),
             Times.Once);
     }
 
