@@ -124,27 +124,46 @@ This guide provides step-by-step instructions for manually testing the MVO Delet
 
 ---
 
-### Scenario 4: Admin Account Protection
+### Scenario 4: Internal Origin Protection
 
-**Purpose**: Verify that internal accounts (Origin=Internal) are never auto-deleted
+**Purpose**: Verify that MVOs with `Origin=Internal` are never auto-deleted
+
+MVOs can have two origins:
+- `Projected` (0): Created by projecting a CSO from a connected system - subject to deletion rules
+- `Internal` (1): Created directly in JIM (e.g., service accounts, test identities) - protected from automatic deletion
 
 **Steps**:
-1. Get the admin MVO:
-   ```powershell
-   $adminMvos = Get-JIMMetaverseObject -ObjectType "User" -SearchQuery "admin"
-   ```
-
-2. Check the database directly to verify Origin field:
+1. Query the database to find any Internal MVOs:
    ```sql
    SELECT "Id", "DisplayName", "Origin", "LastConnectorDisconnectedDate"
    FROM "MetaverseObjects"
-   WHERE "DisplayName" LIKE '%admin%';
+   WHERE "Origin" = 1;  -- Internal
+   ```
+
+2. If no Internal MVOs exist, create one for testing via the API or database:
+   ```sql
+   -- For testing purposes only
+   INSERT INTO "MetaverseObjects" ("Id", "TypeId", "Origin", "Created")
+   SELECT gen_random_uuid(), "Id", 1, NOW()
+   FROM "MetaverseObjectTypes"
+   WHERE "Name" = 'User'
+   LIMIT 1;
+   ```
+
+3. Verify housekeeping skips Internal MVOs:
+   ```sql
+   -- This query (used by housekeeping) excludes Internal MVOs
+   SELECT COUNT(*) FROM "MetaverseObjects"
+   WHERE "Origin" = 0  -- Only Projected
+       AND "LastConnectorDisconnectedDate" IS NOT NULL;
    ```
 
 **Expected Result**:
-- Admin account has `Origin = 1` (Internal)
-- Admin account will never be returned by `GetMetaverseObjectsEligibleForDeletionAsync`
-- Admin account persists even with no CSO connections
+- Internal MVOs (`Origin = 1`) are never returned by `GetMetaverseObjectsEligibleForDeletionAsync`
+- Internal MVOs persist indefinitely, even with no CSO connections
+- Only Projected MVOs (`Origin = 0`) are evaluated for deletion
+
+**Note**: Admin users who log in via SSO/OIDC are regular Projected MVOs created from the IDP. They are not Internal MVOs. Role assignments (Admin, Operator, etc.) do not affect deletion rules - only the `Origin` field matters.
 
 ---
 
