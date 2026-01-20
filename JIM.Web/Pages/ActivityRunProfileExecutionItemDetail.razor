@@ -455,9 +455,11 @@
                             @if (_connectedSystemHeader != null && _deletionTriggerSystems != null
                                 && _deletionTriggerSystems.Any(cs => cs.Id == _connectedSystemHeader.Id))
                             {
-                                <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true" Class="mt-2">
-                                    <strong>@_connectedSystemHeader.Name</strong> is an authoritative source for @_metaverseObjectType.Name objects.
-                                    This deletion will trigger the deletion rule for any joined metaverse objects.
+                                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-2">
+                                    <MudText Typo="Typo.body2">
+                                        <strong>@_connectedSystemHeader.Name</strong> is an authoritative source for @_metaverseObjectType.Name objects.
+                                        This deletion will trigger the deletion rule for any joined metaverse objects.
+                                    </MudText>
                                 </MudAlert>
                             }
                             else if (_connectedSystemHeader != null)
@@ -484,8 +486,9 @@
         }
     }
 
-    @* Attribute Changes Section *@
-    @if (_activityRunProfileExecutionItem.ConnectedSystemObjectChange != null)
+    @* Attribute Changes Section - hide for deletions since there are no attribute changes to show *@
+    @if (_activityRunProfileExecutionItem.ConnectedSystemObjectChange != null
+        && _activityRunProfileExecutionItem.ObjectChangeType != ObjectChangeType.Deleted)
     {
         var changeCount = _activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges
             .Sum(c => c.ValueChanges.Count);
