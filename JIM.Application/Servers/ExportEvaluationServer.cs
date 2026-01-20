@@ -546,12 +546,14 @@ public class ExportEvaluationServer
     /// <summary>
     /// Evaluates export rules for an MVO that is being deleted.
     /// Implements Q4 decision: only create delete exports for Provisioned CSOs.
+    /// Stores the secondary external ID (e.g., DN for LDAP) in AttributeValueChanges
+    /// so the delete export can be processed even after the CSO is deleted.
     /// </summary>
     public async Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo)
     {
         var pendingExports = new List<PendingExport>();
 
-        // Get all CSOs joined to this MVO
+        // Get all CSOs joined to this MVO (includes attribute values for secondary external ID)
         var joinedCsos = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdAsync(mvo.Id);
 
         foreach (var cso in joinedCsos)
@@ -576,6 +578,29 @@ public class ExportEvaluationServer
                 SourceMetaverseObjectId = mvo.Id,
                 CreatedAt = DateTime.UtcNow
             };
+
+            // Store the secondary external ID (e.g., DN for LDAP) in AttributeValueChanges.
+            // This is critical for delete exports because the CSO may be deleted before the export runs,
+            // and connectors like LDAP need the DN to perform the delete operation.
+            var secondaryIdAttrValue = cso.SecondaryExternalIdAttributeValue;
+            if (secondaryIdAttrValue?.Attribute != null && !string.IsNullOrEmpty(secondaryIdAttrValue.StringValue))
+            {
+                pendingExport.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+                {
+                    Id = Guid.NewGuid(),
+                    AttributeId = secondaryIdAttrValue.Attribute.Id,
+                    StringValue = secondaryIdAttrValue.StringValue,
+                    ChangeType = PendingExportAttributeChangeType.Update
+                });
+
+                Log.Debug("EvaluateMvoDeletionAsync: Stored secondary external ID '{Value}' (attr {AttrName}) for delete export {ExportId}",
+                    secondaryIdAttrValue.StringValue, secondaryIdAttrValue.Attribute.Name, pendingExport.Id);
+            }
+            else
+            {
+                Log.Warning("EvaluateMvoDeletionAsync: CSO {CsoId} has no secondary external ID - delete export may fail if CSO is deleted before export",
+                    cso.Id);
+            }
 
             await Application.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
             pendingExports.Add(pendingExport);

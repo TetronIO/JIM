@@ -61,6 +61,9 @@ public abstract class SyncTaskProcessorBase
     // Batch collection for deferred CSO deletions (avoid per-CSO database calls)
     protected readonly List<(ConnectedSystemObject Cso, ActivityRunProfileExecutionItem ExecutionItem)> _obsoleteCsosToDelete = [];
 
+    // Batch collection for deferred MVO deletions (for immediate 0-grace-period deletions)
+    protected readonly List<MetaverseObject> _pendingMvoDeletions = [];
+
     // Batch collection for deferred reference attribute processing.
     // Reference attributes must be processed AFTER all CSOs in the page have been processed (joined/projected)
     // because group member references may point to user CSOs that come later in the processing order.
@@ -530,29 +533,39 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Marks an MVO for deletion by setting LastConnectorDisconnectedDate.
-    /// Housekeeping will handle actual deletion after the grace period expires.
+    /// Processes MVO deletion based on grace period configuration.
+    /// For 0-grace-period: queues for immediate synchronous deletion at page flush.
+    /// For grace period > 0: marks for deferred deletion by housekeeping.
     /// </summary>
-    /// <param name="mvo">The Metaverse Object to mark for deletion.</param>
-    /// <param name="reason">A description of why the MVO is being marked for deletion (for logging).</param>
+    /// <param name="mvo">The Metaverse Object to process for deletion.</param>
+    /// <param name="reason">A description of why the MVO is being deleted (for logging).</param>
     private async Task MarkMvoForDeletionAsync(MetaverseObject mvo, string reason)
     {
-        // Record when deletion was triggered
-        // This timestamp is used by housekeeping to determine when the grace period expires
-        mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
+        var gracePeriodDays = mvo.Type!.DeletionGracePeriodDays;
 
-        if (mvo.Type!.DeletionGracePeriodDays.HasValue && mvo.Type.DeletionGracePeriodDays.Value > 0)
+        if (!gracePeriodDays.HasValue || gracePeriodDays.Value == 0)
         {
-            Log.Information($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} marked for deletion ({reason}). Eligible after {mvo.Type.DeletionGracePeriodDays.Value} days.");
+            // No grace period - delete synchronously during this sync page flush
+            // Check if already queued (multiple CSOs from same MVO may disconnect in same page)
+            if (!_pendingMvoDeletions.Any(m => m.Id == mvo.Id))
+            {
+                Log.Information(
+                    "MarkMvoForDeletionAsync: MVO {MvoId} queued for immediate deletion ({Reason}). No grace period configured.",
+                    mvo.Id, reason);
+                _pendingMvoDeletions.Add(mvo);
+            }
         }
         else
         {
-            // No grace period - housekeeping will delete immediately on next run
-            Log.Information($"ProcessMvoDeletionRuleAsync: MVO {mvo.Id} marked for deletion ({reason}). No grace period configured - will be deleted by housekeeping.");
-        }
+            // Grace period configured - mark for deferred deletion by housekeeping
+            mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
+            Log.Information(
+                "MarkMvoForDeletionAsync: MVO {MvoId} marked for deletion ({Reason}). Eligible after {Days} days.",
+                mvo.Id, reason, gracePeriodDays.Value);
 
-        // Persist the LastConnectorDisconnectedDate
-        await _jim.Metaverse.UpdateMetaverseObjectAsync(mvo);
+            // Persist the LastConnectorDisconnectedDate
+            await _jim.Metaverse.UpdateMetaverseObjectAsync(mvo);
+        }
     }
 
     /// <summary>
@@ -1016,6 +1029,55 @@ public abstract class SyncTaskProcessorBase
         Log.Verbose("FlushObsoleteCsoOperationsAsync: Deleted {Count} obsolete CSOs in batch", _obsoleteCsosToDelete.Count);
 
         _obsoleteCsosToDelete.Clear();
+        span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Batch deletes all MVOs collected for synchronous deletion during the current page.
+    /// Creates delete pending exports for any remaining Provisioned CSOs before deletion.
+    /// This handles 0-grace-period deletions inline during sync rather than deferring to housekeeping.
+    /// </summary>
+    protected async Task FlushPendingMvoDeletionsAsync()
+    {
+        if (_pendingMvoDeletions.Count == 0)
+            return;
+
+        using var span = Diagnostics.Sync.StartSpan("FlushPendingMvoDeletions");
+        span.SetTag("deleteCount", _pendingMvoDeletions.Count);
+
+        foreach (var mvo in _pendingMvoDeletions)
+        {
+            try
+            {
+                // Create delete pending exports for any remaining Provisioned CSOs
+                // This handles WhenAuthoritativeSourceDisconnected where target CSOs still exist
+                var deleteExports = await _jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
+                if (deleteExports.Count > 0)
+                {
+                    Log.Information(
+                        "FlushPendingMvoDeletionsAsync: Created {Count} delete pending exports for MVO {MvoId}",
+                        deleteExports.Count, mvo.Id);
+                }
+
+                // Delete the MVO
+                await _jim.Metaverse.DeleteMetaverseObjectAsync(mvo);
+                Log.Information(
+                    "FlushPendingMvoDeletionsAsync: Deleted MVO {MvoId} ({DisplayName})",
+                    mvo.Id, mvo.DisplayName ?? "No display name");
+            }
+            catch (Exception ex)
+            {
+                // Log error but continue with other deletions
+                // Set LastConnectorDisconnectedDate as fallback so housekeeping can retry
+                Log.Error(ex,
+                    "FlushPendingMvoDeletionsAsync: Failed to delete MVO {MvoId}, marking for housekeeping retry",
+                    mvo.Id);
+                mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
+                await _jim.Metaverse.UpdateMetaverseObjectAsync(mvo);
+            }
+        }
+
+        _pendingMvoDeletions.Clear();
         span.SetSuccess();
     }
 

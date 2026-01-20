@@ -1654,6 +1654,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)
     {
         return await Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.Attribute)
             .Where(cso => cso.MetaverseObjectId == metaverseObjectId)
             .ToListAsync();
     }

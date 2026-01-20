@@ -1440,26 +1440,28 @@ try {
             Write-Host ""
             Write-Host "  Key validations:" -ForegroundColor Cyan
             Write-Host "    - WhenAuthoritativeSourceDisconnected rule triggered MVO deletion" -ForegroundColor Gray
-            Write-Host "    - Housekeeping deprovisioned the group from Target AD" -ForegroundColor Gray
+            Write-Host "    - MVO deleted synchronously (0-grace-period immediate deletion)" -ForegroundColor Gray
+            Write-Host "    - Delete pending exports deprovisioned the group from Target AD" -ForegroundColor Gray
         }
         else {
             # Check what failed
             $sourceDeleted = @($validations | Where-Object { $_.Name -eq "Group confirmed deleted from Source AD" -and $_.Success }).Count -gt 0
             $targetDeleted = @($validations | Where-Object { $_.Name -eq "Group deleted from Target AD" -and $_.Success }).Count -gt 0
 
-            if ($sourceDeleted -and $mvoMarkedForDeletion -and -not $targetDeleted) {
+            if ($sourceDeleted -and $mvoDeleted -and -not $targetDeleted) {
                 Write-Host ""
                 Write-Host "✗ DeleteGroup test failed" -ForegroundColor Red
                 Write-Host "  Group deleted from Source AD" -ForegroundColor Gray
-                Write-Host "  MVO marked for deletion (WhenAuthoritativeSourceDisconnected working)" -ForegroundColor Green
+                Write-Host "  MVO deleted synchronously (WhenAuthoritativeSourceDisconnected working)" -ForegroundColor Green
                 Write-Host "  Group NOT deleted from Target AD (deprovisioning not working)" -ForegroundColor Red
                 throw "DeleteGroup test failed: Target AD deprovisioning did not complete"
             }
-            elseif (-not $mvoMarkedForDeletion) {
+            elseif (-not $mvoDeleted) {
                 Write-Host ""
                 Write-Host "✗ DeleteGroup test failed" -ForegroundColor Red
-                Write-Host "  MVO was NOT marked for deletion after authoritative source disconnect" -ForegroundColor Red
-                throw "DeleteGroup test failed: MVO was not marked for deletion"
+                Write-Host "  MVO was NOT deleted after authoritative source disconnect" -ForegroundColor Red
+                Write-Host "  With DeletionGracePeriodDays = 0, MVO should be deleted synchronously during sync" -ForegroundColor Yellow
+                throw "DeleteGroup test failed: MVO was not deleted synchronously"
             }
             else {
                 throw "DeleteGroup validation failed"
@@ -1476,6 +1478,7 @@ try {
     $testResults.Success = $true
     Write-Host ""
     Write-Host "✓ Scenario 8 test execution completed successfully" -ForegroundColor Green
+    exit 0
 
 }
 catch {

@@ -185,6 +185,9 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             // batch delete obsolete CSOs
             await FlushObsoleteCsoOperationsAsync();
 
+            // batch delete MVOs marked for immediate deletion (0-grace-period)
+            await FlushPendingMvoDeletionsAsync();
+
             // Update progress with page completion - this persists ObjectsProcessed to database
             using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
             {

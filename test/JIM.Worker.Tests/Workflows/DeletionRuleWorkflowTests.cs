@@ -80,11 +80,12 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
     #region DeletionRule.WhenLastConnectorDisconnected Tests
 
     /// <summary>
-    /// Verifies that MVOs with DeletionRule=WhenLastConnectorDisconnected are marked
-    /// for deletion when the last CSO is disconnected.
+    /// Verifies that MVOs with DeletionRule=WhenLastConnectorDisconnected and a grace period
+    /// are marked for deletion (but not deleted) when the last CSO is disconnected.
+    /// Actual deletion is handled asynchronously by housekeeping after the grace period.
     /// </summary>
     [Test]
-    public async Task WhenLastConnectorDisconnected_WhenLastCsoDisconnected_MvoMarkedForDeletionAsync()
+    public async Task WhenLastConnectorDisconnected_WithGracePeriod_MvoMarkedForDeletionAsync()
     {
         // Arrange: Create Source system with a CSO that projects to an MVO
         var sourceSystem = await CreateConnectedSystemAsync("Source HR System");
@@ -92,7 +93,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
             "Person",
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
-            gracePeriodDays: 0);
+            gracePeriodDays: 30);  // 30 day grace period - handled by housekeeping
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
 
         // Create a CSO
@@ -121,14 +122,109 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         await new SyncDeltaSyncTaskProcessor(Jim, sourceSystem, deltaSyncProfile, deltaSyncActivity, cts2)
             .PerformDeltaSyncAsync();
 
-        // Assert: MVO should be marked for deletion
+        // Assert: MVO should be marked for deletion (not deleted yet due to grace period)
         var mvo = await DbContext.MetaverseObjects.FindAsync(mvoId);
-        Assert.That(mvo, Is.Not.Null, "MVO should still exist (deletion is by housekeeping)");
+        Assert.That(mvo, Is.Not.Null, "MVO should still exist (grace period > 0 means housekeeping handles deletion)");
         Assert.That(mvo!.LastConnectorDisconnectedDate, Is.Not.Null,
-            "MVO with DeletionRule=WhenLastConnectorDisconnected should have LastConnectorDisconnectedDate set " +
-            "when the last CSO is disconnected");
+            "MVO with grace period > 0 should have LastConnectorDisconnectedDate set");
         Assert.That(mvo.LastConnectorDisconnectedDate!.Value, Is.EqualTo(DateTime.UtcNow).Within(TimeSpan.FromMinutes(1)),
             "LastConnectorDisconnectedDate should be approximately now");
+    }
+
+    /// <summary>
+    /// Verifies that MVOs with DeletionRule=WhenLastConnectorDisconnected and zero grace period
+    /// are deleted synchronously during sync (not deferred to housekeeping).
+    /// </summary>
+    [Test]
+    public async Task WhenLastConnectorDisconnected_ZeroGracePeriod_MvoDeletedImmediatelyAsync()
+    {
+        // Arrange: Create Source system with a CSO that projects to an MVO
+        var sourceSystem = await CreateConnectedSystemAsync("Source HR System");
+        var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
+        var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
+            "Person",
+            MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
+            gracePeriodDays: 0);  // Zero grace period - delete synchronously
+        await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
+
+        // Create a CSO
+        var cso = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith");
+
+        // Run Full Sync to project the CSO to MVO
+        var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var fullSyncActivity = await CreateActivityAsync(sourceSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
+        var cts1 = new CancellationTokenSource();
+        await new SyncFullSyncTaskProcessor(Jim, sourceSystem, fullSyncProfile, fullSyncActivity, cts1)
+            .PerformFullSyncAsync();
+
+        // Verify MVO was created and CSO is joined
+        cso = await ReloadEntityAsync(cso);
+        Assert.That(cso.MetaverseObjectId, Is.Not.Null, "CSO should be joined to MVO after Full Sync");
+        var mvoId = cso.MetaverseObjectId!.Value;
+
+        // Mark CSO as Obsolete (simulating a Delete from delta import)
+        await MarkCsoAsObsoleteAsync(cso);
+
+        // Run Delta Sync to process the Obsolete CSO
+        var deltaSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        sourceSystem = await ReloadEntityAsync(sourceSystem);
+        var deltaSyncActivity = await CreateActivityAsync(sourceSystem.Id, deltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
+        var cts2 = new CancellationTokenSource();
+        await new SyncDeltaSyncTaskProcessor(Jim, sourceSystem, deltaSyncProfile, deltaSyncActivity, cts2)
+            .PerformDeltaSyncAsync();
+
+        // Assert: MVO should be DELETED (not just marked) due to zero grace period
+        var mvo = await DbContext.MetaverseObjects.FindAsync(mvoId);
+        Assert.That(mvo, Is.Null,
+            "MVO with grace period = 0 should be deleted immediately during sync, not deferred to housekeeping");
+    }
+
+    /// <summary>
+    /// Verifies that MVOs with DeletionRule=WhenLastConnectorDisconnected and null grace period
+    /// (no grace period configured) are deleted synchronously during sync.
+    /// </summary>
+    [Test]
+    public async Task WhenLastConnectorDisconnected_NullGracePeriod_MvoDeletedImmediatelyAsync()
+    {
+        // Arrange: Create Source system with a CSO that projects to an MVO
+        var sourceSystem = await CreateConnectedSystemAsync("Source HR System");
+        var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
+        var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
+            "Person",
+            MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
+            gracePeriodDays: null);  // Null grace period - same as 0, delete synchronously
+        await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
+
+        // Create a CSO
+        var cso = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith");
+
+        // Run Full Sync to project the CSO to MVO
+        var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var fullSyncActivity = await CreateActivityAsync(sourceSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
+        var cts1 = new CancellationTokenSource();
+        await new SyncFullSyncTaskProcessor(Jim, sourceSystem, fullSyncProfile, fullSyncActivity, cts1)
+            .PerformFullSyncAsync();
+
+        // Verify MVO was created and CSO is joined
+        cso = await ReloadEntityAsync(cso);
+        Assert.That(cso.MetaverseObjectId, Is.Not.Null, "CSO should be joined to MVO after Full Sync");
+        var mvoId = cso.MetaverseObjectId!.Value;
+
+        // Mark CSO as Obsolete (simulating a Delete from delta import)
+        await MarkCsoAsObsoleteAsync(cso);
+
+        // Run Delta Sync to process the Obsolete CSO
+        var deltaSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        sourceSystem = await ReloadEntityAsync(sourceSystem);
+        var deltaSyncActivity = await CreateActivityAsync(sourceSystem.Id, deltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
+        var cts2 = new CancellationTokenSource();
+        await new SyncDeltaSyncTaskProcessor(Jim, sourceSystem, deltaSyncProfile, deltaSyncActivity, cts2)
+            .PerformDeltaSyncAsync();
+
+        // Assert: MVO should be DELETED (not just marked) due to null grace period
+        var mvo = await DbContext.MetaverseObjects.FindAsync(mvoId);
+        Assert.That(mvo, Is.Null,
+            "MVO with grace period = null should be deleted immediately during sync, not deferred to housekeeping");
     }
 
     /// <summary>
@@ -194,12 +290,12 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
     #region DeletionTriggerConnectedSystemIds Tests
 
     /// <summary>
-    /// Verifies that MVOs are marked for deletion when a specific trigger system
-    /// disconnects, even if other CSOs from non-trigger systems remain connected.
+    /// Verifies that MVOs with grace period are marked for deletion (but not deleted)
+    /// when a specific trigger system disconnects, even if other CSOs remain connected.
     /// This is the key feature for "delete from Target when deleted from Source".
     /// </summary>
     [Test]
-    public async Task DeletionTrigger_WhenTriggerSystemDisconnects_MvoMarkedForDeletionAsync()
+    public async Task DeletionTrigger_WithGracePeriod_WhenTriggerSystemDisconnects_MvoMarkedAsync()
     {
         // Arrange: Create Source (HR) and Target (AD) systems
         var sourceSystem = await CreateConnectedSystemAsync("Source HR System");
@@ -211,7 +307,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
             "Person",
             MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
-            gracePeriodDays: 0,
+            gracePeriodDays: 30,  // 30 day grace period - handled by housekeeping
             triggerConnectedSystemIds: new List<int> { sourceSystem.Id });
 
         // Create sync rules
@@ -259,13 +355,94 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         await new SyncDeltaSyncTaskProcessor(Jim, sourceSystem, sourceDeltaSyncProfile, sourceDeltaSyncActivity, cts2)
             .PerformDeltaSyncAsync();
 
-        // Assert: MVO SHOULD be marked for deletion because Source (trigger system) disconnected
-        // even though Target CSO is still connected
+        // Assert: MVO SHOULD be marked for deletion (not deleted yet due to grace period)
         var mvo = await DbContext.MetaverseObjects.FindAsync(mvoId);
-        Assert.That(mvo, Is.Not.Null, "MVO should still exist (deletion is by housekeeping)");
+        Assert.That(mvo, Is.Not.Null, "MVO should still exist (grace period > 0 means housekeeping handles deletion)");
         Assert.That(mvo!.LastConnectorDisconnectedDate, Is.Not.Null,
-            "MVO SHOULD have LastConnectorDisconnectedDate set when a DeletionTriggerConnectedSystemId disconnects, " +
-            "even if other CSOs are still connected. This is the key feature for 'delete from Target when deleted from Source'.");
+            "MVO SHOULD have LastConnectorDisconnectedDate set when a DeletionTriggerConnectedSystemId disconnects");
+    }
+
+    /// <summary>
+    /// Verifies that MVOs with zero grace period are deleted synchronously
+    /// when a specific trigger system disconnects, and delete pending exports
+    /// are created for any remaining Provisioned CSOs.
+    /// </summary>
+    [Test]
+    public async Task DeletionTrigger_ZeroGracePeriod_MvoDeletedAndExportsCreatedAsync()
+    {
+        // Arrange: Create Source (HR) and Target (AD) systems
+        var sourceSystem = await CreateConnectedSystemAsync("Source HR System");
+        var targetSystem = await CreateConnectedSystemAsync("Target AD System");
+        var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
+        var targetType = await CreateCsoTypeAsync(targetSystem.Id, "User");
+
+        // Create MV type with WhenAuthoritativeSourceDisconnected and zero grace period
+        var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
+            "Person",
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            gracePeriodDays: 0,  // Zero grace period - delete synchronously
+            triggerConnectedSystemIds: new List<int> { sourceSystem.Id });
+
+        // Create sync rules
+        await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
+        var targetExportRule = await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export");
+
+        // Create matching rules
+        await CreateMatchingRuleAsync(sourceType, mvType, "EmployeeId");
+        await CreateMatchingRuleAsync(targetType, mvType, "EmployeeId");
+
+        // Create Source CSO
+        var sourceCso = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith", "EMP001");
+
+        // Run Full Sync on Source to create MVO
+        var sourceFullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var sourceFullSyncActivity = await CreateActivityAsync(sourceSystem.Id, sourceFullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
+        var cts1 = new CancellationTokenSource();
+        await new SyncFullSyncTaskProcessor(Jim, sourceSystem, sourceFullSyncProfile, sourceFullSyncActivity, cts1)
+            .PerformFullSyncAsync();
+
+        // Verify MVO created
+        sourceCso = await ReloadEntityAsync(sourceCso);
+        Assert.That(sourceCso.MetaverseObjectId, Is.Not.Null, "Source CSO should be joined to MVO");
+        var mvoId = sourceCso.MetaverseObjectId!.Value;
+
+        // Create Target CSO and join it to the MVO (simulating a provisioned export)
+        var targetCso = await CreateCsoAsync(targetSystem.Id, targetType, "John Smith", "EMP001");
+        targetCso.MetaverseObjectId = mvoId;
+        targetCso.JoinType = ConnectedSystemObjectJoinType.Provisioned;
+        targetCso.DateJoined = DateTime.UtcNow;
+        await DbContext.SaveChangesAsync();
+
+        // Verify both CSOs are joined
+        targetCso = await ReloadEntityAsync(targetCso);
+        Assert.That(targetCso.MetaverseObjectId, Is.EqualTo(mvoId), "Target CSO should be joined to same MVO");
+        var targetCsoId = targetCso.Id;
+
+        // Mark Source CSO as Obsolete (simulating a Delete from delta import)
+        await MarkCsoAsObsoleteAsync(sourceCso);
+
+        // Run Delta Sync on Source to process the Obsolete CSO
+        var sourceDeltaSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        sourceSystem = await ReloadEntityAsync(sourceSystem);
+        var sourceDeltaSyncActivity = await CreateActivityAsync(sourceSystem.Id, sourceDeltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
+        var cts2 = new CancellationTokenSource();
+        await new SyncDeltaSyncTaskProcessor(Jim, sourceSystem, sourceDeltaSyncProfile, sourceDeltaSyncActivity, cts2)
+            .PerformDeltaSyncAsync();
+
+        // Assert: MVO SHOULD be DELETED (not just marked) due to zero grace period
+        var mvo = await DbContext.MetaverseObjects.FindAsync(mvoId);
+        Assert.That(mvo, Is.Null,
+            "MVO with grace period = 0 should be deleted immediately during sync");
+
+        // Assert: Delete pending export should be created for Target CSO (Provisioned)
+        var deletePendingExports = await DbContext.PendingExports
+            .Where(pe => pe.ConnectedSystemId == targetSystem.Id &&
+                        pe.ChangeType == JIM.Models.Transactional.PendingExportChangeType.Delete)
+            .ToListAsync();
+        Assert.That(deletePendingExports, Has.Count.EqualTo(1),
+            "Delete pending export should be created for the Provisioned target CSO");
+        Assert.That(deletePendingExports[0].ConnectedSystemObjectId, Is.EqualTo(targetCsoId),
+            "Delete pending export should reference the target CSO");
     }
 
     /// <summary>
@@ -450,8 +627,9 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         Assert.That(hrCso.MetaverseObjectId, Is.EqualTo(mvoId), "HR CSO should still be joined to MVO");
         Assert.That(adCso.MetaverseObjectId, Is.EqualTo(mvoId), "AD CSO should still be joined to MVO");
 
-        // ===== Part 2: Delete HR CSO (authoritative) - MVO SHOULD be marked for deletion =====
+        // ===== Part 2: Delete HR CSO (authoritative) - MVO SHOULD be deleted =====
         await MarkCsoAsObsoleteAsync(hrCso);
+        var adCsoId = adCso.Id;  // Store before MVO deletion disconnects it
 
         var hrDeltaSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
         hrSystem = await ReloadEntityAsync(hrSystem);
@@ -460,17 +638,22 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         await new SyncDeltaSyncTaskProcessor(Jim, hrSystem, hrDeltaSyncProfile, hrDeltaSyncActivity, cts3)
             .PerformDeltaSyncAsync();
 
-        // Assert: MVO SHOULD be marked for deletion because HR (authoritative source) disconnected
+        // Assert: MVO SHOULD be DELETED (not just marked) because HR (authoritative source) disconnected
+        // and grace period is 0
         var mvoAfterHrDelete = await DbContext.MetaverseObjects.FindAsync(mvoId);
-        Assert.That(mvoAfterHrDelete, Is.Not.Null, "MVO should still exist (deletion is by housekeeping)");
-        Assert.That(mvoAfterHrDelete!.LastConnectorDisconnectedDate, Is.Not.Null,
-            "MVO SHOULD have LastConnectorDisconnectedDate set when HR (authoritative source) disconnects, " +
-            "even though AD CSO is still connected. This is the core Leaver scenario.");
+        Assert.That(mvoAfterHrDelete, Is.Null,
+            "MVO with grace period = 0 should be deleted immediately when HR (authoritative source) disconnects. " +
+            "This is the core Leaver scenario with synchronous deletion.");
 
-        // Verify AD CSO is still joined (it will be deprovisioned by housekeeping when MVO is deleted)
-        adCso = await ReloadEntityAsync(adCso);
-        Assert.That(adCso.MetaverseObjectId, Is.EqualTo(mvoId),
-            "AD CSO should still be joined to MVO (will be deprovisioned when MVO is deleted by housekeeping)");
+        // Verify delete pending export was created for AD CSO (Provisioned)
+        var deletePendingExports = await DbContext.PendingExports
+            .Where(pe => pe.ConnectedSystemId == adSystem.Id &&
+                        pe.ChangeType == JIM.Models.Transactional.PendingExportChangeType.Delete)
+            .ToListAsync();
+        Assert.That(deletePendingExports, Has.Count.EqualTo(1),
+            "Delete pending export should be created for the Provisioned AD CSO");
+        Assert.That(deletePendingExports[0].ConnectedSystemObjectId, Is.EqualTo(adCsoId),
+            "Delete pending export should reference the AD CSO");
     }
 
     #endregion

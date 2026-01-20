@@ -250,6 +250,64 @@ public class ExportEvaluationTests
     }
 
     /// <summary>
+    /// Tests that when MVO deletion creates a delete export for a Provisioned CSO,
+    /// the secondary external ID (e.g., DN for LDAP) is stored in AttributeValueChanges.
+    /// This is critical for synchronous MVO deletion scenarios where the CSO may be deleted
+    /// before the export runs.
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionAsync_WhenCsoHasSecondaryExternalId_StoresItInAttributeValueChangesAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var dnAttribute = targetUserType.Attributes.Single(a => a.Name == "distinguishedName");
+
+        // Create a provisioned CSO joined to the MVO with a DN value
+        var provisionedCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            SecondaryExternalIdAttributeId = dnAttribute.Id
+        };
+
+        // Add the DN attribute value to the CSO
+        var expectedDn = "CN=Test User,OU=Users,DC=example,DC=com";
+        provisionedCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = dnAttribute,
+            AttributeId = dnAttribute.Id,
+            StringValue = expectedDn
+        });
+
+        ConnectedSystemObjectsData.Add(provisionedCso);
+
+        // Track pending exports created
+        MockDbSetPendingExports.Setup(set => set.AddAsync(It.IsAny<PendingExport>(), It.IsAny<CancellationToken>()))
+            .Callback((PendingExport entity, CancellationToken _) => { PendingExportsData.Add(entity); })
+            .ReturnsAsync((PendingExport entity, CancellationToken _) => null!);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Count, Is.EqualTo(1), "Expected one delete PendingExport");
+        Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete));
+        Assert.That(result[0].AttributeValueChanges, Is.Not.Empty, "Expected AttributeValueChanges to contain the DN");
+        Assert.That(result[0].AttributeValueChanges.Count, Is.EqualTo(1));
+        Assert.That(result[0].AttributeValueChanges[0].AttributeId, Is.EqualTo(dnAttribute.Id));
+        Assert.That(result[0].AttributeValueChanges[0].StringValue, Is.EqualTo(expectedDn), "DN should be stored in AttributeValueChanges");
+    }
+
+    /// <summary>
     /// Tests that MVOs without a type set are handled gracefully.
     /// </summary>
     [Test]
