@@ -16,10 +16,12 @@ internal class LdapConnectorPartitions
         _logger = logger;
     }
 
-    internal async Task<List<ConnectorPartition>> GetPartitionsAsync()
+    internal async Task<List<ConnectorPartition>> GetPartitionsAsync(bool skipHiddenPartitions = true)
     {
         return await Task.Run(() =>
         {
+            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
             // get the partitions DN by deriving it from the configuration naming context
             var configurationNamingContext = GetConfigurationNamingContext();
             if (string.IsNullOrEmpty(configurationNamingContext))
@@ -30,25 +32,61 @@ internal class LdapConnectorPartitions
             var response = (SearchResponse)_connection.SendRequest(request);
             var partitions = new List<ConnectorPartition>();
 
+            _logger.Debug("GetPartitionsAsync: Found {Count} crossRef entries to process (skipHiddenPartitions={SkipHidden})",
+                response.Entries.Count, skipHiddenPartitions);
+
             foreach (SearchResultEntry entry in response.Entries)
             {
                 // ncName is the actual naming context DN (e.g., "DC=subatomic,DC=local")
                 // entry.DistinguishedName is the crossRef object DN (e.g., "CN=subatomic,CN=Partitions,CN=Configuration,DC=subatomic,DC=local")
                 // We use ncName as the Id because container DNs end with the naming context, not the crossRef DN
                 var ncName = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "ncname") ?? entry.DistinguishedName;
+                var systemFlags = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags");
+
+                // Determine if this is a domain partition (not hidden)
+                // Domain partitions in AD have systemFlags=3, but Samba AD may differ
+                // Also check if ncName is a pure domain DN (starts with DC= and doesn't contain Configuration/Schema/DnsZones)
+                var isDomainPartitionByFlags = systemFlags == LdapConnectorConstants.SYSTEM_FLAGS_DOMAIN_PARTITION;
+                var isDomainPartitionByName = ncName.StartsWith("DC=", StringComparison.OrdinalIgnoreCase) &&
+                                               !ncName.Contains("CN=Configuration", StringComparison.OrdinalIgnoreCase) &&
+                                               !ncName.Contains("CN=Schema", StringComparison.OrdinalIgnoreCase) &&
+                                               !ncName.Contains("DomainDnsZones", StringComparison.OrdinalIgnoreCase) &&
+                                               !ncName.Contains("ForestDnsZones", StringComparison.OrdinalIgnoreCase);
+                var isHidden = !isDomainPartitionByFlags && !isDomainPartitionByName;
+
+                _logger.Debug("GetPartitionsAsync: Partition '{Name}' - systemFlags={SystemFlags}, isDomainByFlags={ByFlags}, isDomainByName={ByName}, isHidden={IsHidden}",
+                    ncName, systemFlags ?? "(null)", isDomainPartitionByFlags, isDomainPartitionByName, isHidden);
+
+                // Skip hidden partitions early if configured - this avoids expensive LDAP subtree searches
+                if (skipHiddenPartitions && isHidden)
+                {
+                    _logger.Debug("GetPartitionsAsync: Skipping hidden partition '{Name}'", ncName);
+                    continue;
+                }
+
+                var partitionStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
                 var partition = new ConnectorPartition
                 {
                     Id = ncName,
                     Name = ncName,
-                    Hidden = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags") != LdapConnectorConstants.SYSTEM_FLAGS_DOMAIN_PARTITION,
+                    Hidden = isHidden,
                 };
 
                 partition.Containers = GetPartitionContainers(partition);
+                partitionStopwatch.Stop();
+
+                _logger.Debug("GetPartitionsAsync: Partition '{Name}' (Hidden={Hidden}) - {ContainerCount} containers retrieved in {ElapsedMs}ms",
+                    partition.Name, partition.Hidden, partition.Containers.Count, partitionStopwatch.ElapsedMilliseconds);
 
                 // only return partitions that have containers. Discard the rest.
                 if (partition.Containers.Count > 0)
                     partitions.Add(partition);
             }
+
+            totalStopwatch.Stop();
+            _logger.Information("GetPartitionsAsync: Completed - {PartitionCount} partitions with containers in {ElapsedMs}ms total",
+                partitions.Count, totalStopwatch.ElapsedMilliseconds);
 
             return partitions;
         });
@@ -56,9 +94,12 @@ internal class LdapConnectorPartitions
 
     private List<ConnectorContainer> GetPartitionContainers(ConnectorPartition partition)
     {
+        var ldapStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var request = new SearchRequest(partition.Name, "(|(objectClass=organizationalUnit)(objectClass=container))", SearchScope.Subtree);
         var response = (SearchResponse)_connection.SendRequest(request);
+        ldapStopwatch.Stop();
 
+        var processingStopwatch = System.Diagnostics.Stopwatch.StartNew();
         // Convert SearchResultEntry objects to simple DTOs for the hierarchy builder
         var entries = response.Entries.Cast<SearchResultEntry>()
             .Select(e => new ContainerEntry(
@@ -66,7 +107,13 @@ internal class LdapConnectorPartitions
                 LdapConnectorUtilities.GetEntryAttributeStringValue(e, "name") ?? e.DistinguishedName))
             .ToList();
 
-        return BuildContainerHierarchy(entries, partition.Name);
+        var containers = BuildContainerHierarchy(entries, partition.Name);
+        processingStopwatch.Stop();
+
+        _logger.Debug("GetPartitionContainers: '{Partition}' - LDAP query: {LdapMs}ms, Processing {EntryCount} entries: {ProcessingMs}ms",
+            partition.Name, ldapStopwatch.ElapsedMilliseconds, entries.Count, processingStopwatch.ElapsedMilliseconds);
+
+        return containers;
     }
 
     /// <summary>

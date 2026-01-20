@@ -52,6 +52,9 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     private readonly string _settingMaxRetries = "Maximum Retries";
     private readonly string _settingRetryDelay = "Retry Delay (ms)";
 
+    // Hierarchy settings
+    private readonly string _settingSkipHiddenPartitions = "Skip Hidden Partitions";
+
     // Export settings
     private readonly string _settingDeleteBehaviour = "Delete Behaviour";
     private readonly string _settingDisableAttribute = "Disable Attribute";
@@ -84,6 +87,9 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
             new() { Name = "Container Provisioning", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingCreateContainersAsNeeded, Description = "i.e. create OUs as needed when provisioning new objects.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox },
+
+            new() { Name = "Hierarchy Settings", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
+            new() { Name = _settingSkipHiddenPartitions, Description = "Skip hidden partitions (Configuration, Schema, DNS zones) when refreshing hierarchy. Improves performance significantly.", DefaultCheckboxValue = true, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.CheckBox },
 
             // Export settings
             new() { Name = "Export Settings", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Heading },
@@ -144,8 +150,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (_connection == null)
             throw new Exception("No connection available to get partitions with");
 
+        var skipHiddenPartitions = settingValues.SingleOrDefault(q => q.Setting.Name == _settingSkipHiddenPartitions)?.CheckboxValue ?? true;
+
         var ldapConnectorPartitions = new LdapConnectorPartitions(_connection, logger);
-        var partitions = await ldapConnectorPartitions.GetPartitionsAsync();
+        var partitions = await ldapConnectorPartitions.GetPartitionsAsync(skipHiddenPartitions);
         CloseImportConnection();
         return partitions;
     }

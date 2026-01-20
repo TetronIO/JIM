@@ -769,17 +769,21 @@ public class SynchronisationController(
     /// After importing the hierarchy, you can select which partitions and containers to include
     /// in import operations using the partition and container update endpoints.
     ///
-    /// **Note:** This operation is destructive - it will replace any existing partition/container configuration.
-    /// Any partition/container selections will be lost.
+    /// This operation uses a match-and-merge approach that preserves existing partition and container
+    /// selections where possible. Items are matched by their ExternalId (e.g., LDAP DN). The response
+    /// includes details about what changed: added items, removed items, renamed items, and moved containers.
+    ///
+    /// If any previously selected items were removed (no longer exist in the external system),
+    /// the `hasSelectedItemsRemoved` flag will be true in the response as a warning.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
-    /// <returns>The updated connected system with imported hierarchy.</returns>
+    /// <returns>A result object describing what changed during the hierarchy refresh.</returns>
     /// <response code="200">Hierarchy imported successfully.</response>
     /// <response code="400">Hierarchy import failed (e.g., connection error, invalid settings).</response>
     /// <response code="404">Connected system not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/import-hierarchy", Name = "ImportConnectedSystemHierarchy")]
-    [ProducesResponseType(typeof(ConnectedSystemDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(HierarchyRefreshResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -803,18 +807,17 @@ public class SynchronisationController(
         try
         {
             // Call the appropriate overload based on authentication method
+            JIM.Models.Staging.DTOs.HierarchyRefreshResult result;
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey != null)
-                await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, apiKey);
+                result = await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, apiKey);
             else
-                await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, initiatedBy);
+                result = await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, initiatedBy);
 
-            _logger.LogInformation("Hierarchy imported for connected system: {Id} ({Name}), {Count} partitions",
-                connectedSystemId, connectedSystem.Name, connectedSystem.Partitions?.Count ?? 0);
+            _logger.LogInformation("Hierarchy imported for connected system: {Id} ({Name}). Summary: {Summary}",
+                connectedSystemId, connectedSystem.Name, result.GetSummary());
 
-            // Retrieve the updated system
-            var updated = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
-            return Ok(ConnectedSystemDetailDto.FromEntity(updated!));
+            return Ok(HierarchyRefreshResultDto.FromModel(result));
         }
         catch (Exception ex)
         {

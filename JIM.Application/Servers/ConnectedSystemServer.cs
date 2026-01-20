@@ -1137,9 +1137,9 @@ public class ConnectedSystemServer
     /// Causes the associated Connector to be instantiated and the hierarchy (partitions and containers) to be imported from the connected system.
     /// You will need update the ConnectedSystem after if happy with the changes, to persist them.
     /// </summary>
-    /// <returns>Nothing, the ConnectedSystem passed in will be updated though with the new hierarchy.</returns>
+    /// <returns>A result object describing what changed during the hierarchy refresh.</returns>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-    public async Task ImportConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
+    public async Task<HierarchyRefreshResult> ImportConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
     {
         ValidateConnectedSystemParameter(connectedSystem);
 
@@ -1171,26 +1171,30 @@ public class ConnectedSystemServer
             throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
         }
 
-        // this point could potentially be a good point to check for data-loss if persisted and return a report object
-        // that the user could decide whether or not to take action against, i.e. cancel or persist.
+        // Merge discovered partitions with existing ones, preserving user selections
+        var result = MergeHierarchy(connectedSystem, partitions);
 
-        connectedSystem.Partitions = new List<ConnectedSystemPartition>(); // super destructive at this point. this is for mvp only. this causes all user partition/OU selections to be lost!
-        foreach (var partition in partitions)
+        // Log the changes
+        if (result.HasChanges)
         {
-            connectedSystem.Partitions.Add(new ConnectedSystemPartition
+            Log.Information("Hierarchy refresh for {ConnectedSystem}: {Summary}", connectedSystem.Name, result.GetSummary());
+            if (result.HasSelectedItemsRemoved)
             {
-                Name = partition.Name,
-                ExternalId = partition.Id,
-                Containers = partition.Containers.Select(BuildConnectedSystemContainerTree).ToHashSet()
-            });
+                Log.Warning("Hierarchy refresh for {ConnectedSystem} removed selected items. Removed partitions: {RemovedPartitions}, Removed containers: {RemovedContainers}",
+                    connectedSystem.Name,
+                    result.RemovedPartitions.Where(p => p.WasSelected).Select(p => p.Name),
+                    result.RemovedContainers.Where(c => c.WasSelected).Select(c => c.Name));
+            }
+            activity.Message = result.GetSummary();
         }
 
-        // for now though, we will just persist and let the user select containers later
-        // pass in this user-initiated activity, so that sub-operations can be associated with it, i.e. the partition persisting operation
+        // Persist the changes
         await UpdateConnectedSystemAsync(connectedSystem, initiatedBy, activity);
 
         // finish the activity
         await Application.Activities.CompleteActivityAsync(activity);
+
+        return result;
     }
 
     /// <summary>
@@ -1198,7 +1202,8 @@ public class ConnectedSystemServer
     /// </summary>
     /// <param name="connectedSystem">The connected system to import hierarchy for.</param>
     /// <param name="initiatedByApiKey">The API key that initiated this operation.</param>
-    public async Task ImportConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
+    /// <returns>A result object describing what changed during the hierarchy refresh.</returns>
+    public async Task<HierarchyRefreshResult> ImportConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
     {
         ValidateConnectedSystemParameter(connectedSystem);
         ArgumentNullException.ThrowIfNull(initiatedByApiKey);
@@ -1227,26 +1232,30 @@ public class ConnectedSystemServer
             throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
         }
 
-        // this point could potentially be a good point to check for data-loss if persisted and return a report object
-        // that the user could decide whether or not to take action against, i.e. cancel or persist.
+        // Merge discovered partitions with existing ones, preserving user selections
+        var result = MergeHierarchy(connectedSystem, partitions);
 
-        connectedSystem.Partitions = new List<ConnectedSystemPartition>(); // super destructive at this point. this is for mvp only. this causes all user partition/OU selections to be lost!
-        foreach (var partition in partitions)
+        // Log the changes
+        if (result.HasChanges)
         {
-            connectedSystem.Partitions.Add(new ConnectedSystemPartition
+            Log.Information("Hierarchy refresh for {ConnectedSystem}: {Summary}", connectedSystem.Name, result.GetSummary());
+            if (result.HasSelectedItemsRemoved)
             {
-                Name = partition.Name,
-                ExternalId = partition.Id,
-                Containers = partition.Containers.Select(BuildConnectedSystemContainerTree).ToHashSet()
-            });
+                Log.Warning("Hierarchy refresh for {ConnectedSystem} removed selected items. Removed partitions: {RemovedPartitions}, Removed containers: {RemovedContainers}",
+                    connectedSystem.Name,
+                    result.RemovedPartitions.Where(p => p.WasSelected).Select(p => p.Name),
+                    result.RemovedContainers.Where(c => c.WasSelected).Select(c => c.Name));
+            }
+            activity.Message = result.GetSummary();
         }
 
-        // for now though, we will just persist and let the user select containers later
-        // pass in this user-initiated activity, so that sub-operations can be associated with it, i.e. the partition persisting operation
+        // Persist the changes
         await UpdateConnectedSystemAsync(connectedSystem, initiatedByApiKey, activity);
 
         // finish the activity
         await Application.Activities.CompleteActivityAsync(activity);
+
+        return result;
     }
 
     /// <summary>
@@ -1418,6 +1427,314 @@ public class ConnectedSystemServer
 
         return null;
     }
+
+    #region Hierarchy Merge Methods
+    /// <summary>
+    /// Merges discovered partitions and containers with existing ones, preserving user selections.
+    /// This replaces the previous destructive approach that wiped all selections on refresh.
+    /// </summary>
+    /// <param name="connectedSystem">The connected system to merge hierarchy into.</param>
+    /// <param name="discoveredPartitions">The partitions discovered from the connector.</param>
+    /// <returns>A result object describing what changed during the merge.</returns>
+    private static HierarchyRefreshResult MergeHierarchy(ConnectedSystem connectedSystem, List<ConnectorPartition> discoveredPartitions)
+    {
+        var result = new HierarchyRefreshResult { Success = true };
+
+        // Build lookup of existing items by ExternalId for efficient matching
+        var existingPartitionLookup = (connectedSystem.Partitions ?? new List<ConnectedSystemPartition>())
+            .ToDictionary(p => p.ExternalId, StringComparer.OrdinalIgnoreCase);
+        var existingContainerLookup = BuildContainerLookup(connectedSystem.Partitions);
+
+        // Track which existing partitions we've matched
+        var matchedPartitionIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Ensure Partitions list exists
+        connectedSystem.Partitions ??= new List<ConnectedSystemPartition>();
+
+        // Process each discovered partition
+        foreach (var discovered in discoveredPartitions)
+        {
+            if (existingPartitionLookup.TryGetValue(discovered.Id, out var existing))
+            {
+                // MATCHED: Update name if changed, preserve Selected flag
+                matchedPartitionIds.Add(discovered.Id);
+
+                if (!string.Equals(existing.Name, discovered.Name, StringComparison.Ordinal))
+                {
+                    result.RenamedPartitions.Add(new HierarchyRenameItem
+                    {
+                        ExternalId = discovered.Id,
+                        OldName = existing.Name,
+                        NewName = discovered.Name,
+                        ItemType = HierarchyItemType.Partition
+                    });
+                    existing.Name = discovered.Name;
+                }
+
+                // Merge containers recursively within this partition
+                existing.Containers ??= new HashSet<ConnectedSystemContainer>();
+                MergeContainersRecursive(
+                    existing.Containers,
+                    discovered.Containers,
+                    null, // parent ExternalId for root containers
+                    result,
+                    existingContainerLookup);
+            }
+            else
+            {
+                // NEW: Add partition with Selected=false
+                // Note: Must set ConnectedSystem explicitly for EF Core change tracking to work correctly
+                // when the Partitions collection was loaded separately from the ConnectedSystem entity
+                var newPartition = new ConnectedSystemPartition
+                {
+                    Name = discovered.Name,
+                    ExternalId = discovered.Id,
+                    Selected = false,
+                    ConnectedSystem = connectedSystem,
+                    Containers = discovered.Containers.Select(BuildConnectedSystemContainerTree).ToHashSet()
+                };
+                connectedSystem.Partitions.Add(newPartition);
+
+                // Track this new partition so it doesn't get removed in the cleanup phase
+                matchedPartitionIds.Add(discovered.Id);
+
+                result.AddedPartitions.Add(new HierarchyChangeItem
+                {
+                    ExternalId = discovered.Id,
+                    Name = discovered.Name,
+                    ItemType = HierarchyItemType.Partition
+                });
+
+                // Count all new containers within the new partition
+                CountAddedContainersRecursive(newPartition.Containers, result.AddedContainers);
+            }
+        }
+
+        // Remove unmatched partitions (they no longer exist in the external system)
+        var toRemove = connectedSystem.Partitions
+            .Where(p => !matchedPartitionIds.Contains(p.ExternalId))
+            .ToList();
+
+        foreach (var partition in toRemove)
+        {
+            result.RemovedPartitions.Add(new HierarchyChangeItem
+            {
+                ExternalId = partition.ExternalId,
+                Name = partition.Name,
+                WasSelected = partition.Selected,
+                ItemType = HierarchyItemType.Partition
+            });
+
+            // Also record all containers within the removed partition
+            if (partition.Containers != null)
+                CollectRemovedContainersRecursive(partition.Containers, result);
+
+            connectedSystem.Partitions.Remove(partition);
+        }
+
+        // Calculate totals
+        result.TotalPartitions = connectedSystem.Partitions.Count;
+        result.TotalContainers = CountAllContainers(connectedSystem.Partitions);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Builds a flat lookup dictionary of all containers by ExternalId for efficient matching.
+    /// </summary>
+    private static Dictionary<string, ConnectedSystemContainer> BuildContainerLookup(IEnumerable<ConnectedSystemPartition>? partitions)
+    {
+        var lookup = new Dictionary<string, ConnectedSystemContainer>(StringComparer.OrdinalIgnoreCase);
+        if (partitions == null) return lookup;
+
+        foreach (var partition in partitions)
+        {
+            if (partition.Containers != null)
+                FlattenContainersIntoLookup(partition.Containers, lookup);
+        }
+
+        return lookup;
+    }
+
+    /// <summary>
+    /// Recursively flattens container hierarchy into a lookup dictionary.
+    /// </summary>
+    private static void FlattenContainersIntoLookup(IEnumerable<ConnectedSystemContainer> containers, Dictionary<string, ConnectedSystemContainer> lookup)
+    {
+        foreach (var container in containers)
+        {
+            // Use TryAdd to handle potential duplicates gracefully
+            lookup.TryAdd(container.ExternalId, container);
+
+            if (container.ChildContainers.Count > 0)
+                FlattenContainersIntoLookup(container.ChildContainers, lookup);
+        }
+    }
+
+    /// <summary>
+    /// Recursively merges discovered containers with existing ones.
+    /// </summary>
+    private static void MergeContainersRecursive(
+        HashSet<ConnectedSystemContainer> existingContainers,
+        List<ConnectorContainer> discoveredContainers,
+        string? parentExternalId,
+        HierarchyRefreshResult result,
+        Dictionary<string, ConnectedSystemContainer> globalLookup)
+    {
+        var matchedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var discovered in discoveredContainers)
+        {
+            if (globalLookup.TryGetValue(discovered.Id, out var existing))
+            {
+                matchedIds.Add(discovered.Id);
+
+                // Check for rename
+                if (!string.Equals(existing.Name, discovered.Name, StringComparison.Ordinal))
+                {
+                    result.RenamedContainers.Add(new HierarchyRenameItem
+                    {
+                        ExternalId = discovered.Id,
+                        OldName = existing.Name,
+                        NewName = discovered.Name,
+                        ItemType = HierarchyItemType.Container
+                    });
+                    existing.Name = discovered.Name;
+                }
+
+                // Check for move (different parent)
+                var existingParentId = existing.ParentContainer?.ExternalId;
+                if (!string.Equals(existingParentId, parentExternalId, StringComparison.OrdinalIgnoreCase))
+                {
+                    result.MovedContainers.Add(new HierarchyMoveItem
+                    {
+                        ExternalId = discovered.Id,
+                        Name = discovered.Name,
+                        OldParentExternalId = existingParentId,
+                        NewParentExternalId = parentExternalId
+                    });
+                    // Note: The actual parent relationship will be corrected by rebuilding the tree structure
+                    // while preserving the Selected flag. For now we just track the move.
+                }
+
+                // Recurse into children
+                MergeContainersRecursive(
+                    existing.ChildContainers,
+                    discovered.ChildContainers,
+                    discovered.Id,
+                    result,
+                    globalLookup);
+            }
+            else
+            {
+                // NEW container - add it
+                var newContainer = BuildConnectedSystemContainerTree(discovered);
+                existingContainers.Add(newContainer);
+
+                result.AddedContainers.Add(new HierarchyChangeItem
+                {
+                    ExternalId = discovered.Id,
+                    Name = discovered.Name,
+                    ItemType = HierarchyItemType.Container
+                });
+
+                // Count all child containers as added too
+                CountAddedContainersRecursive(newContainer.ChildContainers, result.AddedContainers);
+            }
+        }
+
+        // Remove unmatched containers (they no longer exist in the external system)
+        var toRemove = existingContainers
+            .Where(c => !matchedIds.Contains(c.ExternalId))
+            .ToList();
+
+        foreach (var container in toRemove)
+        {
+            CollectRemovedContainerRecursive(container, result);
+            existingContainers.Remove(container);
+        }
+    }
+
+    /// <summary>
+    /// Counts all containers in a hierarchy and adds them to the added containers list.
+    /// </summary>
+    private static void CountAddedContainersRecursive(IEnumerable<ConnectedSystemContainer>? containers, List<HierarchyChangeItem> addedContainers)
+    {
+        if (containers == null) return;
+
+        foreach (var container in containers)
+        {
+            addedContainers.Add(new HierarchyChangeItem
+            {
+                ExternalId = container.ExternalId,
+                Name = container.Name,
+                ItemType = HierarchyItemType.Container
+            });
+
+            CountAddedContainersRecursive(container.ChildContainers, addedContainers);
+        }
+    }
+
+    /// <summary>
+    /// Recursively collects all containers that are being removed into the result.
+    /// </summary>
+    private static void CollectRemovedContainersRecursive(IEnumerable<ConnectedSystemContainer> containers, HierarchyRefreshResult result)
+    {
+        foreach (var container in containers)
+        {
+            CollectRemovedContainerRecursive(container, result);
+        }
+    }
+
+    /// <summary>
+    /// Collects a single container and all its children into the removed containers list.
+    /// </summary>
+    private static void CollectRemovedContainerRecursive(ConnectedSystemContainer container, HierarchyRefreshResult result)
+    {
+        result.RemovedContainers.Add(new HierarchyChangeItem
+        {
+            ExternalId = container.ExternalId,
+            Name = container.Name,
+            WasSelected = container.Selected,
+            ItemType = HierarchyItemType.Container
+        });
+
+        foreach (var child in container.ChildContainers)
+        {
+            CollectRemovedContainerRecursive(child, result);
+        }
+    }
+
+    /// <summary>
+    /// Counts the total number of containers across all partitions.
+    /// </summary>
+    private static int CountAllContainers(IEnumerable<ConnectedSystemPartition>? partitions)
+    {
+        if (partitions == null) return 0;
+
+        var count = 0;
+        foreach (var partition in partitions)
+        {
+            if (partition.Containers != null)
+                count += CountContainersRecursive(partition.Containers);
+        }
+        return count;
+    }
+
+    /// <summary>
+    /// Recursively counts containers in a hierarchy.
+    /// </summary>
+    private static int CountContainersRecursive(IEnumerable<ConnectedSystemContainer> containers)
+    {
+        var count = 0;
+        foreach (var container in containers)
+        {
+            count++;
+            count += CountContainersRecursive(container.ChildContainers);
+        }
+        return count;
+    }
+    #endregion
 
     /// <summary>
     /// Checks if any ancestor container in the hierarchy is selected.

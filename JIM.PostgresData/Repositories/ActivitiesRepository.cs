@@ -483,6 +483,9 @@ public class ActivityRepository : IActivityRepository
             .ThenInclude(ac => ac.ValueChanges)
             .ThenInclude(vc => vc.ReferenceValue)
             .ThenInclude(rv => rv!.Type)
+            // For deletions, include the preserved object type to support deletion rule UI display
+            .Include(q => q.ConnectedSystemObjectChange)
+            .ThenInclude(c => c!.DeletedObjectType)
             // MVO change includes (for future use when MetaverseObjectChange is populated during sync)
             .Include(q => q.MetaverseObjectChange)
             .ThenInclude(c => c!.MetaverseObject)

@@ -338,8 +338,8 @@ try {
     Write-Host "  Importing LDAP hierarchy..." -ForegroundColor Gray
     $ldapSystemWithHierarchy = Import-JIMConnectedSystemHierarchy -Id $ldapSystem.id -PassThru
 
-    # Get the partitions
-    $partitions = Get-JIMConnectedSystemPartition -ConnectedSystemId $ldapSystem.id
+    # Get the partitions (wrap in @() to ensure array even if single result)
+    $partitions = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $ldapSystem.id)
 
     if ($partitions -and $partitions.Count -gt 0) {
         Write-Host "  Found $($partitions.Count) partition(s):" -ForegroundColor Gray
@@ -353,6 +353,12 @@ try {
         $domainPartition = $partitions | Where-Object {
             $_.name -eq "DC=subatomic,DC=local" -or $_.externalId -eq "DC=subatomic,DC=local"
         } | Select-Object -First 1
+
+        # Fallback: if only one partition and filter didn't match, use it (it's the domain partition)
+        if (-not $domainPartition -and $partitions.Count -eq 1) {
+            $domainPartition = $partitions[0]
+            Write-Host "  Using single available partition: $($domainPartition.name)" -ForegroundColor Yellow
+        }
 
         if ($domainPartition) {
             Write-Host "  Selecting partition: $($domainPartition.name) (ID: $($domainPartition.id))" -ForegroundColor Gray

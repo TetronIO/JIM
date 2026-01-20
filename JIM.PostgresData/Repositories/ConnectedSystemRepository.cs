@@ -194,8 +194,44 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)
     {
+        // Handle new partitions and containers explicitly - EF Core doesn't automatically detect new items
+        // in collections that were loaded from a separate query and then modified
+        if (connectedSystem.Partitions != null)
+        {
+            foreach (var partition in connectedSystem.Partitions)
+            {
+                if (partition.Id == 0)
+                {
+                    // New partition - add it to the context
+                    Repository.Database.ConnectedSystemPartitions.Add(partition);
+                }
+                else if (partition.Containers != null)
+                {
+                    // Existing partition - check for new containers
+                    AddNewContainersRecursively(partition.Containers);
+                }
+            }
+        }
+
         Repository.Database.Update(connectedSystem);
         await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Recursively adds new containers (with Id=0) to the DbContext for change tracking.
+    /// </summary>
+    private void AddNewContainersRecursively(IEnumerable<ConnectedSystemContainer>? containers)
+    {
+        if (containers == null) return;
+
+        foreach (var container in containers)
+        {
+            if (container.Id == 0)
+            {
+                Repository.Database.ConnectedSystemContainers.Add(container);
+            }
+            AddNewContainersRecursively(container.ChildContainers);
+        }
     }
     #endregion
 

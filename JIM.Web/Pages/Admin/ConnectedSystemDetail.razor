@@ -9,10 +9,13 @@
 @using JIM.Utilities
 @using JIM.Web.Shared
 @using Serilog
+@using System.Text
+@using Microsoft.JSInterop
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Connected System: @_connectedSystem?.Name</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System:</span> @_connectedSystem?.Name</MudText>
@@ -657,9 +660,9 @@
                     else
                     {
                         <MudText>
-                            <strong>Refreshing the @_partitionAndHierarchyText hierarchy can result in data-loss</strong>. If partitions and/or containers are removed, then this will result in all objects in them being deleted
-                            from the Connected System, which depending on your configuration, could result in those objects being deprovisioned from the Metaverse and any downstream Connected Systems. Refresh with caution.
-                            Ensure the Connected System identity has the right permissions needed to retrieve the hierarchy, and consider a database backup before proceeding.
+                            <strong>Refreshing the @_partitionAndHierarchyText hierarchy preserves your selections</strong> where possible. Existing partitions and containers are matched
+                            by their external ID, so renamed or moved items will keep their selection state. However, if partitions or containers no longer exist in the external system
+                            (e.g., deleted OUs, permission changes), they will be removed. Ensure the Connected System identity has the right permissions needed to retrieve the hierarchy.
                         </MudText>
                     }
                     <MudButton
@@ -696,6 +699,203 @@
                         }
                     </MudButton>
                 </MudAlert>
+
+                @* Hierarchy Refresh Results Panel *@
+                @if (_hierarchyRefreshResult != null && _hierarchyRefreshResult.HasChanges)
+                {
+                    <MudExpansionPanels Class="mt-4" Elevation="0">
+                        <MudExpansionPanel Expanded="false">
+                            <TitleContent>
+                                <div class="d-flex align-center gap-3">
+                                    <MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Small" />
+                                    <MudText Typo="Typo.body1">
+                                        Hierarchy refreshed: @_hierarchyRefreshResult.GetSummary()
+                                    </MudText>
+                                    @if (_hierarchyRefreshResult.HasSelectedItemsRemoved)
+                                    {
+                                        <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">
+                                            Selected items removed
+                                        </MudChip>
+                                    }
+                                </div>
+                            </TitleContent>
+                            <ChildContent>
+                                <div class="pa-4">
+                                    <div class="d-flex justify-end mb-3">
+                                        <MudButton StartIcon="@Icons.Material.Filled.ContentCopy"
+                                                   Variant="Variant.Outlined"
+                                                   Size="Size.Small"
+                                                   OnClick="CopyHierarchyChangesToClipboardAsync">
+                                            Copy Changes
+                                        </MudButton>
+                                    </div>
+
+                                    @* Removed Items (show first if any were selected - important warning) *@
+                                    @if (_hierarchyRefreshResult.RemovedPartitions.Count > 0 || _hierarchyRefreshResult.RemovedContainers.Count > 0)
+                                    {
+                                        <MudText Typo="Typo.subtitle2" Class="mb-2">
+                                            <MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Class="mr-1" Color="Color.Error" />
+                                            Removed
+                                        </MudText>
+                                        <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
+                                            <thead>
+                                                <tr>
+                                                    <th>Type</th>
+                                                    <th>Name</th>
+                                                    <th>External ID</th>
+                                                    <th>Was Selected</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var item in _hierarchyRefreshResult.RemovedPartitions)
+                                                {
+                                                    <tr class="@(item.WasSelected ? "mud-error-text" : "")">
+                                                        <td>Partition</td>
+                                                        <td>@item.Name</td>
+                                                        <td style="font-family: monospace; font-size: 0.85em;">@item.ExternalId</td>
+                                                        <td>
+                                                            @if (item.WasSelected)
+                                                            {
+                                                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" Class="mr-1" />
+                                                                <text>Yes</text>
+                                                            }
+                                                            else
+                                                            {
+                                                                <text>No</text>
+                                                            }
+                                                        </td>
+                                                    </tr>
+                                                }
+                                                @foreach (var item in _hierarchyRefreshResult.RemovedContainers)
+                                                {
+                                                    <tr class="@(item.WasSelected ? "mud-error-text" : "")">
+                                                        <td>Container</td>
+                                                        <td>@item.Name</td>
+                                                        <td style="font-family: monospace; font-size: 0.85em;">@item.ExternalId</td>
+                                                        <td>
+                                                            @if (item.WasSelected)
+                                                            {
+                                                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" Class="mr-1" />
+                                                                <text>Yes</text>
+                                                            }
+                                                            else
+                                                            {
+                                                                <text>No</text>
+                                                            }
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </MudSimpleTable>
+                                    }
+
+                                    @* Added Items *@
+                                    @if (_hierarchyRefreshResult.AddedPartitions.Count > 0 || _hierarchyRefreshResult.AddedContainers.Count > 0)
+                                    {
+                                        <MudText Typo="Typo.subtitle2" Class="mb-2">
+                                            <MudIcon Icon="@Icons.Material.Filled.Add" Size="Size.Small" Class="mr-1" Color="Color.Success" />
+                                            Added
+                                        </MudText>
+                                        <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
+                                            <thead>
+                                                <tr>
+                                                    <th>Type</th>
+                                                    <th>Name</th>
+                                                    <th>External ID</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var item in _hierarchyRefreshResult.AddedPartitions)
+                                                {
+                                                    <tr>
+                                                        <td>Partition</td>
+                                                        <td>@item.Name</td>
+                                                        <td style="font-family: monospace; font-size: 0.85em;">@item.ExternalId</td>
+                                                    </tr>
+                                                }
+                                                @foreach (var item in _hierarchyRefreshResult.AddedContainers)
+                                                {
+                                                    <tr>
+                                                        <td>Container</td>
+                                                        <td>@item.Name</td>
+                                                        <td style="font-family: monospace; font-size: 0.85em;">@item.ExternalId</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </MudSimpleTable>
+                                    }
+
+                                    @* Renamed Items *@
+                                    @if (_hierarchyRefreshResult.RenamedPartitions.Count > 0 || _hierarchyRefreshResult.RenamedContainers.Count > 0)
+                                    {
+                                        <MudText Typo="Typo.subtitle2" Class="mb-2">
+                                            <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Class="mr-1" Color="Color.Info" />
+                                            Renamed
+                                        </MudText>
+                                        <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
+                                            <thead>
+                                                <tr>
+                                                    <th>Type</th>
+                                                    <th>Old Name</th>
+                                                    <th>New Name</th>
+                                                    <th>External ID</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var item in _hierarchyRefreshResult.RenamedPartitions)
+                                                {
+                                                    <tr>
+                                                        <td>Partition</td>
+                                                        <td>@item.OldName</td>
+                                                        <td>@item.NewName</td>
+                                                        <td style="font-family: monospace; font-size: 0.85em;">@item.ExternalId</td>
+                                                    </tr>
+                                                }
+                                                @foreach (var item in _hierarchyRefreshResult.RenamedContainers)
+                                                {
+                                                    <tr>
+                                                        <td>Container</td>
+                                                        <td>@item.OldName</td>
+                                                        <td>@item.NewName</td>
+                                                        <td style="font-family: monospace; font-size: 0.85em;">@item.ExternalId</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </MudSimpleTable>
+                                    }
+
+                                    @* Moved Containers *@
+                                    @if (_hierarchyRefreshResult.MovedContainers.Count > 0)
+                                    {
+                                        <MudText Typo="Typo.subtitle2" Class="mb-2">
+                                            <MudIcon Icon="@Icons.Material.Filled.DriveFileMove" Size="Size.Small" Class="mr-1" Color="Color.Info" />
+                                            Moved
+                                        </MudText>
+                                        <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
+                                            <thead>
+                                                <tr>
+                                                    <th>Name</th>
+                                                    <th>Old Parent</th>
+                                                    <th>New Parent</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var item in _hierarchyRefreshResult.MovedContainers)
+                                                {
+                                                    <tr>
+                                                        <td>@item.Name</td>
+                                                        <td style="font-family: monospace; font-size: 0.85em;">@(item.OldParentExternalId ?? "(root)")</td>
+                                                        <td style="font-family: monospace; font-size: 0.85em;">@(item.NewParentExternalId ?? "(root)")</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </MudSimpleTable>
+                                    }
+                                </div>
+                            </ChildContent>
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
+                }
 
                 @if (_connectedSystem.Partitions is { Count: > 0 } && !_connectedSystem.HasPartitionsOrContainersSelected())
                 {
@@ -1238,6 +1438,7 @@
     private bool _selectedObjectTypeHasClasses;
     private bool _selectedObjectTypeHasDescriptions;
     private bool _hierarchyBeingRetrieved;
+    private HierarchyRefreshResult? _hierarchyRefreshResult;
     private string _schemaSearchString = "";
     private ConnectedSystemRunProfile _newRunProfile = new() { PageSize = 500, RunType = ConnectedSystemRunType.NotSet };
     private IEnumerable<string> AttributeClassFilterSelectedValues { get; set; } = new HashSet<string>();
@@ -1555,13 +1756,33 @@
         var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
 
         _hierarchyBeingRetrieved = true;
+        _hierarchyRefreshResult = null; // Clear previous result
         StateHasChanged();
         await Task.Delay(1);
 
         try
         {
-            await Jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(_connectedSystem, user);
-            Snackbar.Add("Hierarchy has been retrieved successfully.", Severity.Success);
+            _hierarchyRefreshResult = await Jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(_connectedSystem, user);
+
+            if (_hierarchyRefreshResult.Success)
+            {
+                if (_hierarchyRefreshResult.HasSelectedItemsRemoved)
+                {
+                    Snackbar.Add("Hierarchy refreshed with warnings. Some selected items were removed.", Severity.Warning);
+                }
+                else if (_hierarchyRefreshResult.HasChanges)
+                {
+                    Snackbar.Add($"Hierarchy refreshed: {_hierarchyRefreshResult.GetSummary()}", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add("Hierarchy refreshed. No changes detected.", Severity.Info);
+                }
+            }
+            else
+            {
+                Snackbar.Add($"Hierarchy refresh failed: {_hierarchyRefreshResult.ErrorMessage}", Severity.Error);
+            }
         }
         catch (Exception ex)
         {
@@ -1572,6 +1793,67 @@
         {
             _hierarchyBeingRetrieved = false;
             StateHasChanged();
+        }
+    }
+
+    private async Task CopyHierarchyChangesToClipboardAsync()
+    {
+        if (_hierarchyRefreshResult == null)
+            return;
+
+        var sb = new StringBuilder();
+        sb.AppendLine("Hierarchy Refresh Results");
+        sb.AppendLine(new string('=', 50));
+        sb.AppendLine($"Summary: {_hierarchyRefreshResult.GetSummary()}");
+        sb.AppendLine($"Total Partitions: {_hierarchyRefreshResult.TotalPartitions}");
+        sb.AppendLine($"Total Containers: {_hierarchyRefreshResult.TotalContainers}");
+        sb.AppendLine();
+
+        if (_hierarchyRefreshResult.RemovedPartitions.Count > 0 || _hierarchyRefreshResult.RemovedContainers.Count > 0)
+        {
+            sb.AppendLine("REMOVED:");
+            foreach (var item in _hierarchyRefreshResult.RemovedPartitions)
+                sb.AppendLine($"  [Partition] {item.Name} ({item.ExternalId}){(item.WasSelected ? " - WAS SELECTED!" : "")}");
+            foreach (var item in _hierarchyRefreshResult.RemovedContainers)
+                sb.AppendLine($"  [Container] {item.Name} ({item.ExternalId}){(item.WasSelected ? " - WAS SELECTED!" : "")}");
+            sb.AppendLine();
+        }
+
+        if (_hierarchyRefreshResult.AddedPartitions.Count > 0 || _hierarchyRefreshResult.AddedContainers.Count > 0)
+        {
+            sb.AppendLine("ADDED:");
+            foreach (var item in _hierarchyRefreshResult.AddedPartitions)
+                sb.AppendLine($"  [Partition] {item.Name} ({item.ExternalId})");
+            foreach (var item in _hierarchyRefreshResult.AddedContainers)
+                sb.AppendLine($"  [Container] {item.Name} ({item.ExternalId})");
+            sb.AppendLine();
+        }
+
+        if (_hierarchyRefreshResult.RenamedPartitions.Count > 0 || _hierarchyRefreshResult.RenamedContainers.Count > 0)
+        {
+            sb.AppendLine("RENAMED:");
+            foreach (var item in _hierarchyRefreshResult.RenamedPartitions)
+                sb.AppendLine($"  [Partition] \"{item.OldName}\" -> \"{item.NewName}\" ({item.ExternalId})");
+            foreach (var item in _hierarchyRefreshResult.RenamedContainers)
+                sb.AppendLine($"  [Container] \"{item.OldName}\" -> \"{item.NewName}\" ({item.ExternalId})");
+            sb.AppendLine();
+        }
+
+        if (_hierarchyRefreshResult.MovedContainers.Count > 0)
+        {
+            sb.AppendLine("MOVED:");
+            foreach (var item in _hierarchyRefreshResult.MovedContainers)
+                sb.AppendLine($"  [Container] {item.Name}: {item.OldParentExternalId ?? "(root)"} -> {item.NewParentExternalId ?? "(root)"}");
+        }
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", sb.ToString());
+            Snackbar.Add("Changes copied to clipboard", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Failed to copy to clipboard. Please copy manually.", Severity.Warning);
         }
     }
 

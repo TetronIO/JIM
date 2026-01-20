@@ -198,14 +198,14 @@ else {
 }
 
 # Source hierarchy
-$sourcePartitionsCheck = Get-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id
+$sourcePartitionsCheck = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id)
 if ($sourcePartitionsCheck -and $sourcePartitionsCheck.Count -gt 0) {
     Write-Host "  Source hierarchy already imported ($($sourcePartitionsCheck.Count) partitions)" -ForegroundColor Gray
 }
 else {
     Write-Host "  Importing Source LDAP hierarchy..." -ForegroundColor Gray
     Import-JIMConnectedSystemHierarchy -Id $sourceSystem.id | Out-Null
-    $sourcePartitionsCheck = Get-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id
+    $sourcePartitionsCheck = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id)
     Write-Host "  ✓ Source hierarchy imported ($($sourcePartitionsCheck.Count) partitions)" -ForegroundColor Green
 }
 
@@ -222,14 +222,14 @@ else {
 }
 
 # Target hierarchy
-$targetPartitionsCheck = Get-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id
+$targetPartitionsCheck = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id)
 if ($targetPartitionsCheck -and $targetPartitionsCheck.Count -gt 0) {
     Write-Host "  Target hierarchy already imported ($($targetPartitionsCheck.Count) partitions)" -ForegroundColor Gray
 }
 else {
     Write-Host "  Importing Target LDAP hierarchy..." -ForegroundColor Gray
     Import-JIMConnectedSystemHierarchy -Id $targetSystem.id | Out-Null
-    $targetPartitionsCheck = Get-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id
+    $targetPartitionsCheck = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id)
     Write-Host "  ✓ Target hierarchy imported ($($targetPartitionsCheck.Count) partitions)" -ForegroundColor Green
 }
 
@@ -260,9 +260,18 @@ function Find-ContainerByName {
 
 # Configure Source partitions - select domain partition and Corp containers
 Write-Host "  Configuring Source LDAP partitions..." -ForegroundColor Gray
-$sourcePartitions = Get-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id
+$sourcePartitions = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id)
+Write-Host "    Found $($sourcePartitions.Count) partition(s):" -ForegroundColor Gray
+foreach ($p in $sourcePartitions) {
+    Write-Host "      - Name: '$($p.name)', ExternalId: '$($p.externalId)'" -ForegroundColor Gray
+}
 
 $sourceDomainPartition = $sourcePartitions | Where-Object { $_.name -eq "DC=sourcedomain,DC=local" }
+if (-not $sourceDomainPartition -and $sourcePartitions.Count -eq 1) {
+    # If only one partition exists and filter didn't match, use it (it's the domain partition)
+    $sourceDomainPartition = $sourcePartitions[0]
+    Write-Host "    Using single available partition: $($sourceDomainPartition.name)" -ForegroundColor Yellow
+}
 if ($sourceDomainPartition) {
     Set-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id -PartitionId $sourceDomainPartition.id -Selected $true | Out-Null
     Write-Host "    ✓ Selected partition: $($sourceDomainPartition.name)" -ForegroundColor Green
@@ -292,17 +301,30 @@ if ($sourceDomainPartition) {
 
     # Deselect other partitions
     foreach ($partition in $sourcePartitions) {
-        if ($partition.name -ne "DC=sourcedomain,DC=local") {
+        if ($partition.name -ne "DC=sourcedomain,DC=local" -and $partition.name -ne $sourceDomainPartition.name) {
             Set-JIMConnectedSystemPartition -ConnectedSystemId $sourceSystem.id -PartitionId $partition.id -Selected $false | Out-Null
         }
     }
 }
+else {
+    Write-Host "    ✗ ERROR: Could not find source domain partition!" -ForegroundColor Red
+    throw "Source domain partition not found. Available partitions: $($sourcePartitions | ForEach-Object { $_.name } | Join-String -Separator ', ')"
+}
 
 # Configure Target partitions - select domain partition and CorpManaged containers
 Write-Host "  Configuring Target LDAP partitions..." -ForegroundColor Gray
-$targetPartitions = Get-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id
+$targetPartitions = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id)
+Write-Host "    Found $($targetPartitions.Count) partition(s):" -ForegroundColor Gray
+foreach ($p in $targetPartitions) {
+    Write-Host "      - Name: '$($p.name)', ExternalId: '$($p.externalId)'" -ForegroundColor Gray
+}
 
 $targetDomainPartition = $targetPartitions | Where-Object { $_.name -eq "DC=targetdomain,DC=local" }
+if (-not $targetDomainPartition -and $targetPartitions.Count -eq 1) {
+    # If only one partition exists and filter didn't match, use it (it's the domain partition)
+    $targetDomainPartition = $targetPartitions[0]
+    Write-Host "    Using single available partition: $($targetDomainPartition.name)" -ForegroundColor Yellow
+}
 if ($targetDomainPartition) {
     Set-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id -PartitionId $targetDomainPartition.id -Selected $true | Out-Null
     Write-Host "    ✓ Selected partition: $($targetDomainPartition.name)" -ForegroundColor Green
@@ -332,10 +354,14 @@ if ($targetDomainPartition) {
 
     # Deselect other partitions
     foreach ($partition in $targetPartitions) {
-        if ($partition.name -ne "DC=targetdomain,DC=local") {
+        if ($partition.name -ne "DC=targetdomain,DC=local" -and $partition.name -ne $targetDomainPartition.name) {
             Set-JIMConnectedSystemPartition -ConnectedSystemId $targetSystem.id -PartitionId $partition.id -Selected $false | Out-Null
         }
     }
+}
+else {
+    Write-Host "    ✗ ERROR: Could not find target domain partition!" -ForegroundColor Red
+    throw "Target domain partition not found. Available partitions: $($targetPartitions | ForEach-Object { $_.name } | Join-String -Separator ', ')"
 }
 
 Write-Host "  ✓ Partitions and containers configured" -ForegroundColor Green
