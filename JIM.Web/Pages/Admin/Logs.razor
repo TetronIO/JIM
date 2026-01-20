@@ -32,8 +32,9 @@
                 MaxDate="DateTime.Today" Clearable="true" Placeholder="Today" />
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
-            <MudSelect T="string" @bind-Value="_selectedLevel" Label="Minimum Level" Variant="Variant.Outlined"
-                Dense="true" Clearable="true" Placeholder="All Levels">
+            <MudSelect T="string" @bind-SelectedValues="_selectedLevels" Label="Level(s)" Variant="Variant.Outlined"
+                Dense="true" Clearable="true" Placeholder="All Levels" MultiSelection="true"
+                MultiSelectionTextFunc="@(new Func<List<string>, string>(GetSelectedLevelsText))">
                 <MudSelectItem T="string" Value="@("Verbose")">Verbose</MudSelectItem>
                 <MudSelectItem T="string" Value="@("Debug")">Debug</MudSelectItem>
                 <MudSelectItem T="string" Value="@("Information")">Information</MudSelectItem>
@@ -255,7 +256,7 @@
     private List<LogEntry>? _logEntries;
     private string? _selectedService;
     private DateTime? _selectedDate;
-    private string? _selectedLevel;
+    private IEnumerable<string> _selectedLevels = [];
     private string? _searchText;
     private bool _loading = true;
     private bool _autoRefresh;
@@ -364,7 +365,7 @@
             _logEntries = await LogReader.GetLogEntriesAsync(
                 service: _selectedService,
                 date: _selectedDate,
-                minLevel: _selectedLevel,
+                levels: _selectedLevels,
                 search: _searchText,
                 limit: 500,
                 offset: 0);
@@ -404,6 +405,20 @@
             "Fatal" => Color.Error,
             _ => Color.Default
         };
+    }
+
+    private static string GetSelectedLevelsText(List<string> selectedLevels)
+    {
+        if (selectedLevels == null || selectedLevels.Count == 0)
+            return string.Empty;
+
+        if (selectedLevels.Count == 1)
+            return selectedLevels[0];
+
+        if (selectedLevels.Count == 6)
+            return "All Levels";
+
+        return $"{selectedLevels.Count} levels";
     }
 
     private static string GetRowStyle(LogEntry entry)

@@ -16,10 +16,10 @@ public class LogQueryRequest
     public DateTime? Date { get; set; }
 
     /// <summary>
-    /// Minimum log level to include (Verbose, Debug, Information, Warning, Error, Fatal).
-    /// Null returns all levels.
+    /// Specific log levels to include (Verbose, Debug, Information, Warning, Error, Fatal).
+    /// Null or empty returns all levels.
     /// </summary>
-    public string? MinLevel { get; set; }
+    public List<string>? Levels { get; set; }
 
     /// <summary>
     /// Text to search for in the log message (case-insensitive).
