@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **In Progress** |
+| **Status** | **Complete** |
 | **Milestone** | MVP |
 | **Related Issue** | [#173](https://github.com/TetronIO/JIM/issues/173) |
 | **Dependencies** | Source/Target AD containers (samba-ad-source, samba-ad-target) |
@@ -85,13 +85,25 @@
   - Deletes the test group from Source AD
   - Runs Delta Forward Sync to propagate deletion
   - Validates group is deleted from Target AD
-  - Handles deletion grace period gracefully (partial success if group pending)
+  - With `DeletionGracePeriodDays = 0`, MVO is deleted **synchronously during sync** (not deferred to housekeeping)
+  - Delete pending exports are created for target CSOs and executed in the subsequent export
 
-### Remaining 🔄
+- **Phase 10: Synchronous MVO Deletion** - Complete (2026-01-20)
+  - Implemented synchronous MVO deletion for 0-grace-period objects
+  - Before: All MVO deletions were deferred to HousekeepingWorker (up to 60 second delay)
+  - After: 0-grace-period MVOs are deleted immediately during sync
+  - Delete pending exports created for Provisioned CSOs before MVO deletion
+  - MVOs with grace period > 0 continue to use housekeeping worker for deferred deletion
 
-- **Integration Testing** - Pending
-  - Full end-to-end test run with all steps
-  - Validation with different template sizes (Nano, Small, Medium)
+### All Phases Complete ✅
+
+All 6 test steps are implemented and passing:
+1. **InitialSync** - Groups and members provisioned to Target AD
+2. **ForwardSync** - Membership changes flow from Source to Target
+3. **DetectDrift** - Detects manual changes in Target AD
+4. **ReassertState** - Restores authoritative state from Source
+5. **NewGroup** - New groups provisioned to Target
+6. **DeleteGroup** - Deleted groups removed from Target (synchronous with 0-grace-period)
 
 ---
 
@@ -663,12 +675,12 @@ Scenario 8 is fully self-contained and will:
 
 ### Functional
 
-- [ ] All 6 test steps pass with Nano template
-- [ ] All test steps pass with Small template
-- [ ] All group types sync correctly (Universal/Global Security/Distribution)
-- [ ] Member references resolve correctly across domains
-- [ ] Drift detection and reassertion work correctly
-- [ ] Group creation and deletion sync correctly
+- [x] All 6 test steps pass with Nano template
+- [x] All test steps pass with Small template
+- [x] All group types sync correctly (Universal/Global Security/Distribution)
+- [x] Member references resolve correctly across domains
+- [x] Drift detection and reassertion work correctly
+- [x] Group creation and deletion sync correctly
 
 ### Performance
 
@@ -680,10 +692,10 @@ Scenario 8 is fully self-contained and will:
 
 ### Quality
 
-- [ ] All new code has unit tests where applicable
-- [ ] PowerShell scripts follow existing patterns
-- [ ] Documentation updated in INTEGRATION_TESTING.md
-- [ ] No regressions in existing scenarios
+- [x] All new code has unit tests where applicable
+- [x] PowerShell scripts follow existing patterns
+- [x] Documentation updated in INTEGRATION_TESTING.md
+- [x] No regressions in existing scenarios
 
 ---
 

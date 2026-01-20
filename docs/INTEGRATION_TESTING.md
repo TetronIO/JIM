@@ -1631,7 +1631,7 @@ JIM/
 | Scenarios 9-11 | ⏳ Post-MVP | Database scenarios |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 
-### Scenario 8 Complete (2026-01-15)
+### Scenario 8 Complete (2026-01-20)
 
 All remaining Scenario 8 test steps have been implemented:
 
@@ -1641,7 +1641,9 @@ All remaining Scenario 8 test steps have been implemented:
 
 3. **NewGroup** - Creates a new group `Project-Scenario8Test` in Source AD with members, runs Delta Forward Sync to provision to Target AD. Validates group exists with correct members.
 
-4. **DeleteGroup** - Deletes a group from Source AD, runs Delta Forward Sync to propagate deletion. Handles deletion grace period gracefully.
+4. **DeleteGroup** - Deletes a group from Source AD, runs Delta Forward Sync to propagate deletion. With `DeletionGracePeriodDays = 0`, the MVO is deleted **synchronously during sync** (not deferred to housekeeping). Delete pending exports are created for target CSOs and executed in the subsequent export.
+
+**Synchronous MVO Deletion** (2026-01-20): For MVOs with `DeletionGracePeriodDays = 0` (or null), deletion now happens immediately during sync rather than being deferred to housekeeping. This provides immediate consistency - when an authoritative source deletes an object, the MVO and downstream delete exports are created in the same sync cycle. MVOs with a grace period > 0 continue to use the housekeeping worker for deferred deletion.
 
 See full plan: [`docs/plans/SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md`](docs/plans/SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md)
 
