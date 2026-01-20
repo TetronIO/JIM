@@ -1357,15 +1357,9 @@ try {
             Write-Host "    ⚠ Skipping MVO validation (MVO ID not found)" -ForegroundColor Yellow
         }
 
-        # Step 6.7: Run export to Target AD to complete deprovisioning
-        # With synchronous deletion, delete pending exports are created during sync
-        # We just need to run the export - no need to wait for housekeeping
-        Write-Host "  Running export to Target AD to complete deprovisioning..." -ForegroundColor Gray
-
-        if ($targetExportProfile) {
-            Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExportProfile.id -Wait
-            Start-Sleep -Seconds 2
-        }
+        # NOTE: Export to Target AD is already included in Invoke-DeltaForwardSync (step 3)
+        # so we don't need to run it again here. The delete pending export created during
+        # synchronous MVO deletion is executed as part of the forward sync cycle.
 
         # Check if group is deleted from Target AD
         docker exec $targetContainer samba-tool group show $groupToDelete 2>&1 | Out-Null
