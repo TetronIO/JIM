@@ -283,7 +283,7 @@ The following GitHub issues define additional deletion rule features. This secti
 
 | Issue | Title | Status | Priority |
 |-------|-------|--------|----------|
-| #115 | WhenAuthoritativeSourceDisconnected (DeletionTriggerConnectedSystemIds) | Open | **P1 - Critical** |
+| #115 | WhenAuthoritativeSourceDisconnected (DeletionTriggerConnectedSystemIds) | ✅ **Closed** | **P1 - Critical** |
 | #116 | ExcludedFromLastConnectorCheck | Open | P3 - Low |
 | #117 | Soft Delete / Recycle Bin | Open | P2 - Medium |
 | #118 | Conditional MVO Deletion (Attribute-Based) | Open | P2 - Medium |
