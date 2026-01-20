@@ -548,6 +548,7 @@ public class ExportEvaluationServer
     /// Implements Q4 decision: only create delete exports for Provisioned CSOs.
     /// Stores the secondary external ID (e.g., DN for LDAP) in AttributeValueChanges
     /// so the delete export can be processed even after the CSO is deleted.
+    /// Also disconnects CSOs from the MVO to prevent spurious sync processing.
     /// </summary>
     public async Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo)
     {
@@ -563,6 +564,14 @@ public class ExportEvaluationServer
             {
                 Log.Debug("EvaluateMvoDeletionAsync: Skipping delete for CSO {CsoId} - JoinType is {JoinType}, not Provisioned",
                     cso.Id, cso.JoinType);
+
+                // Still disconnect non-Provisioned CSOs to prevent spurious sync processing
+                cso.MetaverseObjectId = null;
+                cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
+                cso.DateJoined = null;
+                await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(cso);
+                Log.Debug("EvaluateMvoDeletionAsync: Disconnected non-Provisioned CSO {CsoId} from MVO {MvoId}",
+                    cso.Id, mvo.Id);
                 continue;
             }
 
@@ -605,7 +614,15 @@ public class ExportEvaluationServer
             await Application.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
             pendingExports.Add(pendingExport);
 
-            Log.Information("EvaluateMvoDeletionAsync: Created delete PendingExport {ExportId} for CSO {CsoId} in system {SystemId}",
+            // Disconnect the CSO from the MVO to prevent spurious sync processing after the MVO is deleted.
+            // The confirming import will mark the CSO as Obsolete when the object is deleted from the target,
+            // and we don't want the subsequent sync to try to "disconnect" an already-orphaned CSO.
+            cso.MetaverseObjectId = null;
+            cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
+            cso.DateJoined = null;
+            await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(cso);
+
+            Log.Information("EvaluateMvoDeletionAsync: Created delete PendingExport {ExportId} for CSO {CsoId} in system {SystemId}, CSO disconnected from MVO",
                 pendingExport.Id, cso.Id, cso.ConnectedSystemId);
         }
 
