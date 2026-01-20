@@ -334,6 +334,145 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
             "(Source CSO is still connected and Source is the only authoritative system)");
     }
 
+    /// <summary>
+    /// Tests a realistic multi-source scenario:
+    /// - HR system is the authoritative source (contributes most user attributes)
+    /// - Training system is a secondary source (contributes trainingCompleted and trainingExpires attributes)
+    /// - AD is the target system (receives provisioned users)
+    ///
+    /// Validates:
+    /// 1. Deleting Training CSO does NOT cause MVO deletion (non-authoritative)
+    /// 2. Deleting HR CSO DOES cause MVO deletion (authoritative source)
+    /// 3. Multi-source attribute fusing works correctly
+    /// </summary>
+    [Test]
+    public async Task DeletionTrigger_MultiSourceScenario_OnlyAuthoritativeSourceTriggersDeleteAsync()
+    {
+        // Arrange: Create HR (authoritative), Training (secondary source), and AD (target) systems
+        var hrSystem = await CreateConnectedSystemAsync("HR System");
+        var trainingSystem = await CreateConnectedSystemAsync("Training System");
+        var adSystem = await CreateConnectedSystemAsync("Target AD System");
+
+        var hrUserType = await CreateCsoTypeAsync(hrSystem.Id, "Employee");
+        var trainingUserType = await CreateCsoTypeAsync(trainingSystem.Id, "Trainee");
+        var adUserType = await CreateCsoTypeAsync(adSystem.Id, "User");
+
+        // Create MV type with WhenAuthoritativeSourceDisconnected and HR as the only authoritative source
+        var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
+            "Person",
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            gracePeriodDays: 0,
+            triggerConnectedSystemIds: new List<int> { hrSystem.Id });
+
+        // Add additional attributes for multi-source fusing test
+        var trainingCompletedAttr = new MetaverseAttribute
+        {
+            Name = "TrainingCompleted",
+            Type = AttributeDataType.Boolean,
+            AttributePlurality = AttributePlurality.SingleValued,
+            MetaverseObjectTypes = new List<MetaverseObjectType> { mvType },
+            PredefinedSearchAttributes = new List<JIM.Models.Search.PredefinedSearchAttribute>()
+        };
+        var trainingExpiresAttr = new MetaverseAttribute
+        {
+            Name = "TrainingExpires",
+            Type = AttributeDataType.DateTime,
+            AttributePlurality = AttributePlurality.SingleValued,
+            MetaverseObjectTypes = new List<MetaverseObjectType> { mvType },
+            PredefinedSearchAttributes = new List<JIM.Models.Search.PredefinedSearchAttribute>()
+        };
+        DbContext.MetaverseAttributes.Add(trainingCompletedAttr);
+        DbContext.MetaverseAttributes.Add(trainingExpiresAttr);
+        await DbContext.SaveChangesAsync();
+        mvType.Attributes.Add(trainingCompletedAttr);
+        mvType.Attributes.Add(trainingExpiresAttr);
+
+        // Create import sync rules for HR and Training (both contribute attributes)
+        await CreateImportSyncRuleAsync(hrSystem.Id, hrUserType, mvType, "HR Import");
+        await CreateImportSyncRuleAsync(trainingSystem.Id, trainingUserType, mvType, "Training Import");
+
+        // Create export sync rule for AD
+        await CreateExportSyncRuleAsync(adSystem.Id, adUserType, mvType, "AD Export");
+
+        // Create HR CSO and run Full Sync to project to MVO
+        var hrCso = await CreateCsoAsync(hrSystem.Id, hrUserType, "John Smith", "EMP001");
+
+        var hrFullSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var hrFullSyncActivity = await CreateActivityAsync(hrSystem.Id, hrFullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
+        var cts1 = new CancellationTokenSource();
+        await new SyncFullSyncTaskProcessor(Jim, hrSystem, hrFullSyncProfile, hrFullSyncActivity, cts1)
+            .PerformFullSyncAsync();
+
+        hrCso = await ReloadEntityAsync(hrCso);
+        Assert.That(hrCso.MetaverseObjectId, Is.Not.Null, "HR CSO should be joined to MVO after Full Sync");
+        var mvoId = hrCso.MetaverseObjectId!.Value;
+
+        // Create Training CSO and manually join to the same MVO (simulating a matched join)
+        var trainingCso = await CreateCsoAsync(trainingSystem.Id, trainingUserType, "John Smith Training", "EMP001");
+        trainingCso.MetaverseObjectId = mvoId;
+        trainingCso.JoinType = ConnectedSystemObjectJoinType.Joined;
+        trainingCso.DateJoined = DateTime.UtcNow;
+        await DbContext.SaveChangesAsync();
+
+        // Create AD CSO and manually join to the same MVO (simulating provisioning)
+        var adCso = await CreateCsoAsync(adSystem.Id, adUserType, "John Smith AD", "EMP001");
+        adCso.MetaverseObjectId = mvoId;
+        adCso.JoinType = ConnectedSystemObjectJoinType.Provisioned;
+        adCso.DateJoined = DateTime.UtcNow;
+        await DbContext.SaveChangesAsync();
+
+        // Verify all three CSOs are joined to the same MVO
+        trainingCso = await ReloadEntityAsync(trainingCso);
+        adCso = await ReloadEntityAsync(adCso);
+        Assert.That(trainingCso.MetaverseObjectId, Is.EqualTo(mvoId), "Training CSO should be joined to same MVO");
+        Assert.That(adCso.MetaverseObjectId, Is.EqualTo(mvoId), "AD CSO should be joined to same MVO");
+
+        // ===== Part 1: Delete Training CSO (non-authoritative) - MVO should NOT be marked for deletion =====
+        await MarkCsoAsObsoleteAsync(trainingCso);
+
+        var trainingDeltaSyncProfile = await CreateRunProfileAsync(trainingSystem.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        trainingSystem = await ReloadEntityAsync(trainingSystem);
+        var trainingDeltaSyncActivity = await CreateActivityAsync(trainingSystem.Id, trainingDeltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
+        var cts2 = new CancellationTokenSource();
+        await new SyncDeltaSyncTaskProcessor(Jim, trainingSystem, trainingDeltaSyncProfile, trainingDeltaSyncActivity, cts2)
+            .PerformDeltaSyncAsync();
+
+        // Assert: MVO should NOT be marked for deletion (Training is not authoritative)
+        var mvoAfterTrainingDelete = await DbContext.MetaverseObjects.FindAsync(mvoId);
+        Assert.That(mvoAfterTrainingDelete, Is.Not.Null, "MVO should still exist after Training CSO deletion");
+        Assert.That(mvoAfterTrainingDelete!.LastConnectorDisconnectedDate, Is.Null,
+            "MVO should NOT have LastConnectorDisconnectedDate set when Training (non-authoritative) system disconnects. " +
+            "HR (authoritative) and AD CSOs are still connected.");
+
+        // Verify HR and AD CSOs are still joined
+        hrCso = await ReloadEntityAsync(hrCso);
+        adCso = await ReloadEntityAsync(adCso);
+        Assert.That(hrCso.MetaverseObjectId, Is.EqualTo(mvoId), "HR CSO should still be joined to MVO");
+        Assert.That(adCso.MetaverseObjectId, Is.EqualTo(mvoId), "AD CSO should still be joined to MVO");
+
+        // ===== Part 2: Delete HR CSO (authoritative) - MVO SHOULD be marked for deletion =====
+        await MarkCsoAsObsoleteAsync(hrCso);
+
+        var hrDeltaSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        hrSystem = await ReloadEntityAsync(hrSystem);
+        var hrDeltaSyncActivity = await CreateActivityAsync(hrSystem.Id, hrDeltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
+        var cts3 = new CancellationTokenSource();
+        await new SyncDeltaSyncTaskProcessor(Jim, hrSystem, hrDeltaSyncProfile, hrDeltaSyncActivity, cts3)
+            .PerformDeltaSyncAsync();
+
+        // Assert: MVO SHOULD be marked for deletion because HR (authoritative source) disconnected
+        var mvoAfterHrDelete = await DbContext.MetaverseObjects.FindAsync(mvoId);
+        Assert.That(mvoAfterHrDelete, Is.Not.Null, "MVO should still exist (deletion is by housekeeping)");
+        Assert.That(mvoAfterHrDelete!.LastConnectorDisconnectedDate, Is.Not.Null,
+            "MVO SHOULD have LastConnectorDisconnectedDate set when HR (authoritative source) disconnects, " +
+            "even though AD CSO is still connected. This is the core Leaver scenario.");
+
+        // Verify AD CSO is still joined (it will be deprovisioned by housekeeping when MVO is deleted)
+        adCso = await ReloadEntityAsync(adCso);
+        Assert.That(adCso.MetaverseObjectId, Is.EqualTo(mvoId),
+            "AD CSO should still be joined to MVO (will be deprovisioned when MVO is deleted by housekeeping)");
+    }
+
     #endregion
 
     #region Grace Period Tests

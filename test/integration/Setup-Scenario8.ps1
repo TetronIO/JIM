@@ -931,17 +931,17 @@ $mvGroupTypeCurrent = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "G
 
 if ($mvGroupTypeCurrent) {
     # Configure deletion rule:
-    # - DeletionRule: WhenLastConnectorDisconnected - triggers deletion when connector disconnects
+    # - DeletionRule: WhenAuthoritativeSourceDisconnected - delete MVO when authoritative source disconnects
     # - DeletionGracePeriodDays: 0 - immediate deletion (no grace period)
-    # - DeletionTriggerConnectedSystemIds: Source system only - triggers when Source disconnects
-    #   This means when a group is deleted from Source AD (APAC), the MVO is deleted,
-    #   which in turn triggers deprovisioning (deletion) from Target AD (EMEA)
+    # - DeletionTriggerConnectedSystemIds: Source system only - Source (APAC) is the authoritative source
+    #   This means when a group is deleted from Source AD (APAC), the MVO is marked for deletion
+    #   even though Target AD (EMEA) CSO still exists, triggering deprovisioning from Target
     Set-JIMMetaverseObjectType -Id $mvGroupTypeCurrent.id `
-        -DeletionRule WhenLastConnectorDisconnected `
+        -DeletionRule WhenAuthoritativeSourceDisconnected `
         -DeletionGracePeriodDays 0 `
         -DeletionTriggerConnectedSystemIds @($sourceSystem.id) | Out-Null
 
-    Write-Host "  ✓ Group deletion rule configured (immediate deletion when Source disconnects)" -ForegroundColor Green
+    Write-Host "  ✓ Group deletion rule configured (WhenAuthoritativeSourceDisconnected, Source=APAC)" -ForegroundColor Green
 }
 else {
     Write-Host "  ⚠ Could not find Group metaverse object type" -ForegroundColor Yellow
@@ -976,7 +976,7 @@ Write-Host "  Users:  APAC AD -> Metaverse -> EMEA AD" -ForegroundColor Gray
 Write-Host "  Groups: APAC AD -> Metaverse -> EMEA AD" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Deletion Rules Configured:" -ForegroundColor Yellow
-Write-Host "  Groups: Immediate deletion when Source (APAC) disconnects" -ForegroundColor Gray
+Write-Host "  Groups: WhenAuthoritativeSourceDisconnected (Source=APAC, immediate)" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Run Profiles Created:" -ForegroundColor Yellow
 Write-Host "  Quantum Dynamics APAC: Full Import, Delta Import, Full Sync, Delta Sync, Export" -ForegroundColor Gray
