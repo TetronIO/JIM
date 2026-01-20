@@ -4,6 +4,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Logic
 @using JIM.Models.Staging
+@using JIM.Utilities
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
@@ -90,12 +91,93 @@
     <MudText Typo="Typo.h5" Class="mt-5">Attributes</MudText>
     <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">These are the attributes bound to the metaverse object type:</MudText>
 
-    <MudPaper Class="pa-5 mt-5 mb-5" Outlined="true">
-        @foreach (var metaverseAttribute in _metaverseObjectType.Attributes)
-        {
-            <MudChip T="string" Variant="Variant.Filled" Color="Color.Primary">@metaverseAttribute.Name</MudChip>
-        }
-    </MudPaper>
+    @* Filter Chips Section *@
+    <MudStack Row="true" Spacing="6" Class="mt-3 mb-3 flex-wrap" AlignItems="AlignItems.Start">
+        @* Type Filter *@
+        <div>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Type:</MudText>
+            <MudChipSet T="AttributeDataType"
+                        SelectionMode="SelectionMode.MultiSelection"
+                        SelectedValues="_selectedTypes"
+                        SelectedValuesChanged="OnTypeFilterChanged">
+                @foreach (var type in GetAvailableTypes())
+                {
+                    <MudChip Value="@type.Key"
+                             Color="Color.Primary"
+                             Variant="@(_selectedTypes.Contains(type.Key) ? Variant.Filled : Variant.Outlined)"
+                             SelectedColor="Color.Primary">
+                        @type.Key.ToString().SplitOnCapitalLetters()
+                        <MudText Typo="Typo.caption" Class="ml-1">(@type.Value)</MudText>
+                    </MudChip>
+                }
+            </MudChipSet>
+        </div>
+
+        @* Plurality Filter *@
+        <div>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Plurality:</MudText>
+            <MudChipSet T="AttributePlurality"
+                        SelectionMode="SelectionMode.MultiSelection"
+                        SelectedValues="_selectedPluralities"
+                        SelectedValuesChanged="OnPluralityFilterChanged">
+                @foreach (var plurality in GetAvailablePluralities())
+                {
+                    <MudChip Value="@plurality.Key"
+                             Color="Color.Secondary"
+                             Variant="@(_selectedPluralities.Contains(plurality.Key) ? Variant.Filled : Variant.Outlined)"
+                             SelectedColor="Color.Secondary">
+                        @(plurality.Key == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                        <MudText Typo="Typo.caption" Class="ml-1">(@plurality.Value)</MudText>
+                    </MudChip>
+                }
+            </MudChipSet>
+        </div>
+
+        @* Built-in Filter *@
+        <div>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Built-in:</MudText>
+            <MudChipSet T="bool"
+                        SelectionMode="SelectionMode.MultiSelection"
+                        SelectedValues="_selectedBuiltIn"
+                        SelectedValuesChanged="OnBuiltInFilterChanged">
+                @foreach (var builtIn in GetAvailableBuiltIn())
+                {
+                    <MudChip Value="@builtIn.Key"
+                             Color="Color.Default"
+                             Variant="@(_selectedBuiltIn.Contains(builtIn.Key) ? Variant.Filled : Variant.Outlined)"
+                             SelectedColor="Color.Default">
+                        @(builtIn.Key ? "Yes" : "No")
+                        <MudText Typo="Typo.caption" Class="ml-1">(@builtIn.Value)</MudText>
+                    </MudChip>
+                }
+            </MudChipSet>
+        </div>
+    </MudStack>
+
+    <MudTable Items="@_metaverseObjectType.Attributes.OrderBy(a => a.Name)" Hover="true" Breakpoint="Breakpoint.Sm" Class="mb-5" SortLabel="Sort By" Elevation="0" Outlined="true" Filter="new Func<MetaverseAttribute, bool>(FilterAttributes)">
+        <ToolBarContent>
+            <MudSpacer />
+            <MudTextField @bind-Value="_attributeSearchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.Type)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.AttributePlurality)"><MudText Typo="Typo.button">Plurality</MudText></MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Type">@context.Type.ToString().SplitOnCapitalLetters()</MudTd>
+            <MudTd DataLabel="Plurality">@(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")</MudTd>
+            <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
+            <MudTd DataLabel="Created">
+                <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                    @context.Created.ToLocalTime().ToRelativeTime()
+                </MudTooltip>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
 }
 
 @code {
@@ -104,6 +186,12 @@
 
     private MetaverseObjectType? _metaverseObjectType;
     private List<BreadcrumbItem> _breadcrumbs = null!;
+    private string _attributeSearchString = "";
+
+    // Attribute filter state
+    private IReadOnlyCollection<AttributeDataType> _selectedTypes = new List<AttributeDataType>();
+    private IReadOnlyCollection<AttributePlurality> _selectedPluralities = new List<AttributePlurality>();
+    private IReadOnlyCollection<bool> _selectedBuiltIn = new List<bool>();
 
     // Deletion rules state
     private MetaverseObjectDeletionRule _deletionRule;
@@ -244,5 +332,75 @@
         {
             Snackbar.Add($"Failed to save deletion rules: {ex.Message}", Severity.Error);
         }
+    }
+
+    private bool FilterAttributes(MetaverseAttribute attribute)
+    {
+        // Text search filter
+        if (!string.IsNullOrWhiteSpace(_attributeSearchString) &&
+            !attribute.Name.Contains(_attributeSearchString, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // Type filter
+        if (_selectedTypes.Count > 0 && !_selectedTypes.Contains(attribute.Type))
+            return false;
+
+        // Plurality filter
+        if (_selectedPluralities.Count > 0 && !_selectedPluralities.Contains(attribute.AttributePlurality))
+            return false;
+
+        // Built-in filter
+        if (_selectedBuiltIn.Count > 0 && !_selectedBuiltIn.Contains(attribute.BuiltIn))
+            return false;
+
+        return true;
+    }
+
+    private void OnTypeFilterChanged(IReadOnlyCollection<AttributeDataType> selectedTypes)
+    {
+        _selectedTypes = selectedTypes;
+    }
+
+    private void OnPluralityFilterChanged(IReadOnlyCollection<AttributePlurality> selectedPluralities)
+    {
+        _selectedPluralities = selectedPluralities;
+    }
+
+    private void OnBuiltInFilterChanged(IReadOnlyCollection<bool> selectedBuiltIn)
+    {
+        _selectedBuiltIn = selectedBuiltIn;
+    }
+
+    private IEnumerable<KeyValuePair<AttributeDataType, int>> GetAvailableTypes()
+    {
+        if (_metaverseObjectType == null)
+            return Enumerable.Empty<KeyValuePair<AttributeDataType, int>>();
+
+        return _metaverseObjectType.Attributes
+            .GroupBy(a => a.Type)
+            .Select(g => new KeyValuePair<AttributeDataType, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key.ToString());
+    }
+
+    private IEnumerable<KeyValuePair<AttributePlurality, int>> GetAvailablePluralities()
+    {
+        if (_metaverseObjectType == null)
+            return Enumerable.Empty<KeyValuePair<AttributePlurality, int>>();
+
+        return _metaverseObjectType.Attributes
+            .GroupBy(a => a.AttributePlurality)
+            .Select(g => new KeyValuePair<AttributePlurality, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key);
+    }
+
+    private IEnumerable<KeyValuePair<bool, int>> GetAvailableBuiltIn()
+    {
+        if (_metaverseObjectType == null)
+            return Enumerable.Empty<KeyValuePair<bool, int>>();
+
+        return _metaverseObjectType.Attributes
+            .GroupBy(a => a.BuiltIn)
+            .Select(g => new KeyValuePair<bool, int>(g.Key, g.Count()))
+            .OrderByDescending(x => x.Key); // Yes first, then No
     }
 }

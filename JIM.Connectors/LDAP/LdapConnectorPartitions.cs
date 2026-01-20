@@ -18,7 +18,7 @@ internal class LdapConnectorPartitions
 
     internal async Task<List<ConnectorPartition>> GetPartitionsAsync()
     {
-        return await Task.Run(() => 
+        return await Task.Run(() =>
         {
             // get the partitions DN by deriving it from the configuration naming context
             var configurationNamingContext = GetConfigurationNamingContext();
@@ -56,44 +56,97 @@ internal class LdapConnectorPartitions
 
     private List<ConnectorContainer> GetPartitionContainers(ConnectorPartition partition)
     {
-        // get all containers
-        // work out which ones are the root containers by their DN
-        // enumerate the root containers
-        // recurse, finding children of the container
-
         var request = new SearchRequest(partition.Name, "(|(objectClass=organizationalUnit)(objectClass=container))", SearchScope.Subtree);
         var response = (SearchResponse)_connection.SendRequest(request);
 
-        // copy the search result entries to a list we can manipulate
-        var entries = response.Entries.Cast<SearchResultEntry>().ToList();
+        // Convert SearchResultEntry objects to simple DTOs for the hierarchy builder
+        var entries = response.Entries.Cast<SearchResultEntry>()
+            .Select(e => new ContainerEntry(
+                e.DistinguishedName,
+                LdapConnectorUtilities.GetEntryAttributeStringValue(e, "name") ?? e.DistinguishedName))
+            .ToList();
 
-        // move top-level containers to the new list
-        var topLevelContainers = entries.Where(q => new DN(q.DistinguishedName).Parent.ToString().Equals(partition.Name, StringComparison.OrdinalIgnoreCase)).ToList();
-        entries.RemoveAll(q => topLevelContainers.Contains(q));
-        var containers = topLevelContainers.Select(topLevelContainer => new ConnectorContainer(topLevelContainer.DistinguishedName, LdapConnectorUtilities.GetEntryAttributeStringValue(topLevelContainer, "name") ?? topLevelContainer.DistinguishedName)).ToList();
-
-        // keep track of how many entries we've processed so we can validate completion
-        var entriesProcessedCounter = containers.Count;
-
-        // loop over the higher-level containers we've already moved into the hierarchy, so we can look for children of them
-        containers = containers.OrderBy(q => q.Name).ToList();
-        foreach (var container in containers)
-            ProcessContainerNodeForHierarchyRecursively(entries, container, ref entriesProcessedCounter);
-
-        return containers;
+        return BuildContainerHierarchy(entries, partition.Name);
     }
 
-    private static void ProcessContainerNodeForHierarchyRecursively(List<SearchResultEntry> entries, ConnectorContainer containerToLookForChildrenFor, ref int entriesProcessedCounter)
+    /// <summary>
+    /// Builds a hierarchical container structure from a flat list of container entries.
+    /// Uses O(n) dictionary-based lookup instead of O(n²) repeated list scanning.
+    /// </summary>
+    /// <param name="entries">Flat list of container entries with DN and name.</param>
+    /// <param name="partitionDn">The partition DN (root) to identify top-level containers.</param>
+    /// <returns>List of top-level containers with nested children.</returns>
+    internal static List<ConnectorContainer> BuildContainerHierarchy(List<ContainerEntry> entries, string partitionDn)
     {
-        foreach (var entry in entries.Where(q => new DN(q.DistinguishedName).Parent.ToString().Equals(containerToLookForChildrenFor.Id, StringComparison.OrdinalIgnoreCase)))
+        if (entries.Count == 0)
+            return new List<ConnectorContainer>();
+
+        // Step 1: Parse all DNs once and build parent lookup (O(n))
+        var dnToParent = new Dictionary<string, string>(entries.Count, StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in entries)
         {
-            var newChildContainer = new ConnectorContainer(entry.DistinguishedName, LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "name") ?? entry.DistinguishedName);
-            containerToLookForChildrenFor.ChildContainers.Add(newChildContainer);
-            entriesProcessedCounter++;
-            ProcessContainerNodeForHierarchyRecursively(entries, newChildContainer, ref entriesProcessedCounter);
-            containerToLookForChildrenFor.ChildContainers = containerToLookForChildrenFor.ChildContainers.OrderBy(q => q.Name).ToList();
+            var parentDn = new DN(entry.DistinguishedName).Parent.ToString();
+            dnToParent[entry.DistinguishedName] = parentDn;
+        }
+
+        // Step 2: Group entries by their parent DN (O(n))
+        var childrenByParent = entries
+            .GroupBy(e => dnToParent[e.DistinguishedName], StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        // Step 3: Create all ConnectorContainer objects upfront (O(n))
+        var containerByDn = entries
+            .ToDictionary(e => e.DistinguishedName, e => new ConnectorContainer(e.DistinguishedName, e.Name), StringComparer.OrdinalIgnoreCase);
+
+        // Step 4: Build hierarchy using dictionary lookups (O(n))
+        var topLevelContainers = new List<ConnectorContainer>();
+
+        foreach (var entry in entries)
+        {
+            var container = containerByDn[entry.DistinguishedName];
+            var parentDn = dnToParent[entry.DistinguishedName];
+
+            if (parentDn.Equals(partitionDn, StringComparison.OrdinalIgnoreCase))
+            {
+                // This is a top-level container
+                topLevelContainers.Add(container);
+            }
+            else if (containerByDn.TryGetValue(parentDn, out var parentContainer))
+            {
+                // Add to parent's children
+                parentContainer.ChildContainers.Add(container);
+            }
+            // If parent not found in containerByDn, it means the parent is not an OU/container
+            // (e.g., the partition itself), so this becomes a top-level container
+            else
+            {
+                topLevelContainers.Add(container);
+            }
+        }
+
+        // Step 5: Sort all children recursively (O(n log n) total)
+        SortChildrenRecursively(topLevelContainers);
+
+        return topLevelContainers.OrderBy(c => c.Name).ToList();
+    }
+
+    private static void SortChildrenRecursively(List<ConnectorContainer> containers)
+    {
+        foreach (var container in containers)
+        {
+            if (container.ChildContainers.Count > 0)
+            {
+                container.ChildContainers = container.ChildContainers.OrderBy(c => c.Name).ToList();
+                SortChildrenRecursively(container.ChildContainers);
+            }
         }
     }
+
+    /// <summary>
+    /// Simple DTO representing a container entry from LDAP search results.
+    /// Used to decouple the hierarchy building algorithm from System.DirectoryServices.Protocols.
+    /// </summary>
+    internal record ContainerEntry(string DistinguishedName, string Name);
 
     private string? GetConfigurationNamingContext()
     {
