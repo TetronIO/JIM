@@ -18,6 +18,20 @@ public interface IUserPreferenceService
     /// </summary>
     /// <param name="rowsPerPage">The page size to store. Must be a valid option (10, 25, 50, or 100).</param>
     Task SetRowsPerPageAsync(int rowsPerPage);
+
+    /// <summary>
+    /// Gets the expanded state for a navigation menu group.
+    /// </summary>
+    /// <param name="groupName">The name of the nav group (e.g., "users", "groups", "admin").</param>
+    /// <returns>True if the group was previously expanded, false otherwise.</returns>
+    Task<bool> GetNavGroupExpandedAsync(string groupName);
+
+    /// <summary>
+    /// Sets the expanded state for a navigation menu group.
+    /// </summary>
+    /// <param name="groupName">The name of the nav group (e.g., "users", "groups", "admin").</param>
+    /// <param name="expanded">Whether the group is expanded.</param>
+    Task SetNavGroupExpandedAsync(string groupName, bool expanded);
 }
 
 /// <summary>
@@ -71,6 +85,51 @@ public class UserPreferenceService : IUserPreferenceService
         try
         {
             await _jsRuntime.InvokeVoidAsync("jimPreferences.set", RowsPerPageKey, rowsPerPage.ToString());
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, ignore
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), ignore
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> GetNavGroupExpandedAsync(string groupName)
+    {
+        if (string.IsNullOrEmpty(groupName))
+            return false;
+
+        try
+        {
+            var key = $"navGroup_{groupName}";
+            var value = await _jsRuntime.InvokeAsync<string?>("jimPreferences.get", key);
+            return value == "true";
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, return default
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), return default
+        }
+
+        return false;
+    }
+
+    /// <inheritdoc />
+    public async Task SetNavGroupExpandedAsync(string groupName, bool expanded)
+    {
+        if (string.IsNullOrEmpty(groupName))
+            return;
+
+        try
+        {
+            var key = $"navGroup_{groupName}";
+            await _jsRuntime.InvokeVoidAsync("jimPreferences.set", key, expanded ? "true" : "false");
         }
         catch (JSDisconnectedException)
         {

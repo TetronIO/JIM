@@ -1,16 +1,17 @@
 @inject NavigationManager NavigationManager
+@inject IUserPreferenceService PreferenceService
 @implements IDisposable
 
 <MudNavMenu Color="Color.Primary" Class="pt-3 pb-3 jim-nav-menu">
     <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home" Class="jim-nav-top-level">Home</MudNavLink>
 
-    <MudNavGroup Title="Users" @bind-Expanded="_usersExpanded" Icon="@Icons.Material.Filled.Person" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
+    <MudNavGroup Title="Users" Expanded="_usersExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "users"))" Icon="@Icons.Material.Filled.Person" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
         <MudNavLink Href="/t/users" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">All Users</MudNavLink>
         <MudNavLink Href="/t/users/s/people" Match="NavLinkMatch.Prefix" Class="jim-nav-child">People</MudNavLink>
         <MudNavLink Href="/t/users/s/service-principals" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Service Principals</MudNavLink>
     </MudNavGroup>
 
-    <MudNavGroup Title="Groups" @bind-Expanded="_groupsExpanded" Icon="@Icons.Material.Filled.Groups" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
+    <MudNavGroup Title="Groups" Expanded="_groupsExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "groups"))" Icon="@Icons.Material.Filled.Groups" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
         <MudNavLink Href="/t/groups" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">All Groups</MudNavLink>
         <MudNavLink Href="/t/groups/s/security-groups" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Security Groups</MudNavLink>
         <MudNavLink Href="/t/groups/s/distribution-groups" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Distribution Groups</MudNavLink>
@@ -18,7 +19,7 @@
 
     @* Dashboard - Hidden until implemented
     <AuthorizeView Roles="Administrator">
-        <MudNavGroup Title="Dashboard" @bind-Expanded="_dashboardExpanded" Icon="@Icons.Material.Filled.Dashboard" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
+        <MudNavGroup Title="Dashboard" Expanded="_dashboardExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "dashboard"))" Icon="@Icons.Material.Filled.Dashboard" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
             <MudNavLink Href="/dashboard/daily" Match="NavLinkMatch.All" Class="jim-nav-child">Daily</MudNavLink>
             <MudNavLink Href="/dashboard/weekly" Match="NavLinkMatch.All" Class="jim-nav-child">Weekly</MudNavLink>
             <MudNavLink Href="/dashboard/weekly" Match="NavLinkMatch.All" Class="jim-nav-child">Monthly</MudNavLink>
@@ -28,7 +29,7 @@
     *@
 
     <AuthorizeView Roles="Administrator">
-        <MudNavGroup Title="Admin" @bind-Expanded="_adminExpanded" Icon="@Icons.Material.Filled.Settings" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
+        <MudNavGroup Title="Admin" Expanded="_adminExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "admin"))" Icon="@Icons.Material.Filled.Settings" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
             <MudNavLink Href="/admin/operations" Match="NavLinkMatch.Prefix" Class="jim-nav-child">Operations</MudNavLink>
             <MudNavLink Href="/admin/connected-systems" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">Connected Systems</MudNavLink>
             <MudNavLink Href="/admin/connected-systems/sync-rules" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">Synchronisation Rules</MudNavLink>
@@ -42,7 +43,7 @@
         </MudNavGroup>
     </AuthorizeView>
 
-    <MudNavGroup Title="Activity" @bind-Expanded="_activityExpanded" Icon="@Icons.Material.Filled.DynamicFeed" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
+    <MudNavGroup Title="Activity" Expanded="_activityExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "activity"))" Icon="@Icons.Material.Filled.DynamicFeed" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
         <MudNavLink Href="/activity" Match="NavLinkMatch.All" Class="jim-nav-child">Activity</MudNavLink>
         <MudNavLink Href="/activity/mine" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">My Activity</MudNavLink>
     </MudNavGroup>
@@ -55,6 +56,7 @@
 
     private string _currentUrl = string.Empty;
     private bool _previousDrawerOpen;
+    private bool _preferencesLoaded;
 
     // Track expanded state for each nav group
     private bool _usersExpanded;
@@ -69,6 +71,7 @@
         NavigationManager.LocationChanged += OnLocationChanged;
 
         // Initialize expanded states based on current URL if drawer starts open
+        // Saved preferences will be loaded in OnAfterRenderAsync when JS interop is available
         if (DrawerOpen)
         {
             _usersExpanded = IsGroupActive("users");
@@ -82,6 +85,34 @@
         }
 
         _previousDrawerOpen = DrawerOpen;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_preferencesLoaded)
+        {
+            _preferencesLoaded = true;
+
+            // Load saved expanded states from browser localStorage
+            var savedUsers = await PreferenceService.GetNavGroupExpandedAsync("users");
+            var savedGroups = await PreferenceService.GetNavGroupExpandedAsync("groups");
+            var savedDashboard = await PreferenceService.GetNavGroupExpandedAsync("dashboard");
+            var savedAdmin = await PreferenceService.GetNavGroupExpandedAsync("admin");
+            var savedActivity = await PreferenceService.GetNavGroupExpandedAsync("activity");
+
+            // Apply saved preferences - expand if saved as expanded OR if currently active
+            // This ensures navigating to a page still opens its group even if previously collapsed
+            if (DrawerOpen)
+            {
+                _usersExpanded = savedUsers || IsGroupActive("users");
+                _groupsExpanded = savedGroups || IsGroupActive("groups");
+                _dashboardExpanded = savedDashboard || IsGroupActive("dashboard");
+                _adminExpanded = savedAdmin || IsGroupActive("admin");
+                _activityExpanded = savedActivity || IsGroupActive("activity");
+            }
+
+            StateHasChanged();
+        }
     }
 
     protected override void OnParametersSet()
@@ -131,6 +162,32 @@
         }
 
         StateHasChanged();
+    }
+
+    private async Task OnGroupExpandedChangedAsync(bool expanded, string groupName)
+    {
+        // Update local state
+        switch (groupName)
+        {
+            case "users":
+                _usersExpanded = expanded;
+                break;
+            case "groups":
+                _groupsExpanded = expanded;
+                break;
+            case "dashboard":
+                _dashboardExpanded = expanded;
+                break;
+            case "admin":
+                _adminExpanded = expanded;
+                break;
+            case "activity":
+                _activityExpanded = expanded;
+                break;
+        }
+
+        // Persist to browser localStorage
+        await PreferenceService.SetNavGroupExpandedAsync(groupName, expanded);
     }
 
     private bool IsGroupActive(string groupKey)
