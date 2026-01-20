@@ -1304,83 +1304,89 @@ try {
         }
 
         # Step 6.5: Run forward sync to propagate the deletion
+        # With DeletionGracePeriodDays = 0, the MVO will be deleted SYNCHRONOUSLY during sync
+        # (not deferred to housekeeping). Delete pending exports are created for target CSOs.
         Write-Host "  Running delta forward sync to propagate deletion..." -ForegroundColor Gray
         Invoke-DeltaForwardSync -Context "DeleteGroup"
 
-        # Step 6.6: Validate MVO is marked for deletion (WhenAuthoritativeSourceDisconnected)
+        # Step 6.6: Validate MVO is deleted synchronously (0-grace-period immediate deletion)
         Write-Host "  Validating MVO deletion state..." -ForegroundColor Gray
 
         $validations = @()
         $mvoDeleted = $false
-        $mvoMarkedForDeletion = $false
+        $targetGroupDeleted = $false
 
         if ($groupMvoId) {
             # Re-fetch the MVO to check its state after sync
-            $mvoAfterSync = Get-JIMMetaverseObject -Id $groupMvoId
+            # Use try/catch because with 0-grace-period, the MVO is deleted synchronously
+            # and the API will return 404 (which throws an exception in PowerShell)
+            try {
+                $mvoAfterSync = Get-JIMMetaverseObject -Id $groupMvoId -ErrorAction Stop
+            }
+            catch {
+                # MVO not found = deleted synchronously (expected with grace period = 0)
+                $mvoAfterSync = $null
+            }
 
             if ($mvoAfterSync) {
-                # Check if LastConnectorDisconnectedDate is set (indicates MVO is marked for deletion)
+                # MVO still exists - unexpected with 0-grace-period (should be deleted synchronously)
+                # This could happen if:
+                # 1. The sync didn't process the obsolete CSO yet
+                # 2. The deletion rule wasn't triggered
                 if ($mvoAfterSync.lastConnectorDisconnectedDate) {
-                    $mvoMarkedForDeletion = $true
-                    $validations += @{ Name = "MVO marked for deletion (LastConnectorDisconnectedDate set)"; Success = $true }
-                    Write-Host "    ✓ MVO marked for deletion: LastConnectorDisconnectedDate = $($mvoAfterSync.lastConnectorDisconnectedDate)" -ForegroundColor Green
-                    Write-Host "      This validates WhenAuthoritativeSourceDisconnected is working correctly" -ForegroundColor Cyan
+                    # MVO was marked but not deleted - this indicates grace period > 0 behaviour
+                    $validations += @{ Name = "MVO deleted synchronously (0-grace-period)"; Success = $false }
+                    Write-Host "    ⚠ MVO marked for deletion but not deleted (unexpected with grace period = 0)" -ForegroundColor Yellow
+                    Write-Host "      LastConnectorDisconnectedDate = $($mvoAfterSync.lastConnectorDisconnectedDate)" -ForegroundColor Yellow
                 }
                 else {
-                    $validations += @{ Name = "MVO marked for deletion (LastConnectorDisconnectedDate set)"; Success = $false }
-                    Write-Host "    ✗ MVO NOT marked for deletion (LastConnectorDisconnectedDate is null)" -ForegroundColor Red
-                    Write-Host "      Expected: LastConnectorDisconnectedDate to be set when Source (authoritative) disconnects" -ForegroundColor Yellow
+                    $validations += @{ Name = "MVO deleted synchronously (0-grace-period)"; Success = $false }
+                    Write-Host "    ✗ MVO still exists and NOT marked for deletion" -ForegroundColor Red
+                    Write-Host "      Expected: MVO to be deleted synchronously with grace period = 0" -ForegroundColor Yellow
                 }
             }
             else {
-                # MVO was already deleted by housekeeping (immediate deletion with grace period = 0)
+                # MVO was deleted synchronously during sync (expected with grace period = 0)
                 $mvoDeleted = $true
-                $mvoMarkedForDeletion = $true
-                $validations += @{ Name = "MVO marked for deletion (LastConnectorDisconnectedDate set)"; Success = $true }
-                Write-Host "    ✓ MVO already deleted by housekeeping (immediate deletion)" -ForegroundColor Green
+                $validations += @{ Name = "MVO deleted synchronously (0-grace-period)"; Success = $true }
+                Write-Host "    ✓ MVO deleted synchronously during sync (immediate deletion)" -ForegroundColor Green
+                Write-Host "      This validates synchronous deletion for 0-grace-period MVOs" -ForegroundColor Cyan
             }
         }
         else {
             Write-Host "    ⚠ Skipping MVO validation (MVO ID not found)" -ForegroundColor Yellow
         }
 
-        # Step 6.7: Wait for housekeeping to complete MVO deletion and Target AD deprovisioning
-        # Housekeeping runs every 60 seconds, so we need to wait and poll
-        Write-Host "  Waiting for housekeeping to complete deletion (max 90 seconds)..." -ForegroundColor Gray
+        # Step 6.7: Run export to Target AD to complete deprovisioning
+        # With synchronous deletion, delete pending exports are created during sync
+        # We just need to run the export - no need to wait for housekeeping
+        Write-Host "  Running export to Target AD to complete deprovisioning..." -ForegroundColor Gray
 
-        $maxWaitSeconds = 90
-        $pollIntervalSeconds = 10
-        $elapsedSeconds = 0
-        $targetGroupDeleted = $false
+        if ($targetExportProfile) {
+            Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExportProfile.id -Wait
+            Start-Sleep -Seconds 2
+        }
 
-        while ($elapsedSeconds -lt $maxWaitSeconds) {
-            # Check if MVO has been deleted (if we had an MVO ID)
-            if ($groupMvoId -and -not $mvoDeleted) {
-                $mvoCheck = Get-JIMMetaverseObject -Id $groupMvoId
-                if (-not $mvoCheck) {
-                    $mvoDeleted = $true
-                    Write-Host "    ✓ MVO deleted by housekeeping (after $elapsedSeconds seconds)" -ForegroundColor Green
+        # Check if group is deleted from Target AD
+        docker exec $targetContainer samba-tool group show $groupToDelete 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            $targetGroupDeleted = $true
+            Write-Host "    ✓ Group '$groupToDelete' deleted from Target AD" -ForegroundColor Green
+        }
+        else {
+            # Group still exists - try one more export cycle
+            Write-Host "    Group still exists in Target AD, trying confirming import + export..." -ForegroundColor Yellow
+            if ($targetImportProfile -and $targetExportProfile) {
+                Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetImportProfile.id -Wait
+                Start-Sleep -Seconds 1
+                Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExportProfile.id -Wait
+                Start-Sleep -Seconds 2
+
+                docker exec $targetContainer samba-tool group show $groupToDelete 2>&1 | Out-Null
+                if ($LASTEXITCODE -ne 0) {
+                    $targetGroupDeleted = $true
+                    Write-Host "    ✓ Group '$groupToDelete' deleted from Target AD after retry" -ForegroundColor Green
                 }
-            }
-
-            # Check if group is deleted from Target AD
-            docker exec $targetContainer samba-tool group show $groupToDelete 2>&1 | Out-Null
-            if ($LASTEXITCODE -ne 0) {
-                $targetGroupDeleted = $true
-                Write-Host "    ✓ Group '$groupToDelete' deleted from Target AD (after $elapsedSeconds seconds)" -ForegroundColor Green
-                break
-            }
-
-            # If MVO is deleted and target group gone, we're done
-            if ($mvoDeleted -and $targetGroupDeleted) {
-                break
-            }
-
-            # Wait and poll again
-            if ($elapsedSeconds -lt $maxWaitSeconds) {
-                Write-Host "    ... waiting ($elapsedSeconds/$maxWaitSeconds seconds)" -ForegroundColor Gray
-                Start-Sleep -Seconds $pollIntervalSeconds
-                $elapsedSeconds += $pollIntervalSeconds
             }
         }
 
