@@ -113,9 +113,9 @@ body {
 
 .jim-drawer-footer {
     display: flex;
-    justify-content: flex-start;
+    justify-content: center;
     gap: 4px;
-    margin: 0 12px;
+    margin: 0 6px;
     border-top-style: solid;
     border-top-width: 1px;
     border-top-color: var(--mud-palette-lines-default);
