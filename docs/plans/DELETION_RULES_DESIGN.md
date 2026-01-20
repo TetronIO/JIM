@@ -258,17 +258,22 @@ Location: `test/JIM.Worker.Tests/Workflows/DeletionRuleWorkflowTests.cs`
 
 Tests to be fixed/added:
 - `Manual_WhenLastCsoDisconnected_MvoNotMarkedForDeletionAsync` ✅
-- `WhenLastConnectorDisconnected_WhenLastCsoDisconnected_MvoMarkedForDeletionAsync` (needs fix)
-- `WhenLastConnectorDisconnected_WhenOneCsoDisconnectedButOthersRemain_MvoNotMarkedAsync` (needs fix)
-- `DeletionTrigger_WhenTriggerSystemDisconnects_MvoMarkedForDeletionAsync` (needs implementation)
-- `DeletionTrigger_WhenNonTriggerSystemDisconnects_MvoNotMarkedAsync` (needs implementation)
-- `GracePeriod_WhenSet_MvoMarkedButNotImmediatelyEligibleAsync` (needs fix)
+- `WhenLastConnectorDisconnected_WhenLastCsoDisconnected_MvoMarkedForDeletionAsync` ✅
+- `WhenLastConnectorDisconnected_WhenOneCsoDisconnectedButOthersRemain_MvoNotMarkedAsync` ✅
+- `DeletionTrigger_WhenTriggerSystemDisconnects_MvoMarkedForDeletionAsync` ✅
+- `DeletionTrigger_WhenNonTriggerSystemDisconnects_MvoNotMarkedAsync` ✅
+- `DeletionTrigger_MultiSourceScenario_OnlyAuthoritativeSourceTriggersDeleteAsync` ✅ (NEW)
+- `GracePeriod_WhenSet_MvoMarkedButNotImmediatelyEligibleAsync` ✅
 
 ### Integration Tests
 
 Location: `test/integration/scenarios/Invoke-Scenario8-CrossDomainEntitlementSync.ps1`
 
-The DeleteGroup test validates end-to-end deletion flow from Source AD deletion through to Target AD deprovisioning.
+The DeleteGroup test validates end-to-end deletion flow:
+- Source AD group deletion triggers `WhenAuthoritativeSourceDisconnected` rule
+- MVO is marked for deletion (`LastConnectorDisconnectedDate` set)
+- Housekeeping deprovisions the group from Target AD
+- Test verifies MVO state via API after sync
 
 ## Related GitHub Issues
 
@@ -291,13 +296,15 @@ The following GitHub issues define additional deletion rule features. This secti
 
 **Description**: Delete MVO when specific "authoritative" connected systems disconnect, regardless of whether other CSOs remain connected.
 
-**Current State**:
+**Current State**: ✅ **COMPLETE**
 - ✅ `WhenAuthoritativeSourceDisconnected` enum value added
 - ✅ `DeletionTriggerConnectedSystemIds` property exists in model
 - ✅ API validation ensures authoritative sources are specified when rule is selected
 - ✅ PowerShell cmdlet supports the new enum value
 - ✅ Admin UI allows configuration of deletion rules and authoritative source selection
-- ❌ Backend logic **not implemented** in `ProcessMvoDeletionRuleAsync()` - this is the remaining work
+- ✅ Backend logic implemented in `ProcessMvoDeletionRuleAsync()`
+- ✅ Unit tests covering multi-source scenarios
+- ✅ Integration test (Scenario 8) validates end-to-end deletion flow
 
 **Use Cases**:
 - HR → AD sync: Delete identity when HR (source of truth) removes employee, even if AD CSO exists
@@ -458,11 +465,13 @@ MetaverseObjectType:
 
 ### Implementation Roadmap
 
-#### Phase 1: MVP (Current Sprint)
+#### Phase 1: MVP ✅ COMPLETE
 | Feature | Issue | Status |
 |---------|-------|--------|
 | `WhenAuthoritativeSourceDisconnected` enum + UI | #115 | ✅ **Complete** |
-| `DeletionTriggerConnectedSystemIds` backend logic | #115 | **In Progress** |
+| `DeletionTriggerConnectedSystemIds` backend logic | #115 | ✅ **Complete** |
+| Multi-source deletion rule unit tests | #115 | ✅ **Complete** |
+| Scenario 8 integration test validation | #115 | ✅ **Complete** |
 
 #### Phase 2: Post-MVP (Near-term)
 | Feature | Issue | Rationale |
