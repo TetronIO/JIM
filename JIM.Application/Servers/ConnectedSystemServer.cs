@@ -2176,6 +2176,17 @@ public class ConnectedSystemServer
         Log.Debug("DeleteConnectedSystemObjectsAsync: Batch deleted {Count} CSOs", connectedSystemObjects.Count);
     }
 
+    /// <summary>
+    /// Batch deletes multiple Connected System Objects without creating change history or RPEIs.
+    /// Use this for quiet deletions where the disconnection was already recorded elsewhere
+    /// (e.g., pre-disconnected CSOs from synchronous MVO deletion).
+    /// </summary>
+    public async Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
+    {
+        await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
+        Log.Debug("DeleteConnectedSystemObjectsAsync: Quietly batch deleted {Count} CSOs (no RPEI)", connectedSystemObjects.Count);
+    }
+
     public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
         return await Application.Repository.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeStringAsync(connectedSystemId, connectedSystemObjectTypeId);

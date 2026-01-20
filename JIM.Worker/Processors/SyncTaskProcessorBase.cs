@@ -61,6 +61,10 @@ public abstract class SyncTaskProcessorBase
     // Batch collection for deferred CSO deletions (avoid per-CSO database calls)
     protected readonly List<(ConnectedSystemObject Cso, ActivityRunProfileExecutionItem ExecutionItem)> _obsoleteCsosToDelete = [];
 
+    // Batch collection for quiet CSO deletions (pre-disconnected CSOs that don't need RPEIs)
+    // These are CSOs that were already disconnected during synchronous MVO deletion and just need cleanup
+    protected readonly List<ConnectedSystemObject> _quietCsosToDelete = [];
+
     // Batch collection for deferred MVO deletions (for immediate 0-grace-period deletions)
     protected readonly List<MetaverseObject> _pendingMvoDeletions = [];
 
@@ -367,7 +371,19 @@ public abstract class SyncTaskProcessorBase
 
         if (connectedSystemObject.MetaverseObject == null)
         {
-            // Not joined, queue the CSO for batch deletion
+            // CSO is not joined to an MVO. Check if it was pre-disconnected as part of MVO deletion.
+            if (connectedSystemObject.JoinType == ConnectedSystemObjectJoinType.NotJoined)
+            {
+                // CSO was already disconnected (e.g., by EvaluateMvoDeletionAsync during synchronous MVO deletion).
+                // This is expected during the confirming import/sync cycle after a delete export.
+                // Just delete the CSO quietly - no RPEI needed as the disconnection was already recorded.
+                _quietCsosToDelete.Add(connectedSystemObject);
+                Log.Debug("ProcessObsoleteConnectedSystemObjectAsync: CSO {CsoId} already disconnected (JoinType=NotJoined), deleting quietly",
+                    connectedSystemObject.Id);
+                return null;
+            }
+
+            // Not joined but has a different JoinType (e.g., Explicit) - this is a regular orphan deletion
             _obsoleteCsosToDelete.Add((connectedSystemObject, runProfileExecutionItem));
             return runProfileExecutionItem;
         }
@@ -1012,9 +1028,19 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Batch deletes all obsolete CSOs collected during the current page.
     /// This reduces database round trips from n deletes to 1 batch delete operation.
+    /// Also handles quiet deletions (pre-disconnected CSOs that don't need RPEIs).
     /// </summary>
     protected async Task FlushObsoleteCsoOperationsAsync()
     {
+        // First, handle quiet deletions (pre-disconnected CSOs from synchronous MVO deletion)
+        if (_quietCsosToDelete.Count > 0)
+        {
+            await _jim.ConnectedSystems.DeleteConnectedSystemObjectsAsync(_quietCsosToDelete);
+            Log.Debug("FlushObsoleteCsoOperationsAsync: Quietly deleted {Count} pre-disconnected CSOs", _quietCsosToDelete.Count);
+            _quietCsosToDelete.Clear();
+        }
+
+        // Then handle normal obsolete CSO deletions (with RPEI tracking)
         if (_obsoleteCsosToDelete.Count == 0)
             return;
 
