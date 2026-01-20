@@ -47,7 +47,7 @@
                 }
                 else
                 {
-                    <MudTooltip Text="@(IsDrawerPinned ? UnpinMenuText : PinMenuText)">
+                    <MudTooltip Text="@(IsDrawerPinned ? UnpinMenuText : PinMenuText)" Arrow="true" Placement="Placement.Top">
                         <MudToggleIconButton Toggled="@IsDrawerPinned"
                                              ToggledChanged="@(_ => ToggleDrawerPinned())"
                                              Icon="@Icons.Material.Outlined.PushPin"
@@ -55,7 +55,7 @@
                                              ToggledIcon="@Icons.Material.Filled.PushPin"
                                              ToggledColor="@Color.Inherit"/>
                     </MudTooltip>
-                    <MudTooltip Text="@(IsDarkMode ? LightModeText : DarkModeText)">
+                    <MudTooltip Text="@(IsDarkMode ? LightModeText : DarkModeText)" Arrow="true" Placement="Placement.Top">
                         <MudToggleIconButton @bind-Toggled="@IsDarkMode"
                                              Icon="@Icons.Material.Filled.WbSunny"
                                              Color="@Color.Inherit"

@@ -128,7 +128,7 @@
             <MudTd DataLabel="External Id">
                 @if (!string.IsNullOrEmpty(context.PendingExternalId))
                 {
-                    <MudTooltip Text="Pending export - not yet confirmed">
+                    <MudTooltip Text="Pending export - not yet confirmed" Arrow="true" Placement="Placement.Top">
                         <MudText Typo="Typo.body2" Color="Color.Info">@context.PendingExternalId</MudText>
                     </MudTooltip>
                 }
@@ -146,7 +146,7 @@
                     }
                     else if (!string.IsNullOrEmpty(context.PendingSecondaryExternalId))
                     {
-                        <MudTooltip Text="Pending export - not yet confirmed">
+                        <MudTooltip Text="Pending export - not yet confirmed" Arrow="true" Placement="Placement.Top">
                             <MudText Typo="Typo.body2" Color="Color.Info">@context.PendingSecondaryExternalId</MudText>
                         </MudTooltip>
                     }
@@ -159,21 +159,21 @@
                 }
                 else if (!string.IsNullOrEmpty(context.PendingDisplayName))
                 {
-                    <MudTooltip Text="Pending export - not yet confirmed">
+                    <MudTooltip Text="Pending export - not yet confirmed" Arrow="true" Placement="Placement.Top">
                         <MudText Typo="Typo.body2" Color="Color.Info">@context.PendingDisplayName</MudText>
                     </MudTooltip>
                 }
             </MudTd>
             <MudTd DataLabel="Type">@context.TypeName</MudTd>
             <MudTd DataLabel="Created">
-                <MudTooltip Text="@context.Created.ToString("O")">
+                <MudTooltip Text="@context.Created.ToString("O")" Arrow="true" Placement="Placement.Top">
                     <MudText Typo="Typo.body2">@context.Created.ToLocalTime().ToRelativeTime()</MudText>
                 </MudTooltip>
             </MudTd>
             <MudTd DataLabel="Date Joined">
                 @if (context.DateJoined != null)
                 {
-                    <MudTooltip Text="@context.DateJoined.Value.ToString("O")">
+                    <MudTooltip Text="@context.DateJoined.Value.ToString("O")" Arrow="true" Placement="Placement.Top">
                         <MudText Typo="Typo.body2">@context.DateJoined.Value.ToLocalTime().ToRelativeTime()</MudText>
                     </MudTooltip>
                 }

@@ -34,7 +34,7 @@ else if (_syncRule != null)
             @if (_syncRule.Id > 0)
             {
                 <div class="d-flex gap-2">
-                    <MudTooltip Text="@_syncRule.Created.ToLocalTime().ToFriendlyDate()" Placement="Placement.Top">
+                    <MudTooltip Text="@_syncRule.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                         <MudChip T="string" Variant="Variant.Text" Color="Color.Info">
                             Created @_syncRule.Created.ToLocalTime().ToRelativeTime()@if (_syncRule.CreatedBy != null)
                             {<text> by @_syncRule.CreatedBy.DisplayName</text>}
@@ -42,7 +42,7 @@ else if (_syncRule != null)
                     </MudTooltip>
                     @if (_syncRule.LastUpdated.HasValue)
                     {
-                        <MudTooltip Text="@_syncRule.LastUpdated.Value.ToLocalTime().ToFriendlyDate()" Placement="Placement.Top">
+                        <MudTooltip Text="@_syncRule.LastUpdated.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                             <MudChip T="string" Variant="Variant.Text" Color="Color.Info">
                                 Updated @_syncRule.LastUpdated.Value.ToLocalTime().ToRelativeTime()
                             </MudChip>
@@ -182,7 +182,7 @@ else if (_syncRule != null)
             }
         </MudForm>
         <MudTooltip Text="Synchronisation Rules will not be evaluated when disabled. This allows to either prepare a rule in advance of it being needed, or to temporarily stop a sync rule from being evaluated."
-                    Placement="Placement.Top">
+                    Arrow="true" Placement="Placement.Top">
             <MudSwitch Class="mt-5" @bind-Value="@_syncRule.Enabled" Color="Color.Primary" Label="Enabled?" />
         </MudTooltip>
     </MudPaper>
@@ -201,7 +201,7 @@ else if (_syncRule != null)
                 <ChildContent>
                     <MudStack Spacing="4" Class="pa-2">
                         <MudTooltip Text="When enabled, changes made directly in the target system (drift) will be automatically corrected during the next sync run. Disable this only if you need to allow emergency manual changes in the target system."
-                                    Placement="Placement.Right">
+                                    Arrow="true" Placement="Placement.Right">
                             <MudSwitch @bind-Value="@_syncRule.EnforceState" Color="Color.Primary"
                                        Label="Enforce State (Auto-correct drift)" />
                         </MudTooltip>
@@ -224,7 +224,7 @@ else if (_syncRule != null)
                 <MudText Typo="Typo.h5">Matching Rules</MudText>
                 @if (_syncRule.ConnectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.SyncRule)
                 {
-                    <MudTooltip Text="Matching rules are specific to this sync rule." Placement="Placement.Top">
+                    <MudTooltip Text="Matching rules are specific to this sync rule." Arrow="true" Placement="Placement.Top">
                         <MudChip T="string" Variant="Variant.Text" Text="Advanced Mode" Color="Color.Info" />
                     </MudTooltip>
                 }
@@ -283,7 +283,7 @@ else if (_syncRule != null)
                                     <MudItem xs="12" Class="d-flex align-center">
                                         <MudChip T="string">
                                             <AvatarContent>
-                                                <MudTooltip Text="Connected System Attribute">
+                                                <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
                                                     <MudAvatar>CS</MudAvatar>
                                                 </MudTooltip>
                                             </AvatarContent>
@@ -294,7 +294,7 @@ else if (_syncRule != null)
                                         </MudChip>
                                         <MudChip T="string">
                                             <AvatarContent>
-                                                <MudTooltip Text="Metaverse Attribute">
+                                                <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
                                                     <MudAvatar>MV</MudAvatar>
                                                 </MudTooltip>
                                             </AvatarContent>
@@ -611,7 +611,7 @@ else if (_syncRule != null)
                 {
                     <MudChip T="string">
                         <AvatarContent>
-                            <MudTooltip Text="Metaverse Attribute">
+                            <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
                                 <MudAvatar Color="Color.Dark">MV</MudAvatar>
                             </MudTooltip>
                         </AvatarContent>
@@ -628,7 +628,7 @@ else if (_syncRule != null)
                         {
                             <MudChip T="string">
                                 <AvatarContent>
-                                    <MudTooltip Text="Connected System Attribute">
+                                    <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
                                         <MudAvatar Color="Color.Dark">CS</MudAvatar>
                                     </MudTooltip>
                                 </AvatarContent>
@@ -639,7 +639,7 @@ else if (_syncRule != null)
                         {
                             <MudChip T="string">
                                 <AvatarContent>
-                                    <MudTooltip Text="Expression">
+                                    <MudTooltip Text="Expression" Arrow="true" Placement="Placement.Top">
                                         <MudAvatar Color="Color.Secondary">Fx</MudAvatar>
                                     </MudTooltip>
                                 </AvatarContent>
@@ -658,7 +658,7 @@ else if (_syncRule != null)
                         {
                             <MudChip T="string">
                                 <AvatarContent>
-                                    <MudTooltip Text="Metaverse Attribute">
+                                    <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
                                         <MudAvatar Color="Color.Dark">MV</MudAvatar>
                                     </MudTooltip>
                                 </AvatarContent>
@@ -669,7 +669,7 @@ else if (_syncRule != null)
                         {
                             <MudChip T="string">
                                 <AvatarContent>
-                                    <MudTooltip Text="Expression">
+                                    <MudTooltip Text="Expression" Arrow="true" Placement="Placement.Top">
                                         <MudAvatar Color="Color.Secondary">Fx</MudAvatar>
                                     </MudTooltip>
                                 </AvatarContent>
@@ -686,7 +686,7 @@ else if (_syncRule != null)
 
                     <MudChip T="string">
                         <AvatarContent>
-                            <MudTooltip Text="Connected System Attribute">
+                            <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
                                 <MudAvatar Color="Color.Dark">CS</MudAvatar>
                             </MudTooltip>
                         </AvatarContent>

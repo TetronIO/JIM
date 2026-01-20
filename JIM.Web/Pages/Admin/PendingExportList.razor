@@ -140,7 +140,7 @@
             </MudTd>
             <MudTd DataLabel="Changes">@context.AttributeChangeCount</MudTd>
             <MudTd DataLabel="Created">
-                <MudTooltip Text="@context.CreatedAt.ToLocalTime().ToFriendlyDate()" Color="Color.Dark">
+                <MudTooltip Text="@context.CreatedAt.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                     <span>@context.CreatedAt.ToLocalTime().ToRelativeTime()</span>
                 </MudTooltip>
             </MudTd>
