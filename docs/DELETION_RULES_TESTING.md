@@ -23,9 +23,17 @@ This guide provides step-by-step instructions for manually testing the MVO Delet
 
 2. Configure deletion rules:
    ```powershell
+   # Option A: Delete when ALL connectors disconnect
    Set-JIMMetaverseObjectType -Id $userType.id `
        -DeletionRule "WhenLastConnectorDisconnected" `
        -DeletionGracePeriodDays 7
+
+   # Option B: Delete when authoritative source disconnects (recommended for Leaver scenarios)
+   $hrSystem = Get-JIMConnectedSystem -Name "HR System"
+   Set-JIMMetaverseObjectType -Id $userType.id `
+       -DeletionRule "WhenAuthoritativeSourceDisconnected" `
+       -DeletionGracePeriodDays 7 `
+       -DeletionTriggerConnectedSystemIds @($hrSystem.id)
    ```
 
 3. Verify configuration:
@@ -33,11 +41,13 @@ This guide provides step-by-step instructions for manually testing the MVO Delet
    $userType = Get-JIMMetaverseObjectType -Name "User"
    Write-Host "Deletion Rule: $($userType.deletionRule)"
    Write-Host "Grace Period: $($userType.deletionGracePeriodDays) days"
+   Write-Host "Authoritative Sources: $($userType.deletionTriggerConnectedSystemIds -join ', ')"
    ```
 
 **Expected Result**:
-- Deletion rule set to `WhenLastConnectorDisconnected`
+- Deletion rule set to chosen option
 - Grace period set to 7 days
+- For `WhenAuthoritativeSourceDisconnected`: Authoritative source IDs listed
 
 ---
 
@@ -170,6 +180,80 @@ This guide provides step-by-step instructions for manually testing the MVO Delet
 
 ---
 
+### Scenario 5b: Authoritative Source Deletion (Multi-Source)
+
+**Purpose**: Verify that `WhenAuthoritativeSourceDisconnected` triggers deletion only when authoritative source disconnects
+
+This is the core **Leaver scenario** for multi-source identity management. When HR (authoritative source) removes an employee, the MVO should be marked for deletion even if other CSOs (e.g., Training, Target AD) remain connected.
+
+**Setup**:
+1. Configure multiple connected systems:
+   - **HR System** (authoritative source) - imports employee data
+   - **Training System** (secondary source) - imports training completion data
+   - **Target AD** (target) - receives provisioned users
+
+2. Configure User object type with authoritative source deletion:
+   ```powershell
+   $hrSystem = Get-JIMConnectedSystem -Name "HR System"
+   $userType = Get-JIMMetaverseObjectType -Name "User"
+
+   Set-JIMMetaverseObjectType -Id $userType.id `
+       -DeletionRule "WhenAuthoritativeSourceDisconnected" `
+       -DeletionGracePeriodDays 0 `
+       -DeletionTriggerConnectedSystemIds @($hrSystem.id)
+   ```
+
+**Steps**:
+1. Ensure a user exists with CSOs from all three systems joined to one MVO:
+   ```powershell
+   $mvos = Search-JIMMetaverseObject -ObjectTypeName "User" `
+       -FilterAttribute "Employee ID" -FilterValue "EMP001" -FilterOperator Equals
+   $mvoId = $mvos.results[0].id
+
+   # Verify all CSOs are connected
+   $mvo = Get-JIMMetaverseObject -Id $mvoId
+   Write-Host "Connected CSOs: $($mvo.connectedSystemObjects.Count)"
+   ```
+
+2. **Test Part 1**: Delete from Training System (non-authoritative)
+   - Remove user from Training source
+   - Run Training import and sync
+   ```powershell
+   Start-JIMRunProfile -ConnectedSystemId $trainingSystem.id -RunProfileName "Delta Import"
+   Start-JIMRunProfile -ConnectedSystemId $trainingSystem.id -RunProfileName "Delta Sync"
+   ```
+
+3. Check MVO status:
+   ```powershell
+   $mvo = Get-JIMMetaverseObject -Id $mvoId
+   Write-Host "LastConnectorDisconnectedDate: $($mvo.lastConnectorDisconnectedDate)"
+   ```
+
+   **Expected**: `LastConnectorDisconnectedDate` should be **null** (not marked for deletion)
+
+4. **Test Part 2**: Delete from HR System (authoritative)
+   - Remove user from HR source
+   - Run HR import and sync
+   ```powershell
+   Start-JIMRunProfile -ConnectedSystemId $hrSystem.id -RunProfileName "Delta Import"
+   Start-JIMRunProfile -ConnectedSystemId $hrSystem.id -RunProfileName "Delta Sync"
+   ```
+
+5. Check MVO status:
+   ```powershell
+   $mvo = Get-JIMMetaverseObject -Id $mvoId
+   Write-Host "LastConnectorDisconnectedDate: $($mvo.lastConnectorDisconnectedDate)"
+   ```
+
+   **Expected**: `LastConnectorDisconnectedDate` should be **set** (marked for deletion)
+
+**Expected Result**:
+- Training CSO deletion: MVO NOT marked for deletion (non-authoritative source)
+- HR CSO deletion: MVO IS marked for deletion (authoritative source disconnected)
+- Target AD CSO remains connected (will be deprovisioned when housekeeping deletes MVO)
+
+---
+
 ### Scenario 6: Out-of-Scope Deprovisioning (Import)
 
 **Purpose**: Verify InboundOutOfScopeAction when CSO becomes obsolete
@@ -249,12 +333,13 @@ SELECT
     mo."LastConnectorDisconnectedDate" + (mot."DeletionGracePeriodDays" || ' days')::INTERVAL AS "DeletionEligibleDate",
     mot."DeletionRule",
     mot."DeletionGracePeriodDays",
+    mot."DeletionTriggerConnectedSystemIds",
     (SELECT COUNT(*) FROM "ConnectedSystemObjects" WHERE "MetaverseObjectId" = mo."Id") AS "ConnectorCount"
 FROM "MetaverseObjects" mo
 JOIN "MetaverseObjectTypes" mot ON mo."TypeId" = mot."Id"
 WHERE mo."LastConnectorDisconnectedDate" IS NOT NULL
-    AND mo."Origin" = 0  -- Projected
-    AND mot."DeletionRule" = 1;  -- WhenLastConnectorDisconnected
+    AND mo."Origin" = 0;  -- Projected
+-- Note: DeletionRule values: 0=Manual, 1=WhenLastConnectorDisconnected, 2=WhenAuthoritativeSourceDisconnected
 ```
 
 ### Check MVOs Eligible for Immediate Deletion
@@ -318,9 +403,10 @@ WHERE sr."Enabled" = true;
 3. Verify `OutboundDeprovisionAction` is configured on sync rule
 4. Review logs: `EvaluateOutOfScopeExportsAsync` messages
 
-## Integration Test Script
+## Integration Test Scripts
 
-The automated integration test can be run with:
+### Scenario 4: Basic Deletion Rules
+The automated integration test for basic deletion scenarios:
 ```powershell
 ./test/integration/scenarios/Invoke-Scenario4-DeletionRules.ps1 `
     -Step All `
@@ -329,4 +415,17 @@ The automated integration test can be run with:
     -ApiKey "your-api-key"
 ```
 
-This tests all scenarios automatically in sequence.
+### Scenario 8: Cross-Domain with Authoritative Source Deletion
+Tests `WhenAuthoritativeSourceDisconnected` in a cross-domain AD sync:
+```powershell
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario8-CrossDomainEntitlementSync
+```
+
+This scenario:
+- Configures Source AD (APAC) as the authoritative source for Groups
+- Uses `WhenAuthoritativeSourceDisconnected` deletion rule
+- Tests DeleteGroup step: deleting a group from Source AD marks the MVO for deletion
+- Validates MVO `LastConnectorDisconnectedDate` is set after sync
+- Housekeeping deprovisions the group from Target AD (EMEA)
+
+See [INTEGRATION_TESTING.md](INTEGRATION_TESTING.md) for full details on running integration tests.
