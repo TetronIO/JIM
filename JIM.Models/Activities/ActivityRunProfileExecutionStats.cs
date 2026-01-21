@@ -87,7 +87,7 @@ public class ActivityRunProfileExecutionStats
     #region Pending Export Stats (surfaced during sync)
     /// <summary>
     /// Count of pending exports staged for the next export run.
-    /// These are exports that were previously executed but not yet confirmed (ExportNotImported status),
+    /// These are exports that were previously executed but not yet confirmed (ExportNotConfirmed status),
     /// giving operators visibility into what changes will be made to connected systems.
     /// </summary>
     public int TotalPendingExports { get; set; }

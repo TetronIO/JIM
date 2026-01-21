@@ -598,10 +598,10 @@ public class PendingExportReconciliationTests
     }
 
     /// <summary>
-    /// Tests that PendingExport status is updated to ExportNotImported when there are changes needing retry.
+    /// Tests that PendingExport status is updated to ExportNotConfirmed when there are changes needing retry.
     /// </summary>
     [Test]
-    public async Task ReconcileAsync_SomeChangesNeedRetry_PendingExportStatusIsExportNotImportedAsync()
+    public async Task ReconcileAsync_SomeChangesNeedRetry_PendingExportStatusIsExportNotConfirmedAsync()
     {
         // Arrange
         var cso = CreateTestCso();
@@ -620,8 +620,8 @@ public class PendingExportReconciliationTests
 
         // Assert
         Assert.That(result.RetryChanges.Count, Is.EqualTo(1));
-        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.ExportNotImported),
-            "PendingExport should be marked as ExportNotImported for retry");
+        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed),
+            "PendingExport should be marked as ExportNotConfirmed for retry");
     }
 
     #endregion

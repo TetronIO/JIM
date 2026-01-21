@@ -209,7 +209,7 @@ public static class Helpers
         {
             PendingExportStatus.Pending => Color.Info,
             PendingExportStatus.Executing => Color.Primary,
-            PendingExportStatus.ExportNotImported => Color.Warning,
+            PendingExportStatus.ExportNotConfirmed => Color.Warning,
             PendingExportStatus.Failed => Color.Error,
             PendingExportStatus.Exported => Color.Success,
             _ => Color.Default,

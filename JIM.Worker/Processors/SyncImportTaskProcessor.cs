@@ -1758,7 +1758,7 @@ public class SyncImportTaskProcessor
                                     ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue,
                                     ObjectChangeType = ObjectChangeType.Updated,
                                     ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
-                                    ErrorMessage = $"Export not confirmed for {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will retry on next export run.",
+                                    ErrorMessage = $"We exported a change, but did not get confirmation of it when a confirming import was performed. Details: {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will attempt to reassert the change on the next export run.",
                                     DataSnapshot = $"Unconfirmed attributes: {retryAttrNames}"
                                 };
                                 _activityRunProfileExecutionItems.Add(executionItem);

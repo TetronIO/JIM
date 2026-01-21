@@ -216,16 +216,16 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 
     /// <summary>
     /// Creates ActivityRunProfileExecutionItems for pending exports that are awaiting confirmation.
-    /// This surfaces unconfirmed exports (ExportNotImported status) to the Activity so operators
+    /// This surfaces unconfirmed exports (ExportNotConfirmed status) to the Activity so operators
     /// can see what changes will be made to connected systems on the next export run.
     /// </summary>
     /// <param name="allPendingExports">All pending exports for this connected system.</param>
     private void SurfacePendingExportsAsExecutionItems(List<PendingExport> allPendingExports)
     {
-        // Filter to only pending exports that are awaiting confirmation (ExportNotImported)
+        // Filter to only pending exports that are awaiting confirmation (ExportNotConfirmed)
         // or are pending execution. These represent staged changes the operator should know about.
         var pendingExportsToSurface = allPendingExports
-            .Where(pe => pe.Status == PendingExportStatus.ExportNotImported ||
+            .Where(pe => pe.Status == PendingExportStatus.ExportNotConfirmed ||
                          pe.Status == PendingExportStatus.Pending)
             .ToList();
 

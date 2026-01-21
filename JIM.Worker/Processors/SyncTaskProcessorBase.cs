@@ -306,7 +306,7 @@ public abstract class SyncTaskProcessorBase
 
                 // increment error count and update status
                 pendingExport.ErrorCount++;
-                pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotImported;
+                pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotConfirmed;
 
                 _pendingExportsToUpdate.Add(pendingExport);
             }
@@ -318,7 +318,7 @@ public abstract class SyncTaskProcessorBase
 
                 // increment error count and update status
                 pendingExport.ErrorCount++;
-                pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotImported;
+                pendingExport.Status = JIM.Models.Transactional.PendingExportStatus.ExportNotConfirmed;
 
                 _pendingExportsToUpdate.Add(pendingExport);
             }

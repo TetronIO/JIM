@@ -239,7 +239,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = cso,
-            Status = PendingExportStatus.ExportNotImported, // Failed status
+            Status = PendingExportStatus.ExportNotConfirmed, // Failed status
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow.AddMinutes(-30),
             NextRetryAt = DateTime.UtcNow.AddMinutes(30), // Not due yet
@@ -289,7 +289,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             ConnectedSystem = targetSystem,
             ConnectedSystemObject = cso,
-            Status = PendingExportStatus.ExportNotImported,
+            Status = PendingExportStatus.ExportNotConfirmed,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow.AddHours(-1),
             ErrorCount = 3,
