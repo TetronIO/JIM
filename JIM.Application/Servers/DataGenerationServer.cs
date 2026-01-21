@@ -193,7 +193,11 @@ public class DataGenerationServer
             Parallel.For(0, objectType.ObjectsToCreate,
                 index =>
                 {
-                    var metaverseObject = new MetaverseObject { Type = objectType.MetaverseObjectType };
+                    var metaverseObject = new MetaverseObject
+                    {
+                        Type = objectType.MetaverseObjectType,
+                        Origin = MetaverseObjectOrigin.Internal
+                    };
                     // make sure we process attributes with no dependencies first
                     foreach (var templateAttribute in objectType.TemplateAttributes.OrderBy(q => q.AttributeDependency))
                     {
