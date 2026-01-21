@@ -954,6 +954,17 @@ public class SyncImportTaskProcessor
     {
         var stopwatch = Stopwatch.StartNew();
 
+        // Defensively deduplicate imported attribute values before processing
+        // This prevents corrupt source data from creating CSOs with duplicate values
+        // Use a temporary identifier for logging since we haven't created the CSO yet
+        var tempExternalId = connectedSystemImportObject.Attributes
+            .FirstOrDefault(a => connectedSystemObjectType.Attributes.Any(csa => csa.IsExternalId && csa.Name.Equals(a.Name, StringComparison.OrdinalIgnoreCase)))
+            ?.StringValues.FirstOrDefault()
+            ?? connectedSystemImportObject.Attributes
+                .FirstOrDefault(a => connectedSystemObjectType.Attributes.Any(csa => csa.IsExternalId && csa.Name.Equals(a.Name, StringComparison.OrdinalIgnoreCase)))
+                ?.GuidValues.FirstOrDefault().ToString();
+        DeduplicateImportObjectAttributes(connectedSystemImportObject, tempExternalId);
+
         // new object - create connected system object using data from an import object
         var connectedSystemObject = new ConnectedSystemObject
         {
@@ -1114,6 +1125,12 @@ public class SyncImportTaskProcessor
 
     private static void UpdateConnectedSystemObjectFromImportObject(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObject connectedSystemObject, ConnectedSystemObjectType connectedSystemObjectType, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
     {
+        // Defensively deduplicate imported attribute values before processing
+        // This prevents corrupt source data from propagating duplicates to the CSO
+        var csoExternalId = connectedSystemObject.ExternalIdAttributeValue?.StringValue
+                         ?? connectedSystemObject.ExternalIdAttributeValue?.GuidValue?.ToString();
+        DeduplicateImportObjectAttributes(connectedSystemImportObject, csoExternalId);
+
         // process known attributes (potential updates)
         // need to work with the fact that we have individual objects for multivalued attribute values
         foreach (var csoAttributeName in connectedSystemObjectType.Attributes.Select(a => a.Name))
@@ -1305,6 +1322,139 @@ public class SyncImportTaskProcessor
                 var attributeValuesToDelete = connectedSystemObject.AttributeValues.Where(q => (q.AttributeId != 0 ? q.AttributeId : q.Attribute?.Id) == attributeToDelete.Id).ToList();
                 connectedSystemObject.PendingAttributeValueRemovals.AddRange(attributeValuesToDelete);
             }
+        }
+    }
+
+    /// <summary>
+    /// Deduplicates multi-valued attribute values on an import object before processing.
+    /// This is a defensive measure to prevent duplicate values from corrupted source data
+    /// propagating through the sync process. Logs a warning when duplicates are detected.
+    /// Note: We check all value collections regardless of the Type property since import
+    /// objects may not have Type set - the actual type is determined from schema later.
+    /// </summary>
+    /// <param name="importObject">The import object to deduplicate</param>
+    /// <param name="csoExternalId">External ID for logging context</param>
+    private static void DeduplicateImportObjectAttributes(ConnectedSystemImportObject importObject, string? csoExternalId)
+    {
+        foreach (var attr in importObject.Attributes)
+        {
+            // Check StringValues collection
+            var originalStringCount = attr.StringValues.Count;
+            if (originalStringCount > 1)
+            {
+                var uniqueStrings = attr.StringValues.Distinct(StringComparer.Ordinal).ToList();
+                if (uniqueStrings.Count < originalStringCount)
+                {
+                    Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate string value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
+                        "Original count: {OriginalCount}, Unique count: {UniqueCount}",
+                        originalStringCount - uniqueStrings.Count, attr.Name, csoExternalId ?? "(unknown)", originalStringCount, uniqueStrings.Count);
+                    attr.StringValues.Clear();
+                    attr.StringValues.AddRange(uniqueStrings);
+                }
+            }
+
+            // Check IntValues collection
+            var originalIntCount = attr.IntValues.Count;
+            if (originalIntCount > 1)
+            {
+                var uniqueInts = attr.IntValues.Distinct().ToList();
+                if (uniqueInts.Count < originalIntCount)
+                {
+                    Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate int value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
+                        "Original count: {OriginalCount}, Unique count: {UniqueCount}",
+                        originalIntCount - uniqueInts.Count, attr.Name, csoExternalId ?? "(unknown)", originalIntCount, uniqueInts.Count);
+                    attr.IntValues.Clear();
+                    attr.IntValues.AddRange(uniqueInts);
+                }
+            }
+
+            // Check LongValues collection
+            var originalLongCount = attr.LongValues.Count;
+            if (originalLongCount > 1)
+            {
+                var uniqueLongs = attr.LongValues.Distinct().ToList();
+                if (uniqueLongs.Count < originalLongCount)
+                {
+                    Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate long value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
+                        "Original count: {OriginalCount}, Unique count: {UniqueCount}",
+                        originalLongCount - uniqueLongs.Count, attr.Name, csoExternalId ?? "(unknown)", originalLongCount, uniqueLongs.Count);
+                    attr.LongValues.Clear();
+                    attr.LongValues.AddRange(uniqueLongs);
+                }
+            }
+
+            // Check GuidValues collection
+            var originalGuidCount = attr.GuidValues.Count;
+            if (originalGuidCount > 1)
+            {
+                var uniqueGuids = attr.GuidValues.Distinct().ToList();
+                if (uniqueGuids.Count < originalGuidCount)
+                {
+                    Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate GUID value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
+                        "Original count: {OriginalCount}, Unique count: {UniqueCount}",
+                        originalGuidCount - uniqueGuids.Count, attr.Name, csoExternalId ?? "(unknown)", originalGuidCount, uniqueGuids.Count);
+                    attr.GuidValues.Clear();
+                    attr.GuidValues.AddRange(uniqueGuids);
+                }
+            }
+
+            // Check ReferenceValues collection (use case-insensitive comparison for DNs)
+            var originalRefCount = attr.ReferenceValues.Count;
+            if (originalRefCount > 1)
+            {
+                var uniqueRefs = attr.ReferenceValues.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (uniqueRefs.Count < originalRefCount)
+                {
+                    Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate reference value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
+                        "Original count: {OriginalCount}, Unique count: {UniqueCount}",
+                        originalRefCount - uniqueRefs.Count, attr.Name, csoExternalId ?? "(unknown)", originalRefCount, uniqueRefs.Count);
+                    attr.ReferenceValues.Clear();
+                    attr.ReferenceValues.AddRange(uniqueRefs);
+                }
+            }
+
+            // Check ByteValues collection
+            var originalBinaryCount = attr.ByteValues.Count;
+            if (originalBinaryCount > 1)
+            {
+                var uniqueBinaries = attr.ByteValues.Distinct(ByteArrayEqualityComparer.Instance).ToList();
+                if (uniqueBinaries.Count < originalBinaryCount)
+                {
+                    Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate binary value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
+                        "Original count: {OriginalCount}, Unique count: {UniqueCount}",
+                        originalBinaryCount - uniqueBinaries.Count, attr.Name, csoExternalId ?? "(unknown)", originalBinaryCount, uniqueBinaries.Count);
+                    attr.ByteValues.Clear();
+                    attr.ByteValues.AddRange(uniqueBinaries);
+                }
+            }
+
+            // Note: DateTime and Boolean are single-valued by nature, no deduplication needed
+        }
+    }
+
+    /// <summary>
+    /// Comparer for byte arrays that compares by content rather than reference.
+    /// </summary>
+    private sealed class ByteArrayEqualityComparer : IEqualityComparer<byte[]>
+    {
+        public static readonly ByteArrayEqualityComparer Instance = new();
+
+        public bool Equals(byte[]? x, byte[]? y)
+        {
+            if (ReferenceEquals(x, y)) return true;
+            if (x == null || y == null) return false;
+            if (x.Length != y.Length) return false;
+            return x.SequenceEqual(y);
+        }
+
+        public int GetHashCode(byte[] obj)
+        {
+            if (obj == null) return 0;
+            // Use a simple hash combining the length and first/last bytes
+            var hash = obj.Length;
+            if (obj.Length > 0) hash = (hash * 31) + obj[0];
+            if (obj.Length > 1) hash = (hash * 31) + obj[^1];
+            return hash;
         }
     }
 

@@ -1,5 +1,6 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.Staging;
+using Serilog;
 using System.DirectoryServices.Protocols;
 namespace JIM.Connectors.LDAP;
 
@@ -47,7 +48,20 @@ internal static class LdapConnectorUtilities
         foreach (byte[] byteValue in entry.Attributes[attributeName])
             guidValues.Add(new Guid(byteValue));
 
-        return guidValues;
+        if (guidValues.Count == 0)
+            return null;
+
+        // Deduplicate values defensively - LDAP multi-valued attributes should not contain duplicates
+        var uniqueValues = guidValues.Distinct().ToList();
+        if (uniqueValues.Count < guidValues.Count)
+        {
+            var duplicateCount = guidValues.Count - uniqueValues.Count;
+            Log.Warning("GetEntryAttributeGuidValues: Detected and removed {DuplicateCount} duplicate value(s) from attribute '{AttributeName}' on entry '{EntryDn}'. " +
+                "Original count: {OriginalCount}, Unique count: {UniqueCount}",
+                duplicateCount, attributeName, entry.DistinguishedName, guidValues.Count, uniqueValues.Count);
+        }
+
+        return uniqueValues;
     }
 
     /// <summary>
@@ -188,12 +202,28 @@ internal static class LdapConnectorUtilities
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
         if (entry.Attributes[attributeName].Count == 0) return null;
+
         // Strip null bytes and filter out empty strings (treat as "no value")
         var values = (from string value in entry.Attributes[attributeName].GetValues(typeof(string))
             let cleanedValue = value.Replace("\0", string.Empty)
             where !string.IsNullOrEmpty(cleanedValue)
             select cleanedValue).ToList();
-        return values.Count > 0 ? values : null;
+
+        if (values.Count == 0)
+            return null;
+
+        // Deduplicate values defensively - LDAP multi-valued attributes should not contain duplicates
+        // but corrupt data or bugs in source systems can cause this. Log when duplicates are detected.
+        var uniqueValues = values.Distinct(StringComparer.Ordinal).ToList();
+        if (uniqueValues.Count < values.Count)
+        {
+            var duplicateCount = values.Count - uniqueValues.Count;
+            Log.Warning("GetEntryAttributeStringValues: Detected and removed {DuplicateCount} duplicate value(s) from attribute '{AttributeName}' on entry '{EntryDn}'. " +
+                "Original count: {OriginalCount}, Unique count: {UniqueCount}",
+                duplicateCount, attributeName, entry.DistinguishedName, values.Count, uniqueValues.Count);
+        }
+
+        return uniqueValues;
     }
 
     internal static List<byte[]>? GetEntryAttributeBinaryValues(SearchResultEntry entry, string attributeName)
@@ -201,8 +231,51 @@ internal static class LdapConnectorUtilities
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
         if (entry.Attributes[attributeName].Count == 0) return null;
-        return (from byte[] value in entry.Attributes[attributeName].GetValues(typeof(byte[]))
+
+        var binaryValues = (from byte[] value in entry.Attributes[attributeName].GetValues(typeof(byte[]))
             select value).ToList();
+
+        if (binaryValues.Count == 0)
+            return null;
+
+        // Deduplicate values defensively - LDAP multi-valued attributes should not contain duplicates
+        // Use a custom comparer for byte arrays since default equality doesn't work for arrays
+        var uniqueValues = binaryValues.Distinct(ByteArrayComparer.Instance).ToList();
+        if (uniqueValues.Count < binaryValues.Count)
+        {
+            var duplicateCount = binaryValues.Count - uniqueValues.Count;
+            Log.Warning("GetEntryAttributeBinaryValues: Detected and removed {DuplicateCount} duplicate value(s) from attribute '{AttributeName}' on entry '{EntryDn}'. " +
+                "Original count: {OriginalCount}, Unique count: {UniqueCount}",
+                duplicateCount, attributeName, entry.DistinguishedName, binaryValues.Count, uniqueValues.Count);
+        }
+
+        return uniqueValues;
+    }
+
+    /// <summary>
+    /// Comparer for byte arrays that compares by content rather than reference.
+    /// </summary>
+    private sealed class ByteArrayComparer : IEqualityComparer<byte[]>
+    {
+        public static readonly ByteArrayComparer Instance = new();
+
+        public bool Equals(byte[]? x, byte[]? y)
+        {
+            if (ReferenceEquals(x, y)) return true;
+            if (x == null || y == null) return false;
+            if (x.Length != y.Length) return false;
+            return x.SequenceEqual(y);
+        }
+
+        public int GetHashCode(byte[] obj)
+        {
+            if (obj == null) return 0;
+            // Use a simple hash combining the length and first/last bytes
+            var hash = obj.Length;
+            if (obj.Length > 0) hash = (hash * 31) + obj[0];
+            if (obj.Length > 1) hash = (hash * 31) + obj[^1];
+            return hash;
+        }
     }
 
     internal static List<int>? GetEntryAttributeIntValues(SearchResultEntry entry, string attributeName)
@@ -210,6 +283,7 @@ internal static class LdapConnectorUtilities
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
         if (entry.Attributes[attributeName].Count == 0) return null;
+
         // DirectoryAttribute.GetValues() only supports string or byte[] types, so get as strings and parse
         var result = new List<int>();
         foreach (string value in entry.Attributes[attributeName].GetValues(typeof(string)))
@@ -219,7 +293,21 @@ internal static class LdapConnectorUtilities
                 result.Add(intValue);
             }
         }
-        return result.Count > 0 ? result : null;
+
+        if (result.Count == 0)
+            return null;
+
+        // Deduplicate values defensively - LDAP multi-valued attributes should not contain duplicates
+        var uniqueValues = result.Distinct().ToList();
+        if (uniqueValues.Count < result.Count)
+        {
+            var duplicateCount = result.Count - uniqueValues.Count;
+            Log.Warning("GetEntryAttributeIntValues: Detected and removed {DuplicateCount} duplicate value(s) from attribute '{AttributeName}' on entry '{EntryDn}'. " +
+                "Original count: {OriginalCount}, Unique count: {UniqueCount}",
+                duplicateCount, attributeName, entry.DistinguishedName, result.Count, uniqueValues.Count);
+        }
+
+        return uniqueValues;
     }
 
     internal static List<long>? GetEntryAttributeLongValues(SearchResultEntry entry, string attributeName)
@@ -227,6 +315,7 @@ internal static class LdapConnectorUtilities
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
         if (entry.Attributes[attributeName].Count == 0) return null;
+
         // DirectoryAttribute.GetValues() only supports string or byte[] types, so get as strings and parse
         var result = new List<long>();
         foreach (string value in entry.Attributes[attributeName].GetValues(typeof(string)))
@@ -236,7 +325,21 @@ internal static class LdapConnectorUtilities
                 result.Add(longValue);
             }
         }
-        return result.Count > 0 ? result : null;
+
+        if (result.Count == 0)
+            return null;
+
+        // Deduplicate values defensively - LDAP multi-valued attributes should not contain duplicates
+        var uniqueValues = result.Distinct().ToList();
+        if (uniqueValues.Count < result.Count)
+        {
+            var duplicateCount = result.Count - uniqueValues.Count;
+            Log.Warning("GetEntryAttributeLongValues: Detected and removed {DuplicateCount} duplicate value(s) from attribute '{AttributeName}' on entry '{EntryDn}'. " +
+                "Original count: {OriginalCount}, Unique count: {UniqueCount}",
+                duplicateCount, attributeName, entry.DistinguishedName, result.Count, uniqueValues.Count);
+        }
+
+        return uniqueValues;
     }
 
     internal static int? GetEntryAttributeIntValue(SearchResultEntry entry, string attributeName)
