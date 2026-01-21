@@ -26,11 +26,12 @@ JIM supports common Identity Governance & Administration (IGA) scenarios:
 ## Benefits
 Why choose JIM?
 
-- It's modern. No legacy hosting requirements or janky old UIs
-- Supports SSO to comply with modern security requirements
-- Open Source. You can see exactly what it does and help improve it
-- Flexible. We're developing it now, so you can suggest your must-have features
-- Built by people with decades of experience of integrating IDAM systems into the real world
+- **Modern Architecture** - Container-native design with no legacy infrastructure requirements
+- **Secure by Default** - SSO via OpenID Connect, no shared service accounts needed
+- **Air-Gapped Ready** - Fully functional without internet connectivity for sensitive environments
+- **Source Available** - Transparent, auditable code you can inspect and verify
+- **Actively Developed** - Built by identity management practitioners with decades of real-world experience
+
 ## Architecture
 JIM is a container-based distributed application implementing the metaverse pattern for centralised identity governance.
 
