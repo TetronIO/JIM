@@ -24,7 +24,7 @@
 
             <NavMenu DrawerOpen="@IsDrawerOpen"/>
 
-            <div class="jim-drawer-footer mud-text-secondary">
+            <div class="jim-drawer-footer mud-text-secondary @(IsDrawerOpen ? "jim-drawer-footer-expanded" : "")">
                 <MudTooltip Text="@(IsDrawerPinned ? UnpinMenuText : PinMenuText)" Arrow="true" Placement="Placement.Top">
                     <MudToggleIconButton Toggled="@IsDrawerPinned"
                                          ToggledChanged="@(_ => ToggleDrawerPinned())"

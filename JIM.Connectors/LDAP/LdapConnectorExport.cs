@@ -19,6 +19,43 @@ internal class LdapConnectorExport
     private const string SettingDisableAttribute = "Disable Attribute";
     private const string SettingCreateContainersAsNeeded = "Create containers as needed?";
 
+    /// <summary>
+    /// Active Directory protected attributes that cannot be deleted via LDAP.
+    /// When JIM attempts to clear these attributes (set to null), we must instead
+    /// replace them with their default "unset" values.
+    ///
+    /// This list is based on Samba AD's objectclass_attrs.c del_prot_attributes[] array:
+    /// https://github.com/samba-team/samba/blob/master/source4/dsdb/samdb/ldb_modules/objectclass_attrs.c
+    ///
+    /// The full list of protected attributes is:
+    /// nTSecurityDescriptor, objectSid, sAMAccountType, sAMAccountName, groupType,
+    /// primaryGroupID, userAccountControl, accountExpires, badPasswordTime, badPwdCount,
+    /// codePage, countryCode, lastLogoff, lastLogon, logonCount, pwdLastSet
+    ///
+    /// We only include attributes that JIM might legitimately try to clear via sync rules.
+    /// System-managed attributes (objectSid, sAMAccountType, etc.) are not included as
+    /// JIM would never attempt to modify them.
+    /// </summary>
+    internal static readonly Dictionary<string, string> ProtectedAttributeDefaults = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // accountExpires: 9223372036854775807 (Int64.MaxValue) means "never expires"
+        // A value of 0 also means "never expires" but MaxValue is the default for new accounts
+        ["accountExpires"] = "9223372036854775807"
+    };
+
+    /// <summary>
+    /// Gets the default value for a protected AD attribute, or null if the attribute is not protected.
+    /// Protected attributes cannot be deleted in AD - they must be replaced with a default value instead.
+    /// </summary>
+    /// <param name="attributeName">The attribute name to check (case-insensitive)</param>
+    /// <returns>The default value to use when clearing the attribute, or null if the attribute is not protected</returns>
+    internal static string? GetProtectedAttributeDefault(string attributeName)
+    {
+        return ProtectedAttributeDefaults.TryGetValue(attributeName, out var defaultValue)
+            ? defaultValue
+            : null;
+    }
+
     // Cache of containers we've already created or verified exist during this export session
     private readonly HashSet<string> _verifiedContainers = new(StringComparer.OrdinalIgnoreCase);
 
@@ -486,8 +523,20 @@ internal class LdapConnectorExport
         };
 
         // For RemoveAll, we replace with no values (clears the attribute)
+        // However, some AD attributes are protected and cannot be cleared - use default value instead
         if (attrChange.ChangeType == PendingExportAttributeChangeType.RemoveAll)
         {
+            var attrName = attrChange.Attribute!.Name;
+            if (ProtectedAttributeDefaults.TryGetValue(attrName, out var defaultValue))
+            {
+                _logger.Debug("LdapConnectorExport.CreateModification: Attribute '{AttrName}' is protected and cannot be cleared via RemoveAll. " +
+                    "Substituting default value '{DefaultValue}' instead.",
+                    attrName, defaultValue);
+                modification.Add(defaultValue);
+
+                // Update the attribute change so reconciliation knows what value to expect
+                UpdateAttributeChangeWithSubstitutedValue(attrChange, defaultValue);
+            }
             return modification;
         }
 
@@ -507,6 +556,24 @@ internal class LdapConnectorExport
             _logger.Warning("LdapConnectorExport.CreateModification: Cannot remove value for '{AttrName}' - no value specified",
                 attrChange.Attribute.Name);
             return null;
+        }
+        else if (attrChange.ChangeType == PendingExportAttributeChangeType.Update)
+        {
+            // Update with no value means "clear this attribute".
+            // Some AD attributes are protected and cannot be deleted - they must be replaced
+            // with a default value instead.
+            var attrName = attrChange.Attribute.Name;
+            if (ProtectedAttributeDefaults.TryGetValue(attrName, out var defaultValue))
+            {
+                _logger.Debug("LdapConnectorExport.CreateModification: Attribute '{AttrName}' is protected and cannot be cleared. " +
+                    "Substituting default value '{DefaultValue}' instead.",
+                    attrName, defaultValue);
+                modification.Add(defaultValue);
+
+                // Update the attribute change so reconciliation knows what value to expect
+                UpdateAttributeChangeWithSubstitutedValue(attrChange, defaultValue);
+            }
+            // else: no value and not protected - modification will have no values, which clears the attribute
         }
 
         return modification;
@@ -545,6 +612,34 @@ internal class LdapConnectorExport
     {
         // LDAP uses generalizedTime format: YYYYMMDDHHMMSS.0Z
         return dateTime.ToUniversalTime().ToString("yyyyMMddHHmmss.0Z");
+    }
+
+    /// <summary>
+    /// Updates a PendingExportAttributeValueChange with the substituted value for a protected attribute.
+    /// This ensures that reconciliation knows what value to expect on the CSO after export.
+    /// </summary>
+    private static void UpdateAttributeChangeWithSubstitutedValue(PendingExportAttributeValueChange attrChange, string substitutedValue)
+    {
+        // Determine the correct property to set based on the attribute type
+        var attrType = attrChange.Attribute?.Type ?? AttributeDataType.NotSet;
+
+        switch (attrType)
+        {
+            case AttributeDataType.LongNumber:
+                if (long.TryParse(substitutedValue, out var longVal))
+                    attrChange.LongValue = longVal;
+                break;
+
+            case AttributeDataType.Number:
+                if (int.TryParse(substitutedValue, out var intVal))
+                    attrChange.IntValue = intVal;
+                break;
+
+            case AttributeDataType.Text:
+            default:
+                attrChange.StringValue = substitutedValue;
+                break;
+        }
     }
 
     private static string? GetDistinguishedNameForCreate(PendingExport pendingExport)

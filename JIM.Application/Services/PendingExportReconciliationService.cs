@@ -84,9 +84,9 @@ public class PendingExportReconciliationService
         // Only process exports that have been executed and are awaiting confirmation
         // This includes:
         // - Exported: Just executed, awaiting first confirmation
-        // - ExportNotImported: Previously executed but some attributes weren't confirmed, awaiting re-confirmation
+        // - ExportNotConfirmed: Previously executed but some attributes weren't confirmed, awaiting re-confirmation
         if (pendingExport.Status != PendingExportStatus.Exported &&
-            pendingExport.Status != PendingExportStatus.ExportNotImported)
+            pendingExport.Status != PendingExportStatus.ExportNotConfirmed)
         {
             Log.Debug("ReconcileCsoAgainstPendingExport: PendingExport {ExportId} status is {Status}, not awaiting confirmation. Skipping.",
                 pendingExport.Id, pendingExport.Status);
@@ -388,7 +388,7 @@ public class PendingExportReconciliationService
         else if (anyPendingOrRetry)
         {
             // There are changes that need to be exported/re-exported
-            pendingExport.Status = PendingExportStatus.ExportNotImported;
+            pendingExport.Status = PendingExportStatus.ExportNotConfirmed;
         }
         else if (anyFailed)
         {

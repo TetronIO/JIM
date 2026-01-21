@@ -385,7 +385,7 @@ public class ExportAttributeChangeStatusTests
     {
         // Arrange
         var cso = CreateTestCso();
-        var pendingExport = CreateTestPendingExport(cso, PendingExportStatus.ExportNotImported);
+        var pendingExport = CreateTestPendingExport(cso, PendingExportStatus.ExportNotConfirmed);
         var attrChange = new PendingExportAttributeValueChange
         {
             Id = Guid.NewGuid(),

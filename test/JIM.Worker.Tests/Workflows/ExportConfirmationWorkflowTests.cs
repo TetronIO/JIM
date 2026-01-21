@@ -295,7 +295,7 @@ public class ExportConfirmationWorkflowTests
         Assert.That(result1.RetryChanges.Count, Is.EqualTo(1));
         Assert.That(attrChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedNotConfirmed));
         Assert.That(attrChange.LastImportedValue, Is.EqualTo("Wrong Name"));
-        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.ExportNotImported));
+        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed));
 
         // Act Step 3: Re-export (simulated by resetting status and re-exporting)
         await SimulateExportAsync(pendingExport);

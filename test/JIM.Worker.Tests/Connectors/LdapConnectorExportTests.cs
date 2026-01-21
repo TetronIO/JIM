@@ -127,4 +127,63 @@ public class LdapConnectorExportTests
     }
 
     #endregion
+
+    #region Protected Attribute Default Value tests
+
+    [Test]
+    public void GetProtectedAttributeDefault_AccountExpires_ReturnsNeverExpiresValue()
+    {
+        var result = LdapConnectorExport.GetProtectedAttributeDefault("accountExpires");
+
+        Assert.That(result, Is.EqualTo("9223372036854775807"));
+    }
+
+    [Test]
+    public void GetProtectedAttributeDefault_AccountExpires_CaseInsensitive()
+    {
+        var result1 = LdapConnectorExport.GetProtectedAttributeDefault("ACCOUNTEXPIRES");
+        var result2 = LdapConnectorExport.GetProtectedAttributeDefault("AccountExpires");
+        var result3 = LdapConnectorExport.GetProtectedAttributeDefault("accountexpires");
+
+        Assert.That(result1, Is.EqualTo("9223372036854775807"));
+        Assert.That(result2, Is.EqualTo("9223372036854775807"));
+        Assert.That(result3, Is.EqualTo("9223372036854775807"));
+    }
+
+    [Test]
+    public void GetProtectedAttributeDefault_UnprotectedAttribute_ReturnsNull()
+    {
+        var result = LdapConnectorExport.GetProtectedAttributeDefault("givenName");
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void GetProtectedAttributeDefault_DisplayName_ReturnsNull()
+    {
+        // displayName is not a protected attribute - it can be cleared
+        var result = LdapConnectorExport.GetProtectedAttributeDefault("displayName");
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void ProtectedAttributeDefaults_ContainsAccountExpires()
+    {
+        // Verify the dictionary is correctly configured
+        Assert.That(LdapConnectorExport.ProtectedAttributeDefaults, Contains.Key("accountExpires"));
+        Assert.That(LdapConnectorExport.ProtectedAttributeDefaults["accountExpires"], Is.EqualTo("9223372036854775807"));
+    }
+
+    [Test]
+    public void ProtectedAttributeDefaults_AccountExpiresValue_IsInt64MaxValue()
+    {
+        // Verify the value is actually Int64.MaxValue (never expires)
+        var value = LdapConnectorExport.ProtectedAttributeDefaults["accountExpires"];
+        var parsed = long.Parse(value);
+
+        Assert.That(parsed, Is.EqualTo(long.MaxValue));
+    }
+
+    #endregion
 }

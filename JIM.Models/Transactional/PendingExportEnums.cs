@@ -70,9 +70,10 @@ public enum PendingExportStatus
     /// </summary>
     Pending = 0,
     /// <summary>
-    /// The pending export was applied against the connected system, but one or more attribute values were not persisted.
+    /// The pending export was applied against the connected system, but one or more attribute values were not confirmed
+    /// during the confirming import. Will be retried on the next export run.
     /// </summary>
-    ExportNotImported = 1,
+    ExportNotConfirmed = 1,
     /// <summary>
     /// The pending export is currently being processed by a connector.
     /// </summary>

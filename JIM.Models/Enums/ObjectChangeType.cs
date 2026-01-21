@@ -93,7 +93,7 @@ public enum ObjectChangeType
     // Pending export visibility (surfaced during sync)
     /// <summary>
     /// A pending export exists that is staged for the next export run.
-    /// This surfaces unconfirmed exports (ExportNotImported status) so operators
+    /// This surfaces unconfirmed exports (ExportNotConfirmed status) so operators
     /// can see what changes will be made to connected systems.
     /// </summary>
     PendingExport,

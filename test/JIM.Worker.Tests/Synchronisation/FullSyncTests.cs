@@ -176,7 +176,7 @@ public class FullSyncTests
         var employeeNumberAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_NUMBER);
 
         // create a pending export for updating this CSO with attribute changes
-        // Status is ExportNotImported to simulate an export that has already been sent
+        // Status is ExportNotConfirmed to simulate an export that has already been sent
         // and is now being confirmed via a confirming sync
         var pendingExport = new PendingExport
         {
@@ -184,7 +184,7 @@ public class FullSyncTests
             ConnectedSystemId = connectedSystem.Id,
             ConnectedSystem = connectedSystem,
             ConnectedSystemObject = cso,
-            Status = PendingExportStatus.ExportNotImported,
+            Status = PendingExportStatus.ExportNotConfirmed,
             ChangeType = PendingExportChangeType.Update,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
             {
@@ -254,7 +254,7 @@ public class FullSyncTests
     /// 1. Successfully applied attribute changes are removed from the PendingExport
     /// 2. Failed attribute changes remain in the PendingExport
     /// 3. ErrorCount is incremented
-    /// 4. Status is updated to ExportNotImported
+    /// 4. Status is updated to ExportNotConfirmed
     /// </summary>
     [Test]
     public async Task PendingExportPartialMatchRemovesSuccessfulAttributesAndIncrementsErrorCountTestAsync()
@@ -270,14 +270,14 @@ public class FullSyncTests
         var roleAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.ROLE);
 
         // create a pending export with 3 attribute changes that has already been exported
-        // (ExportNotImported means it was exported but not all changes were confirmed)
+        // (ExportNotConfirmed means it was exported but not all changes were confirmed)
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
             ConnectedSystemId = connectedSystem.Id,
             ConnectedSystem = connectedSystem,
             ConnectedSystemObject = cso,
-            Status = PendingExportStatus.ExportNotImported,
+            Status = PendingExportStatus.ExportNotConfirmed,
             ChangeType = PendingExportChangeType.Update,
             ErrorCount = 0,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
@@ -331,7 +331,7 @@ public class FullSyncTests
         Assert.That(PendingExportsData.Count, Is.EqualTo(1), "Expected one pending export before sync.");
         Assert.That(pendingExport.AttributeValueChanges.Count, Is.EqualTo(3), "Expected 3 attribute changes before sync.");
         Assert.That(pendingExport.ErrorCount, Is.EqualTo(0), "Expected ErrorCount to be 0 before sync.");
-        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.ExportNotImported), "Expected Status to be ExportNotImported before sync (already exported, awaiting confirmation).");
+        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed), "Expected Status to be ExportNotConfirmed before sync (already exported, awaiting confirmation).");
 
         // setup mock to handle pending export deletion (shouldn't be called for partial match)
         var deleteCallCount = 0;
@@ -371,9 +371,9 @@ public class FullSyncTests
         Assert.That(pendingExport.ErrorCount, Is.EqualTo(1),
             "Expected ErrorCount to be incremented to 1 after partial failure.");
 
-        // verify Status was updated to ExportNotImported
-        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.ExportNotImported),
-            "Expected Status to be updated to ExportNotImported after partial failure.");
+        // verify Status was updated to ExportNotConfirmed
+        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed),
+            "Expected Status to be updated to ExportNotConfirmed after partial failure.");
     }
 
     /// <summary>
@@ -397,7 +397,7 @@ public class FullSyncTests
             ConnectedSystemId = connectedSystem.Id,
             ConnectedSystem = connectedSystem,
             ConnectedSystemObject = cso,
-            Status = PendingExportStatus.ExportNotImported,
+            Status = PendingExportStatus.ExportNotConfirmed,
             ChangeType = PendingExportChangeType.Update,
             ErrorCount = 2, // Already failed twice
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
@@ -2373,12 +2373,12 @@ public class FullSyncTests
     #region Pending Export Visibility Tests
 
     /// <summary>
-    /// Tests that pending exports with ExportNotImported status are surfaced as
+    /// Tests that pending exports with ExportNotConfirmed status are surfaced as
     /// ActivityRunProfileExecutionItems during FullSync for operator visibility.
     /// This enables operators to see what changes will be made on the next export run.
     /// </summary>
     [Test]
-    public async Task PendingExportsWithExportNotImportedStatusAreSurfacedAsExecutionItemsAsync()
+    public async Task PendingExportsWithExportNotConfirmedStatusAreSurfacedAsExecutionItemsAsync()
     {
         // Arrange
         var cso = ConnectedSystemObjectsData[0];
@@ -2386,7 +2386,7 @@ public class FullSyncTests
         var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
         var displayNameAttr = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME);
 
-        // Create a pending export with ExportNotImported status (awaiting confirmation)
+        // Create a pending export with ExportNotConfirmed status (awaiting confirmation)
         var pendingExport = new PendingExport
         {
             Id = Guid.NewGuid(),
@@ -2394,7 +2394,7 @@ public class FullSyncTests
             ConnectedSystem = connectedSystem,
             ConnectedSystemObject = cso,
             ConnectedSystemObjectId = cso.Id,
-            Status = PendingExportStatus.ExportNotImported,
+            Status = PendingExportStatus.ExportNotConfirmed,
             ChangeType = PendingExportChangeType.Update,
             ErrorCount = 1,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>
@@ -2435,7 +2435,7 @@ public class FullSyncTests
             .ToList();
 
         Assert.That(pendingExportItems.Count, Is.EqualTo(1),
-            "Expected one PendingExport execution item to be created for the ExportNotImported pending export.");
+            "Expected one PendingExport execution item to be created for the ExportNotConfirmed pending export.");
 
         var executionItem = pendingExportItems.First();
         Assert.That(executionItem.ConnectedSystemObjectId, Is.EqualTo(cso.Id),

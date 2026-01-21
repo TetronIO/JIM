@@ -193,13 +193,13 @@ public class ExportExecutionServer
         // For Create and Delete, we proceed even if there are no attribute changes
         // (Create might have no initial attributes, Delete just needs the operation)
 
-        // Execute if status is Pending, Exported (for retry), or ExportNotImported
+        // Execute if status is Pending, Exported (for retry), or ExportNotConfirmed
         // - Pending: New export, not yet processed
         // - Exported: Was exported, but has attribute changes needing retry (ExportedNotConfirmed)
-        // - ExportNotImported: Previous export indicated not all values persisted
+        // - ExportNotConfirmed: Previous export indicated not all values persisted
         if (pendingExport.Status != PendingExportStatus.Pending &&
             pendingExport.Status != PendingExportStatus.Exported &&
-            pendingExport.Status != PendingExportStatus.ExportNotImported)
+            pendingExport.Status != PendingExportStatus.ExportNotConfirmed)
         {
             return false;
         }
@@ -797,7 +797,7 @@ public class ExportExecutionServer
                 export.LastErrorStackTrace = ex.StackTrace;
                 export.LastAttemptedAt = now;
                 export.NextRetryAt = CalculateNextRetryTime(export.ErrorCount);
-                export.Status = PendingExportStatus.ExportNotImported;
+                export.Status = PendingExportStatus.ExportNotConfirmed;
             }
             await Application.Repository.ConnectedSystems.UpdatePendingExportsAsync(pendingExports);
 
@@ -988,7 +988,7 @@ public class ExportExecutionServer
         else
         {
             // Keep as Pending while we're still retrying
-            // ExportNotImported is for when export succeeded but some values didn't persist
+            // ExportNotConfirmed is for when export succeeded but some values didn't persist
             export.Status = PendingExportStatus.Pending;
             Log.Warning("MarkExportFailedAsync: Export {ExportId} failed (attempt {Attempt}/{MaxRetries}). Next retry at {NextRetry}. Error: {Error}",
                 export.Id, export.ErrorCount, export.MaxRetries, export.NextRetryAt, errorMessage);

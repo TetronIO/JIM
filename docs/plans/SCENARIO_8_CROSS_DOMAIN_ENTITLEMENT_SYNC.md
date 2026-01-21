@@ -42,7 +42,7 @@
   - Confirming import working - pending exports confirmed and cleared
   - **Bugs Fixed**:
     - `ExportExecutionServer`: Resolve references to secondary external ID (DN) for LDAP systems
-    - `PendingExportReconciliationService`: Process `ExportNotImported` status and `ExportedNotConfirmed` attribute changes during confirming import
+    - `PendingExportReconciliationService`: Process `ExportNotConfirmed` status and `ExportedNotConfirmed` attribute changes during confirming import
   - Related: Created issue #287 for pending export visibility improvements
 
 - **Phase 5: ForwardSync Step** - Complete
