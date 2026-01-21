@@ -14,14 +14,15 @@ JIM is a modern Identity Management system designed for organisations with compl
 ![A screenshot of JIM running](https://tetron.io/images/jim/jim-8.png "JIM Screenshot")
 
 ## Scenarios
-JIM is designed to support the following common Identity, Governance & Administration (IGA) scenarios:
+JIM supports common Identity Governance & Administration (IGA) scenarios:
 
-- Automate JML by synchronising users from HR systems to directories, apps and systems
-- Keep HR systems up to date by writing I.T related attributes back to HR systems, i.e. email address, telephone numbers, etc.
-- Centrally manage user entitlements, i.e. group memberships in directories, apps and systems
-- Facilitate domain consolidations, i.e. to prepare for migrating to the cloud, simplification, or for organisational mergers
-- Facilitate domain migrations, i.e. divestitures
-- Identity fusing - bring together user/entitlement data from various business apps and systems
+- **Joiner/Mover/Leaver (JML) Automation** - Synchronise users from HR systems to directories, applications, and downstream systems
+- **Attribute Writeback** - Keep HR systems current by writing IT-managed attributes back (e.g., email addresses, phone numbers)
+- **Entitlement Management** - Centrally manage group memberships across directories, applications, and systems
+- **Domain Consolidation** - Prepare for cloud migration, simplification, or organisational mergers
+- **Domain Migration** - Support divestitures and system decommissioning
+- **Identity Correlation** - Bring together user and entitlement data from disparate business applications
+
 ## Benefits
 Why choose JIM?
 
