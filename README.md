@@ -2,15 +2,13 @@
 
 [![.NET Build & Test](https://github.com/TetronIO/JIM/actions/workflows/dotnet-build-and-test.yml/badge.svg?branch=main)](https://github.com/TetronIO/JIM/actions/workflows/dotnet-build-and-test.yml)
 
-JIM is a modern Identity Management system designed for organisations with non-trivial Identity Management and synchronisation requirements.
-It's designed to be self-hosted, deployable on container platforms and is suitable for connected, or air-gapped networks. Features include:
+JIM is a modern Identity Management system designed for organisations with complex identity synchronisation requirements. It is self-hosted, container-deployable, and works in both connected and air-gapped networks. Features include:
 
-- Synchronises objects between systems. Supports Users and Groups by default
-- Supports custom object types, i.e. Departments, Qualifications, Courses, Licenses, Roles, Computers, etc.
-- Transform data using a wide range of functions
-- Extensible with custom functions
+- Hub-and-spoke architecture using a central metaverse for identity correlation
+- Bidirectional synchronisation of Users, Groups, and custom object types (e.g., Departments, Roles, Computers)
+- Transform data using expressions with built-in functions for common identity operations
 - Extensible with custom connectors (fully unit-testable)
-- A modern Web Portal and API
+- Modern Web Portal and REST API with OpenAPI documentation
 - Single Sign-On (SSO) using OpenID Connect
 
 ![A screenshot of JIM running](https://tetron.io/images/jim/jim-8.png "JIM Screenshot")
