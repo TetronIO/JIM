@@ -1613,7 +1613,7 @@ JIM/
 
 ## Current Progress & Known Issues
 
-### Phase 1 Status (as of 2026-01-15) - ✅ COMPLETE
+### Phase 1 Status (as of 2026-01-20) - ✅ COMPLETE
 
 | Component | Status | Notes |
 |-----------|--------|-------|
@@ -1757,9 +1757,12 @@ docker logs jim.web --tail 100
 1. ~~**Debug sync engine export**~~ - ✅ Fixed! Users now provisioned to AD successfully
 2. ~~**Fix file connector change detection**~~ - ✅ Fixed! All Scenario 1 tests now passing
 3. ~~**Fix Scenario 2 duplicate attribute bug**~~ - ✅ Fixed! PR #279 - uses objectGUID as external ID
-4. **Test and validate Scenario 2** - Run full cross-domain sync tests
-5. **Complete Scenario 3** - GALSYNC (AD to CSV export)
-6. **Create GitHub Actions workflow** - Automate integration tests in CI/CD
+4. ~~**Test and validate Scenario 2**~~ - ✅ Complete! All 4 tests passing
+5. ~~**Complete Scenario 8**~~ - ✅ Complete! All 6 tests passing (cross-domain entitlement sync)
+6. **Complete Scenario 3** - GALSYNC (AD to CSV export)
+7. **Create GitHub Actions workflow** - Automate integration tests in CI/CD
+8. **Post-MVP: Scenarios 6-7** - Internal MVO design required for entitlement management
+9. **Post-MVP: Scenarios 9-11** - Database connector testing (SQL Server, PostgreSQL, Oracle, MySQL)
 
 ### Scenario 2 Status: Ready for Testing
 

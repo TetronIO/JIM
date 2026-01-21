@@ -152,12 +152,26 @@ JIM is approximately 92% complete towards MVP status with core identity synchron
 - Unit tests for models, utilities, and API endpoints
 - Worker tests for synchronisation logic
 - Workflow tests for multi-step sync scenarios (import → sync → export → confirming import)
+- Integration tests with real connected systems (Phase 1 complete)
+
+**Integration Testing (Complete):**
+- Scenario 1: HR to Identity Directory (Joiner/Mover/Leaver)
+- Scenario 2: Cross-domain Synchronisation
+- Scenario 4: Deletion Rules
+- Scenario 5: Matching Rules
+- Scenario 8: Cross-domain Entitlement Synchronisation
+
+See [Integration Testing](docs/INTEGRATION_TESTING.md) for full details on running tests.
 
 **In Progress:**
 - Scheduler service for automated run profile execution (#168 - critical path for MVP)
 - Full RBAC model with additional roles
 
-> **Note:** Integration testing is currently underway. As a pre-MVP release, bugs may exist. Please report any issues on [GitHub](https://github.com/TetronIO/JIM/issues).
+**Deferred (Post-MVP):**
+- Scenarios 6-7: Entitlement Management (pending Internal MVO design)
+- Scenarios 9-11: Database connector testing
+
+> **Note:** As a pre-MVP release, bugs may exist. Please report any issues on [GitHub](https://github.com/TetronIO/JIM/issues).
 
 If you don't have any connected systems available, you can use the Example Data feature to populate JIM with sample users and groups for testing.
 

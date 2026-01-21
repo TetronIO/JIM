@@ -72,6 +72,7 @@ body {
 
 .jim-text-code {
     font-family: "Lucida Console", "Courier New", monospace;
+    font-size: 0.9em;
 }
 
 /* Inline code styling - similar to GitHub/markdown code blocks */

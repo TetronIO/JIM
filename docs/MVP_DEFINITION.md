@@ -1,8 +1,8 @@
 # JIM MVP Definition
 
-> **Version**: 1.12
-> **Last Updated**: 2026-01-04
-> **Status**: In Progress (~92% Complete)
+> **Version**: 1.13
+> **Last Updated**: 2026-01-21
+> **Status**: In Progress (~94% Complete)
 
 ---
 
@@ -18,9 +18,9 @@
 | Security | `██████████` | 5 | 5 | 100% |
 | Operations | `██████████` | 6 | 6 | 100% |
 | API Coverage | `██████████` | 7 | 7 | 100% |
-| Tooling | `██████░░░░` | 3 | 5 | 60% |
+| Tooling | `██████████` | 5 | 5 | 100% |
 | Release | `██████████` | 9 | 9 | 100% |
-| **Overall** | `█████████░` | **94** | **102** | **92%** |
+| **Overall** | `█████████░` | **96** | **102** | **94%** |
 
 ### Priority Order for Remaining Work
 
@@ -35,9 +35,11 @@
 - Full RBAC (#21) and Synchronisation Readers role (#9)
 - Change history (#14)
 - Sync preview
-- End-to-End Integration Testing Framework (#173)
 
 ### Recently Completed ✓
+- ~~Integration Testing Framework (#173)~~ - Phase 1 complete with 5 scenarios (1, 2, 4, 5, 8), Samba AD infrastructure
+- ~~Scenario 8 Cross-domain Entitlement Sync~~ - Groups sync between AD domains with reference attribute translation
+- ~~Synchronous MVO Deletion~~ - MVOs with 0-grace-period now delete immediately during sync
 - ~~Credential Encryption (#171)~~ - AES-256-GCM encryption for connector passwords at rest
 - ~~Background MVO deletion job (#120)~~ - Housekeeping deletes orphaned MVOs after grace period expires
 - ~~MVO Deletion Rules (#203)~~ - Pending deletions UI, API endpoints, background housekeeping job
@@ -224,8 +226,8 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - [x] Script-based automation with name-based parameters
 
 #### 9.2 Testing Framework (#173)
-- [ ] End-to-end integration tests with real connected systems
-- [ ] Automated test scenarios
+- [x] End-to-end integration tests with real connected systems
+- [x] Automated test scenarios (Scenarios 1, 2, 4, 5, 8 complete; 6-7 deferred pending Internal MVO design)
 
 ### 10. Release & Deployment (#188)
 
