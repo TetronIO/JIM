@@ -14,9 +14,9 @@
 
 @if (MetaverseObject != null)
 {
-    <MudPaper Class="mt-5" Outlined="true">
-        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-5">
-            <MudTabPanel Text="Details" Icon="@Icons.Material.Filled.Info">
+    <MudTabs @bind-ActivePanelIndex="_activeTabIndex" Elevation="0" Rounded="false" Class="mt-5" PanelClass="pa-0">
+        <MudTabPanel Text="Details" Icon="@Icons.Material.Filled.Info">
+            <MudPaper Class="pa-5 mt-3" Outlined="true">
                 <MudGrid>
                     @foreach (var attributeValue in MetaverseObject.AttributeValues)
                     {
@@ -61,13 +61,15 @@
                         </MudItem>
                     }
                 </MudGrid>
-            </MudTabPanel>
+            </MudPaper>
+        </MudTabPanel>
 
-            <MudTabPanel Text="Changes" Icon="@Icons.Material.Filled.History" BadgeData="@GetChangeCount()" BadgeColor="Color.Primary">
+        <MudTabPanel Text="Changes" Icon="@Icons.Material.Filled.History" BadgeData="@GetChangeCount()" BadgeColor="Color.Primary">
+            <div class="mt-3">
                 <ChangeHistoryTimeline Changes="@GetChangeHistory()" />
-            </MudTabPanel>
-        </MudTabs>
-    </MudPaper>
+            </div>
+        </MudTabPanel>
+    </MudTabs>
 }
 
 @code {
@@ -78,6 +80,7 @@
     private MetaverseObject? MetaverseObject { get; set; }
     private MetaverseObjectType? MetaverseObjectType { get; set; }
     private string? _displayName;
+    private int _activeTabIndex = 0;
     private List<BreadcrumbItem> _breadcrumbs = null!;
 
     protected override async Task OnParametersSetAsync()
