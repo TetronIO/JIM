@@ -217,6 +217,23 @@ public static class Constants
         // History Settings
         public const string HistoryRetentionPeriod = "History.RetentionPeriod";
 
+        // Change Tracking Settings
+        /// <summary>
+        /// Enables or disables change tracking for Connected System Objects.
+        /// When enabled, all CSO create/update/delete operations create ConnectedSystemObjectChange records.
+        /// When disabled, no change history is recorded for CSOs (improves performance but loses audit trail).
+        /// Default: true.
+        /// </summary>
+        public const string ChangeTrackingCsoChangesEnabled = "ChangeTracking.CsoChanges.Enabled";
+
+        /// <summary>
+        /// Enables or disables change tracking for Metaverse Objects.
+        /// When enabled, all MVO create/update/delete operations create MetaverseObjectChange records.
+        /// When disabled, no change history is recorded for MVOs (improves performance but loses audit trail).
+        /// Default: true.
+        /// </summary>
+        public const string ChangeTrackingMvoChangesEnabled = "ChangeTracking.MvoChanges.Enabled";
+
         // Maintenance Settings
         public const string MaintenanceMode = "Maintenance.IsEnabled";
 

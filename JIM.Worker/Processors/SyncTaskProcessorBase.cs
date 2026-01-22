@@ -68,6 +68,10 @@ public abstract class SyncTaskProcessorBase
     // Batch collection for deferred MVO deletions (for immediate 0-grace-period deletions)
     protected readonly List<MetaverseObject> _pendingMvoDeletions = [];
 
+    // Batch collection for MVO change object creation (deferred to page boundary for performance)
+    // Stores: (MVO, Additions, Removals, RPEI) - captured BEFORE applying pending changes
+    protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> Additions, List<MetaverseObjectAttributeValue> Removals, ActivityRunProfileExecutionItem Rpei)> _pendingMvoChanges = [];
+
     // Batch collection for deferred reference attribute processing.
     // Reference attributes must be processed AFTER all CSOs in the page have been processed (joined/projected)
     // because group member references may point to user CSOs that come later in the processing order.

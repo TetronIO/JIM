@@ -2090,7 +2090,7 @@ public class ConnectedSystemServer
     #region Connected System Objects
     /// <summary>
     /// Deletes a Connected System Object, and it's attribute values from a Connected System.
-    /// Also prepares a Connected System Object Change for persistence with the activityRunProfileExecutionItem by the caller.  
+    /// Also prepares a Connected System Object Change for persistence with the activityRunProfileExecutionItem by the caller.
     /// </summary>
     public async Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
     {
@@ -2099,6 +2099,16 @@ public class ConnectedSystemServer
         var externalIdDisplayValue = connectedSystemObject.ExternalIdAttributeValue?.ToString();
 
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject);
+
+        // Check if CSO change tracking is enabled
+        var changeTrackingEnabled = await Application.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
+        if (!changeTrackingEnabled)
+        {
+            // Clear the navigation property and FK to the deleted CSO to prevent FK constraint violations.
+            activityRunProfileExecutionItem.ConnectedSystemObject = null;
+            activityRunProfileExecutionItem.ConnectedSystemObjectId = null;
+            return;
+        }
 
         // Create a Change Object for this deletion.
         // Note: ConnectedSystemObject and DeletedObjectExternalIdAttributeValue are intentionally NOT set
@@ -2152,23 +2162,30 @@ public class ConnectedSystemServer
         // Batch delete from database
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
 
-        // Create change objects for each deletion
+        // Check if CSO change tracking is enabled
+        var changeTrackingEnabled = await Application.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
+
+        // Create change objects for each deletion (if enabled)
         for (int i = 0; i < connectedSystemObjects.Count; i++)
         {
             var cso = connectedSystemObjects[i];
             var executionItem = activityRunProfileExecutionItems[i];
             var externalIdValue = externalIdValues[i];
 
-            var change = new ConnectedSystemObjectChange
+            if (changeTrackingEnabled)
             {
-                ConnectedSystemId = cso.ConnectedSystemId,
-                ChangeType = ObjectChangeType.Deleted,
-                ChangeTime = DateTime.UtcNow,
-                DeletedObjectType = cso.Type,
-                ActivityRunProfileExecutionItem = executionItem
-            };
+                var change = new ConnectedSystemObjectChange
+                {
+                    ConnectedSystemId = cso.ConnectedSystemId,
+                    ChangeType = ObjectChangeType.Deleted,
+                    ChangeTime = DateTime.UtcNow,
+                    DeletedObjectType = cso.Type,
+                    ActivityRunProfileExecutionItem = executionItem
+                };
 
-            executionItem.ConnectedSystemObjectChange = change;
+                executionItem.ConnectedSystemObjectChange = change;
+            }
+
             executionItem.ConnectedSystemObject = null;
             executionItem.ConnectedSystemObjectId = null;
         }
@@ -2414,6 +2431,9 @@ public class ConnectedSystemServer
         // bulk persist csos creates
         await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjects);
 
+        // Check if CSO change tracking is enabled
+        var changeTrackingEnabled = await Application.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
+
         // add a Change Object to the relevant Activity Run Profile Execution Item for each cso.
         // they will be persisted further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
@@ -2425,7 +2445,7 @@ public class ConnectedSystemServer
             // This ensures the FK is properly tracked when the execution item is saved later.
             activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
 
-            AddConnectedSystemObjectChange(cso, activityRunProfileExecutionItem);
+            AddConnectedSystemObjectChange(cso, activityRunProfileExecutionItem, changeTrackingEnabled);
         }
     }
     
@@ -2443,6 +2463,9 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, List<ActivityRunProfileExecutionItem> activityRunProfileExecutionItems)
     {
+        // Check if CSO change tracking is enabled
+        var changeTrackingEnabled = await Application.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
+
         // add a change object to the relevant activity run profile execution item for each cso to be updated.
         // the change objects will be persisted later, further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
@@ -2456,7 +2479,7 @@ public class ConnectedSystemServer
                 // Explicitly set the FK to ensure it's properly tracked when the execution item is saved.
                 activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
 
-                ProcessConnectedSystemObjectAttributeValueChanges(cso, activityRunProfileExecutionItem);
+                ProcessConnectedSystemObjectAttributeValueChanges(cso, activityRunProfileExecutionItem, changeTrackingEnabled);
             }
             // If no RPEI exists, CSO was added to update list for reference resolution but had no changes - skip change tracking
         }
@@ -2468,8 +2491,11 @@ public class ConnectedSystemServer
     /// <summary>
     /// Adds a Change Object to a Run Profile Execution Item for a CSO that's being created.
     /// </summary>
-    private static void AddConnectedSystemObjectChange(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
+    private static void AddConnectedSystemObjectChange(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem, bool changeTrackingEnabled)
     {
+        if (!changeTrackingEnabled)
+            return;
+
         // now populate the Connected System Object Change Object with the cso attribute values.
         // create a change object we can add attribute changes to.
         var change = new ConnectedSystemObjectChange
@@ -2482,7 +2508,7 @@ public class ConnectedSystemServer
             ActivityRunProfileExecutionItemId = activityRunProfileExecutionItem.Id
         };
         activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
-        
+
         foreach (var attributeValue in connectedSystemObject.AttributeValues)
             AddChangeAttributeValueObject(change, attributeValue, ValueChangeType.Add);
     }
@@ -2490,7 +2516,7 @@ public class ConnectedSystemServer
     /// <summary>
     /// Adds a Change object to the Run Profile Execution Item for a CSO that's being updated.
     /// </summary>
-    private static void ProcessConnectedSystemObjectAttributeValueChanges(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
+    private static void ProcessConnectedSystemObjectAttributeValueChanges(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem, bool changeTrackingEnabled)
     {
         if (connectedSystemObject == null)
             throw new ArgumentNullException(nameof(connectedSystemObject));
@@ -2508,42 +2534,51 @@ public class ConnectedSystemServer
             return;
         }
 
-        // create a change object we can track attribute changes with
-        var change = new ConnectedSystemObjectChange
-        {
-            ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
-            ConnectedSystemObject = connectedSystemObject,
-            ChangeType = ObjectChangeType.Updated,
-            ChangeTime = DateTime.UtcNow,
-            ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
-        };
-
-        // the change object will be persisted with the activity run profile execution item further up the stack.
-        // we just need to associate the change with the detail item.
-        // unsure if this is the right approach. should we persist the change here and just associate with the detail item?
-        activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
-
         // make sure the CSO is linked to the activity run profile execution item
         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
         activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
 
-        // persist new attribute values from addition list and create change object
+        // persist new attribute values from addition list and create change object (if enabled)
         foreach (var pendingAttributeValueAddition in connectedSystemObject.PendingAttributeValueAdditions)
         {
             connectedSystemObject.AttributeValues.Add(pendingAttributeValueAddition);
-                
-            // trigger auditing of this change
-            AddChangeAttributeValueObject(change, pendingAttributeValueAddition, ValueChangeType.Add);
         }
 
-        // delete attribute values to be removed and create change
+        // delete attribute values to be removed and create change (if enabled)
         foreach (var pendingAttributeValueRemoval in connectedSystemObject.PendingAttributeValueRemovals)
         {
             // this will cause a cascade delete of the attribute value object
             connectedSystemObject.AttributeValues.RemoveAll(av => av.Id == pendingAttributeValueRemoval.Id);
+        }
 
-            // trigger auditing of this change
-            AddChangeAttributeValueObject(change, pendingAttributeValueRemoval, ValueChangeType.Remove);
+        // Only create change object if tracking is enabled
+        if (changeTrackingEnabled)
+        {
+            // create a change object we can track attribute changes with
+            var change = new ConnectedSystemObjectChange
+            {
+                ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
+                ConnectedSystemObject = connectedSystemObject,
+                ChangeType = ObjectChangeType.Updated,
+                ChangeTime = DateTime.UtcNow,
+                ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
+            };
+
+            // the change object will be persisted with the activity run profile execution item further up the stack.
+            // we just need to associate the change with the detail item.
+            activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
+
+            // Record attribute additions
+            foreach (var pendingAttributeValueAddition in connectedSystemObject.PendingAttributeValueAdditions)
+            {
+                AddChangeAttributeValueObject(change, pendingAttributeValueAddition, ValueChangeType.Add);
+            }
+
+            // Record attribute removals
+            foreach (var pendingAttributeValueRemoval in connectedSystemObject.PendingAttributeValueRemovals)
+            {
+                AddChangeAttributeValueObject(change, pendingAttributeValueRemoval, ValueChangeType.Remove);
+            }
         }
         
         // we can now reset the pending attribute value lists

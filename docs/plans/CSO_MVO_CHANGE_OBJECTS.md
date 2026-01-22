@@ -45,14 +45,18 @@ Complete the implementation of change object tracking and lifecycle management f
 
 | Purpose | File | Lines |
 |---------|------|-------|
-| CSO change creation | `JIM.Application/Servers/ConnectedSystemServer.cs` | 1879-2392 |
+| CSO change creation | `JIM.Application/Servers/ConnectedSystemServer.cs` | 2109 (delete), 2162 (batch delete), 2475 (create), 2512 (update) |
 | CSO change model | `JIM.Models/Staging/ConnectedSystemObjectChange.cs` | 1-57 |
 | MVO change model | `JIM.Models/Core/MetaverseObjectChange.cs` | 1-41 |
-| RPEI detail display | `JIM.Web/Pages/ActivityRunProfileExecutionItemDetail.razor` | 135-187 |
-| CSO detail page | `JIM.Web/Pages/Admin/ConnectedSystemObjectDetail.razor` | 1-260 |
-| MVO detail page | `JIM.Web/Pages/Types/View.razor` | 1-101 |
+| RPEI detail display | `JIM.Web/Pages/ActivityRunProfileExecutionItemDetail.razor` | 490-554 (attribute changes table) |
+| CSO detail page | `JIM.Web/Pages/Admin/ConnectedSystemObjectDetail.razor` | (no change history section yet) |
+| MVO detail page | `JIM.Web/Pages/Types/View.razor` | (minimal implementation) |
 | Service settings | `JIM.Application/Servers/ServiceSettingsServer.cs` | 1-252 |
-| History retention setting | `JIM.Models/Core/Constants.cs` | (HistoryRetentionPeriod key) |
+| History retention setting | `JIM.Models/Core/Constants.cs` | Line 218 |
+
+**Note on CSO Change Creation:** CSOs use a "pending changes" pattern during sync - `PendingAttributeValueAdditions` and `PendingAttributeValueRemovals` (in-memory, not persisted) are populated during sync processing, then converted to `ConnectedSystemObjectChange` entities at persistence time in ConnectedSystemServer.
+
+**PERFORMANCE REQUIREMENTS:** JIM processes objects in pages (default: 500 CSOs per page) with batched database writes at page boundaries only. SaveChangesAsync is called exactly 5 times per page to minimise database round trips. MVO change creation MUST follow this pattern - changes must be captured in-memory during page processing and created in a single batch at the page boundary, NOT per-object. This maintains O(1) database writes per page rather than O(N) per object.
 
 ## Technical Architecture
 

@@ -33,6 +33,8 @@ public class ActivityRunProfileExecutionItemTests
     private Mock<DbSet<ConnectedSystemPartition>> MockDbSetConnectedSystemPartitions { get; set; } = null!;
     private List<Activity> ActivitiesData { get; set; } = null!;
     private Mock<DbSet<Activity>> MockDbSetActivities { get; set; } = null!;
+    private List<ServiceSetting> ServiceSettingsData { get; set; } = null!;
+    private Mock<DbSet<ServiceSetting>> MockDbSetServiceSettings { get; set; } = null!;
     private Mock<JimDbContext> MockJimDbContext { get; set; } = null!;
     private JimApplication Jim { get; set; } = null!;
     #endregion
@@ -65,12 +67,37 @@ public class ActivityRunProfileExecutionItemTests
         ConnectedSystemPartitionsData = TestUtilities.GetConnectedSystemPartitionData();
         MockDbSetConnectedSystemPartitions = ConnectedSystemPartitionsData.BuildMockDbSet();
 
+        // set up service settings mock with change tracking settings
+        ServiceSettingsData = new List<ServiceSetting>
+        {
+            new ServiceSetting
+            {
+                Key = "ChangeTracking.CsoChanges.Enabled",
+                DisplayName = "Track CSO changes",
+                Category = ServiceSettingCategory.History,
+                ValueType = ServiceSettingValueType.Boolean,
+                DefaultValue = "true",
+                Value = null
+            },
+            new ServiceSetting
+            {
+                Key = "ChangeTracking.MvoChanges.Enabled",
+                DisplayName = "Track MVO changes",
+                Category = ServiceSettingCategory.History,
+                ValueType = ServiceSettingValueType.Boolean,
+                DefaultValue = "true",
+                Value = null
+            }
+        };
+        MockDbSetServiceSettings = ServiceSettingsData.BuildMockDbSet();
+
         // mock entity framework calls to use our data sources above
         MockJimDbContext = new Mock<JimDbContext>();
         MockJimDbContext.Setup(m => m.ConnectedSystems).Returns(MockDbSetConnectedSystems.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(MockDbSetConnectedSystemObjectTypes.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemRunProfiles).Returns(MockDbSetConnectedSystemRunProfiles.Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemPartitions).Returns(MockDbSetConnectedSystemPartitions.Object);
+        MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(MockDbSetServiceSettings.Object);
     }
 
     #region Import Execution Item Tests

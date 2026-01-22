@@ -728,6 +728,29 @@ internal class SeedingServer
             IsReadOnly = false
         });
 
+        // Change Tracking Settings
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ChangeTrackingCsoChangesEnabled,
+            DisplayName = "Track CSO changes",
+            Description = "When enabled, change history is recorded for all Connected System Object create/update/delete operations. Disable to improve performance at the expense of audit trail.",
+            Category = ServiceSettingCategory.History,
+            ValueType = ServiceSettingValueType.Boolean,
+            DefaultValue = "true",
+            IsReadOnly = false
+        });
+
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ChangeTrackingMvoChangesEnabled,
+            DisplayName = "Track MVO changes",
+            Description = "When enabled, change history is recorded for all Metaverse Object create/update/delete operations. Disable to improve performance at the expense of audit trail.",
+            Category = ServiceSettingCategory.History,
+            ValueType = ServiceSettingValueType.Boolean,
+            DefaultValue = "true",
+            IsReadOnly = false
+        });
+
         // Maintenance Settings
         await SeedSettingAsync(new ServiceSetting
         {

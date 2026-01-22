@@ -112,6 +112,24 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
+        /// Gets whether CSO change tracking is enabled.
+        /// When enabled, ConnectedSystemObjectChange records are created for CSO create/update/delete operations.
+        /// </summary>
+        public async Task<bool> GetCsoChangeTrackingEnabledAsync()
+        {
+            return await GetSettingValueAsync(Constants.SettingKeys.ChangeTrackingCsoChangesEnabled, true);
+        }
+
+        /// <summary>
+        /// Gets whether MVO change tracking is enabled.
+        /// When enabled, MetaverseObjectChange records are created for MVO create/update/delete operations.
+        /// </summary>
+        public async Task<bool> GetMvoChangeTrackingEnabledAsync()
+        {
+            return await GetSettingValueAsync(Constants.SettingKeys.ChangeTrackingMvoChangesEnabled, true);
+        }
+
+        /// <summary>
         /// Updates a service setting value and creates an Activity for audit purposes.
         /// Encrypted string values are automatically encrypted before storage.
         /// </summary>
