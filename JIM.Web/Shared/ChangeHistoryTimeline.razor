@@ -22,13 +22,14 @@
                               DebounceInterval="300"
                               Style="max-width: 300px;" />
 
-                <MudSelect @bind-Value="_filterChangeType"
+                <MudSelect T="ValueChangeType?"
+                           @bind-Value="_filterChangeType"
                            Label="Filter by change type"
                            Variant="Variant.Outlined"
                            Style="max-width: 200px;">
-                    <MudSelectItem Value="@((ValueChangeType?)null)">All Changes</MudSelectItem>
-                    <MudSelectItem Value="@ValueChangeType.Add">Add</MudSelectItem>
-                    <MudSelectItem Value="@ValueChangeType.Remove">Remove</MudSelectItem>
+                    <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)null)">All Changes</MudSelectItem>
+                    <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Add)">Add</MudSelectItem>
+                    <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Remove)">Remove</MudSelectItem>
                 </MudSelect>
             </MudStack>
 
