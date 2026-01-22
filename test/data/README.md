@@ -4,49 +4,50 @@ This directory contains SQL scripts for seeding test data into JIM databases for
 
 ## Available Scripts
 
-### seed-change-history.sql
+### seed-change-history-simple.sql
 
 Generates realistic change history data for testing the Change History UI feature.
 
 **What it creates:**
-- 2 Person MVOs: Alice Anderson and Bob Brown with extensive change history
-- 2 Group MVOs: Engineers and Platform Team with membership changes
-- ~17 total change records covering all scenarios:
-  - Promotions and salary changes
+- 2 User MVOs: Alice Anderson and Bob Brown with extensive change history
+- 1 Group MVO: Software Engineers with membership changes
+- ~9 total change records covering all scenarios:
+  - Promotions and job title changes
   - Department and email updates
-  - Manager reference add/remove/re-add cycles
+  - Manager reference changes (Bob reports to Alice)
   - Group membership changes
-  - Name and description updates
+  - Uses built-in User and Group types with built-in attributes
 
 **How to run:**
 
 ```bash
 # Option 1: Pipe from host (recommended - works in devcontainer)
-docker compose exec -T jim.database psql -U jim -d jim < test/data/seed-change-history.sql
+docker compose exec -T jim.database psql -U jim -d jim < test/data/seed-change-history-simple.sql
 
 # Option 2: Copy into container then run
-docker cp test/data/seed-change-history.sql jim.database:/tmp/
-docker compose exec jim.database psql -U jim -d jim -f /tmp/seed-change-history.sql
+docker cp test/data/seed-change-history-simple.sql jim.database:/tmp/
+docker compose exec jim.database psql -U jim -d jim -f /tmp/seed-change-history-simple.sql
 
 # Option 3: From host machine (if PostgreSQL client installed locally)
-psql -h localhost -p 5432 -U jim -d jim -f test/data/seed-change-history.sql
+psql -h localhost -p 5432 -U jim -d jim -f test/data/seed-change-history-simple.sql
 ```
 
-**Note:** The current script has schema mismatches with the database. You'll need to either:
-1. Run an integration test to generate real change history data (recommended)
-2. Update the SQL script to match the current schema (see CLAUDE.md maintenance section)
+**Requirements:**
+- JIM must be running (`jim-stack` or `jim-stack-dev`)
+- Database must have built-in types initialized (User, Group types with built-in attributes)
+- Script uses existing built-in types and creates test MVOs with change history
 
 **After running:**
 The script will output URLs like:
 ```
 UI Testing URLs:
-  Alice: /t/people/v/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-  Bob: /t/people/v/yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy
-  Engineers: /t/groups/v/zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz
-  Platform Team: /t/groups/v/wwwwwwww-wwww-wwww-wwww-wwwwwwwwwwww
+  Alice: http://localhost:5200/t/users/v/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+  Bob: http://localhost:5200/t/users/v/yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy
+  Engineers: http://localhost:5200/t/groups/v/zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz
 ```
 
-Copy these URLs and navigate to them in your browser (http://localhost:5200) to view the change history timeline.
+Copy these URLs and navigate to them in your browser to view the change history timeline. Alice and Bob will also appear in the Users list in the navigation.
+
 
 ## Maintenance
 
