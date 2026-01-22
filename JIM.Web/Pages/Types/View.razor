@@ -12,60 +12,62 @@
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">@MetaverseObjectType?.Name:</span> @_displayName</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-<MudPaper Class="pa-5 mt-5" Outlined="true">
-    @if (MetaverseObject != null)
-    {
-        <MudGrid>
-            @foreach (var attributeValue in MetaverseObject.AttributeValues)
-            {
-                <MudItem xs="12" sm="6" md="4">
-                    <MudField Label="@attributeValue.Attribute.Name" Variant="Variant.Outlined">
-                        @if (attributeValue.Attribute.Type == AttributeDataType.Text)
-                        {
-                            if (attributeValue.Attribute.Name == Constants.BuiltInAttributes.Email && !string.IsNullOrEmpty(attributeValue.StringValue))
-                            {
-                                <MudLink Href="@($"mailto:{attributeValue.StringValue}")">@attributeValue.StringValue</MudLink>
-                            }
-                            else
-                            {
-                                @attributeValue.StringValue
-                            }
-                        }
-                        else if (attributeValue.Attribute.Type == AttributeDataType.Number)
-                        {
-                            @attributeValue.IntValue
-                        }
-                        else if (attributeValue.Attribute.Type == AttributeDataType.LongNumber)
-                        {
-                            @attributeValue.LongValue
-                        }
-                        else if (attributeValue.Attribute.Type == AttributeDataType.DateTime)
-                        {
-                            @attributeValue.DateTimeValue
-                        }
-                        else if (attributeValue.Attribute.Type == AttributeDataType.Guid)
-                        {
-                            @attributeValue.GuidValue.ToString()
-                        }
-                        else if (attributeValue.Attribute.Type == AttributeDataType.Boolean && attributeValue.BoolValue.HasValue)
-                        {
-                            @(attributeValue.BoolValue.Value ? "true" : "false")
-                        }
-                        else if (attributeValue.Attribute.Type == AttributeDataType.Reference && attributeValue.ReferenceValue != null)
-                        {
-                            <MudLink Href="@Utilities.GetMetaverseObjectHref(attributeValue.ReferenceValue)">@(attributeValue.ReferenceValue.DisplayName ?? attributeValue.ReferenceValue.Id.ToString())</MudLink>
-                        }
-                    </MudField>
-                </MudItem>
-            }
-        </MudGrid>
-    }
-</MudPaper>
-
-@* Change History *@
 @if (MetaverseObject != null)
 {
-    <ChangeHistoryTimeline Changes="@GetChangeHistory()" />
+    <MudPaper Class="mt-5" Outlined="true">
+        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-5">
+            <MudTabPanel Text="Details" Icon="@Icons.Material.Filled.Info">
+                <MudGrid>
+                    @foreach (var attributeValue in MetaverseObject.AttributeValues)
+                    {
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudField Label="@attributeValue.Attribute.Name" Variant="Variant.Outlined">
+                                @if (attributeValue.Attribute.Type == AttributeDataType.Text)
+                                {
+                                    if (attributeValue.Attribute.Name == Constants.BuiltInAttributes.Email && !string.IsNullOrEmpty(attributeValue.StringValue))
+                                    {
+                                        <MudLink Href="@($"mailto:{attributeValue.StringValue}")">@attributeValue.StringValue</MudLink>
+                                    }
+                                    else
+                                    {
+                                        @attributeValue.StringValue
+                                    }
+                                }
+                                else if (attributeValue.Attribute.Type == AttributeDataType.Number)
+                                {
+                                    @attributeValue.IntValue
+                                }
+                                else if (attributeValue.Attribute.Type == AttributeDataType.LongNumber)
+                                {
+                                    @attributeValue.LongValue
+                                }
+                                else if (attributeValue.Attribute.Type == AttributeDataType.DateTime)
+                                {
+                                    @attributeValue.DateTimeValue
+                                }
+                                else if (attributeValue.Attribute.Type == AttributeDataType.Guid)
+                                {
+                                    @attributeValue.GuidValue.ToString()
+                                }
+                                else if (attributeValue.Attribute.Type == AttributeDataType.Boolean && attributeValue.BoolValue.HasValue)
+                                {
+                                    @(attributeValue.BoolValue.Value ? "true" : "false")
+                                }
+                                else if (attributeValue.Attribute.Type == AttributeDataType.Reference && attributeValue.ReferenceValue != null)
+                                {
+                                    <MudLink Href="@Utilities.GetMetaverseObjectHref(attributeValue.ReferenceValue)">@(attributeValue.ReferenceValue.DisplayName ?? attributeValue.ReferenceValue.Id.ToString())</MudLink>
+                                }
+                            </MudField>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudTabPanel>
+
+            <MudTabPanel Text="Changes" Icon="@Icons.Material.Filled.History" BadgeData="@GetChangeCount()" BadgeColor="Color.Primary">
+                <ChangeHistoryTimeline Changes="@GetChangeHistory()" />
+            </MudTabPanel>
+        </MudTabs>
+    </MudPaper>
 }
 
 @code {
@@ -105,6 +107,14 @@
                 new(MetaverseObjectType.PluralName, href: $"/t/{MetaverseObjectType.PluralName.ToLower()}"),
                 new(MetaverseObject.DisplayName, href: null, disabled: true)
             };
+    }
+
+    private string GetChangeCount()
+    {
+        if (MetaverseObject?.Changes == null)
+            return "0";
+
+        return MetaverseObject.Changes.Count.ToString();
     }
 
     private List<ChangeHistoryTimeline.ChangeGroup> GetChangeHistory()

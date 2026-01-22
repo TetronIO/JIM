@@ -1,114 +1,217 @@
 @using JIM.Models.Core
 @using JIM.Models.Enums
 
-<MudPaper Class="pa-5 mt-5" Outlined="true">
-    <MudStack Spacing="3">
-        <MudText Typo="Typo.h6">Change History</MudText>
+@if (Changes == null || !Changes.Any())
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary pa-5">No change history available.</MudText>
+}
+else
+{
+    <!-- Search and Filter Controls -->
+    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudTextField @bind-Value="_searchText"
+                      Label="Search attributes"
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      Immediate="true"
+                      DebounceInterval="300"
+                      Style="max-width: 300px;" />
 
-        @if (Changes == null || !Changes.Any())
+        <MudSelect T="ValueChangeType?"
+                   @bind-Value="_filterChangeType"
+                   Label="Filter by change type"
+                   Variant="Variant.Outlined"
+                   Style="max-width: 200px;">
+            <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)null)">All Changes</MudSelectItem>
+            <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Add)">Add</MudSelectItem>
+            <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Remove)">Remove</MudSelectItem>
+        </MudSelect>
+    </MudStack>
+
+    <!-- Timeline -->
+    <MudTimeline TimelinePosition="TimelinePosition.Start" TimelineOrientation="TimelineOrientation.Vertical">
+        @foreach (var changeGroup in GetFilteredChangeGroups())
         {
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">No change history available.</MudText>
+            <MudTimelineItem Color="@GetChangeTypeColor(changeGroup.ChangeType)" Size="Size.Small" Elevation="0">
+                <ItemOpposite>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        @changeGroup.ChangeTime.ToLocalTime().ToString("dd MMM yyyy")
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @changeGroup.ChangeTime.ToLocalTime().ToString("HH:mm:ss")
+                    </MudText>
+                </ItemOpposite>
+                <ItemContent>
+                    <MudCard Outlined="true" Class="cursor-pointer" @onclick="() => OpenChangeDetails(changeGroup)">
+                        <MudCardContent>
+                            <MudStack Spacing="2">
+                                <!-- Change Header -->
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@GetChangeTypeIcon(changeGroup.ChangeType)"
+                                             Color="@GetChangeTypeColor(changeGroup.ChangeType)"
+                                             Size="Size.Medium" />
+                                    <div>
+                                        <MudText Typo="Typo.subtitle1">
+                                            <strong>@changeGroup.ChangeType</strong>
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                            @GetChangeInitiatorDescription(changeGroup)
+                                        </MudText>
+                                    </div>
+                                </MudStack>
+
+                                <!-- Summary of Changes -->
+                                @if (changeGroup.AttributeChanges.Any())
+                                {
+                                    <MudDivider />
+                                    <div class="change-summary" style="@GetSummaryStyle(changeGroup)">
+                                        @foreach (var attrGroup in GetAttributeSummary(changeGroup))
+                                        {
+                                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mb-1">
+                                                <MudText Typo="Typo.body2" Class="jim-text-code" Style="min-width: 120px;">
+                                                    @attrGroup.AttributeName
+                                                </MudText>
+                                                <MudChip T="string"
+                                                         Variant="Variant.Text"
+                                                         Size="Size.Small"
+                                                         Color="@Helpers.GetMudBlazorColorForValueChangeType(attrGroup.ChangeType)">
+                                                    @attrGroup.ChangeType
+                                                </MudChip>
+                                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                    @GetValueSummary(attrGroup)
+                                                </MudText>
+                                            </MudStack>
+                                        }
+                                    </div>
+
+                                    @if (ShouldShowExpandButton(changeGroup))
+                                    {
+                                        <div class="fade-overlay"></div>
+                                        <MudButton Variant="Variant.Text"
+                                                   Color="Color.Primary"
+                                                   StartIcon="@Icons.Material.Filled.ExpandMore"
+                                                   Size="Size.Small"
+                                                   FullWidth="true"
+                                                   OnClick="@(() => OpenChangeDetails(changeGroup))">
+                                            View All Changes
+                                        </MudButton>
+                                    }
+                                }
+                                else if (changeGroup.ChangeType == ObjectChangeType.Deleted)
+                                {
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                        Object was deleted. Final attribute values were not captured.
+                                    </MudText>
+                                }
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </ItemContent>
+            </MudTimelineItem>
+        }
+    </MudTimeline>
+}
+
+<!-- Change Details Dialog -->
+<MudDialog @bind-Visible="_detailsDialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            <MudIcon Icon="@GetChangeTypeIcon(_selectedChange?.ChangeType ?? ObjectChangeType.Updated)"
+                     Color="@GetChangeTypeColor(_selectedChange?.ChangeType ?? ObjectChangeType.Updated)"
+                     Size="Size.Large" />
+            <div>
+                <MudText Typo="Typo.h6">@_selectedChange?.ChangeType</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    @_selectedChange?.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss") - @GetChangeInitiatorDescription(_selectedChange)
+                </MudText>
+            </div>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        @if (_selectedChange?.AttributeChanges.Any() == true)
+        {
+            <MudTable Items="@_selectedChange.AttributeChanges"
+                      Dense="true"
+                      Hover="true"
+                      Breakpoint="Breakpoint.Sm"
+                      Elevation="0">
+                <HeaderContent>
+                    <MudTh>Attribute</MudTh>
+                    <MudTh>Change</MudTh>
+                    <MudTh>Value</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Attribute">
+                        <MudText Class="jim-text-code">@context.AttributeName</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Change">
+                        <MudChip T="string"
+                                 Variant="Variant.Text"
+                                 Color="@Helpers.GetMudBlazorColorForValueChangeType(context.ChangeType)">
+                            @context.ChangeType
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Value">
+                        @if (context.ReferenceValue != null)
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudChip T="string" Color="Color.Default" Size="Size.Small">@context.ReferenceValue.TypeName</MudChip>
+                                <MudLink Href="@context.ReferenceValue.Href">
+                                    @context.ReferenceValue.DisplayName
+                                </MudLink>
+                                @if (!string.IsNullOrEmpty(context.ReferenceValue.SecondaryId))
+                                {
+                                    <MudText Class="mud-text-secondary">(@context.ReferenceValue.SecondaryId)</MudText>
+                                }
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudText>@context.Value</MudText>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
         }
         else
         {
-            <!-- Search and Filter Controls -->
-            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                <MudTextField @bind-Value="_searchText"
-                              Label="Search attributes"
-                              Variant="Variant.Outlined"
-                              Adornment="Adornment.Start"
-                              AdornmentIcon="@Icons.Material.Filled.Search"
-                              Immediate="true"
-                              DebounceInterval="300"
-                              Style="max-width: 300px;" />
-
-                <MudSelect T="ValueChangeType?"
-                           @bind-Value="_filterChangeType"
-                           Label="Filter by change type"
-                           Variant="Variant.Outlined"
-                           Style="max-width: 200px;">
-                    <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)null)">All Changes</MudSelectItem>
-                    <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Add)">Add</MudSelectItem>
-                    <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Remove)">Remove</MudSelectItem>
-                </MudSelect>
-            </MudStack>
-
-            <!-- Timeline of Changes -->
-            @foreach (var changeGroup in GetFilteredChangeGroups())
-            {
-                <MudPaper Class="pa-4 mt-2" Outlined="true">
-                    <MudStack Spacing="2">
-                        <!-- Change Header -->
-                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                            <MudIcon Icon="@GetChangeTypeIcon(changeGroup.ChangeType)" Color="@GetChangeTypeColor(changeGroup.ChangeType)" Size="Size.Medium" />
-                            <div>
-                                <MudText Typo="Typo.subtitle1">
-                                    <strong>@changeGroup.ChangeType</strong>
-                                </MudText>
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                    @changeGroup.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss") - @GetChangeInitiatorDescription(changeGroup)
-                                </MudText>
-                            </div>
-                        </MudStack>
-
-                        <!-- Attribute Changes Table -->
-                        @if (changeGroup.AttributeChanges.Any())
-                        {
-                            <MudTable Items="@changeGroup.AttributeChanges"
-                                      Dense="true"
-                                      Hover="true"
-                                      Breakpoint="Breakpoint.Sm"
-                                      Elevation="0"
-                                      Class="mt-2">
-                                <HeaderContent>
-                                    <MudTh>Attribute</MudTh>
-                                    <MudTh>Change</MudTh>
-                                    <MudTh>Value</MudTh>
-                                </HeaderContent>
-                                <RowTemplate>
-                                    <MudTd DataLabel="Attribute">
-                                        <MudText Class="jim-text-code">@context.AttributeName</MudText>
-                                    </MudTd>
-                                    <MudTd DataLabel="Change">
-                                        <MudChip T="string"
-                                                 Variant="Variant.Text"
-                                                 Color="@Helpers.GetMudBlazorColorForValueChangeType(context.ChangeType)"
-                                                 Class="ml-0">
-                                            @context.ChangeType
-                                        </MudChip>
-                                    </MudTd>
-                                    <MudTd DataLabel="Value">
-                                        @if (context.ReferenceValue != null)
-                                        {
-                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                                <MudChip T="string" Color="Color.Default" Size="Size.Small">@context.ReferenceValue.TypeName</MudChip>
-                                                <MudLink Href="@context.ReferenceValue.Href">
-                                                    @context.ReferenceValue.DisplayName
-                                                </MudLink>
-                                                @if (!string.IsNullOrEmpty(context.ReferenceValue.SecondaryId))
-                                                {
-                                                    <MudText Class="mud-text-secondary">(@context.ReferenceValue.SecondaryId)</MudText>
-                                                }
-                                            </MudStack>
-                                        }
-                                        else
-                                        {
-                                            <MudText>@context.Value</MudText>
-                                        }
-                                    </MudTd>
-                                </RowTemplate>
-                            </MudTable>
-                        }
-                        else if (changeGroup.ChangeType == ObjectChangeType.Deleted)
-                        {
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Object was deleted. Final attribute values were not captured.</MudText>
-                        }
-                    </MudStack>
-                </MudPaper>
-            }
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Object was deleted. Final attribute values were not captured.
+            </MudText>
         }
-    </MudStack>
-</MudPaper>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseDetailsDialog" Color="Color.Primary">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<style>
+    .change-summary {
+        position: relative;
+        max-height: 200px;
+        overflow: hidden;
+    }
+
+    .fade-overlay {
+        position: absolute;
+        bottom: 48px;
+        left: 0;
+        right: 0;
+        height: 60px;
+        background: linear-gradient(to bottom, transparent, var(--mud-palette-background));
+        pointer-events: none;
+    }
+
+    .cursor-pointer {
+        cursor: pointer;
+        transition: box-shadow 0.2s;
+    }
+
+    .cursor-pointer:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+</style>
 
 @code {
     /// <summary>
@@ -119,6 +222,15 @@
 
     private string _searchText = string.Empty;
     private ValueChangeType? _filterChangeType = null;
+    private bool _detailsDialogVisible = false;
+    private ChangeGroup? _selectedChange = null;
+
+    private DialogOptions _dialogOptions = new DialogOptions
+    {
+        MaxWidth = MaxWidth.Large,
+        FullWidth = true,
+        CloseButton = true
+    };
 
     /// <summary>
     /// Represents a group of changes that occurred at a specific point in time.
@@ -153,6 +265,14 @@
         public string DisplayName { get; set; } = string.Empty;
         public string? SecondaryId { get; set; }
         public string Href { get; set; } = string.Empty;
+    }
+
+    private class AttributeSummary
+    {
+        public string AttributeName { get; set; } = string.Empty;
+        public ValueChangeType ChangeType { get; set; }
+        public int Count { get; set; }
+        public string FirstValue { get; set; } = string.Empty;
     }
 
     private IEnumerable<ChangeGroup> GetFilteredChangeGroups()
@@ -192,8 +312,65 @@
         return filtered.OrderByDescending(cg => cg.ChangeTime);
     }
 
-    private string GetChangeInitiatorDescription(ChangeGroup changeGroup)
+    private IEnumerable<AttributeSummary> GetAttributeSummary(ChangeGroup changeGroup)
     {
+        // Group by attribute name and change type, showing first 5
+        return changeGroup.AttributeChanges
+            .GroupBy(ac => new { ac.AttributeName, ac.ChangeType })
+            .Select(g => new AttributeSummary
+            {
+                AttributeName = g.Key.AttributeName,
+                ChangeType = g.Key.ChangeType,
+                Count = g.Count(),
+                FirstValue = g.First().Value ?? g.First().ReferenceValue?.DisplayName ?? ""
+            })
+            .Take(5);
+    }
+
+    private string GetValueSummary(AttributeSummary summary)
+    {
+        if (summary.Count == 1)
+        {
+            return summary.FirstValue;
+        }
+        else
+        {
+            return $"{summary.FirstValue} and {summary.Count - 1} more";
+        }
+    }
+
+    private bool ShouldShowExpandButton(ChangeGroup changeGroup)
+    {
+        // Show expand button if more than 5 attribute changes
+        return changeGroup.AttributeChanges.Count > 5;
+    }
+
+    private string GetSummaryStyle(ChangeGroup changeGroup)
+    {
+        if (ShouldShowExpandButton(changeGroup))
+        {
+            return "max-height: 150px; overflow: hidden; position: relative;";
+        }
+        return "";
+    }
+
+    private void OpenChangeDetails(ChangeGroup changeGroup)
+    {
+        _selectedChange = changeGroup;
+        _detailsDialogVisible = true;
+    }
+
+    private void CloseDetailsDialog()
+    {
+        _detailsDialogVisible = false;
+        _selectedChange = null;
+    }
+
+    private string GetChangeInitiatorDescription(ChangeGroup? changeGroup)
+    {
+        if (changeGroup == null)
+            return string.Empty;
+
         if (!string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
         {
             return $"{changeGroup.ChangeInitiatorType}: {changeGroup.ChangeInitiatorName}";
