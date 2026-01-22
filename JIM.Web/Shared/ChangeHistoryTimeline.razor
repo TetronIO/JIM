@@ -127,9 +127,13 @@ else
                 </MudText>
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
                     @GetChangeInitiatorIcon(_selectedChange!)
-                    @if (_selectedChange?.ChangeInitiatorType is "User" or "ApiKey" && !string.IsNullOrEmpty(_selectedChange.ChangeInitiatorName))
+                    @if (_selectedChange?.ChangeInitiatorType is "User" or "ApiKey" or "SynchronisationRule" && !string.IsNullOrEmpty(_selectedChange.ChangeInitiatorName))
                     {
                         <MudLink Href="@GetInitiatorHref(_selectedChange)">@_selectedChange.ChangeInitiatorName</MudLink>
+                    }
+                    else if (_selectedChange?.ChangeInitiatorType == "SynchronisationRule")
+                    {
+                        <MudLink Href="/admin/syncrules">Synchronisation Rule</MudLink>
                     }
                     else
                     {
@@ -440,6 +444,7 @@ else
         {
             "User" => $"/t/users/v/{changeGroup.ChangeInitiatorId}",
             "ApiKey" => $"/admin/apikeys", // API Keys list page
+            "SynchronisationRule" => $"/admin/syncrules/{changeGroup.ChangeInitiatorId}",
             _ => "#"
         };
     }

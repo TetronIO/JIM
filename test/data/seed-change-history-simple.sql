@@ -305,7 +305,7 @@ BEGIN
     -- Change 1: Promotion to Lead Engineer (25 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '25 days', 2);  -- Updated, SynchronisationRule
+    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '25 days', 4);  -- Updated, SynchronisationRule
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -320,7 +320,7 @@ BEGIN
     -- Change 2: Promotion to Engineering Manager (20 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '20 days', 2);
+    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '20 days', 4);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -335,7 +335,7 @@ BEGIN
     -- Change 3: Department change (15 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '15 days', 2);
+    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '15 days', 4);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -350,7 +350,7 @@ BEGIN
     -- Change 4: Email update (10 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '10 days', 2);
+    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '10 days', 4);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -371,7 +371,7 @@ BEGIN
     -- Change 1: Manager assignment (24 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, bob_id, 2, NOW() - INTERVAL '24 days', 2);
+    VALUES (change_id, bob_id, 2, NOW() - INTERVAL '24 days', 4);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -383,7 +383,7 @@ BEGIN
     -- Change 2: Promotion (18 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, bob_id, 2, NOW() - INTERVAL '18 days', 2);
+    VALUES (change_id, bob_id, 2, NOW() - INTERVAL '18 days', 4);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -398,7 +398,7 @@ BEGIN
     -- Change 3: Manager change (12 days ago - temporarily removed then re-added)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, bob_id, 2, NOW() - INTERVAL '12 days', 2);
+    VALUES (change_id, bob_id, 2, NOW() - INTERVAL '12 days', 4);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -419,7 +419,7 @@ BEGIN
     -- Change 1: Initial group name (19 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '19 days', 2);
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '19 days', 4);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -434,7 +434,7 @@ BEGIN
     -- Change 2: Bulk initial members added - Alice, Bob, Charlie (18 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '18 days', 2);
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '18 days', 4);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -454,7 +454,7 @@ BEGIN
     -- Change 4: Description update (16 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '16 days', 2);
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '16 days', 4);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -469,7 +469,7 @@ BEGIN
     -- Change 5: Bulk add Diana, Eve, Frank (15 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '15 days', 2);
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '15 days', 4);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -487,7 +487,7 @@ BEGIN
     -- Change 6: Group name refinement (14 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '14 days', 2);
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '14 days', 4);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -504,7 +504,7 @@ BEGIN
     -- Change 8: Remove Charlie (temporarily) (12 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '12 days', 2);
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '12 days', 4);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -516,7 +516,7 @@ BEGIN
     -- Change 9: Description update (11 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '11 days', 2);
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '11 days', 4);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -531,7 +531,7 @@ BEGIN
     -- Change 10: Bulk add Grace, Henry, and re-add Charlie (10 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '10 days', 2);
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '10 days', 4);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -551,7 +551,7 @@ BEGIN
     -- Change 12: Bulk member removal - remove Diana, Eve, Frank (8 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '8 days', 2);
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '8 days', 4);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -569,7 +569,7 @@ BEGIN
     -- Change 13: Group name final update (7 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '7 days', 2);
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '7 days', 4);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")

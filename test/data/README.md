@@ -67,4 +67,4 @@ git log --oneline --all -- JIM.PostgresData/Migrations/*Change*.cs
 - Scripts are designed to be idempotent where possible (create-if-not-exists)
 - All timestamps are relative to NOW() for realistic aging
 - Reference attributes properly link to existing MVOs
-- Change initiator is always set to SynchronisationRule (type 2) for consistency
+- Change initiator is always set to SynchronisationRule (type 4) for consistency
