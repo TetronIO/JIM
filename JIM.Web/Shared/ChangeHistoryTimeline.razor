@@ -22,7 +22,7 @@ else
                    @bind-Value="_filterChangeType"
                    Label="Filter by change type"
                    Variant="Variant.Outlined"
-                   Style="max-width: 200px;">
+                   Style="max-width: 250px;">
             <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)null)">All Changes</MudSelectItem>
             <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Add)">Add</MudSelectItem>
             <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Remove)">Remove</MudSelectItem>
@@ -35,12 +35,11 @@ else
         {
             <MudTimelineItem Color="@GetChangeTypeColor(changeGroup.ChangeType)" Size="Size.Small" Elevation="0">
                 <ItemOpposite>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        @changeGroup.ChangeTime.ToLocalTime().ToString("dd MMM yyyy")
-                    </MudText>
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                        @changeGroup.ChangeTime.ToLocalTime().ToString("HH:mm:ss")
-                    </MudText>
+                    <MudTooltip Text="@changeGroup.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")" Placement="Placement.Top" Arrow="true">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            @GetRelativeTime(changeGroup.ChangeTime)
+                        </MudText>
+                    </MudTooltip>
                 </ItemOpposite>
                 <ItemContent>
                     <MudCard Outlined="true" Class="cursor-pointer" @onclick="() => OpenChangeDetails(changeGroup)">
@@ -56,6 +55,7 @@ else
                                             <strong>@changeGroup.ChangeType</strong>
                                         </MudText>
                                         <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                            @GetChangeInitiatorIcon(changeGroup)
                                             @GetChangeInitiatorDescription(changeGroup)
                                         </MudText>
                                     </div>
@@ -123,7 +123,18 @@ else
             <div>
                 <MudText Typo="Typo.h6">@_selectedChange?.ChangeType</MudText>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                    @_selectedChange?.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss") - @GetChangeInitiatorDescription(_selectedChange)
+                    @_selectedChange?.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")
+                </MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @GetChangeInitiatorIcon(_selectedChange!)
+                    @if (_selectedChange?.ChangeInitiatorType is "User" or "ApiKey" && !string.IsNullOrEmpty(_selectedChange.ChangeInitiatorName))
+                    {
+                        <MudLink Href="@GetInitiatorHref(_selectedChange)">@_selectedChange.ChangeInitiatorName</MudLink>
+                    }
+                    else
+                    {
+                        @GetChangeInitiatorDescription(_selectedChange)
+                    }
                 </MudText>
             </div>
         </MudStack>
@@ -242,6 +253,7 @@ else
         public DateTime ChangeTime { get; set; }
         public string ChangeInitiatorType { get; set; } = string.Empty;
         public string? ChangeInitiatorName { get; set; }
+        public Guid? ChangeInitiatorId { get; set; }
         public List<AttributeChange> AttributeChanges { get; set; } = new();
     }
 
@@ -366,6 +378,47 @@ else
         _selectedChange = null;
     }
 
+    private string GetRelativeTime(DateTime changeTime)
+    {
+        var localTime = changeTime.ToLocalTime();
+        var now = DateTime.Now;
+        var diff = now - localTime;
+
+        if (diff.TotalMinutes < 1)
+            return "Just now";
+        if (diff.TotalMinutes < 60)
+            return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24)
+            return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7)
+            return $"{(int)diff.TotalDays}d ago";
+        if (diff.TotalDays < 30)
+            return $"{(int)(diff.TotalDays / 7)}w ago";
+        if (diff.TotalDays < 365)
+            return $"{(int)(diff.TotalDays / 30)}mo ago";
+        return $"{(int)(diff.TotalDays / 365)}y ago";
+    }
+
+    private RenderFragment GetChangeInitiatorIcon(ChangeGroup changeGroup)
+    {
+        return builder =>
+        {
+            string icon = changeGroup.ChangeInitiatorType switch
+            {
+                "User" => Icons.Material.Filled.Person,
+                "ApiKey" => Icons.Material.Filled.Key,
+                "System" => Icons.Material.Filled.Settings,
+                _ => Icons.Material.Filled.Rule // SynchronisationRule or other
+            };
+
+            builder.OpenComponent<MudIcon>(0);
+            builder.AddAttribute(1, "Icon", icon);
+            builder.AddAttribute(2, "Size", Size.Small);
+            builder.AddAttribute(3, "Style", "margin-right: 4px; vertical-align: text-bottom;");
+            builder.CloseComponent();
+        };
+    }
+
     private string GetChangeInitiatorDescription(ChangeGroup? changeGroup)
     {
         if (changeGroup == null)
@@ -373,9 +426,22 @@ else
 
         if (!string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
         {
-            return $"{changeGroup.ChangeInitiatorType}: {changeGroup.ChangeInitiatorName}";
+            return changeGroup.ChangeInitiatorName;
         }
         return changeGroup.ChangeInitiatorType;
+    }
+
+    private string GetInitiatorHref(ChangeGroup changeGroup)
+    {
+        if (changeGroup.ChangeInitiatorId == null)
+            return "#";
+
+        return changeGroup.ChangeInitiatorType switch
+        {
+            "User" => $"/t/users/v/{changeGroup.ChangeInitiatorId}",
+            "ApiKey" => $"/admin/apikeys", // API Keys list page
+            _ => "#"
+        };
     }
 
     private string GetChangeTypeIcon(ObjectChangeType changeType)

@@ -133,6 +133,7 @@
                 ChangeTime = change.ChangeTime,
                 ChangeInitiatorType = change.ChangeInitiatorType.ToString(),
                 ChangeInitiatorName = change.ChangeInitiator?.DisplayName,
+                ChangeInitiatorId = change.ChangeInitiator?.Id,
                 AttributeChanges = change.AttributeChanges
                     .OrderBy(ac => ac.Attribute.Name)
                     .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
