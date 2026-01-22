@@ -15,5 +15,6 @@ public enum MockTargetSystemAttributeNames
     DistinguishedName = 8,
     EmployeeId = 10,
     UserAccountControl = 11,
-    UserPrincipalName = 12
+    UserPrincipalName = 12,
+    AccountExpires = 13
 }

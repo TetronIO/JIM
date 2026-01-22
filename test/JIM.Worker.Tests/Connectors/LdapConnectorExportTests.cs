@@ -185,5 +185,23 @@ public class LdapConnectorExportTests
         Assert.That(parsed, Is.EqualTo(long.MaxValue));
     }
 
+    [Test]
+    public void GetProtectedAttributeDefault_UserAccountControl_ReturnsNull()
+    {
+        // userAccountControl is NOT a protected attribute - it's user-controllable
+        // We don't want to substitute defaults for it as that would interfere with
+        // legitimate enable/disable operations
+        var result = LdapConnectorExport.GetProtectedAttributeDefault("userAccountControl");
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void ProtectedAttributeDefaults_ContainsExpectedAttributeCount()
+    {
+        // Verify we have exactly the attributes we expect (only accountExpires)
+        Assert.That(LdapConnectorExport.ProtectedAttributeDefaults, Has.Count.EqualTo(1));
+    }
+
     #endregion
 }

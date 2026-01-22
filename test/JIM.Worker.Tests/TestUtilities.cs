@@ -792,6 +792,14 @@ public static class TestUtilities
                         Type = AttributeDataType.Text,
                         IsSecondaryExternalId = true,
                         Selected = true
+                    },
+                    new()
+                    {
+                        // AD protected attribute - Large Integer for account expiry timestamp
+                        Id = (int)MockTargetSystemAttributeNames.AccountExpires,
+                        Name = "accountExpires",
+                        Type = AttributeDataType.LongNumber,
+                        Selected = true
                     }
                 }
             },

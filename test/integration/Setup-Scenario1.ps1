@@ -591,6 +591,7 @@ try {
             @{ CsAttr = "samAccountName";    MvAttr = "Account Name" }
             @{ CsAttr = "employeeType";      MvAttr = "Employee Type" }
             @{ CsAttr = "employeeEndDate";   MvAttr = "Employee End Date" }  # DateTime - HR end date → MV, then exported to AD accountExpires via ToFileTime
+            @{ CsAttr = "status";            MvAttr = "Employee Status" }     # Active/Inactive - controls userAccountControl in AD
         )
 
         $exportMappings = @(
@@ -620,8 +621,17 @@ try {
                 Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",OU=Users,OU=Corp,DC=subatomic,DC=local"'
             }
             @{
+                # userAccountControl: Conditional expression based on Employee Status
+                # - "Active" → 512 (ADS_UF_NORMAL_ACCOUNT - enabled)
+                # - "Inactive" or null → 514 (ADS_UF_NORMAL_ACCOUNT + ADS_UF_ACCOUNTDISABLE - disabled)
+                # This tests:
+                #   1. Integer data type export to AD
+                #   2. Conditional expressions with IIF
+                #   3. Protected attribute substitution when expression returns null
+                # Note: Use Eq() for string comparison, NOT ==, because AttributeAccessor returns object?
+                # and the == operator uses reference equality for object comparisons
                 LdapAttr = "userAccountControl"
-                Expression = '512'  # Normal account, enabled - tests Number (Int32) data type export
+                Expression = 'IIF(Eq(mv["Employee Status"], "Active"), 512, 514)'
             }
             @{
                 LdapAttr = "accountExpires"

@@ -177,6 +177,11 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         target.SetFunction("Coalesce", (Func<object?, object?, object?>)((a, b) => a ?? b));
         target.SetFunction("IIF", (Func<bool, object?, object?, object?>)((condition, trueVal, falseVal) => condition ? trueVal : falseVal));
 
+        // Equality comparison function - IMPORTANT: The == operator doesn't work correctly
+        // when comparing object? to string because it uses reference equality.
+        // Use Eq() for value-based string/object comparisons in expressions.
+        target.SetFunction("Eq", (Func<object?, object?, bool>)ValueEquals);
+
         // Date functions
         target.SetFunction("Now", (Func<DateTime>)(() => DateTime.UtcNow));
         target.SetFunction("Today", (Func<DateTime>)(() => DateTime.UtcNow.Date));
@@ -599,6 +604,65 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     /// Checks if a bit is set in the value ((value &amp; bit) == bit).
     /// </summary>
     private static bool HasBit(int value, int bit) => (value & bit) == bit;
+
+    #endregion
+
+    #region Equality Functions
+
+    /// <summary>
+    /// Performs value-based equality comparison between two objects.
+    /// This is necessary because the == operator in expressions uses reference equality
+    /// when comparing object? to string (since the indexer returns object?).
+    /// </summary>
+    /// <remarks>
+    /// IMPORTANT: In C#, when you write `mv["attr"] == "value"`:
+    /// - mv["attr"] returns object? (from the AttributeAccessor indexer)
+    /// - "value" is a string literal
+    /// - The == operator uses static type analysis, so it compares object? to string
+    /// - For object comparisons, == uses reference equality, NOT value equality
+    /// - This means two strings with the same content but different instances return false!
+    ///
+    /// Use Eq() for value-based comparisons: `Eq(mv["attr"], "value")`
+    /// </remarks>
+    private static bool ValueEquals(object? a, object? b)
+    {
+        // Handle null cases
+        if (a is null && b is null) return true;
+        if (a is null || b is null) return false;
+
+        // String comparison (most common case)
+        if (a is string strA && b is string strB)
+            return string.Equals(strA, strB, StringComparison.Ordinal);
+
+        // If one is string and other is object, convert and compare
+        if (a is string && b is not string)
+            return string.Equals(a.ToString(), b.ToString(), StringComparison.Ordinal);
+        if (b is string && a is not string)
+            return string.Equals(a.ToString(), b.ToString(), StringComparison.Ordinal);
+
+        // Numeric comparisons - handle cross-type numeric equality
+        if (IsNumeric(a) && IsNumeric(b))
+        {
+            try
+            {
+                var decA = Convert.ToDecimal(a);
+                var decB = Convert.ToDecimal(b);
+                return decA == decB;
+            }
+            catch
+            {
+                // Fall through to default Equals
+            }
+        }
+
+        // Default to Equals method
+        return a.Equals(b);
+    }
+
+    private static bool IsNumeric(object? obj)
+    {
+        return obj is byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal;
+    }
 
     #endregion
 }

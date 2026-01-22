@@ -1187,11 +1187,6 @@ public class ExportEvaluationServer
                     {
                         // Build expression context with MVO attributes (lazy initialization - only build once)
                         mvAttributeDictionary ??= BuildAttributeDictionary(mvo);
-
-                        Log.Debug("CreateAttributeValueChanges: Evaluating expression for MVO {MvoId}. " +
-                            "Expression: '{Expression}', Available attributes: [{Attributes}]",
-                            mvo.Id, source.Expression, string.Join(", ", mvAttributeDictionary.Keys));
-
                         var context = new ExpressionContext(mvAttributeDictionary, null);
 
                         // Evaluate the expression
@@ -1252,8 +1247,13 @@ public class ExportEvaluationServer
                             {
                                 var cacheKey = (existingCso!.Id, change.AttributeId);
                                 var existingCsoValues = csoAttributeCache![cacheKey];
+                                var valuesList = existingCsoValues.ToList();
 
-                                if (IsCsoAttributeAlreadyCurrent(change, existingCsoValues))
+                                Log.Debug("CreateAttributeValueChanges: No-net-change check for attr {AttrId} on CSO {CsoId}. Change.IntValue={ChangeInt}, Cache has {CacheCount} values: [{CacheValues}]",
+                                    change.AttributeId, existingCso.Id, change.IntValue, valuesList.Count,
+                                    string.Join(", ", valuesList.Select(v => $"Int={v.IntValue},Str={v.StringValue}")));
+
+                                if (IsCsoAttributeAlreadyCurrent(change, valuesList))
                                 {
                                     Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (expression)",
                                         change.AttributeId, existingCso.Id);
@@ -1606,10 +1606,16 @@ public class ExportEvaluationServer
         if (existingValue == null)
         {
             // Check if the pending change is also null/empty
-            return IsPendingChangeEmpty(pendingChange);
+            var isEmpty = IsPendingChangeEmpty(pendingChange);
+            Log.Debug("IsSingleValueMatch: existingValue is null, pendingChange empty={IsEmpty}, IntValue={IntValue}, StringValue={StringValue}",
+                isEmpty, pendingChange.IntValue, pendingChange.StringValue);
+            return isEmpty;
         }
 
-        return ValuesMatch(pendingChange, existingValue);
+        var result = ValuesMatch(pendingChange, existingValue);
+        Log.Debug("IsSingleValueMatch: Comparing pendingChange (IntValue={PendingInt}, StringValue={PendingStr}) with existingValue (IntValue={ExistingInt}, StringValue={ExistingStr}). Result={Result}",
+            pendingChange.IntValue, pendingChange.StringValue, existingValue.IntValue, existingValue.StringValue, result);
+        return result;
     }
 
     /// <summary>

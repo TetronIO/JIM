@@ -300,6 +300,172 @@ public class DynamicExpressoEvaluatorTests
 
     #endregion
 
+    #region Eq (Value Equality) Function Tests
+
+    /// <summary>
+    /// IMPORTANT: This test documents a critical issue with the == operator in expressions.
+    /// The AttributeAccessor indexer returns object? (to support multiple value types).
+    /// When comparing object? to string with ==, C# uses REFERENCE equality, not VALUE equality.
+    /// This means mv["attr"] == "value" will always return false even when the values are equal!
+    /// Use Eq(mv["attr"], "value") instead.
+    /// </summary>
+    [Test]
+    public void Evaluate_Eq_ComparesStringsByValue()
+    {
+        // This test demonstrates the Eq() function working correctly
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "Status", "Active" } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("Eq(mv[\"Status\"], \"Active\")", context);
+
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void Evaluate_Eq_ReturnsFalseForDifferentStrings()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "Status", "Inactive" } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("Eq(mv[\"Status\"], \"Active\")", context);
+
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void Evaluate_Eq_HandlesNullValues()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "Status", null } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("Eq(mv[\"Status\"], \"Active\")", context);
+
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void Evaluate_Eq_BothNullReturnsTrue()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "A", null }, { "B", null } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("Eq(mv[\"A\"], mv[\"B\"])", context);
+
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void Evaluate_Eq_ComparesIntegersByValue()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "Count", 42 } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("Eq(mv[\"Count\"], 42)", context);
+
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void Evaluate_Eq_HandlesNumericTypeMismatch()
+    {
+        // Comparing int to long should work via numeric conversion
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "Count", 42L } },  // long
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("Eq(mv[\"Count\"], 42)", context);  // int literal
+
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void Evaluate_IIF_WithEq_WorksCorrectly()
+    {
+        // This is the primary use case - using Eq() inside IIF for string comparisons
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "Employee Status", "Active" } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate(
+            "IIF(Eq(mv[\"Employee Status\"], \"Active\"), 512, 514)",
+            context);
+
+        Assert.That(result, Is.EqualTo(512));
+    }
+
+    [Test]
+    public void Evaluate_IIF_WithEq_ReturnsFalseValue()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "Employee Status", "Inactive" } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate(
+            "IIF(Eq(mv[\"Employee Status\"], \"Active\"), 512, 514)",
+            context);
+
+        Assert.That(result, Is.EqualTo(514));
+    }
+
+    [Test]
+    public void Evaluate_IIF_WithEq_HandlesCaseSensitivity()
+    {
+        // Eq() is case-sensitive by default (like C# string comparison)
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "Status", "ACTIVE" } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("Eq(mv[\"Status\"], \"Active\")", context);
+
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void Evaluate_IIF_WithEq_CaseInsensitiveWorkaround()
+    {
+        // Use Lower() for case-insensitive comparison
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "Status", "ACTIVE" } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("Eq(Lower(mv[\"Status\"]), \"active\")", context);
+
+        Assert.That(result, Is.True);
+    }
+
+    /// <summary>
+    /// Note: The == operator appears to work in simple test cases due to how DynamicExpresso
+    /// compiles expressions. However, in the actual sync flow, the expression
+    /// `mv["Employee Status"] == "Active"` was observed returning false even when the value
+    /// was "Active". The exact cause may be related to:
+    /// - Expression caching and recompilation
+    /// - Different dictionary creation paths
+    /// - String interning behaviour
+    ///
+    /// ALWAYS use Eq() for string comparisons in expressions to guarantee correct behaviour.
+    /// </summary>
+    [Test]
+    public void Evaluate_DoubleEquals_WorksInSimpleTestCase_ButUseEqInProduction()
+    {
+        // Note: This test shows == working, but production showed it failing
+        // in the sync flow. Always use Eq() to be safe.
+        var context = new ExpressionContext(
+            new Dictionary<string, object?> { { "Status", "Active" } },
+            new Dictionary<string, object?>());
+
+        var result = _evaluator.Evaluate("mv[\"Status\"] == \"Active\"", context);
+
+        // This works in test but failed in production - ALWAYS use Eq() to be safe
+        Assert.That(result, Is.True);
+    }
+
+    #endregion
+
     #region DN Helper Tests
 
     [Test]

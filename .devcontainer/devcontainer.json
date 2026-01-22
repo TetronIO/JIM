@@ -10,6 +10,10 @@
       "moby": true,
       "dockerDashComposeVersion": "v2"
     },
+    // Node.js - required by Claude Code extension
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    },
     // GitHub CLI
     "ghcr.io/devcontainers/features/github-cli:1": {
       "version": "latest"

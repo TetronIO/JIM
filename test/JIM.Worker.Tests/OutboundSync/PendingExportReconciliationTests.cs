@@ -1164,4 +1164,248 @@ public class PendingExportReconciliationTests
     }
 
     #endregion
+
+    #region LongNumber Value Tests
+
+    /// <summary>
+    /// Tests that LongNumber (Int64) attribute values are correctly compared when they match.
+    /// This is critical for AD attributes like accountExpires that use large integer values.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_LongNumberValue_ConfirmsWhenMatchesAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var accountExpiresAttr = TargetUserType.Attributes.Single(a => a.Name == "accountExpires");
+
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = accountExpiresAttr.Id,
+            Attribute = accountExpiresAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            LongValue = 133456789012345678L, // A specific file time value
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // Add matching long value
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = accountExpiresAttr,
+            AttributeId = accountExpiresAttr.Id,
+            LongValue = 133456789012345678L
+        });
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1), "LongNumber value should be confirmed when matches");
+    }
+
+    /// <summary>
+    /// Tests that LongNumber attribute values are marked for retry when they don't match.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_LongNumberValue_RetriesWhenDoesNotMatchAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var accountExpiresAttr = TargetUserType.Attributes.Single(a => a.Name == "accountExpires");
+
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = accountExpiresAttr.Id,
+            Attribute = accountExpiresAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            LongValue = 133456789012345678L,
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // Add different long value
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = accountExpiresAttr,
+            AttributeId = accountExpiresAttr.Id,
+            LongValue = 9223372036854775807L // Different value (never expires)
+        });
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(0), "LongNumber value should not be confirmed when different");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(1), "LongNumber value should be marked for retry");
+    }
+
+    /// <summary>
+    /// Tests that Int64.MaxValue (never expires) value for accountExpires is correctly matched.
+    /// This is the default value used by AD when accountExpires is "not set".
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_AccountExpiresNeverExpires_ConfirmsWhenMatchesAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var accountExpiresAttr = TargetUserType.Attributes.Single(a => a.Name == "accountExpires");
+
+        // This represents the "never expires" value that the LDAP connector substitutes
+        // when a sync rule returns null for accountExpires
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = accountExpiresAttr.Id,
+            Attribute = accountExpiresAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            LongValue = long.MaxValue, // 9223372036854775807 = "never expires"
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // CSO has the "never expires" value (as it would after import from AD)
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = accountExpiresAttr,
+            AttributeId = accountExpiresAttr.Id,
+            LongValue = long.MaxValue
+        });
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1),
+            "accountExpires 'never expires' value should be confirmed when matches");
+    }
+
+    #endregion
+
+    #region Protected Attribute Substitution Tests
+
+    /// <summary>
+    /// Tests the scenario where a protected attribute (accountExpires) had its value substituted
+    /// by the LDAP connector. The pending export's LongValue should have been updated to the
+    /// substituted value, allowing reconciliation to confirm successfully.
+    ///
+    /// This simulates what happens when:
+    /// 1. Sync rule evaluates ToFileTime(mv["Employee End Date"]) and returns null
+    /// 2. Drift detection creates a pending export with no value (clearing the attribute)
+    /// 3. LDAP connector substitutes the "never expires" default (9223372036854775807)
+    /// 4. LDAP connector updates the PendingExportAttributeValueChange.LongValue
+    /// 5. Confirming import reads the value from AD
+    /// 6. Reconciliation confirms because LongValue now matches the CSO value
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_ProtectedAttributeSubstituted_ConfirmsAfterSubstitutionAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var accountExpiresAttr = TargetUserType.Attributes.Single(a => a.Name == "accountExpires");
+
+        // Simulating what the LDAP connector does after substitution:
+        // The pending export attribute change has been updated with the substituted value
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = accountExpiresAttr.Id,
+            Attribute = accountExpiresAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            // After LDAP connector substitution, LongValue is set to the "never expires" default
+            LongValue = 9223372036854775807L,
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // The CSO has the "never expires" value (unchanged from what was already in AD)
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = accountExpiresAttr,
+            AttributeId = accountExpiresAttr.Id,
+            LongValue = 9223372036854775807L
+        });
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1),
+            "Protected attribute with substituted value should be confirmed");
+        Assert.That(result.PendingExportDeleted, Is.True,
+            "PendingExport should be deleted after all changes confirmed");
+    }
+
+    /// <summary>
+    /// Tests that userAccountControl (another protected attribute) works correctly when
+    /// its value has been substituted to the default "normal enabled account" value (512).
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_UserAccountControlSubstituted_ConfirmsWhenMatchesAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var uacAttr = TargetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.UserAccountControl.ToString());
+
+        // Simulating what happens when userAccountControl is set to the default value
+        // after LDAP connector substitution (if clearing was attempted)
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = uacAttr.Id,
+            Attribute = uacAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            IntValue = 512, // ADS_UF_NORMAL_ACCOUNT - the protected attribute default
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // CSO has the normal account value
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = uacAttr,
+            AttributeId = uacAttr.Id,
+            IntValue = 512
+        });
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1),
+            "userAccountControl with substituted default value should be confirmed");
+    }
+
+    #endregion
 }

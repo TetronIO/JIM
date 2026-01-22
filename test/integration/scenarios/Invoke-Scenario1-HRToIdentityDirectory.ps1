@@ -40,7 +40,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiner", "Leaver", "Mover", "Mover-Rename", "Mover-Move", "Reconnection", "ImportOnly", "All")]
+    [ValidateSet("Joiner", "Leaver", "Mover", "Mover-Rename", "Mover-Move", "Disable", "Enable", "Reconnection", "ImportOnly", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -513,6 +513,134 @@ try {
             }
         }
         $stepTimings["2c. Mover-Move"] = (Get-Date) - $step2cStart
+    }
+
+    # Test 2d: Disable (userAccountControl change - Protected Attribute Test)
+    if ($Step -eq "Disable" -or $Step -eq "All") {
+        $step2dStart = Get-Date
+        Write-TestSection "Test 2d: Disable (userAccountControl)"
+
+        # Use the second user (index 2) for disable/enable tests to preserve user 1 for other tests
+        $disableUser = New-TestUser -Index 2
+        $disableSamAccountName = $disableUser.SamAccountName
+
+        Write-Host "Setting user status to Inactive in CSV (triggers AD account disable)..." -ForegroundColor Gray
+
+        # Update the status field to "Inactive" - this will change userAccountControl from 512 to 514
+        # The expression is: IIF(mv["Employee Status"] == "Active", 512, 514)
+        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+
+        $csv = Import-Csv $csvPath
+        $targetUser = $csv | Where-Object { $_.samAccountName -eq $disableSamAccountName }
+        if ($targetUser) {
+            $targetUser.status = "Inactive"
+        }
+        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+        Write-Host "  ✓ Changed $disableSamAccountName status to 'Inactive'" -ForegroundColor Green
+
+        # Copy updated CSV
+        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+
+        # Trigger sync sequence with progress output
+        Write-Host "Triggering sync sequence:" -ForegroundColor Gray
+        Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
+        Write-Host "  ✓ Sync sequence completed" -ForegroundColor Green
+
+        # Validate account is disabled in AD
+        # userAccountControl 514 = 512 (normal) + 2 (disabled)
+        Write-Host "Validating account disabled state in AD..." -ForegroundColor Gray
+
+        $adUserInfo = docker exec samba-ad-primary bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$disableSamAccountName)' userAccountControl 2>&1"
+
+        # Check if userAccountControl is 514 (disabled) - ldbsearch returns decimal value
+        if ($adUserInfo -match "userAccountControl: 514") {
+            Write-Host "  ✓ Account disabled (userAccountControl=514) in AD" -ForegroundColor Green
+            $testResults.Steps += @{ Name = "Disable"; Success = $true }
+        }
+        elseif ($adUserInfo -match "userAccountControl: 512") {
+            Write-Host "  ✗ Account still enabled (userAccountControl=512) - disable not applied" -ForegroundColor Red
+            Write-Host "    AD output: $adUserInfo" -ForegroundColor Gray
+            $testResults.Steps += @{ Name = "Disable"; Success = $false; Error = "Account not disabled" }
+            if (-not $ContinueOnError) {
+                Write-Host ""
+                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                exit 1
+            }
+        }
+        else {
+            Write-Host "  ✗ Unexpected userAccountControl value in AD" -ForegroundColor Red
+            Write-Host "    AD output: $adUserInfo" -ForegroundColor Gray
+            $testResults.Steps += @{ Name = "Disable"; Success = $false; Error = "Unexpected UAC value" }
+            if (-not $ContinueOnError) {
+                Write-Host ""
+                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                exit 1
+            }
+        }
+        $stepTimings["2d. Disable"] = (Get-Date) - $step2dStart
+    }
+
+    # Test 2e: Enable (userAccountControl change - Restore from Disabled)
+    if ($Step -eq "Enable" -or $Step -eq "All") {
+        $step2eStart = Get-Date
+        Write-TestSection "Test 2e: Enable (userAccountControl)"
+
+        # Continue using the second user (index 2) that was disabled in the previous test
+        $enableUser = New-TestUser -Index 2
+        $enableSamAccountName = $enableUser.SamAccountName
+
+        Write-Host "Setting user status back to Active in CSV (triggers AD account enable)..." -ForegroundColor Gray
+
+        # Update the status field back to "Active" - this will change userAccountControl from 514 to 512
+        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+
+        $csv = Import-Csv $csvPath
+        $targetUser = $csv | Where-Object { $_.samAccountName -eq $enableSamAccountName }
+        if ($targetUser) {
+            $targetUser.status = "Active"
+        }
+        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+        Write-Host "  ✓ Changed $enableSamAccountName status to 'Active'" -ForegroundColor Green
+
+        # Copy updated CSV
+        docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+
+        # Trigger sync sequence with progress output
+        Write-Host "Triggering sync sequence:" -ForegroundColor Gray
+        Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
+        Write-Host "  ✓ Sync sequence completed" -ForegroundColor Green
+
+        # Validate account is enabled in AD
+        Write-Host "Validating account enabled state in AD..." -ForegroundColor Gray
+
+        $adUserInfo = docker exec samba-ad-primary bash -c "ldbsearch -H /usr/local/samba/private/sam.ldb '(sAMAccountName=$enableSamAccountName)' userAccountControl 2>&1"
+
+        # Check if userAccountControl is 512 (enabled)
+        if ($adUserInfo -match "userAccountControl: 512") {
+            Write-Host "  ✓ Account enabled (userAccountControl=512) in AD" -ForegroundColor Green
+            $testResults.Steps += @{ Name = "Enable"; Success = $true }
+        }
+        elseif ($adUserInfo -match "userAccountControl: 514") {
+            Write-Host "  ✗ Account still disabled (userAccountControl=514) - enable not applied" -ForegroundColor Red
+            Write-Host "    AD output: $adUserInfo" -ForegroundColor Gray
+            $testResults.Steps += @{ Name = "Enable"; Success = $false; Error = "Account not enabled" }
+            if (-not $ContinueOnError) {
+                Write-Host ""
+                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                exit 1
+            }
+        }
+        else {
+            Write-Host "  ✗ Unexpected userAccountControl value in AD" -ForegroundColor Red
+            Write-Host "    AD output: $adUserInfo" -ForegroundColor Gray
+            $testResults.Steps += @{ Name = "Enable"; Success = $false; Error = "Unexpected UAC value" }
+            if (-not $ContinueOnError) {
+                Write-Host ""
+                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                exit 1
+            }
+        }
+        $stepTimings["2e. Enable"] = (Get-Date) - $step2eStart
     }
 
     # Test 3: Leaver (Deprovisioning)
