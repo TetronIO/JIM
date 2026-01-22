@@ -88,84 +88,10 @@ For development setup using GitHub Codespaces or local installation, see the [De
 For SSO configuration with your Identity Provider, see the [SSO Setup Guide](docs/SSO_SETUP_GUIDE.md).
 
 ## State of Development
-JIM is approximately 92% complete towards MVP status with core identity synchronisation functionality complete. See [MVP Definition](docs/MVP_DEFINITION.md) for detailed progress tracking.
 
-**Connectors (Complete):**
-- **LDAP/Active Directory** - Full import and export, schema discovery, LDAPS support with certificate validation, auto-detection of default naming context
-- **CSV Files** - Full import and export, configurable delimiters, timestamped outputs
+JIM is in active development, currently at approximately 94% of MVP completion. Core identity synchronisation functionality (import, sync, export) is complete and working.
 
-**Import (Complete):**
-- Full import from all connectors with object creation, update, and deletion detection
-- Multi-valued attribute handling and all data types supported
-
-**Inbound Synchronisation (Complete):**
-- Join rules to match Connected System Objects to existing Metaverse Objects
-- Projection to create new Metaverse Objects
-- Attribute flow rules with multi-valued attribute support
-- Metaverse Object lifecycle management with deletion rules and grace periods
-
-**Outbound Synchronisation / Export (Complete):**
-- Pending Export detection when Metaverse Objects change
-- Export evaluation and execution via connectors
-- Create, update, and delete operations in target systems
-- Retry logic with exponential backoff
-- Pending Export review UI with server-side sorting, filtering, and pagination
-
-**Security (Complete):**
-- SSO/OIDC authentication for Web UI
-- JWT Bearer token authentication for API
-- API Key authentication for automation and CI/CD
-- Role-based authorisation (basic model)
-- Connector credential encryption at rest (AES-256-GCM)
-
-**API (Complete):**
-- Activity monitoring and run profile execution
-- Connected Systems, Sync Rules, and Run Profiles CRUD
-- Metaverse Object querying with filtering and pagination
-- Data generation for testing
-- Certificate management
-
-**PowerShell Module (Complete):**
-- 35 cmdlets covering all major JIM operations
-- Connection management with API key support
-- Full CRUD for Connected Systems, Sync Rules, Run Profiles
-- Metaverse Object querying and inspection
-- Run profile execution and activity monitoring
-- Data generation for testing scenarios
-
-**Web UI (Complete):**
-- Operations view for manual run profile execution and task monitoring
-- Activity history with server-side sorting, filtering, and pagination
-- Connected Systems management and connector configuration
-- Sync Rule configuration with attribute flow mapping
-- Metaverse Object browsing and inspection
-- Pending Export list and detail views
-- Certificate management for secure connections
-
-**Release & Deployment (Complete):**
-- Automated release workflow with GitHub Actions
-- Docker images published to GitHub Container Registry
-- Air-gapped deployment bundles with SHA256 checksums
-- PowerShell module auto-published to PSGallery
-
-**Testing:**
-- Unit tests for models, utilities, and API endpoints
-- Worker tests for synchronisation logic
-- Workflow tests for multi-step sync scenarios (import → sync → export → confirming import)
-- Integration tests with real connected systems (Phase 1 complete)
-
-**Integration Testing (Complete):**
-- Scenario 1: HR to Identity Directory (Joiner/Mover/Leaver)
-- Scenario 2: Cross-domain Synchronisation
-- Scenario 4: Deletion Rules
-- Scenario 5: Matching Rules
-- Scenario 8: Cross-domain Entitlement Synchronisation
-
-See [Integration Testing](docs/INTEGRATION_TESTING.md) for full details on running tests.
-
-**In Progress:**
-- Scheduler service for automated run profile execution (#168 - critical path for MVP)
-- Full RBAC model with additional roles
+For detailed progress tracking, feature checklists, and remaining work, see the [MVP Definition](docs/MVP_DEFINITION.md).
 
 **Deferred (Post-MVP):**
 - Scenarios 6-7: Entitlement Management (pending Internal MVO design)
