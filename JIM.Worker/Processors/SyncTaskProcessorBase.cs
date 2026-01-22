@@ -69,8 +69,9 @@ public abstract class SyncTaskProcessorBase
     protected readonly List<MetaverseObject> _pendingMvoDeletions = [];
 
     // Batch collection for MVO change object creation (deferred to page boundary for performance)
-    // Stores: (MVO, Additions, Removals, RPEI) - captured BEFORE applying pending changes
-    protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> Additions, List<MetaverseObjectAttributeValue> Removals, ActivityRunProfileExecutionItem Rpei)> _pendingMvoChanges = [];
+    // Stores: (MVO, Additions, Removals) - captured BEFORE applying pending changes
+    // MVO changes use ChangeInitiatorType.SynchronisationRule rather than linking to RPEIs
+    protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> Additions, List<MetaverseObjectAttributeValue> Removals)> _pendingMvoChanges = [];
 
     // Batch collection for deferred reference attribute processing.
     // Reference attributes must be processed AFTER all CSOs in the page have been processed (joined/projected)
@@ -698,6 +699,15 @@ public abstract class SyncTaskProcessorBase
                 ? connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.ToHashSet()
                 : null;
 
+            // Capture MVO changes for change tracking (before applying, so we have the pending lists)
+            // Change objects will be created in batch at page boundary for performance
+            if (attributesAdded > 0 || attributesRemoved > 0)
+            {
+                var additions = connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions.ToList();
+                var removals = connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.ToList();
+                _pendingMvoChanges.Add((connectedSystemObject.MetaverseObject, additions, removals));
+            }
+
             // Apply pending attribute value changes to the MVO
             ApplyPendingMetaverseObjectAttributeChanges(connectedSystemObject.MetaverseObject);
 
@@ -1109,6 +1119,115 @@ public abstract class SyncTaskProcessorBase
 
         _pendingMvoDeletions.Clear();
         span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Creates MetaverseObjectChange records for all pending MVO changes in the current page batch.
+    /// Called at page boundary after MVOs are persisted (so IDs are available).
+    /// Respects the MVO change tracking feature flag.
+    /// </summary>
+    protected async Task CreatePendingMvoChangeObjectsAsync()
+    {
+        if (_pendingMvoChanges.Count == 0)
+            return;
+
+        // Check feature flag
+        var changeTrackingEnabled = await _jim.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
+        if (!changeTrackingEnabled)
+        {
+            _pendingMvoChanges.Clear();
+            return;
+        }
+
+        using var span = Diagnostics.Sync.StartSpan("CreatePendingMvoChangeObjects");
+        span.SetTag("changeCount", _pendingMvoChanges.Count);
+
+        foreach (var (mvo, additions, removals) in _pendingMvoChanges)
+        {
+            // Create MVO change object
+            var change = new MetaverseObjectChange
+            {
+                MetaverseObject = mvo,
+                ChangeType = ObjectChangeType.Updated,
+                ChangeTime = DateTime.UtcNow,
+                ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule
+                // ChangeInitiator is null for sync operations - could link to sync rule in future
+            };
+
+            // Create attribute change records for additions
+            foreach (var addition in additions)
+            {
+                AddMvoChangeAttributeValueObject(change, addition, ValueChangeType.Add);
+            }
+
+            // Create attribute change records for removals
+            foreach (var removal in removals)
+            {
+                AddMvoChangeAttributeValueObject(change, removal, ValueChangeType.Remove);
+            }
+
+            // Add to MVO's Changes collection - will be persisted when Activity is saved (MVO already tracked)
+            mvo.Changes.Add(change);
+        }
+
+        _pendingMvoChanges.Clear();
+        span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Creates the necessary attribute change audit item for when an MVO is updated or deleted, and adds it to the change object.
+    /// </summary>
+    /// <param name="metaverseObjectChange">The MetaverseObjectChange being built.</param>
+    /// <param name="metaverseObjectAttributeValue">The attribute and value pair for the change.</param>
+    /// <param name="valueChangeType">The type of change (Add or Remove).</param>
+    private static void AddMvoChangeAttributeValueObject(MetaverseObjectChange metaverseObjectChange, MetaverseObjectAttributeValue metaverseObjectAttributeValue, ValueChangeType valueChangeType)
+    {
+        var attributeChange = metaverseObjectChange.AttributeChanges.SingleOrDefault(ac => ac.Attribute.Id == metaverseObjectAttributeValue.Attribute.Id);
+        if (attributeChange == null)
+        {
+            // Create the attribute change object that provides an audit trail of changes to an MVO's attributes
+            attributeChange = new MetaverseObjectChangeAttribute
+            {
+                Attribute = metaverseObjectAttributeValue.Attribute,
+                MetaverseObjectChange = metaverseObjectChange
+            };
+            metaverseObjectChange.AttributeChanges.Add(attributeChange);
+        }
+
+        switch (metaverseObjectAttributeValue.Attribute.Type)
+        {
+            case AttributeDataType.Text when metaverseObjectAttributeValue.StringValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, metaverseObjectAttributeValue.StringValue));
+                break;
+            case AttributeDataType.Number when metaverseObjectAttributeValue.IntValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, (int)metaverseObjectAttributeValue.IntValue));
+                break;
+            case AttributeDataType.LongNumber when metaverseObjectAttributeValue.LongValue != null:
+                // TODO: MetaverseObjectChangeAttributeValue model needs LongValue property and constructor
+                // For now, cast to int (may lose precision for very large longs)
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, (int)metaverseObjectAttributeValue.LongValue.Value));
+                break;
+            case AttributeDataType.Guid when metaverseObjectAttributeValue.GuidValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, (Guid)metaverseObjectAttributeValue.GuidValue));
+                break;
+            case AttributeDataType.Boolean when metaverseObjectAttributeValue.BoolValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, (bool)metaverseObjectAttributeValue.BoolValue));
+                break;
+            case AttributeDataType.DateTime when metaverseObjectAttributeValue.DateTimeValue.HasValue:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, metaverseObjectAttributeValue.DateTimeValue.Value));
+                break;
+            case AttributeDataType.Binary when metaverseObjectAttributeValue.ByteValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, true, metaverseObjectAttributeValue.ByteValue.Length));
+                break;
+            case AttributeDataType.Reference when metaverseObjectAttributeValue.ReferenceValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, metaverseObjectAttributeValue.ReferenceValue));
+                break;
+            case AttributeDataType.Reference when metaverseObjectAttributeValue.UnresolvedReferenceValue != null:
+                // We do not log changes for unresolved references. Only resolved references get change tracked.
+                break;
+            default:
+                throw new NotImplementedException($"Attribute data type {metaverseObjectAttributeValue.Attribute.Type} is not yet supported for MVO change tracking.");
+        }
     }
 
     /// <summary>

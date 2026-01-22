@@ -176,6 +176,9 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             // cannot be decoupled from batch persistence boundaries.
             await PersistPendingMetaverseObjectsAsync();
 
+            // create MVO change objects for change tracking (after MVOs persisted so IDs available)
+            await CreatePendingMvoChangeObjectsAsync();
+
             // Batch evaluate exports for all MVOs that changed during this page
             await EvaluatePendingExportsAsync();
 
@@ -188,7 +191,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             // batch delete MVOs marked for immediate deletion (0-grace-period)
             await FlushPendingMvoDeletionsAsync();
 
-            // Update progress with page completion - this persists ObjectsProcessed to database
+            // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
             using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
             {
                 await _jim.Activities.UpdateActivityAsync(_activity);
