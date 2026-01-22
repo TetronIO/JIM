@@ -159,6 +159,39 @@ public class MetaverseRepository : IMetaverseRepository
             SingleOrDefaultAsync(mo => mo.Id == id);
     }
 
+    public async Task<MetaverseObject?> GetMetaverseObjectWithChangeHistoryAsync(Guid id)
+    {
+        return await Repository.Database.MetaverseObjects.
+            AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
+            Include(mo => mo.Type).
+            Include(mo => mo.AttributeValues).
+            ThenInclude(av => av.Attribute).
+            Include(mo => mo.AttributeValues).
+            ThenInclude(av => av.ReferenceValue).
+            ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
+            ThenInclude(rvav => rvav.Attribute).
+            Include(mo => mo.AttributeValues).
+            ThenInclude(av => av.ReferenceValue).
+            ThenInclude(rv => rv!.Type).
+            Include(mo => mo.Changes).
+            ThenInclude(c => c.AttributeChanges).
+            ThenInclude(ac => ac.Attribute).
+            Include(mo => mo.Changes).
+            ThenInclude(c => c.AttributeChanges).
+            ThenInclude(ac => ac.ValueChanges).
+            ThenInclude(vc => vc.ReferenceValue).
+            ThenInclude(rv => rv!.Type).
+            Include(mo => mo.Changes).
+            ThenInclude(c => c.AttributeChanges).
+            ThenInclude(ac => ac.ValueChanges).
+            ThenInclude(vc => vc.ReferenceValue).
+            ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
+            ThenInclude(rvav => rvav.Attribute).
+            Include(mo => mo.Changes).
+            ThenInclude(c => c.ChangeInitiator).
+            SingleOrDefaultAsync(mo => mo.Id == id);
+    }
+
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)
     {
         return await Repository.Database.MetaverseObjects

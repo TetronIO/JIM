@@ -247,6 +247,11 @@ public class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectAsync(id);
     }
 
+    public async Task<MetaverseObject?> GetMetaverseObjectWithChangeHistoryAsync(Guid id)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectWithChangeHistoryAsync(id);
+    }
+
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectHeaderAsync(id);

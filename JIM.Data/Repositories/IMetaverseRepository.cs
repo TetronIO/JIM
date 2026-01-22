@@ -27,6 +27,8 @@ public interface IMetaverseRepository
     #region objects
     public Task<MetaverseObject?> GetMetaverseObjectAsync(Guid id);
 
+    public Task<MetaverseObject?> GetMetaverseObjectWithChangeHistoryAsync(Guid id);
+
     public Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id);
 
     public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject);

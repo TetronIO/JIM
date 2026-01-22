@@ -1,7 +1,9 @@
-﻿@page "/t/{TypeNameUrlParam}/v/{IdParam:guid}"
+@page "/t/{TypeNameUrlParam}/v/{IdParam:guid}"
 @attribute [Authorize(Roles = "User")]
 @using JIM.Application
 @using JIM.Models.Core
+@using JIM.Models.Enums
+@using JIM.Web.Shared
 @using Utilities;
 @inject JimApplication Jim
 @inject NavigationManager NavManager
@@ -60,6 +62,12 @@
     }
 </MudPaper>
 
+@* Change History *@
+@if (MetaverseObject != null)
+{
+    <ChangeHistoryTimeline Changes="@GetChangeHistory()" />
+}
+
 @code {
     [Parameter]
     public string TypeNameUrlParam { get; set; } = null!;
@@ -80,8 +88,8 @@
             return;
         }
 
-        // get the metaverse object...
-        MetaverseObject = await Jim.Metaverse.GetMetaverseObjectAsync(IdParam);
+        // get the metaverse object with change history...
+        MetaverseObject = await Jim.Metaverse.GetMetaverseObjectWithChangeHistoryAsync(IdParam);
         if (MetaverseObject == null)
         {
             NavManager.NavigateTo("/");
@@ -97,5 +105,38 @@
                 new(MetaverseObjectType.PluralName, href: $"/t/{MetaverseObjectType.PluralName.ToLower()}"),
                 new(MetaverseObject.DisplayName, href: null, disabled: true)
             };
+    }
+
+    private List<ChangeHistoryTimeline.ChangeGroup> GetChangeHistory()
+    {
+        if (MetaverseObject?.Changes == null)
+            return new List<ChangeHistoryTimeline.ChangeGroup>();
+
+        return MetaverseObject.Changes
+            .OrderByDescending(c => c.ChangeTime)
+            .Select(change => new ChangeHistoryTimeline.ChangeGroup
+            {
+                ChangeType = change.ChangeType,
+                ChangeTime = change.ChangeTime,
+                ChangeInitiatorType = change.ChangeInitiatorType.ToString(),
+                ChangeInitiatorName = change.ChangeInitiator?.DisplayName,
+                AttributeChanges = change.AttributeChanges
+                    .OrderBy(ac => ac.Attribute.Name)
+                    .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
+                    {
+                        AttributeName = ac.Attribute.Name,
+                        ChangeType = vc.ValueChangeType,
+                        Value = vc.ReferenceValue == null ? vc.ToString() : null,
+                        ReferenceValue = vc.ReferenceValue != null ? new ChangeHistoryTimeline.ReferenceValueInfo
+                        {
+                            TypeName = vc.ReferenceValue.Type.Name,
+                            DisplayName = vc.ReferenceValue.DisplayName ?? vc.ReferenceValue.Id.ToString(),
+                            SecondaryId = null, // MVO doesn't have secondary external ID
+                            Href = Utilities.GetMetaverseObjectHref(vc.ReferenceValue)
+                        } : null
+                    }))
+                    .ToList()
+            })
+            .ToList();
     }
 }
