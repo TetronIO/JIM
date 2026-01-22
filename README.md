@@ -87,19 +87,13 @@ For development setup using GitHub Codespaces or local installation, see the [De
 
 For SSO configuration with your Identity Provider, see the [SSO Setup Guide](docs/SSO_SETUP_GUIDE.md).
 
+If you don't have any connected systems available, you can use the Example Data feature to populate JIM with sample users and groups for testing.
+
 ## State of Development
 
 JIM is in active development, currently at approximately 94% of MVP completion. Core identity synchronisation functionality (import, sync, export) is complete and working.
 
 For detailed progress tracking, feature checklists, and remaining work, see the [MVP Definition](docs/MVP_DEFINITION.md).
-
-**Deferred (Post-MVP):**
-- Scenarios 6-7: Entitlement Management (pending Internal MVO design)
-- Scenarios 9-11: Database connector testing
-
-> **Note:** As a pre-MVP release, bugs may exist. Please report any issues on [GitHub](https://github.com/TetronIO/JIM/issues).
-
-If you don't have any connected systems available, you can use the Example Data feature to populate JIM with sample users and groups for testing.
 
 ## Licensing
 JIM uses a Source-Available model where it is free to use in non-production scenarios, but requires a commercial license for use in production scenarios. [﻿Full details can be found here](https://tetron.io/jim/#licensing).
