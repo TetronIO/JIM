@@ -34,7 +34,7 @@ psql -h localhost -p 5432 -U jim -d jim -f test/data/seed-change-history-simple.
 
 **Requirements:**
 - JIM must be running (`jim-stack` or `jim-stack-dev`)
-- Database must have built-in types initialized (User, Group types with built-in attributes)
+- Database must have built-in types initialised (User, Group types with built-in attributes)
 - Script uses existing built-in types and creates test MVOs with change history
 
 **After running:**

@@ -22,6 +22,10 @@ DECLARE
     attr_jobtitle_id INT;
     attr_manager_id INT;
     attr_members_id INT;
+    attr_accountname_id INT;
+    attr_description_id INT;
+    attr_grouptype_id INT;
+    attr_groupscope_id INT;
 
     -- MVO IDs
     alice_id UUID;
@@ -62,11 +66,16 @@ BEGIN
     SELECT "Id" INTO attr_jobtitle_id FROM "MetaverseAttributes" WHERE "Name" = 'Job Title' AND "BuiltIn" = true LIMIT 1;
     SELECT "Id" INTO attr_manager_id FROM "MetaverseAttributes" WHERE "Name" = 'Manager' AND "BuiltIn" = true LIMIT 1;
     SELECT "Id" INTO attr_members_id FROM "MetaverseAttributes" WHERE "Name" = 'Static Members' AND "BuiltIn" = true LIMIT 1;
+    SELECT "Id" INTO attr_accountname_id FROM "MetaverseAttributes" WHERE "Name" = 'Account Name' AND "BuiltIn" = true LIMIT 1;
+    SELECT "Id" INTO attr_description_id FROM "MetaverseAttributes" WHERE "Name" = 'Description' AND "BuiltIn" = true LIMIT 1;
+    SELECT "Id" INTO attr_grouptype_id FROM "MetaverseAttributes" WHERE "Name" = 'Group Type' AND "BuiltIn" = true LIMIT 1;
+    SELECT "Id" INTO attr_groupscope_id FROM "MetaverseAttributes" WHERE "Name" = 'Group Scope' AND "BuiltIn" = true LIMIT 1;
 
     IF attr_displayname_id IS NULL OR attr_firstname_id IS NULL OR attr_lastname_id IS NULL OR
        attr_email_id IS NULL OR attr_department_id IS NULL OR attr_jobtitle_id IS NULL OR
-       attr_manager_id IS NULL OR attr_members_id IS NULL THEN
-        RAISE EXCEPTION 'Required built-in attributes not found. JIM must be initialized first.';
+       attr_manager_id IS NULL OR attr_members_id IS NULL OR attr_accountname_id IS NULL OR
+       attr_description_id IS NULL OR attr_grouptype_id IS NULL OR attr_groupscope_id IS NULL THEN
+        RAISE EXCEPTION 'Required built-in attributes not found. JIM must be initialised first.';
     END IF;
 
     RAISE NOTICE 'Found all required built-in attributes';
@@ -136,6 +145,21 @@ BEGIN
 
     INSERT INTO "MetaverseObjectAttributeValues" ("Id", "MetaverseObjectId", "AttributeId", "StringValue")
     VALUES (gen_random_uuid(), engineers_group_id, attr_displayname_id, 'Software Engineers');
+
+    INSERT INTO "MetaverseObjectAttributeValues" ("Id", "MetaverseObjectId", "AttributeId", "StringValue")
+    VALUES (gen_random_uuid(), engineers_group_id, attr_accountname_id, 'SoftwareEngineers');
+
+    INSERT INTO "MetaverseObjectAttributeValues" ("Id", "MetaverseObjectId", "AttributeId", "StringValue")
+    VALUES (gen_random_uuid(), engineers_group_id, attr_description_id, 'Engineering team group for software developers');
+
+    INSERT INTO "MetaverseObjectAttributeValues" ("Id", "MetaverseObjectId", "AttributeId", "StringValue")
+    VALUES (gen_random_uuid(), engineers_group_id, attr_grouptype_id, 'Security');
+
+    INSERT INTO "MetaverseObjectAttributeValues" ("Id", "MetaverseObjectId", "AttributeId", "StringValue")
+    VALUES (gen_random_uuid(), engineers_group_id, attr_groupscope_id, 'Global');
+
+    INSERT INTO "MetaverseObjectAttributeValues" ("Id", "MetaverseObjectId", "AttributeId", "StringValue")
+    VALUES (gen_random_uuid(), engineers_group_id, attr_email_id, 'engineers@contoso.enterprise.com');
 
     -- Group has both Alice and Bob as members
     INSERT INTO "MetaverseObjectAttributeValues" ("Id", "MetaverseObjectId", "AttributeId", "ReferenceValueId")
