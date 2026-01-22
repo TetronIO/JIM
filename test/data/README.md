@@ -21,16 +21,20 @@ Generates realistic change history data for testing the Change History UI featur
 **How to run:**
 
 ```bash
-# Option 1: Direct psql (if database is running in Docker)
-docker compose exec jim.database psql -U jim -d jim_test -f /app/test/data/seed-change-history.sql
+# Option 1: Pipe from host (recommended - works in devcontainer)
+docker compose exec -T jim.database psql -U jim -d jim < test/data/seed-change-history.sql
 
-# Option 2: From host machine (if PostgreSQL client installed)
-psql -h localhost -p 5432 -U jim -d jim_test -f test/data/seed-change-history.sql
-
-# Option 3: Copy into container then run
+# Option 2: Copy into container then run
 docker cp test/data/seed-change-history.sql jim.database:/tmp/
-docker compose exec jim.database psql -U jim -d jim_test -f /tmp/seed-change-history.sql
+docker compose exec jim.database psql -U jim -d jim -f /tmp/seed-change-history.sql
+
+# Option 3: From host machine (if PostgreSQL client installed locally)
+psql -h localhost -p 5432 -U jim -d jim -f test/data/seed-change-history.sql
 ```
+
+**Note:** The current script has schema mismatches with the database. You'll need to either:
+1. Run an integration test to generate real change history data (recommended)
+2. Update the SQL script to match the current schema (see CLAUDE.md maintenance section)
 
 **After running:**
 The script will output URLs like:
