@@ -411,7 +411,7 @@ BEGIN
     VALUES (gen_random_uuid(), attr_change_id, 1, alice_id);  -- Re-add (simulating update)
 
     -- ========================================================================
-    -- STEP 6: Create Change History - Engineers Group (14 changes)
+    -- STEP 6: Create Change History - Engineers Group (11 changes with bulk operations)
     -- ========================================================================
 
     RAISE NOTICE 'Creating Engineers Group change history...';
@@ -431,7 +431,7 @@ BEGIN
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 1, 'Software Engineers');  -- Add
 
-    -- Change 2: Initial members added - Alice and Bob (18 days ago)
+    -- Change 2: Bulk initial members added - Alice, Bob, Charlie (18 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '18 days', 2);
@@ -446,17 +446,10 @@ BEGIN
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
     VALUES (gen_random_uuid(), attr_change_id, 1, bob_id);  -- Add Bob
 
-    -- Change 3: Add Charlie (17 days ago)
-    change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '17 days', 2);
-
-    attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
-    VALUES (attr_change_id, change_id, attr_members_id);
-
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
     VALUES (gen_random_uuid(), attr_change_id, 1, charlie_id);  -- Add Charlie
+
+    -- Change 3: (removed - consolidated into change 2)
 
     -- Change 4: Description update (16 days ago)
     change_id := gen_random_uuid();
@@ -473,7 +466,7 @@ BEGIN
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 1, 'Engineering team group for software developers');  -- Add
 
-    -- Change 5: Add Diana and Eve (15 days ago)
+    -- Change 5: Bulk add Diana, Eve, Frank (15 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '15 days', 2);
@@ -487,6 +480,9 @@ BEGIN
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
     VALUES (gen_random_uuid(), attr_change_id, 1, eve_id);  -- Add Eve
+
+    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
+    VALUES (gen_random_uuid(), attr_change_id, 1, frank_id);  -- Add Frank
 
     -- Change 6: Group name refinement (14 days ago)
     change_id := gen_random_uuid();
@@ -503,17 +499,7 @@ BEGIN
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 1, 'Platform Engineering Team');  -- Add
 
-    -- Change 7: Add Frank (13 days ago)
-    change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '13 days', 2);
-
-    attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
-    VALUES (attr_change_id, change_id, attr_members_id);
-
-    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
-    VALUES (gen_random_uuid(), attr_change_id, 1, frank_id);  -- Add Frank
+    -- Change 7: (removed - Frank already added in Change 5)
 
     -- Change 8: Remove Charlie (temporarily) (12 days ago)
     change_id := gen_random_uuid();
@@ -542,7 +528,7 @@ BEGIN
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 1, 'Core platform engineering team responsible for infrastructure and DevOps');  -- Add
 
-    -- Change 10: Add Grace and Henry (10 days ago)
+    -- Change 10: Bulk add Grace, Henry, and re-add Charlie (10 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '10 days', 2);
@@ -557,19 +543,12 @@ BEGIN
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
     VALUES (gen_random_uuid(), attr_change_id, 1, henry_id);  -- Add Henry
 
-    -- Change 11: Re-add Charlie (9 days ago)
-    change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '9 days', 2);
-
-    attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
-    VALUES (attr_change_id, change_id, attr_members_id);
-
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
     VALUES (gen_random_uuid(), attr_change_id, 1, charlie_id);  -- Re-add Charlie
 
-    -- Change 12: Remove Diana (8 days ago)
+    -- Change 11: (removed - consolidated into Change 10)
+
+    -- Change 12: Bulk member removal - remove Diana, Eve, Frank (8 days ago)
     change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '8 days', 2);
@@ -580,6 +559,12 @@ BEGIN
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
     VALUES (gen_random_uuid(), attr_change_id, 2, diana_id);  -- Remove Diana
+
+    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
+    VALUES (gen_random_uuid(), attr_change_id, 2, eve_id);  -- Remove Eve
+
+    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
+    VALUES (gen_random_uuid(), attr_change_id, 2, frank_id);  -- Remove Frank
 
     -- Change 13: Group name final update (7 days ago)
     change_id := gen_random_uuid();
@@ -596,20 +581,7 @@ BEGIN
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 1, 'Software Engineers');  -- Add (back to original)
 
-    -- Change 14: Bulk member update - remove Eve and Frank, keep final team (6 days ago)
-    change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '6 days', 2);
-
-    attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
-    VALUES (attr_change_id, change_id, attr_members_id);
-
-    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
-    VALUES (gen_random_uuid(), attr_change_id, 2, eve_id);  -- Remove Eve
-
-    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
-    VALUES (gen_random_uuid(), attr_change_id, 2, frank_id);  -- Remove Frank
+    -- Change 14: (removed - consolidated into Change 12)
 
     -- ========================================================================
     -- SUCCESS
@@ -622,11 +594,12 @@ BEGIN
     RAISE NOTICE '  - 8 Users: Alice, Bob, Charlie, Diana, Eve, Frank, Grace, Henry';
     RAISE NOTICE '  - Alice (User) with 4 changes';
     RAISE NOTICE '  - Bob (User) with 3 changes (including Manager reference)';
-    RAISE NOTICE '  - Software Engineers (Group) with 14 changes';
+    RAISE NOTICE '  - Software Engineers (Group) with 11 changes';
     RAISE NOTICE '    * Name changes: Engineers -> Software Engineers -> Platform Engineering Team -> Software Engineers';
     RAISE NOTICE '    * Description updates showing group evolution';
-    RAISE NOTICE '    * Member additions: Alice, Bob, Charlie, Diana, Eve, Frank, Grace, Henry';
-    RAISE NOTICE '    * Member removals: Charlie (temp), Diana, Eve, Frank';
+    RAISE NOTICE '    * BULK member additions: Change 2 (3 users), Change 5 (3 users), Change 10 (3 users)';
+    RAISE NOTICE '    * BULK member removal: Change 12 (3 users)';
+    RAISE NOTICE '    * Member operations: Alice, Bob, Charlie (3x), Diana, Eve, Frank, Grace, Henry';
     RAISE NOTICE '    * Final members: Alice, Bob, Charlie, Grace, Henry';
     RAISE NOTICE '';
     RAISE NOTICE 'UI Testing URLs:';
