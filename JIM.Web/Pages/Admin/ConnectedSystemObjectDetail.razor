@@ -381,12 +381,14 @@ new(CsoId.ToString(), href: null, disabled: true)
             {
                 ChangeType = change.ChangeType,
                 ChangeTime = change.ChangeTime,
-                // CSO changes don't have the same initiator tracking as MVO changes
-                // The RPEI can be used to track back to the activity if needed
+                // CSO changes: Initiated by the connected system via import
                 ChangeInitiatorType = "Import",
                 ChangeInitiatorName = ConnectedSystemHeader?.Name ?? "Connected System",
                 ChangeInitiatorId = null,
                 ChangeMechanismType = "Import",
+                // Connected system info for mechanism link
+                ConnectedSystemId = ConnectedSystemHeader?.Id,
+                ConnectedSystemName = ConnectedSystemHeader?.Name,
                 SyncRuleId = null,
                 SyncRuleName = null,
                 ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,

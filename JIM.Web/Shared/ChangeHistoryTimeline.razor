@@ -443,13 +443,13 @@ else
         public ObjectChangeType ChangeType { get; set; }
         public DateTime ChangeTime { get; set; }
         /// <summary>
-        /// The principal type (User, ApiKey) that initiated this change - used for icon display.
+        /// The principal type (User, ApiKey, Import) that initiated this change - used for icon display.
         /// </summary>
         public string ChangeInitiatorType { get; set; } = string.Empty;
         public string? ChangeInitiatorName { get; set; }
         public Guid? ChangeInitiatorId { get; set; }
         /// <summary>
-        /// The mechanism that triggered this change (SynchronisationRule, User, WorkflowInstance, etc.).
+        /// The mechanism that triggered this change (SynchronisationRule, User, WorkflowInstance, Import, etc.).
         /// Used to determine if this is a sync-initiated change.
         /// </summary>
         public string ChangeMechanismType { get; set; } = string.Empty;
@@ -462,6 +462,14 @@ else
         /// Link to the RPEI for viewing the full activity context.
         /// </summary>
         public Guid? ActivityRunProfileExecutionItemId { get; set; }
+        /// <summary>
+        /// For CSO import changes: the connected system ID (for linking).
+        /// </summary>
+        public int? ConnectedSystemId { get; set; }
+        /// <summary>
+        /// For CSO import changes: the connected system name.
+        /// </summary>
+        public string? ConnectedSystemName { get; set; }
         public List<AttributeChange> AttributeChanges { get; set; } = new();
     }
 
@@ -1048,7 +1056,7 @@ else
 
     /// <summary>
     /// Generates the icon for the modal principal (who) display.
-    /// Shows User or ApiKey icon based on the principal type.
+    /// Shows User, ApiKey, or Import icon based on the principal type.
     /// </summary>
     private RenderFragment GetModalPrincipalIcon(ChangeGroup changeGroup)
     {
@@ -1058,6 +1066,7 @@ else
             {
                 "User" => Icons.Material.Filled.Person,
                 "ApiKey" => Icons.Material.Filled.Key,
+                "Import" => Icons.Material.Filled.CloudDownload,
                 _ => Icons.Material.Filled.HelpOutline
             };
 
@@ -1107,7 +1116,7 @@ else
 
     /// <summary>
     /// Generates the icon for the modal mechanism (how) display.
-    /// Shows Sync, Person, Workflow, or Group icon based on mechanism type.
+    /// Shows Sync, Person, Workflow, Group, or Import icon based on mechanism type.
     /// </summary>
     private RenderFragment GetModalMechanismIcon(ChangeGroup changeGroup)
     {
@@ -1119,6 +1128,7 @@ else
                 "User" => Icons.Material.Filled.Edit,
                 "WorkflowInstance" => Icons.Material.Filled.AccountTree,
                 "GroupMembershipRuleEvaluation" => Icons.Material.Filled.Group,
+                "Import" => Icons.Material.Filled.CloudDownload,
                 _ => Icons.Material.Filled.HelpOutline
             };
 
@@ -1133,6 +1143,7 @@ else
     /// <summary>
     /// Generates the text for the modal mechanism (how) display.
     /// For sync changes, shows the sync rule as a link if available.
+    /// For import changes, shows "Import" with connected system link.
     /// </summary>
     private RenderFragment GetModalMechanismText(ChangeGroup changeGroup)
     {
@@ -1144,6 +1155,9 @@ else
             bool isSyncChange = changeGroup.ChangeMechanismType == "SynchronisationRule" ||
                                 changeGroup.SyncRuleId != null ||
                                 !string.IsNullOrEmpty(changeGroup.SyncRuleName);
+
+            // Check if this is an import change (CSO)
+            bool isImportChange = changeGroup.ChangeMechanismType == "Import";
 
             if (isSyncChange)
             {
@@ -1177,6 +1191,29 @@ else
                         builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, $"{changeGroup.SyncRuleName} (deleted)")));
                         builder.CloseComponent();
                     }
+                }
+            }
+            else if (isImportChange)
+            {
+                // Show "Import" with connected system link if available
+                builder.OpenComponent<MudText>(seq++);
+                builder.AddAttribute(seq++, "Style", "display: inline;");
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Import")));
+                builder.CloseComponent();
+
+                // If we have a connected system, show it as a link
+                if (changeGroup.ConnectedSystemId != null && !string.IsNullOrEmpty(changeGroup.ConnectedSystemName))
+                {
+                    builder.OpenComponent<MudText>(seq++);
+                    builder.AddAttribute(seq++, "Style", "display: inline; margin-left: 4px;");
+                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "from")));
+                    builder.CloseComponent();
+
+                    builder.OpenComponent<MudLink>(seq++);
+                    builder.AddAttribute(seq++, "Href", $"/admin/connected-systems/{changeGroup.ConnectedSystemId}");
+                    builder.AddAttribute(seq++, "Style", "margin-left: 4px;");
+                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ConnectedSystemName)));
+                    builder.CloseComponent();
                 }
             }
             else
