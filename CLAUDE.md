@@ -458,6 +458,18 @@ The SQL script at `test/data/seed-change-history.sql` generates realistic change
   - RELEASE_PROCESS.md - Release and deployment procedures
   - SSO_SETUP_GUIDE.md - SSO configuration instructions
 
+**AI Assistant Context Documents:**
+
+JIM has context documents for use with AI assistant platforms (Claude Desktop, ChatGPT, etc.) for ideation and research:
+- `docs/JIM_AI_ASSISTANT_INSTRUCTIONS.md` - System prompt/instructions to copy
+- `docs/JIM_AI_ASSISTANT_CONTEXT.md` - Comprehensive context document to upload
+
+**Keep these updated when:**
+- MVP status changes significantly (update Section 8 - Current Status)
+- New connectors are added (update Section 4 - Connectors)
+- Architecture changes materially (update Section 2 - Architecture)
+- Key terminology or concepts change (update Section 11 - Glossary)
+
 ## Architecture Quick Reference
 
 **Metaverse Pattern:**
