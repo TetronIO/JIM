@@ -8,26 +8,29 @@
 else
 {
     <!-- Search and Filter Controls -->
-    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-4" Style="flex-wrap: nowrap;">
-        <MudTextField @bind-Value="_searchText"
-                      Label="Search attributes"
-                      Variant="Variant.Outlined"
-                      Adornment="Adornment.Start"
-                      AdornmentIcon="@Icons.Material.Filled.Search"
-                      Immediate="true"
-                      DebounceInterval="300"
-                      Style="max-width: 300px; flex: 0 0 auto;" />
-
-        <MudSelect T="ValueChangeType?"
-                   @bind-Value="_filterChangeType"
-                   Label="Filter by change type"
-                   Variant="Variant.Outlined"
-                   Style="max-width: 250px; flex: 0 0 auto;">
-            <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)null)">All Changes</MudSelectItem>
-            <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Add)">Add</MudSelectItem>
-            <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Remove)">Remove</MudSelectItem>
-        </MudSelect>
-    </MudStack>
+    <div style="display: flex; flex-direction: row; gap: 12px; margin-bottom: 16px;">
+        <div style="width: 300px;">
+            <MudTextField @bind-Value="_searchText"
+                          Label="Search attributes"
+                          Variant="Variant.Outlined"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true"
+                          DebounceInterval="300"
+                          FullWidth="true" />
+        </div>
+        <div style="width: 200px;">
+            <MudSelect T="ValueChangeType?"
+                       @bind-Value="_filterChangeType"
+                       Label="Filter by change type"
+                       Variant="Variant.Outlined"
+                       FullWidth="true">
+                <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)null)">All Changes</MudSelectItem>
+                <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Add)">Add</MudSelectItem>
+                <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Remove)">Remove</MudSelectItem>
+            </MudSelect>
+        </div>
+    </div>
 
     <!-- Timeline -->
     <MudTimeline TimelinePosition="TimelinePosition.Start" TimelineOrientation="TimelineOrientation.Vertical">
