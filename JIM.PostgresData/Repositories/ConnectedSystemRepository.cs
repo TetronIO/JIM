@@ -1924,6 +1924,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(c => c.ConnectedSystemObject != null && c.ConnectedSystemObject.Id == connectedSystemObjectId)
             .OrderByDescending(c => c.ChangeTime)
             .Take(limit)
+            .Include(c => c.ActivityRunProfileExecutionItem)
+            .ThenInclude(rpei => rpei!.Activity)
             .Include(c => c.AttributeChanges)
             .ThenInclude(ac => ac.Attribute)
             .Include(c => c.AttributeChanges)

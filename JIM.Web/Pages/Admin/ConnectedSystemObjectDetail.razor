@@ -386,10 +386,11 @@ new(CsoId.ToString(), href: null, disabled: true)
                 ChangeInitiatorType = MapInitiatorType(change.InitiatedByType),
                 ChangeInitiatorName = change.InitiatedByName,
                 ChangeInitiatorId = change.InitiatedById,
-                // Mechanism is Import, with link to connected system
+                // Mechanism is Import, with link to connected system and run profile name
                 ChangeMechanismType = "Import",
                 ConnectedSystemId = ConnectedSystemHeader?.Id,
                 ConnectedSystemName = ConnectedSystemHeader?.Name,
+                RunProfileName = change.ActivityRunProfileExecutionItem?.Activity?.TargetName,
                 SyncRuleId = null,
                 SyncRuleName = null,
                 ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,

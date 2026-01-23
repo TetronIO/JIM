@@ -9,22 +9,23 @@ else
 {
     <!-- Search and Filter Controls -->
     <div style="display: flex; flex-direction: row; gap: 12px; margin-bottom: 16px;">
-        <div style="width: 300px;">
+        <div style="width: 250px;">
             <MudTextField @bind-Value="_searchText"
-                          Label="Search attributes"
+                          Label="Search"
                           Variant="Variant.Outlined"
                           Adornment="Adornment.Start"
                           AdornmentIcon="@Icons.Material.Filled.Search"
                           Immediate="true"
                           DebounceInterval="300"
-                          FullWidth="true" />
+                          Margin="Margin.Dense" />
         </div>
-        <div style="width: 200px;">
+        <div style="width: 150px;">
             <MudSelect T="ValueChangeType?"
                        @bind-Value="_filterChangeType"
-                       Label="Filter by change type"
+                       Label="Change type"
                        Variant="Variant.Outlined"
-                       FullWidth="true">
+                       Dense="true"
+                       Margin="Margin.Dense">
                 <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)null)">All Changes</MudSelectItem>
                 <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Add)">Add</MudSelectItem>
                 <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Remove)">Remove</MudSelectItem>
@@ -470,6 +471,10 @@ else
         /// For CSO import changes: the connected system name.
         /// </summary>
         public string? ConnectedSystemName { get; set; }
+        /// <summary>
+        /// For CSO import changes: the run profile name (e.g., "Full Import", "Delta Import").
+        /// </summary>
+        public string? RunProfileName { get; set; }
         public List<AttributeChange> AttributeChanges { get; set; } = new();
     }
 
@@ -1195,10 +1200,11 @@ else
             }
             else if (isImportChange)
             {
-                // Show "Import" with connected system link if available
+                // Show run profile name (e.g., "Full Import") with connected system link if available
+                var runProfileDisplayName = !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName : "Import";
                 builder.OpenComponent<MudText>(seq++);
                 builder.AddAttribute(seq++, "Style", "display: inline;");
-                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Import")));
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, runProfileDisplayName)));
                 builder.CloseComponent();
 
                 // If we have a connected system, show it as a link

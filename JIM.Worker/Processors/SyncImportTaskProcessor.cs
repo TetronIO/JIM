@@ -453,6 +453,7 @@ public class SyncImportTaskProcessor
         // we need to create a run profile execution item for the object deletion. it will get persisted in the activity tree.
         var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
         _activityRunProfileExecutionItems.Add(activityRunProfileExecutionItem);
+        activityRunProfileExecutionItem.Activity = _activity;  // Set Activity for initiator tracking in CSO change history
         activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Deleted;
         activityRunProfileExecutionItem.ConnectedSystemObject = cso;
         activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
@@ -515,6 +516,7 @@ public class SyncImportTaskProcessor
 
             // this will store the detail for the import object that will persist in the history for the run
             var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
+            activityRunProfileExecutionItem.Activity = _activity;  // Set Activity for initiator tracking in CSO change history
             _activityRunProfileExecutionItems.Add(activityRunProfileExecutionItem);
 
             try
