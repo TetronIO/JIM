@@ -1205,7 +1205,7 @@ else
         return changeGroup.ChangeInitiatorType switch
         {
             "User" => $"/t/users/v/{changeGroup.ChangeInitiatorId}",
-            "ApiKey" => $"/admin/apikeys", // API Keys list page
+            "ApiKey" => $"/admin/apikeys/{changeGroup.ChangeInitiatorId}",
             "SynchronisationRule" => $"/admin/connected-systems/sync-rules/{changeGroup.ChangeInitiatorId}",
             _ => "#"
         };
@@ -1215,9 +1215,16 @@ else
     {
         return changeType switch
         {
+            // CSO Import operations
             ObjectChangeType.Added => Icons.Material.Filled.Add,
             ObjectChangeType.Updated => Icons.Material.Filled.Edit,
             ObjectChangeType.Deleted => Icons.Material.Filled.Delete,
+
+            // MVO Sync operations
+            ObjectChangeType.Projected => Icons.Material.Filled.AddCircle,     // New MVO created
+            ObjectChangeType.Joined => Icons.Material.Filled.Link,              // CSO joined to existing MVO
+            ObjectChangeType.AttributeFlow => Icons.Material.Filled.SyncAlt,    // Attributes flowed to MVO
+
             _ => Icons.Material.Filled.Info
         };
     }
@@ -1226,9 +1233,16 @@ else
     {
         return changeType switch
         {
+            // CSO Import operations
             ObjectChangeType.Added => Color.Success,
             ObjectChangeType.Updated => Color.Info,
             ObjectChangeType.Deleted => Color.Error,
+
+            // MVO Sync operations
+            ObjectChangeType.Projected => Color.Success,      // New MVO = green (creation)
+            ObjectChangeType.Joined => Color.Tertiary,        // Join = purple/tertiary (linking)
+            ObjectChangeType.AttributeFlow => Color.Info,     // Attribute flow = blue (update)
+
             _ => Color.Default
         };
     }
