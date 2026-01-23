@@ -313,7 +313,8 @@ BEGIN
         "InitiatedByType", "InitiatedById", "InitiatedByName",
         "TargetType", "TargetOperationType",
         "TargetName", "TargetContext",
-        "ConnectedSystemRunType"
+        "ConnectedSystemRunType",
+        "ObjectsToProcess", "ObjectsProcessed"
     )
     VALUES (
         activity_id,
@@ -327,23 +328,13 @@ BEGIN
         1,  -- Execute
         'Full Synchronisation',
         'HR System',
-        3   -- FullSync
-    );
-
-    -- Create a single RPEI that will be linked to all MVO changes
-    -- This simulates a sync run that updated multiple MVOs
-    rpei_id := gen_random_uuid();
-    INSERT INTO "ActivityRunProfileExecutionItems" (
-        "Id", "ActivityId", "ObjectChangeType"
-    )
-    VALUES (
-        rpei_id,
-        activity_id,
-        2  -- Updated
+        3,  -- FullSync
+        18, -- ObjectsToProcess (4 Alice + 3 Bob + 11 Group changes)
+        18  -- ObjectsProcessed
     );
 
     RAISE NOTICE 'Created Activity: %', activity_id;
-    RAISE NOTICE 'Created RPEI: %', rpei_id;
+    RAISE NOTICE 'Note: Individual RPEIs will be created for each MVO change';
 
     -- ========================================================================
     -- STEP 5: Create Change History - Alice (4 changes)
@@ -353,6 +344,10 @@ BEGIN
 
     -- Change 1: Promotion to Lead Engineer (25 days ago)
     change_id := gen_random_uuid();
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
+    VALUES (rpei_id, activity_id, 2);
+
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
     VALUES (change_id, alice_id, 2, NOW() - INTERVAL '25 days', 4, rpei_id);  -- Updated, SynchronisationRule, initiated by Alice
 
@@ -368,6 +363,10 @@ BEGIN
 
     -- Change 2: Promotion to Engineering Manager (20 days ago)
     change_id := gen_random_uuid();
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
+    VALUES (rpei_id, activity_id, 2);
+
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
     VALUES (change_id, alice_id, 2, NOW() - INTERVAL '20 days', 4, rpei_id);
 
@@ -383,6 +382,10 @@ BEGIN
 
     -- Change 3: Department change (15 days ago)
     change_id := gen_random_uuid();
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
+    VALUES (rpei_id, activity_id, 2);
+
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
     VALUES (change_id, alice_id, 2, NOW() - INTERVAL '15 days', 4, rpei_id);
 
@@ -398,6 +401,10 @@ BEGIN
 
     -- Change 4: Email update (10 days ago)
     change_id := gen_random_uuid();
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
+    VALUES (rpei_id, activity_id, 2);
+
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
     VALUES (change_id, alice_id, 2, NOW() - INTERVAL '10 days', 4, rpei_id);
 
@@ -419,6 +426,10 @@ BEGIN
 
     -- Change 1: Manager assignment (24 days ago)
     change_id := gen_random_uuid();
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
+    VALUES (rpei_id, activity_id, 2);
+
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
     VALUES (change_id, bob_id, 2, NOW() - INTERVAL '24 days', 4, rpei_id);
     -- NOTE: Add rpei_id after the 4
@@ -432,6 +443,10 @@ BEGIN
 
     -- Change 2: Promotion (18 days ago)
     change_id := gen_random_uuid();
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
+    VALUES (rpei_id, activity_id, 2);
+
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
     VALUES (change_id, bob_id, 2, NOW() - INTERVAL '18 days', 4, rpei_id);
     -- NOTE: Add rpei_id after the 4
@@ -448,6 +463,10 @@ BEGIN
 
     -- Change 3: Manager change (12 days ago - temporarily removed then re-added)
     change_id := gen_random_uuid();
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
+    VALUES (rpei_id, activity_id, 2);
+
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
     VALUES (change_id, bob_id, 2, NOW() - INTERVAL '12 days', 4, rpei_id);
     -- NOTE: Add rpei_id after the 4
@@ -470,6 +489,10 @@ BEGIN
 
     -- Change 1: Initial group name (19 days ago)
     change_id := gen_random_uuid();
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
+    VALUES (rpei_id, activity_id, 2);
+
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '19 days', 4, rpei_id);
 
@@ -485,6 +508,10 @@ BEGIN
 
     -- Change 2: Bulk initial members added - Alice, Bob, Charlie (18 days ago)
     change_id := gen_random_uuid();
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
+    VALUES (rpei_id, activity_id, 2);
+
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '18 days', 4, rpei_id);
 
@@ -505,6 +532,10 @@ BEGIN
 
     -- Change 4: Description update (16 days ago)
     change_id := gen_random_uuid();
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
+    VALUES (rpei_id, activity_id, 2);
+
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '16 days', 4, rpei_id);
 
@@ -520,6 +551,10 @@ BEGIN
 
     -- Change 5: Bulk add Diana, Eve, Frank (15 days ago)
     change_id := gen_random_uuid();
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
+    VALUES (rpei_id, activity_id, 2);
+
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '15 days', 4, rpei_id);
 
@@ -538,6 +573,10 @@ BEGIN
 
     -- Change 6: Group name refinement (14 days ago)
     change_id := gen_random_uuid();
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
+    VALUES (rpei_id, activity_id, 2);
+
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '14 days', 4, rpei_id);
 
@@ -555,6 +594,10 @@ BEGIN
 
     -- Change 8: Remove Charlie (temporarily) (12 days ago)
     change_id := gen_random_uuid();
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
+    VALUES (rpei_id, activity_id, 2);
+
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '12 days', 4, rpei_id);
 
@@ -567,6 +610,10 @@ BEGIN
 
     -- Change 9: Description update (11 days ago)
     change_id := gen_random_uuid();
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
+    VALUES (rpei_id, activity_id, 2);
+
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '11 days', 4, rpei_id);
 
@@ -582,6 +629,10 @@ BEGIN
 
     -- Change 10: Bulk add Grace, Henry, and re-add Charlie (10 days ago)
     change_id := gen_random_uuid();
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
+    VALUES (rpei_id, activity_id, 2);
+
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '10 days', 4, rpei_id);
 
@@ -602,6 +653,10 @@ BEGIN
 
     -- Change 12: Bulk member removal - remove Diana, Eve, Frank (8 days ago)
     change_id := gen_random_uuid();
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
+    VALUES (rpei_id, activity_id, 2);
+
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '8 days', 4, rpei_id);
 
@@ -620,6 +675,10 @@ BEGIN
 
     -- Change 13: Group name final update (7 days ago)
     change_id := gen_random_uuid();
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
+    VALUES (rpei_id, activity_id, 2);
+
     INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '7 days', 4, rpei_id);
 
