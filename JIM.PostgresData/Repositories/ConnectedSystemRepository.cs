@@ -1916,6 +1916,28 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }).ToListAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<List<ConnectedSystemObjectChange>> GetConnectedSystemObjectChangesAsync(Guid connectedSystemObjectId, int limit = 100)
+    {
+        return await Repository.Database.ConnectedSystemObjectChanges
+            .AsSplitQuery()
+            .Where(c => c.ConnectedSystemObject != null && c.ConnectedSystemObject.Id == connectedSystemObjectId)
+            .OrderByDescending(c => c.ChangeTime)
+            .Take(limit)
+            .Include(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.Attribute)
+            .Include(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.ValueChanges)
+            .ThenInclude(vc => vc.ReferenceValue)
+            .ThenInclude(rv => rv!.Type)
+            .Include(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.ValueChanges)
+            .ThenInclude(vc => vc.ReferenceValue)
+            .ThenInclude(rv => rv!.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .ToListAsync();
+    }
+
     public async Task<SyncRule?> GetSyncRuleAsync(int id)
     {
         return await Repository.Database.SyncRules

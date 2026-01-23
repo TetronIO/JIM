@@ -237,6 +237,15 @@ public interface IConnectedSystemRepository
 
     public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();
 
+    /// <summary>
+    /// Gets the change history for a Connected System Object.
+    /// Includes all attribute changes and value changes for displaying in the UI.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The unique identifier of the CSO.</param>
+    /// <param name="limit">Maximum number of changes to return. Defaults to 100.</param>
+    /// <returns>List of changes ordered by ChangeTime descending (most recent first).</returns>
+    Task<List<ConnectedSystemObjectChange>> GetConnectedSystemObjectChangesAsync(Guid connectedSystemObjectId, int limit = 100);
+
     #region Sync Rule Mappings
     /// <summary>
     /// Gets all mappings for a sync rule.

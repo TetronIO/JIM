@@ -3189,6 +3189,17 @@ public class ConnectedSystemServer
     {
         return await Application.Repository.ConnectedSystems.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
     }
+
+    /// <summary>
+    /// Retrieves the change history for a Connected System Object.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The unique identifier of the Connected System Object.</param>
+    /// <param name="limit">Maximum number of changes to return. Defaults to 100.</param>
+    /// <returns>List of changes ordered by ChangeTime descending (most recent first).</returns>
+    public async Task<List<ConnectedSystemObjectChange>> GetConnectedSystemObjectChangesAsync(Guid connectedSystemObjectId, int limit = 100)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectChangesAsync(connectedSystemObjectId, limit);
+    }
     #endregion
 
     #region Sync Rules
