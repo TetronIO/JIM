@@ -922,22 +922,51 @@ public abstract class SyncTaskProcessorBase
                     .FirstOrDefault(r => r.ConnectedSystemObjectId == cso.Id ||
                                         (r.ConnectedSystemObject != null && r.ConnectedSystemObject.Id == cso.Id));
 
-                if (existingRpei == null)
+                // Capture additions and removals BEFORE applying changes (they get cleared by ApplyPendingMetaverseObjectAttributeChanges)
+                // This is needed for both export (Remove changes for MVAs) and MVO change tracking
+                var refAddedAttributes = mvo.PendingAttributeValueAdditions
+                    .Where(av => av.ReferenceValue != null)
+                    .ToList();
+                var refRemovedAttributesList = mvo.PendingAttributeValueRemovals
+                    .Where(av => av.ReferenceValue != null)
+                    .ToList();
+                // Also keep as HashSet for export evaluation (existing code expects HashSet)
+                var refRemovedAttributes = refRemovedAttributesList.Count > 0
+                    ? refRemovedAttributesList.ToHashSet()
+                    : null;
+
+                // Ensure we have an RPEI for this CSO (needed for MVO change tracking and activity visibility)
+                var rpei = existingRpei;
+                if (rpei == null)
                 {
                     // No RPEI exists for this CSO - create one for the reference attribute flow
-                    var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
-                    runProfileExecutionItem.ConnectedSystemObject = cso;
-                    runProfileExecutionItem.ObjectChangeType = ObjectChangeType.AttributeFlow;
-                    _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+                    rpei = _activity.PrepareRunProfileExecutionItem();
+                    rpei.ConnectedSystemObject = cso;
+                    rpei.ObjectChangeType = ObjectChangeType.AttributeFlow;
+                    _activity.RunProfileExecutionItems.Add(rpei);
                     Log.Debug("ProcessDeferredReferenceAttributes: Created RPEI for CSO {CsoId} with reference-only changes",
                         cso.Id);
                 }
 
-                // Capture removals BEFORE applying changes (they get cleared by ApplyPendingMetaverseObjectAttributeChanges)
-                // This is needed so export can create Remove changes for multi-valued reference attributes
-                var refRemovedAttributes = mvo.PendingAttributeValueRemovals.Count > 0
-                    ? mvo.PendingAttributeValueRemovals.ToHashSet()
-                    : null;
+                // Capture MVO changes for change tracking (reference attributes processed separately from scalar attributes)
+                // Try to find an existing pending change entry for this MVO (from scalar attribute processing)
+                // and merge reference changes into it, rather than creating duplicate entries
+                if (refAddedAttributes.Count > 0 || refRemovedAttributesList.Count > 0)
+                {
+                    var existingChangeEntry = _pendingMvoChanges.FirstOrDefault(p => p.Mvo == mvo);
+                    if (existingChangeEntry.Mvo != null)
+                    {
+                        // Merge reference changes into existing entry
+                        existingChangeEntry.Additions.AddRange(refAddedAttributes);
+                        existingChangeEntry.Removals.AddRange(refRemovedAttributesList);
+                    }
+                    else
+                    {
+                        // No existing entry - create new one (reference-only change scenario)
+                        var isNewMvo = mvo.Id == Guid.Empty;
+                        _pendingMvoChanges.Add((mvo, refAddedAttributes, refRemovedAttributesList, isNewMvo, rpei));
+                    }
+                }
 
                 // Apply the reference attribute changes to the MVO
                 ApplyPendingMetaverseObjectAttributeChanges(mvo);
