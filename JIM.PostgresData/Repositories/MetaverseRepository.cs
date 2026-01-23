@@ -765,12 +765,20 @@ public class MetaverseRepository : IMetaverseRepository
     /// <param name="metaverseObject">The Metaverse Object to delete.</param>
     public async Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
-        // Null out the FK reference in Activities to preserve audit history
+        // Null out the FK references in related tables to preserve audit history before deletion.
         // Only execute raw SQL if we have a real database connection (not mocked)
         try
         {
+            // Null out FK reference in Activities to preserve audit history
             await Repository.Database.Database.ExecuteSqlRawAsync(
                 @"UPDATE ""Activities"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
+                metaverseObject.Id);
+
+            // Null out FK reference in MetaverseObjectChanges to preserve change history audit trail
+            // The MetaverseObjectId column is nullable specifically to support this - DELETE change records
+            // intentionally have null MetaverseObjectId since the MVO no longer exists
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""MetaverseObjectChanges"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
                 metaverseObject.Id);
         }
         catch (Exception)
