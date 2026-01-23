@@ -1,4 +1,5 @@
 ﻿using JIM.Models.Enums;
+using JIM.Models.Logic;
 namespace JIM.Models.Core;
 
 /// <summary>
@@ -41,7 +42,18 @@ public class MetaverseObjectChange
     /// </summary>
     public ObjectChangeType ChangeType { get; set; }
 
-    // todo: add in links to workflow instance, group and sync rules for the initiators...
+    /// <summary>
+    /// The sync rule that caused this change (for sync-initiated changes).
+    /// Nullable FK - if sync rule is deleted, this becomes null.
+    /// </summary>
+    public SyncRule? SyncRule { get; set; }
+    public int? SyncRuleId { get; set; }
+
+    /// <summary>
+    /// Snapshot of sync rule name at time of change.
+    /// Preserved even if sync rule is deleted for audit trail.
+    /// </summary>
+    public string? SyncRuleName { get; set; }
 
     /// <summary>
     /// Enables access to per-attribute value changes for the metaverse object in question.

@@ -42,6 +42,12 @@ DECLARE
     activity_id UUID;
     rpei_id UUID;
 
+    -- Connected System and Sync Rule IDs
+    hr_system_id INT;
+    hr_user_type_id INT;
+    hr_sync_rule_id INT;
+    connector_def_id INT;
+
     -- Change IDs
     change_id UUID;
     attr_change_id UUID;
@@ -301,7 +307,56 @@ BEGIN
     RAISE NOTICE 'Created Engineers Group: %', engineers_group_id;
 
     -- ========================================================================
-    -- STEP 4: Create Activity and RPEI for Change Attribution
+    -- STEP 4: Create Connected System and Sync Rule for Attribution
+    -- ========================================================================
+
+    RAISE NOTICE 'Creating HR Connected System and Sync Rule...';
+
+    -- Get or create a connector definition (CSV connector)
+    SELECT "Id" INTO connector_def_id FROM "ConnectorDefinitions" WHERE "Name" LIKE '%CSV%' LIMIT 1;
+    IF connector_def_id IS NULL THEN
+        -- Use any existing connector definition
+        SELECT "Id" INTO connector_def_id FROM "ConnectorDefinitions" LIMIT 1;
+    END IF;
+    IF connector_def_id IS NULL THEN
+        RAISE EXCEPTION 'No connector definitions found. JIM must be initialised first.';
+    END IF;
+
+    -- Create HR Connected System (or find existing)
+    SELECT "Id" INTO hr_system_id FROM "ConnectedSystems" WHERE "Name" = 'HR System (Test)' LIMIT 1;
+    IF hr_system_id IS NULL THEN
+        INSERT INTO "ConnectedSystems" ("Name", "Description", "Created", "LastUpdated", "Status", "ConnectorDefinitionId", "SettingValuesValid", "ObjectMatchingRuleMode")
+        VALUES ('HR System (Test)', 'Test HR system for change history seed data', NOW() - INTERVAL '60 days', NOW() - INTERVAL '60 days', 1, connector_def_id, true, 0)
+        RETURNING "Id" INTO hr_system_id;
+        RAISE NOTICE 'Created HR Connected System: %', hr_system_id;
+    ELSE
+        RAISE NOTICE 'Found existing HR Connected System: %', hr_system_id;
+    END IF;
+
+    -- Create User object type for HR system (or find existing)
+    SELECT "Id" INTO hr_user_type_id FROM "ConnectedSystemObjectTypes" WHERE "ConnectedSystemId" = hr_system_id AND "Name" = 'User' LIMIT 1;
+    IF hr_user_type_id IS NULL THEN
+        INSERT INTO "ConnectedSystemObjectTypes" ("Name", "ConnectedSystemId", "Created", "Selected", "RemoveContributedAttributesOnObsoletion")
+        VALUES ('User', hr_system_id, NOW() - INTERVAL '60 days', true, true)
+        RETURNING "Id" INTO hr_user_type_id;
+        RAISE NOTICE 'Created HR User Object Type: %', hr_user_type_id;
+    ELSE
+        RAISE NOTICE 'Found existing HR User Object Type: %', hr_user_type_id;
+    END IF;
+
+    -- Create HR Import Sync Rule (or find existing)
+    SELECT "Id" INTO hr_sync_rule_id FROM "SyncRules" WHERE "Name" = 'HR User Import' AND "ConnectedSystemId" = hr_system_id LIMIT 1;
+    IF hr_sync_rule_id IS NULL THEN
+        INSERT INTO "SyncRules" ("Name", "Created", "ConnectedSystemId", "ConnectedSystemObjectTypeId", "MetaverseObjectTypeId", "Direction", "ProvisionToConnectedSystem", "ProjectToMetaverse", "Enabled", "OutboundDeprovisionAction", "InboundOutOfScopeAction", "EnforceState")
+        VALUES ('HR User Import', NOW() - INTERVAL '60 days', hr_system_id, hr_user_type_id, user_type_id, 1, false, true, true, 0, 0, true)
+        RETURNING "Id" INTO hr_sync_rule_id;
+        RAISE NOTICE 'Created HR User Import Sync Rule: %', hr_sync_rule_id;
+    ELSE
+        RAISE NOTICE 'Found existing HR User Import Sync Rule: %', hr_sync_rule_id;
+    END IF;
+
+    -- ========================================================================
+    -- STEP 5: Create Activity and RPEI for Change Attribution
     -- ========================================================================
 
     RAISE NOTICE 'Creating Activity initiated by Alice...';
@@ -337,7 +392,7 @@ BEGIN
     RAISE NOTICE 'Note: Individual RPEIs will be created for each MVO change';
 
     -- ========================================================================
-    -- STEP 5: Create Change History - Alice (4 changes)
+    -- STEP 6: Create Change History - Alice (4 changes)
     -- ========================================================================
 
     RAISE NOTICE 'Creating Alice change history...';
@@ -348,8 +403,8 @@ BEGIN
     INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
     VALUES (rpei_id, activity_id, 2);
 
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
-    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '25 days', 4, rpei_id);  -- Updated, SynchronisationRule, initiated by Alice
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId", "SyncRuleId", "SyncRuleName")
+    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '25 days', 4, rpei_id, hr_sync_rule_id, 'HR User Import');  -- Updated, SynchronisationRule
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -367,8 +422,8 @@ BEGIN
     INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
     VALUES (rpei_id, activity_id, 2);
 
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
-    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '20 days', 4, rpei_id);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId", "SyncRuleId", "SyncRuleName")
+    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '20 days', 4, rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -386,8 +441,8 @@ BEGIN
     INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
     VALUES (rpei_id, activity_id, 2);
 
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
-    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '15 days', 4, rpei_id);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId", "SyncRuleId", "SyncRuleName")
+    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '15 days', 4, rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -405,8 +460,8 @@ BEGIN
     INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
     VALUES (rpei_id, activity_id, 2);
 
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
-    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '10 days', 4, rpei_id);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId", "SyncRuleId", "SyncRuleName")
+    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '10 days', 4, rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -419,7 +474,7 @@ BEGIN
     VALUES (gen_random_uuid(), attr_change_id, 1, 'alice.anderson@contoso.enterprise.com');  -- Add
 
     -- ========================================================================
-    -- STEP 6: Create Change History - Bob (3 changes)
+    -- STEP 7: Create Change History - Bob (3 changes)
     -- ========================================================================
 
     RAISE NOTICE 'Creating Bob change history...';
@@ -430,9 +485,8 @@ BEGIN
     INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
     VALUES (rpei_id, activity_id, 2);
 
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
-    VALUES (change_id, bob_id, 2, NOW() - INTERVAL '24 days', 4, rpei_id);
-    -- NOTE: Add rpei_id after the 4
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId", "SyncRuleId", "SyncRuleName")
+    VALUES (change_id, bob_id, 2, NOW() - INTERVAL '24 days', 4, rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -447,9 +501,8 @@ BEGIN
     INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
     VALUES (rpei_id, activity_id, 2);
 
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
-    VALUES (change_id, bob_id, 2, NOW() - INTERVAL '18 days', 4, rpei_id);
-    -- NOTE: Add rpei_id after the 4
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId", "SyncRuleId", "SyncRuleName")
+    VALUES (change_id, bob_id, 2, NOW() - INTERVAL '18 days', 4, rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -467,9 +520,8 @@ BEGIN
     INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
     VALUES (rpei_id, activity_id, 2);
 
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
-    VALUES (change_id, bob_id, 2, NOW() - INTERVAL '12 days', 4, rpei_id);
-    -- NOTE: Add rpei_id after the 4
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId", "SyncRuleId", "SyncRuleName")
+    VALUES (change_id, bob_id, 2, NOW() - INTERVAL '12 days', 4, rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -482,7 +534,7 @@ BEGIN
     VALUES (gen_random_uuid(), attr_change_id, 1, alice_id);  -- Re-add (simulating update)
 
     -- ========================================================================
-    -- STEP 7: Create Change History - Engineers Group (11 changes with bulk operations)
+    -- STEP 8: Create Change History - Engineers Group (11 changes with bulk operations)
     -- ========================================================================
 
     RAISE NOTICE 'Creating Engineers Group change history...';
@@ -493,8 +545,8 @@ BEGIN
     INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
     VALUES (rpei_id, activity_id, 2);
 
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '19 days', 4, rpei_id);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId", "SyncRuleId", "SyncRuleName")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '19 days', 4, rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -512,8 +564,8 @@ BEGIN
     INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
     VALUES (rpei_id, activity_id, 2);
 
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '18 days', 4, rpei_id);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId", "SyncRuleId", "SyncRuleName")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '18 days', 4, rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -536,8 +588,8 @@ BEGIN
     INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
     VALUES (rpei_id, activity_id, 2);
 
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '16 days', 4, rpei_id);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId", "SyncRuleId", "SyncRuleName")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '16 days', 4, rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -555,8 +607,8 @@ BEGIN
     INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
     VALUES (rpei_id, activity_id, 2);
 
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '15 days', 4, rpei_id);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId", "SyncRuleId", "SyncRuleName")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '15 days', 4, rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -577,8 +629,8 @@ BEGIN
     INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
     VALUES (rpei_id, activity_id, 2);
 
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '14 days', 4, rpei_id);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId", "SyncRuleId", "SyncRuleName")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '14 days', 4, rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -598,8 +650,8 @@ BEGIN
     INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
     VALUES (rpei_id, activity_id, 2);
 
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '12 days', 4, rpei_id);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId", "SyncRuleId", "SyncRuleName")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '12 days', 4, rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -614,8 +666,8 @@ BEGIN
     INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
     VALUES (rpei_id, activity_id, 2);
 
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '11 days', 4, rpei_id);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId", "SyncRuleId", "SyncRuleName")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '11 days', 4, rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -633,8 +685,8 @@ BEGIN
     INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
     VALUES (rpei_id, activity_id, 2);
 
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '10 days', 4, rpei_id);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId", "SyncRuleId", "SyncRuleName")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '10 days', 4, rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -657,8 +709,8 @@ BEGIN
     INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
     VALUES (rpei_id, activity_id, 2);
 
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '8 days', 4, rpei_id);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId", "SyncRuleId", "SyncRuleName")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '8 days', 4, rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -679,8 +731,8 @@ BEGIN
     INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
     VALUES (rpei_id, activity_id, 2);
 
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '7 days', 4, rpei_id);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId", "SyncRuleId", "SyncRuleName")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '7 days', 4, rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")

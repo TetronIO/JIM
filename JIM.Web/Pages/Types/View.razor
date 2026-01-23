@@ -138,6 +138,11 @@
                     ?? change.ChangeInitiator?.DisplayName,
                 ChangeInitiatorId = change.ActivityRunProfileExecutionItem?.Activity?.InitiatedById
                     ?? change.ChangeInitiator?.Id,
+                // Sync rule context
+                SyncRuleId = change.SyncRuleId,
+                SyncRuleName = change.SyncRuleName,
+                // Activity link for drill-down
+                ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
                 AttributeChanges = change.AttributeChanges
                     .OrderBy(ac => ac.Attribute.Name)
                     .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange

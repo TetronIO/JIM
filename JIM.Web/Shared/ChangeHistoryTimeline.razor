@@ -55,8 +55,7 @@ else
                                             <strong>@changeGroup.ChangeType</strong>
                                         </MudText>
                                         <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                            @GetChangeInitiatorIcon(changeGroup)
-                                            @GetChangeInitiatorDescription(changeGroup)
+                                            @GetTimelineInitiatorDisplay(changeGroup)
                                         </MudText>
                                     </div>
                                 </MudStack>
@@ -125,25 +124,68 @@ else
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
                     @_selectedChange?.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")
                 </MudText>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                    @GetChangeInitiatorIcon(_selectedChange!)
-                    @if (_selectedChange?.ChangeInitiatorType is "User" or "ApiKey" or "SynchronisationRule" && !string.IsNullOrEmpty(_selectedChange.ChangeInitiatorName))
-                    {
-                        <MudLink Href="@GetInitiatorHref(_selectedChange)">@_selectedChange.ChangeInitiatorName</MudLink>
-                    }
-                    else if (_selectedChange?.ChangeInitiatorType == "SynchronisationRule")
-                    {
-                        <MudLink Href="/admin/syncrules">Synchronisation Rule</MudLink>
-                    }
-                    else
-                    {
-                        @GetChangeInitiatorDescription(_selectedChange)
-                    }
-                </MudText>
             </div>
         </MudStack>
     </TitleContent>
     <DialogContent>
+        @if (_selectedChange != null)
+        {
+            <!-- Initiator Context Section -->
+            <MudPaper Class="pa-3 mb-4" Outlined="true">
+                <MudGrid Spacing="2">
+                    <!-- Initiated By -->
+                    <MudItem xs="12" sm="4">
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Initiated By</MudText>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            @GetModalInitiatorIcon(_selectedChange)
+                            @if (_selectedChange.ChangeInitiatorId != null && !string.IsNullOrEmpty(_selectedChange.ChangeInitiatorName))
+                            {
+                                <MudLink Href="@GetInitiatorHref(_selectedChange)">@_selectedChange.ChangeInitiatorName</MudLink>
+                            }
+                            else if (!string.IsNullOrEmpty(_selectedChange.ChangeInitiatorName))
+                            {
+                                <MudText>@_selectedChange.ChangeInitiatorName</MudText>
+                            }
+                            else
+                            {
+                                <MudText Class="mud-text-secondary">Unknown</MudText>
+                            }
+                        </MudStack>
+                    </MudItem>
+
+                    <!-- Sync Rule -->
+                    @if (_selectedChange.SyncRuleId != null || !string.IsNullOrEmpty(_selectedChange.SyncRuleName))
+                    {
+                        <MudItem xs="12" sm="4">
+                            <MudText Typo="Typo.overline" Class="mud-text-secondary">Sync Rule</MudText>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.Rule" Size="Size.Small" Class="mud-text-secondary" />
+                                @if (_selectedChange.SyncRuleId != null)
+                                {
+                                    <MudLink Href="@($"/admin/connected-systems/sync-rules/{_selectedChange.SyncRuleId}")">@(_selectedChange.SyncRuleName ?? "Sync Rule")</MudLink>
+                                }
+                                else
+                                {
+                                    <MudText>@_selectedChange.SyncRuleName <span class="mud-text-secondary">(deleted)</span></MudText>
+                                }
+                            </MudStack>
+                        </MudItem>
+                    }
+
+                    <!-- Activity Link -->
+                    @if (_selectedChange.ActivityRunProfileExecutionItemId != null)
+                    {
+                        <MudItem xs="12" sm="4">
+                            <MudText Typo="Typo.overline" Class="mud-text-secondary">Activity</MudText>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Small" Class="mud-text-secondary" />
+                                <MudLink Href="@($"/activity/item/{_selectedChange.ActivityRunProfileExecutionItemId}")">View Activity</MudLink>
+                            </MudStack>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudPaper>
+        }
         @if (_selectedChange?.AttributeChanges.Any() == true)
         {
             <MudTable Items="@_selectedChange.AttributeChanges"
@@ -258,6 +300,15 @@ else
         public string ChangeInitiatorType { get; set; } = string.Empty;
         public string? ChangeInitiatorName { get; set; }
         public Guid? ChangeInitiatorId { get; set; }
+        /// <summary>
+        /// The sync rule that caused this change (if applicable).
+        /// </summary>
+        public int? SyncRuleId { get; set; }
+        public string? SyncRuleName { get; set; }
+        /// <summary>
+        /// Link to the RPEI for viewing the full activity context.
+        /// </summary>
+        public Guid? ActivityRunProfileExecutionItemId { get; set; }
         public List<AttributeChange> AttributeChanges { get; set; } = new();
     }
 
@@ -304,6 +355,10 @@ else
                 ChangeTime = cg.ChangeTime,
                 ChangeInitiatorType = cg.ChangeInitiatorType,
                 ChangeInitiatorName = cg.ChangeInitiatorName,
+                ChangeInitiatorId = cg.ChangeInitiatorId,
+                SyncRuleId = cg.SyncRuleId,
+                SyncRuleName = cg.SyncRuleName,
+                ActivityRunProfileExecutionItemId = cg.ActivityRunProfileExecutionItemId,
                 AttributeChanges = cg.AttributeChanges
                     .Where(ac => ac.AttributeName.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
                     .ToList()
@@ -319,6 +374,10 @@ else
                 ChangeTime = cg.ChangeTime,
                 ChangeInitiatorType = cg.ChangeInitiatorType,
                 ChangeInitiatorName = cg.ChangeInitiatorName,
+                ChangeInitiatorId = cg.ChangeInitiatorId,
+                SyncRuleId = cg.SyncRuleId,
+                SyncRuleName = cg.SyncRuleName,
+                ActivityRunProfileExecutionItemId = cg.ActivityRunProfileExecutionItemId,
                 AttributeChanges = cg.AttributeChanges
                     .Where(ac => ac.ChangeType == _filterChangeType.Value)
                     .ToList()
@@ -403,7 +462,65 @@ else
         return $"{(int)(diff.TotalDays / 365)}y ago";
     }
 
-    private RenderFragment GetChangeInitiatorIcon(ChangeGroup changeGroup)
+    /// <summary>
+    /// Generates the timeline card initiator display.
+    /// Format: "🔄 Synchronisation by Alice Anderson" for sync changes
+    /// Format: "👤 Alice Anderson" for direct user changes
+    /// </summary>
+    private RenderFragment GetTimelineInitiatorDisplay(ChangeGroup changeGroup)
+    {
+        return builder =>
+        {
+            // Determine if this is a sync-initiated change
+            bool isSyncChange = changeGroup.ChangeInitiatorType == "SynchronisationRule" ||
+                                changeGroup.SyncRuleId != null ||
+                                !string.IsNullOrEmpty(changeGroup.SyncRuleName);
+
+            if (isSyncChange)
+            {
+                // Sync icon
+                builder.OpenComponent<MudIcon>(0);
+                builder.AddAttribute(1, "Icon", Icons.Material.Filled.Sync);
+                builder.AddAttribute(2, "Size", Size.Small);
+                builder.AddAttribute(3, "Style", "margin-right: 4px; vertical-align: text-bottom;");
+                builder.CloseComponent();
+
+                // "Synchronisation by {Name}"
+                if (!string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
+                {
+                    builder.AddContent(4, $"Synchronisation by {changeGroup.ChangeInitiatorName}");
+                }
+                else
+                {
+                    builder.AddContent(4, "Synchronisation");
+                }
+            }
+            else
+            {
+                // Direct change by user/system - use appropriate icon
+                string icon = changeGroup.ChangeInitiatorType switch
+                {
+                    "User" => Icons.Material.Filled.Person,
+                    "ApiKey" => Icons.Material.Filled.Key,
+                    "System" => Icons.Material.Filled.Settings,
+                    _ => Icons.Material.Filled.HelpOutline
+                };
+
+                builder.OpenComponent<MudIcon>(0);
+                builder.AddAttribute(1, "Icon", icon);
+                builder.AddAttribute(2, "Size", Size.Small);
+                builder.AddAttribute(3, "Style", "margin-right: 4px; vertical-align: text-bottom;");
+                builder.CloseComponent();
+
+                builder.AddContent(4, changeGroup.ChangeInitiatorName ?? changeGroup.ChangeInitiatorType);
+            }
+        };
+    }
+
+    /// <summary>
+    /// Generates the icon for the modal initiator display.
+    /// </summary>
+    private RenderFragment GetModalInitiatorIcon(ChangeGroup changeGroup)
     {
         return builder =>
         {
@@ -412,27 +529,15 @@ else
                 "User" => Icons.Material.Filled.Person,
                 "ApiKey" => Icons.Material.Filled.Key,
                 "System" => Icons.Material.Filled.Settings,
-                _ => Icons.Material.Filled.Rule // SynchronisationRule or other
+                _ => Icons.Material.Filled.HelpOutline
             };
 
             builder.OpenComponent<MudIcon>(0);
             builder.AddAttribute(1, "Icon", icon);
             builder.AddAttribute(2, "Size", Size.Small);
-            builder.AddAttribute(3, "Style", "margin-right: 4px; vertical-align: text-bottom;");
+            builder.AddAttribute(3, "Class", "mud-text-secondary");
             builder.CloseComponent();
         };
-    }
-
-    private string GetChangeInitiatorDescription(ChangeGroup? changeGroup)
-    {
-        if (changeGroup == null)
-            return string.Empty;
-
-        if (!string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
-        {
-            return changeGroup.ChangeInitiatorName;
-        }
-        return changeGroup.ChangeInitiatorType;
     }
 
     private string GetInitiatorHref(ChangeGroup changeGroup)
@@ -444,7 +549,7 @@ else
         {
             "User" => $"/t/users/v/{changeGroup.ChangeInitiatorId}",
             "ApiKey" => $"/admin/apikeys", // API Keys list page
-            "SynchronisationRule" => $"/admin/syncrules/{changeGroup.ChangeInitiatorId}",
+            "SynchronisationRule" => $"/admin/connected-systems/sync-rules/{changeGroup.ChangeInitiatorId}",
             _ => "#"
         };
     }
