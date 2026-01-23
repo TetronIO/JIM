@@ -20,7 +20,16 @@ public class MetaverseObjectChange
     public DateTime ChangeTime { get; set; }
 
     /// <summary>
+    /// The run profile execution item that caused this change (for sync-initiated changes).
+    /// Links to Activity for initiator context (User, ApiKey, System).
+    /// May be null if run history has been cleared or for non-sync changes.
+    /// </summary>
+    public Activities.ActivityRunProfileExecutionItem? ActivityRunProfileExecutionItem { get; set; }
+    public Guid? ActivityRunProfileExecutionItemId { get; set; }
+
+    /// <summary>
     /// Which user initiated this change, if any?
+    /// Deprecated: Use ActivityRunProfileExecutionItem.Activity.InitiatedBy* fields instead.
     /// </summary>
     public MetaverseObject? ChangeInitiator { get; set; }
 

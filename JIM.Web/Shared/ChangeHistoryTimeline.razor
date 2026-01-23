@@ -8,7 +8,7 @@
 else
 {
     <!-- Search and Filter Controls -->
-    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-4" Style="flex-wrap: nowrap;">
         <MudTextField @bind-Value="_searchText"
                       Label="Search attributes"
                       Variant="Variant.Outlined"
@@ -16,13 +16,13 @@ else
                       AdornmentIcon="@Icons.Material.Filled.Search"
                       Immediate="true"
                       DebounceInterval="300"
-                      Style="max-width: 300px;" />
+                      Style="max-width: 300px; flex: 0 0 auto;" />
 
         <MudSelect T="ValueChangeType?"
                    @bind-Value="_filterChangeType"
                    Label="Filter by change type"
                    Variant="Variant.Outlined"
-                   Style="max-width: 250px;">
+                   Style="max-width: 250px; flex: 0 0 auto;">
             <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)null)">All Changes</MudSelectItem>
             <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Add)">Add</MudSelectItem>
             <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Remove)">Remove</MudSelectItem>
