@@ -70,9 +70,36 @@ else
                                                          Color="@GetDisplayChangeTypeColor(change)">
                                                     @change.DisplayChangeType
                                                 </MudChip>
-                                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                                    @GetDisplayValue(change)
-                                                </MudText>
+                                                @* Value display with old value de-emphasised for updates *@
+                                                <div style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                    @if (change.IsUpdate)
+                                                    {
+                                                        @if (change.OldReferenceValue != null || change.NewReferenceValue != null)
+                                                        {
+                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;">@(change.OldReferenceValue?.DisplayName ?? "(none)")</MudText>
+                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;"> → </MudText>
+                                                            <MudText Typo="Typo.body2" Style="display: inline;">@(change.NewReferenceValue?.DisplayName ?? "(none)")</MudText>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;">@change.OldValue</MudText>
+                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;"> → </MudText>
+                                                            <MudText Typo="Typo.body2" Style="display: inline;">@change.NewValue</MudText>
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        @* Set/Add values get normal emphasis, Removed values get de-emphasised *@
+                                                        @if (change.DisplayChangeType == "Removed" || change.DisplayChangeType == "Remove")
+                                                        {
+                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@GetDisplayValue(change)</MudText>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText Typo="Typo.body2">@GetDisplayValue(change)</MudText>
+                                                        }
+                                                    }
+                                                </div>
                                             </MudStack>
                                         }
                                         @if (ShouldShowMoreIndicatorForDisplay(changeGroup))
@@ -298,19 +325,19 @@ else
                     <MudTd DataLabel="Value">
                         @if (context.IsUpdate)
                         {
-                            @* SVA Update - show old → new *@
+                            @* SVA Update - show old → new with old value de-emphasised *@
                             @if (context.OldReferenceValue != null || context.NewReferenceValue != null)
                             {
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                     @if (context.OldReferenceValue != null)
                                     {
-                                        <MudLink Href="@context.OldReferenceValue.Href">@context.OldReferenceValue.DisplayName</MudLink>
+                                        <MudLink Href="@context.OldReferenceValue.Href" Class="mud-text-secondary">@context.OldReferenceValue.DisplayName</MudLink>
                                     }
                                     else
                                     {
                                         <MudText Class="mud-text-secondary">(none)</MudText>
                                     }
-                                    <MudText>→</MudText>
+                                    <MudText Class="mud-text-secondary">→</MudText>
                                     @if (context.NewReferenceValue != null)
                                     {
                                         <MudLink Href="@context.NewReferenceValue.Href">@context.NewReferenceValue.DisplayName</MudLink>
@@ -323,7 +350,12 @@ else
                             }
                             else
                             {
-                                <MudText>@context.DisplayValue</MudText>
+                                @* Scalar update - render old value de-emphasised *@
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudText Class="mud-text-secondary">@context.OldValue</MudText>
+                                    <MudText Class="mud-text-secondary">→</MudText>
+                                    <MudText>@context.NewValue</MudText>
+                                </MudStack>
                             }
                         }
                         else if (context.ReferenceValue != null)
@@ -488,6 +520,14 @@ else
         /// </summary>
         public bool IsUpdate { get; set; }
         /// <summary>
+        /// For SVA scalar updates: the old value being removed.
+        /// </summary>
+        public string? OldValue { get; set; }
+        /// <summary>
+        /// For SVA scalar updates: the new value being added.
+        /// </summary>
+        public string? NewValue { get; set; }
+        /// <summary>
         /// The underlying change type for filtering purposes.
         /// </summary>
         public ValueChangeType UnderlyingChangeType { get; set; }
@@ -525,10 +565,10 @@ else
                         DisplayChangeType = "Updated",
                         IsUpdate = true,
                         UnderlyingChangeType = ValueChangeType.Add, // For filtering, treat as Add
-                        // Handle both scalar and reference values
-                        DisplayValue = (removeChange.ReferenceValue == null && addChange.ReferenceValue == null)
-                            ? $"{removeChange.Value} → {addChange.Value}"
-                            : null,
+                        // For scalar updates, store old and new values separately for display styling
+                        OldValue = removeChange.ReferenceValue == null ? removeChange.Value : null,
+                        NewValue = addChange.ReferenceValue == null ? addChange.Value : null,
+                        // For reference updates, store the reference info
                         OldReferenceValue = removeChange.ReferenceValue,
                         NewReferenceValue = addChange.ReferenceValue
                     });
@@ -682,8 +722,8 @@ else
                 var newName = change.NewReferenceValue?.DisplayName ?? "(none)";
                 return $"{oldName} → {newName}";
             }
-            // Scalar update
-            return change.DisplayValue ?? string.Empty;
+            // Scalar update - combine old and new values
+            return $"{change.OldValue} → {change.NewValue}";
         }
 
         // Simple Add or Remove
