@@ -78,25 +78,25 @@ else
                                                         {
                                                             <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;">@(change.OldReferenceValue?.DisplayName ?? "(none)")</MudText>
                                                             <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;"> → </MudText>
-                                                            <MudText Typo="Typo.body2" Style="display: inline;">@(change.NewReferenceValue?.DisplayName ?? "(none)")</MudText>
+                                                            <MudText Typo="Typo.body2" Style="display: inline; font-weight: 600;">@(change.NewReferenceValue?.DisplayName ?? "(none)")</MudText>
                                                         }
                                                         else
                                                         {
                                                             <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;">@change.OldValue</MudText>
                                                             <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;"> → </MudText>
-                                                            <MudText Typo="Typo.body2" Style="display: inline;">@change.NewValue</MudText>
+                                                            <MudText Typo="Typo.body2" Style="display: inline; font-weight: 600;">@change.NewValue</MudText>
                                                         }
                                                     }
                                                     else
                                                     {
-                                                        @* Set/Add values get normal emphasis, Removed values get de-emphasised *@
+                                                        @* Set/Add values get bold emphasis, Removed values get de-emphasised *@
                                                         @if (change.DisplayChangeType == "Removed" || change.DisplayChangeType == "Remove")
                                                         {
                                                             <MudText Typo="Typo.body2" Class="mud-text-secondary">@GetDisplayValue(change)</MudText>
                                                         }
                                                         else
                                                         {
-                                                            <MudText Typo="Typo.body2">@GetDisplayValue(change)</MudText>
+                                                            <MudText Typo="Typo.body2" Style="font-weight: 600;">@GetDisplayValue(change)</MudText>
                                                         }
                                                     }
                                                 </div>
@@ -340,7 +340,7 @@ else
                                     <MudText Class="mud-text-secondary">→</MudText>
                                     @if (context.NewReferenceValue != null)
                                     {
-                                        <MudLink Href="@context.NewReferenceValue.Href">@context.NewReferenceValue.DisplayName</MudLink>
+                                        <MudLink Href="@context.NewReferenceValue.Href" Style="font-weight: 600;">@context.NewReferenceValue.DisplayName</MudLink>
                                     }
                                     else
                                     {
@@ -350,21 +350,31 @@ else
                             }
                             else
                             {
-                                @* Scalar update - render old value de-emphasised *@
+                                @* Scalar update - render old value de-emphasised, new value bold *@
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                     <MudText Class="mud-text-secondary">@context.OldValue</MudText>
                                     <MudText Class="mud-text-secondary">→</MudText>
-                                    <MudText>@context.NewValue</MudText>
+                                    <MudText Style="font-weight: 600;">@context.NewValue</MudText>
                                 </MudStack>
                             }
                         }
                         else if (context.ReferenceValue != null)
                         {
+                            @* MVA reference Add/Remove - bold for Add, de-emphasised for Remove *@
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                 <MudChip T="string" Color="Color.Default" Size="Size.Small">@context.ReferenceValue.TypeName</MudChip>
-                                <MudLink Href="@context.ReferenceValue.Href">
-                                    @context.ReferenceValue.DisplayName
-                                </MudLink>
+                                @if (context.DisplayChangeType == "Remove")
+                                {
+                                    <MudLink Href="@context.ReferenceValue.Href" Class="mud-text-secondary">
+                                        @context.ReferenceValue.DisplayName
+                                    </MudLink>
+                                }
+                                else
+                                {
+                                    <MudLink Href="@context.ReferenceValue.Href" Style="font-weight: 600;">
+                                        @context.ReferenceValue.DisplayName
+                                    </MudLink>
+                                }
                                 @if (!string.IsNullOrEmpty(context.ReferenceValue.SecondaryId))
                                 {
                                     <MudText Class="mud-text-secondary">(@context.ReferenceValue.SecondaryId)</MudText>
@@ -373,7 +383,15 @@ else
                         }
                         else
                         {
-                            <MudText>@context.DisplayValue</MudText>
+                            @* Simple scalar Add/Remove - bold for Set/Add, de-emphasised for Removed/Remove *@
+                            @if (context.DisplayChangeType == "Removed" || context.DisplayChangeType == "Remove")
+                            {
+                                <MudText Class="mud-text-secondary">@context.DisplayValue</MudText>
+                            }
+                            else
+                            {
+                                <MudText Style="font-weight: 600;">@context.DisplayValue</MudText>
+                            }
                         }
                     </MudTd>
                 </RowTemplate>
