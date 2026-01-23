@@ -190,12 +190,26 @@ else
                                     <MudText Typo="Typo.body2" Class="jim-text-code" Style="min-width: 120px;">
                                         @summary.AttributeName
                                     </MudText>
+                                    @* SVA terminology: Set, Updated, Removed *@
+                                    @if (summary.SetCount > 0)
+                                    {
+                                        <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Success">
+                                            Set
+                                        </MudChip>
+                                    }
                                     @if (summary.UpdateCount > 0)
                                     {
                                         <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Info">
                                             Updated
                                         </MudChip>
                                     }
+                                    @if (summary.RemovedCount > 0)
+                                    {
+                                        <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Error">
+                                            Removed
+                                        </MudChip>
+                                    }
+                                    @* MVA terminology: Add (+count), Remove (-count) *@
                                     @if (summary.AddCount > 0)
                                     {
                                         <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Success">
@@ -508,7 +522,7 @@ else
                     result.Add(new AttributeChangeDisplay
                     {
                         AttributeName = group.Key,
-                        DisplayChangeType = "Update",
+                        DisplayChangeType = "Updated",
                         IsUpdate = true,
                         UnderlyingChangeType = ValueChangeType.Add, // For filtering, treat as Add
                         // Handle both scalar and reference values
@@ -524,10 +538,14 @@ else
                     // SVA with only Add or only Remove
                     foreach (var change in changes)
                     {
+                        // For SVA Add without Remove, use "Set" to indicate first-time assignment
+                        // For SVA Remove without Add, use "Removed" for consistency
+                        var displayType = change.ChangeType == ValueChangeType.Add ? "Set" : "Removed";
+
                         result.Add(new AttributeChangeDisplay
                         {
                             AttributeName = change.AttributeName,
-                            DisplayChangeType = change.ChangeType.ToString(),
+                            DisplayChangeType = displayType,
                             IsUpdate = false,
                             UnderlyingChangeType = change.ChangeType,
                             DisplayValue = change.Value,
@@ -631,15 +649,18 @@ else
 
     /// <summary>
     /// Gets the MudBlazor color for a display change type.
+    /// SVA terms: Set (green), Updated (blue), Removed (red)
+    /// MVA terms: Add (green), Remove (red)
     /// </summary>
     private Color GetDisplayChangeTypeColor(AttributeChangeDisplay change)
     {
-        if (change.IsUpdate)
-            return Color.Info; // Blue for updates
         return change.DisplayChangeType switch
         {
-            "Add" => Color.Success,
-            "Remove" => Color.Error,
+            "Set" => Color.Success,     // SVA: null → value
+            "Updated" => Color.Info,    // SVA: value → value
+            "Removed" => Color.Error,   // SVA: value → null
+            "Add" => Color.Success,     // MVA: value added
+            "Remove" => Color.Error,    // MVA: value removed
             _ => Color.Default
         };
     }
@@ -687,7 +708,7 @@ else
 
     /// <summary>
     /// Gets aggregated summary of changes grouped by attribute.
-    /// For SVAs: Shows "Update" when there's both Add and Remove.
+    /// For SVAs: Shows "Updated" when there's both Add and Remove, "Set" for Add only, "Removed" for Remove only.
     /// For MVAs: Shows individual Add and Remove counts.
     /// </summary>
     private List<AttributeChangeSummary> GetAggregatedSummary(ChangeGroup changeGroup)
@@ -701,25 +722,44 @@ else
                 var addCount = changes.Count(c => c.ChangeType == ValueChangeType.Add);
                 var removeCount = changes.Count(c => c.ChangeType == ValueChangeType.Remove);
 
-                if (!isMultiValued && addCount > 0 && removeCount > 0)
+                if (!isMultiValued)
                 {
-                    // SVA with both Add and Remove = Update
-                    return new AttributeChangeSummary
+                    // SVA: Use Set/Updated/Removed terminology
+                    if (addCount > 0 && removeCount > 0)
                     {
-                        AttributeName = g.Key,
-                        AddCount = 0,
-                        RemoveCount = 0,
-                        UpdateCount = 1
-                    };
+                        // SVA with both Add and Remove = Updated
+                        return new AttributeChangeSummary
+                        {
+                            AttributeName = g.Key,
+                            UpdateCount = 1
+                        };
+                    }
+                    else if (addCount > 0)
+                    {
+                        // SVA with only Add = Set
+                        return new AttributeChangeSummary
+                        {
+                            AttributeName = g.Key,
+                            SetCount = 1
+                        };
+                    }
+                    else
+                    {
+                        // SVA with only Remove = Removed
+                        return new AttributeChangeSummary
+                        {
+                            AttributeName = g.Key,
+                            RemovedCount = 1
+                        };
+                    }
                 }
 
-                // MVA or SVA with only Add or only Remove
+                // MVA: Use Add/Remove terminology with counts
                 return new AttributeChangeSummary
                 {
                     AttributeName = g.Key,
                     AddCount = addCount,
-                    RemoveCount = removeCount,
-                    UpdateCount = 0
+                    RemoveCount = removeCount
                 };
             })
             .OrderBy(s => s.AttributeName)
@@ -778,16 +818,22 @@ else
 
     /// <summary>
     /// Represents an aggregated summary of changes for a single attribute.
+    /// SVA terminology: Set (null→value), Updated (value→value), Removed (value→null)
+    /// MVA terminology: Add (+count), Remove (-count)
     /// </summary>
     private class AttributeChangeSummary
     {
         public string AttributeName { get; set; } = string.Empty;
-        public int AddCount { get; set; }
-        public int RemoveCount { get; set; }
-        /// <summary>
-        /// Count of SVA updates (where there's both an Add and Remove).
-        /// </summary>
+        /// <summary>SVA: First-time value assignment (null → value).</summary>
+        public int SetCount { get; set; }
+        /// <summary>SVA: Value change (value → value).</summary>
         public int UpdateCount { get; set; }
+        /// <summary>SVA: Value cleared (value → null).</summary>
+        public int RemovedCount { get; set; }
+        /// <summary>MVA: Values added.</summary>
+        public int AddCount { get; set; }
+        /// <summary>MVA: Values removed.</summary>
+        public int RemoveCount { get; set; }
     }
 
     private string GetRelativeTime(DateTime changeTime)
