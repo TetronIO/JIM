@@ -270,12 +270,16 @@ public class MetaverseServer
     /// <param name="metaverseObject">The MVO being updated.</param>
     /// <param name="additions">Attribute values being added.</param>
     /// <param name="removals">Attribute values being removed.</param>
-    /// <param name="initiatedBy">The user or system initiating the change.</param>
+    /// <param name="initiatedByType">The type of principal initiating the change.</param>
+    /// <param name="initiatedById">The ID of the principal initiating the change.</param>
+    /// <param name="initiatedByName">The display name of the principal initiating the change.</param>
     public async Task CreateMetaverseObjectChangeAsync(
         MetaverseObject metaverseObject,
         List<MetaverseObjectAttributeValue> additions,
         List<MetaverseObjectAttributeValue> removals,
-        MetaverseObject? initiatedBy = null)
+        ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,
+        Guid? initiatedById = null,
+        string? initiatedByName = null)
     {
         // Check if MVO change tracking is enabled
         var changeTrackingEnabled = await Application.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
@@ -291,8 +295,10 @@ public class MetaverseServer
             MetaverseObject = metaverseObject,
             ChangeType = ObjectChangeType.Updated,
             ChangeTime = DateTime.UtcNow,
-            ChangeInitiator = initiatedBy,
-            ChangeInitiatorType = initiatedBy != null
+            InitiatedByType = initiatedByType,
+            InitiatedById = initiatedById,
+            InitiatedByName = initiatedByName,
+            ChangeInitiatorType = initiatedByType == ActivityInitiatorType.User
                 ? MetaverseObjectChangeInitiatorType.User
                 : MetaverseObjectChangeInitiatorType.NotSet
         };
@@ -408,7 +414,18 @@ public class MetaverseServer
         await Application.Repository.Metaverse.UpdateMetaverseObjectsAsync(metaverseObjects);
     }
 
-    public async Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
+    /// <summary>
+    /// Deletes a Metaverse Object and optionally records the deletion for audit trail.
+    /// </summary>
+    /// <param name="metaverseObject">The MVO to delete.</param>
+    /// <param name="initiatedByType">The type of principal initiating the deletion.</param>
+    /// <param name="initiatedById">The ID of the principal initiating the deletion.</param>
+    /// <param name="initiatedByName">The display name of the principal initiating the deletion.</param>
+    public async Task DeleteMetaverseObjectAsync(
+        MetaverseObject metaverseObject,
+        ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,
+        Guid? initiatedById = null,
+        string? initiatedByName = null)
     {
         // Check if MVO change tracking is enabled
         var changeTrackingEnabled = await Application.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
@@ -427,8 +444,12 @@ public class MetaverseServer
                 // because the MVO no longer exists after deletion.
                 ChangeType = ObjectChangeType.Deleted,
                 ChangeTime = DateTime.UtcNow,
-                ChangeInitiatorType = MetaverseObjectChangeInitiatorType.NotSet
-                // TODO: When UI is implemented, pass initiatedBy parameter to set ChangeInitiator
+                InitiatedByType = initiatedByType,
+                InitiatedById = initiatedById,
+                InitiatedByName = initiatedByName,
+                ChangeInitiatorType = initiatedByType == ActivityInitiatorType.User
+                    ? MetaverseObjectChangeInitiatorType.User
+                    : MetaverseObjectChangeInitiatorType.NotSet
             };
 
             // Save the change record directly (not via MVO navigation property)

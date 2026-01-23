@@ -131,17 +131,17 @@
             {
                 ChangeType = change.ChangeType,
                 ChangeTime = change.ChangeTime,
-                // Try RPEI->Activity initiator first, fall back to deprecated ChangeInitiator
-                ChangeInitiatorType = change.ActivityRunProfileExecutionItem?.Activity?.InitiatedByType.ToString()
-                    ?? change.ChangeInitiatorType.ToString(),
-                ChangeInitiatorName = change.ActivityRunProfileExecutionItem?.Activity?.InitiatedByName
-                    ?? change.ChangeInitiator?.DisplayName,
-                ChangeInitiatorId = change.ActivityRunProfileExecutionItem?.Activity?.InitiatedById
-                    ?? change.ChangeInitiator?.Id,
+                // Initiator info is now stored directly on the change object (self-contained audit trail)
+                // ChangeInitiatorType = the principal type (User, ApiKey) for icon display
+                // ChangeMechanismType = how the change was triggered (SynchronisationRule, User, etc.)
+                ChangeInitiatorType = change.InitiatedByType.ToString(),
+                ChangeInitiatorName = change.InitiatedByName,
+                ChangeInitiatorId = change.InitiatedById,
+                ChangeMechanismType = change.ChangeInitiatorType.ToString(),
                 // Sync rule context
                 SyncRuleId = change.SyncRuleId,
                 SyncRuleName = change.SyncRuleName,
-                // Activity link for drill-down
+                // Activity link for drill-down (optional - RPEI may be cleaned up)
                 ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
                 AttributeChanges = change.AttributeChanges
                     .OrderBy(ac => ac.Attribute.Name)

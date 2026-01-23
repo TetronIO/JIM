@@ -148,36 +148,26 @@ else
     <DialogContent>
         @if (_selectedChange != null)
         {
-            <!-- Initiator Context Section -->
+            <!-- Initiator Context Section: Who | How | Activity -->
             <MudPaper Class="pa-3 mb-4" Outlined="true">
                 <MudGrid Spacing="2">
-                    <!-- Initiated By -->
+                    <!-- Initiated By (Who) - the principal that triggered the change -->
                     <MudItem xs="12" sm="4">
                         <MudText Typo="Typo.overline" Class="mud-text-secondary">Initiated By</MudText>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            @GetModalInitiatorIcon(_selectedChange)
-                            @GetModalInitiatorText(_selectedChange)
+                            @GetModalPrincipalIcon(_selectedChange)
+                            @GetModalPrincipalText(_selectedChange)
                         </MudStack>
                     </MudItem>
 
-                    <!-- Sync Rule -->
-                    @if (_selectedChange.SyncRuleId != null || !string.IsNullOrEmpty(_selectedChange.SyncRuleName))
-                    {
-                        <MudItem xs="12" sm="4">
-                            <MudText Typo="Typo.overline" Class="mud-text-secondary">Sync Rule</MudText>
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudIcon Icon="@Icons.Material.Filled.Rule" Size="Size.Small" Class="mud-text-secondary" />
-                                @if (_selectedChange.SyncRuleId != null)
-                                {
-                                    <MudLink Href="@($"/admin/connected-systems/sync-rules/{_selectedChange.SyncRuleId}")">@(_selectedChange.SyncRuleName ?? "Sync Rule")</MudLink>
-                                }
-                                else
-                                {
-                                    <MudText>@_selectedChange.SyncRuleName <span class="mud-text-secondary">(deleted)</span></MudText>
-                                }
-                            </MudStack>
-                        </MudItem>
-                    }
+                    <!-- Mechanism (How) - how the change was triggered -->
+                    <MudItem xs="12" sm="4">
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Mechanism</MudText>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            @GetModalMechanismIcon(_selectedChange)
+                            @GetModalMechanismText(_selectedChange)
+                        </MudStack>
+                    </MudItem>
 
                     <!-- Activity Link -->
                     @if (_selectedChange.ActivityRunProfileExecutionItemId != null)
@@ -452,9 +442,17 @@ else
     {
         public ObjectChangeType ChangeType { get; set; }
         public DateTime ChangeTime { get; set; }
+        /// <summary>
+        /// The principal type (User, ApiKey) that initiated this change - used for icon display.
+        /// </summary>
         public string ChangeInitiatorType { get; set; } = string.Empty;
         public string? ChangeInitiatorName { get; set; }
         public Guid? ChangeInitiatorId { get; set; }
+        /// <summary>
+        /// The mechanism that triggered this change (SynchronisationRule, User, WorkflowInstance, etc.).
+        /// Used to determine if this is a sync-initiated change.
+        /// </summary>
+        public string ChangeMechanismType { get; set; } = string.Empty;
         /// <summary>
         /// The sync rule that caused this change (if applicable).
         /// </summary>
@@ -915,8 +913,8 @@ else
         {
             int seq = 0;
 
-            // Determine if this is a sync-initiated change
-            bool isSyncChange = changeGroup.ChangeInitiatorType == "SynchronisationRule" ||
+            // Determine if this is a sync-initiated change (by mechanism type or sync rule context)
+            bool isSyncChange = changeGroup.ChangeMechanismType == "SynchronisationRule" ||
                                 changeGroup.SyncRuleId != null ||
                                 !string.IsNullOrEmpty(changeGroup.SyncRuleName);
 
@@ -946,12 +944,11 @@ else
             }
             else
             {
-                // Direct change by user/system - use appropriate icon
+                // Direct change by user/API key - use appropriate icon based on principal type
                 string icon = changeGroup.ChangeInitiatorType switch
                 {
                     "User" => Icons.Material.Filled.Person,
                     "ApiKey" => Icons.Material.Filled.Key,
-                    "System" => Icons.Material.Filled.Settings,
                     _ => Icons.Material.Filled.HelpOutline
                 };
 
@@ -965,7 +962,7 @@ else
                 builder.OpenComponent<MudText>(seq++);
                 builder.AddAttribute(seq++, "Typo", Typo.body2);
                 builder.AddAttribute(seq++, "Class", "mud-text-secondary");
-                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ChangeInitiatorName ?? changeGroup.ChangeInitiatorType)));
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ChangeInitiatorName ?? "Unknown")));
                 builder.CloseComponent();
             }
         };
@@ -978,8 +975,8 @@ else
     {
         return builder =>
         {
-            // Check if this is a sync-initiated change
-            bool isSyncChange = changeGroup.ChangeInitiatorType == "SynchronisationRule" ||
+            // Check if this is a sync-initiated change (by mechanism type or sync rule context)
+            bool isSyncChange = changeGroup.ChangeMechanismType == "SynchronisationRule" ||
                                 changeGroup.SyncRuleId != null ||
                                 !string.IsNullOrEmpty(changeGroup.SyncRuleName);
 
@@ -987,7 +984,6 @@ else
             {
                 "User" => Icons.Material.Filled.Person,
                 "ApiKey" => Icons.Material.Filled.Key,
-                "System" => Icons.Material.Filled.Settings,
                 _ => Icons.Material.Filled.HelpOutline
             };
 
@@ -1005,8 +1001,8 @@ else
         {
             int seq = 0;
 
-            // Check if this is a sync-initiated change
-            bool isSyncChange = changeGroup.ChangeInitiatorType == "SynchronisationRule" ||
+            // Check if this is a sync-initiated change (by mechanism type or sync rule context)
+            bool isSyncChange = changeGroup.ChangeMechanismType == "SynchronisationRule" ||
                                 changeGroup.SyncRuleId != null ||
                                 !string.IsNullOrEmpty(changeGroup.SyncRuleName);
 
@@ -1045,6 +1041,157 @@ else
                 builder.OpenComponent<MudText>(seq++);
                 builder.AddAttribute(seq++, "Class", "mud-text-secondary");
                 builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Unknown")));
+                builder.CloseComponent();
+            }
+        };
+    }
+
+    /// <summary>
+    /// Generates the icon for the modal principal (who) display.
+    /// Shows User or ApiKey icon based on the principal type.
+    /// </summary>
+    private RenderFragment GetModalPrincipalIcon(ChangeGroup changeGroup)
+    {
+        return builder =>
+        {
+            string icon = changeGroup.ChangeInitiatorType switch
+            {
+                "User" => Icons.Material.Filled.Person,
+                "ApiKey" => Icons.Material.Filled.Key,
+                _ => Icons.Material.Filled.HelpOutline
+            };
+
+            builder.OpenComponent<MudIcon>(0);
+            builder.AddAttribute(1, "Icon", icon);
+            builder.AddAttribute(2, "Size", Size.Small);
+            builder.AddAttribute(3, "Class", "mud-text-secondary");
+            builder.CloseComponent();
+        };
+    }
+
+    /// <summary>
+    /// Generates the text/link for the modal principal (who) display.
+    /// Renders the principal name as a clickable link when ID is available.
+    /// </summary>
+    private RenderFragment GetModalPrincipalText(ChangeGroup changeGroup)
+    {
+        return builder =>
+        {
+            int seq = 0;
+
+            if (changeGroup.ChangeInitiatorId != null && !string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
+            {
+                // Linked principal name
+                builder.OpenComponent<MudLink>(seq++);
+                builder.AddAttribute(seq++, "Href", GetInitiatorHref(changeGroup));
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ChangeInitiatorName)));
+                builder.CloseComponent();
+            }
+            else if (!string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
+            {
+                // Plain text principal name (no ID to link to)
+                builder.OpenComponent<MudText>(seq++);
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ChangeInitiatorName)));
+                builder.CloseComponent();
+            }
+            else
+            {
+                // Unknown
+                builder.OpenComponent<MudText>(seq++);
+                builder.AddAttribute(seq++, "Class", "mud-text-secondary");
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Unknown")));
+                builder.CloseComponent();
+            }
+        };
+    }
+
+    /// <summary>
+    /// Generates the icon for the modal mechanism (how) display.
+    /// Shows Sync, Person, Workflow, or Group icon based on mechanism type.
+    /// </summary>
+    private RenderFragment GetModalMechanismIcon(ChangeGroup changeGroup)
+    {
+        return builder =>
+        {
+            string icon = changeGroup.ChangeMechanismType switch
+            {
+                "SynchronisationRule" => Icons.Material.Filled.Sync,
+                "User" => Icons.Material.Filled.Edit,
+                "WorkflowInstance" => Icons.Material.Filled.AccountTree,
+                "GroupMembershipRuleEvaluation" => Icons.Material.Filled.Group,
+                _ => Icons.Material.Filled.HelpOutline
+            };
+
+            builder.OpenComponent<MudIcon>(0);
+            builder.AddAttribute(1, "Icon", icon);
+            builder.AddAttribute(2, "Size", Size.Small);
+            builder.AddAttribute(3, "Class", "mud-text-secondary");
+            builder.CloseComponent();
+        };
+    }
+
+    /// <summary>
+    /// Generates the text for the modal mechanism (how) display.
+    /// For sync changes, shows the sync rule as a link if available.
+    /// </summary>
+    private RenderFragment GetModalMechanismText(ChangeGroup changeGroup)
+    {
+        return builder =>
+        {
+            int seq = 0;
+
+            // Check if this is a sync-initiated change
+            bool isSyncChange = changeGroup.ChangeMechanismType == "SynchronisationRule" ||
+                                changeGroup.SyncRuleId != null ||
+                                !string.IsNullOrEmpty(changeGroup.SyncRuleName);
+
+            if (isSyncChange)
+            {
+                // Show "Synchronisation" with sync rule link if available
+                builder.OpenComponent<MudText>(seq++);
+                builder.AddAttribute(seq++, "Style", "display: inline;");
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Synchronisation")));
+                builder.CloseComponent();
+
+                // If we have a sync rule, show it as a link
+                if (changeGroup.SyncRuleId != null || !string.IsNullOrEmpty(changeGroup.SyncRuleName))
+                {
+                    builder.OpenComponent<MudText>(seq++);
+                    builder.AddAttribute(seq++, "Style", "display: inline; margin-left: 4px;");
+                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "via")));
+                    builder.CloseComponent();
+
+                    if (changeGroup.SyncRuleId != null)
+                    {
+                        builder.OpenComponent<MudLink>(seq++);
+                        builder.AddAttribute(seq++, "Href", $"/admin/connected-systems/sync-rules/{changeGroup.SyncRuleId}");
+                        builder.AddAttribute(seq++, "Style", "margin-left: 4px;");
+                        builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.SyncRuleName ?? "Sync Rule")));
+                        builder.CloseComponent();
+                    }
+                    else
+                    {
+                        // Sync rule was deleted, show name with "(deleted)" indicator
+                        builder.OpenComponent<MudText>(seq++);
+                        builder.AddAttribute(seq++, "Style", "display: inline; margin-left: 4px;");
+                        builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, $"{changeGroup.SyncRuleName} (deleted)")));
+                        builder.CloseComponent();
+                    }
+                }
+            }
+            else
+            {
+                // Non-sync mechanism
+                string mechanismText = changeGroup.ChangeMechanismType switch
+                {
+                    "User" => "Direct Edit",
+                    "WorkflowInstance" => "Workflow",
+                    "GroupMembershipRuleEvaluation" => "Group Rule",
+                    _ => changeGroup.ChangeMechanismType
+                };
+
+                builder.OpenComponent<MudText>(seq++);
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, mechanismText)));
                 builder.CloseComponent();
             }
         };

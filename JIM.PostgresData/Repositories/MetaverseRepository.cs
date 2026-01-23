@@ -188,11 +188,7 @@ public class MetaverseRepository : IMetaverseRepository
             ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
             ThenInclude(rvav => rvav.Attribute).
             Include(mo => mo.Changes).
-            ThenInclude(c => c.ChangeInitiator).
-            Include(mo => mo.Changes).
-            ThenInclude(c => c.ActivityRunProfileExecutionItem).
-            ThenInclude(rpei => rpei!.Activity).
-            ThenInclude(a => a!.InitiatedByMetaverseObject).
+            ThenInclude(c => c.SyncRule).
             SingleOrDefaultAsync(mo => mo.Id == id);
     }
 

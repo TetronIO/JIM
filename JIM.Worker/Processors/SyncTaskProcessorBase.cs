@@ -1164,14 +1164,18 @@ public abstract class SyncTaskProcessorBase
         foreach (var (mvo, additions, removals, isNew, rpei) in _pendingMvoChanges)
         {
             // Create MVO change object with correct ChangeType based on whether MVO is new or existing
-            // Link to RPEI so we can trace back to the Activity for initiator context (User, ApiKey, etc.)
+            // Initiator info copied directly from Activity for self-contained audit trail
             var change = new MetaverseObjectChange
             {
                 MetaverseObject = mvo,
                 ChangeType = isNew ? ObjectChangeType.Added : ObjectChangeType.Updated,
                 ChangeTime = DateTime.UtcNow,
                 ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule,
-                // Link to RPEI for Activity initiator context - EF will resolve the FK when persisted
+                // Copy initiator info directly from Activity for self-contained audit trail
+                InitiatedByType = _activity.InitiatedByType,
+                InitiatedById = _activity.InitiatedById,
+                InitiatedByName = _activity.InitiatedByName,
+                // Link to RPEI for additional context (optional - RPEI may be cleaned up)
                 ActivityRunProfileExecutionItem = rpei
             };
 

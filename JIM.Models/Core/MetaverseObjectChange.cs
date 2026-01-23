@@ -1,4 +1,5 @@
-﻿using JIM.Models.Enums;
+﻿using JIM.Models.Activities;
+using JIM.Models.Enums;
 using JIM.Models.Logic;
 namespace JIM.Models.Core;
 
@@ -22,18 +23,35 @@ public class MetaverseObjectChange
 
     /// <summary>
     /// The run profile execution item that caused this change (for sync-initiated changes).
-    /// Links to Activity for initiator context (User, ApiKey, System).
     /// May be null if run history has been cleared or for non-sync changes.
     /// </summary>
     public Activities.ActivityRunProfileExecutionItem? ActivityRunProfileExecutionItem { get; set; }
     public Guid? ActivityRunProfileExecutionItemId { get; set; }
 
-    /// <summary>
-    /// Which user initiated this change, if any?
-    /// Deprecated: Use ActivityRunProfileExecutionItem.Activity.InitiatedBy* fields instead.
-    /// </summary>
-    public MetaverseObject? ChangeInitiator { get; set; }
+    // -----------------------------------------------------------------------------------------------------------------
+    // Initiator tracking - mirrors Activity's pattern for audit trail
+    // -----------------------------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// The type of security principal that initiated this change.
+    /// </summary>
+    public ActivityInitiatorType InitiatedByType { get; set; } = ActivityInitiatorType.NotSet;
+
+    /// <summary>
+    /// The unique identifier of the security principal (MetaverseObject or ApiKey) that initiated this change.
+    /// Retained even if the principal is deleted to support audit investigations.
+    /// </summary>
+    public Guid? InitiatedById { get; set; }
+
+    /// <summary>
+    /// The display name of the security principal at the time of the change.
+    /// Retained even if the principal is deleted to maintain audit trail readability.
+    /// </summary>
+    public string? InitiatedByName { get; set; }
+
+    /// <summary>
+    /// What mechanism triggered this change (sync rule, workflow, direct user action, etc.).
+    /// </summary>
     public MetaverseObjectChangeInitiatorType ChangeInitiatorType { get; set; }
 
     /// <summary>
