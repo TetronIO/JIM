@@ -182,28 +182,30 @@ else
             {
                 <MudPaper Class="pa-3 mb-4" Outlined="true" Style="background-color: var(--mud-palette-background-grey);">
                     <MudText Typo="Typo.overline" Class="mud-text-secondary mb-2">Summary</MudText>
-                    <div class="aggregated-summary">
+                    <MudGrid Spacing="2">
                         @foreach (var summary in GetAggregatedSummary(_selectedChange))
                         {
-                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mb-1">
-                                <MudText Typo="Typo.body2" Class="jim-text-code" Style="min-width: 140px;">
-                                    @summary.AttributeName
-                                </MudText>
-                                @if (summary.AddCount > 0)
-                                {
-                                    <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Success">
-                                        +@summary.AddCount added
-                                    </MudChip>
-                                }
-                                @if (summary.RemoveCount > 0)
-                                {
-                                    <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Error">
-                                        -@summary.RemoveCount removed
-                                    </MudChip>
-                                }
-                            </MudStack>
+                            <MudItem xs="12" sm="6" md="4">
+                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                    <MudText Typo="Typo.body2" Class="jim-text-code" Style="min-width: 120px;">
+                                        @summary.AttributeName
+                                    </MudText>
+                                    @if (summary.AddCount > 0)
+                                    {
+                                        <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Success">
+                                            +@summary.AddCount
+                                        </MudChip>
+                                    }
+                                    @if (summary.RemoveCount > 0)
+                                    {
+                                        <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Error">
+                                            -@summary.RemoveCount
+                                        </MudChip>
+                                    }
+                                </MudStack>
+                            </MudItem>
                         }
-                    </div>
+                    </MudGrid>
                 </MudPaper>
             }
         }
