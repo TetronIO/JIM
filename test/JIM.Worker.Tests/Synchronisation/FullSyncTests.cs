@@ -125,7 +125,8 @@ public class FullSyncTests
         ConnectedSystemObjectAttributeValuesData = new List<ConnectedSystemObjectAttributeValue>();
         MockDbSetConnectedSystemObjectAttributeValues = ConnectedSystemObjectAttributeValuesData.BuildMockDbSet();
 
-        // set up the Service Setting Items mock with default SyncPageSize
+        // set up the Service Setting Items mock with default SyncPageSize and MVO change tracking disabled
+        // MVO change tracking is disabled to avoid needing to mock MetaverseObjectChanges in most tests
         ServiceSettingItemsData = new List<ServiceSetting>
         {
             new()
@@ -136,9 +137,21 @@ public class FullSyncTests
                 ValueType = ServiceSettingValueType.Integer,
                 DefaultValue = "1000",
                 Value = null
+            },
+            new()
+            {
+                Key = Constants.SettingKeys.ChangeTrackingMvoChangesEnabled,
+                DisplayName = "Track MVO changes",
+                Category = ServiceSettingCategory.Synchronisation,
+                ValueType = ServiceSettingValueType.Boolean,
+                DefaultValue = "true",
+                Value = "false"  // Disabled for tests to avoid needing MetaverseObjectChanges mock
             }
         };
         MockDbSetServiceSettingItems = ServiceSettingItemsData.BuildMockDbSet();
+        // Setup FindAsync to return the setting matching the key (mock DbSet doesn't support FindAsync by default)
+        MockDbSetServiceSettingItems.Setup(m => m.FindAsync(It.IsAny<object?[]?>()))
+            .Returns<object?[]?>(keys => ValueTask.FromResult(ServiceSettingItemsData.FirstOrDefault(s => s.Key == keys?[0]?.ToString())));
 
         // mock entity framework calls to use our data sources above
         MockJimDbContext = new Mock<JimDbContext>();

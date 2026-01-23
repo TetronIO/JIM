@@ -69,10 +69,10 @@ public abstract class SyncTaskProcessorBase
     protected readonly List<MetaverseObject> _pendingMvoDeletions = [];
 
     // Batch collection for MVO change object creation (deferred to page boundary for performance)
-    // Stores: (MVO, Additions, Removals, IsNew) - captured BEFORE applying pending changes
+    // Stores: (MVO, Additions, Removals, IsNew, RPEI) - captured BEFORE applying pending changes
     // IsNew indicates whether this MVO is being created (true) or updated (false), used to set ChangeType correctly
-    // MVO changes use ChangeInitiatorType.SynchronisationRule rather than linking to RPEIs
-    protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> Additions, List<MetaverseObjectAttributeValue> Removals, bool IsNew)> _pendingMvoChanges = [];
+    // RPEI links MVO changes to the Activity for initiator context (User, ApiKey, etc.)
+    protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> Additions, List<MetaverseObjectAttributeValue> Removals, bool IsNew, ActivityRunProfileExecutionItem Rpei)> _pendingMvoChanges = [];
 
     // Batch collection for deferred reference attribute processing.
     // Reference attributes must be processed AFTER all CSOs in the page have been processed (joined/projected)
@@ -160,13 +160,24 @@ public abstract class SyncTaskProcessorBase
             {
                 _activity.RunProfileExecutionItems.Add(obsoleteExecutionItem);
             }
-            // Create execution item for successful changes (join, projection, attribute flow)
+            // Handle execution item for successful changes (join, projection, attribute flow)
             else if (changeResult.HasChanges)
             {
-                var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
-                runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
-                runProfileExecutionItem.ObjectChangeType = changeResult.ChangeType;
-                _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+                // Check if an RPEI was already created for this CSO (in ProcessMetaverseObjectChangesAsync when MVO changes were captured)
+                var existingRpei = _activity.RunProfileExecutionItems.FirstOrDefault(r => r.ConnectedSystemObject?.Id == connectedSystemObject.Id);
+                if (existingRpei != null)
+                {
+                    // Update the existing RPEI with the ObjectChangeType
+                    existingRpei.ObjectChangeType = changeResult.ChangeType;
+                }
+                else
+                {
+                    // Create a new RPEI (for cases like join/project without attribute changes)
+                    var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+                    runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+                    runProfileExecutionItem.ObjectChangeType = changeResult.ChangeType;
+                    _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+                }
             }
         }
         catch (SyncJoinException joinEx)
@@ -702,13 +713,18 @@ public abstract class SyncTaskProcessorBase
 
             // Capture MVO changes for change tracking (before applying, so we have the pending lists)
             // Change objects will be created in batch at page boundary for performance
+            // Create RPEI here so MVO changes can link to it for initiator context (User, ApiKey)
             if (attributesAdded > 0 || attributesRemoved > 0)
             {
                 var additions = connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions.ToList();
                 var removals = connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.ToList();
                 // Track whether this is a new MVO (Id == Guid.Empty) for correct ChangeType (Added vs Updated)
                 var isNewMvo = connectedSystemObject.MetaverseObject.Id == Guid.Empty;
-                _pendingMvoChanges.Add((connectedSystemObject.MetaverseObject, additions, removals, isNewMvo));
+                // Create RPEI for this CSO change - will be used to link MVO change to Activity for initiator context
+                var rpei = _activity.PrepareRunProfileExecutionItem();
+                rpei.ConnectedSystemObject = connectedSystemObject;
+                _activity.RunProfileExecutionItems.Add(rpei);
+                _pendingMvoChanges.Add((connectedSystemObject.MetaverseObject, additions, removals, isNewMvo, rpei));
             }
 
             // Apply pending attribute value changes to the MVO
@@ -1145,16 +1161,18 @@ public abstract class SyncTaskProcessorBase
         using var span = Diagnostics.Sync.StartSpan("CreatePendingMvoChangeObjects");
         span.SetTag("changeCount", _pendingMvoChanges.Count);
 
-        foreach (var (mvo, additions, removals, isNew) in _pendingMvoChanges)
+        foreach (var (mvo, additions, removals, isNew, rpei) in _pendingMvoChanges)
         {
             // Create MVO change object with correct ChangeType based on whether MVO is new or existing
+            // Link to RPEI so we can trace back to the Activity for initiator context (User, ApiKey, etc.)
             var change = new MetaverseObjectChange
             {
                 MetaverseObject = mvo,
                 ChangeType = isNew ? ObjectChangeType.Added : ObjectChangeType.Updated,
                 ChangeTime = DateTime.UtcNow,
-                ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule
-                // ChangeInitiator is null for sync operations - could link to sync rule in future
+                ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule,
+                // Link to RPEI for Activity initiator context - EF will resolve the FK when persisted
+                ActivityRunProfileExecutionItem = rpei
             };
 
             // Create attribute change records for additions

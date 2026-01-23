@@ -163,6 +163,14 @@ public interface IMetaverseRepository
     /// <param name="objectTypeId">Optional object type ID to filter by.</param>
     /// <returns>The count of MVOs pending deletion.</returns>
     public Task<int> GetMetaverseObjectsPendingDeletionCountAsync(int? objectTypeId = null);
+
+    /// <summary>
+    /// Creates a MetaverseObjectChange record directly in the database.
+    /// Used for DELETE operations where the change should not be linked via navigation property
+    /// because the MVO is about to be deleted.
+    /// </summary>
+    /// <param name="change">The change record to create.</param>
+    public Task CreateMetaverseObjectChangeAsync(MetaverseObjectChange change);
     #endregion
 
     #region attributes

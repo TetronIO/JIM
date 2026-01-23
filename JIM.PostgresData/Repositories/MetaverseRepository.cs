@@ -948,6 +948,13 @@ public class MetaverseRepository : IMetaverseRepository
         return await query.CountAsync();
     }
 
+    /// <inheritdoc />
+    public async Task CreateMetaverseObjectChangeAsync(MetaverseObjectChange change)
+    {
+        Repository.Database.MetaverseObjectChanges.Add(change);
+        await Repository.Database.SaveChangesAsync();
+    }
+
     private static List<MetaverseObjectAttributeValue> GetFilteredAttributeValuesList(PredefinedSearch predefinedSearch, MetaverseObject metaverseObject)
     {
         return predefinedSearch.Attributes

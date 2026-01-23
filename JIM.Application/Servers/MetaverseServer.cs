@@ -415,18 +415,24 @@ public class MetaverseServer
 
         if (changeTrackingEnabled)
         {
-            // Create a deletion change record before deleting
+            // Create a deletion change record before deleting.
+            // IMPORTANT: Do NOT add this to metaverseObject.Changes collection!
+            // Adding via navigation property causes EF Core to try to INSERT a record
+            // referencing an MVO that's being DELETED in the same transaction, which fails.
+            // Instead, we create the record with MetaverseObjectId = null (intentional for DELETE ops)
+            // and save it directly via the repository.
             var change = new MetaverseObjectChange
             {
-                // MetaverseObject is intentionally null for DELETE operations (MVO no longer exists after delete)
+                // MetaverseObject/MetaverseObjectId is intentionally null for DELETE operations
+                // because the MVO no longer exists after deletion.
                 ChangeType = ObjectChangeType.Deleted,
                 ChangeTime = DateTime.UtcNow,
                 ChangeInitiatorType = MetaverseObjectChangeInitiatorType.NotSet
                 // TODO: When UI is implemented, pass initiatedBy parameter to set ChangeInitiator
             };
 
-            // Add to MVO's Changes collection - will be persisted before deletion
-            metaverseObject.Changes.Add(change);
+            // Save the change record directly (not via MVO navigation property)
+            await Application.Repository.Metaverse.CreateMetaverseObjectChangeAsync(change);
         }
 
         await Application.Repository.Metaverse.DeleteMetaverseObjectAsync(metaverseObject);
