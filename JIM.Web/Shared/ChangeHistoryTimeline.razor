@@ -156,18 +156,7 @@ else
                         <MudText Typo="Typo.overline" Class="mud-text-secondary">Initiated By</MudText>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             @GetModalInitiatorIcon(_selectedChange)
-                            @if (_selectedChange.ChangeInitiatorId != null && !string.IsNullOrEmpty(_selectedChange.ChangeInitiatorName))
-                            {
-                                <MudLink Href="@GetInitiatorHref(_selectedChange)">@_selectedChange.ChangeInitiatorName</MudLink>
-                            }
-                            else if (!string.IsNullOrEmpty(_selectedChange.ChangeInitiatorName))
-                            {
-                                <MudText>@_selectedChange.ChangeInitiatorName</MudText>
-                            }
-                            else
-                            {
-                                <MudText Class="mud-text-secondary">Unknown</MudText>
-                            }
+                            @GetModalInitiatorText(_selectedChange)
                         </MudStack>
                     </MudItem>
 
@@ -989,7 +978,12 @@ else
     {
         return builder =>
         {
-            string icon = changeGroup.ChangeInitiatorType switch
+            // Check if this is a sync-initiated change
+            bool isSyncChange = changeGroup.ChangeInitiatorType == "SynchronisationRule" ||
+                                changeGroup.SyncRuleId != null ||
+                                !string.IsNullOrEmpty(changeGroup.SyncRuleName);
+
+            string icon = isSyncChange ? Icons.Material.Filled.Sync : changeGroup.ChangeInitiatorType switch
             {
                 "User" => Icons.Material.Filled.Person,
                 "ApiKey" => Icons.Material.Filled.Key,
@@ -1002,6 +996,57 @@ else
             builder.AddAttribute(2, "Size", Size.Small);
             builder.AddAttribute(3, "Class", "mud-text-secondary");
             builder.CloseComponent();
+        };
+    }
+
+    private RenderFragment GetModalInitiatorText(ChangeGroup changeGroup)
+    {
+        return builder =>
+        {
+            int seq = 0;
+
+            // Check if this is a sync-initiated change
+            bool isSyncChange = changeGroup.ChangeInitiatorType == "SynchronisationRule" ||
+                                changeGroup.SyncRuleId != null ||
+                                !string.IsNullOrEmpty(changeGroup.SyncRuleName);
+
+            if (isSyncChange)
+            {
+                // For sync changes: "Synchronisation" or "Synchronisation by {Name}"
+                builder.OpenComponent<MudText>(seq++);
+                if (!string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
+                {
+                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, $"Synchronisation by {changeGroup.ChangeInitiatorName}")));
+                }
+                else
+                {
+                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Synchronisation")));
+                }
+                builder.CloseComponent();
+            }
+            else if (changeGroup.ChangeInitiatorId != null && !string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
+            {
+                // Linked initiator name
+                builder.OpenComponent<MudLink>(seq++);
+                builder.AddAttribute(seq++, "Href", GetInitiatorHref(changeGroup));
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ChangeInitiatorName)));
+                builder.CloseComponent();
+            }
+            else if (!string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
+            {
+                // Plain text initiator name
+                builder.OpenComponent<MudText>(seq++);
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ChangeInitiatorName)));
+                builder.CloseComponent();
+            }
+            else
+            {
+                // Unknown
+                builder.OpenComponent<MudText>(seq++);
+                builder.AddAttribute(seq++, "Class", "mud-text-secondary");
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Unknown")));
+                builder.CloseComponent();
+            }
         };
     }
 

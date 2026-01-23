@@ -69,9 +69,10 @@ public abstract class SyncTaskProcessorBase
     protected readonly List<MetaverseObject> _pendingMvoDeletions = [];
 
     // Batch collection for MVO change object creation (deferred to page boundary for performance)
-    // Stores: (MVO, Additions, Removals) - captured BEFORE applying pending changes
+    // Stores: (MVO, Additions, Removals, IsNew) - captured BEFORE applying pending changes
+    // IsNew indicates whether this MVO is being created (true) or updated (false), used to set ChangeType correctly
     // MVO changes use ChangeInitiatorType.SynchronisationRule rather than linking to RPEIs
-    protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> Additions, List<MetaverseObjectAttributeValue> Removals)> _pendingMvoChanges = [];
+    protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> Additions, List<MetaverseObjectAttributeValue> Removals, bool IsNew)> _pendingMvoChanges = [];
 
     // Batch collection for deferred reference attribute processing.
     // Reference attributes must be processed AFTER all CSOs in the page have been processed (joined/projected)
@@ -705,7 +706,9 @@ public abstract class SyncTaskProcessorBase
             {
                 var additions = connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions.ToList();
                 var removals = connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.ToList();
-                _pendingMvoChanges.Add((connectedSystemObject.MetaverseObject, additions, removals));
+                // Track whether this is a new MVO (Id == Guid.Empty) for correct ChangeType (Added vs Updated)
+                var isNewMvo = connectedSystemObject.MetaverseObject.Id == Guid.Empty;
+                _pendingMvoChanges.Add((connectedSystemObject.MetaverseObject, additions, removals, isNewMvo));
             }
 
             // Apply pending attribute value changes to the MVO
@@ -1142,13 +1145,13 @@ public abstract class SyncTaskProcessorBase
         using var span = Diagnostics.Sync.StartSpan("CreatePendingMvoChangeObjects");
         span.SetTag("changeCount", _pendingMvoChanges.Count);
 
-        foreach (var (mvo, additions, removals) in _pendingMvoChanges)
+        foreach (var (mvo, additions, removals, isNew) in _pendingMvoChanges)
         {
-            // Create MVO change object
+            // Create MVO change object with correct ChangeType based on whether MVO is new or existing
             var change = new MetaverseObjectChange
             {
                 MetaverseObject = mvo,
-                ChangeType = ObjectChangeType.Updated,
+                ChangeType = isNew ? ObjectChangeType.Added : ObjectChangeType.Updated,
                 ChangeTime = DateTime.UtcNow,
                 ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule
                 // ChangeInitiator is null for sync operations - could link to sync rule in future
