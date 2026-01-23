@@ -2124,7 +2124,11 @@ public class ConnectedSystemServer
             ChangeTime = DateTime.UtcNow,
             DeletedObjectType = connectedSystemObject.Type,
             // DeletedObjectExternalIdAttributeValue cannot be set - the attribute value is cascade deleted with the CSO
-            ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
+            ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,
+            // Copy initiator info from the Activity for audit trail (if Activity is loaded)
+            InitiatedByType = activityRunProfileExecutionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
+            InitiatedById = activityRunProfileExecutionItem.Activity?.InitiatedById,
+            InitiatedByName = activityRunProfileExecutionItem.Activity?.InitiatedByName
         };
 
         // Log the external ID for audit purposes since we can't persist it via FK
@@ -2180,7 +2184,11 @@ public class ConnectedSystemServer
                     ChangeType = ObjectChangeType.Deleted,
                     ChangeTime = DateTime.UtcNow,
                     DeletedObjectType = cso.Type,
-                    ActivityRunProfileExecutionItem = executionItem
+                    ActivityRunProfileExecutionItem = executionItem,
+                    // Copy initiator info from the Activity for audit trail (if Activity is loaded)
+                    InitiatedByType = executionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
+                    InitiatedById = executionItem.Activity?.InitiatedById,
+                    InitiatedByName = executionItem.Activity?.InitiatedByName
                 };
 
                 executionItem.ConnectedSystemObjectChange = change;
@@ -2505,7 +2513,11 @@ public class ConnectedSystemServer
             ChangeType = ObjectChangeType.Added,
             ChangeTime = DateTime.UtcNow,
             ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,
-            ActivityRunProfileExecutionItemId = activityRunProfileExecutionItem.Id
+            ActivityRunProfileExecutionItemId = activityRunProfileExecutionItem.Id,
+            // Copy initiator info from the Activity for audit trail (if Activity is loaded)
+            InitiatedByType = activityRunProfileExecutionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
+            InitiatedById = activityRunProfileExecutionItem.Activity?.InitiatedById,
+            InitiatedByName = activityRunProfileExecutionItem.Activity?.InitiatedByName
         };
         activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
 
@@ -2561,7 +2573,11 @@ public class ConnectedSystemServer
                 ConnectedSystemObject = connectedSystemObject,
                 ChangeType = ObjectChangeType.Updated,
                 ChangeTime = DateTime.UtcNow,
-                ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
+                ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,
+                // Copy initiator info from the Activity for audit trail (if Activity is loaded)
+                InitiatedByType = activityRunProfileExecutionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
+                InitiatedById = activityRunProfileExecutionItem.Activity?.InitiatedById,
+                InitiatedByName = activityRunProfileExecutionItem.Activity?.InitiatedByName
             };
 
             // the change object will be persisted with the activity run profile execution item further up the stack.

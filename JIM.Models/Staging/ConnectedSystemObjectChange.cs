@@ -40,6 +40,27 @@ public class ConnectedSystemObjectChange
     /// </summary>
     public ObjectChangeType ChangeType { get; set; }
 
+    // -----------------------------------------------------------------------------------------------------------------
+    // Initiator tracking - mirrors Activity's pattern for audit trail
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The type of security principal that initiated this change.
+    /// </summary>
+    public ActivityInitiatorType InitiatedByType { get; set; } = ActivityInitiatorType.NotSet;
+
+    /// <summary>
+    /// The unique identifier of the security principal (MetaverseObject or ApiKey) that initiated this change.
+    /// Retained even if the principal is deleted to support audit investigations.
+    /// </summary>
+    public Guid? InitiatedById { get; set; }
+
+    /// <summary>
+    /// The display name of the security principal at the time of the change.
+    /// Retained even if the principal is deleted to maintain audit trail readability.
+    /// </summary>
+    public string? InitiatedByName { get; set; }
+
     /// <summary>
     /// Enables access to per-attribute value changes for the connected system object in question.
     /// </summary>

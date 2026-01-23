@@ -4,6 +4,7 @@
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Transactional
+@using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Enums
 @using JIM.Utilities
@@ -381,12 +382,12 @@ new(CsoId.ToString(), href: null, disabled: true)
             {
                 ChangeType = change.ChangeType,
                 ChangeTime = change.ChangeTime,
-                // CSO changes: Initiated by the connected system via import
-                ChangeInitiatorType = "Import",
-                ChangeInitiatorName = ConnectedSystemHeader?.Name ?? "Connected System",
-                ChangeInitiatorId = null,
+                // CSO changes: Map the principal that initiated the import (User or ApiKey)
+                ChangeInitiatorType = MapInitiatorType(change.InitiatedByType),
+                ChangeInitiatorName = change.InitiatedByName,
+                ChangeInitiatorId = change.InitiatedById,
+                // Mechanism is Import, with link to connected system
                 ChangeMechanismType = "Import",
-                // Connected system info for mechanism link
                 ConnectedSystemId = ConnectedSystemHeader?.Id,
                 ConnectedSystemName = ConnectedSystemHeader?.Name,
                 SyncRuleId = null,
@@ -411,5 +412,15 @@ new(CsoId.ToString(), href: null, disabled: true)
                     .ToList()
             })
             .ToList();
+    }
+
+    private static string MapInitiatorType(ActivityInitiatorType initiatorType)
+    {
+        return initiatorType switch
+        {
+            ActivityInitiatorType.User => "User",
+            ActivityInitiatorType.ApiKey => "ApiKey",
+            _ => "Unknown"
+        };
     }
 }
