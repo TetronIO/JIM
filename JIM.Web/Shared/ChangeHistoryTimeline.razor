@@ -58,7 +58,7 @@ else
                                 {
                                     <MudDivider />
                                     <div class="change-summary">
-                                        @foreach (var change in GetVisibleChanges(changeGroup))
+                                        @foreach (var change in GetVisibleDisplayChanges(changeGroup))
                                         {
                                             <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mb-1">
                                                 <MudText Typo="Typo.body2" Class="jim-text-code" Style="min-width: 120px;">
@@ -67,22 +67,22 @@ else
                                                 <MudChip T="string"
                                                          Variant="Variant.Text"
                                                          Size="Size.Small"
-                                                         Color="@Helpers.GetMudBlazorColorForValueChangeType(change.ChangeType)">
-                                                    @change.ChangeType
+                                                         Color="@GetDisplayChangeTypeColor(change)">
+                                                    @change.DisplayChangeType
                                                 </MudChip>
                                                 <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                                    @(change.ReferenceValue?.DisplayName ?? change.Value)
+                                                    @GetDisplayValue(change)
                                                 </MudText>
                                             </MudStack>
                                         }
-                                        @if (ShouldShowMoreIndicator(changeGroup))
+                                        @if (ShouldShowMoreIndicatorForDisplay(changeGroup))
                                         {
                                             <div class="more-changes-indicator">
                                                 <MudChip T="string"
                                                          Variant="Variant.Filled"
                                                          Size="Size.Small"
                                                          Color="Color.Primary">
-                                                    +@GetRemainingChangesCount(changeGroup) more
+                                                    +@GetRemainingDisplayChangesCount(changeGroup) more
                                                 </MudChip>
                                             </div>
                                         }
@@ -190,6 +190,12 @@ else
                                     <MudText Typo="Typo.body2" Class="jim-text-code" Style="min-width: 120px;">
                                         @summary.AttributeName
                                     </MudText>
+                                    @if (summary.UpdateCount > 0)
+                                    {
+                                        <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Info">
+                                            Updated
+                                        </MudChip>
+                                    }
                                     @if (summary.AddCount > 0)
                                     {
                                         <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Success">
@@ -252,13 +258,13 @@ else
             </div>
 
             <!-- Paginated table -->
-            <MudTable Items="@GetFilteredModalChanges()"
+            <MudTable Items="@GetFilteredModalDisplayChanges()"
                       Dense="true"
                       Hover="true"
                       Breakpoint="Breakpoint.Sm"
                       Elevation="0"
                       RowsPerPage="10"
-                      T="AttributeChange">
+                      T="AttributeChangeDisplay">
                 <HeaderContent>
                     <MudTh>Attribute</MudTh>
                     <MudTh>Change</MudTh>
@@ -271,12 +277,42 @@ else
                     <MudTd DataLabel="Change">
                         <MudChip T="string"
                                  Variant="Variant.Text"
-                                 Color="@Helpers.GetMudBlazorColorForValueChangeType(context.ChangeType)">
-                            @context.ChangeType
+                                 Color="@GetDisplayChangeTypeColor(context)">
+                            @context.DisplayChangeType
                         </MudChip>
                     </MudTd>
                     <MudTd DataLabel="Value">
-                        @if (context.ReferenceValue != null)
+                        @if (context.IsUpdate)
+                        {
+                            @* SVA Update - show old → new *@
+                            @if (context.OldReferenceValue != null || context.NewReferenceValue != null)
+                            {
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    @if (context.OldReferenceValue != null)
+                                    {
+                                        <MudLink Href="@context.OldReferenceValue.Href">@context.OldReferenceValue.DisplayName</MudLink>
+                                    }
+                                    else
+                                    {
+                                        <MudText Class="mud-text-secondary">(none)</MudText>
+                                    }
+                                    <MudText>→</MudText>
+                                    @if (context.NewReferenceValue != null)
+                                    {
+                                        <MudLink Href="@context.NewReferenceValue.Href">@context.NewReferenceValue.DisplayName</MudLink>
+                                    }
+                                    else
+                                    {
+                                        <MudText Class="mud-text-secondary">(none)</MudText>
+                                    }
+                                </MudStack>
+                            }
+                            else
+                            {
+                                <MudText>@context.DisplayValue</MudText>
+                            }
+                        }
+                        else if (context.ReferenceValue != null)
                         {
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                 <MudChip T="string" Color="Color.Default" Size="Size.Small">@context.ReferenceValue.TypeName</MudChip>
@@ -291,7 +327,7 @@ else
                         }
                         else
                         {
-                            <MudText>@context.Value</MudText>
+                            <MudText>@context.DisplayValue</MudText>
                         }
                     </MudTd>
                 </RowTemplate>
@@ -387,6 +423,12 @@ else
         public ValueChangeType ChangeType { get; set; }
         public string? Value { get; set; }
         public ReferenceValueInfo? ReferenceValue { get; set; }
+        /// <summary>
+        /// Whether this attribute is multi-valued. Used to determine display format:
+        /// - SVA (single-valued): Show as "Update" when there's both Add and Remove
+        /// - MVA (multi-valued): Show individual Add/Remove operations
+        /// </summary>
+        public bool IsMultiValued { get; set; }
     }
 
     /// <summary>
@@ -398,6 +440,121 @@ else
         public string DisplayName { get; set; } = string.Empty;
         public string? SecondaryId { get; set; }
         public string Href { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Display model for attribute changes that handles SVA vs MVA presentation.
+    /// For SVAs with both Add and Remove, this collapses them into a single "Update" row.
+    /// </summary>
+    public class AttributeChangeDisplay
+    {
+        public string AttributeName { get; set; } = string.Empty;
+        /// <summary>
+        /// Display change type: Add, Remove, or Update (for SVA with both).
+        /// </summary>
+        public string DisplayChangeType { get; set; } = string.Empty;
+        /// <summary>
+        /// For Update: "OldValue → NewValue". For Add/Remove: just the value.
+        /// </summary>
+        public string? DisplayValue { get; set; }
+        /// <summary>
+        /// For MVA reference values, the reference info.
+        /// </summary>
+        public ReferenceValueInfo? ReferenceValue { get; set; }
+        /// <summary>
+        /// For SVA reference updates: the old reference being removed.
+        /// </summary>
+        public ReferenceValueInfo? OldReferenceValue { get; set; }
+        /// <summary>
+        /// For SVA reference updates: the new reference being added.
+        /// </summary>
+        public ReferenceValueInfo? NewReferenceValue { get; set; }
+        /// <summary>
+        /// Whether this is an update (SVA with both Add and Remove).
+        /// </summary>
+        public bool IsUpdate { get; set; }
+        /// <summary>
+        /// The underlying change type for filtering purposes.
+        /// </summary>
+        public ValueChangeType UnderlyingChangeType { get; set; }
+    }
+
+    /// <summary>
+    /// Converts raw AttributeChanges into display items, collapsing SVA Add+Remove pairs into Updates.
+    /// </summary>
+    private List<AttributeChangeDisplay> GetDisplayChanges(ChangeGroup changeGroup)
+    {
+        var result = new List<AttributeChangeDisplay>();
+
+        // Group changes by attribute name
+        var groupedByAttribute = changeGroup.AttributeChanges
+            .GroupBy(c => c.AttributeName)
+            .OrderBy(g => g.Key);
+
+        foreach (var group in groupedByAttribute)
+        {
+            var changes = group.ToList();
+            var isMultiValued = changes.FirstOrDefault()?.IsMultiValued ?? false;
+
+            if (!isMultiValued)
+            {
+                // SVA: Check if we have both Add and Remove (i.e., an update)
+                var addChange = changes.FirstOrDefault(c => c.ChangeType == ValueChangeType.Add);
+                var removeChange = changes.FirstOrDefault(c => c.ChangeType == ValueChangeType.Remove);
+
+                if (addChange != null && removeChange != null)
+                {
+                    // It's an update - combine into single display item
+                    result.Add(new AttributeChangeDisplay
+                    {
+                        AttributeName = group.Key,
+                        DisplayChangeType = "Update",
+                        IsUpdate = true,
+                        UnderlyingChangeType = ValueChangeType.Add, // For filtering, treat as Add
+                        // Handle both scalar and reference values
+                        DisplayValue = (removeChange.ReferenceValue == null && addChange.ReferenceValue == null)
+                            ? $"{removeChange.Value} → {addChange.Value}"
+                            : null,
+                        OldReferenceValue = removeChange.ReferenceValue,
+                        NewReferenceValue = addChange.ReferenceValue
+                    });
+                }
+                else
+                {
+                    // SVA with only Add or only Remove
+                    foreach (var change in changes)
+                    {
+                        result.Add(new AttributeChangeDisplay
+                        {
+                            AttributeName = change.AttributeName,
+                            DisplayChangeType = change.ChangeType.ToString(),
+                            IsUpdate = false,
+                            UnderlyingChangeType = change.ChangeType,
+                            DisplayValue = change.Value,
+                            ReferenceValue = change.ReferenceValue
+                        });
+                    }
+                }
+            }
+            else
+            {
+                // MVA: Show all individual Add/Remove operations
+                foreach (var change in changes)
+                {
+                    result.Add(new AttributeChangeDisplay
+                    {
+                        AttributeName = change.AttributeName,
+                        DisplayChangeType = change.ChangeType.ToString(),
+                        IsUpdate = false,
+                        UnderlyingChangeType = change.ChangeType,
+                        DisplayValue = change.Value,
+                        ReferenceValue = change.ReferenceValue
+                    });
+                }
+            }
+        }
+
+        return result;
     }
 
     private IEnumerable<ChangeGroup> GetFilteredChangeGroups()
@@ -447,22 +604,69 @@ else
 
     private const int MaxVisibleChanges = 3;
 
-    private IEnumerable<AttributeChange> GetVisibleChanges(ChangeGroup changeGroup)
+    /// <summary>
+    /// Gets visible display changes for the timeline card (limited to MaxVisibleChanges).
+    /// Uses the display model which collapses SVA Add+Remove into Update.
+    /// </summary>
+    private IEnumerable<AttributeChangeDisplay> GetVisibleDisplayChanges(ChangeGroup changeGroup)
     {
-        // Show individual changes, limited to MaxVisibleChanges
-        return changeGroup.AttributeChanges.Take(MaxVisibleChanges);
+        return GetDisplayChanges(changeGroup).Take(MaxVisibleChanges);
     }
 
-    private int GetRemainingChangesCount(ChangeGroup changeGroup)
+    /// <summary>
+    /// Gets the remaining count of display changes not shown in the timeline card.
+    /// </summary>
+    private int GetRemainingDisplayChangesCount(ChangeGroup changeGroup)
     {
-        // Count total changes minus the visible ones
-        return changeGroup.AttributeChanges.Count - MaxVisibleChanges;
+        return GetDisplayChanges(changeGroup).Count - MaxVisibleChanges;
     }
 
-    private bool ShouldShowMoreIndicator(ChangeGroup changeGroup)
+    /// <summary>
+    /// Determines if the "+N more" indicator should be shown for display changes.
+    /// </summary>
+    private bool ShouldShowMoreIndicatorForDisplay(ChangeGroup changeGroup)
     {
-        // Show indicator when there are more changes than we display
-        return changeGroup.AttributeChanges.Count > MaxVisibleChanges;
+        return GetDisplayChanges(changeGroup).Count > MaxVisibleChanges;
+    }
+
+    /// <summary>
+    /// Gets the MudBlazor color for a display change type.
+    /// </summary>
+    private Color GetDisplayChangeTypeColor(AttributeChangeDisplay change)
+    {
+        if (change.IsUpdate)
+            return Color.Info; // Blue for updates
+        return change.DisplayChangeType switch
+        {
+            "Add" => Color.Success,
+            "Remove" => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    /// <summary>
+    /// Gets the display value string for an attribute change display item.
+    /// For updates: "OldValue → NewValue" or reference display names.
+    /// For add/remove: just the value or reference display name.
+    /// </summary>
+    private string GetDisplayValue(AttributeChangeDisplay change)
+    {
+        if (change.IsUpdate)
+        {
+            // SVA Update
+            if (change.OldReferenceValue != null || change.NewReferenceValue != null)
+            {
+                // Reference update
+                var oldName = change.OldReferenceValue?.DisplayName ?? "(none)";
+                var newName = change.NewReferenceValue?.DisplayName ?? "(none)";
+                return $"{oldName} → {newName}";
+            }
+            // Scalar update
+            return change.DisplayValue ?? string.Empty;
+        }
+
+        // Simple Add or Remove
+        return change.ReferenceValue?.DisplayName ?? change.DisplayValue ?? string.Empty;
     }
 
     private void OpenChangeDetails(ChangeGroup changeGroup)
@@ -483,17 +687,40 @@ else
 
     /// <summary>
     /// Gets aggregated summary of changes grouped by attribute.
-    /// Shows count of adds and removes per attribute.
+    /// For SVAs: Shows "Update" when there's both Add and Remove.
+    /// For MVAs: Shows individual Add and Remove counts.
     /// </summary>
     private List<AttributeChangeSummary> GetAggregatedSummary(ChangeGroup changeGroup)
     {
         return changeGroup.AttributeChanges
             .GroupBy(c => c.AttributeName)
-            .Select(g => new AttributeChangeSummary
+            .Select(g =>
             {
-                AttributeName = g.Key,
-                AddCount = g.Count(c => c.ChangeType == ValueChangeType.Add),
-                RemoveCount = g.Count(c => c.ChangeType == ValueChangeType.Remove)
+                var changes = g.ToList();
+                var isMultiValued = changes.FirstOrDefault()?.IsMultiValued ?? false;
+                var addCount = changes.Count(c => c.ChangeType == ValueChangeType.Add);
+                var removeCount = changes.Count(c => c.ChangeType == ValueChangeType.Remove);
+
+                if (!isMultiValued && addCount > 0 && removeCount > 0)
+                {
+                    // SVA with both Add and Remove = Update
+                    return new AttributeChangeSummary
+                    {
+                        AttributeName = g.Key,
+                        AddCount = 0,
+                        RemoveCount = 0,
+                        UpdateCount = 1
+                    };
+                }
+
+                // MVA or SVA with only Add or only Remove
+                return new AttributeChangeSummary
+                {
+                    AttributeName = g.Key,
+                    AddCount = addCount,
+                    RemoveCount = removeCount,
+                    UpdateCount = 0
+                };
             })
             .OrderBy(s => s.AttributeName)
             .ToList();
@@ -511,37 +738,42 @@ else
     }
 
     /// <summary>
-    /// Gets filtered changes for the modal table based on current filter state.
+    /// Gets filtered display changes for the modal table based on current filter state.
+    /// Uses the display model which collapses SVA Add+Remove into Update.
     /// </summary>
-    private IEnumerable<AttributeChange> GetFilteredModalChanges()
+    private IEnumerable<AttributeChangeDisplay> GetFilteredModalDisplayChanges()
     {
         if (_selectedChange == null)
-            return Enumerable.Empty<AttributeChange>();
+            return Enumerable.Empty<AttributeChangeDisplay>();
 
-        var filtered = _selectedChange.AttributeChanges.AsEnumerable();
+        var displayChanges = GetDisplayChanges(_selectedChange).AsEnumerable();
 
         // Apply search filter
         if (!string.IsNullOrWhiteSpace(_modalSearchText))
         {
-            filtered = filtered.Where(c =>
+            displayChanges = displayChanges.Where(c =>
                 c.AttributeName.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ||
-                (c.Value?.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                (c.ReferenceValue?.DisplayName.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ?? false));
+                (c.DisplayValue?.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (c.ReferenceValue?.DisplayName.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (c.OldReferenceValue?.DisplayName.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (c.NewReferenceValue?.DisplayName.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ?? false));
         }
 
         // Apply attribute filter
         if (!string.IsNullOrEmpty(_modalFilterAttribute))
         {
-            filtered = filtered.Where(c => c.AttributeName == _modalFilterAttribute);
+            displayChanges = displayChanges.Where(c => c.AttributeName == _modalFilterAttribute);
         }
 
-        // Apply change type filter
+        // Apply change type filter (Update matches Add filter since it represents a value being set)
         if (_modalFilterChangeType.HasValue)
         {
-            filtered = filtered.Where(c => c.ChangeType == _modalFilterChangeType.Value);
+            displayChanges = displayChanges.Where(c =>
+                c.UnderlyingChangeType == _modalFilterChangeType.Value ||
+                (c.IsUpdate && _modalFilterChangeType.Value == ValueChangeType.Add));
         }
 
-        return filtered.OrderBy(c => c.AttributeName).ThenBy(c => c.ChangeType);
+        return displayChanges.OrderBy(c => c.AttributeName).ThenBy(c => c.DisplayChangeType);
     }
 
     /// <summary>
@@ -552,6 +784,10 @@ else
         public string AttributeName { get; set; } = string.Empty;
         public int AddCount { get; set; }
         public int RemoveCount { get; set; }
+        /// <summary>
+        /// Count of SVA updates (where there's both an Add and Remove).
+        /// </summary>
+        public int UpdateCount { get; set; }
     }
 
     private string GetRelativeTime(DateTime changeTime)

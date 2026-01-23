@@ -156,7 +156,8 @@
                             DisplayName = vc.ReferenceValue.DisplayName ?? vc.ReferenceValue.Id.ToString(),
                             SecondaryId = null, // MVO doesn't have secondary external ID
                             Href = Utilities.GetMetaverseObjectHref(vc.ReferenceValue)
-                        } : null
+                        } : null,
+                        IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued
                     }))
                     .ToList()
             })
