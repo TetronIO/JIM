@@ -37,30 +37,20 @@ else
         @foreach (var changeGroup in GetFilteredChangeGroups())
         {
             <MudTimelineItem Color="@GetChangeTypeColor(changeGroup.ChangeType)" Size="Size.Small" Elevation="0">
-                <ItemOpposite>
-                    <MudTooltip Text="@changeGroup.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")" Placement="Placement.Top" Arrow="true">
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                            @GetRelativeTime(changeGroup.ChangeTime)
-                        </MudText>
-                    </MudTooltip>
-                </ItemOpposite>
                 <ItemContent>
                     <MudCard Outlined="true" Class="cursor-pointer" @onclick="() => OpenChangeDetails(changeGroup)">
                         <MudCardContent>
                             <MudStack Spacing="2">
-                                <!-- Change Header -->
-                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <!-- Change Header: {icon} {type}    {relative date}    {mechanism icon} {mechanism} by {initiator} -->
+                                <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center" Style="flex-wrap: wrap; gap: 6px;">
                                     <MudIcon Icon="@GetChangeTypeIcon(changeGroup.ChangeType)"
                                              Color="@GetChangeTypeColor(changeGroup.ChangeType)"
-                                             Size="Size.Medium" />
-                                    <div>
-                                        <MudText Typo="Typo.subtitle1">
-                                            <strong>@changeGroup.ChangeType</strong>
-                                        </MudText>
-                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                            @GetTimelineInitiatorDisplay(changeGroup)
-                                        </MudText>
-                                    </div>
+                                             Size="Size.Small" />
+                                    <MudText Typo="Typo.body1" Style="margin-right: 12px;"><strong>@changeGroup.ChangeType</strong></MudText>
+                                    <MudTooltip Text="@changeGroup.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")" Placement="Placement.Top" Arrow="true">
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="margin-right: 12px;">@GetRelativeTime(changeGroup.ChangeTime)</MudText>
+                                    </MudTooltip>
+                                    @GetTimelineInitiatorDisplay(changeGroup)
                                 </MudStack>
 
                                 <!-- Summary of Changes -->
@@ -467,13 +457,15 @@ else
 
     /// <summary>
     /// Generates the timeline card initiator display.
-    /// Format: "🔄 Synchronisation by Alice Anderson" for sync changes
-    /// Format: "👤 Alice Anderson" for direct user changes
+    /// Format: "{icon} Synchronisation by {Name}" for sync changes
+    /// Format: "{icon} {Name}" for direct user changes
     /// </summary>
     private RenderFragment GetTimelineInitiatorDisplay(ChangeGroup changeGroup)
     {
         return builder =>
         {
+            int seq = 0;
+
             // Determine if this is a sync-initiated change
             bool isSyncChange = changeGroup.ChangeInitiatorType == "SynchronisationRule" ||
                                 changeGroup.SyncRuleId != null ||
@@ -482,21 +474,26 @@ else
             if (isSyncChange)
             {
                 // Sync icon
-                builder.OpenComponent<MudIcon>(0);
-                builder.AddAttribute(1, "Icon", Icons.Material.Filled.Sync);
-                builder.AddAttribute(2, "Size", Size.Small);
-                builder.AddAttribute(3, "Style", "margin-right: 4px; vertical-align: text-bottom;");
+                builder.OpenComponent<MudIcon>(seq++);
+                builder.AddAttribute(seq++, "Icon", Icons.Material.Filled.Sync);
+                builder.AddAttribute(seq++, "Size", Size.Small);
+                builder.AddAttribute(seq++, "Class", "mud-text-secondary");
+                builder.AddAttribute(seq++, "Style", "margin-right: 4px;");
                 builder.CloseComponent();
 
                 // "Synchronisation by {Name}"
+                builder.OpenComponent<MudText>(seq++);
+                builder.AddAttribute(seq++, "Typo", Typo.body2);
+                builder.AddAttribute(seq++, "Class", "mud-text-secondary");
                 if (!string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
                 {
-                    builder.AddContent(4, $"Synchronisation by {changeGroup.ChangeInitiatorName}");
+                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, $"Synchronisation by {changeGroup.ChangeInitiatorName}")));
                 }
                 else
                 {
-                    builder.AddContent(4, "Synchronisation");
+                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Synchronisation")));
                 }
+                builder.CloseComponent();
             }
             else
             {
@@ -509,13 +506,18 @@ else
                     _ => Icons.Material.Filled.HelpOutline
                 };
 
-                builder.OpenComponent<MudIcon>(0);
-                builder.AddAttribute(1, "Icon", icon);
-                builder.AddAttribute(2, "Size", Size.Small);
-                builder.AddAttribute(3, "Style", "margin-right: 4px; vertical-align: text-bottom;");
+                builder.OpenComponent<MudIcon>(seq++);
+                builder.AddAttribute(seq++, "Icon", icon);
+                builder.AddAttribute(seq++, "Size", Size.Small);
+                builder.AddAttribute(seq++, "Class", "mud-text-secondary");
+                builder.AddAttribute(seq++, "Style", "margin-right: 4px;");
                 builder.CloseComponent();
 
-                builder.AddContent(4, changeGroup.ChangeInitiatorName ?? changeGroup.ChangeInitiatorType);
+                builder.OpenComponent<MudText>(seq++);
+                builder.AddAttribute(seq++, "Typo", Typo.body2);
+                builder.AddAttribute(seq++, "Class", "mud-text-secondary");
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ChangeInitiatorName ?? changeGroup.ChangeInitiatorType)));
+                builder.CloseComponent();
             }
         };
     }
