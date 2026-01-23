@@ -75,4 +75,10 @@ public class ConnectedSystemObjectChange
     /// If the object was deleted, the External Id attribute will be copied here to make it possible to identify which object was deleted.
     /// </summary>
     public ConnectedSystemObjectAttributeValue? DeletedObjectExternalIdAttributeValue { get; set; }
+
+    /// <summary>
+    /// If the object was deleted, the display name is preserved here for UI display in the deleted objects browser.
+    /// This is typically the value of the displayName or name attribute at the time of deletion.
+    /// </summary>
+    public string? DeletedObjectDisplayName { get; set; }
 }

@@ -1940,6 +1940,84 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<(List<ConnectedSystemObjectChange> Items, int TotalCount)> GetDeletedCsoChangesAsync(
+        int? connectedSystemId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? externalIdSearch = null,
+        int page = 1,
+        int pageSize = 50)
+    {
+        var query = Repository.Database.ConnectedSystemObjectChanges
+            .Where(c => c.ChangeType == ObjectChangeType.Deleted && c.ConnectedSystemObject == null);
+
+        // Apply filters
+        if (connectedSystemId.HasValue)
+            query = query.Where(c => c.ConnectedSystemId == connectedSystemId.Value);
+
+        if (fromDate.HasValue)
+            query = query.Where(c => c.ChangeTime >= fromDate.Value);
+
+        if (toDate.HasValue)
+            query = query.Where(c => c.ChangeTime <= toDate.Value);
+
+        if (!string.IsNullOrWhiteSpace(externalIdSearch))
+        {
+            query = query.Where(c =>
+                c.DeletedObjectExternalIdAttributeValue != null &&
+                c.DeletedObjectExternalIdAttributeValue.StringValue != null &&
+                c.DeletedObjectExternalIdAttributeValue.StringValue.Contains(externalIdSearch));
+        }
+
+        // Get total count before pagination
+        var totalCount = await query.CountAsync();
+
+        // Apply ordering and pagination
+        var items = await query
+            .OrderByDescending(c => c.ChangeTime)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Include(c => c.DeletedObjectType)
+            .Include(c => c.DeletedObjectExternalIdAttributeValue)
+            .ThenInclude(av => av!.Attribute)
+            .ToListAsync();
+
+        return (items, totalCount);
+    }
+
+    /// <inheritdoc />
+    public async Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId)
+    {
+        // First, get the change to find the ConnectedSystemId and External ID
+        var targetChange = await Repository.Database.ConnectedSystemObjectChanges
+            .Include(c => c.DeletedObjectExternalIdAttributeValue)
+            .FirstOrDefaultAsync(c => c.Id == changeId);
+
+        if (targetChange == null)
+            return new List<ConnectedSystemObjectChange>();
+
+        // Get all changes for that CSO based on External ID and Connected System
+        // Since the CSO is deleted, we need to match by external ID value
+        var externalIdValue = targetChange.DeletedObjectExternalIdAttributeValue?.StringValue;
+        if (string.IsNullOrEmpty(externalIdValue))
+            return new List<ConnectedSystemObjectChange> { targetChange };
+
+        return await Repository.Database.ConnectedSystemObjectChanges
+            .AsSplitQuery()
+            .Where(c => c.ConnectedSystemId == targetChange.ConnectedSystemId &&
+                        c.DeletedObjectExternalIdAttributeValue != null &&
+                        c.DeletedObjectExternalIdAttributeValue.StringValue == externalIdValue)
+            .OrderByDescending(c => c.ChangeTime)
+            .Include(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.Attribute)
+            .Include(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.ValueChanges)
+            .ThenInclude(vc => vc.ReferenceValue)
+            .ThenInclude(rv => rv!.Type)
+            .ToListAsync();
+    }
+
     public async Task<SyncRule?> GetSyncRuleAsync(int id)
     {
         return await Repository.Database.SyncRules

@@ -959,6 +959,76 @@ public class MetaverseRepository : IMetaverseRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<(List<MetaverseObjectChange> Items, int TotalCount)> GetDeletedMvoChangesAsync(
+        int? objectTypeId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? displayNameSearch = null,
+        int page = 1,
+        int pageSize = 50)
+    {
+        var query = Repository.Database.MetaverseObjectChanges
+            .Where(c => c.ChangeType == ObjectChangeType.Deleted && c.MetaverseObject == null);
+
+        // Apply filters
+        if (objectTypeId.HasValue)
+            query = query.Where(c => c.DeletedObjectTypeId == objectTypeId.Value);
+
+        if (fromDate.HasValue)
+            query = query.Where(c => c.ChangeTime >= fromDate.Value);
+
+        if (toDate.HasValue)
+            query = query.Where(c => c.ChangeTime <= toDate.Value);
+
+        if (!string.IsNullOrWhiteSpace(displayNameSearch))
+        {
+            query = query.Where(c =>
+                c.DeletedObjectDisplayName != null &&
+                c.DeletedObjectDisplayName.Contains(displayNameSearch));
+        }
+
+        // Get total count before pagination
+        var totalCount = await query.CountAsync();
+
+        // Apply ordering and pagination
+        var items = await query
+            .OrderByDescending(c => c.ChangeTime)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Include(c => c.DeletedObjectType)
+            .ToListAsync();
+
+        return (items, totalCount);
+    }
+
+    /// <inheritdoc />
+    public async Task<List<MetaverseObjectChange>> GetDeletedMvoChangeHistoryAsync(Guid changeId)
+    {
+        // First, get the change to find the MVO ID pattern (from the change record)
+        var targetChange = await Repository.Database.MetaverseObjectChanges
+            .FirstOrDefaultAsync(c => c.Id == changeId);
+
+        if (targetChange == null)
+            return new List<MetaverseObjectChange>();
+
+        // For deleted MVOs, we can only return changes that share the same display name and type
+        // since the MVO ID link is broken. This is a best-effort match.
+        if (string.IsNullOrEmpty(targetChange.DeletedObjectDisplayName) || !targetChange.DeletedObjectTypeId.HasValue)
+            return new List<MetaverseObjectChange> { targetChange };
+
+        return await Repository.Database.MetaverseObjectChanges
+            .AsSplitQuery()
+            .Where(c => c.DeletedObjectTypeId == targetChange.DeletedObjectTypeId &&
+                        c.DeletedObjectDisplayName == targetChange.DeletedObjectDisplayName)
+            .OrderByDescending(c => c.ChangeTime)
+            .Include(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.Attribute)
+            .Include(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.ValueChanges)
+            .ToListAsync();
+    }
+
     private static List<MetaverseObjectAttributeValue> GetFilteredAttributeValuesList(PredefinedSearch predefinedSearch, MetaverseObject metaverseObject)
     {
         return predefinedSearch.Attributes

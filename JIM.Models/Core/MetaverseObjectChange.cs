@@ -77,4 +77,23 @@ public class MetaverseObjectChange
     /// Enables access to per-attribute value changes for the metaverse object in question.
     /// </summary>
     public List<MetaverseObjectChangeAttribute> AttributeChanges { get; set; } = new List<MetaverseObjectChangeAttribute>();
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Deleted object tracking - preserved for audit trail when MVO is deleted
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// If the object was deleted, the object type ID is preserved here.
+    /// </summary>
+    public int? DeletedObjectTypeId { get; set; }
+
+    /// <summary>
+    /// If the object was deleted, the object type is preserved here for display.
+    /// </summary>
+    public MetaverseObjectType? DeletedObjectType { get; set; }
+
+    /// <summary>
+    /// If the object was deleted, the display name is preserved here for UI display in the deleted objects browser.
+    /// </summary>
+    public string? DeletedObjectDisplayName { get; set; }
 }
