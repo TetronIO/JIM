@@ -176,14 +176,87 @@ else
                     }
                 </MudGrid>
             </MudPaper>
+
+            <!-- Aggregated Summary (shown when more than 1 change) -->
+            @if (_selectedChange.AttributeChanges.Count > 1)
+            {
+                <MudPaper Class="pa-3 mb-4" Outlined="true" Style="background-color: var(--mud-palette-background-grey);">
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary mb-2">Summary</MudText>
+                    <div class="aggregated-summary">
+                        @foreach (var summary in GetAggregatedSummary(_selectedChange))
+                        {
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mb-1">
+                                <MudText Typo="Typo.body2" Class="jim-text-code" Style="min-width: 140px;">
+                                    @summary.AttributeName
+                                </MudText>
+                                @if (summary.AddCount > 0)
+                                {
+                                    <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Success">
+                                        +@summary.AddCount added
+                                    </MudChip>
+                                }
+                                @if (summary.RemoveCount > 0)
+                                {
+                                    <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Error">
+                                        -@summary.RemoveCount removed
+                                    </MudChip>
+                                }
+                            </MudStack>
+                        }
+                    </div>
+                </MudPaper>
+            }
         }
         @if (_selectedChange?.AttributeChanges.Any() == true)
         {
-            <MudTable Items="@_selectedChange.AttributeChanges"
+            <!-- Filter controls for the table -->
+            <div style="display: flex; flex-direction: row; gap: 12px; margin-bottom: 12px;">
+                <div style="width: 250px;">
+                    <MudTextField @bind-Value="_modalSearchText"
+                                  Label="Search"
+                                  Variant="Variant.Outlined"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Immediate="true"
+                                  DebounceInterval="300"
+                                  Margin="Margin.Dense" />
+                </div>
+                <div style="width: 180px;">
+                    <MudSelect T="string"
+                               @bind-Value="_modalFilterAttribute"
+                               Label="Attribute"
+                               Variant="Variant.Outlined"
+                               Dense="true"
+                               Margin="Margin.Dense">
+                        <MudSelectItem T="string" Value="@((string)null!)">All Attributes</MudSelectItem>
+                        @foreach (var attr in GetUniqueAttributes(_selectedChange))
+                        {
+                            <MudSelectItem T="string" Value="@attr">@attr</MudSelectItem>
+                        }
+                    </MudSelect>
+                </div>
+                <div style="width: 150px;">
+                    <MudSelect T="ValueChangeType?"
+                               @bind-Value="_modalFilterChangeType"
+                               Label="Change type"
+                               Variant="Variant.Outlined"
+                               Dense="true"
+                               Margin="Margin.Dense">
+                        <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)null)">All</MudSelectItem>
+                        <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Add)">Add</MudSelectItem>
+                        <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Remove)">Remove</MudSelectItem>
+                    </MudSelect>
+                </div>
+            </div>
+
+            <!-- Paginated table -->
+            <MudTable Items="@GetFilteredModalChanges()"
                       Dense="true"
                       Hover="true"
                       Breakpoint="Breakpoint.Sm"
-                      Elevation="0">
+                      Elevation="0"
+                      RowsPerPage="10"
+                      T="AttributeChange">
                 <HeaderContent>
                     <MudTh>Attribute</MudTh>
                     <MudTh>Change</MudTh>
@@ -220,6 +293,9 @@ else
                         }
                     </MudTd>
                 </RowTemplate>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
+                </PagerContent>
             </MudTable>
         }
         else
@@ -264,6 +340,11 @@ else
     private ValueChangeType? _filterChangeType = null;
     private bool _detailsDialogVisible = false;
     private ChangeGroup? _selectedChange = null;
+
+    // Modal filter state
+    private string _modalSearchText = string.Empty;
+    private string? _modalFilterAttribute = null;
+    private ValueChangeType? _modalFilterChangeType = null;
 
     private DialogOptions _dialogOptions = new DialogOptions
     {
@@ -385,6 +466,10 @@ else
     private void OpenChangeDetails(ChangeGroup changeGroup)
     {
         _selectedChange = changeGroup;
+        // Reset modal filters when opening
+        _modalSearchText = string.Empty;
+        _modalFilterAttribute = null;
+        _modalFilterChangeType = null;
         _detailsDialogVisible = true;
     }
 
@@ -392,6 +477,79 @@ else
     {
         _detailsDialogVisible = false;
         _selectedChange = null;
+    }
+
+    /// <summary>
+    /// Gets aggregated summary of changes grouped by attribute.
+    /// Shows count of adds and removes per attribute.
+    /// </summary>
+    private List<AttributeChangeSummary> GetAggregatedSummary(ChangeGroup changeGroup)
+    {
+        return changeGroup.AttributeChanges
+            .GroupBy(c => c.AttributeName)
+            .Select(g => new AttributeChangeSummary
+            {
+                AttributeName = g.Key,
+                AddCount = g.Count(c => c.ChangeType == ValueChangeType.Add),
+                RemoveCount = g.Count(c => c.ChangeType == ValueChangeType.Remove)
+            })
+            .OrderBy(s => s.AttributeName)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Gets unique attribute names from a change group for the filter dropdown.
+    /// </summary>
+    private IEnumerable<string> GetUniqueAttributes(ChangeGroup changeGroup)
+    {
+        return changeGroup.AttributeChanges
+            .Select(c => c.AttributeName)
+            .Distinct()
+            .OrderBy(n => n);
+    }
+
+    /// <summary>
+    /// Gets filtered changes for the modal table based on current filter state.
+    /// </summary>
+    private IEnumerable<AttributeChange> GetFilteredModalChanges()
+    {
+        if (_selectedChange == null)
+            return Enumerable.Empty<AttributeChange>();
+
+        var filtered = _selectedChange.AttributeChanges.AsEnumerable();
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(_modalSearchText))
+        {
+            filtered = filtered.Where(c =>
+                c.AttributeName.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ||
+                (c.Value?.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (c.ReferenceValue?.DisplayName.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        // Apply attribute filter
+        if (!string.IsNullOrEmpty(_modalFilterAttribute))
+        {
+            filtered = filtered.Where(c => c.AttributeName == _modalFilterAttribute);
+        }
+
+        // Apply change type filter
+        if (_modalFilterChangeType.HasValue)
+        {
+            filtered = filtered.Where(c => c.ChangeType == _modalFilterChangeType.Value);
+        }
+
+        return filtered.OrderBy(c => c.AttributeName).ThenBy(c => c.ChangeType);
+    }
+
+    /// <summary>
+    /// Represents an aggregated summary of changes for a single attribute.
+    /// </summary>
+    private class AttributeChangeSummary
+    {
+        public string AttributeName { get; set; } = string.Empty;
+        public int AddCount { get; set; }
+        public int RemoveCount { get; set; }
     }
 
     private string GetRelativeTime(DateTime changeTime)
