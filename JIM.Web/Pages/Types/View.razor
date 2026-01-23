@@ -131,9 +131,13 @@
             {
                 ChangeType = change.ChangeType,
                 ChangeTime = change.ChangeTime,
-                ChangeInitiatorType = change.ChangeInitiatorType.ToString(),
-                ChangeInitiatorName = change.ChangeInitiator?.DisplayName,
-                ChangeInitiatorId = change.ChangeInitiator?.Id,
+                // Try RPEI->Activity initiator first, fall back to deprecated ChangeInitiator
+                ChangeInitiatorType = change.ActivityRunProfileExecutionItem?.Activity?.InitiatedByType.ToString()
+                    ?? change.ChangeInitiatorType.ToString(),
+                ChangeInitiatorName = change.ActivityRunProfileExecutionItem?.Activity?.InitiatedByName
+                    ?? change.ChangeInitiator?.DisplayName,
+                ChangeInitiatorId = change.ActivityRunProfileExecutionItem?.Activity?.InitiatedById
+                    ?? change.ChangeInitiator?.Id,
                 AttributeChanges = change.AttributeChanges
                     .OrderBy(ac => ac.Attribute.Name)
                     .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange

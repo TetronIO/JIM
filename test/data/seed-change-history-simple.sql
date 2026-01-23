@@ -38,6 +38,10 @@ DECLARE
     henry_id UUID;
     engineers_group_id UUID;
 
+    -- Activity and RPEI IDs
+    activity_id UUID;
+    rpei_id UUID;
+
     -- Change IDs
     change_id UUID;
     attr_change_id UUID;
@@ -297,15 +301,60 @@ BEGIN
     RAISE NOTICE 'Created Engineers Group: %', engineers_group_id;
 
     -- ========================================================================
-    -- STEP 4: Create Change History - Alice (4 changes)
+    -- STEP 4: Create Activity and RPEI for Change Attribution
+    -- ========================================================================
+
+    RAISE NOTICE 'Creating Activity initiated by Alice...';
+
+    -- Create Activity representing a sync run initiated by Alice
+    activity_id := gen_random_uuid();
+    INSERT INTO "Activities" (
+        "Id", "Created", "Executed", "Status",
+        "InitiatedByType", "InitiatedById", "InitiatedByName",
+        "TargetType", "TargetOperationType",
+        "TargetName", "TargetContext",
+        "ConnectedSystemRunType"
+    )
+    VALUES (
+        activity_id,
+        NOW() - INTERVAL '30 days',  -- Created 30 days ago
+        NOW() - INTERVAL '30 days',  -- Executed immediately
+        3,  -- Completed
+        1,  -- User
+        alice_id,
+        'Alice Anderson',
+        2,  -- ConnectedSystemRunProfile
+        1,  -- Execute
+        'Full Synchronisation',
+        'HR System',
+        3   -- FullSync
+    );
+
+    -- Create a single RPEI that will be linked to all MVO changes
+    -- This simulates a sync run that updated multiple MVOs
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" (
+        "Id", "ActivityId", "ObjectChangeType"
+    )
+    VALUES (
+        rpei_id,
+        activity_id,
+        2  -- Updated
+    );
+
+    RAISE NOTICE 'Created Activity: %', activity_id;
+    RAISE NOTICE 'Created RPEI: %', rpei_id;
+
+    -- ========================================================================
+    -- STEP 5: Create Change History - Alice (4 changes)
     -- ========================================================================
 
     RAISE NOTICE 'Creating Alice change history...';
 
     -- Change 1: Promotion to Lead Engineer (25 days ago)
     change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '25 days', 4);  -- Updated, SynchronisationRule
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
+    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '25 days', 4, rpei_id);  -- Updated, SynchronisationRule, initiated by Alice
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -319,8 +368,8 @@ BEGIN
 
     -- Change 2: Promotion to Engineering Manager (20 days ago)
     change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '20 days', 4);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
+    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '20 days', 4, rpei_id);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -334,8 +383,8 @@ BEGIN
 
     -- Change 3: Department change (15 days ago)
     change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '15 days', 4);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
+    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '15 days', 4, rpei_id);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -349,8 +398,8 @@ BEGIN
 
     -- Change 4: Email update (10 days ago)
     change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '10 days', 4);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
+    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '10 days', 4, rpei_id);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -363,15 +412,16 @@ BEGIN
     VALUES (gen_random_uuid(), attr_change_id, 1, 'alice.anderson@contoso.enterprise.com');  -- Add
 
     -- ========================================================================
-    -- STEP 5: Create Change History - Bob (3 changes)
+    -- STEP 6: Create Change History - Bob (3 changes)
     -- ========================================================================
 
     RAISE NOTICE 'Creating Bob change history...';
 
     -- Change 1: Manager assignment (24 days ago)
     change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, bob_id, 2, NOW() - INTERVAL '24 days', 4);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
+    VALUES (change_id, bob_id, 2, NOW() - INTERVAL '24 days', 4, rpei_id);
+    -- NOTE: Add rpei_id after the 4
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -382,8 +432,9 @@ BEGIN
 
     -- Change 2: Promotion (18 days ago)
     change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, bob_id, 2, NOW() - INTERVAL '18 days', 4);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
+    VALUES (change_id, bob_id, 2, NOW() - INTERVAL '18 days', 4, rpei_id);
+    -- NOTE: Add rpei_id after the 4
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -397,8 +448,9 @@ BEGIN
 
     -- Change 3: Manager change (12 days ago - temporarily removed then re-added)
     change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, bob_id, 2, NOW() - INTERVAL '12 days', 4);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
+    VALUES (change_id, bob_id, 2, NOW() - INTERVAL '12 days', 4, rpei_id);
+    -- NOTE: Add rpei_id after the 4
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -411,15 +463,15 @@ BEGIN
     VALUES (gen_random_uuid(), attr_change_id, 1, alice_id);  -- Re-add (simulating update)
 
     -- ========================================================================
-    -- STEP 6: Create Change History - Engineers Group (11 changes with bulk operations)
+    -- STEP 7: Create Change History - Engineers Group (11 changes with bulk operations)
     -- ========================================================================
 
     RAISE NOTICE 'Creating Engineers Group change history...';
 
     -- Change 1: Initial group name (19 days ago)
     change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '19 days', 4);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '19 days', 4, rpei_id);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -433,8 +485,8 @@ BEGIN
 
     -- Change 2: Bulk initial members added - Alice, Bob, Charlie (18 days ago)
     change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '18 days', 4);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '18 days', 4, rpei_id);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -453,8 +505,8 @@ BEGIN
 
     -- Change 4: Description update (16 days ago)
     change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '16 days', 4);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '16 days', 4, rpei_id);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -468,8 +520,8 @@ BEGIN
 
     -- Change 5: Bulk add Diana, Eve, Frank (15 days ago)
     change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '15 days', 4);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '15 days', 4, rpei_id);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -486,8 +538,8 @@ BEGIN
 
     -- Change 6: Group name refinement (14 days ago)
     change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '14 days', 4);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '14 days', 4, rpei_id);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -503,8 +555,8 @@ BEGIN
 
     -- Change 8: Remove Charlie (temporarily) (12 days ago)
     change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '12 days', 4);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '12 days', 4, rpei_id);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -515,8 +567,8 @@ BEGIN
 
     -- Change 9: Description update (11 days ago)
     change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '11 days', 4);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '11 days', 4, rpei_id);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -530,8 +582,8 @@ BEGIN
 
     -- Change 10: Bulk add Grace, Henry, and re-add Charlie (10 days ago)
     change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '10 days', 4);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '10 days', 4, rpei_id);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -550,8 +602,8 @@ BEGIN
 
     -- Change 12: Bulk member removal - remove Diana, Eve, Frank (8 days ago)
     change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '8 days', 4);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '8 days', 4, rpei_id);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
@@ -568,8 +620,8 @@ BEGIN
 
     -- Change 13: Group name final update (7 days ago)
     change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType")
-    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '7 days', 4);
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId")
+    VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '7 days', 4, rpei_id);
 
     attr_change_id := gen_random_uuid();
     INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
