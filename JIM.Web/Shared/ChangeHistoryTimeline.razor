@@ -57,38 +57,36 @@ else
                                 @if (changeGroup.AttributeChanges.Any())
                                 {
                                     <MudDivider />
-                                    <div class="change-summary" style="@GetSummaryStyle(changeGroup)">
-                                        @foreach (var attrGroup in GetAttributeSummary(changeGroup))
+                                    <div class="change-summary">
+                                        @foreach (var change in GetVisibleChanges(changeGroup))
                                         {
                                             <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mb-1">
                                                 <MudText Typo="Typo.body2" Class="jim-text-code" Style="min-width: 120px;">
-                                                    @attrGroup.AttributeName
+                                                    @change.AttributeName
                                                 </MudText>
                                                 <MudChip T="string"
                                                          Variant="Variant.Text"
                                                          Size="Size.Small"
-                                                         Color="@Helpers.GetMudBlazorColorForValueChangeType(attrGroup.ChangeType)">
-                                                    @attrGroup.ChangeType
+                                                         Color="@Helpers.GetMudBlazorColorForValueChangeType(change.ChangeType)">
+                                                    @change.ChangeType
                                                 </MudChip>
                                                 <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                                    @GetValueSummary(attrGroup)
+                                                    @(change.ReferenceValue?.DisplayName ?? change.Value)
                                                 </MudText>
                                             </MudStack>
                                         }
+                                        @if (ShouldShowMoreIndicator(changeGroup))
+                                        {
+                                            <div class="more-changes-indicator">
+                                                <MudChip T="string"
+                                                         Variant="Variant.Filled"
+                                                         Size="Size.Small"
+                                                         Color="Color.Primary">
+                                                    +@GetRemainingChangesCount(changeGroup) more
+                                                </MudChip>
+                                            </div>
+                                        }
                                     </div>
-
-                                    @if (ShouldShowExpandButton(changeGroup))
-                                    {
-                                        <div class="fade-overlay"></div>
-                                        <MudButton Variant="Variant.Text"
-                                                   Color="Color.Primary"
-                                                   StartIcon="@Icons.Material.Filled.ExpandMore"
-                                                   Size="Size.Small"
-                                                   FullWidth="true"
-                                                   OnClick="@(() => OpenChangeDetails(changeGroup))">
-                                            View All Changes
-                                        </MudButton>
-                                    }
                                 }
                                 else if (changeGroup.ChangeType == ObjectChangeType.Deleted)
                                 {
@@ -239,18 +237,10 @@ else
 <style>
     .change-summary {
         position: relative;
-        max-height: 200px;
-        overflow: hidden;
     }
 
-    .fade-overlay {
-        position: absolute;
-        bottom: 48px;
-        left: 0;
-        right: 0;
-        height: 60px;
-        background: linear-gradient(to bottom, transparent, var(--mud-palette-background));
-        pointer-events: none;
+    .more-changes-indicator {
+        margin-top: 4px;
     }
 
     .cursor-pointer {
@@ -327,14 +317,6 @@ else
         public string Href { get; set; } = string.Empty;
     }
 
-    private class AttributeSummary
-    {
-        public string AttributeName { get; set; } = string.Empty;
-        public ValueChangeType ChangeType { get; set; }
-        public int Count { get; set; }
-        public string FirstValue { get; set; } = string.Empty;
-    }
-
     private IEnumerable<ChangeGroup> GetFilteredChangeGroups()
     {
         var filtered = Changes.AsEnumerable();
@@ -380,46 +362,24 @@ else
         return filtered.OrderByDescending(cg => cg.ChangeTime);
     }
 
-    private IEnumerable<AttributeSummary> GetAttributeSummary(ChangeGroup changeGroup)
+    private const int MaxVisibleChanges = 3;
+
+    private IEnumerable<AttributeChange> GetVisibleChanges(ChangeGroup changeGroup)
     {
-        // Group by attribute name and change type, showing first 5
-        return changeGroup.AttributeChanges
-            .GroupBy(ac => new { ac.AttributeName, ac.ChangeType })
-            .Select(g => new AttributeSummary
-            {
-                AttributeName = g.Key.AttributeName,
-                ChangeType = g.Key.ChangeType,
-                Count = g.Count(),
-                FirstValue = g.First().Value ?? g.First().ReferenceValue?.DisplayName ?? ""
-            })
-            .Take(5);
+        // Show individual changes, limited to MaxVisibleChanges
+        return changeGroup.AttributeChanges.Take(MaxVisibleChanges);
     }
 
-    private string GetValueSummary(AttributeSummary summary)
+    private int GetRemainingChangesCount(ChangeGroup changeGroup)
     {
-        if (summary.Count == 1)
-        {
-            return summary.FirstValue;
-        }
-        else
-        {
-            return $"{summary.FirstValue} and {summary.Count - 1} more";
-        }
+        // Count total changes minus the visible ones
+        return changeGroup.AttributeChanges.Count - MaxVisibleChanges;
     }
 
-    private bool ShouldShowExpandButton(ChangeGroup changeGroup)
+    private bool ShouldShowMoreIndicator(ChangeGroup changeGroup)
     {
-        // Show expand button if more than 5 attribute changes
-        return changeGroup.AttributeChanges.Count > 5;
-    }
-
-    private string GetSummaryStyle(ChangeGroup changeGroup)
-    {
-        if (ShouldShowExpandButton(changeGroup))
-        {
-            return "max-height: 150px; overflow: hidden; position: relative;";
-        }
-        return "";
+        // Show indicator when there are more changes than we display
+        return changeGroup.AttributeChanges.Count > MaxVisibleChanges;
     }
 
     private void OpenChangeDetails(ChangeGroup changeGroup)

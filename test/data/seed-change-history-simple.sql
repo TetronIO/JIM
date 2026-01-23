@@ -473,6 +473,79 @@ BEGIN
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 1, 'alice.anderson@contoso.enterprise.com');  -- Add
 
+    -- Change 5: Comprehensive profile update (5 days ago) - Tests the "+N more" badge
+    -- This change modifies many attributes at once to demonstrate the overflow indicator
+    change_id := gen_random_uuid();
+    rpei_id := gen_random_uuid();
+    INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType")
+    VALUES (rpei_id, activity_id, 2);
+
+    INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeType", "ChangeTime", "ChangeInitiatorType", "ActivityRunProfileExecutionItemId", "SyncRuleId", "SyncRuleName")
+    VALUES (change_id, alice_id, 2, NOW() - INTERVAL '5 days', 4, rpei_id, hr_sync_rule_id, 'HR User Import');
+
+    -- Attribute 1: Job Title update
+    attr_change_id := gen_random_uuid();
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
+    VALUES (attr_change_id, change_id, attr_jobtitle_id);
+    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
+    VALUES (gen_random_uuid(), attr_change_id, 2, 'Engineering Manager');  -- Remove
+    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
+    VALUES (gen_random_uuid(), attr_change_id, 1, 'Director of Engineering');  -- Add
+
+    -- Attribute 2: Department update
+    attr_change_id := gen_random_uuid();
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
+    VALUES (attr_change_id, change_id, attr_department_id);
+    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
+    VALUES (gen_random_uuid(), attr_change_id, 2, 'Engineering - Platform Team');  -- Remove
+    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
+    VALUES (gen_random_uuid(), attr_change_id, 1, 'Engineering - Leadership');  -- Add
+
+    -- Attribute 3: Display Name update
+    attr_change_id := gen_random_uuid();
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
+    VALUES (attr_change_id, change_id, attr_displayname_id);
+    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
+    VALUES (gen_random_uuid(), attr_change_id, 2, 'Alice Anderson');  -- Remove
+    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
+    VALUES (gen_random_uuid(), attr_change_id, 1, 'Alice Anderson (Director)');  -- Add
+
+    -- Attribute 4: Email update
+    attr_change_id := gen_random_uuid();
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
+    VALUES (attr_change_id, change_id, attr_email_id);
+    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
+    VALUES (gen_random_uuid(), attr_change_id, 2, 'alice.anderson@contoso.enterprise.com');  -- Remove
+    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
+    VALUES (gen_random_uuid(), attr_change_id, 1, 'alice.director@contoso.enterprise.com');  -- Add
+
+    -- Attribute 5: Description update
+    attr_change_id := gen_random_uuid();
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
+    VALUES (attr_change_id, change_id, attr_description_id);
+    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
+    VALUES (gen_random_uuid(), attr_change_id, 1, 'Director of Engineering - Platform Division');  -- Add (new attribute)
+
+    -- Attribute 6: Manager reference update (becomes her own boss for org chart purposes)
+    attr_change_id := gen_random_uuid();
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
+    VALUES (attr_change_id, change_id, attr_manager_id);
+    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
+    VALUES (gen_random_uuid(), attr_change_id, 2, alice_id);  -- Remove self-reference if existed
+    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
+    VALUES (gen_random_uuid(), attr_change_id, 1, bob_id);  -- Add Bob as manager (just for test data variety)
+
+    -- Attribute 7: Static Members update (adding direct reports)
+    attr_change_id := gen_random_uuid();
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId")
+    VALUES (attr_change_id, change_id, attr_members_id);
+    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
+    VALUES (gen_random_uuid(), attr_change_id, 1, charlie_id);  -- Add Charlie as direct report
+    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
+    VALUES (gen_random_uuid(), attr_change_id, 1, diana_id);  -- Add Diana as direct report
+    INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
+    VALUES (gen_random_uuid(), attr_change_id, 1, eve_id);  -- Add Eve as direct report
+
     -- ========================================================================
     -- STEP 7: Create Change History - Bob (3 changes)
     -- ========================================================================
