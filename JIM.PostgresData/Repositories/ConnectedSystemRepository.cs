@@ -1989,25 +1989,25 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// <inheritdoc />
     public async Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId)
     {
-        // First, get the change to find the ConnectedSystemId and External ID
+        // First, get the deletion change to find the ConnectedSystemId and External ID
         var targetChange = await Repository.Database.ConnectedSystemObjectChanges
-            .Include(c => c.DeletedObjectExternalIdAttributeValue)
             .FirstOrDefaultAsync(c => c.Id == changeId);
 
         if (targetChange == null)
             return new List<ConnectedSystemObjectChange>();
 
-        // Get all changes for that CSO based on External ID and Connected System
-        // Since the CSO is deleted, we need to match by external ID value
-        var externalIdValue = targetChange.DeletedObjectExternalIdAttributeValue?.StringValue;
+        // Use the DeletedObjectExternalId string field (populated on deletion changes)
+        var externalIdValue = targetChange.DeletedObjectExternalId;
         if (string.IsNullOrEmpty(externalIdValue))
             return new List<ConnectedSystemObjectChange> { targetChange };
 
+        // Get all changes for that CSO based on External ID string match
+        // This includes: the deletion change (has DeletedObjectExternalId) and
+        // earlier changes (have DeletedObjectExternalId populated since we now store it on all changes)
         return await Repository.Database.ConnectedSystemObjectChanges
             .AsSplitQuery()
             .Where(c => c.ConnectedSystemId == targetChange.ConnectedSystemId &&
-                        c.DeletedObjectExternalIdAttributeValue != null &&
-                        c.DeletedObjectExternalIdAttributeValue.StringValue == externalIdValue)
+                        c.DeletedObjectExternalId == externalIdValue)
             .OrderByDescending(c => c.ChangeTime)
             .Include(c => c.AttributeChanges)
             .ThenInclude(ac => ac.Attribute)

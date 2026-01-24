@@ -2533,7 +2533,10 @@ public class ConnectedSystemServer
             // Copy initiator info from the Activity for audit trail (if Activity is loaded)
             InitiatedByType = activityRunProfileExecutionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
             InitiatedById = activityRunProfileExecutionItem.Activity?.InitiatedById,
-            InitiatedByName = activityRunProfileExecutionItem.Activity?.InitiatedByName
+            InitiatedByName = activityRunProfileExecutionItem.Activity?.InitiatedByName,
+            // Store external ID as string to enable linking change history even after CSO deletion
+            // Use ToStringNoName() to match the format used in deletion changes
+            DeletedObjectExternalId = connectedSystemObject.ExternalIdAttributeValue?.ToStringNoName()
         };
         activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
 
@@ -2593,7 +2596,10 @@ public class ConnectedSystemServer
                 // Copy initiator info from the Activity for audit trail (if Activity is loaded)
                 InitiatedByType = activityRunProfileExecutionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
                 InitiatedById = activityRunProfileExecutionItem.Activity?.InitiatedById,
-                InitiatedByName = activityRunProfileExecutionItem.Activity?.InitiatedByName
+                InitiatedByName = activityRunProfileExecutionItem.Activity?.InitiatedByName,
+                // Store external ID as string to enable linking change history even after CSO deletion
+                // Use ToStringNoName() to match the format used in deletion changes
+                DeletedObjectExternalId = connectedSystemObject.ExternalIdAttributeValue?.ToStringNoName()
             };
 
             // the change object will be persisted with the activity run profile execution item further up the stack.
