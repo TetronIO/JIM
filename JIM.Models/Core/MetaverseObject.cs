@@ -1,4 +1,5 @@
-﻿using JIM.Models.Security;
+﻿using JIM.Models.Activities;
+using JIM.Models.Security;
 using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Staging;
 
@@ -27,6 +28,29 @@ public class MetaverseObject
     /// Null = MVO has active connectors or was never connected.
     /// </summary>
     public DateTime? LastConnectorDisconnectedDate { get; set; }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Deletion initiator tracking - captures who triggered the deletion when MVO is marked for deferred deletion.
+    // This is set when LastConnectorDisconnectedDate is populated, so housekeeping can preserve the audit trail.
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The type of security principal that initiated the deletion (when marked for deferred deletion).
+    /// Populated when LastConnectorDisconnectedDate is set, used by housekeeping to preserve audit trail.
+    /// </summary>
+    public ActivityInitiatorType DeletionInitiatedByType { get; set; } = ActivityInitiatorType.NotSet;
+
+    /// <summary>
+    /// The unique identifier of the security principal that initiated the deletion.
+    /// Populated when LastConnectorDisconnectedDate is set, used by housekeeping to preserve audit trail.
+    /// </summary>
+    public Guid? DeletionInitiatedById { get; set; }
+
+    /// <summary>
+    /// The display name of the security principal that initiated the deletion.
+    /// Populated when LastConnectorDisconnectedDate is set, used by housekeeping to preserve audit trail.
+    /// </summary>
+    public string? DeletionInitiatedByName { get; set; }
 
     /// <summary>
     /// How this MVO was created - determines deletion rule applicability.

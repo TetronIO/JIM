@@ -20,7 +20,7 @@
     <MudTabPanel Text="Deleted CSOs">
         <MudPaper Class="pa-5" Outlined="true">
             <!-- Filters -->
-            <MudGrid Class="mb-4" Spacing="2">
+            <MudGrid>
                 <MudItem xs="12" sm="6" md="3">
                     <MudSelect T="int?"
                                @bind-Value="_csoFilterConnectedSystemId"
@@ -37,7 +37,7 @@
                         }
                     </MudSelect>
                 </MudItem>
-                <MudItem xs="12" sm="6" md="2">
+                <MudItem xs="12" sm="6" md="3">
                     <MudTextField @bind-Value="_csoSearchExternalId"
                                   Label="Search External ID"
                                   Variant="Variant.Outlined"
@@ -46,37 +46,45 @@
                                   Immediate="true"
                                   DebounceInterval="500" />
                 </MudItem>
-                <MudItem xs="6" sm="3" md="2">
+                <MudItem xs="6" sm="3" md="3">
                     <MudDatePicker @bind-Date="_csoFromDate"
                                    Label="From Date"
                                    Variant="Variant.Outlined"
                                    Clearable="true" />
                 </MudItem>
-                <MudItem xs="6" sm="3" md="2">
+                <MudItem xs="6" sm="3" md="3">
                     <MudDatePicker @bind-Date="_csoToDate"
                                    Label="To Date"
                                    Variant="Variant.Outlined"
                                    Clearable="true" />
                 </MudItem>
-                <MudItem xs="12" sm="6" md="3" Class="d-flex align-end">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchCsosAsync" DropShadow="false">
-                        Search
-                    </MudButton>
-                </MudItem>
             </MudGrid>
+            <div class="d-flex align-center gap-3 mt-4 mb-4">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchCsosAsync" DropShadow="false">
+                    Search
+                </MudButton>
+            </div>
 
             <!-- Results Table -->
             <MudTable Items="@_deletedCsoChanges" Hover="true" Breakpoint="Breakpoint.Sm" Outlined="true" Elevation="0"
-                      Loading="@_csoLoading" Dense="true">
+                      Loading="@_csoLoading" Dense="true" CurrentPage="@(_csoPage - 1)" RowsPerPage="@_pageSize">
                 <HeaderContent>
+                    <MudTh Style="width: 1px;"></MudTh>
                     <MudTh><MudText Typo="Typo.button">External ID</MudText></MudTh>
                     <MudTh><MudText Typo="Typo.button">Display Name</MudText></MudTh>
                     <MudTh><MudText Typo="Typo.button">Object Type</MudText></MudTh>
                     <MudTh><MudText Typo="Typo.button">Connected System</MudText></MudTh>
                     <MudTh><MudText Typo="Typo.button">Deleted</MudText></MudTh>
-                    <MudTh Style="text-align: right;"><MudText Typo="Typo.button">Actions</MudText></MudTh>
                 </HeaderContent>
                 <RowTemplate>
+                    <MudTd>
+                        <MudButton Variant="Variant.Outlined"
+                                   Size="Size.Small"
+                                   Color="Color.Primary"
+                                   OnClick="() => ViewCsoHistoryAsync(context)">
+                            View
+                        </MudButton>
+                    </MudTd>
                     <MudTd DataLabel="External ID">
                         <span class="jim-text-code">@(context.DeletedObjectExternalId ?? "N/A")</span>
                     </MudTd>
@@ -97,42 +105,21 @@
                             @context.ChangeTime.ToLocalTime().Humanize()
                         </MudTooltip>
                     </MudTd>
-                    <MudTd DataLabel="Actions">
-                        <div class="d-flex justify-end gap-2">
-                            <MudTooltip Text="View History" Arrow="true" Placement="Placement.Top">
-                                <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="() => ViewCsoHistoryAsync(context)">
-                                    View History
-                                </MudButton>
-                            </MudTooltip>
-                        </div>
-                    </MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
                     <MudText>No deleted CSOs found matching your criteria.</MudText>
                 </NoRecordsContent>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="new int[] { 25, 50, 100 }" />
+                </PagerContent>
             </MudTable>
-
-            <!-- Pagination -->
-            @if (_csoTotalCount > 0)
-            {
-                <div class="d-flex justify-space-between align-center mt-4">
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        Showing @((_csoPage - 1) * _pageSize + 1) - @Math.Min(_csoPage * _pageSize, _csoTotalCount) of @_csoTotalCount
-                    </MudText>
-                    <MudPagination Count="@((int)Math.Ceiling((double)_csoTotalCount / _pageSize))"
-                                   Selected="@_csoPage"
-                                   SelectedChanged="CsoPageChangedAsync"
-                                   Variant="Variant.Outlined"
-                                   Color="Color.Primary" />
-                </div>
-            }
         </MudPaper>
     </MudTabPanel>
 
     <MudTabPanel Text="Deleted MVOs">
         <MudPaper Class="pa-5" Outlined="true">
             <!-- Filters -->
-            <MudGrid Class="mb-4" Spacing="2">
+            <MudGrid>
                 <MudItem xs="12" sm="6" md="3">
                     <MudSelect T="int?"
                                @bind-Value="_mvoFilterObjectTypeId"
@@ -149,7 +136,7 @@
                         }
                     </MudSelect>
                 </MudItem>
-                <MudItem xs="12" sm="6" md="2">
+                <MudItem xs="12" sm="6" md="3">
                     <MudTextField @bind-Value="_mvoSearchDisplayName"
                                   Label="Search Display Name"
                                   Variant="Variant.Outlined"
@@ -158,36 +145,44 @@
                                   Immediate="true"
                                   DebounceInterval="500" />
                 </MudItem>
-                <MudItem xs="6" sm="3" md="2">
+                <MudItem xs="6" sm="3" md="3">
                     <MudDatePicker @bind-Date="_mvoFromDate"
                                    Label="From Date"
                                    Variant="Variant.Outlined"
                                    Clearable="true" />
                 </MudItem>
-                <MudItem xs="6" sm="3" md="2">
+                <MudItem xs="6" sm="3" md="3">
                     <MudDatePicker @bind-Date="_mvoToDate"
                                    Label="To Date"
                                    Variant="Variant.Outlined"
                                    Clearable="true" />
                 </MudItem>
-                <MudItem xs="12" sm="6" md="3" Class="d-flex align-end">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchMvosAsync" DropShadow="false">
-                        Search
-                    </MudButton>
-                </MudItem>
             </MudGrid>
+            <div class="d-flex align-center gap-3 mt-4 mb-4">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchMvosAsync" DropShadow="false">
+                    Search
+                </MudButton>
+            </div>
 
             <!-- Results Table -->
             <MudTable Items="@_deletedMvoChanges" Hover="true" Breakpoint="Breakpoint.Sm" Outlined="true" Elevation="0"
-                      Loading="@_mvoLoading" Dense="true">
+                      Loading="@_mvoLoading" Dense="true" CurrentPage="@(_mvoPage - 1)" RowsPerPage="@_pageSize">
                 <HeaderContent>
+                    <MudTh Style="width: 1px;"></MudTh>
                     <MudTh><MudText Typo="Typo.button">Display Name</MudText></MudTh>
                     <MudTh><MudText Typo="Typo.button">Object Type</MudText></MudTh>
                     <MudTh><MudText Typo="Typo.button">Deleted</MudText></MudTh>
                     <MudTh><MudText Typo="Typo.button">Deleted By</MudText></MudTh>
-                    <MudTh Style="text-align: right;"><MudText Typo="Typo.button">Actions</MudText></MudTh>
                 </HeaderContent>
                 <RowTemplate>
+                    <MudTd>
+                        <MudButton Variant="Variant.Outlined"
+                                   Size="Size.Small"
+                                   Color="Color.Primary"
+                                   OnClick="() => ViewMvoHistoryAsync(context)">
+                            View
+                        </MudButton>
+                    </MudTd>
                     <MudTd DataLabel="Display Name">
                         @(context.DeletedObjectDisplayName ?? "-")
                     </MudTd>
@@ -202,53 +197,35 @@
                     <MudTd DataLabel="Deleted By">
                         @if (!string.IsNullOrEmpty(context.InitiatedByName))
                         {
-                            @if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.ApiKey && context.InitiatedById.HasValue)
-                            {
-                                <MudLink Href="@($"/admin/apikeys/{context.InitiatedById}")">@context.InitiatedByName</MudLink>
-                            }
-                            else if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.User && context.InitiatedById.HasValue)
-                            {
-                                <MudLink Href="@($"/users/{context.InitiatedById}")">@context.InitiatedByName</MudLink>
-                            }
-                            else
-                            {
-                                @context.InitiatedByName
-                            }
+                            <div class="d-flex align-center gap-1">
+                                <MudIcon Icon="@Helpers.GetInitiatorIcon(context.InitiatedByType)" Size="Size.Small" Class="mud-text-secondary" />
+                                @if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.ApiKey && context.InitiatedById.HasValue)
+                                {
+                                    <MudLink Href="@($"/admin/apikeys/{context.InitiatedById}")">@context.InitiatedByName</MudLink>
+                                }
+                                else if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.User && context.InitiatedById.HasValue)
+                                {
+                                    <MudLink Href="@($"/users/{context.InitiatedById}")">@context.InitiatedByName</MudLink>
+                                }
+                                else
+                                {
+                                    @context.InitiatedByName
+                                }
+                            </div>
                         }
                         else
                         {
                             <span class="mud-text-secondary">Unknown</span>
                         }
                     </MudTd>
-                    <MudTd DataLabel="Actions">
-                        <div class="d-flex justify-end gap-2">
-                            <MudTooltip Text="View History" Arrow="true" Placement="Placement.Top">
-                                <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="() => ViewMvoHistoryAsync(context)">
-                                    View History
-                                </MudButton>
-                            </MudTooltip>
-                        </div>
-                    </MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
                     <MudText>No deleted MVOs found matching your criteria.</MudText>
                 </NoRecordsContent>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="new int[] { 25, 50, 100 }" />
+                </PagerContent>
             </MudTable>
-
-            <!-- Pagination -->
-            @if (_mvoTotalCount > 0)
-            {
-                <div class="d-flex justify-space-between align-center mt-4">
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        Showing @((_mvoPage - 1) * _pageSize + 1) - @Math.Min(_mvoPage * _pageSize, _mvoTotalCount) of @_mvoTotalCount
-                    </MudText>
-                    <MudPagination Count="@((int)Math.Ceiling((double)_mvoTotalCount / _pageSize))"
-                                   Selected="@_mvoPage"
-                                   SelectedChanged="MvoPageChangedAsync"
-                                   Variant="Variant.Outlined"
-                                   Color="Color.Primary" />
-                </div>
-            }
         </MudPaper>
     </MudTabPanel>
 </MudTabs>
@@ -332,7 +309,6 @@
     private DateTime? _csoFromDate;
     private DateTime? _csoToDate;
     private List<ConnectedSystemObjectChange>? _deletedCsoChanges;
-    private int _csoTotalCount;
     private int _csoPage = 1;
     private bool _csoLoading;
 
@@ -342,7 +318,6 @@
     private DateTime? _mvoFromDate;
     private DateTime? _mvoToDate;
     private List<MetaverseObjectChange>? _deletedMvoChanges;
-    private int _mvoTotalCount;
     private int _mvoPage = 1;
     private bool _mvoLoading;
 
@@ -380,41 +355,15 @@
 
         try
         {
-            var (items, totalCount) = await Jim.Repository.ConnectedSystems.GetDeletedCsoChangesAsync(
+            var (items, _) = await Jim.Repository.ConnectedSystems.GetDeletedCsoChangesAsync(
                 connectedSystemId: _csoFilterConnectedSystemId,
                 fromDate: _csoFromDate?.ToUniversalTime(),
                 toDate: _csoToDate?.ToUniversalTime().AddDays(1), // Include the entire day
                 externalIdSearch: string.IsNullOrWhiteSpace(_csoSearchExternalId) ? null : _csoSearchExternalId,
-                page: _csoPage,
-                pageSize: _pageSize);
+                page: 1,
+                pageSize: 10000); // Load all for client-side pagination
 
             _deletedCsoChanges = items;
-            _csoTotalCount = totalCount;
-        }
-        finally
-        {
-            _csoLoading = false;
-        }
-    }
-
-    private async Task CsoPageChangedAsync(int page)
-    {
-        _csoPage = page;
-        _csoLoading = true;
-        StateHasChanged();
-
-        try
-        {
-            var (items, totalCount) = await Jim.Repository.ConnectedSystems.GetDeletedCsoChangesAsync(
-                connectedSystemId: _csoFilterConnectedSystemId,
-                fromDate: _csoFromDate?.ToUniversalTime(),
-                toDate: _csoToDate?.ToUniversalTime().AddDays(1),
-                externalIdSearch: string.IsNullOrWhiteSpace(_csoSearchExternalId) ? null : _csoSearchExternalId,
-                page: _csoPage,
-                pageSize: _pageSize);
-
-            _deletedCsoChanges = items;
-            _csoTotalCount = totalCount;
         }
         finally
         {
@@ -430,41 +379,15 @@
 
         try
         {
-            var (items, totalCount) = await Jim.Repository.Metaverse.GetDeletedMvoChangesAsync(
+            var (items, _) = await Jim.Repository.Metaverse.GetDeletedMvoChangesAsync(
                 objectTypeId: _mvoFilterObjectTypeId,
                 fromDate: _mvoFromDate?.ToUniversalTime(),
                 toDate: _mvoToDate?.ToUniversalTime().AddDays(1),
                 displayNameSearch: string.IsNullOrWhiteSpace(_mvoSearchDisplayName) ? null : _mvoSearchDisplayName,
-                page: _mvoPage,
-                pageSize: _pageSize);
+                page: 1,
+                pageSize: 10000); // Load all for client-side pagination
 
             _deletedMvoChanges = items;
-            _mvoTotalCount = totalCount;
-        }
-        finally
-        {
-            _mvoLoading = false;
-        }
-    }
-
-    private async Task MvoPageChangedAsync(int page)
-    {
-        _mvoPage = page;
-        _mvoLoading = true;
-        StateHasChanged();
-
-        try
-        {
-            var (items, totalCount) = await Jim.Repository.Metaverse.GetDeletedMvoChangesAsync(
-                objectTypeId: _mvoFilterObjectTypeId,
-                fromDate: _mvoFromDate?.ToUniversalTime(),
-                toDate: _mvoToDate?.ToUniversalTime().AddDays(1),
-                displayNameSearch: string.IsNullOrWhiteSpace(_mvoSearchDisplayName) ? null : _mvoSearchDisplayName,
-                page: _mvoPage,
-                pageSize: _pageSize);
-
-            _deletedMvoChanges = items;
-            _mvoTotalCount = totalCount;
         }
         finally
         {

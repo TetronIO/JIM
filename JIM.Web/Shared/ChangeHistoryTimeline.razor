@@ -958,15 +958,8 @@ else
             else
             {
                 // Direct change by user/API key - use appropriate icon based on principal type
-                string icon = changeGroup.ChangeInitiatorType switch
-                {
-                    "User" => Icons.Material.Filled.Person,
-                    "ApiKey" => Icons.Material.Filled.Key,
-                    _ => Icons.Material.Filled.HelpOutline
-                };
-
                 builder.OpenComponent<MudIcon>(seq++);
-                builder.AddAttribute(seq++, "Icon", icon);
+                builder.AddAttribute(seq++, "Icon", Helpers.GetInitiatorIcon(changeGroup.ChangeInitiatorType));
                 builder.AddAttribute(seq++, "Size", Size.Small);
                 builder.AddAttribute(seq++, "Class", "mud-text-secondary");
                 builder.AddAttribute(seq++, "Style", "margin-right: 4px;");
@@ -993,12 +986,7 @@ else
                                 changeGroup.SyncRuleId != null ||
                                 !string.IsNullOrEmpty(changeGroup.SyncRuleName);
 
-            string icon = isSyncChange ? Icons.Material.Filled.Sync : changeGroup.ChangeInitiatorType switch
-            {
-                "User" => Icons.Material.Filled.Person,
-                "ApiKey" => Icons.Material.Filled.Key,
-                _ => Icons.Material.Filled.HelpOutline
-            };
+            string icon = isSyncChange ? Icons.Material.Filled.Sync : Helpers.GetInitiatorIcon(changeGroup.ChangeInitiatorType);
 
             builder.OpenComponent<MudIcon>(0);
             builder.AddAttribute(1, "Icon", icon);
@@ -1067,16 +1055,8 @@ else
     {
         return builder =>
         {
-            string icon = changeGroup.ChangeInitiatorType switch
-            {
-                "User" => Icons.Material.Filled.Person,
-                "ApiKey" => Icons.Material.Filled.Key,
-                "Import" => Icons.Material.Filled.CloudDownload,
-                _ => Icons.Material.Filled.HelpOutline
-            };
-
             builder.OpenComponent<MudIcon>(0);
-            builder.AddAttribute(1, "Icon", icon);
+            builder.AddAttribute(1, "Icon", Helpers.GetInitiatorIcon(changeGroup.ChangeInitiatorType));
             builder.AddAttribute(2, "Size", Size.Small);
             builder.AddAttribute(3, "Class", "mud-text-secondary");
             builder.CloseComponent();

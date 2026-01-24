@@ -441,8 +441,13 @@ public class Worker : BackgroundService
                         // Note: Most orphaned MVOs won't have CSOs, but this handles edge cases
                         await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
 
-                        // Delete the MVO
-                        await jim.Metaverse.DeleteMetaverseObjectAsync(mvo);
+                        // Delete the MVO using the initiator info captured when it was marked for deletion
+                        // This preserves the audit trail - the original initiator is recorded, not housekeeping
+                        await jim.Metaverse.DeleteMetaverseObjectAsync(
+                            mvo,
+                            mvo.DeletionInitiatedByType,
+                            mvo.DeletionInitiatedById,
+                            mvo.DeletionInitiatedByName);
 
                         Log.Information("PerformHousekeepingAsync: Successfully deleted orphaned MVO {MvoId}", mvo.Id);
                     }

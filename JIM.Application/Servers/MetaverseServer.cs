@@ -449,7 +449,10 @@ public class MetaverseServer
                 InitiatedByName = initiatedByName,
                 ChangeInitiatorType = initiatedByType == ActivityInitiatorType.User
                     ? MetaverseObjectChangeInitiatorType.User
-                    : MetaverseObjectChangeInitiatorType.NotSet
+                    : MetaverseObjectChangeInitiatorType.NotSet,
+                // Preserve object identity for the deleted objects browser
+                DeletedObjectTypeId = metaverseObject.Type?.Id,
+                DeletedObjectDisplayName = metaverseObject.DisplayName
             };
 
             // Save the change record directly (not via MVO navigation property)

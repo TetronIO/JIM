@@ -591,12 +591,16 @@ public abstract class SyncTaskProcessorBase
         else
         {
             // Grace period configured - mark for deferred deletion by housekeeping
+            // Capture initiator info NOW so housekeeping can preserve the audit trail
             mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
+            mvo.DeletionInitiatedByType = _activity.InitiatedByType;
+            mvo.DeletionInitiatedById = _activity.InitiatedById;
+            mvo.DeletionInitiatedByName = _activity.InitiatedByName;
             Log.Information(
-                "MarkMvoForDeletionAsync: MVO {MvoId} marked for deletion ({Reason}). Eligible after {Days} days.",
-                mvo.Id, reason, gracePeriodDays.Value);
+                "MarkMvoForDeletionAsync: MVO {MvoId} marked for deletion ({Reason}). Eligible after {Days} days. Initiator: {Initiator}",
+                mvo.Id, reason, gracePeriodDays.Value, _activity.InitiatedByName ?? "Unknown");
 
-            // Persist the LastConnectorDisconnectedDate
+            // Persist the LastConnectorDisconnectedDate and initiator info
             await _jim.Metaverse.UpdateMetaverseObjectAsync(mvo);
         }
     }
@@ -1149,8 +1153,12 @@ public abstract class SyncTaskProcessorBase
                         deleteExports.Count, mvo.Id);
                 }
 
-                // Delete the MVO
-                await _jim.Metaverse.DeleteMetaverseObjectAsync(mvo);
+                // Delete the MVO, passing initiator info from the activity
+                await _jim.Metaverse.DeleteMetaverseObjectAsync(
+                    mvo,
+                    _activity.InitiatedByType,
+                    _activity.InitiatedById,
+                    _activity.InitiatedByName);
                 Log.Information(
                     "FlushPendingMvoDeletionsAsync: Deleted MVO {MvoId} ({DisplayName})",
                     mvo.Id, mvo.DisplayName ?? "No display name");

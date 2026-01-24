@@ -2096,8 +2096,12 @@ public class ConnectedSystemServer
     {
         // Capture the external ID and display name BEFORE deletion.
         // We cannot reference attribute values after deletion because they get cascade deleted with the CSO.
-        var externalIdDisplayValue = connectedSystemObject.ExternalIdAttributeValue?.ToString();
-        var displayName = connectedSystemObject.DisplayNameOrId;
+        // Use ToStringNoName() to get just the value without "attributeName: " prefix.
+        var externalIdDisplayValue = connectedSystemObject.ExternalIdAttributeValue?.ToStringNoName();
+        // Get the displayName attribute value directly (don't use DisplayNameOrId which falls back to External ID)
+        var displayNameAttr = connectedSystemObject.AttributeValues
+            .SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true);
+        var displayName = displayNameAttr?.StringValue;
 
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject);
 
@@ -2162,8 +2166,14 @@ public class ConnectedSystemServer
 
         // Capture external ID and display name values before deletion
         // We cannot reference attribute values after deletion because they get cascade deleted with the CSO.
+        // Use ToStringNoName() to get just the value without "attributeName: " prefix.
+        // Get displayName attribute directly (don't use DisplayNameOrId which falls back to External ID).
         var deletedObjectInfo = connectedSystemObjects
-            .Select(cso => (ExternalId: cso.ExternalIdAttributeValue?.ToString(), DisplayName: cso.DisplayNameOrId))
+            .Select(cso => (
+                ExternalId: cso.ExternalIdAttributeValue?.ToStringNoName(),
+                DisplayName: cso.AttributeValues
+                    .SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true)
+                    ?.StringValue))
             .ToList();
 
         // Batch delete from database
