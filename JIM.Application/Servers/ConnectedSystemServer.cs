@@ -2094,9 +2094,10 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
     {
-        // Capture the external ID value string representation BEFORE deletion.
-        // We cannot reference the attribute value entity after deletion because it gets cascade deleted with the CSO.
+        // Capture the external ID and display name BEFORE deletion.
+        // We cannot reference attribute values after deletion because they get cascade deleted with the CSO.
         var externalIdDisplayValue = connectedSystemObject.ExternalIdAttributeValue?.ToString();
+        var displayName = connectedSystemObject.DisplayNameOrId;
 
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject);
 
@@ -2113,9 +2114,7 @@ public class ConnectedSystemServer
         // Create a Change Object for this deletion.
         // Note: ConnectedSystemObject and DeletedObjectExternalIdAttributeValue are intentionally NOT set
         // because the CSO and its attribute values have been cascade deleted from the database.
-        // The DeletedObjectType field preserves the object type information.
-        // TODO: Consider adding a DeletedObjectExternalIdValue (string) field to store the external ID value
-        // without requiring a FK reference to the deleted attribute value entity.
+        // The DeletedObjectType, DeletedObjectExternalId, and DeletedObjectDisplayName fields preserve the object identity.
         var change = new ConnectedSystemObjectChange
         {
             ConnectedSystemId = connectedSystemObject.ConnectedSystemId,
@@ -2124,6 +2123,9 @@ public class ConnectedSystemServer
             ChangeTime = DateTime.UtcNow,
             DeletedObjectType = connectedSystemObject.Type,
             // DeletedObjectExternalIdAttributeValue cannot be set - the attribute value is cascade deleted with the CSO
+            // Use string fields to preserve the values for UI display:
+            DeletedObjectExternalId = externalIdDisplayValue,
+            DeletedObjectDisplayName = displayName,
             ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,
             // Copy initiator info from the Activity for audit trail (if Activity is loaded)
             InitiatedByType = activityRunProfileExecutionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
@@ -2131,7 +2133,7 @@ public class ConnectedSystemServer
             InitiatedByName = activityRunProfileExecutionItem.Activity?.InitiatedByName
         };
 
-        // Log the external ID for audit purposes since we can't persist it via FK
+        // Log the external ID for audit purposes
         if (!string.IsNullOrEmpty(externalIdDisplayValue))
         {
             Log.Debug("DeleteConnectedSystemObjectAsync: Deleted CSO with external ID: {ExternalId}", externalIdDisplayValue);
@@ -2158,9 +2160,10 @@ public class ConnectedSystemServer
         if (connectedSystemObjects.Count != activityRunProfileExecutionItems.Count)
             throw new ArgumentException("CSO count must match execution item count");
 
-        // Capture external ID values before deletion
-        var externalIdValues = connectedSystemObjects
-            .Select(cso => cso.ExternalIdAttributeValue?.ToString())
+        // Capture external ID and display name values before deletion
+        // We cannot reference attribute values after deletion because they get cascade deleted with the CSO.
+        var deletedObjectInfo = connectedSystemObjects
+            .Select(cso => (ExternalId: cso.ExternalIdAttributeValue?.ToString(), DisplayName: cso.DisplayNameOrId))
             .ToList();
 
         // Batch delete from database
@@ -2174,7 +2177,7 @@ public class ConnectedSystemServer
         {
             var cso = connectedSystemObjects[i];
             var executionItem = activityRunProfileExecutionItems[i];
-            var externalIdValue = externalIdValues[i];
+            var (externalId, displayName) = deletedObjectInfo[i];
 
             if (changeTrackingEnabled)
             {
@@ -2184,6 +2187,9 @@ public class ConnectedSystemServer
                     ChangeType = ObjectChangeType.Deleted,
                     ChangeTime = DateTime.UtcNow,
                     DeletedObjectType = cso.Type,
+                    // Use string fields to preserve the values for UI display:
+                    DeletedObjectExternalId = externalId,
+                    DeletedObjectDisplayName = displayName,
                     ActivityRunProfileExecutionItem = executionItem,
                     // Copy initiator info from the Activity for audit trail (if Activity is loaded)
                     InitiatedByType = executionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,

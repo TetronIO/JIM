@@ -12,7 +12,9 @@
 4. **NEVER** create a PR without verifying build and tests pass
 5. **NEVER** assume tests will pass without running them
 
-**EXCEPTION: Scripts (.ps1, .sh, etc.) do not require dotnet build/test.** Only .NET code changes (C#, Razor, etc.) require running the build pipeline.
+**EXCEPTIONS:**
+- Scripts (.ps1, .sh, etc.) do not require dotnet build/test
+- **UI-only changes** (Blazor pages, Razor components, CSS) require `dotnet build` but do NOT require `dotnet test` - there are no UI tests, so running tests just wastes time
 
 **YOU MUST WRITE UNIT TESTS FOR NEW FUNCTIONALITY:**
 

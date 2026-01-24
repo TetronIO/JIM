@@ -11,8 +11,8 @@
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
-<PageTitle>Connected System Object: @ConnectedSystemObject?.Id</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System Object:</span> @ConnectedSystemObject?.Id
+<PageTitle>Connected System Object: @GetDisplayIdentifier()</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System Object:</span> @GetDisplayIdentifier()
 </MudText>
 <MudBreadcrumbs Items="Breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
@@ -29,7 +29,9 @@
             @* Object Type *@
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">Type:</MudText>
-                <MudText Typo="Typo.body2">@ConnectedSystemObject.Type.Name</MudText>
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Primary" Size="Size.Small">
+                    @ConnectedSystemObject.Type.Name
+                </MudChip>
             </MudStack>
             <MudDivider Vertical="true" FlexItem="true" Class="my-1" />
 
@@ -145,68 +147,73 @@
         </MudPaper>
     }
 
-    <style>
-        .mud-table-cell-custom-group {
-            font-weight: 500;
-        }
-
-        .mud-table-cell-custom-group-footer {
-            padding-bottom: 50px;
-            text-align: right;
-        }
-    </style>
-
     <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-0 mt-4">
         <MudTabPanel Text="Attributes">
-            <MudPaper Class="pa-5" Outlined="true">
-                <MudTable Hover="true" Breakpoint="Breakpoint.Sm" Elevation="0"
-                    Items="@(ConnectedSystemObject.AttributeValues.OrderBy(q => q.Attribute.Name))" GroupBy="@_groupDefinition"
-                    GroupHeaderStyle="background-color:var(--mud-palette-background-grey)" GroupFooterClass="mb-4" Dense="true">
-                    <ColGroup>
-                        <col style="width: 60px;" />
-                        <col />
-                        <col />
-                    </ColGroup>
-                    <HeaderContent>
-                        <MudTh>Attribute Value Type</MudTh>
-                        <MudTh>Attribute Value</MudTh>
-                    </HeaderContent>
-                    <GroupHeaderTemplate>
-                        <MudTh Class="mud-table-cell-custom-group" colspan="5">@(context.GroupName): <span
-                                class="mud-secondary-text">@(context.Key)</span></MudTh>
-                    </GroupHeaderTemplate>
-                    <RowTemplate>
-                        <MudTd DataLabel="Type">@context.Attribute.Type</MudTd>
-                        <MudTd DataLabel="Value">
-                            @if (context.ReferenceValue != null)
-                            {
-                                <MudChip T="string" Color="Color.Default" Size="Size.Small">@context.ReferenceValue.Type.Name</MudChip>
-                                <text> </text>
-                                <MudLink Href="@Utilities.GetConnectedSystemObjectHref(context.ReferenceValue)">
-                                    @context.ReferenceValue.DisplayNameOrId</MudLink>
-
-                                if (context.ReferenceValue.SecondaryExternalIdAttributeValue != null)
-                                {
-                                    <span class="mud-text-secondary">
-                                        (@context.ReferenceValue.SecondaryExternalIdAttributeValue.ToString())</span>
-                                }
-                            }
-                            else if (context.UnresolvedReferenceValue != null)
-                            {
-                                <MudText>Unresolved reference: <span
-                                        Style="@($"color:{Colors.Gray.Darken2};")">@context.ToString()</span></MudText>
-                            }
-                            else
-                            {
-                                @context.ToStringNoName()
-                            }
-                        </MudTd>
-                    </RowTemplate>
-                    <GroupFooterTemplate>
-                        <MudTh Class="mud-table-cell-custom-group mud-table-cell-custom-group-footer" colspan="5">Total Values:
-                            @context.Items.Count()</MudTh>
-                    </GroupFooterTemplate>
-                </MudTable>
+            <MudPaper Class="pa-0" Outlined="true">
+                <MudSimpleTable Hover="true" Elevation="0" Class="jim-attribute-table">
+                    <thead>
+                        <tr>
+                            <th class="jim-attr-header-name">Attribute</th>
+                            <th class="jim-attr-header-type">Type</th>
+                            <th class="jim-attr-header-plurality">Plurality</th>
+                            <th class="jim-attr-header-value">Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var group in GetGroupedAttributes())
+                        {
+                            <tr class="@(group.Values.Count > 1 ? "jim-attr-row-mva" : "")">
+                                <td class="jim-attr-name">
+                                    <MudText Typo="Typo.body2" Class="jim-text-code">@group.AttributeName</MudText>
+                                </td>
+                                <td class="jim-attr-type">
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@group.Values[0].Attribute.Type</MudText>
+                                </td>
+                                <td class="jim-attr-plurality">
+                                    @if (group.IsMultiValued)
+                                    {
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Multi</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Single</MudText>
+                                    }
+                                </td>
+                                <td class="jim-attr-value">
+                                    @if (group.Values.Count == 1)
+                                    {
+                                        <CsoAttributeValue Value="@group.Values[0]" />
+                                    }
+                                    else if (group.IsCollapsed)
+                                    {
+                                        <div class="jim-attr-multivalue">
+                                            <CsoAttributeValue Value="@group.Values[0]" />
+                                            <MudButton Variant="Variant.Outlined" Size="Size.Small" Class="jim-attr-expand-btn"
+                                                       OnClick="@(() => ToggleCollapse(group.AttributeName))">
+                                                +@(group.Values.Count - 1) more
+                                            </MudButton>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="jim-attr-expanded">
+                                            @foreach (var val in group.Values)
+                                            {
+                                                <div class="jim-attr-expanded-item">
+                                                    <CsoAttributeValue Value="@val" />
+                                                </div>
+                                            }
+                                            <MudButton Variant="Variant.Outlined" Size="Size.Small" Class="jim-attr-collapse-btn"
+                                                       OnClick="@(() => ToggleCollapse(group.AttributeName))">
+                                                Collapse
+                                            </MudButton>
+                                        </div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
             </MudPaper>
         </MudTabPanel>
         <MudTabPanel Text="Change History">
@@ -278,13 +285,13 @@
         }
 
         Breadcrumbs = new List<BreadcrumbItem>
-{
-new("Home", href: "/", icon: Icons.Material.Filled.Home),
-new("Connected Systems", href: "/admin/connected-systems/"),
-new(ConnectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(ConnectedSystemHeader)),
-new("Objects", href: Utilities.GetConnectedSystemObjectsHref(ConnectedSystemHeader)),
-new(CsoId.ToString(), href: null, disabled: true)
-};
+        {
+            new("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new("Connected Systems", href: "/admin/connected-systems/"),
+            new(ConnectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(ConnectedSystemHeader)),
+            new("Objects", href: Utilities.GetConnectedSystemObjectsHref(ConnectedSystemHeader)),
+            new(GetDisplayIdentifier(), href: null, disabled: true)
+        };
 
         ExternalIdAttributeValue = ConnectedSystemObject.ExternalIdAttributeValue;
         SecondaryExternalIdAttributeValue = ConnectedSystemObject.SecondaryExternalIdAttributeValue;
@@ -296,13 +303,38 @@ new(CsoId.ToString(), href: null, disabled: true)
         CsoChanges = await Jim.ConnectedSystems.GetConnectedSystemObjectChangesAsync(connectedSystemObjectId);
     }
 
-    private readonly TableGroupDefinition<ConnectedSystemObjectAttributeValue> _groupDefinition = new()
+    // Tracks which MVAs are collapsed (expanded by default)
+    private readonly HashSet<string> _collapsedAttributes = new();
+
+    private record AttributeGroup(
+        string AttributeName,
+        List<ConnectedSystemObjectAttributeValue> Values,
+        bool IsMultiValued,
+        bool IsCollapsed);
+
+    private List<AttributeGroup> GetGroupedAttributes()
     {
-        GroupName = "Group",
-        Indentation = false,
-        Expandable = true,
-        Selector = (e) => e.Attribute.Name
-    };
+        if (ConnectedSystemObject == null)
+            return new List<AttributeGroup>();
+
+        return ConnectedSystemObject.AttributeValues
+            .GroupBy(v => v.Attribute.Name)
+            .OrderBy(g => g.Key)
+            .Select(g => new AttributeGroup(
+                g.Key,
+                g.ToList(),
+                g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued,
+                _collapsedAttributes.Contains(g.Key)))
+            .ToList();
+    }
+
+    private void ToggleCollapse(string attributeName)
+    {
+        if (_collapsedAttributes.Contains(attributeName))
+            _collapsedAttributes.Remove(attributeName);
+        else
+            _collapsedAttributes.Add(attributeName);
+    }
 
     private static string GetAttributeValue(PendingExportAttributeValueChange change)
     {
@@ -423,5 +455,16 @@ new(CsoId.ToString(), href: null, disabled: true)
             ActivityInitiatorType.ApiKey => "ApiKey",
             _ => "Unknown"
         };
+    }
+
+    /// <summary>
+    /// Gets a user-friendly display identifier for the CSO.
+    /// Returns the external ID value if available, otherwise falls back to the internal GUID.
+    /// </summary>
+    private string GetDisplayIdentifier()
+    {
+        return ExternalIdAttributeValue?.ToStringNoName()
+            ?? ConnectedSystemObject?.Id.ToString()
+            ?? CsoId;
     }
 }

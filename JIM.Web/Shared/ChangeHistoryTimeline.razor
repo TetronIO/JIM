@@ -345,7 +345,7 @@ else
                                 <MudChip T="string" Color="Color.Default" Size="Size.Small">@context.ReferenceValue.TypeName</MudChip>
                                 @if (context.DisplayChangeType == "Remove")
                                 {
-                                    <MudLink Href="@context.ReferenceValue.Href" Class="mud-text-secondary">
+                                    <MudLink Href="@context.ReferenceValue.Href">
                                         @context.ReferenceValue.DisplayName
                                     </MudLink>
                                 }
