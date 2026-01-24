@@ -554,6 +554,38 @@ else {
 }
 $timings["2. Build"] = (Get-Date) - $step2Start
 
+# Step 2b: Generate API Key (before starting JIM so it picks up the key on first startup)
+Write-Section "Step 2b: Generating API Key"
+
+Write-Step "Generating infrastructure API key..."
+$randomBytes = New-Object byte[] 32
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+$rng.GetBytes($randomBytes)
+$randomString = [Convert]::ToBase64String($randomBytes).Replace("+", "").Replace("/", "").Replace("=", "")
+$apiKey = "jim_ak_$randomString"
+Write-Success "Generated key prefix: $($apiKey.Substring(0, 12))"
+
+# Update .env file
+Write-Step "Updating .env file..."
+$envFilePath = Join-Path $repoRoot ".env"
+$envContent = Get-Content $envFilePath -Raw
+if ($null -eq $envContent) { $envContent = "" }
+
+if ($envContent -match "JIM_INFRASTRUCTURE_API_KEY=") {
+    $envContent = $envContent -replace "JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$apiKey"
+}
+else {
+    $newLine = if ($envContent.EndsWith("`n")) { "" } else { "`n" }
+    $envContent = $envContent + $newLine + "JIM_INFRASTRUCTURE_API_KEY=$apiKey`n"
+}
+$envContent | Set-Content $envFilePath -NoNewline
+Write-Success "Updated .env file"
+
+# Save API key to file for scenario scripts
+$keyFilePath = Join-Path $scriptRoot ".api-key"
+$apiKey | Out-File -FilePath $keyFilePath -NoNewline -Encoding UTF8
+Write-Success "Saved API key to .api-key"
+
 # Step 3: Start services
 $step3Start = Get-Date
 Write-Section "Step 3: Starting Services"
@@ -724,83 +756,9 @@ if ($Scenario -like "*Scenario1*") {
     }
 }
 
-# Step 5: Setup API Key
+# Step 5: Run test scenario
 $step5Start = Get-Date
-Write-Section "Step 5: Setting Up API Key"
-
-# Generate API key
-Write-Step "Generating infrastructure API key..."
-$randomBytes = New-Object byte[] 32
-$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-$rng.GetBytes($randomBytes)
-$randomString = [Convert]::ToBase64String($randomBytes).Replace("+", "").Replace("/", "").Replace("=", "")
-$apiKey = "jim_ak_$randomString"
-Write-Success "Generated key prefix: $($apiKey.Substring(0, 12))"
-
-# Update .env file
-Write-Step "Updating .env file..."
-$envFilePath = Join-Path $repoRoot ".env"
-$envContent = Get-Content $envFilePath -Raw
-if ($null -eq $envContent) { $envContent = "" }
-
-if ($envContent -match "JIM_INFRASTRUCTURE_API_KEY=") {
-    $envContent = $envContent -replace "JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$apiKey"
-}
-else {
-    $newLine = if ($envContent.EndsWith("`n")) { "" } else { "`n" }
-    $envContent = $envContent + $newLine + "JIM_INFRASTRUCTURE_API_KEY=$apiKey`n"
-}
-$envContent | Set-Content $envFilePath -NoNewline
-Write-Success "Updated .env file"
-
-# Save API key to file for scenario scripts
-$keyFilePath = Join-Path $scriptRoot ".api-key"
-$apiKey | Out-File -FilePath $keyFilePath -NoNewline -Encoding UTF8
-Write-Success "Saved API key to .api-key"
-
-# Recreate jim.web to pick up new API key
-Write-Step "Recreating JIM.Web with new API key..."
-docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --force-recreate jim.web 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    Write-Failure "Failed to recreate JIM.Web"
-    exit 1
-}
-Write-Success "JIM.Web recreated"
-
-# Wait for JIM.Web to be ready
-Write-Step "Waiting for JIM.Web to be ready..."
-$maxAttempts = 30
-$attempt = 0
-$jimReady = $false
-
-while ($attempt -lt $maxAttempts -and -not $jimReady) {
-    $attempt++
-    try {
-        $response = Invoke-WebRequest -Uri "http://localhost:5200" -Method GET -TimeoutSec 2 -ErrorAction SilentlyContinue
-        if ($response.StatusCode -in @(200, 302)) {
-            $jimReady = $true
-        }
-    }
-    catch {
-        # Ignore errors, keep trying
-    }
-
-    if (-not $jimReady) {
-        Start-Sleep -Seconds 2
-    }
-}
-
-if (-not $jimReady) {
-    Write-Failure "JIM.Web did not become ready"
-    Write-Host "${YELLOW}  Check logs: docker logs jim.web${NC}"
-    exit 1
-}
-Write-Success "JIM.Web is ready"
-$timings["5. Setup API Key"] = (Get-Date) - $step5Start
-
-# Step 6: Run test scenario
-$step6Start = Get-Date
-Write-Section "Step 6: Running Test Scenario"
+Write-Section "Step 5: Running Test Scenario"
 
 $scenarioScript = Join-Path $scriptRoot "scenarios" "Invoke-$Scenario.ps1"
 if (-not (Test-Path $scenarioScript)) {
@@ -817,11 +775,11 @@ Write-Host ""
 
 & $scenarioScript -Template $Template -Step $Step -ApiKey $apiKey
 $scenarioExitCode = $LASTEXITCODE
-$timings["6. Run Tests"] = (Get-Date) - $step6Start
+$timings["5. Run Tests"] = (Get-Date) - $step5Start
 
-# Step 7: Capture Performance Metrics
-$step7Start = Get-Date
-Write-Section "Step 7: Capturing Performance Metrics"
+# Step 6: Capture Performance Metrics
+$step6Start = Get-Date
+Write-Section "Step 6: Capturing Performance Metrics"
 
 Write-Step "Extracting diagnostic timing from worker logs..."
 
@@ -1078,7 +1036,7 @@ else {
     }
 }
 
-$timings["7. Capture Metrics"] = (Get-Date) - $step7Start
+$timings["6. Capture Metrics"] = (Get-Date) - $step6Start
 
 # Summary
 $endTime = Get-Date
@@ -1103,7 +1061,7 @@ foreach ($timing in $sortedTimings) {
 }
 
 Write-Host ""
-Write-Host "${GRAY}Note: '6. Run Tests' breakdown shown in 'Performance Breakdown (Test Steps)' section above${NC}"
+Write-Host "${GRAY}Note: '5. Run Tests' breakdown shown in 'Performance Breakdown (Test Steps)' section above${NC}"
 Write-Host ""
 Write-Host "${CYAN}Total Duration: ${NC}$($duration.ToString('hh\:mm\:ss')) (${totalSeconds}s)"
 Write-Host ""
