@@ -450,7 +450,8 @@
                 ChangeInitiatorType = MapInitiatorType(change.InitiatedByType),
                 ChangeInitiatorName = change.InitiatedByName,
                 ChangeInitiatorId = change.InitiatedById,
-                ChangeMechanismType = "Import",
+                ChangeMechanismType = MapRunTypeToMechanismType(change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemRunType),
+                RunProfileName = change.ActivityRunProfileExecutionItem?.Activity?.TargetName,
                 ConnectedSystemId = change.ConnectedSystemId,
                 ConnectedSystemName = csName,
                 ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
@@ -488,7 +489,10 @@
                 ChangeInitiatorType = MapInitiatorType(change.InitiatedByType),
                 ChangeInitiatorName = change.InitiatedByName,
                 ChangeInitiatorId = change.InitiatedById,
-                ChangeMechanismType = change.ChangeInitiatorType.ToString(),
+                ChangeMechanismType = MapRunTypeToMechanismType(change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemRunType),
+                RunProfileName = change.ActivityRunProfileExecutionItem?.Activity?.TargetName,
+                ConnectedSystemId = change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemId,
+                ConnectedSystemName = change.ActivityRunProfileExecutionItem?.Activity?.TargetContext,
                 SyncRuleId = change.SyncRuleId,
                 SyncRuleName = change.SyncRuleName,
                 ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
@@ -519,6 +523,17 @@
             JIM.Models.Activities.ActivityInitiatorType.User => "User",
             JIM.Models.Activities.ActivityInitiatorType.ApiKey => "ApiKey",
             _ => "Unknown"
+        };
+    }
+
+    private static string MapRunTypeToMechanismType(ConnectedSystemRunType? runType)
+    {
+        return runType switch
+        {
+            ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport => "Import",
+            ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation => "SynchronisationRule",
+            ConnectedSystemRunType.Export => "Export",
+            _ => "Import"
         };
     }
 }

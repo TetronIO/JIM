@@ -252,7 +252,7 @@ public static class Helpers
         {
             "User" => Icons.Material.Filled.Person,
             "ApiKey" => Icons.Material.Filled.Key,
-            "Import" => Icons.Material.Filled.CloudDownload,
+            "Import" => Icons.Material.Filled.Input,
             _ => Icons.Material.Filled.HelpOutline
         };
     }

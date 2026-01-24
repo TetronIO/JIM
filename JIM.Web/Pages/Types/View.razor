@@ -3,6 +3,7 @@
 @using JIM.Application
 @using JIM.Models.Core
 @using JIM.Models.Enums
+@using JIM.Models.Staging
 @using JIM.Web.Shared
 @using Utilities;
 @inject JimApplication Jim
@@ -137,7 +138,11 @@
                 ChangeInitiatorType = change.InitiatedByType.ToString(),
                 ChangeInitiatorName = change.InitiatedByName,
                 ChangeInitiatorId = change.InitiatedById,
-                ChangeMechanismType = change.ChangeInitiatorType.ToString(),
+                ChangeMechanismType = MapRunTypeToMechanismType(change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemRunType),
+                // Run profile and connected system context
+                RunProfileName = change.ActivityRunProfileExecutionItem?.Activity?.TargetName,
+                ConnectedSystemId = change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemId,
+                ConnectedSystemName = change.ActivityRunProfileExecutionItem?.Activity?.TargetContext,
                 // Sync rule context
                 SyncRuleId = change.SyncRuleId,
                 SyncRuleName = change.SyncRuleName,
@@ -162,5 +167,16 @@
                     .ToList()
             })
             .ToList();
+    }
+
+    private static string MapRunTypeToMechanismType(ConnectedSystemRunType? runType)
+    {
+        return runType switch
+        {
+            ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport => "Import",
+            ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation => "SynchronisationRule",
+            ConnectedSystemRunType.Export => "Export",
+            _ => "SynchronisationRule" // Default to sync for MVO changes
+        };
     }
 }

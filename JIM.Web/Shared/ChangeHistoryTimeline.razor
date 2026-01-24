@@ -1107,13 +1107,17 @@ else
     {
         return builder =>
         {
-            string icon = changeGroup.ChangeMechanismType switch
+            // Determine the effective mechanism type, using RunProfileName as fallback
+            var effectiveMechanism = GetEffectiveMechanismType(changeGroup);
+
+            string icon = effectiveMechanism switch
             {
                 "SynchronisationRule" => Icons.Material.Filled.Sync,
                 "User" => Icons.Material.Filled.Edit,
                 "WorkflowInstance" => Icons.Material.Filled.AccountTree,
                 "GroupMembershipRuleEvaluation" => Icons.Material.Filled.Group,
-                "Import" => Icons.Material.Filled.CloudDownload,
+                "Export" => Icons.Material.Filled.Output,
+                "Import" => Icons.Material.Filled.Input,
                 _ => Icons.Material.Filled.HelpOutline
             };
 
@@ -1123,6 +1127,30 @@ else
             builder.AddAttribute(3, "Class", "mud-text-secondary");
             builder.CloseComponent();
         };
+    }
+
+    /// <summary>
+    /// Determines the effective mechanism type by checking ChangeMechanismType first,
+    /// then falling back to parsing RunProfileName for legacy data where the run type may not be set.
+    /// </summary>
+    private static string GetEffectiveMechanismType(ChangeGroup changeGroup)
+    {
+        // If we already have a specific mechanism type (not generic "Import"), use it
+        if (changeGroup.ChangeMechanismType is "SynchronisationRule" or "Export" or "User" or "WorkflowInstance" or "GroupMembershipRuleEvaluation")
+            return changeGroup.ChangeMechanismType;
+
+        // For "Import" or unknown, check if RunProfileName suggests a different type
+        if (!string.IsNullOrEmpty(changeGroup.RunProfileName))
+        {
+            var name = changeGroup.RunProfileName.ToLowerInvariant();
+            if (name.Contains("sync") || name.Contains("synchronisation"))
+                return "SynchronisationRule";
+            if (name.Contains("export"))
+                return "Export";
+        }
+
+        // Default to Import for import run profiles or unknown
+        return "Import";
     }
 
     /// <summary>
@@ -1136,24 +1164,44 @@ else
         {
             int seq = 0;
 
-            // Check if this is a sync-initiated change
-            bool isSyncChange = changeGroup.ChangeMechanismType == "SynchronisationRule" ||
-                                changeGroup.SyncRuleId != null ||
-                                !string.IsNullOrEmpty(changeGroup.SyncRuleName);
+            // Determine the effective mechanism type using the same logic as icon selection
+            var effectiveMechanism = GetEffectiveMechanismType(changeGroup);
 
-            // Check if this is an import change (CSO)
-            bool isImportChange = changeGroup.ChangeMechanismType == "Import";
+            // Check if we have connected system info (for both CSO and MVO run profile changes)
+            bool hasConnectedSystemInfo = changeGroup.ConnectedSystemId != null;
 
-            if (isSyncChange)
+            // Check if this is an MVO sync change with sync rule info
+            bool hasSyncRuleInfo = changeGroup.SyncRuleId != null || !string.IsNullOrEmpty(changeGroup.SyncRuleName);
+
+            // Check if this is a sync-type change
+            bool isSyncMechanism = effectiveMechanism == "SynchronisationRule";
+
+            if (hasConnectedSystemInfo)
             {
-                // Show "Synchronisation" with sync rule link if available
+                // Show run profile name (e.g., "Full Import", "Delta Sync", "Export") with connected system link
+                var runProfileDisplayName = !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName : effectiveMechanism;
                 builder.OpenComponent<MudText>(seq++);
                 builder.AddAttribute(seq++, "Style", "display: inline;");
-                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Synchronisation")));
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, runProfileDisplayName)));
                 builder.CloseComponent();
 
-                // If we have a sync rule, show it as a link
-                if (changeGroup.SyncRuleId != null || !string.IsNullOrEmpty(changeGroup.SyncRuleName))
+                // Show connected system as a link
+                if (!string.IsNullOrEmpty(changeGroup.ConnectedSystemName))
+                {
+                    builder.OpenComponent<MudText>(seq++);
+                    builder.AddAttribute(seq++, "Style", "display: inline; margin-left: 4px;");
+                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "on")));
+                    builder.CloseComponent();
+
+                    builder.OpenComponent<MudLink>(seq++);
+                    builder.AddAttribute(seq++, "Href", $"/admin/connected-systems/{changeGroup.ConnectedSystemId}");
+                    builder.AddAttribute(seq++, "Style", "margin-left: 4px;");
+                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ConnectedSystemName)));
+                    builder.CloseComponent();
+                }
+
+                // For MVO sync changes, also show sync rule info if available
+                if (hasSyncRuleInfo)
                 {
                     builder.OpenComponent<MudText>(seq++);
                     builder.AddAttribute(seq++, "Style", "display: inline; margin-left: 4px;");
@@ -1178,38 +1226,25 @@ else
                     }
                 }
             }
-            else if (isImportChange)
+            else if (isSyncMechanism)
             {
-                // Show run profile name (e.g., "Full Import") with connected system link if available
-                var runProfileDisplayName = !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName : "Import";
+                // Sync change without sync rule or connected system info - show run profile name or "Synchronisation"
+                var runProfileDisplayName = !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName : "Synchronisation";
                 builder.OpenComponent<MudText>(seq++);
                 builder.AddAttribute(seq++, "Style", "display: inline;");
                 builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, runProfileDisplayName)));
                 builder.CloseComponent();
-
-                // If we have a connected system, show it as a link
-                if (changeGroup.ConnectedSystemId != null && !string.IsNullOrEmpty(changeGroup.ConnectedSystemName))
-                {
-                    builder.OpenComponent<MudText>(seq++);
-                    builder.AddAttribute(seq++, "Style", "display: inline; margin-left: 4px;");
-                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "from")));
-                    builder.CloseComponent();
-
-                    builder.OpenComponent<MudLink>(seq++);
-                    builder.AddAttribute(seq++, "Href", $"/admin/connected-systems/{changeGroup.ConnectedSystemId}");
-                    builder.AddAttribute(seq++, "Style", "margin-left: 4px;");
-                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ConnectedSystemName)));
-                    builder.CloseComponent();
-                }
             }
             else
             {
-                // Non-sync mechanism
+                // Other mechanisms (User, Workflow, etc.)
                 string mechanismText = changeGroup.ChangeMechanismType switch
                 {
                     "User" => "Direct Edit",
                     "WorkflowInstance" => "Workflow",
                     "GroupMembershipRuleEvaluation" => "Group Rule",
+                    "Import" => !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName : "Import",
+                    "Export" => !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName : "Export",
                     _ => changeGroup.ChangeMechanismType
                 };
 

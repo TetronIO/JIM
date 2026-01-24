@@ -2009,6 +2009,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Where(c => c.ConnectedSystemId == targetChange.ConnectedSystemId &&
                         c.DeletedObjectExternalId == externalIdValue)
             .OrderByDescending(c => c.ChangeTime)
+            .Include(c => c.ActivityRunProfileExecutionItem)
+            .ThenInclude(rpei => rpei!.Activity)
             .Include(c => c.AttributeChanges)
             .ThenInclude(ac => ac.Attribute)
             .Include(c => c.AttributeChanges)

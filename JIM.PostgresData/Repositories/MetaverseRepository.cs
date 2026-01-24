@@ -189,6 +189,9 @@ public class MetaverseRepository : IMetaverseRepository
             ThenInclude(rvav => rvav.Attribute).
             Include(mo => mo.Changes).
             ThenInclude(c => c.SyncRule).
+            Include(mo => mo.Changes).
+            ThenInclude(c => c.ActivityRunProfileExecutionItem).
+            ThenInclude(rpei => rpei!.Activity).
             SingleOrDefaultAsync(mo => mo.Id == id);
     }
 
@@ -1022,6 +1025,8 @@ public class MetaverseRepository : IMetaverseRepository
             .Where(c => c.DeletedObjectTypeId == targetChange.DeletedObjectTypeId &&
                         c.DeletedObjectDisplayName == targetChange.DeletedObjectDisplayName)
             .OrderByDescending(c => c.ChangeTime)
+            .Include(c => c.ActivityRunProfileExecutionItem)
+            .ThenInclude(rpei => rpei!.Activity)
             .Include(c => c.AttributeChanges)
             .ThenInclude(ac => ac.Attribute)
             .Include(c => c.AttributeChanges)
