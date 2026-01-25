@@ -21,24 +21,32 @@ public class DeleteConnectedSystemWorkerTask : WorkerTask
     /// </summary>
     public bool EvaluateMvoDeletionRules { get; set; }
 
+    /// <summary>
+    /// Whether to delete change history for the deleted CSOs.
+    /// Default: false (preserves audit trail).
+    /// </summary>
+    public bool DeleteChangeHistory { get; set; } = false;
+
     public DeleteConnectedSystemWorkerTask()
     {
         // For use by EntityFramework to construct db-sourced objects.
     }
 
-    public DeleteConnectedSystemWorkerTask(int connectedSystemId, bool evaluateMvoDeletionRules = false)
+    public DeleteConnectedSystemWorkerTask(int connectedSystemId, bool evaluateMvoDeletionRules = false, bool deleteChangeHistory = false)
     {
         ConnectedSystemId = connectedSystemId;
         EvaluateMvoDeletionRules = evaluateMvoDeletionRules;
+        DeleteChangeHistory = deleteChangeHistory;
     }
 
     /// <summary>
     /// When deletion is triggered by a user, this overload should be used to attribute the action to the user.
     /// </summary>
-    public DeleteConnectedSystemWorkerTask(int connectedSystemId, MetaverseObject initiatedBy, bool evaluateMvoDeletionRules = false)
+    public DeleteConnectedSystemWorkerTask(int connectedSystemId, MetaverseObject initiatedBy, bool evaluateMvoDeletionRules = false, bool deleteChangeHistory = false)
     {
         ConnectedSystemId = connectedSystemId;
         EvaluateMvoDeletionRules = evaluateMvoDeletionRules;
+        DeleteChangeHistory = deleteChangeHistory;
         InitiatedByType = ActivityInitiatorType.User;
         InitiatedById = initiatedBy.Id;
         InitiatedByMetaverseObject = initiatedBy;
@@ -48,10 +56,11 @@ public class DeleteConnectedSystemWorkerTask : WorkerTask
     /// <summary>
     /// When deletion is triggered by an API key, this overload should be used to attribute the action to the API key.
     /// </summary>
-    public DeleteConnectedSystemWorkerTask(int connectedSystemId, ApiKey apiKey, bool evaluateMvoDeletionRules = false)
+    public DeleteConnectedSystemWorkerTask(int connectedSystemId, ApiKey apiKey, bool evaluateMvoDeletionRules = false, bool deleteChangeHistory = false)
     {
         ConnectedSystemId = connectedSystemId;
         EvaluateMvoDeletionRules = evaluateMvoDeletionRules;
+        DeleteChangeHistory = deleteChangeHistory;
         InitiatedByType = ActivityInitiatorType.ApiKey;
         InitiatedById = apiKey.Id;
         InitiatedByApiKey = apiKey;

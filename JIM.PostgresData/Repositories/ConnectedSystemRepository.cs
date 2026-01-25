@@ -2243,14 +2243,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         Log.Information("DeleteAllConnectedSystemObjectsAndDependenciesAsync: Completed for Connected System {Id}", connectedSystemId);
     }
 
-    public async Task DeleteConnectedSystemAsync(int connectedSystemId)
+    public async Task DeleteConnectedSystemAsync(int connectedSystemId, bool deleteChangeHistory = false)
     {
         // Use raw SQL for bulk deletion - much faster than EF Core tracking
         // Delete order follows dependency graph from design doc
-        Log.Information("DeleteConnectedSystemAsync: Starting bulk deletion for Connected System {Id}", connectedSystemId);
+        Log.Information("DeleteConnectedSystemAsync: Starting bulk deletion for Connected System {Id}, deleteChangeHistory={DeleteHistory}",
+            connectedSystemId, deleteChangeHistory);
 
-        // 1. Delete all CSOs and their dependencies (preserving change history)
-        await DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory: false);
+        // 1. Delete all CSOs and their dependencies
+        await DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory);
 
         // 2. Delete Containers (child of Partition)
         await Repository.Database.Database.ExecuteSqlRawAsync(

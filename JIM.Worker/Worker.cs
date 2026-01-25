@@ -312,7 +312,9 @@ public class Worker : BackgroundService
                                         try
                                         {
                                             // initiate clearing the connected system
-                                            await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
+                                            await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(
+                                                clearConnectedSystemObjectsTask.ConnectedSystemId,
+                                                clearConnectedSystemObjectsTask.DeleteChangeHistory);
 
                                             // task completed successfully, complete the activity
                                             await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
@@ -333,15 +335,16 @@ public class Worker : BackgroundService
                                 }
                                 case DeleteConnectedSystemWorkerTask deleteConnectedSystemTask:
                                 {
-                                    Log.Information("ExecuteAsync: DeleteConnectedSystemWorkerTask received for connected system id: {ConnectedSystemId}, EvaluateMvoDeletionRules: {EvaluateMvo}",
-                                        deleteConnectedSystemTask.ConnectedSystemId, deleteConnectedSystemTask.EvaluateMvoDeletionRules);
+                                    Log.Information("ExecuteAsync: DeleteConnectedSystemWorkerTask received for connected system id: {ConnectedSystemId}, EvaluateMvoDeletionRules: {EvaluateMvo}, DeleteChangeHistory: {DeleteHistory}",
+                                        deleteConnectedSystemTask.ConnectedSystemId, deleteConnectedSystemTask.EvaluateMvoDeletionRules, deleteConnectedSystemTask.DeleteChangeHistory);
 
                                     try
                                     {
                                         // Execute the deletion (marks orphaned MVOs for deletion before deleting CS)
                                         await taskJim.ConnectedSystems.ExecuteDeletionAsync(
                                             deleteConnectedSystemTask.ConnectedSystemId,
-                                            deleteConnectedSystemTask.EvaluateMvoDeletionRules);
+                                            deleteConnectedSystemTask.EvaluateMvoDeletionRules,
+                                            deleteConnectedSystemTask.DeleteChangeHistory);
 
                                         // Task completed successfully, complete the activity
                                         await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);

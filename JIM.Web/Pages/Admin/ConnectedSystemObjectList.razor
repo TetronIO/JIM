@@ -202,17 +202,41 @@
         </PagerContent>
     </MudTable>
 
-    <MudMessageBox @ref="DeleteAllObjectsMessageBox" Title="Warning" CancelText="Cancel">
-        <MessageContent>
-            Deleting the connected system objects does not cause objects to be deleted in the external system.
-            It just removes the objects from JIM. A full-import on this connect system and full-synchronisation on all connected system is needed to rebuild the correct state.
-            <br/><br/>
-            The deletes will be executed via a task and may take some time. Check the <MudLink Href="/admin/operations" Target="_blank">Operations</MudLink> page or refresh this one to see progress.
-        </MessageContent>
-        <YesButton>
-            <MudButton Variant="Variant.Filled" Color="Color.Error" DropShadow="false" StartIcon="@Icons.Material.Filled.DeleteForever" Class="ml-2">Delete all objects</MudButton>
-        </YesButton>
-    </MudMessageBox>
+    <MudDialog @bind-Visible="_clearDialogVisible" Options="_clearDialogOptions">
+        <TitleContent>
+            <MudText Typo="Typo.h6">
+                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-3" /> Clear Connector Space
+            </MudText>
+        </TitleContent>
+        <DialogContent>
+            <MudAlert Severity="Severity.Warning" Class="mb-4">
+                This action will delete all Connected System Objects from JIM.
+            </MudAlert>
+
+            <MudText>
+                Deleting the connected system objects does not cause objects to be deleted in the external system.
+                It just removes the objects from JIM. A full-import on this connected system and full-synchronisation on all connected systems is needed to rebuild the correct state.
+            </MudText>
+
+            <MudText Class="mt-3">
+                The deletes will be executed via a task and may take some time. Check the <MudLink Href="/admin/operations" Target="_blank">Operations</MudLink> page or refresh this one to see progress.
+            </MudText>
+
+            <MudCheckBox @bind-Value="_clearDeleteChangeHistory" Class="mt-4" Color="Color.Primary">
+                <MudText>Delete change history for cleared objects</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    When enabled, all change history records for the cleared CSOs will also be deleted.
+                    This is recommended when clearing for re-import as the old history becomes irrelevant.
+                </MudText>
+            </MudCheckBox>
+        </DialogContent>
+        <DialogActions>
+            <MudButton OnClick="@(() => _clearDialogVisible = false)" DropShadow="false">Cancel</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Error" DropShadow="false" StartIcon="@Icons.Material.Filled.DeleteForever" OnClick="HandleClearConfirmedAsync">
+                Clear Connector Space
+            </MudButton>
+        </DialogActions>
+    </MudDialog>
 }
 else
 {
@@ -227,11 +251,13 @@ else
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
     private MudTable<ConnectedSystemObjectHeader>? _table;
-    private MudMessageBox? DeleteAllObjectsMessageBox { get; set; }
     private ConnectedSystemHeader? _connectedSystemHeader;
     private string _searchString = "";
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private bool _loading;
+    private bool _clearDialogVisible;
+    private bool _clearDeleteChangeHistory = true; // Default to true (recommended for re-import)
+    private readonly DialogOptions _clearDialogOptions = new() { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
     private bool _hasSecondaryExternalId;
     private string _externalIdColumnHeader = "External Id";
     private string _secondaryExternalIdColumnHeader = "Secondary External Id";
@@ -369,18 +395,18 @@ else
         NavManager.NavigateTo(Utilities.GetConnectedSystemObjectHref(args.Item));
     }
 
-    private async Task HandleDeleteAllObjectsClickAsync()
+    private void HandleDeleteAllObjectsClickAsync()
     {
-        if (DeleteAllObjectsMessageBox == null)
-            return;
+        _clearDialogVisible = true;
+    }
 
-        var userPromptResult = await DeleteAllObjectsMessageBox.ShowAsync();
-        if (!userPromptResult.HasValue || !userPromptResult.Value)
-            return;
+    private async Task HandleClearConfirmedAsync()
+    {
+        _clearDialogVisible = false;
 
         // attribute the execution to the user
         var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-        var task = new ClearConnectedSystemObjectsWorkerTask(Id, user);
+        var task = new ClearConnectedSystemObjectsWorkerTask(Id, user, _clearDeleteChangeHistory);
         var result = await Jim.Tasking.CreateWorkerTaskAsync(task);
 
         if (!result.Success)

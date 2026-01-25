@@ -838,6 +838,7 @@ public class SynchronisationController(
     /// Use the deletion-preview endpoint first to understand the impact before calling this endpoint.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the connected system to delete.</param>
+    /// <param name="deleteChangeHistory">Whether to delete change history for the deleted CSOs. Default: false (preserves audit trail).</param>
     /// <returns>The result of the deletion request including outcome and tracking IDs.</returns>
     /// <response code="200">Deletion completed immediately.</response>
     /// <response code="202">Deletion has been queued as a background job.</response>
@@ -848,9 +849,12 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ConnectedSystemDeletionResult), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> DeleteConnectedSystemAsync(int connectedSystemId)
+    public async Task<IActionResult> DeleteConnectedSystemAsync(
+        int connectedSystemId,
+        [FromQuery] bool deleteChangeHistory = false)
     {
-        _logger.LogInformation("Deletion requested for connected system: {Id}", connectedSystemId);
+        _logger.LogInformation("Deletion requested for connected system: {Id}, deleteChangeHistory={DeleteHistory}",
+            connectedSystemId, deleteChangeHistory);
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
@@ -860,7 +864,7 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        var result = await _application.ConnectedSystems.DeleteAsync(connectedSystemId, initiatedBy);
+        var result = await _application.ConnectedSystems.DeleteAsync(connectedSystemId, initiatedBy, deleteChangeHistory);
 
         if (!result.Success)
             return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage ?? "Deletion failed."));
@@ -873,6 +877,61 @@ public class SynchronisationController(
         }
 
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Clears all Connected System Objects from a connected system's connector space.
+    /// </summary>
+    /// <remarks>
+    /// This operation removes all CSOs and their attributes from the connector space,
+    /// typically used before re-importing data from the connected system. By default,
+    /// change history is also deleted since the objects will be re-imported.
+    ///
+    /// This is a destructive operation and should be used with caution.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the connected system to clear.</param>
+    /// <param name="deleteChangeHistory">Whether to delete change history for the cleared CSOs. Default: true (recommended for re-import scenarios).</param>
+    /// <response code="200">Connector space cleared successfully.</response>
+    /// <response code="400">Clear operation failed.</response>
+    /// <response code="401">User is not authenticated.</response>
+    /// <response code="404">Connected system not found.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/clear", Name = "ClearConnectorSpace")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ClearConnectorSpaceAsync(
+        int connectedSystemId,
+        [FromQuery] bool deleteChangeHistory = true)
+    {
+        _logger.LogInformation("Clear connector space requested for connected system: {Id}, deleteChangeHistory={DeleteHistory}",
+            connectedSystemId, deleteChangeHistory);
+
+        try
+        {
+            // Verify connected system exists
+            var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+            if (connectedSystem == null)
+            {
+                return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+            }
+
+            await _application.ConnectedSystems.ClearConnectedSystemObjectsAsync(connectedSystemId, deleteChangeHistory);
+
+            _logger.LogInformation("Connector space cleared for connected system: {Id}", connectedSystemId);
+            return Ok();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Clear connector space failed for connected system: {Id}", connectedSystemId);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Clear connector space failed for connected system: {Id}", connectedSystemId);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                ApiErrorResponse.InternalError($"Clear operation failed: {ex.Message}"));
+        }
     }
 
     #endregion

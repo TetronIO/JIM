@@ -597,11 +597,12 @@ public class ConnectedSystemServer
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to delete.</param>
     /// <param name="initiatedBy">The user who initiated the deletion.</param>
+    /// <param name="deleteChangeHistory">Whether to delete change history for the deleted CSOs. Default: false (preserves audit trail).</param>
     /// <returns>The result of the deletion request.</returns>
-    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, MetaverseObject? initiatedBy)
+    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, MetaverseObject? initiatedBy, bool deleteChangeHistory = false)
     {
-        Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by {User}",
-            connectedSystemId, initiatedBy?.DisplayName ?? "System");
+        Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by {User}, deleteChangeHistory={DeleteHistory}",
+            connectedSystemId, initiatedBy?.DisplayName ?? "System", deleteChangeHistory);
 
         // Get the Connected System
         var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
@@ -632,8 +633,8 @@ public class ConnectedSystemServer
                 runningSyncTask.Id, connectedSystemId);
 
             var deleteTask = initiatedBy != null
-                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: true)
-                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true);
+                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: true, deleteChangeHistory)
+                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory);
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id);
@@ -649,8 +650,8 @@ public class ConnectedSystemServer
                 connectedSystemId, csoCount, BackgroundDeletionThreshold);
 
             var deleteTask = initiatedBy != null
-                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: true)
-                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true);
+                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: true, deleteChangeHistory)
+                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory);
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id);
@@ -679,7 +680,7 @@ public class ConnectedSystemServer
             await Application.Metaverse.MarkOrphanedMvosForDeletionAsync(connectedSystemId);
 
             // Perform the deletion
-            await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId);
+            await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId, deleteChangeHistory);
 
             // Complete the activity
             await Application.Activities.CompleteActivityAsync(activity);
@@ -710,10 +711,11 @@ public class ConnectedSystemServer
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to delete.</param>
     /// <param name="evaluateMvoDeletionRules">Whether to mark orphaned MVOs for deletion before deleting the Connected System.</param>
-    public async Task ExecuteDeletionAsync(int connectedSystemId, bool evaluateMvoDeletionRules = true)
+    /// <param name="deleteChangeHistory">Whether to delete change history for the deleted CSOs. Default: false (preserves audit trail).</param>
+    public async Task ExecuteDeletionAsync(int connectedSystemId, bool evaluateMvoDeletionRules = true, bool deleteChangeHistory = false)
     {
-        Log.Information("ExecuteDeletionAsync: Starting for Connected System {Id}, EvaluateMvoDeletionRules={EvaluateMvo}",
-            connectedSystemId, evaluateMvoDeletionRules);
+        Log.Information("ExecuteDeletionAsync: Starting for Connected System {Id}, EvaluateMvoDeletionRules={EvaluateMvo}, deleteChangeHistory={DeleteHistory}",
+            connectedSystemId, evaluateMvoDeletionRules, deleteChangeHistory);
 
         if (evaluateMvoDeletionRules)
         {
@@ -722,7 +724,7 @@ public class ConnectedSystemServer
             await Application.Metaverse.MarkOrphanedMvosForDeletionAsync(connectedSystemId);
         }
 
-        await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId);
+        await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId, deleteChangeHistory);
 
         Log.Information("ExecuteDeletionAsync: Completed for Connected System {Id}", connectedSystemId);
     }
@@ -2636,10 +2638,12 @@ public class ConnectedSystemServer
     /// to remove all CSO-related data including change history (since objects will be re-imported).
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier for the connected system to clear.</param>
+    /// <param name="deleteChangeHistory">Whether to delete change history for the cleared CSOs. Default: true (recommended for re-import scenarios).</param>
     /// <exception cref="InvalidOperationException">Thrown if the Connected System is being deleted.</exception>
-    public async Task ClearConnectedSystemObjectsAsync(int connectedSystemId)
+    public async Task ClearConnectedSystemObjectsAsync(int connectedSystemId, bool deleteChangeHistory = true)
     {
-        Log.Information("ClearConnectedSystemObjectsAsync: Starting for Connected System {Id}", connectedSystemId);
+        Log.Information("ClearConnectedSystemObjectsAsync: Starting for Connected System {Id}, deleteChangeHistory={DeleteHistory}",
+            connectedSystemId, deleteChangeHistory);
 
         // Check for concurrency - don't clear if system is being deleted
         var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
@@ -2656,8 +2660,7 @@ public class ConnectedSystemServer
         }
 
         // Use the shared method that handles all CSO dependencies properly.
-        // deleteChangeHistory=true because we're clearing for re-import - the old change history is no longer relevant.
-        await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory: true);
+        await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory);
 
         Log.Information("ClearConnectedSystemObjectsAsync: Completed for Connected System {Id}", connectedSystemId);
 

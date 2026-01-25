@@ -500,7 +500,8 @@ public interface IConnectedSystemRepository
     /// Should only be called after verifying no sync operations are running.
     /// </summary>
     /// <param name="connectedSystemId">The ID of the Connected System to delete.</param>
-    Task DeleteConnectedSystemAsync(int connectedSystemId);
+    /// <param name="deleteChangeHistory">Whether to delete change history for the deleted CSOs. Default: false (preserves audit trail).</param>
+    Task DeleteConnectedSystemAsync(int connectedSystemId, bool deleteChangeHistory = false);
 
     /// <summary>
     /// Gets the count of Sync Rules for a Connected System.
