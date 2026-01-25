@@ -457,10 +457,43 @@ public class Worker : BackgroundService
                     }
                 }
             }
+
+            // Perform change history cleanup
+            await PerformChangeHistoryCleanupAsync(jim);
         }
         catch (Exception ex)
         {
             Log.Error(ex, "PerformHousekeepingAsync: Error during housekeeping");
+        }
+    }
+
+    /// <summary>
+    /// Performs change history and activity cleanup based on retention policy.
+    /// Runs as part of housekeeping during worker idle time.
+    /// </summary>
+    private async Task PerformChangeHistoryCleanupAsync(JimApplication jim)
+    {
+        try
+        {
+            // Get retention settings
+            var retentionPeriod = await jim.ServiceSettings.GetHistoryRetentionPeriodAsync();
+            var batchSize = await jim.ServiceSettings.GetHistoryCleanupBatchSizeAsync();
+
+            var cutoffDate = DateTime.UtcNow - retentionPeriod;
+
+            // Perform cleanup (creates its own Activity for audit)
+            var result = await jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, batchSize, initiatedBy: null);
+
+            // Log results if anything was deleted
+            if (result.CsoChangesDeleted > 0 || result.MvoChangesDeleted > 0 || result.ActivitiesDeleted > 0)
+            {
+                Log.Information("PerformChangeHistoryCleanupAsync: Deleted {CsoCount} CSO changes, {MvoCount} MVO changes, {ActivityCount} activities",
+                    result.CsoChangesDeleted, result.MvoChangesDeleted, result.ActivitiesDeleted);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "PerformChangeHistoryCleanupAsync: Error during change history cleanup");
         }
     }
 
