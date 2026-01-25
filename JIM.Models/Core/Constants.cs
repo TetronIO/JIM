@@ -217,6 +217,12 @@ public static class Constants
         // History Settings
         public const string HistoryRetentionPeriod = "History.RetentionPeriod";
 
+        /// <summary>
+        /// Maximum number of records to delete per cleanup batch during housekeeping.
+        /// Default: 100, prevents long-running transactions and database locks.
+        /// </summary>
+        public const string HistoryCleanupBatchSize = "History.CleanupBatchSize";
+
         // Change Tracking Settings
         /// <summary>
         /// Enables or disables change tracking for Connected System Objects.

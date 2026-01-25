@@ -207,6 +207,35 @@ public class Activity
     /// </summary>
     public ConnectedSystemRunType? ConnectedSystemRunType { get; set; } = Staging.ConnectedSystemRunType.NotSet;
 
+    // -----------------------------------------------------------------------------------------------------------------
+    // history retention cleanup stats (for HistoryRetentionCleanup activities)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// For HistoryRetentionCleanup activities: Count of CSO change records deleted.
+    /// </summary>
+    public int? DeletedCsoChangeCount { get; set; }
+
+    /// <summary>
+    /// For HistoryRetentionCleanup activities: Count of MVO change records deleted.
+    /// </summary>
+    public int? DeletedMvoChangeCount { get; set; }
+
+    /// <summary>
+    /// For HistoryRetentionCleanup activities: Count of Activity records deleted.
+    /// </summary>
+    public int? DeletedActivityCount { get; set; }
+
+    /// <summary>
+    /// For HistoryRetentionCleanup activities: Oldest deleted record timestamp.
+    /// </summary>
+    public DateTime? DeletedRecordsFromDate { get; set; }
+
+    /// <summary>
+    /// For HistoryRetentionCleanup activities: Newest deleted record timestamp.
+    /// </summary>
+    public DateTime? DeletedRecordsToDate { get; set; }
+
     // results:
     // what would be useful here is to capture two levels of stats, depending on system settings:
     // - result item with operation type (create/update/delete) and link to the Metaverse Object

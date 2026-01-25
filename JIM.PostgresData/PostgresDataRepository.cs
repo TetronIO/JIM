@@ -10,6 +10,7 @@ public class PostgresDataRepository : IRepository
 {
     public IActivityRepository Activity { get; }
     public IApiKeyRepository ApiKeys { get; }
+    public IChangeHistoryRepository ChangeHistory { get; }
     public IConnectedSystemRepository ConnectedSystems { get; }
     public IDataGenerationRepository DataGeneration { get; }
     public IMetaverseRepository Metaverse { get; }
@@ -52,6 +53,7 @@ public class PostgresDataRepository : IRepository
 
         Activity = new ActivityRepository(this);
         ApiKeys = new ApiKeyRepository(this);
+        ChangeHistory = new ChangeHistoryRepository(jimDbContext);
         ConnectedSystems = new ConnectedSystemRepository(this);
         DataGeneration = new DataGenerationRepository(this);
         Database = jimDbContext; // the db context is passed in, so we can unit test jim and the data repository by passing in either a mock or the actual db context.
