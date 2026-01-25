@@ -1008,30 +1008,48 @@ public class MetaverseRepository : IMetaverseRepository
     /// <inheritdoc />
     public async Task<List<MetaverseObjectChange>> GetDeletedMvoChangeHistoryAsync(Guid changeId)
     {
-        // First, get the change to find the MVO ID pattern (from the change record)
+        // First, get the Delete change record
         var targetChange = await Repository.Database.MetaverseObjectChanges
             .FirstOrDefaultAsync(c => c.Id == changeId);
 
         if (targetChange == null)
             return new List<MetaverseObjectChange>();
 
-        // For deleted MVOs, we can only return changes that share the same display name and type
-        // since the MVO ID link is broken. This is a best-effort match.
+        // Validate it's a Delete change with tombstone data
         if (string.IsNullOrEmpty(targetChange.DeletedObjectDisplayName) || !targetChange.DeletedObjectTypeId.HasValue)
             return new List<MetaverseObjectChange> { targetChange };
 
-        return await Repository.Database.MetaverseObjectChanges
-            .AsSplitQuery()
+        // Strategy: Find the original MetaverseObjectId by looking for other changes with the same
+        // deleted object identity. Earlier changes (Projected, AttributeFlow) still have the FK populated.
+        var mvoId = await Repository.Database.MetaverseObjectChanges
             .Where(c => c.DeletedObjectTypeId == targetChange.DeletedObjectTypeId &&
-                        c.DeletedObjectDisplayName == targetChange.DeletedObjectDisplayName)
-            .OrderByDescending(c => c.ChangeTime)
-            .Include(c => c.ActivityRunProfileExecutionItem)
-            .ThenInclude(rpei => rpei!.Activity)
-            .Include(c => c.AttributeChanges)
-            .ThenInclude(ac => ac.Attribute)
-            .Include(c => c.AttributeChanges)
-            .ThenInclude(ac => ac.ValueChanges)
-            .ToListAsync();
+                        c.DeletedObjectDisplayName == targetChange.DeletedObjectDisplayName &&
+                        c.MetaverseObject != null) // Earlier changes still have the FK
+            .Select(c => c.MetaverseObject!.Id)
+            .FirstOrDefaultAsync();
+
+        // If we found the original MVO ID, fetch ALL changes (including Delete change)
+        if (mvoId != Guid.Empty)
+        {
+            return await Repository.Database.MetaverseObjectChanges
+                .AsSplitQuery()
+                .Where(c => c.MetaverseObject!.Id == mvoId || // Non-deleted changes
+                            (c.DeletedObjectTypeId == targetChange.DeletedObjectTypeId &&
+                             c.DeletedObjectDisplayName == targetChange.DeletedObjectDisplayName &&
+                             c.ChangeType == ObjectChangeType.Deleted)) // The Delete change
+                .OrderByDescending(c => c.ChangeTime)
+                .Include(c => c.ActivityRunProfileExecutionItem)
+                .ThenInclude(rpei => rpei!.Activity)
+                .Include(c => c.AttributeChanges)
+                .ThenInclude(ac => ac.Attribute)
+                .Include(c => c.AttributeChanges)
+                .ThenInclude(ac => ac.ValueChanges)
+                .ToListAsync();
+        }
+
+        // Fallback: If no earlier changes exist (edge case), return only the Delete change
+        // This can happen if an MVO was projected and immediately deleted in the same sync
+        return new List<MetaverseObjectChange> { targetChange };
     }
 
     private static List<MetaverseObjectAttributeValue> GetFilteredAttributeValuesList(PredefinedSearch predefinedSearch, MetaverseObject metaverseObject)

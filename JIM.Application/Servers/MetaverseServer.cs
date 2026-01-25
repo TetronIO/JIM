@@ -436,12 +436,14 @@ public class MetaverseServer
             // IMPORTANT: Do NOT add this to metaverseObject.Changes collection!
             // Adding via navigation property causes EF Core to try to INSERT a record
             // referencing an MVO that's being DELETED in the same transaction, which fails.
-            // Instead, we create the record with MetaverseObjectId = null (intentional for DELETE ops)
-            // and save it directly via the repository.
+            // Instead, we create the record with a direct reference to the MVO, then allow
+            // the FK to be nulled during deletion (cascade behavior).
             var change = new MetaverseObjectChange
             {
-                // MetaverseObject/MetaverseObjectId is intentionally null for DELETE operations
-                // because the MVO no longer exists after deletion.
+                // CRITICAL: Set MetaverseObject reference to enable querying full change history.
+                // The FK will be automatically nulled when the MVO is deleted (cascade behavior),
+                // but we capture the ID here so GetDeletedMvoChangeHistoryAsync can find all related changes.
+                MetaverseObject = metaverseObject,
                 ChangeType = ObjectChangeType.Deleted,
                 ChangeTime = DateTime.UtcNow,
                 InitiatedByType = initiatedByType,
