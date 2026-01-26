@@ -574,9 +574,9 @@ public abstract class SyncTaskProcessorBase
     /// <param name="reason">A description of why the MVO is being deleted (for logging).</param>
     private async Task MarkMvoForDeletionAsync(MetaverseObject mvo, string reason)
     {
-        var gracePeriodDays = mvo.Type!.DeletionGracePeriodDays;
+        var gracePeriod = mvo.Type!.DeletionGracePeriod;
 
-        if (!gracePeriodDays.HasValue || gracePeriodDays.Value == 0)
+        if (!gracePeriod.HasValue || gracePeriod.Value == TimeSpan.Zero)
         {
             // No grace period - delete synchronously during this sync page flush
             // Check if already queued (multiple CSOs from same MVO may disconnect in same page)
@@ -597,8 +597,8 @@ public abstract class SyncTaskProcessorBase
             mvo.DeletionInitiatedById = _activity.InitiatedById;
             mvo.DeletionInitiatedByName = _activity.InitiatedByName;
             Log.Information(
-                "MarkMvoForDeletionAsync: MVO {MvoId} marked for deletion ({Reason}). Eligible after {Days} days. Initiator: {Initiator}",
-                mvo.Id, reason, gracePeriodDays.Value, _activity.InitiatedByName ?? "Unknown");
+                "MarkMvoForDeletionAsync: MVO {MvoId} marked for deletion ({Reason}). Eligible after {GracePeriod}. Initiator: {Initiator}",
+                mvo.Id, reason, gracePeriod.Value, _activity.InitiatedByName ?? "Unknown");
 
             // Persist the LastConnectorDisconnectedDate and initiator info
             await _jim.Metaverse.UpdateMetaverseObjectAsync(mvo);

@@ -13,7 +13,7 @@ public class MetaverseObjectTypeDetailDto
     public DateTime Created { get; set; }
     public bool BuiltIn { get; set; }
     public MetaverseObjectDeletionRule DeletionRule { get; set; }
-    public int? DeletionGracePeriodDays { get; set; }
+    public TimeSpan? DeletionGracePeriod { get; set; }
     public List<int> DeletionTriggerConnectedSystemIds { get; set; } = new();
     public List<MetaverseAttributeSummaryDto> Attributes { get; set; } = new();
 
@@ -30,7 +30,7 @@ public class MetaverseObjectTypeDetailDto
             Created = entity.Created,
             BuiltIn = entity.BuiltIn,
             DeletionRule = entity.DeletionRule,
-            DeletionGracePeriodDays = entity.DeletionGracePeriodDays,
+            DeletionGracePeriod = entity.DeletionGracePeriod,
             DeletionTriggerConnectedSystemIds = entity.DeletionTriggerConnectedSystemIds ?? new(),
             Attributes = entity.Attributes?
                 .Select(MetaverseAttributeSummaryDto.FromEntity)
@@ -50,10 +50,10 @@ public class UpdateMetaverseObjectTypeRequest
     public MetaverseObjectDeletionRule? DeletionRule { get; set; }
 
     /// <summary>
-    /// Optional grace period in days before deletion is executed.
-    /// Set to 0 or null for immediate deletion when conditions are met.
+    /// Optional grace period before deletion is executed, as an ISO 8601 duration string (e.g., "00:01:00" for 1 minute, "1.00:00:00" for 1 day).
+    /// Set to "00:00:00", TimeSpan.Zero, or null for immediate deletion when conditions are met.
     /// </summary>
-    public int? DeletionGracePeriodDays { get; set; }
+    public TimeSpan? DeletionGracePeriod { get; set; }
 
     /// <summary>
     /// List of connected system IDs that are authoritative sources for deletion.

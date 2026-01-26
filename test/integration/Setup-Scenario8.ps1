@@ -958,13 +958,13 @@ $mvGroupTypeCurrent = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "G
 if ($mvGroupTypeCurrent) {
     # Configure deletion rule:
     # - DeletionRule: WhenAuthoritativeSourceDisconnected - delete MVO when authoritative source disconnects
-    # - DeletionGracePeriodDays: 0 - immediate deletion (no grace period)
+    # - DeletionGracePeriod: Zero - immediate deletion (no grace period)
     # - DeletionTriggerConnectedSystemIds: Source system only - Source (APAC) is the authoritative source
     #   This means when a group is deleted from Source AD (APAC), the MVO is marked for deletion
     #   even though Target AD (EMEA) CSO still exists, triggering deprovisioning from Target
     Set-JIMMetaverseObjectType -Id $mvGroupTypeCurrent.id `
         -DeletionRule WhenAuthoritativeSourceDisconnected `
-        -DeletionGracePeriodDays 0 `
+        -DeletionGracePeriod ([TimeSpan]::Zero) `
         -DeletionTriggerConnectedSystemIds @($sourceSystem.id) | Out-Null
 
     Write-Host "  ✓ Group deletion rule configured (WhenAuthoritativeSourceDisconnected, Source=APAC)" -ForegroundColor Green

@@ -24,7 +24,7 @@ public class MetaverseObject
 
     /// <summary>
     /// When the last connector was disconnected from this MVO.
-    /// Used with MetaverseObjectType.DeletionGracePeriodDays to calculate deletion eligibility.
+    /// Used with MetaverseObjectType.DeletionGracePeriod to calculate deletion eligibility.
     /// Null = MVO has active connectors or was never connected.
     /// </summary>
     public DateTime? LastConnectorDisconnectedDate { get; set; }
@@ -112,8 +112,8 @@ public class MetaverseObject
     /// Null if not pending deletion or no grace period configured.
     /// </summary>
     [NotMapped]
-    public DateTime? DeletionEligibleDate => IsPendingDeletion && Type?.DeletionGracePeriodDays > 0
-        ? LastConnectorDisconnectedDate!.Value.AddDays(Type.DeletionGracePeriodDays.Value)
+    public DateTime? DeletionEligibleDate => IsPendingDeletion && Type?.DeletionGracePeriod.HasValue == true && Type.DeletionGracePeriod.Value > TimeSpan.Zero
+        ? LastConnectorDisconnectedDate!.Value.Add(Type.DeletionGracePeriod.Value)
         : null;
     #endregion
 

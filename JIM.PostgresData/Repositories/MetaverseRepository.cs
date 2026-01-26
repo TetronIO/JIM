@@ -46,7 +46,7 @@ public class MetaverseRepository : IMetaverseRepository
             BuiltIn = t.BuiltIn,
             HasPredefinedSearches = t.PredefinedSearches.Count > 0,
             DeletionRule = t.DeletionRule,
-            DeletionGracePeriodDays = t.DeletionGracePeriodDays
+            DeletionGracePeriod = t.DeletionGracePeriod
         }).ToListAsync();
 
         return metaverseObjectTypeHeaders;
@@ -799,7 +799,7 @@ public class MetaverseRepository : IMetaverseRepository
     /// Returns MVOs where:
     /// - Origin = Projected (not Internal - protects admin accounts)
     /// - Type.DeletionRule = WhenLastConnectorDisconnected
-    /// - LastConnectorDisconnectedDate + GracePeriodDays less than or equal to now
+    /// - LastConnectorDisconnectedDate + DeletionGracePeriod less than or equal to now
     /// - No connected system objects remain
     /// </summary>
     public async Task<List<MetaverseObject>> GetMetaverseObjectsEligibleForDeletionAsync(int maxResults = 100)
@@ -821,9 +821,9 @@ public class MetaverseRepository : IMetaverseRepository
                 // Must have no remaining connected system objects
                 !mvo.ConnectedSystemObjects.Any() &&
                 // Grace period must have elapsed (or no grace period configured)
-                (mvo.Type.DeletionGracePeriodDays == null ||
-                 mvo.Type.DeletionGracePeriodDays == 0 ||
-                 mvo.LastConnectorDisconnectedDate.Value.AddDays(mvo.Type.DeletionGracePeriodDays.Value) <= now))
+                (mvo.Type.DeletionGracePeriod == null ||
+                 mvo.Type.DeletionGracePeriod == TimeSpan.Zero ||
+                 mvo.LastConnectorDisconnectedDate.Value + mvo.Type.DeletionGracePeriod.Value <= now))
             .OrderBy(mvo => mvo.LastConnectorDisconnectedDate)
             .Take(maxResults)
             .ToListAsync();

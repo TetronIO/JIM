@@ -97,11 +97,11 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         if (request.DeletionRule.HasValue)
             objectType.DeletionRule = request.DeletionRule.Value;
 
-        if (request.DeletionGracePeriodDays.HasValue)
+        if (request.DeletionGracePeriod.HasValue)
         {
-            if (request.DeletionGracePeriodDays.Value < 0)
-                return BadRequest(ApiErrorResponse.BadRequest("DeletionGracePeriodDays cannot be negative."));
-            objectType.DeletionGracePeriodDays = request.DeletionGracePeriodDays.Value == 0 ? null : request.DeletionGracePeriodDays.Value;
+            if (request.DeletionGracePeriod.Value < TimeSpan.Zero)
+                return BadRequest(ApiErrorResponse.BadRequest("DeletionGracePeriod cannot be negative."));
+            objectType.DeletionGracePeriod = request.DeletionGracePeriod.Value == TimeSpan.Zero ? null : request.DeletionGracePeriod.Value;
         }
 
         if (request.DeletionTriggerConnectedSystemIds != null)
@@ -128,7 +128,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         await _application.Metaverse.UpdateMetaverseObjectTypeAsync(objectType);
 
         _logger.LogInformation("Updated metaverse object type: {Id} ({Name}) - DeletionRule: {DeletionRule}, GracePeriod: {GracePeriod}",
-            objectType.Id, objectType.Name, objectType.DeletionRule, objectType.DeletionGracePeriodDays);
+            objectType.Id, objectType.Name, objectType.DeletionRule, objectType.DeletionGracePeriod);
 
         var result = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectType.Id, false);
         return Ok(MetaverseObjectTypeDetailDto.FromEntity(result!));

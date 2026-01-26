@@ -846,7 +846,7 @@ try {
         # and re-added within the grace period, their MVO is preserved
         Set-JIMMetaverseObjectType -Id $mvUserType.id `
             -DeletionRule WhenLastConnectorDisconnected `
-            -DeletionGracePeriodDays 7 | Out-Null
+            -DeletionGracePeriod ([TimeSpan]::FromDays(7)) | Out-Null
 
         Write-Host "  ✓ Deletion rule configured: WhenLastConnectorDisconnected with 7-day grace period" -ForegroundColor Green
     }

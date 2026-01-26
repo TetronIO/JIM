@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -69,7 +70,7 @@ public class MetaverseControllerObjectTypeTests
             Name = "User",
             PluralName = "Users",
             DeletionRule = MetaverseObjectDeletionRule.Manual,
-            DeletionGracePeriodDays = null
+            DeletionGracePeriod = null
         };
 
         _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false))
@@ -80,7 +81,7 @@ public class MetaverseControllerObjectTypeTests
         var request = new UpdateMetaverseObjectTypeRequest
         {
             DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
-            DeletionGracePeriodDays = 30
+            DeletionGracePeriod = TimeSpan.FromDays(30)
         };
 
         var result = await _controller.UpdateObjectTypeAsync(1, request);
@@ -134,14 +135,14 @@ public class MetaverseControllerObjectTypeTests
     }
 
     [Test]
-    public async Task UpdateObjectTypeAsync_UpdatesDeletionGracePeriodDays()
+    public async Task UpdateObjectTypeAsync_UpdatesDeletionGracePeriod()
     {
         var objectType = new MetaverseObjectType
         {
             Id = 1,
             Name = "User",
             PluralName = "Users",
-            DeletionGracePeriodDays = null
+            DeletionGracePeriod = null
         };
 
         MetaverseObjectType? capturedObjectType = null;
@@ -153,13 +154,13 @@ public class MetaverseControllerObjectTypeTests
 
         var request = new UpdateMetaverseObjectTypeRequest
         {
-            DeletionGracePeriodDays = 7
+            DeletionGracePeriod = TimeSpan.FromDays(7)
         };
 
         await _controller.UpdateObjectTypeAsync(1, request);
 
         Assert.That(capturedObjectType, Is.Not.Null);
-        Assert.That(capturedObjectType!.DeletionGracePeriodDays, Is.EqualTo(7));
+        Assert.That(capturedObjectType!.DeletionGracePeriod, Is.EqualTo(TimeSpan.FromDays(7)));
     }
 
     [Test]
@@ -170,7 +171,7 @@ public class MetaverseControllerObjectTypeTests
             Id = 1,
             Name = "User",
             PluralName = "Users",
-            DeletionGracePeriodDays = 30
+            DeletionGracePeriod = TimeSpan.FromDays(30)
         };
 
         MetaverseObjectType? capturedObjectType = null;
@@ -182,13 +183,13 @@ public class MetaverseControllerObjectTypeTests
 
         var request = new UpdateMetaverseObjectTypeRequest
         {
-            DeletionGracePeriodDays = 0
+            DeletionGracePeriod = TimeSpan.Zero
         };
 
         await _controller.UpdateObjectTypeAsync(1, request);
 
         Assert.That(capturedObjectType, Is.Not.Null);
-        Assert.That(capturedObjectType!.DeletionGracePeriodDays, Is.Null);
+        Assert.That(capturedObjectType!.DeletionGracePeriod, Is.Null);
     }
 
     [Test]
@@ -206,7 +207,7 @@ public class MetaverseControllerObjectTypeTests
 
         var request = new UpdateMetaverseObjectTypeRequest
         {
-            DeletionGracePeriodDays = -1
+            DeletionGracePeriod = TimeSpan.FromDays(-1)
         };
 
         var result = await _controller.UpdateObjectTypeAsync(1, request);
@@ -284,7 +285,7 @@ public class MetaverseControllerObjectTypeTests
             Name = "User",
             PluralName = "Users",
             DeletionRule = MetaverseObjectDeletionRule.Manual,
-            DeletionGracePeriodDays = null,
+            DeletionGracePeriod = null,
             DeletionTriggerConnectedSystemIds = new List<int>()
         };
 
@@ -296,7 +297,7 @@ public class MetaverseControllerObjectTypeTests
         var request = new UpdateMetaverseObjectTypeRequest
         {
             DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
-            DeletionGracePeriodDays = 30
+            DeletionGracePeriod = TimeSpan.FromDays(30)
         };
 
         var result = await _controller.UpdateObjectTypeAsync(1, request) as OkObjectResult;
@@ -307,7 +308,7 @@ public class MetaverseControllerObjectTypeTests
         Assert.That(dto!.Id, Is.EqualTo(1));
         Assert.That(dto.Name, Is.EqualTo("User"));
         Assert.That(dto.DeletionRule, Is.EqualTo(MetaverseObjectDeletionRule.WhenLastConnectorDisconnected));
-        Assert.That(dto.DeletionGracePeriodDays, Is.EqualTo(30));
+        Assert.That(dto.DeletionGracePeriod, Is.EqualTo(TimeSpan.FromDays(30)));
     }
 
     [Test]

@@ -293,7 +293,7 @@
                 DaysUntilDeletion = mvo.DeletionEligibleDate.HasValue
                     ? (int)Math.Ceiling((mvo.DeletionEligibleDate.Value - DateTime.UtcNow).TotalDays)
                     : (int?)null,
-                GracePeriodDays = mvo.Type?.DeletionGracePeriodDays,
+                GracePeriod = mvo.Type?.DeletionGracePeriod,
                 ConnectorCount = mvo.ConnectedSystemObjects?.Count ?? 0
             }).ToList();
 
@@ -339,7 +339,7 @@
         public DateTime LastConnectorDisconnectedDate { get; set; }
         public DateTime? DeletionEligibleDate { get; set; }
         public int? DaysUntilDeletion { get; set; }
-        public int? GracePeriodDays { get; set; }
+        public TimeSpan? GracePeriod { get; set; }
         public int ConnectorCount { get; set; }
     }
 }

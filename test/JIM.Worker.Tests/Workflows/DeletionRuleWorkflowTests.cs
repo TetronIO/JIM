@@ -21,7 +21,7 @@ namespace JIM.Worker.Tests.Workflows;
 /// - DeletionRule.Manual - no automatic deletion
 /// - DeletionRule.WhenLastConnectorDisconnected - delete when all CSOs are gone
 /// - DeletionTriggerConnectedSystemIds - delete when specific system disconnects (even if other CSOs remain)
-/// - DeletionGracePeriodDays - immediate vs delayed deletion
+/// - DeletionGracePeriod - immediate vs delayed deletion
 /// </summary>
 [TestFixture]
 public class DeletionRuleWorkflowTests : WorkflowTestBase
@@ -93,7 +93,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
             "Person",
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
-            gracePeriodDays: 30);  // 30 day grace period - handled by housekeeping
+            gracePeriod: TimeSpan.FromDays(30));  // 30 day grace period - handled by housekeeping
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
 
         // Create a CSO
@@ -144,7 +144,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
             "Person",
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
-            gracePeriodDays: 0);  // Zero grace period - delete synchronously
+            gracePeriod: TimeSpan.Zero);  // Zero grace period - delete synchronously
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
 
         // Create a CSO
@@ -192,7 +192,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
             "Person",
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
-            gracePeriodDays: null);  // Null grace period - same as 0, delete synchronously
+            gracePeriod: null);  // Null grace period - same as 0, delete synchronously
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
 
         // Create a CSO
@@ -240,7 +240,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
             "Person",
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
-            gracePeriodDays: 0);
+            gracePeriod: TimeSpan.Zero);
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
 
         // Create CSO and run Full Sync to project to MVO
@@ -307,7 +307,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
             "Person",
             MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
-            gracePeriodDays: 30,  // 30 day grace period - handled by housekeeping
+            gracePeriod: TimeSpan.FromDays(30),  // 30 day grace period - handled by housekeeping
             triggerConnectedSystemIds: new List<int> { sourceSystem.Id });
 
         // Create sync rules
@@ -380,7 +380,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
             "Person",
             MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
-            gracePeriodDays: 0,  // Zero grace period - delete synchronously
+            gracePeriod: TimeSpan.Zero,  // Zero grace period - delete synchronously
             triggerConnectedSystemIds: new List<int> { sourceSystem.Id });
 
         // Create sync rules
@@ -460,7 +460,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
             "Person",
             MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
-            gracePeriodDays: 0,
+            gracePeriod: TimeSpan.Zero,
             triggerConnectedSystemIds: new List<int> { sourceSystem.Id });
 
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
@@ -538,7 +538,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
             "Person",
             MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
-            gracePeriodDays: 0,
+            gracePeriod: TimeSpan.Zero,
             triggerConnectedSystemIds: new List<int> { hrSystem.Id });
 
         // Add additional attributes for multi-source fusing test
@@ -672,7 +672,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
             "Person",
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
-            gracePeriodDays: 30);
+            gracePeriod: TimeSpan.FromDays(30));
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
 
         // Create a CSO
@@ -722,7 +722,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
     protected async Task<MetaverseObjectType> CreateMvObjectTypeWithDeletionRuleAsync(
         string name,
         MetaverseObjectDeletionRule deletionRule,
-        int? gracePeriodDays = null,
+        TimeSpan? gracePeriod = null,
         List<int>? triggerConnectedSystemIds = null)
     {
         var mvType = new MetaverseObjectType
@@ -731,7 +731,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
             PluralName = name + "s",
             BuiltIn = false,
             DeletionRule = deletionRule,
-            DeletionGracePeriodDays = gracePeriodDays,
+            DeletionGracePeriod = gracePeriod,
             DeletionTriggerConnectedSystemIds = triggerConnectedSystemIds ?? new List<int>(),
             Attributes = new List<MetaverseAttribute>(),
             DataGenerationTemplateAttributes = new List<JIM.Models.DataGeneration.DataGenerationTemplateAttribute>(),

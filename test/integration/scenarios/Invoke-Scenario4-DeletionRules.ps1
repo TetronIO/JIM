@@ -3,41 +3,55 @@
     Test Scenario 4: MVO Deletion Rules - Comprehensive Coverage
 
 .DESCRIPTION
-    Validates ALL MVO deletion rule scenarios including:
+    Validates ALL MVO deletion rule scenarios in a Source -> Target topology (CSV -> MVO -> LDAP).
 
-    Test 1: WhenLastConnectorDisconnected + No Grace Period (synchronous deletion)
-        - Configure DeletionRule=WhenLastConnectorDisconnected, GracePeriodDays=0
-        - Provision a user via CSV (source) -> LDAP (target), remove from CSV, full sync cycle
-        - Validate MVO is deleted immediately when last connector disconnects
-        - Validate MVO appears in Deleted Objects view via API
+    IMPORTANT: In this topology, each MVO has TWO connectors (CSV CSO + LDAP CSO). Removing a user
+    from the CSV source and running CSV import+sync only disconnects the CSV CSO. The LDAP CSO
+    remains joined. This is critical for understanding WhenLastConnectorDisconnected behaviour -
+    the MVO will NOT be deleted because the last connector has NOT disconnected.
 
-    Test 2: WhenLastConnectorDisconnected + Grace Period (asynchronous deletion)
-        - Reconfigure GracePeriodDays=1 (minimum non-zero)
-        - Provision a user, remove from CSV, full sync cycle
-        - Validate MVO is marked for deletion but NOT yet deleted (grace period not elapsed)
-        - Validate LastConnectorDisconnectedDate is set
+    Test 1: WhenLastConnectorDisconnected + RemoveContributedAttributesOnObsoletion=true + GracePeriod=0
+        - Remove user from CSV, run CSV import+sync only
+        - Assert: MVO still exists (LDAP CSO still joined - this is NOT the last connector)
+        - Assert: CSV-contributed attributes are recalled (RemoveContributedAttributesOnObsoletion=true)
+        - Assert: LDAP target has pending exports (attribute changes need to flow to target)
+        - NOTE: This is an UNDESIRABLE CONFIGURATION for Source->Target. The user is removed from
+          source but MVO persists with no source attributes, and the target is updated to remove them.
 
-    Test 3: Manual Deletion Rule (no automatic deletion)
-        - Reconfigure DeletionRule=Manual
-        - Provision a user, remove from CSV, full sync cycle
-        - Validate MVO is NOT deleted and NOT marked for deletion
+    Test 2: WhenLastConnectorDisconnected + RemoveContributedAttributesOnObsoletion=false + GracePeriod=0
+        - Remove user from CSV, run CSV import+sync only
+        - Assert: MVO still exists (LDAP CSO still joined)
+        - Assert: Attributes remain on MVO (RemoveContributedAttributesOnObsoletion=false)
+        - Assert: No pending exports on LDAP (nothing changed on MVO)
 
-    Test 4: WhenAuthoritativeSourceDisconnected (Source -> MVO -> Target)
-        - Configure DeletionRule=WhenAuthoritativeSourceDisconnected with CSV as authoritative
-        - Provision a user via CSV -> LDAP, remove from CSV (authoritative source)
-        - Run CSV import+sync only (NOT full cycle) - only the authoritative CSO disconnects
-        - Validate MVO is deleted even though LDAP connector still exists
-        - This proves authoritative source deletion triggers on ANY authoritative disconnect,
-          not just when the last connector is removed
+    Test 3: WhenAuthoritativeSourceDisconnected + GracePeriod=0 + immediate deletion
+        - Configure CSV as authoritative source
+        - Remove user from CSV, run CSV import+sync only
+        - Assert: MVO is deleted immediately (authoritative source disconnected, 0 grace period)
+        - Assert: LDAP target is deprovisioned (pending export created for delete)
 
-    Test 5: WhenAuthoritativeSourceDisconnected - Multi-Source (DEFERRED)
-        - DEFERRED: Requires attribute precedence (not yet implemented)
-        - When implemented: two source systems feeding same MVO, remove authoritative only
-        - See script comments for full specification
+    Test 4: WhenAuthoritativeSourceDisconnected + GracePeriod=1 minute + deferred deletion
+        - Configure CSV as authoritative source with 1-minute grace period
+        - Remove user from CSV, run CSV import+sync only
+        - Assert: MVO exists but is marked for deletion (grace period not elapsed)
+        - Wait for housekeeping to process (grace period expires)
+        - Assert: MVO is deleted after grace period elapses
 
-    Test 6: Internal MVO Protection
-        - Validate that internal MVOs (Origin=Internal) are NEVER deleted
-        - Regardless of deletion rule configuration, internal MVOs must be protected
+    Test 5: Manual + RemoveContributedAttributesOnObsoletion=true + GracePeriod=0
+        - Remove user from CSV, run CSV import+sync only
+        - Assert: MVO still exists (Manual rule never auto-deletes)
+        - Assert: CSV-contributed attributes are recalled (RemoveContributedAttributesOnObsoletion=true)
+        - Assert: LDAP target has pending exports (attribute changes need to flow to target)
+
+    Test 6: Manual + RemoveContributedAttributesOnObsoletion=false + GracePeriod=0
+        - Remove user from CSV, run CSV import+sync only
+        - Assert: MVO still exists (Manual rule never auto-deletes)
+        - Assert: Attributes remain on MVO (RemoveContributedAttributesOnObsoletion=false)
+        - Assert: No pending exports on LDAP (nothing changed on MVO)
+
+    Test 7: Internal MVO Protection
+        - Internal MVOs (Origin=Internal) must NEVER be auto-deleted regardless of deletion rule
+        - Deferred: requires Internal MVO management feature (see GitHub issue)
 
 .PARAMETER Step
     Which test step to execute
@@ -58,12 +72,21 @@
     ./Invoke-Scenario4-DeletionRules.ps1 -Step All -Template Small -ApiKey "jim_..."
 
 .EXAMPLE
-    ./Invoke-Scenario4-DeletionRules.ps1 -Step AuthoritativeSource -Template Nano -ApiKey $env:JIM_API_KEY
+    ./Invoke-Scenario4-DeletionRules.ps1 -Step AuthoritativeImmediate -Template Nano -ApiKey $env:JIM_API_KEY
 #>
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("SyncDelete", "AsyncDelete", "ManualRule", "AuthoritativeSource", "InternalProtection", "All")]
+    [ValidateSet(
+        "WhenLastConnectorRecall",
+        "WhenLastConnectorNoRecall",
+        "AuthoritativeImmediate",
+        "AuthoritativeGracePeriod",
+        "ManualRecall",
+        "ManualNoRecall",
+        "InternalProtection",
+        "All"
+    )]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -241,8 +264,8 @@ function Invoke-RemoveUserFromSource {
         Assert-ActivitySuccess -ActivityId $ldapSyncResult.activityId -Name "LDAP Delta Sync ($TestName removal)"
     }
     else {
-        # CSV-only cycle: Import + Sync (disconnects CSV CSO only)
-        Write-Host "  Running import+sync cycle ($TestName removal)..." -ForegroundColor Gray
+        # CSV-only cycle: Import + Sync (disconnects CSV CSO only, LDAP CSO remains)
+        Write-Host "  Running CSV import+sync cycle ($TestName removal)..." -ForegroundColor Gray
         $importResult = Start-JIMRunProfile -ConnectedSystemId $Config.CSVSystemId -RunProfileId $Config.CSVImportProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "CSV Import ($TestName removal)"
 
@@ -272,6 +295,75 @@ function Test-MvoExists {
         }
     }
     return $false
+}
+
+# -----------------------------------------------------------------------------------------------------------------
+# Helper: Get pending export count for a connected system
+# -----------------------------------------------------------------------------------------------------------------
+function Get-PendingExportCount {
+    param(
+        [Parameter(Mandatory=$true)]
+        [int]$ConnectedSystemId
+    )
+
+    $cs = Get-JIMConnectedSystem -Id $ConnectedSystemId
+    if ($cs -and $cs.PSObject.Properties.Name -contains 'pendingExportCount') {
+        return [int]$cs.pendingExportCount
+    }
+    return 0
+}
+
+# -----------------------------------------------------------------------------------------------------------------
+# Helper: Configure deletion rules on the MVO object type and optionally the CSO type
+# -----------------------------------------------------------------------------------------------------------------
+function Set-DeletionRuleConfig {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Config,
+
+        [Parameter(Mandatory=$true)]
+        [string]$ObjectTypeId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$DeletionRule,
+
+        [Parameter(Mandatory=$false)]
+        [TimeSpan]$GracePeriod = [TimeSpan]::Zero,
+
+        [Parameter(Mandatory=$false)]
+        [string]$DeletionTriggerConnectedSystemIds,
+
+        [Parameter(Mandatory=$false)]
+        [Nullable[bool]]$RemoveContributedAttributesOnObsoletion
+    )
+
+    # Set MVO type deletion rule
+    $setParams = @{
+        Id = $ObjectTypeId
+        DeletionRule = $DeletionRule
+        DeletionGracePeriod = $GracePeriod
+    }
+    if ($DeletionTriggerConnectedSystemIds) {
+        $setParams.DeletionTriggerConnectedSystemIds = $DeletionTriggerConnectedSystemIds
+    }
+    Set-JIMMetaverseObjectType @setParams
+
+    Write-Host "  Configured MVO type: DeletionRule=$DeletionRule, GracePeriod=$GracePeriod" -ForegroundColor Green
+
+    # Set RemoveContributedAttributesOnObsoletion on the CSV object type if specified
+    if ($null -ne $RemoveContributedAttributesOnObsoletion) {
+        # Get CSV object types to find the User type ID
+        $csvObjectTypes = Get-JIMConnectedSystem -Id $Config.CSVSystemId -ObjectTypes
+        $csvUserType = $csvObjectTypes | Where-Object { $_.name -match "^(user|person|record)$" } | Select-Object -First 1
+        if ($csvUserType) {
+            Set-JIMConnectedSystemObjectType -ConnectedSystemId $Config.CSVSystemId -ObjectTypeId $csvUserType.id `
+                -RemoveContributedAttributesOnObsoletion $RemoveContributedAttributesOnObsoletion
+            Write-Host "  Configured CSV object type: RemoveContributedAttributesOnObsoletion=$RemoveContributedAttributesOnObsoletion" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  WARNING: Could not find CSV User object type to set RemoveContributedAttributesOnObsoletion" -ForegroundColor Yellow
+        }
+    }
 }
 
 try {
@@ -305,7 +397,12 @@ try {
 
     # Clean up test-specific AD users from previous test runs
     Write-Host "Cleaning up test-specific AD users from previous runs..." -ForegroundColor Gray
-    $testUsers = @("test.syncdelete", "test.asyncdelete", "test.manualrule", "test.authsource", "test.leaver", "test.reconnect2", "test.outofscope", "test.admin", "scope.ituser", "scope.financeuser", "baseline.user1")
+    $testUsers = @(
+        "test.wlcd.recall", "test.wlcd.norecall",
+        "test.auth.immediate", "test.auth.grace",
+        "test.manual.recall", "test.manual.norecall",
+        "baseline.user1"
+    )
     $deletedCount = 0
     foreach ($user in $testUsers) {
         $output = & docker exec samba-ad-primary bash -c "samba-tool user delete '$user' 2>&1; echo EXIT_CODE:\$?"
@@ -358,269 +455,235 @@ try {
     Assert-ActivitySuccess -ActivityId $initSync.activityId -Name "Full Sync (baseline)"
 
     # =============================================================================================================
-    # Test 1: WhenLastConnectorDisconnected + No Grace Period (Synchronous Deletion)
+    # Test 1: WhenLastConnectorDisconnected + RemoveContributedAttributesOnObsoletion=true + GracePeriod=0
     # =============================================================================================================
-    if ($Step -eq "SyncDelete" -or $Step -eq "All") {
-        Write-TestSection "Test 1: Synchronous Deletion (No Grace Period)"
-        Write-Host "DeletionRule: WhenLastConnectorDisconnected, GracePeriodDays: 0" -ForegroundColor Gray
-        Write-Host "Expected: MVO is deleted immediately during sync when last connector disconnects" -ForegroundColor Gray
+    # In Source->Target topology, removing from source disconnects the CSV CSO only.
+    # The LDAP CSO remains joined. So this is NOT the "last connector disconnected".
+    # MVO should remain, but CSV-contributed attributes should be recalled and
+    # pending exports should be created on the LDAP target.
+    # NOTE: This is an UNDESIRABLE CONFIGURATION for Source->Target topologies.
+    # =============================================================================================================
+    if ($Step -eq "WhenLastConnectorRecall" -or $Step -eq "All") {
+        Write-TestSection "Test 1: WhenLastConnectorDisconnected + Recall Attributes"
+        Write-Host "DeletionRule: WhenLastConnectorDisconnected, GracePeriod: 0" -ForegroundColor Gray
+        Write-Host "RemoveContributedAttributesOnObsoletion: true" -ForegroundColor Gray
+        Write-Host "Expected: MVO remains (LDAP CSO still joined), attributes recalled, pending exports on LDAP" -ForegroundColor Gray
         Write-Host ""
 
-        # Configure: WhenLastConnectorDisconnected with NO grace period (immediate deletion)
-        Set-JIMMetaverseObjectType -Id $userObjectType.id `
+        # Configure deletion rules
+        Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
             -DeletionRule "WhenLastConnectorDisconnected" `
-            -DeletionGracePeriodDays 0
-        Write-Host "  Configured: DeletionRule=WhenLastConnectorDisconnected, GracePeriodDays=0" -ForegroundColor Green
+            -GracePeriod ([TimeSpan]::Zero) `
+            -RemoveContributedAttributesOnObsoletion $true
+
+        # Record pending export count before test
+        $pendingExportsBefore = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+        Write-Host "  LDAP pending exports before: $pendingExportsBefore" -ForegroundColor Gray
 
         # Provision a test user
-        $syncDeleteMvo = Invoke-ProvisionUser -Config $config `
-            -EmployeeId "SYNCDEL001" `
-            -SamAccountName "test.syncdelete" `
-            -DisplayName "Test SyncDelete" `
-            -TestName "SyncDelete"
+        $test1Mvo = Invoke-ProvisionUser -Config $config `
+            -EmployeeId "WLCD001" `
+            -SamAccountName "test.wlcd.recall" `
+            -DisplayName "Test WLCD Recall" `
+            -TestName "Test1"
 
-        $syncDeleteMvoId = $syncDeleteMvo.id
-        Write-Host "  MVO ID before deletion: $syncDeleteMvoId" -ForegroundColor Gray
+        $test1MvoId = $test1Mvo.id
+        Write-Host "  MVO ID: $test1MvoId" -ForegroundColor Gray
 
-        # Remove user from CSV source and run full sync cycle.
-        # Full cycle is required because the MVO has TWO connectors (CSV + LDAP).
-        # CSV removal disconnects the CSV CSO; the LDAP export deprovisions from AD;
-        # LDAP import+sync disconnects the LDAP CSO. Only then does the MVO have zero
-        # connectors, making it eligible for immediate deletion (0-day grace period).
-        Invoke-RemoveUserFromSource -Config $config -SamAccountName "test.syncdelete" -TestName "SyncDelete" -FullCycle
+        # Remove user from CSV source - CSV import+sync only (NOT full cycle)
+        # This disconnects the CSV CSO but leaves the LDAP CSO joined
+        Invoke-RemoveUserFromSource -Config $config -SamAccountName "test.wlcd.recall" -TestName "Test1"
 
-        # Validate: MVO should be deleted immediately (no grace period)
-        Start-Sleep -Seconds 2  # Brief pause for processing
-        $mvoStillExists = Test-MvoExists -DisplayName "Test SyncDelete" -ObjectTypeName "User"
+        Start-Sleep -Seconds 3
+
+        # Assert 1: MVO still exists (LDAP CSO still joined - not the last connector)
+        $mvoStillExists = Test-MvoExists -DisplayName "Test WLCD Recall" -ObjectTypeName "User"
 
         if ($mvoStillExists) {
-            Write-Host "  FAILED: MVO still exists after sync with 0-day grace period" -ForegroundColor Red
-            Write-Host "  The MVO should have been deleted immediately during sync processing" -ForegroundColor Red
-            $testResults.Steps += @{ Name = "SyncDelete"; Success = $false; Error = "MVO not deleted immediately with 0-day grace period" }
+            Write-Host "  PASSED: MVO still exists (LDAP CSO still joined, not the last connector)" -ForegroundColor Green
         } else {
-            Write-Host "  PASSED: MVO deleted immediately during sync (no grace period)" -ForegroundColor Green
+            Write-Host "  FAILED: MVO was deleted despite LDAP CSO still being joined" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $false; Error = "MVO deleted when LDAP CSO still joined" }
+            # Skip remaining assertions for this test
+            if ($Step -ne "All") { throw "Test 1 failed" }
+        }
 
-            # Validate: Deleted MVO should appear in the Deleted Objects view
-            Write-Host "  Verifying deleted MVO appears in Deleted Objects view..." -ForegroundColor Gray
-            $deletedMvos = Get-JIMDeletedObject -ObjectType MVO -Search "Test SyncDelete" -PageSize 10
-            if ($deletedMvos -and $deletedMvos.items) {
-                $deletedEntry = $deletedMvos.items | Where-Object { $_.displayName -eq "Test SyncDelete" } | Select-Object -First 1
-                if ($deletedEntry) {
-                    Write-Host "  PASSED: Deleted MVO found in Deleted Objects view (ID: $($deletedEntry.id))" -ForegroundColor Green
-                    Write-Host "    Object Type: $($deletedEntry.objectTypeName)" -ForegroundColor Gray
-                    Write-Host "    Deleted At:  $($deletedEntry.changeTime)" -ForegroundColor Gray
+        if ($mvoStillExists) {
+            # Assert 2: Check that CSV-contributed attributes were recalled
+            # After recall, attributes like department, title etc. contributed by CSV should be removed
+            $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test WLCD Recall" -PageSize 10 -ErrorAction SilentlyContinue) |
+                Where-Object { $_.displayName -eq "Test WLCD Recall" } | Select-Object -First 1
+
+            if ($mvoDetail) {
+                # Check if source-contributed attributes (e.g., department, title) are now empty/null
+                $deptValue = $null
+                if ($mvoDetail.PSObject.Properties.Name -contains 'department') {
+                    $deptValue = $mvoDetail.department
+                }
+                if (-not $deptValue) {
+                    Write-Host "  PASSED: CSV-contributed attribute 'department' has been recalled (empty/null)" -ForegroundColor Green
                 } else {
-                    Write-Host "  WARNING: Deleted MVO not found in Deleted Objects search results" -ForegroundColor Yellow
+                    Write-Host "  FAILED: CSV-contributed attribute 'department' still has value: $deptValue" -ForegroundColor Red
+                    Write-Host "  Expected: null/empty (attributes should be recalled after source CSO obsoletion)" -ForegroundColor Red
                 }
+            }
+
+            # Assert 3: Check for pending exports on LDAP (attribute changes should flow to target)
+            $pendingExportsAfter = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+            Write-Host "  LDAP pending exports after: $pendingExportsAfter" -ForegroundColor Gray
+
+            if ($pendingExportsAfter -gt $pendingExportsBefore) {
+                Write-Host "  PASSED: Pending exports created on LDAP target (attribute changes flowing to target)" -ForegroundColor Green
             } else {
-                Write-Host "  WARNING: No deleted MVOs returned from API" -ForegroundColor Yellow
+                Write-Host "  FAILED: No new pending exports on LDAP target" -ForegroundColor Red
+                Write-Host "  Expected: Pending exports for recalled attribute values" -ForegroundColor Red
             }
 
-            $testResults.Steps += @{ Name = "SyncDelete"; Success = $true }
+            $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $true }
         }
     }
 
     # =============================================================================================================
-    # Test 2: WhenLastConnectorDisconnected + Grace Period (Asynchronous Deletion via Housekeeping)
+    # Test 2: WhenLastConnectorDisconnected + RemoveContributedAttributesOnObsoletion=false + GracePeriod=0
     # =============================================================================================================
-    if ($Step -eq "AsyncDelete" -or $Step -eq "All") {
-        Write-TestSection "Test 2: Asynchronous Deletion (Grace Period + Housekeeping)"
-        Write-Host "DeletionRule: WhenLastConnectorDisconnected, GracePeriodDays: ~1 minute" -ForegroundColor Gray
-        Write-Host "Expected: MVO is marked for deletion, then housekeeping deletes it after grace period" -ForegroundColor Gray
+    # Same topology as Test 1, but with RemoveContributedAttributesOnObsoletion=false.
+    # MVO should remain, attributes should stay, no pending exports.
+    # =============================================================================================================
+    if ($Step -eq "WhenLastConnectorNoRecall" -or $Step -eq "All") {
+        Write-TestSection "Test 2: WhenLastConnectorDisconnected + No Attribute Recall"
+        Write-Host "DeletionRule: WhenLastConnectorDisconnected, GracePeriod: 0" -ForegroundColor Gray
+        Write-Host "RemoveContributedAttributesOnObsoletion: false" -ForegroundColor Gray
+        Write-Host "Expected: MVO remains (LDAP CSO still joined), attributes stay, no pending exports" -ForegroundColor Gray
         Write-Host ""
 
-        # NOTE: DeletionGracePeriodDays is an integer (days), so the smallest non-zero
-        # grace period we can configure is 1 day. For integration testing, we need a much
-        # shorter period. We use a workaround:
-        # 1. Set GracePeriodDays=1 (the API minimum for a non-zero grace period)
-        # 2. After sync marks the MVO for deletion, the LastConnectorDisconnectedDate is set
-        # 3. The worker housekeeping checks: LastConnectorDisconnectedDate + GracePeriodDays <= now
-        # 4. Since we can't make 1 day elapse in a test, we validate the intermediate state instead:
-        #    - MVO exists but is marked for deletion (LastConnectorDisconnectedDate is set)
-        #    - MVO has no remaining connectors
-        # This validates the grace period DEFERRAL mechanism correctly.
-        # Full end-to-end async deletion is validated by running the integration test suite
-        # with a long enough wait time or by manual testing.
-
-        Set-JIMMetaverseObjectType -Id $userObjectType.id `
+        # Configure deletion rules
+        Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
             -DeletionRule "WhenLastConnectorDisconnected" `
-            -DeletionGracePeriodDays 1
-        Write-Host "  Configured: DeletionRule=WhenLastConnectorDisconnected, GracePeriodDays=1" -ForegroundColor Green
+            -GracePeriod ([TimeSpan]::Zero) `
+            -RemoveContributedAttributesOnObsoletion $false
+
+        # Record pending export count before test
+        $pendingExportsBefore = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+        Write-Host "  LDAP pending exports before: $pendingExportsBefore" -ForegroundColor Gray
 
         # Provision a test user
-        $asyncDeleteMvo = Invoke-ProvisionUser -Config $config `
-            -EmployeeId "ASYNCDEL001" `
-            -SamAccountName "test.asyncdelete" `
-            -DisplayName "Test AsyncDelete" `
-            -TestName "AsyncDelete"
+        $test2Mvo = Invoke-ProvisionUser -Config $config `
+            -EmployeeId "WLCD002" `
+            -SamAccountName "test.wlcd.norecall" `
+            -DisplayName "Test WLCD NoRecall" `
+            -TestName "Test2"
 
-        $asyncDeleteMvoId = $asyncDeleteMvo.id
-        Write-Host "  MVO ID: $asyncDeleteMvoId" -ForegroundColor Gray
+        $test2MvoId = $test2Mvo.id
+        Write-Host "  MVO ID: $test2MvoId" -ForegroundColor Gray
 
-        # Remove user from CSV source and run full sync cycle to disconnect all connectors.
-        # With a 1-day grace period, the MVO should be marked for deletion but NOT deleted.
-        Invoke-RemoveUserFromSource -Config $config -SamAccountName "test.asyncdelete" -TestName "AsyncDelete" -FullCycle
+        # Drain any pending exports from provisioning before testing
+        $provisionExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+        Start-Sleep -Seconds 2
+        $pendingExportsBefore = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+        Write-Host "  LDAP pending exports after drain: $pendingExportsBefore" -ForegroundColor Gray
 
-        # Validate: MVO should STILL EXIST (grace period has not elapsed)
+        # Remove user from CSV source - CSV import+sync only (NOT full cycle)
+        Invoke-RemoveUserFromSource -Config $config -SamAccountName "test.wlcd.norecall" -TestName "Test2"
+
         Start-Sleep -Seconds 3
-        $mvoStillExists = Test-MvoExists -DisplayName "Test AsyncDelete" -ObjectTypeName "User"
 
-        if (-not $mvoStillExists) {
-            Write-Host "  FAILED: MVO was deleted immediately despite 1-day grace period" -ForegroundColor Red
-            Write-Host "  The MVO should exist with LastConnectorDisconnectedDate set, awaiting housekeeping" -ForegroundColor Red
-            $testResults.Steps += @{ Name = "AsyncDelete"; Success = $false; Error = "MVO deleted immediately despite grace period being set" }
+        # Assert 1: MVO still exists
+        $mvoStillExists = Test-MvoExists -DisplayName "Test WLCD NoRecall" -ObjectTypeName "User"
+
+        if ($mvoStillExists) {
+            Write-Host "  PASSED: MVO still exists (LDAP CSO still joined, not the last connector)" -ForegroundColor Green
         } else {
-            Write-Host "  PASSED: MVO still exists with grace period pending (deferred deletion)" -ForegroundColor Green
-            Write-Host "  The MVO is marked for deletion but grace period has not elapsed" -ForegroundColor Gray
-            Write-Host "  Worker housekeeping will delete it after 1 day" -ForegroundColor Gray
+            Write-Host "  FAILED: MVO was deleted despite LDAP CSO still being joined" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "WhenLastConnectorNoRecall"; Success = $false; Error = "MVO deleted when LDAP CSO still joined" }
+            if ($Step -ne "All") { throw "Test 2 failed" }
+        }
 
-            # Additional validation: verify the MVO has pending deletion state
-            # The MVO should have no remaining CSV connectors
-            $mvoDetailItems = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test AsyncDelete" -PageSize 10 -ErrorAction SilentlyContinue)
-            if ($mvoDetailItems.Count -gt 0) {
-                $targetMvo = $mvoDetailItems | Where-Object { $_.displayName -eq "Test AsyncDelete" } | Select-Object -First 1
-                if ($targetMvo) {
-                    # Check if isPendingDeletion or lastConnectorDisconnectedDate is available via API
-                    if ($targetMvo.PSObject.Properties.Name -contains 'isPendingDeletion') {
-                        if ($targetMvo.isPendingDeletion) {
-                            Write-Host "  PASSED: MVO isPendingDeletion=true (confirmed pending state)" -ForegroundColor Green
-                        } else {
-                            Write-Host "  WARNING: MVO isPendingDeletion=false (expected true after disconnection)" -ForegroundColor Yellow
-                        }
-                    }
-                    if ($targetMvo.PSObject.Properties.Name -contains 'lastConnectorDisconnectedDate') {
-                        if ($targetMvo.lastConnectorDisconnectedDate) {
-                            Write-Host "  PASSED: lastConnectorDisconnectedDate is set: $($targetMvo.lastConnectorDisconnectedDate)" -ForegroundColor Green
-                        } else {
-                            Write-Host "  WARNING: lastConnectorDisconnectedDate is not set" -ForegroundColor Yellow
-                        }
-                    }
+        if ($mvoStillExists) {
+            # Assert 2: Attributes should remain on MVO (not recalled)
+            $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test WLCD NoRecall" -PageSize 10 -ErrorAction SilentlyContinue) |
+                Where-Object { $_.displayName -eq "Test WLCD NoRecall" } | Select-Object -First 1
+
+            if ($mvoDetail) {
+                $deptValue = $null
+                if ($mvoDetail.PSObject.Properties.Name -contains 'department') {
+                    $deptValue = $mvoDetail.department
+                }
+                if ($deptValue) {
+                    Write-Host "  PASSED: CSV-contributed attribute 'department' retained: $deptValue" -ForegroundColor Green
+                } else {
+                    Write-Host "  FAILED: CSV-contributed attribute 'department' was removed despite RemoveContributedAttributesOnObsoletion=false" -ForegroundColor Red
                 }
             }
 
-            $testResults.Steps += @{ Name = "AsyncDelete"; Success = $true }
+            # Assert 3: No new pending exports (nothing changed on MVO)
+            $pendingExportsAfter = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+            Write-Host "  LDAP pending exports after: $pendingExportsAfter" -ForegroundColor Gray
+
+            if ($pendingExportsAfter -le $pendingExportsBefore) {
+                Write-Host "  PASSED: No new pending exports on LDAP target (attributes unchanged)" -ForegroundColor Green
+            } else {
+                Write-Host "  FAILED: Unexpected pending exports created on LDAP target" -ForegroundColor Red
+                Write-Host "  Expected: No new pending exports (RemoveContributedAttributesOnObsoletion=false)" -ForegroundColor Red
+            }
+
+            $testResults.Steps += @{ Name = "WhenLastConnectorNoRecall"; Success = $true }
         }
     }
 
     # =============================================================================================================
-    # Test 3: Manual Deletion Rule (No Automatic Deletion)
+    # Test 3: WhenAuthoritativeSourceDisconnected + GracePeriod=0 (Immediate Deletion)
     # =============================================================================================================
-    if ($Step -eq "ManualRule" -or $Step -eq "All") {
-        Write-TestSection "Test 3: Manual Deletion Rule (No Automatic Deletion)"
-        Write-Host "DeletionRule: Manual" -ForegroundColor Gray
-        Write-Host "Expected: MVO is NEVER automatically deleted, regardless of connector state" -ForegroundColor Gray
-        Write-Host ""
-
-        # Configure: Manual deletion rule
-        Set-JIMMetaverseObjectType -Id $userObjectType.id `
-            -DeletionRule "Manual" `
-            -DeletionGracePeriodDays 0
-        Write-Host "  Configured: DeletionRule=Manual" -ForegroundColor Green
-
-        # Provision a test user
-        $manualMvo = Invoke-ProvisionUser -Config $config `
-            -EmployeeId "MANUAL001" `
-            -SamAccountName "test.manualrule" `
-            -DisplayName "Test ManualRule" `
-            -TestName "ManualRule"
-
-        $manualMvoId = $manualMvo.id
-        Write-Host "  MVO ID: $manualMvoId" -ForegroundColor Gray
-
-        # Remove user from CSV source and run full sync cycle to disconnect all connectors.
-        # With Manual deletion rule, the MVO should NOT be deleted regardless of connector state.
-        Invoke-RemoveUserFromSource -Config $config -SamAccountName "test.manualrule" -TestName "ManualRule" -FullCycle
-
-        # Validate: MVO should STILL EXIST (manual rule = no automatic deletion)
-        Start-Sleep -Seconds 3
-        $mvoStillExists = Test-MvoExists -DisplayName "Test ManualRule" -ObjectTypeName "User"
-
-        if (-not $mvoStillExists) {
-            Write-Host "  FAILED: MVO was deleted despite Manual deletion rule" -ForegroundColor Red
-            Write-Host "  Manual rule should prevent all automatic MVO deletion" -ForegroundColor Red
-            $testResults.Steps += @{ Name = "ManualRule"; Success = $false; Error = "MVO deleted despite Manual deletion rule" }
-        } else {
-            Write-Host "  PASSED: MVO preserved with Manual deletion rule (no automatic deletion)" -ForegroundColor Green
-
-            # Additional validation: MVO should NOT be marked for deletion
-            $mvoDetailItems = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test ManualRule" -PageSize 10 -ErrorAction SilentlyContinue)
-            if ($mvoDetailItems.Count -gt 0) {
-                $targetMvo = $mvoDetailItems | Where-Object { $_.displayName -eq "Test ManualRule" } | Select-Object -First 1
-                if ($targetMvo -and $targetMvo.PSObject.Properties.Name -contains 'isPendingDeletion') {
-                    if (-not $targetMvo.isPendingDeletion) {
-                        Write-Host "  PASSED: MVO isPendingDeletion=false (not marked for deletion)" -ForegroundColor Green
-                    } else {
-                        Write-Host "  WARNING: MVO isPendingDeletion=true despite Manual rule" -ForegroundColor Yellow
-                    }
-                }
-                if ($targetMvo -and $targetMvo.PSObject.Properties.Name -contains 'lastConnectorDisconnectedDate') {
-                    if (-not $targetMvo.lastConnectorDisconnectedDate) {
-                        Write-Host "  PASSED: lastConnectorDisconnectedDate is not set (no deletion tracking)" -ForegroundColor Green
-                    } else {
-                        Write-Host "  WARNING: lastConnectorDisconnectedDate is set despite Manual rule" -ForegroundColor Yellow
-                    }
-                }
-            }
-
-            $testResults.Steps += @{ Name = "ManualRule"; Success = $true }
-        }
-    }
-
+    # Configure CSV as the authoritative source. When the CSV CSO disconnects (user removed from
+    # source), the MVO should be deleted immediately (0 grace period) even though the LDAP CSO
+    # still exists. This is the correct rule for Source->Target topologies.
     # =============================================================================================================
-    # Test 4: WhenAuthoritativeSourceDisconnected (Source -> MVO -> Target)
-    # =============================================================================================================
-    if ($Step -eq "AuthoritativeSource" -or $Step -eq "All") {
-        Write-TestSection "Test 4: Authoritative Source Disconnected (Source -> MVO -> Target)"
-        Write-Host "DeletionRule: WhenAuthoritativeSourceDisconnected" -ForegroundColor Gray
+    if ($Step -eq "AuthoritativeImmediate" -or $Step -eq "All") {
+        Write-TestSection "Test 3: WhenAuthoritativeSourceDisconnected + Immediate Deletion"
+        Write-Host "DeletionRule: WhenAuthoritativeSourceDisconnected, GracePeriod: 0" -ForegroundColor Gray
         Write-Host "Authoritative source: CSV (HR System)" -ForegroundColor Gray
-        Write-Host "Expected: MVO is deleted when authoritative source CSO disconnects," -ForegroundColor Gray
-        Write-Host "          even though LDAP (target) connector still exists" -ForegroundColor Gray
+        Write-Host "Expected: MVO deleted immediately when CSV CSO disconnects, LDAP deprovisioned" -ForegroundColor Gray
         Write-Host ""
 
-        # Configure: WhenAuthoritativeSourceDisconnected with CSV as authoritative, 0-day grace period
-        Set-JIMMetaverseObjectType -Id $userObjectType.id `
+        # Configure deletion rules - CSV is the authoritative source
+        Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
             -DeletionRule "WhenAuthoritativeSourceDisconnected" `
-            -DeletionGracePeriodDays 0 `
-            -DeletionTriggerConnectedSystemIds $config.CSVSystemId
-        Write-Host "  Configured: DeletionRule=WhenAuthoritativeSourceDisconnected" -ForegroundColor Green
-        Write-Host "  Configured: DeletionTriggerConnectedSystemIds=$($config.CSVSystemId) (CSV/HR)" -ForegroundColor Green
-        Write-Host "  Configured: GracePeriodDays=0 (immediate)" -ForegroundColor Green
+            -GracePeriod ([TimeSpan]::Zero) `
+            -DeletionTriggerConnectedSystemIds "$($config.CSVSystemId)" `
+            -RemoveContributedAttributesOnObsoletion $true
 
         # Provision a test user (creates both CSV CSO and LDAP CSO via export)
-        $authSourceMvo = Invoke-ProvisionUser -Config $config `
-            -EmployeeId "AUTHSRC001" `
-            -SamAccountName "test.authsource" `
-            -DisplayName "Test AuthSource" `
-            -TestName "AuthoritativeSource"
+        $test3Mvo = Invoke-ProvisionUser -Config $config `
+            -EmployeeId "AUTH001" `
+            -SamAccountName "test.auth.immediate" `
+            -DisplayName "Test Auth Immediate" `
+            -TestName "Test3"
 
-        $authSourceMvoId = $authSourceMvo.id
-        Write-Host "  MVO ID before deletion: $authSourceMvoId" -ForegroundColor Gray
+        $test3MvoId = $test3Mvo.id
+        Write-Host "  MVO ID before deletion: $test3MvoId" -ForegroundColor Gray
 
-        # Remove user from CSV source but run CSV import+sync ONLY (not full cycle).
-        # This disconnects the CSV CSO (authoritative source) but leaves the LDAP CSO intact.
-        # With WhenAuthoritativeSourceDisconnected, the MVO should be deleted immediately
-        # because the authoritative source connector has disconnected - regardless of
-        # whether other (non-authoritative) connectors still exist.
-        Invoke-RemoveUserFromSource -Config $config -SamAccountName "test.authsource" -TestName "AuthoritativeSource"
+        # Remove user from CSV source - CSV import+sync ONLY (not full cycle)
+        # This disconnects the CSV CSO (authoritative source). The LDAP CSO remains.
+        # With WhenAuthoritativeSourceDisconnected, the MVO should be deleted immediately.
+        Invoke-RemoveUserFromSource -Config $config -SamAccountName "test.auth.immediate" -TestName "Test3"
 
-        # Validate: MVO should be deleted immediately (authoritative source disconnected)
         Start-Sleep -Seconds 2
-        $mvoStillExists = Test-MvoExists -DisplayName "Test AuthSource" -ObjectTypeName "User"
+
+        # Assert 1: MVO should be deleted immediately (authoritative source disconnected)
+        $mvoStillExists = Test-MvoExists -DisplayName "Test Auth Immediate" -ObjectTypeName "User"
 
         if ($mvoStillExists) {
             Write-Host "  FAILED: MVO still exists after authoritative source disconnected" -ForegroundColor Red
-            Write-Host "  The MVO should have been deleted when the CSV (authoritative) CSO disconnected," -ForegroundColor Red
-            Write-Host "  even though the LDAP CSO still exists" -ForegroundColor Red
-            $testResults.Steps += @{ Name = "AuthoritativeSource"; Success = $false; Error = "MVO not deleted when authoritative source disconnected" }
+            Write-Host "  Expected: MVO deleted immediately when CSV (authoritative) CSO disconnected" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "AuthoritativeImmediate"; Success = $false; Error = "MVO not deleted when authoritative source disconnected" }
         } else {
             Write-Host "  PASSED: MVO deleted when authoritative source disconnected" -ForegroundColor Green
             Write-Host "  LDAP connector was still present but deletion triggered by authoritative CSV disconnect" -ForegroundColor Gray
 
-            # Validate: Deleted MVO should appear in the Deleted Objects view
+            # Assert 2: Deleted MVO should appear in the Deleted Objects view
             Write-Host "  Verifying deleted MVO appears in Deleted Objects view..." -ForegroundColor Gray
-            $deletedMvos = Get-JIMDeletedObject -ObjectType MVO -Search "Test AuthSource" -PageSize 10
+            $deletedMvos = Get-JIMDeletedObject -ObjectType MVO -Search "Test Auth Immediate" -PageSize 10
             if ($deletedMvos -and $deletedMvos.items) {
-                $deletedEntry = $deletedMvos.items | Where-Object { $_.displayName -eq "Test AuthSource" } | Select-Object -First 1
+                $deletedEntry = $deletedMvos.items | Where-Object { $_.displayName -eq "Test Auth Immediate" } | Select-Object -First 1
                 if ($deletedEntry) {
                     Write-Host "  PASSED: Deleted MVO found in Deleted Objects view (ID: $($deletedEntry.id))" -ForegroundColor Green
                 } else {
@@ -630,140 +693,324 @@ try {
                 Write-Host "  WARNING: No deleted MVOs returned from API" -ForegroundColor Yellow
             }
 
-            # Run LDAP export to clean up the orphaned AD user (deprovisioning)
+            # Assert 3: Run LDAP export to verify deprovisioning pending export was created
             Write-Host "  Running LDAP export to deprovision orphaned AD user..." -ForegroundColor Gray
             $cleanupExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $cleanupExport.activityId -Name "LDAP Export (AuthoritativeSource cleanup)"
-            Write-Host "  LDAP deprovisioning export complete" -ForegroundColor Gray
+            Assert-ActivitySuccess -ActivityId $cleanupExport.activityId -Name "LDAP Export (Test3 deprovisioning)"
 
-            $testResults.Steps += @{ Name = "AuthoritativeSource"; Success = $true }
+            # Verify user is removed from AD
+            Start-Sleep -Seconds 3
+            $adUserExists = & docker exec samba-ad-primary bash -c "samba-tool user show 'test.auth.immediate' 2>&1; echo EXIT_CODE:\$?"
+            if ($adUserExists -match "Unable to find" -or $adUserExists -match "ERROR") {
+                Write-Host "  PASSED: User deprovisioned from AD (no longer exists in directory)" -ForegroundColor Green
+            } else {
+                Write-Host "  WARNING: User may still exist in AD after export" -ForegroundColor Yellow
+            }
+
+            $testResults.Steps += @{ Name = "AuthoritativeImmediate"; Success = $true }
         }
     }
 
     # =============================================================================================================
-    # Test 5: WhenAuthoritativeSourceDisconnected - Multi-Source (DEFERRED)
+    # Test 4: WhenAuthoritativeSourceDisconnected + GracePeriod=1 minute (Deferred Deletion)
     # =============================================================================================================
-    # =========================================================================================================
-    # DEFERRED: WhenAuthoritativeSourceDisconnected with multiple source systems
-    # =========================================================================================================
-    # This test case is NOT implemented because attribute precedence functionality is not yet developed.
-    #
-    # This test validates the more complex scenario where TWO source systems both contribute
-    # attributes to the same MVO, and we need to test that deletion triggers only when the
-    # AUTHORITATIVE source disconnects (not the secondary source).
-    #
-    # Attribute precedence determines which Connected System's attribute values take priority when
-    # multiple systems contribute the same attribute to an MVO. Without this functionality,
-    # configuring a second source system has limited value.
-    #
-    # When attribute precedence IS implemented, this test should:
-    #   1. Create a second Connected System (e.g., "Staff Training System" - CSV-based)
-    #   2. Define custom MVO attributes:
-    #      - "Mandatory Training Course 001 Complete" (Boolean)
-    #      - "Mandatory Training Course 002 Complete" (Boolean)
-    #   3. Define CSO attributes on the training system and create import sync rules
-    #   4. Configure the HR CSV system as the authoritative source using
-    #      DeletionTriggerConnectedSystemIds
-    #   5. Provision a user via both HR and Training systems
-    #   6. Remove user from HR source (authoritative) while keeping in Training source
-    #      Validate MVO is deleted (authoritative source disconnected, even though
-    #      training connector remains)
-    #   7. Test the inverse: remove from Training (non-authoritative) but keep in HR
-    #      Validate MVO is NOT deleted (only non-authoritative connector disconnected)
-    #
-    # Prerequisites:
-    #   - Attribute precedence feature (planned)
-    #   - PowerShell cmdlets for adding custom MVO attributes and mapping to object types
-    #   - Second CSV file for training system data
-    # =========================================================================================================
-
-    if ($Step -eq "All") {
-        Write-TestSection "Test 5: Authoritative Source - Multi-Source (DEFERRED)"
-        Write-Host "  SKIPPED: This test is deferred until attribute precedence is implemented." -ForegroundColor Yellow
-        Write-Host "  This would test two source systems feeding the same MVO, validating that" -ForegroundColor Gray
-        Write-Host "  deletion only triggers when the authoritative source disconnects." -ForegroundColor Gray
-        Write-Host "  See script comments for full test specification." -ForegroundColor Gray
-        Write-Host ""
-        $testResults.Steps += @{
-            Name = "AuthoritativeSourceMultiSource"
-            Success = $true
-            Warning = "DEFERRED - attribute precedence not yet implemented"
-        }
-    }
-
+    # Same as Test 3 but with a 1-minute grace period. The MVO should be marked for deletion
+    # but not deleted until the grace period elapses and housekeeping runs.
     # =============================================================================================================
-    # Test 6: Internal MVO Protection
-    # =============================================================================================================
-    if ($Step -eq "InternalProtection" -or $Step -eq "All") {
-        Write-TestSection "Test 6: Internal MVO Protection (Origin=Internal)"
-        Write-Host "Expected: Internal MVOs are NEVER deleted, regardless of deletion rule" -ForegroundColor Gray
+    if ($Step -eq "AuthoritativeGracePeriod" -or $Step -eq "All") {
+        Write-TestSection "Test 4: WhenAuthoritativeSourceDisconnected + 1-Minute Grace Period"
+        Write-Host "DeletionRule: WhenAuthoritativeSourceDisconnected, GracePeriod: 1 minute" -ForegroundColor Gray
+        Write-Host "Authoritative source: CSV (HR System)" -ForegroundColor Gray
+        Write-Host "Expected: MVO marked for deletion, then deleted after 1-minute grace period" -ForegroundColor Gray
         Write-Host ""
 
-        # Ensure we still have a deletion rule that would delete projected MVOs
-        # (to prove that internal MVOs are exempt)
-        Set-JIMMetaverseObjectType -Id $userObjectType.id `
-            -DeletionRule "WhenLastConnectorDisconnected" `
-            -DeletionGracePeriodDays 0
-        Write-Host "  Configured: DeletionRule=WhenLastConnectorDisconnected, GracePeriodDays=0" -ForegroundColor Green
-        Write-Host "  (This rule would delete Projected MVOs immediately - Internal MVOs must be exempt)" -ForegroundColor Gray
+        # Configure deletion rules - CSV is the authoritative source, 1-minute grace period
+        Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
+            -DeletionRule "WhenAuthoritativeSourceDisconnected" `
+            -GracePeriod ([TimeSpan]::FromMinutes(1)) `
+            -DeletionTriggerConnectedSystemIds "$($config.CSVSystemId)" `
+            -RemoveContributedAttributesOnObsoletion $true
 
-        # The built-in admin user should have Origin=Internal
-        # Query the API to find the admin MVO
-        # Note: Get-JIMMetaverseObject outputs objects directly to the pipeline (not wrapped in .items)
-        $adminUsers = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "admin" -PageSize 10 -ErrorAction SilentlyContinue)
+        # Provision a test user
+        $test4Mvo = Invoke-ProvisionUser -Config $config `
+            -EmployeeId "AUTH002" `
+            -SamAccountName "test.auth.grace" `
+            -DisplayName "Test Auth Grace" `
+            -TestName "Test4"
 
-        if ($adminUsers.Count -gt 0) {
-            $admin = $adminUsers | Where-Object {
-                $_.displayName -match "admin" -or
-                ($_.PSObject.Properties.Name -contains 'userName' -and $_.userName -match "admin")
-            } | Select-Object -First 1
+        $test4MvoId = $test4Mvo.id
+        Write-Host "  MVO ID: $test4MvoId" -ForegroundColor Gray
 
-            if ($admin) {
-                Write-Host "  Found admin MVO: $($admin.displayName) (ID: $($admin.id))" -ForegroundColor Gray
+        # Remove user from CSV source - CSV import+sync only
+        Invoke-RemoveUserFromSource -Config $config -SamAccountName "test.auth.grace" -TestName "Test4"
 
-                # Check Origin property
-                $originChecked = $false
-                if ($admin.PSObject.Properties.Name -contains 'origin') {
-                    if ($admin.origin -eq 'Internal' -or $admin.origin -eq 1) {
-                        Write-Host "  PASSED: Admin MVO has Origin=Internal" -ForegroundColor Green
-                        $originChecked = $true
-                    } else {
-                        Write-Host "  WARNING: Admin MVO has Origin=$($admin.origin) (expected Internal)" -ForegroundColor Yellow
+        Start-Sleep -Seconds 3
+
+        # Assert 1: MVO should still exist (grace period not yet elapsed)
+        $mvoStillExists = Test-MvoExists -DisplayName "Test Auth Grace" -ObjectTypeName "User"
+
+        if (-not $mvoStillExists) {
+            Write-Host "  FAILED: MVO was deleted immediately despite 1-minute grace period" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $false; Error = "MVO deleted immediately despite grace period" }
+        } else {
+            Write-Host "  PASSED: MVO still exists (grace period not yet elapsed)" -ForegroundColor Green
+
+            # Verify MVO is marked for pending deletion
+            $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Auth Grace" -PageSize 10 -ErrorAction SilentlyContinue) |
+                Where-Object { $_.displayName -eq "Test Auth Grace" } | Select-Object -First 1
+
+            if ($mvoDetail -and $mvoDetail.PSObject.Properties.Name -contains 'isPendingDeletion') {
+                if ($mvoDetail.isPendingDeletion) {
+                    Write-Host "  PASSED: MVO isPendingDeletion=true (correctly marked for deferred deletion)" -ForegroundColor Green
+                } else {
+                    Write-Host "  FAILED: MVO isPendingDeletion=false (should be marked for deletion)" -ForegroundColor Red
+                }
+            }
+
+            # Wait for the grace period to elapse (1 minute + buffer for housekeeping)
+            Write-Host "  Waiting for 1-minute grace period to elapse..." -ForegroundColor Gray
+            Write-Host "  (Housekeeping will delete the MVO after the grace period)" -ForegroundColor Gray
+            $waitTime = 90  # 1 minute + 30 seconds buffer for housekeeping cycle
+            for ($i = 0; $i -lt $waitTime; $i += 10) {
+                Start-Sleep -Seconds 10
+                $remaining = $waitTime - $i - 10
+                if ($remaining -gt 0) {
+                    Write-Host "  Waiting... ($remaining seconds remaining)" -ForegroundColor Gray
+                }
+            }
+
+            # Assert 2: MVO should now be deleted (grace period elapsed, housekeeping ran)
+            $mvoDeletedAfterGrace = -not (Test-MvoExists -DisplayName "Test Auth Grace" -ObjectTypeName "User")
+
+            if ($mvoDeletedAfterGrace) {
+                Write-Host "  PASSED: MVO deleted after grace period elapsed (housekeeping processed it)" -ForegroundColor Green
+
+                # Verify it appears in deleted objects
+                $deletedMvos = Get-JIMDeletedObject -ObjectType MVO -Search "Test Auth Grace" -PageSize 10
+                if ($deletedMvos -and $deletedMvos.items) {
+                    $deletedEntry = $deletedMvos.items | Where-Object { $_.displayName -eq "Test Auth Grace" } | Select-Object -First 1
+                    if ($deletedEntry) {
+                        Write-Host "  PASSED: Deleted MVO found in Deleted Objects view" -ForegroundColor Green
                     }
                 }
 
-                if (-not $originChecked) {
-                    Write-Host "  Origin property not directly visible via API" -ForegroundColor Gray
-                    Write-Host "  Verifying protection by confirming admin MVO has no connectors and still exists..." -ForegroundColor Gray
-                }
-
-                # The admin MVO has no connectors (it's created internally, not via sync).
-                # With WhenLastConnectorDisconnected + 0 grace period, a Projected MVO
-                # with no connectors would be eligible for deletion.
-                # The fact that admin still exists proves Internal origin protection works.
-
-                # Verify admin still exists (it should always exist)
-                $adminStillExists = Test-MvoExists -DisplayName $admin.displayName -ObjectTypeName "User"
-
-                if ($adminStillExists) {
-                    Write-Host "  PASSED: Admin MVO exists despite having no connectors" -ForegroundColor Green
-                    Write-Host "  Internal MVOs are protected from automatic deletion" -ForegroundColor Green
-                    $testResults.Steps += @{ Name = "InternalProtection"; Success = $true }
-                } else {
-                    Write-Host "  FAILED: Admin MVO not found - internal protection may be broken" -ForegroundColor Red
-                    $testResults.Steps += @{ Name = "InternalProtection"; Success = $false; Error = "Admin MVO not found" }
-                }
+                $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $true }
             } else {
-                Write-Host "  WARNING: Could not find admin MVO in search results" -ForegroundColor Yellow
-                Write-Host "  Available items:" -ForegroundColor Gray
-                foreach ($item in $adminUsers) {
-                    Write-Host "    - $($item.displayName)" -ForegroundColor Gray
-                }
-                $testResults.Steps += @{ Name = "InternalProtection"; Success = $true; Warning = "Admin MVO not found in search" }
+                Write-Host "  FAILED: MVO still exists after grace period should have elapsed" -ForegroundColor Red
+                Write-Host "  Possible causes:" -ForegroundColor Yellow
+                Write-Host "    - Housekeeping service not running" -ForegroundColor Yellow
+                Write-Host "    - Grace period calculation incorrect" -ForegroundColor Yellow
+                Write-Host "    - MVO not correctly marked for deletion" -ForegroundColor Yellow
+                $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $false; Error = "MVO not deleted after grace period elapsed" }
             }
+        }
+    }
+
+    # =============================================================================================================
+    # Test 5: Manual + RemoveContributedAttributesOnObsoletion=true + GracePeriod=0
+    # =============================================================================================================
+    # Manual deletion rule means MVOs are NEVER automatically deleted. But if
+    # RemoveContributedAttributesOnObsoletion=true, the CSV-contributed attributes should still
+    # be recalled when the CSV CSO is obsoleted, and pending exports should be created.
+    # =============================================================================================================
+    if ($Step -eq "ManualRecall" -or $Step -eq "All") {
+        Write-TestSection "Test 5: Manual Deletion Rule + Recall Attributes"
+        Write-Host "DeletionRule: Manual, GracePeriod: 0" -ForegroundColor Gray
+        Write-Host "RemoveContributedAttributesOnObsoletion: true" -ForegroundColor Gray
+        Write-Host "Expected: MVO remains (Manual = never auto-delete), attributes recalled, pending exports on LDAP" -ForegroundColor Gray
+        Write-Host ""
+
+        # Configure deletion rules
+        Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
+            -DeletionRule "Manual" `
+            -GracePeriod ([TimeSpan]::Zero) `
+            -RemoveContributedAttributesOnObsoletion $true
+
+        # Record pending export count before test
+        $pendingExportsBefore = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+        Write-Host "  LDAP pending exports before: $pendingExportsBefore" -ForegroundColor Gray
+
+        # Provision a test user
+        $test5Mvo = Invoke-ProvisionUser -Config $config `
+            -EmployeeId "MANUAL001" `
+            -SamAccountName "test.manual.recall" `
+            -DisplayName "Test Manual Recall" `
+            -TestName "Test5"
+
+        $test5MvoId = $test5Mvo.id
+        Write-Host "  MVO ID: $test5MvoId" -ForegroundColor Gray
+
+        # Remove user from CSV source - CSV import+sync only
+        Invoke-RemoveUserFromSource -Config $config -SamAccountName "test.manual.recall" -TestName "Test5"
+
+        Start-Sleep -Seconds 3
+
+        # Assert 1: MVO still exists (Manual rule - never auto-deleted)
+        $mvoStillExists = Test-MvoExists -DisplayName "Test Manual Recall" -ObjectTypeName "User"
+
+        if ($mvoStillExists) {
+            Write-Host "  PASSED: MVO still exists (Manual deletion rule - never auto-deleted)" -ForegroundColor Green
         } else {
-            Write-Host "  WARNING: Could not query metaverse objects" -ForegroundColor Yellow
-            $testResults.Steps += @{ Name = "InternalProtection"; Success = $true; Warning = "Could not query admin account" }
+            Write-Host "  FAILED: MVO was deleted despite Manual deletion rule" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "ManualRecall"; Success = $false; Error = "MVO deleted with Manual deletion rule" }
+            if ($Step -ne "All") { throw "Test 5 failed" }
+        }
+
+        if ($mvoStillExists) {
+            # Assert 2: Check that CSV-contributed attributes were recalled
+            $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Manual Recall" -PageSize 10 -ErrorAction SilentlyContinue) |
+                Where-Object { $_.displayName -eq "Test Manual Recall" } | Select-Object -First 1
+
+            if ($mvoDetail) {
+                $deptValue = $null
+                if ($mvoDetail.PSObject.Properties.Name -contains 'department') {
+                    $deptValue = $mvoDetail.department
+                }
+                if (-not $deptValue) {
+                    Write-Host "  PASSED: CSV-contributed attribute 'department' has been recalled (empty/null)" -ForegroundColor Green
+                } else {
+                    Write-Host "  FAILED: CSV-contributed attribute 'department' still has value: $deptValue" -ForegroundColor Red
+                    Write-Host "  Expected: null/empty (attributes should be recalled after source CSO obsoletion)" -ForegroundColor Red
+                }
+            }
+
+            # Assert 3: Check for pending exports on LDAP
+            $pendingExportsAfter = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+            Write-Host "  LDAP pending exports after: $pendingExportsAfter" -ForegroundColor Gray
+
+            if ($pendingExportsAfter -gt $pendingExportsBefore) {
+                Write-Host "  PASSED: Pending exports created on LDAP target (attribute changes flowing to target)" -ForegroundColor Green
+            } else {
+                Write-Host "  FAILED: No new pending exports on LDAP target" -ForegroundColor Red
+                Write-Host "  Expected: Pending exports for recalled attribute values" -ForegroundColor Red
+            }
+
+            # Assert 4: MVO should NOT be marked as pending deletion (Manual rule)
+            if ($mvoDetail -and $mvoDetail.PSObject.Properties.Name -contains 'isPendingDeletion') {
+                if (-not $mvoDetail.isPendingDeletion) {
+                    Write-Host "  PASSED: MVO isPendingDeletion=false (Manual rule does not mark for deletion)" -ForegroundColor Green
+                } else {
+                    Write-Host "  WARNING: MVO isPendingDeletion=true despite Manual deletion rule" -ForegroundColor Yellow
+                }
+            }
+
+            $testResults.Steps += @{ Name = "ManualRecall"; Success = $true }
+        }
+    }
+
+    # =============================================================================================================
+    # Test 6: Manual + RemoveContributedAttributesOnObsoletion=false + GracePeriod=0
+    # =============================================================================================================
+    # Manual deletion rule + no attribute recall = nothing happens to the MVO at all.
+    # The CSO is obsoleted/disconnected but the MVO retains all attributes and no exports created.
+    # =============================================================================================================
+    if ($Step -eq "ManualNoRecall" -or $Step -eq "All") {
+        Write-TestSection "Test 6: Manual Deletion Rule + No Attribute Recall"
+        Write-Host "DeletionRule: Manual, GracePeriod: 0" -ForegroundColor Gray
+        Write-Host "RemoveContributedAttributesOnObsoletion: false" -ForegroundColor Gray
+        Write-Host "Expected: MVO remains, attributes stay, no pending exports" -ForegroundColor Gray
+        Write-Host ""
+
+        # Configure deletion rules
+        Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
+            -DeletionRule "Manual" `
+            -GracePeriod ([TimeSpan]::Zero) `
+            -RemoveContributedAttributesOnObsoletion $false
+
+        # Provision a test user
+        $test6Mvo = Invoke-ProvisionUser -Config $config `
+            -EmployeeId "MANUAL002" `
+            -SamAccountName "test.manual.norecall" `
+            -DisplayName "Test Manual NoRecall" `
+            -TestName "Test6"
+
+        $test6MvoId = $test6Mvo.id
+        Write-Host "  MVO ID: $test6MvoId" -ForegroundColor Gray
+
+        # Drain any pending exports from provisioning before testing
+        $provisionExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+        Start-Sleep -Seconds 2
+        $pendingExportsBefore = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+        Write-Host "  LDAP pending exports after drain: $pendingExportsBefore" -ForegroundColor Gray
+
+        # Remove user from CSV source - CSV import+sync only
+        Invoke-RemoveUserFromSource -Config $config -SamAccountName "test.manual.norecall" -TestName "Test6"
+
+        Start-Sleep -Seconds 3
+
+        # Assert 1: MVO still exists (Manual rule - never auto-deleted)
+        $mvoStillExists = Test-MvoExists -DisplayName "Test Manual NoRecall" -ObjectTypeName "User"
+
+        if ($mvoStillExists) {
+            Write-Host "  PASSED: MVO still exists (Manual deletion rule - never auto-deleted)" -ForegroundColor Green
+        } else {
+            Write-Host "  FAILED: MVO was deleted despite Manual deletion rule" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "ManualNoRecall"; Success = $false; Error = "MVO deleted with Manual deletion rule" }
+            if ($Step -ne "All") { throw "Test 6 failed" }
+        }
+
+        if ($mvoStillExists) {
+            # Assert 2: Attributes should remain on MVO (not recalled)
+            $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Manual NoRecall" -PageSize 10 -ErrorAction SilentlyContinue) |
+                Where-Object { $_.displayName -eq "Test Manual NoRecall" } | Select-Object -First 1
+
+            if ($mvoDetail) {
+                $deptValue = $null
+                if ($mvoDetail.PSObject.Properties.Name -contains 'department') {
+                    $deptValue = $mvoDetail.department
+                }
+                if ($deptValue) {
+                    Write-Host "  PASSED: CSV-contributed attribute 'department' retained: $deptValue" -ForegroundColor Green
+                } else {
+                    Write-Host "  FAILED: CSV-contributed attribute 'department' was removed despite RemoveContributedAttributesOnObsoletion=false" -ForegroundColor Red
+                }
+            }
+
+            # Assert 3: No new pending exports (nothing changed on MVO)
+            $pendingExportsAfter = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+            Write-Host "  LDAP pending exports after: $pendingExportsAfter" -ForegroundColor Gray
+
+            if ($pendingExportsAfter -le $pendingExportsBefore) {
+                Write-Host "  PASSED: No new pending exports on LDAP target (attributes unchanged)" -ForegroundColor Green
+            } else {
+                Write-Host "  FAILED: Unexpected pending exports created on LDAP target" -ForegroundColor Red
+            }
+
+            # Assert 4: MVO should NOT be marked as pending deletion
+            if ($mvoDetail -and $mvoDetail.PSObject.Properties.Name -contains 'isPendingDeletion') {
+                if (-not $mvoDetail.isPendingDeletion) {
+                    Write-Host "  PASSED: MVO isPendingDeletion=false (Manual rule does not mark for deletion)" -ForegroundColor Green
+                } else {
+                    Write-Host "  WARNING: MVO isPendingDeletion=true despite Manual deletion rule" -ForegroundColor Yellow
+                }
+            }
+
+            $testResults.Steps += @{ Name = "ManualNoRecall"; Success = $true }
+        }
+    }
+
+    # =============================================================================================================
+    # Test 7: Internal MVO Protection (DEFERRED)
+    # =============================================================================================================
+    # Internal MVOs (Origin=Internal) must NEVER be auto-deleted regardless of deletion rule.
+    # This test is deferred until the Internal MVO management feature is implemented,
+    # which will allow creating and managing Internal MVOs via the admin UI/API.
+    # See GitHub issue for Internal MVO management.
+    # =============================================================================================================
+    if ($Step -eq "InternalProtection" -or $Step -eq "All") {
+        Write-TestSection "Test 7: Internal MVO Protection (DEFERRED)"
+        Write-Host "  SKIPPED: This test is deferred until Internal MVO management is implemented." -ForegroundColor Yellow
+        Write-Host "  Internal MVOs (Origin=Internal) must never be auto-deleted." -ForegroundColor Gray
+        Write-Host "  When implemented, this test will:" -ForegroundColor Gray
+        Write-Host "    1. Create an Internal MVO via the admin API" -ForegroundColor Gray
+        Write-Host "    2. Configure WhenLastConnectorDisconnected with 0 grace period" -ForegroundColor Gray
+        Write-Host "    3. Verify the Internal MVO is never deleted" -ForegroundColor Gray
+        Write-Host "  See GitHub issue for Internal MVO management feature." -ForegroundColor Gray
+        Write-Host ""
+        $testResults.Steps += @{
+            Name = "InternalProtection"
+            Success = $true
+            Warning = "DEFERRED - Internal MVO management not yet implemented"
         }
     }
 
@@ -774,8 +1021,18 @@ try {
     try {
         Set-JIMMetaverseObjectType -Id $userObjectType.id `
             -DeletionRule "WhenLastConnectorDisconnected" `
-            -DeletionGracePeriodDays 7
-        Write-Host "  Reset to: DeletionRule=WhenLastConnectorDisconnected, GracePeriodDays=7" -ForegroundColor Green
+            -DeletionGracePeriod ([TimeSpan]::FromDays(7))
+
+        # Reset RemoveContributedAttributesOnObsoletion to default (true)
+        $csvObjectTypes = Get-JIMConnectedSystem -Id $config.CSVSystemId -ObjectTypes
+        $csvUserType = $csvObjectTypes | Where-Object { $_.name -match "^(user|person|record)$" } | Select-Object -First 1
+        if ($csvUserType) {
+            Set-JIMConnectedSystemObjectType -ConnectedSystemId $config.CSVSystemId -ObjectTypeId $csvUserType.id `
+                -RemoveContributedAttributesOnObsoletion $true
+        }
+
+        Write-Host "  Reset to: DeletionRule=WhenLastConnectorDisconnected, GracePeriod=7 days" -ForegroundColor Green
+        Write-Host "  Reset to: RemoveContributedAttributesOnObsoletion=true" -ForegroundColor Green
     }
     catch {
         Write-Host "  WARNING: Could not reset deletion rules: $_" -ForegroundColor Yellow

@@ -49,7 +49,7 @@ public class MetaverseRepositoryEligibleForDeletionTests
             Id = 1,
             Name = "Person",
             DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
-            DeletionGracePeriodDays = null // No grace period
+            DeletionGracePeriod = null // No grace period
         };
 
         _personTypeWithGracePeriod = new MetaverseObjectType
@@ -57,7 +57,7 @@ public class MetaverseRepositoryEligibleForDeletionTests
             Id = 2,
             Name = "PersonWithGrace",
             DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
-            DeletionGracePeriodDays = 30
+            DeletionGracePeriod = TimeSpan.FromDays(30)
         };
 
         _personTypeWithManualDeletion = new MetaverseObjectType
@@ -72,7 +72,7 @@ public class MetaverseRepositoryEligibleForDeletionTests
             Id = 4,
             Name = "PersonZeroGrace",
             DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
-            DeletionGracePeriodDays = 0
+            DeletionGracePeriod = TimeSpan.Zero
         };
 
         // Initialise empty data - tests will populate as needed

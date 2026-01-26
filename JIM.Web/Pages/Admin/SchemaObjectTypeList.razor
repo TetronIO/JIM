@@ -72,10 +72,19 @@
         };
     }
 
+    private static string FormatGracePeriod(TimeSpan period)
+    {
+        var parts = new List<string>();
+        if (period.Days > 0) parts.Add($"{period.Days} day{(period.Days != 1 ? "s" : "")}");
+        if (period.Hours > 0) parts.Add($"{period.Hours} hour{(period.Hours != 1 ? "s" : "")}");
+        if (period.Minutes > 0) parts.Add($"{period.Minutes} minute{(period.Minutes != 1 ? "s" : "")}");
+        return parts.Count > 0 ? string.Join(", ", parts) : "0";
+    }
+
     private string GetDeletionRuleTooltip(MetaverseObjectTypeHeader header)
     {
-        var gracePeriod = header.DeletionGracePeriodDays.HasValue && header.DeletionGracePeriodDays.Value > 0
-            ? $" ({header.DeletionGracePeriodDays} day grace period)"
+        var gracePeriod = header.DeletionGracePeriod.HasValue && header.DeletionGracePeriod.Value > TimeSpan.Zero
+            ? $" ({FormatGracePeriod(header.DeletionGracePeriod.Value)} grace period)"
             : " (immediate)";
 
         return header.DeletionRule switch

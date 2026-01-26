@@ -50,7 +50,7 @@ public class MetaverseRepositoryOrphanDetectionTests
             Id = 1,
             Name = "Person",
             DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
-            DeletionGracePeriodDays = 30
+            DeletionGracePeriod = TimeSpan.FromDays(30)
         };
 
         _personTypeWithManualDeletion = new MetaverseObjectType

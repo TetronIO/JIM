@@ -22,7 +22,7 @@ public class MetaverseObjectTypeHeader
     public bool BuiltIn { get; set; }
     public bool HasPredefinedSearches { get; set; }
     public MetaverseObjectDeletionRule DeletionRule { get; set; }
-    public int? DeletionGracePeriodDays { get; set; }
+    public TimeSpan? DeletionGracePeriod { get; set; }
 
     /// <summary>
     /// Creates a header from a MetaverseObjectType entity.
@@ -39,7 +39,7 @@ public class MetaverseObjectTypeHeader
             BuiltIn = entity.BuiltIn,
             HasPredefinedSearches = entity.PredefinedSearches?.Count > 0,
             DeletionRule = entity.DeletionRule,
-            DeletionGracePeriodDays = entity.DeletionGracePeriodDays
+            DeletionGracePeriod = entity.DeletionGracePeriod
         };
     }
 }

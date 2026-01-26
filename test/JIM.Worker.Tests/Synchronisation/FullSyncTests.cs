@@ -1949,7 +1949,7 @@ public class FullSyncTests
         // set up: MVO with DeletionRule = WhenLastConnectorDisconnected, no grace period
         var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
         mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
-        mvoType.DeletionGracePeriodDays = null;  // null = 0 = immediate deletion
+        mvoType.DeletionGracePeriod = null;  // null = TimeSpan.Zero = immediate deletion
 
         // configure sync rule to disconnect on obsoletion (required for deletion rule processing)
         var importSyncRule = SyncRulesData.Single(sr => sr.Id == 1);
@@ -2002,7 +2002,7 @@ public class FullSyncTests
         // set up: MVO with DeletionRule = WhenLastConnectorDisconnected, 30-day grace period
         var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
         mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
-        mvoType.DeletionGracePeriodDays = 30;
+        mvoType.DeletionGracePeriod = TimeSpan.FromDays(30);
 
         // configure sync rule to disconnect on obsoletion (required for deletion rule processing)
         var importSyncRule = SyncRulesData.Single(sr => sr.Id == 1);
@@ -2048,7 +2048,7 @@ public class FullSyncTests
         Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount), "Expected MVO to NOT be deleted during grace period.");
 
         // verify LastConnectorDisconnectedDate was set to approximately now (not 30 days in future)
-        // The grace period is calculated by adding DeletionGracePeriodDays to LastConnectorDisconnectedDate
+        // The grace period is calculated by adding DeletionGracePeriod (TimeSpan) to LastConnectorDisconnectedDate
         Assert.That(mvo.LastConnectorDisconnectedDate, Is.Not.Null, "Expected LastConnectorDisconnectedDate to be set.");
         Assert.That(mvo.LastConnectorDisconnectedDate!.Value, Is.EqualTo(beforeSync).Within(TimeSpan.FromMinutes(1)),
             "Expected LastConnectorDisconnectedDate to be approximately now (when disconnection occurred).");
@@ -2070,7 +2070,7 @@ public class FullSyncTests
         // set up: MVO with DeletionRule = WhenLastConnectorDisconnected
         var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
         mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
-        mvoType.DeletionGracePeriodDays = null;
+        mvoType.DeletionGracePeriod = null;
 
         // create MVO joined to TWO CSOs
         var cso1 = ConnectedSystemObjectsData[0];
@@ -2137,7 +2137,7 @@ public class FullSyncTests
         // set up: MVO with disconnection date set (simulating previous disconnection within grace period)
         var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
         mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
-        mvoType.DeletionGracePeriodDays = 30;
+        mvoType.DeletionGracePeriod = TimeSpan.FromDays(30);
 
         var mvo = MetaverseObjectsData[0];
         mvo.Type = mvoType;
