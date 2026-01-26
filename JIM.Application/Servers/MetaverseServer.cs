@@ -1,6 +1,7 @@
 ﻿using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
+using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Search;
@@ -246,6 +247,11 @@ public class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectAsync(id);
     }
 
+    public async Task<MetaverseObject?> GetMetaverseObjectWithChangeHistoryAsync(Guid id)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectWithChangeHistoryAsync(id);
+    }
+
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectHeaderAsync(id);
@@ -254,6 +260,128 @@ public class MetaverseServer
     public async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
         await Application.Repository.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
+    }
+
+    /// <summary>
+    /// Creates a MetaverseObjectChange record for direct MVO updates (e.g., via UI/API).
+    /// Call this BEFORE applying changes to the MVO when change tracking is needed.
+    /// This is intended for future UI implementations - sync operations use a different batched approach.
+    /// </summary>
+    /// <param name="metaverseObject">The MVO being updated.</param>
+    /// <param name="additions">Attribute values being added.</param>
+    /// <param name="removals">Attribute values being removed.</param>
+    /// <param name="initiatedByType">The type of principal initiating the change.</param>
+    /// <param name="initiatedById">The ID of the principal initiating the change.</param>
+    /// <param name="initiatedByName">The display name of the principal initiating the change.</param>
+    public async Task CreateMetaverseObjectChangeAsync(
+        MetaverseObject metaverseObject,
+        List<MetaverseObjectAttributeValue> additions,
+        List<MetaverseObjectAttributeValue> removals,
+        ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,
+        Guid? initiatedById = null,
+        string? initiatedByName = null)
+    {
+        // Check if MVO change tracking is enabled
+        var changeTrackingEnabled = await Application.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
+        if (!changeTrackingEnabled)
+            return;
+
+        if (additions.Count == 0 && removals.Count == 0)
+            return;
+
+        // Create MVO change object
+        var change = new MetaverseObjectChange
+        {
+            MetaverseObject = metaverseObject,
+            ChangeType = ObjectChangeType.Updated,
+            ChangeTime = DateTime.UtcNow,
+            InitiatedByType = initiatedByType,
+            InitiatedById = initiatedById,
+            InitiatedByName = initiatedByName,
+            ChangeInitiatorType = initiatedByType == ActivityInitiatorType.User
+                ? MetaverseObjectChangeInitiatorType.User
+                : MetaverseObjectChangeInitiatorType.NotSet
+        };
+
+        // Create attribute change records (reuse helper from sync processor pattern)
+        foreach (var addition in additions)
+        {
+            AddMvoChangeAttributeValueObject(change, addition, ValueChangeType.Add);
+        }
+
+        foreach (var removal in removals)
+        {
+            AddMvoChangeAttributeValueObject(change, removal, ValueChangeType.Remove);
+        }
+
+        // Add to MVO's Changes collection
+        metaverseObject.Changes.Add(change);
+    }
+
+    /// <summary>
+    /// Helper method to create attribute change records for MVO changes.
+    /// Mirrors the pattern used in SyncTaskProcessorBase for consistency.
+    /// </summary>
+    private static void AddMvoChangeAttributeValueObject(
+        MetaverseObjectChange metaverseObjectChange,
+        MetaverseObjectAttributeValue metaverseObjectAttributeValue,
+        ValueChangeType valueChangeType)
+    {
+        var attributeChange = metaverseObjectChange.AttributeChanges.SingleOrDefault(
+            ac => ac.Attribute.Id == metaverseObjectAttributeValue.Attribute.Id);
+
+        if (attributeChange == null)
+        {
+            attributeChange = new MetaverseObjectChangeAttribute
+            {
+                Attribute = metaverseObjectAttributeValue.Attribute,
+                MetaverseObjectChange = metaverseObjectChange
+            };
+            metaverseObjectChange.AttributeChanges.Add(attributeChange);
+        }
+
+        switch (metaverseObjectAttributeValue.Attribute.Type)
+        {
+            case AttributeDataType.Text when metaverseObjectAttributeValue.StringValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
+                    attributeChange, valueChangeType, metaverseObjectAttributeValue.StringValue));
+                break;
+            case AttributeDataType.Number when metaverseObjectAttributeValue.IntValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
+                    attributeChange, valueChangeType, (int)metaverseObjectAttributeValue.IntValue));
+                break;
+            case AttributeDataType.LongNumber when metaverseObjectAttributeValue.LongValue != null:
+                // TODO: MetaverseObjectChangeAttributeValue needs LongValue support
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
+                    attributeChange, valueChangeType, (int)metaverseObjectAttributeValue.LongValue.Value));
+                break;
+            case AttributeDataType.Guid when metaverseObjectAttributeValue.GuidValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
+                    attributeChange, valueChangeType, (Guid)metaverseObjectAttributeValue.GuidValue));
+                break;
+            case AttributeDataType.Boolean when metaverseObjectAttributeValue.BoolValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
+                    attributeChange, valueChangeType, (bool)metaverseObjectAttributeValue.BoolValue));
+                break;
+            case AttributeDataType.DateTime when metaverseObjectAttributeValue.DateTimeValue.HasValue:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
+                    attributeChange, valueChangeType, metaverseObjectAttributeValue.DateTimeValue.Value));
+                break;
+            case AttributeDataType.Binary when metaverseObjectAttributeValue.ByteValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
+                    attributeChange, valueChangeType, true, metaverseObjectAttributeValue.ByteValue.Length));
+                break;
+            case AttributeDataType.Reference when metaverseObjectAttributeValue.ReferenceValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
+                    attributeChange, valueChangeType, metaverseObjectAttributeValue.ReferenceValue));
+                break;
+            case AttributeDataType.Reference when metaverseObjectAttributeValue.UnresolvedReferenceValue != null:
+                // Don't track unresolved references
+                break;
+            default:
+                throw new NotImplementedException(
+                    $"Attribute data type {metaverseObjectAttributeValue.Attribute.Type} is not yet supported for MVO change tracking.");
+        }
     }
 
     public async Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, string attributeValue)
@@ -286,8 +414,53 @@ public class MetaverseServer
         await Application.Repository.Metaverse.UpdateMetaverseObjectsAsync(metaverseObjects);
     }
 
-    public async Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
+    /// <summary>
+    /// Deletes a Metaverse Object and optionally records the deletion for audit trail.
+    /// </summary>
+    /// <param name="metaverseObject">The MVO to delete.</param>
+    /// <param name="initiatedByType">The type of principal initiating the deletion.</param>
+    /// <param name="initiatedById">The ID of the principal initiating the deletion.</param>
+    /// <param name="initiatedByName">The display name of the principal initiating the deletion.</param>
+    public async Task DeleteMetaverseObjectAsync(
+        MetaverseObject metaverseObject,
+        ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,
+        Guid? initiatedById = null,
+        string? initiatedByName = null)
     {
+        // Check if MVO change tracking is enabled
+        var changeTrackingEnabled = await Application.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
+
+        if (changeTrackingEnabled)
+        {
+            // Create a deletion change record before deleting.
+            // IMPORTANT: Do NOT add this to metaverseObject.Changes collection!
+            // Adding via navigation property causes EF Core to try to INSERT a record
+            // referencing an MVO that's being DELETED in the same transaction, which fails.
+            // Instead, we create the record with a direct reference to the MVO, then allow
+            // the FK to be nulled during deletion (cascade behavior).
+            var change = new MetaverseObjectChange
+            {
+                // CRITICAL: Set MetaverseObject reference to enable querying full change history.
+                // The FK will be automatically nulled when the MVO is deleted (cascade behavior),
+                // but we capture the ID here so GetDeletedMvoChangeHistoryAsync can find all related changes.
+                MetaverseObject = metaverseObject,
+                ChangeType = ObjectChangeType.Deleted,
+                ChangeTime = DateTime.UtcNow,
+                InitiatedByType = initiatedByType,
+                InitiatedById = initiatedById,
+                InitiatedByName = initiatedByName,
+                ChangeInitiatorType = initiatedByType == ActivityInitiatorType.User
+                    ? MetaverseObjectChangeInitiatorType.User
+                    : MetaverseObjectChangeInitiatorType.NotSet,
+                // Preserve object identity for the deleted objects browser
+                DeletedObjectTypeId = metaverseObject.Type?.Id,
+                DeletedObjectDisplayName = metaverseObject.DisplayName
+            };
+
+            // Save the change record directly (not via MVO navigation property)
+            await Application.Repository.Metaverse.CreateMetaverseObjectChangeAsync(change);
+        }
+
         await Application.Repository.Metaverse.DeleteMetaverseObjectAsync(metaverseObject);
     }
 

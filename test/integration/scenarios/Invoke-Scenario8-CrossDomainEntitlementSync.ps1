@@ -1304,7 +1304,7 @@ try {
         }
 
         # Step 6.5: Run forward sync to propagate the deletion
-        # With DeletionGracePeriodDays = 0, the MVO will be deleted SYNCHRONOUSLY during sync
+        # With DeletionGracePeriod = Zero, the MVO will be deleted SYNCHRONOUSLY during sync
         # (not deferred to housekeeping). Delete pending exports are created for target CSOs.
         Write-Host "  Running delta forward sync to propagate deletion..." -ForegroundColor Gray
         Invoke-DeltaForwardSync -Context "DeleteGroup"
@@ -1454,7 +1454,7 @@ try {
                 Write-Host ""
                 Write-Host "✗ DeleteGroup test failed" -ForegroundColor Red
                 Write-Host "  MVO was NOT deleted after authoritative source disconnect" -ForegroundColor Red
-                Write-Host "  With DeletionGracePeriodDays = 0, MVO should be deleted synchronously during sync" -ForegroundColor Yellow
+                Write-Host "  With DeletionGracePeriod = Zero, MVO should be deleted synchronously during sync" -ForegroundColor Yellow
                 throw "DeleteGroup test failed: MVO was not deleted synchronously"
             }
             else {

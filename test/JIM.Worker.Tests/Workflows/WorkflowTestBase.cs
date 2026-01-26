@@ -58,6 +58,27 @@ public abstract class WorkflowTestBase
             DefaultValue = "1000",
             Value = null
         });
+
+        DbContext.ServiceSettingItems.Add(new ServiceSetting
+        {
+            Key = "ChangeTracking.CsoChanges.Enabled",
+            DisplayName = "Track CSO changes",
+            Category = ServiceSettingCategory.History,
+            ValueType = ServiceSettingValueType.Boolean,
+            DefaultValue = "true",
+            Value = null
+        });
+
+        DbContext.ServiceSettingItems.Add(new ServiceSetting
+        {
+            Key = "ChangeTracking.MvoChanges.Enabled",
+            DisplayName = "Track MVO changes",
+            Category = ServiceSettingCategory.History,
+            ValueType = ServiceSettingValueType.Boolean,
+            DefaultValue = "true",
+            Value = null
+        });
+
         await DbContext.SaveChangesAsync();
     }
 

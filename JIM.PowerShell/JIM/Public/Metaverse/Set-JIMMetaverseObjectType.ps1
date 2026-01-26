@@ -22,9 +22,10 @@ function Set-JIMMetaverseObjectType {
         - WhenLastConnectorDisconnected: Objects are deleted when all connectors are removed
         - WhenAuthoritativeSourceDisconnected: Objects are deleted when any authoritative source disconnects (requires DeletionTriggerConnectedSystemIds)
 
-    .PARAMETER DeletionGracePeriodDays
-        Number of days to wait after deletion conditions are met before deleting.
-        Set to 0 for immediate deletion when conditions are met.
+    .PARAMETER DeletionGracePeriod
+        Grace period before deletion is executed, as a TimeSpan.
+        Examples: [TimeSpan]::FromMinutes(1), [TimeSpan]::FromDays(30), [TimeSpan]::FromHours(2)
+        Set to [TimeSpan]::Zero or omit for immediate deletion when conditions are met.
 
     .PARAMETER DeletionTriggerConnectedSystemIds
         Array of Connected System IDs that are authoritative sources for deletion.
@@ -39,19 +40,24 @@ function Set-JIMMetaverseObjectType {
         If -PassThru is specified, returns the updated Object Type object.
 
     .EXAMPLE
-        Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenLastConnectorDisconnected -DeletionGracePeriodDays 30
+        Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenLastConnectorDisconnected -DeletionGracePeriod ([TimeSpan]::FromDays(30))
 
         Configures User type to delete 30 days after last connector disconnects.
 
     .EXAMPLE
-        Set-JIMMetaverseObjectType -Name 'User' -DeletionGracePeriodDays 0
+        Set-JIMMetaverseObjectType -Name 'User' -DeletionGracePeriod ([TimeSpan]::Zero)
 
         Configures immediate deletion for User type when connectors disconnect.
 
     .EXAMPLE
-        Get-JIMMetaverseObjectType -Name 'User' | Set-JIMMetaverseObjectType -DeletionGracePeriodDays 7 -PassThru
+        Get-JIMMetaverseObjectType -Name 'User' | Set-JIMMetaverseObjectType -DeletionGracePeriod ([TimeSpan]::FromDays(7)) -PassThru
 
         Updates from pipeline and returns the updated object.
+
+    .EXAMPLE
+        Set-JIMMetaverseObjectType -Id 1 -DeletionGracePeriod ([TimeSpan]::FromMinutes(1))
+
+        Configures a 1-minute grace period (useful for testing).
 
     .EXAMPLE
         Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenAuthoritativeSourceDisconnected -DeletionTriggerConnectedSystemIds 1,2
@@ -80,8 +86,7 @@ function Set-JIMMetaverseObjectType {
         [string]$DeletionRule,
 
         [Parameter()]
-        [ValidateRange(0, 3650)]
-        [int]$DeletionGracePeriodDays,
+        [TimeSpan]$DeletionGracePeriod,
 
         [Parameter()]
         [int[]]$DeletionTriggerConnectedSystemIds,
@@ -125,8 +130,9 @@ function Set-JIMMetaverseObjectType {
             $body.deletionRule = $deletionRuleMap[$DeletionRule]
         }
 
-        if ($PSBoundParameters.ContainsKey('DeletionGracePeriodDays')) {
-            $body.deletionGracePeriodDays = $DeletionGracePeriodDays
+        if ($PSBoundParameters.ContainsKey('DeletionGracePeriod')) {
+            # API expects TimeSpan as "d.hh:mm:ss" string format
+            $body.deletionGracePeriod = $DeletionGracePeriod.ToString()
         }
 
         if ($PSBoundParameters.ContainsKey('DeletionTriggerConnectedSystemIds')) {

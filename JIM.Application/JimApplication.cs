@@ -18,6 +18,7 @@ public class JimApplication : IDisposable
     private SeedingServer Seeding { get; }
     public ActivityServer Activities { get; }
     public CertificateServer Certificates { get; }
+    public ChangeHistoryServer ChangeHistory { get; }
     public ConnectedSystemServer ConnectedSystems { get; }
     public DataGenerationServer DataGeneration { get; }
     public DriftDetectionService DriftDetection { get; }
@@ -36,6 +37,7 @@ public class JimApplication : IDisposable
     {
         Activities = new ActivityServer(this);
         Certificates = new CertificateServer(this);
+        ChangeHistory = new ChangeHistoryServer(this);
         ConnectedSystems = new ConnectedSystemServer(this);
         DataGeneration = new DataGenerationServer(this);
         DriftDetection = new DriftDetectionService(this);

@@ -180,6 +180,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // Progress updates at finer granularity would require a separate DbContext instance.
             await PersistPendingMetaverseObjectsAsync();
 
+            // create MVO change objects for change tracking (after MVOs persisted so IDs available)
+            await CreatePendingMvoChangeObjectsAsync();
+
             // batch evaluate exports for all MVOs that changed during this page
             await EvaluatePendingExportsAsync();
 
@@ -192,7 +195,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // batch delete MVOs marked for immediate deletion (0-grace-period)
             await FlushPendingMvoDeletionsAsync();
 
-            // Update progress with page completion - this persists ObjectsProcessed to database
+            // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
             using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
             {
                 await _jim.Activities.UpdateActivityAsync(_activity);

@@ -112,6 +112,43 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
+        /// Gets whether CSO change tracking is enabled.
+        /// When enabled, ConnectedSystemObjectChange records are created for CSO create/update/delete operations.
+        /// </summary>
+        public async Task<bool> GetCsoChangeTrackingEnabledAsync()
+        {
+            return await GetSettingValueAsync(Constants.SettingKeys.ChangeTrackingCsoChangesEnabled, true);
+        }
+
+        /// <summary>
+        /// Gets whether MVO change tracking is enabled.
+        /// When enabled, MetaverseObjectChange records are created for MVO create/update/delete operations.
+        /// </summary>
+        public async Task<bool> GetMvoChangeTrackingEnabledAsync()
+        {
+            return await GetSettingValueAsync(Constants.SettingKeys.ChangeTrackingMvoChangesEnabled, true);
+        }
+
+        /// <summary>
+        /// Gets the history retention period (how long to keep change history and activities).
+        /// Default: 90 days.
+        /// </summary>
+        public async Task<TimeSpan> GetHistoryRetentionPeriodAsync()
+        {
+            var days = await GetSettingValueAsync(Constants.SettingKeys.HistoryRetentionPeriod, 90);
+            return TimeSpan.FromDays(days);
+        }
+
+        /// <summary>
+        /// Gets the cleanup batch size (maximum records to delete per housekeeping cycle).
+        /// Default: 100 records.
+        /// </summary>
+        public async Task<int> GetHistoryCleanupBatchSizeAsync()
+        {
+            return await GetSettingValueAsync(Constants.SettingKeys.HistoryCleanupBatchSize, 100);
+        }
+
+        /// <summary>
         /// Updates a service setting value and creates an Activity for audit purposes.
         /// Encrypted string values are automatically encrypted before storage.
         /// </summary>

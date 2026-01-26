@@ -312,7 +312,9 @@ public class Worker : BackgroundService
                                         try
                                         {
                                             // initiate clearing the connected system
-                                            await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(clearConnectedSystemObjectsTask.ConnectedSystemId);
+                                            await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(
+                                                clearConnectedSystemObjectsTask.ConnectedSystemId,
+                                                clearConnectedSystemObjectsTask.DeleteChangeHistory);
 
                                             // task completed successfully, complete the activity
                                             await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
@@ -333,15 +335,16 @@ public class Worker : BackgroundService
                                 }
                                 case DeleteConnectedSystemWorkerTask deleteConnectedSystemTask:
                                 {
-                                    Log.Information("ExecuteAsync: DeleteConnectedSystemWorkerTask received for connected system id: {ConnectedSystemId}, EvaluateMvoDeletionRules: {EvaluateMvo}",
-                                        deleteConnectedSystemTask.ConnectedSystemId, deleteConnectedSystemTask.EvaluateMvoDeletionRules);
+                                    Log.Information("ExecuteAsync: DeleteConnectedSystemWorkerTask received for connected system id: {ConnectedSystemId}, EvaluateMvoDeletionRules: {EvaluateMvo}, DeleteChangeHistory: {DeleteHistory}",
+                                        deleteConnectedSystemTask.ConnectedSystemId, deleteConnectedSystemTask.EvaluateMvoDeletionRules, deleteConnectedSystemTask.DeleteChangeHistory);
 
                                     try
                                     {
                                         // Execute the deletion (marks orphaned MVOs for deletion before deleting CS)
                                         await taskJim.ConnectedSystems.ExecuteDeletionAsync(
                                             deleteConnectedSystemTask.ConnectedSystemId,
-                                            deleteConnectedSystemTask.EvaluateMvoDeletionRules);
+                                            deleteConnectedSystemTask.EvaluateMvoDeletionRules,
+                                            deleteConnectedSystemTask.DeleteChangeHistory);
 
                                         // Task completed successfully, complete the activity
                                         await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
@@ -428,34 +431,72 @@ public class Worker : BackgroundService
 
             if (mvosToDelete.Count > 0)
             {
-                Log.Information("PerformHousekeepingAsync: Found {Count} orphaned MVOs eligible for deletion", mvosToDelete.Count);
+                Log.Information("PerformHousekeepingAsync: Found {Count} MVOs eligible for deletion", mvosToDelete.Count);
 
                 foreach (var mvo in mvosToDelete)
                 {
                     try
                     {
-                        Log.Information("PerformHousekeepingAsync: Deleting orphaned MVO {MvoId} ({DisplayName}) - disconnected at {DisconnectedDate}",
-                            mvo.Id, mvo.DisplayName ?? "No display name", mvo.LastConnectorDisconnectedDate);
+                        Log.Information("PerformHousekeepingAsync: Deleting MVO {MvoId} ({DisplayName}) - disconnected at {DisconnectedDate}, rule: {DeletionRule}",
+                            mvo.Id, mvo.DisplayName ?? "No display name", mvo.LastConnectorDisconnectedDate, mvo.Type?.DeletionRule);
 
                         // Evaluate export rules for the MVO deletion (create delete pending exports for provisioned CSOs)
-                        // Note: Most orphaned MVOs won't have CSOs, but this handles edge cases
+                        // WhenAuthoritativeSourceDisconnected MVOs may still have target CSOs that need delete exports
                         await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
 
-                        // Delete the MVO
-                        await jim.Metaverse.DeleteMetaverseObjectAsync(mvo);
+                        // Delete the MVO using the initiator info captured when it was marked for deletion
+                        // This preserves the audit trail - the original initiator is recorded, not housekeeping
+                        await jim.Metaverse.DeleteMetaverseObjectAsync(
+                            mvo,
+                            mvo.DeletionInitiatedByType,
+                            mvo.DeletionInitiatedById,
+                            mvo.DeletionInitiatedByName);
 
-                        Log.Information("PerformHousekeepingAsync: Successfully deleted orphaned MVO {MvoId}", mvo.Id);
+                        Log.Information("PerformHousekeepingAsync: Successfully deleted MVO {MvoId}", mvo.Id);
                     }
                     catch (Exception ex)
                     {
-                        Log.Error(ex, "PerformHousekeepingAsync: Failed to delete orphaned MVO {MvoId}", mvo.Id);
+                        Log.Error(ex, "PerformHousekeepingAsync: Failed to delete MVO {MvoId}", mvo.Id);
                     }
                 }
             }
+
+            // Perform change history cleanup
+            await PerformChangeHistoryCleanupAsync(jim);
         }
         catch (Exception ex)
         {
             Log.Error(ex, "PerformHousekeepingAsync: Error during housekeeping");
+        }
+    }
+
+    /// <summary>
+    /// Performs change history and activity cleanup based on retention policy.
+    /// Runs as part of housekeeping during worker idle time.
+    /// </summary>
+    private async Task PerformChangeHistoryCleanupAsync(JimApplication jim)
+    {
+        try
+        {
+            // Get retention settings
+            var retentionPeriod = await jim.ServiceSettings.GetHistoryRetentionPeriodAsync();
+            var batchSize = await jim.ServiceSettings.GetHistoryCleanupBatchSizeAsync();
+
+            var cutoffDate = DateTime.UtcNow - retentionPeriod;
+
+            // Perform cleanup (creates its own Activity for audit)
+            var result = await jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, batchSize, initiatedBy: null);
+
+            // Log results if anything was deleted
+            if (result.CsoChangesDeleted > 0 || result.MvoChangesDeleted > 0 || result.ActivitiesDeleted > 0)
+            {
+                Log.Information("PerformChangeHistoryCleanupAsync: Deleted {CsoCount} CSO changes, {MvoCount} MVO changes, {ActivityCount} activities",
+                    result.CsoChangesDeleted, result.MvoChangesDeleted, result.ActivitiesDeleted);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "PerformChangeHistoryCleanupAsync: Error during change history cleanup");
         }
     }
 

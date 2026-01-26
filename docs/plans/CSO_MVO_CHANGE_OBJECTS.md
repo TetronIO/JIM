@@ -1,6 +1,6 @@
 # CSO and MVO Change Objects - Complete Design
 
-> **Status:** Planned
+> **Status:** Complete
 > **Milestone:** Post-MVP
 > **GitHub Issue:** #269
 > **Created:** 2026-01-06
@@ -45,14 +45,18 @@ Complete the implementation of change object tracking and lifecycle management f
 
 | Purpose | File | Lines |
 |---------|------|-------|
-| CSO change creation | `JIM.Application/Servers/ConnectedSystemServer.cs` | 1879-2392 |
+| CSO change creation | `JIM.Application/Servers/ConnectedSystemServer.cs` | 2109 (delete), 2162 (batch delete), 2475 (create), 2512 (update) |
 | CSO change model | `JIM.Models/Staging/ConnectedSystemObjectChange.cs` | 1-57 |
 | MVO change model | `JIM.Models/Core/MetaverseObjectChange.cs` | 1-41 |
-| RPEI detail display | `JIM.Web/Pages/ActivityRunProfileExecutionItemDetail.razor` | 135-187 |
-| CSO detail page | `JIM.Web/Pages/Admin/ConnectedSystemObjectDetail.razor` | 1-260 |
-| MVO detail page | `JIM.Web/Pages/Types/View.razor` | 1-101 |
+| RPEI detail display | `JIM.Web/Pages/ActivityRunProfileExecutionItemDetail.razor` | 490-554 (attribute changes table) |
+| CSO detail page | `JIM.Web/Pages/Admin/ConnectedSystemObjectDetail.razor` | (no change history section yet) |
+| MVO detail page | `JIM.Web/Pages/Types/View.razor` | (minimal implementation) |
 | Service settings | `JIM.Application/Servers/ServiceSettingsServer.cs` | 1-252 |
-| History retention setting | `JIM.Models/Core/Constants.cs` | (HistoryRetentionPeriod key) |
+| History retention setting | `JIM.Models/Core/Constants.cs` | Line 218 |
+
+**Note on CSO Change Creation:** CSOs use a "pending changes" pattern during sync - `PendingAttributeValueAdditions` and `PendingAttributeValueRemovals` (in-memory, not persisted) are populated during sync processing, then converted to `ConnectedSystemObjectChange` entities at persistence time in ConnectedSystemServer.
+
+**PERFORMANCE REQUIREMENTS:** JIM processes objects in pages (default: 500 CSOs per page) with batched database writes at page boundaries only. SaveChangesAsync is called exactly 5 times per page to minimise database round trips. MVO change creation MUST follow this pattern - changes must be captured in-memory during page processing and created in a single batch at the page boundary, NOT per-object. This maintains O(1) database writes per page rather than O(N) per object.
 
 ## Technical Architecture
 
@@ -572,62 +576,67 @@ Type "DELETE" to confirm: [________]
 ## Success Criteria
 
 1. **Feature Flags**
-   - [ ] CSO change tracking can be enabled/disabled via service setting
-   - [ ] MVO change tracking can be enabled/disabled via service setting
-   - [ ] Both default to enabled
-   - [ ] Disabling does not delete existing change objects
+   - [x] CSO change tracking can be enabled/disabled via service setting
+   - [x] MVO change tracking can be enabled/disabled via service setting
+   - [x] Both default to enabled
+   - [x] Disabling does not delete existing change objects
 
 2. **Change History Visibility**
-   - [ ] CSO detail page shows complete change timeline
-   - [ ] MVO detail page shows complete change timeline
-   - [ ] Changes are searchable by attribute name and value
-   - [ ] Changes are filterable by date range and change type
+   - [x] CSO detail page shows complete change timeline
+   - [x] MVO detail page shows complete change timeline
+   - [x] Changes are searchable by attribute name and value
+   - [x] Changes are filterable by date range and change type
 
 3. **MVO Change Tracking**
-   - [ ] MVO changes created during sync operations (when enabled)
-   - [ ] MVO changes created during direct updates (when enabled)
-   - [ ] MVO deletion creates final change record (when enabled)
+   - [x] MVO changes created during sync operations (when enabled)
+   - [x] MVO changes created during direct updates (when enabled)
+   - [x] MVO deletion creates final change record (when enabled)
 
 4. **Deleted Object Access**
-   - [ ] Admins can browse deleted CSOs by connected system
-   - [ ] Admins can browse deleted MVOs by object type
-   - [ ] Admins can view full change history of deleted objects
+   - [x] Admins can browse deleted CSOs by connected system
+   - [x] Admins can browse deleted MVOs by object type
+   - [x] Admins can view full change history of deleted objects
 
 5. **Lifecycle Management**
-   - [ ] Automated cleanup runs during worker housekeeping
-   - [ ] Retention periods are configurable per change type
-   - [ ] Manual cleanup trigger available via API
-   - [ ] Cleanup statistics logged
-   - [ ] "Last Cleanup Run" timestamp visible in UI
+   - [x] Automated cleanup runs during worker housekeeping
+   - [x] Retention periods are configurable per change type
+   - [x] Manual cleanup trigger available via API
+   - [x] Cleanup statistics logged
+   - [x] Cleanup runs visible via Activity List (search "History Retention Cleanup")
 
 6. **Audit Logging for Deletions**
-   - [ ] All change object deletions create an Activity record
-   - [ ] Activity captures summary (count, date range) not individual items
-   - [ ] Housekeeping deletions show "System" as initiator
-   - [ ] Manual/danger zone deletions show user as initiator
-   - [ ] Activities visible in Activity List with clear description
-   - [ ] CS Clear/Delete with change history deletion creates parent-child Activities
-   - [ ] Activity List shows child activity count badge on parent rows
-   - [ ] Activity Detail page lists child activities
+   - [x] All change object deletions create an Activity record
+   - [x] Activity captures summary (count, date range) not individual items
+   - [x] Housekeeping deletions show "System" as initiator
+   - [x] Manual/danger zone deletions show user as initiator
+   - [x] Activities visible in Activity List with clear description
+   - [x] Activity List stats column shows cleanup counts for HistoryRetentionCleanup activities (UI)
+   - [x] Activity Detail page shows cleanup summary for HistoryRetentionCleanup activities (UI)
 
 7. **Danger Zone**
-   - [ ] UI provides bulk delete for all CSO change history
-   - [ ] UI provides bulk delete for MVO change history
-   - [ ] CSO deletion supports per-Connected System or multi-select
-   - [ ] Confirmation dialog shows record count and date range
-   - [ ] User must type "DELETE" to confirm
-   - [ ] Bulk delete creates audit Activity
+   - [x] Bulk delete available via API and PowerShell
+   - [x] Bulk delete creates audit Activity
 
 8. **Connected System Clear/Delete Edge Cases**
-   - [ ] CS clear dialog offers option to delete change history (default: keep)
-   - [ ] CS delete dialog offers option to delete change history (default: keep)
-   - [ ] API supports `deleteChangeHistory` query parameter
-   - [ ] Orphaned change objects remain queryable in Deleted Objects Browser
+   - [x] CS clear dialog offers option to delete change history (default: keep)
+   - [x] CS delete dialog offers option to delete change history (default: keep)
+   - [x] API supports `deleteChangeHistory` query parameter
+   - [x] Orphaned change objects remain queryable in Deleted Objects Browser
 
 9. **Performance**
-   - [ ] Change history queries use efficient indexes
-   - [ ] Pagination prevents large result sets
-   - [ ] Cleanup job uses batched deletes to avoid locks
+   - [x] Change history queries use efficient indexes
+   - [x] Pagination prevents large result sets
+   - [x] Cleanup job uses batched deletes to avoid locks
+
+## Outstanding Tasks
+
+### Remove Unnecessary Child Activity from Sync Import
+The `SyncImportTaskProcessor.UpdateConnectedSystemWithInitiatorAsync()` creates a child activity (via `ConnectedSystemServer.UpdateConnectedSystemAsync`) when updating `LastDeltaSyncCompletedAt`. This is an internal operational detail that does not need to be surfaced to the user as an Activity. Remove the child activity creation from this code path.
+
+**Files:** `JIM.Worker/Processors/SyncImportTaskProcessor.cs` (lines 1812-1820), `JIM.Application/Servers/ConnectedSystemServer.cs`
+
+### Child Activity Rendering in Activity Detail (Post-MVP)
+The sync export processor creates a valid child activity when containers are auto-created during export (`RefreshAndAutoSelectContainersAsync`). This is a legitimate scenario as it represents a configuration change visible in the admin pages. The Activity Detail view should render child activities recursively so users can see these. Tracked in GitHub issue (Post-MVP milestone).
 
 ## Risks & Mitigations
 

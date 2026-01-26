@@ -1,0 +1,539 @@
+@page "/admin/deleted-objects"
+@attribute [Authorize(Roles = "Administrator")]
+@using JIM.Application
+@using JIM.Models.Core
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+@using JIM.Models.Enums
+@using Humanizer
+@inject JimApplication Jim
+@inject NavigationManager NavManager
+
+<PageTitle>Deleted Objects</PageTitle>
+<MudText Typo="Typo.h4">Deleted Objects</MudText>
+<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
+    When objects are deleted, their change history is preserved here for audit and compliance purposes.
+    Click <strong>View</strong> to see the full history of changes made to an object before it was deleted.
+</MudText>
+
+<MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-0 mt-4" Class="mt-4" @bind-ActivePanelIndex="_activeTabIndex">
+    <MudTabPanel Text="Deleted CSOs">
+        <MudPaper Class="pa-5" Outlined="true">
+            <!-- Filters -->
+            <MudGrid>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="int?"
+                               @bind-Value="_csoFilterConnectedSystemId"
+                               Label="Connected System"
+                               Variant="Variant.Outlined"
+                               Dense="true"
+                               Clearable="true">
+                        @if (_connectedSystems != null)
+                        {
+                            @foreach (var cs in _connectedSystems)
+                            {
+                                <MudSelectItem T="int?" Value="@cs.Id">@cs.Name</MudSelectItem>
+                            }
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudTextField @bind-Value="_csoSearchExternalId"
+                                  Label="Search External ID"
+                                  Variant="Variant.Outlined"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Immediate="true"
+                                  DebounceInterval="500" />
+                </MudItem>
+                <MudItem xs="6" sm="3" md="3">
+                    <MudDatePicker @bind-Date="_csoFromDate"
+                                   Label="From Date"
+                                   Variant="Variant.Outlined"
+                                   Clearable="true" />
+                </MudItem>
+                <MudItem xs="6" sm="3" md="3">
+                    <MudDatePicker @bind-Date="_csoToDate"
+                                   Label="To Date"
+                                   Variant="Variant.Outlined"
+                                   Clearable="true" />
+                </MudItem>
+            </MudGrid>
+            <div class="d-flex align-center gap-3 mt-4 mb-4">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchCsosAsync" DropShadow="false">
+                    Search
+                </MudButton>
+            </div>
+
+            <!-- Results Table -->
+            <MudTable Items="@_deletedCsoChanges" Hover="true" Breakpoint="Breakpoint.Sm" Outlined="true" Elevation="0"
+                      Loading="@_csoLoading" Dense="true" CurrentPage="@(_csoPage - 1)" RowsPerPage="@_pageSize">
+                <HeaderContent>
+                    <MudTh Style="width: 1px;"></MudTh>
+                    <MudTh><MudText Typo="Typo.button">External ID</MudText></MudTh>
+                    <MudTh><MudText Typo="Typo.button">Display Name</MudText></MudTh>
+                    <MudTh><MudText Typo="Typo.button">Object Type</MudText></MudTh>
+                    <MudTh><MudText Typo="Typo.button">Connected System</MudText></MudTh>
+                    <MudTh><MudText Typo="Typo.button">Deleted</MudText></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>
+                        <MudButton Variant="Variant.Outlined"
+                                   Size="Size.Small"
+                                   Color="Color.Primary"
+                                   OnClick="() => ViewCsoHistoryAsync(context)">
+                            View
+                        </MudButton>
+                    </MudTd>
+                    <MudTd DataLabel="External ID">
+                        <span class="jim-text-code">@(context.DeletedObjectExternalId ?? "N/A")</span>
+                    </MudTd>
+                    <MudTd DataLabel="Display Name">
+                        @(context.DeletedObjectDisplayName ?? "-")
+                    </MudTd>
+                    <MudTd DataLabel="Object Type">
+                        @(context.DeletedObjectType?.Name ?? "Unknown")
+                    </MudTd>
+                    <MudTd DataLabel="Connected System">
+                        @{
+                            var csName = _connectedSystems?.FirstOrDefault(c => c.Id == context.ConnectedSystemId)?.Name ?? $"ID: {context.ConnectedSystemId}";
+                        }
+                        <MudLink Href="@($"/admin/connected-systems/{context.ConnectedSystemId}")">@csName</MudLink>
+                    </MudTd>
+                    <MudTd DataLabel="Deleted">
+                        <MudTooltip Text="@context.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")" Arrow="true" Placement="Placement.Top">
+                            @context.ChangeTime.ToLocalTime().Humanize()
+                        </MudTooltip>
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText>No deleted CSOs found matching your criteria.</MudText>
+                </NoRecordsContent>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="new int[] { 25, 50, 100 }" />
+                </PagerContent>
+            </MudTable>
+        </MudPaper>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Deleted MVOs">
+        <MudPaper Class="pa-5" Outlined="true">
+            <!-- Filters -->
+            <MudGrid>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="int?"
+                               @bind-Value="_mvoFilterObjectTypeId"
+                               Label="Object Type"
+                               Variant="Variant.Outlined"
+                               Dense="true"
+                               Clearable="true">
+                        @if (_objectTypes != null)
+                        {
+                            @foreach (var ot in _objectTypes)
+                            {
+                                <MudSelectItem T="int?" Value="@ot.Id">@ot.Name</MudSelectItem>
+                            }
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudTextField @bind-Value="_mvoSearchDisplayName"
+                                  Label="Search Display Name"
+                                  Variant="Variant.Outlined"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Immediate="true"
+                                  DebounceInterval="500" />
+                </MudItem>
+                <MudItem xs="6" sm="3" md="3">
+                    <MudDatePicker @bind-Date="_mvoFromDate"
+                                   Label="From Date"
+                                   Variant="Variant.Outlined"
+                                   Clearable="true" />
+                </MudItem>
+                <MudItem xs="6" sm="3" md="3">
+                    <MudDatePicker @bind-Date="_mvoToDate"
+                                   Label="To Date"
+                                   Variant="Variant.Outlined"
+                                   Clearable="true" />
+                </MudItem>
+            </MudGrid>
+            <div class="d-flex align-center gap-3 mt-4 mb-4">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchMvosAsync" DropShadow="false">
+                    Search
+                </MudButton>
+            </div>
+
+            <!-- Results Table -->
+            <MudTable Items="@_deletedMvoChanges" Hover="true" Breakpoint="Breakpoint.Sm" Outlined="true" Elevation="0"
+                      Loading="@_mvoLoading" Dense="true" CurrentPage="@(_mvoPage - 1)" RowsPerPage="@_pageSize">
+                <HeaderContent>
+                    <MudTh Style="width: 1px;"></MudTh>
+                    <MudTh><MudText Typo="Typo.button">Display Name</MudText></MudTh>
+                    <MudTh><MudText Typo="Typo.button">Object Type</MudText></MudTh>
+                    <MudTh><MudText Typo="Typo.button">Deleted</MudText></MudTh>
+                    <MudTh><MudText Typo="Typo.button">Deleted By</MudText></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>
+                        <MudButton Variant="Variant.Outlined"
+                                   Size="Size.Small"
+                                   Color="Color.Primary"
+                                   OnClick="() => ViewMvoHistoryAsync(context)">
+                            View
+                        </MudButton>
+                    </MudTd>
+                    <MudTd DataLabel="Display Name">
+                        @(context.DeletedObjectDisplayName ?? "-")
+                    </MudTd>
+                    <MudTd DataLabel="Object Type">
+                        @(context.DeletedObjectType?.Name ?? "Unknown")
+                    </MudTd>
+                    <MudTd DataLabel="Deleted">
+                        <MudTooltip Text="@context.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")" Arrow="true" Placement="Placement.Top">
+                            @context.ChangeTime.ToLocalTime().Humanize()
+                        </MudTooltip>
+                    </MudTd>
+                    <MudTd DataLabel="Deleted By">
+                        @if (!string.IsNullOrEmpty(context.InitiatedByName))
+                        {
+                            <div class="d-flex align-center gap-1">
+                                <MudIcon Icon="@Helpers.GetInitiatorIcon(context.InitiatedByType)" Size="Size.Small" Class="mud-text-secondary" />
+                                @if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.ApiKey && context.InitiatedById.HasValue)
+                                {
+                                    <MudLink Href="@($"/admin/apikeys/{context.InitiatedById}")">@context.InitiatedByName</MudLink>
+                                }
+                                else if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.User && context.InitiatedById.HasValue)
+                                {
+                                    <MudLink Href="@($"/users/{context.InitiatedById}")">@context.InitiatedByName</MudLink>
+                                }
+                                else
+                                {
+                                    @context.InitiatedByName
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <span class="mud-text-secondary">Unknown</span>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText>No deleted MVOs found matching your criteria.</MudText>
+                </NoRecordsContent>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="new int[] { 25, 50, 100 }" />
+                </PagerContent>
+            </MudTable>
+        </MudPaper>
+    </MudTabPanel>
+</MudTabs>
+
+<!-- CSO History Dialog -->
+<MudDialog @bind-Visible="_csoHistoryDialogVisible" Options="_historyDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-3" />
+            Change History: @(_selectedCsoChange?.DeletedObjectExternalId ?? "Deleted CSO")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_csoHistoryLoading)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else if (_selectedCsoHistory != null && _selectedCsoHistory.Any())
+        {
+            <ChangeHistoryTimeline Changes="@GetCsoHistoryAsChangeGroups()" />
+        }
+        else
+        {
+            <MudText Class="mud-text-secondary">No change history available.</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
+            OnClick="() => _csoHistoryDialogVisible = false">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<!-- MVO History Dialog -->
+<MudDialog @bind-Visible="_mvoHistoryDialogVisible" Options="_historyDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-3" />
+            Change History: @(_selectedMvoChange?.DeletedObjectDisplayName ?? "Deleted MVO")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_mvoHistoryLoading)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else if (_selectedMvoHistory != null && _selectedMvoHistory.Any())
+        {
+            <ChangeHistoryTimeline Changes="@GetMvoHistoryAsChangeGroups()" />
+        }
+        else
+        {
+            <MudText Class="mud-text-secondary">No change history available.</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
+            OnClick="() => _mvoHistoryDialogVisible = false">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private int _activeTabIndex;
+    private const int _pageSize = 50;
+
+    private readonly List<BreadcrumbItem> _breadcrumbs = new()
+    {
+        new("Home", href: "/", icon: Icons.Material.Filled.Home),
+        new("Admin", href: "/admin/operations"),
+        new("Deleted Objects", href: null, disabled: true)
+    };
+
+    private readonly DialogOptions _historyDialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Large };
+
+    // Reference data
+    private List<ConnectedSystemHeader>? _connectedSystems;
+    private List<MetaverseObjectType>? _objectTypes;
+
+    // CSO tab state
+    private int? _csoFilterConnectedSystemId;
+    private string _csoSearchExternalId = "";
+    private DateTime? _csoFromDate;
+    private DateTime? _csoToDate;
+    private List<ConnectedSystemObjectChange>? _deletedCsoChanges;
+    private int _csoPage = 1;
+    private bool _csoLoading;
+
+    // MVO tab state
+    private int? _mvoFilterObjectTypeId;
+    private string _mvoSearchDisplayName = "";
+    private DateTime? _mvoFromDate;
+    private DateTime? _mvoToDate;
+    private List<MetaverseObjectChange>? _deletedMvoChanges;
+    private int _mvoPage = 1;
+    private bool _mvoLoading;
+
+    // CSO History dialog
+    private bool _csoHistoryDialogVisible;
+    private ConnectedSystemObjectChange? _selectedCsoChange;
+    private List<ConnectedSystemObjectChange>? _selectedCsoHistory;
+    private bool _csoHistoryLoading;
+
+    // MVO History dialog
+    private bool _mvoHistoryDialogVisible;
+    private MetaverseObjectChange? _selectedMvoChange;
+    private List<MetaverseObjectChange>? _selectedMvoHistory;
+    private bool _mvoHistoryLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load reference data
+        var csHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+        _connectedSystems = csHeaders?.ToList();
+
+        var otHeaders = await Jim.Metaverse.GetMetaverseObjectTypeHeadersAsync();
+        _objectTypes = otHeaders?.Select(h => new MetaverseObjectType { Id = h.Id, Name = h.Name }).ToList();
+
+        // Load initial data for both tabs (showing latest deleted objects by default)
+        await SearchCsosAsync();
+        await SearchMvosAsync();
+    }
+
+    private async Task SearchCsosAsync()
+    {
+        _csoLoading = true;
+        _csoPage = 1;
+        StateHasChanged();
+
+        try
+        {
+            var (items, _) = await Jim.Repository.ConnectedSystems.GetDeletedCsoChangesAsync(
+                connectedSystemId: _csoFilterConnectedSystemId,
+                fromDate: _csoFromDate?.ToUniversalTime(),
+                toDate: _csoToDate?.ToUniversalTime().AddDays(1), // Include the entire day
+                externalIdSearch: string.IsNullOrWhiteSpace(_csoSearchExternalId) ? null : _csoSearchExternalId,
+                page: 1,
+                pageSize: 10000); // Load all for client-side pagination
+
+            _deletedCsoChanges = items;
+        }
+        finally
+        {
+            _csoLoading = false;
+        }
+    }
+
+    private async Task SearchMvosAsync()
+    {
+        _mvoLoading = true;
+        _mvoPage = 1;
+        StateHasChanged();
+
+        try
+        {
+            var (items, _) = await Jim.Repository.Metaverse.GetDeletedMvoChangesAsync(
+                objectTypeId: _mvoFilterObjectTypeId,
+                fromDate: _mvoFromDate?.ToUniversalTime(),
+                toDate: _mvoToDate?.ToUniversalTime().AddDays(1),
+                displayNameSearch: string.IsNullOrWhiteSpace(_mvoSearchDisplayName) ? null : _mvoSearchDisplayName,
+                page: 1,
+                pageSize: 10000); // Load all for client-side pagination
+
+            _deletedMvoChanges = items;
+        }
+        finally
+        {
+            _mvoLoading = false;
+        }
+    }
+
+    private async Task ViewCsoHistoryAsync(ConnectedSystemObjectChange change)
+    {
+        _selectedCsoChange = change;
+        _csoHistoryDialogVisible = true;
+        _csoHistoryLoading = true;
+        _selectedCsoHistory = null;
+        StateHasChanged();
+
+        try
+        {
+            _selectedCsoHistory = await Jim.Repository.ConnectedSystems.GetDeletedCsoChangeHistoryAsync(change.Id);
+        }
+        finally
+        {
+            _csoHistoryLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ViewMvoHistoryAsync(MetaverseObjectChange change)
+    {
+        _selectedMvoChange = change;
+        _mvoHistoryDialogVisible = true;
+        _mvoHistoryLoading = true;
+        _selectedMvoHistory = null;
+        StateHasChanged();
+
+        try
+        {
+            _selectedMvoHistory = await Jim.Repository.Metaverse.GetDeletedMvoChangeHistoryAsync(change.Id);
+        }
+        finally
+        {
+            _mvoHistoryLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private List<ChangeHistoryTimeline.ChangeGroup> GetCsoHistoryAsChangeGroups()
+    {
+        if (_selectedCsoHistory == null)
+            return new List<ChangeHistoryTimeline.ChangeGroup>();
+
+        var csName = _connectedSystems?.FirstOrDefault(c => c.Id == _selectedCsoChange?.ConnectedSystemId)?.Name;
+
+        return _selectedCsoHistory
+            .OrderByDescending(c => c.ChangeTime)
+            .Select(change => new ChangeHistoryTimeline.ChangeGroup
+            {
+                ChangeType = change.ChangeType,
+                ChangeTime = change.ChangeTime,
+                ChangeInitiatorType = MapInitiatorType(change.InitiatedByType),
+                ChangeInitiatorName = change.InitiatedByName,
+                ChangeInitiatorId = change.InitiatedById,
+                ChangeMechanismType = MapRunTypeToMechanismType(change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemRunType),
+                RunProfileName = change.ActivityRunProfileExecutionItem?.Activity?.TargetName,
+                ConnectedSystemId = change.ConnectedSystemId,
+                ConnectedSystemName = csName,
+                ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
+                AttributeChanges = change.AttributeChanges
+                    .OrderBy(ac => ac.Attribute.Name)
+                    .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
+                    {
+                        AttributeName = ac.Attribute.Name,
+                        ChangeType = vc.ValueChangeType,
+                        Value = vc.ReferenceValue == null ? vc.ToString() : null,
+                        ReferenceValue = vc.ReferenceValue != null ? new ChangeHistoryTimeline.ReferenceValueInfo
+                        {
+                            TypeName = vc.ReferenceValue.Type?.Name ?? "Unknown",
+                            DisplayName = vc.ReferenceValue.DisplayNameOrId ?? vc.ReferenceValue.Id.ToString(),
+                            Href = JIM.Utilities.Utilities.GetConnectedSystemObjectHref(vc.ReferenceValue)
+                        } : null,
+                        IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued
+                    }))
+                    .ToList()
+            })
+            .ToList();
+    }
+
+    private List<ChangeHistoryTimeline.ChangeGroup> GetMvoHistoryAsChangeGroups()
+    {
+        if (_selectedMvoHistory == null)
+            return new List<ChangeHistoryTimeline.ChangeGroup>();
+
+        return _selectedMvoHistory
+            .OrderByDescending(c => c.ChangeTime)
+            .Select(change => new ChangeHistoryTimeline.ChangeGroup
+            {
+                ChangeType = change.ChangeType,
+                ChangeTime = change.ChangeTime,
+                ChangeInitiatorType = MapInitiatorType(change.InitiatedByType),
+                ChangeInitiatorName = change.InitiatedByName,
+                ChangeInitiatorId = change.InitiatedById,
+                ChangeMechanismType = MapRunTypeToMechanismType(change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemRunType),
+                RunProfileName = change.ActivityRunProfileExecutionItem?.Activity?.TargetName,
+                ConnectedSystemId = change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemId,
+                ConnectedSystemName = change.ActivityRunProfileExecutionItem?.Activity?.TargetContext,
+                SyncRuleId = change.SyncRuleId,
+                SyncRuleName = change.SyncRuleName,
+                ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
+                AttributeChanges = change.AttributeChanges
+                    .OrderBy(ac => ac.Attribute.Name)
+                    .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
+                    {
+                        AttributeName = ac.Attribute.Name,
+                        ChangeType = vc.ValueChangeType,
+                        Value = vc.ReferenceValue == null ? vc.ToString() : null,
+                        ReferenceValue = vc.ReferenceValue != null ? new ChangeHistoryTimeline.ReferenceValueInfo
+                        {
+                            TypeName = vc.ReferenceValue.Type?.Name ?? "Unknown",
+                            DisplayName = vc.ReferenceValue.DisplayName ?? vc.ReferenceValue.Id.ToString(),
+                            Href = $"/users/{vc.ReferenceValue.Id}"
+                        } : null,
+                        IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued
+                    }))
+                    .ToList()
+            })
+            .ToList();
+    }
+
+    private static string MapInitiatorType(JIM.Models.Activities.ActivityInitiatorType initiatorType)
+    {
+        return initiatorType switch
+        {
+            JIM.Models.Activities.ActivityInitiatorType.User => "User",
+            JIM.Models.Activities.ActivityInitiatorType.ApiKey => "ApiKey",
+            _ => "Unknown"
+        };
+    }
+
+    private static string MapRunTypeToMechanismType(ConnectedSystemRunType? runType)
+    {
+        return runType switch
+        {
+            ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport => "Import",
+            ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation => "SynchronisationRule",
+            ConnectedSystemRunType.Export => "Export",
+            _ => "Import"
+        };
+    }
+}

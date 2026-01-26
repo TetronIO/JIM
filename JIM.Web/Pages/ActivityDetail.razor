@@ -14,8 +14,8 @@
 @inject NavigationManager NavManager
 @inject IUserPreferenceService PreferenceService
 
-<PageTitle>Activity: @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters(): @GetTargetDisplayText()</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Activity:</span> @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters(): <span class="mud-primary-text">@GetTargetDisplayText()</span></MudText>
+<PageTitle>Activity: @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters()@(ShowTargetInTitle() ? $": {GetTargetDisplayText()}" : "")</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Activity:</span> @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters()@if (ShowTargetInTitle()) {<span>: </span><span class="mud-primary-text">@GetTargetDisplayText()</span>}</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @if (_activity != null)
@@ -53,6 +53,10 @@
                             break;
                         case ActivityTargetType.MetaverseAttribute:
                             <MudLink Href="/admin/schema/metaverse">@_activity.TargetName</MudLink>
+                            break;
+                        case ActivityTargetType.HistoryRetentionCleanup:
+                            <MudIcon Icon="@Icons.Material.Filled.CleaningServices" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                            @(_activity.TargetName ?? "History Retention Cleanup")
                             break;
                         case ActivityTargetType.ObjectMatchingRule:
                         case ActivityTargetType.NotSet:
@@ -126,6 +130,61 @@
                 <pre style="white-space: pre-wrap; word-wrap: break-word; overflow-x: auto; max-width: 100%; margin-top: 8px;">@_activity.ErrorStackTrace</pre>
             }
         </MudAlert>
+    }
+
+    @if (_activity.TargetType == ActivityTargetType.HistoryRetentionCleanup)
+    {
+        var csoCount = _activity.DeletedCsoChangeCount ?? 0;
+        var mvoCount = _activity.DeletedMvoChangeCount ?? 0;
+        var activityCount = _activity.DeletedActivityCount ?? 0;
+        var totalDeleted = csoCount + mvoCount + activityCount;
+
+        <MudText Typo="Typo.h5" Class="mt-5">Cleanup Summary</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2 mb-4">
+            Automated retention cleanup removed expired change history and activity records.
+            Retention periods can be configured in <MudLink Href="/admin/settings">Settings</MudLink>.
+        </MudText>
+
+        <MudStack Row="true" Class="mt-2 mb-5 flex-wrap" Spacing="3">
+            @* Total card *@
+            <MudPaper Class="pa-4" Outlined="true" Style="min-width: 120px;">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Total Deleted</MudText>
+                <MudText Typo="Typo.h4">@totalDeleted.ToString("N0")</MudText>
+            </MudPaper>
+
+            @* CSO Changes *@
+            <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Orange.Default}; min-width: 120px;")">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">CSO Changes</MudText>
+                <MudText Typo="Typo.h4" Color="Color.Warning">@csoCount.ToString("N0")</MudText>
+            </MudPaper>
+
+            @* MVO Changes *@
+            <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Orange.Default}; min-width: 120px;")">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">MVO Changes</MudText>
+                <MudText Typo="Typo.h4" Color="Color.Warning">@mvoCount.ToString("N0")</MudText>
+            </MudPaper>
+
+            @* Activities *@
+            <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Orange.Default}; min-width: 120px;")">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Activities</MudText>
+                <MudText Typo="Typo.h4" Color="Color.Warning">@activityCount.ToString("N0")</MudText>
+            </MudPaper>
+
+            @* Date range card *@
+            @if (_activity.DeletedRecordsFromDate.HasValue && _activity.DeletedRecordsToDate.HasValue)
+            {
+                <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Gray.Default}; min-width: 200px;")">
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Oldest Record Deleted</MudText>
+                    <MudText Typo="Typo.h6" title="@_activity.DeletedRecordsFromDate.Value.ToLocalTime().ToFriendlyDate()">
+                        @_activity.DeletedRecordsFromDate.Value.ToLocalTime().ToRelativeTime()
+                    </MudText>
+                    <MudText Typo="Typo.button" Class="mud-text-secondary mt-3">Newest Record Deleted</MudText>
+                    <MudText Typo="Typo.h6" title="@_activity.DeletedRecordsToDate.Value.ToLocalTime().ToFriendlyDate()">
+                        @_activity.DeletedRecordsToDate.Value.ToLocalTime().ToRelativeTime()
+                    </MudText>
+                </MudPaper>
+            }
+        </MudStack>
     }
 
     @if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute && _preferencesLoaded)
@@ -825,6 +884,15 @@
             Color.Surface => "surface",
             _ => "default"
         };
+    }
+
+    /// <summary>
+    /// Whether to show the target name in the page title. Some activity types have self-descriptive
+    /// type names that make the target name redundant (e.g. HistoryRetentionCleanup).
+    /// </summary>
+    private bool ShowTargetInTitle()
+    {
+        return _activity?.TargetType != ActivityTargetType.HistoryRetentionCleanup;
     }
 
     /// <summary>

@@ -228,6 +228,36 @@ public static class Helpers
     }
     #endregion
 
+    #region Initiator Icon Helpers
+    /// <summary>
+    /// Gets the MudBlazor icon for an activity initiator type.
+    /// </summary>
+    public static string GetInitiatorIcon(ActivityInitiatorType initiatorType)
+    {
+        return initiatorType switch
+        {
+            ActivityInitiatorType.User => Icons.Material.Filled.Person,
+            ActivityInitiatorType.ApiKey => Icons.Material.Filled.Key,
+            _ => Icons.Material.Filled.HelpOutline
+        };
+    }
+
+    /// <summary>
+    /// Gets the MudBlazor icon for an initiator type string.
+    /// Accepts "User", "ApiKey", "Import", or other values.
+    /// </summary>
+    public static string GetInitiatorIcon(string? initiatorType)
+    {
+        return initiatorType switch
+        {
+            "User" => Icons.Material.Filled.Person,
+            "ApiKey" => Icons.Material.Filled.Key,
+            "Import" => Icons.Material.Filled.Input,
+            _ => Icons.Material.Filled.HelpOutline
+        };
+    }
+    #endregion
+
     #region Run Type Helpers
     /// <summary>
     /// Gets the display title for the results section based on run type.

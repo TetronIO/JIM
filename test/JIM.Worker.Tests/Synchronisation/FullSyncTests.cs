@@ -125,7 +125,8 @@ public class FullSyncTests
         ConnectedSystemObjectAttributeValuesData = new List<ConnectedSystemObjectAttributeValue>();
         MockDbSetConnectedSystemObjectAttributeValues = ConnectedSystemObjectAttributeValuesData.BuildMockDbSet();
 
-        // set up the Service Setting Items mock with default SyncPageSize
+        // set up the Service Setting Items mock with default SyncPageSize and MVO change tracking disabled
+        // MVO change tracking is disabled to avoid needing to mock MetaverseObjectChanges in most tests
         ServiceSettingItemsData = new List<ServiceSetting>
         {
             new()
@@ -136,9 +137,21 @@ public class FullSyncTests
                 ValueType = ServiceSettingValueType.Integer,
                 DefaultValue = "1000",
                 Value = null
+            },
+            new()
+            {
+                Key = Constants.SettingKeys.ChangeTrackingMvoChangesEnabled,
+                DisplayName = "Track MVO changes",
+                Category = ServiceSettingCategory.Synchronisation,
+                ValueType = ServiceSettingValueType.Boolean,
+                DefaultValue = "true",
+                Value = "false"  // Disabled for tests to avoid needing MetaverseObjectChanges mock
             }
         };
         MockDbSetServiceSettingItems = ServiceSettingItemsData.BuildMockDbSet();
+        // Setup FindAsync to return the setting matching the key (mock DbSet doesn't support FindAsync by default)
+        MockDbSetServiceSettingItems.Setup(m => m.FindAsync(It.IsAny<object?[]?>()))
+            .Returns<object?[]?>(keys => ValueTask.FromResult(ServiceSettingItemsData.FirstOrDefault(s => s.Key == keys?[0]?.ToString())));
 
         // mock entity framework calls to use our data sources above
         MockJimDbContext = new Mock<JimDbContext>();
@@ -1119,11 +1132,14 @@ public class FullSyncTests
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
-        // verify that the MVO has pending attribute value removals for the attributes contributed by this system
-        Assert.That(mvo.PendingAttributeValueRemovals, Is.Not.Empty,
-            "Expected pending attribute value removals when RemoveContributedAttributesOnObsoletion is enabled.");
-        Assert.That(mvo.PendingAttributeValueRemovals.Count, Is.EqualTo(2),
-            "Expected 2 pending attribute value removals (DisplayName and EmployeeNumber).");
+        // verify that the contributed attributes were actually removed from the MVO
+        // (ApplyPendingMetaverseObjectAttributeChanges is called during obsoletion to apply the removals)
+        Assert.That(mvo.AttributeValues, Is.Empty,
+            "Expected MVO attribute values to be empty after recall (both attributes contributed by this system).");
+
+        // verify that pending removals were cleared after being applied
+        Assert.That(mvo.PendingAttributeValueRemovals, Is.Empty,
+            "Expected pending attribute value removals to be cleared after being applied.");
 
         // verify the CSO-MVO join was broken
         Assert.That(cso.MetaverseObject, Is.Null, "Expected CSO-MVO join to be broken.");
@@ -1936,7 +1952,7 @@ public class FullSyncTests
         // set up: MVO with DeletionRule = WhenLastConnectorDisconnected, no grace period
         var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
         mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
-        mvoType.DeletionGracePeriodDays = null;  // null = 0 = immediate deletion
+        mvoType.DeletionGracePeriod = null;  // null = TimeSpan.Zero = immediate deletion
 
         // configure sync rule to disconnect on obsoletion (required for deletion rule processing)
         var importSyncRule = SyncRulesData.Single(sr => sr.Id == 1);
@@ -1989,7 +2005,7 @@ public class FullSyncTests
         // set up: MVO with DeletionRule = WhenLastConnectorDisconnected, 30-day grace period
         var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
         mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
-        mvoType.DeletionGracePeriodDays = 30;
+        mvoType.DeletionGracePeriod = TimeSpan.FromDays(30);
 
         // configure sync rule to disconnect on obsoletion (required for deletion rule processing)
         var importSyncRule = SyncRulesData.Single(sr => sr.Id == 1);
@@ -2035,7 +2051,7 @@ public class FullSyncTests
         Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount), "Expected MVO to NOT be deleted during grace period.");
 
         // verify LastConnectorDisconnectedDate was set to approximately now (not 30 days in future)
-        // The grace period is calculated by adding DeletionGracePeriodDays to LastConnectorDisconnectedDate
+        // The grace period is calculated by adding DeletionGracePeriod (TimeSpan) to LastConnectorDisconnectedDate
         Assert.That(mvo.LastConnectorDisconnectedDate, Is.Not.Null, "Expected LastConnectorDisconnectedDate to be set.");
         Assert.That(mvo.LastConnectorDisconnectedDate!.Value, Is.EqualTo(beforeSync).Within(TimeSpan.FromMinutes(1)),
             "Expected LastConnectorDisconnectedDate to be approximately now (when disconnection occurred).");
@@ -2057,7 +2073,7 @@ public class FullSyncTests
         // set up: MVO with DeletionRule = WhenLastConnectorDisconnected
         var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
         mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
-        mvoType.DeletionGracePeriodDays = null;
+        mvoType.DeletionGracePeriod = null;
 
         // create MVO joined to TWO CSOs
         var cso1 = ConnectedSystemObjectsData[0];
@@ -2124,7 +2140,7 @@ public class FullSyncTests
         // set up: MVO with disconnection date set (simulating previous disconnection within grace period)
         var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
         mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
-        mvoType.DeletionGracePeriodDays = 30;
+        mvoType.DeletionGracePeriod = TimeSpan.FromDays(30);
 
         var mvo = MetaverseObjectsData[0];
         mvo.Type = mvoType;

@@ -721,10 +721,44 @@ internal class SeedingServer
         {
             Key = Constants.SettingKeys.HistoryRetentionPeriod,
             DisplayName = "History retention period",
-            Description = "The duration for which activity and audit history is retained. Format: d.hh:mm:ss (e.g., '30.00:00:00' for 30 days).",
+            Description = "The duration for which activity and audit history is retained. Format: d.hh:mm:ss (e.g., '90.00:00:00' for 90 days).",
             Category = ServiceSettingCategory.History,
             ValueType = ServiceSettingValueType.TimeSpan,
-            DefaultValue = "30.00:00:00", // 30 days
+            DefaultValue = "90.00:00:00", // 90 days
+            IsReadOnly = false
+        });
+
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.HistoryCleanupBatchSize,
+            DisplayName = "History cleanup batch size",
+            Description = "Maximum number of records to delete per cleanup batch during housekeeping. Lower values reduce database load but take longer to clean up large volumes. Higher values are faster but may cause temporary performance impact.",
+            Category = ServiceSettingCategory.History,
+            ValueType = ServiceSettingValueType.Integer,
+            DefaultValue = "100",
+            IsReadOnly = false
+        });
+
+        // Change Tracking Settings
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ChangeTrackingCsoChangesEnabled,
+            DisplayName = "Track CSO changes",
+            Description = "When enabled, change history is recorded for all Connected System Object create/update/delete operations. Disable to improve performance at the expense of audit trail.",
+            Category = ServiceSettingCategory.History,
+            ValueType = ServiceSettingValueType.Boolean,
+            DefaultValue = "true",
+            IsReadOnly = false
+        });
+
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ChangeTrackingMvoChangesEnabled,
+            DisplayName = "Track MVO changes",
+            Description = "When enabled, change history is recorded for all Metaverse Object create/update/delete operations. Disable to improve performance at the expense of audit trail.",
+            Category = ServiceSettingCategory.History,
+            ValueType = ServiceSettingValueType.Boolean,
+            DefaultValue = "true",
             IsReadOnly = false
         });
 

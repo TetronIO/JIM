@@ -583,6 +583,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // in SyncRuleMappingProcessor.ProcessReferenceAttribute can detect existing MVO reference values
             // and avoid creating spurious "new" values for unchanged references.
             // IMPORTANT: MVO Type must be included for deletion rule evaluation in ProcessMvoDeletionRuleAsync.
+            // IMPORTANT: MVO AttributeValues must include ContributedBySystem so that
+            // ProcessObsoleteConnectedSystemObjectAsync can identify and recall attributes contributed
+            // by the disconnecting system when RemoveContributedAttributesOnObsoletion is enabled.
             query = Repository.Database.ConnectedSystemObjects
                 .AsSplitQuery()
                 .Include(cso => cso.Type)
@@ -598,7 +601,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .ThenInclude(av => av.Attribute)
                 .Include(cso => cso.MetaverseObject)
                     .ThenInclude(mvo => mvo!.AttributeValues)
-                    .ThenInclude(av => av.ReferenceValue);
+                    .ThenInclude(av => av.ReferenceValue)
+                .Include(cso => cso.MetaverseObject)
+                    .ThenInclude(mvo => mvo!.AttributeValues)
+                    .ThenInclude(av => av.ContributedBySystem);
         }
         else
         {
@@ -611,6 +617,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // in SyncRuleMappingProcessor.ProcessReferenceAttribute can detect existing MVO reference values
             // and avoid creating spurious "new" values for unchanged references.
             // IMPORTANT: MVO Type must be included for deletion rule evaluation in ProcessMvoDeletionRuleAsync.
+            // IMPORTANT: MVO AttributeValues must include ContributedBySystem so that
+            // ProcessObsoleteConnectedSystemObjectAsync can identify and recall attributes contributed
+            // by the disconnecting system when RemoveContributedAttributesOnObsoletion is enabled.
             query = Repository.Database.ConnectedSystemObjects
                 .AsSplitQuery()
                 .Include(cso => cso.Type)
@@ -626,7 +635,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .ThenInclude(av => av.Attribute)
                 .Include(cso => cso.MetaverseObject)
                     .ThenInclude(mvo => mvo!.AttributeValues)
-                    .ThenInclude(av => av.ReferenceValue);
+                    .ThenInclude(av => av.ReferenceValue)
+                .Include(cso => cso.MetaverseObject)
+                    .ThenInclude(mvo => mvo!.AttributeValues)
+                    .ThenInclude(av => av.ContributedBySystem);
         }
 
         // add the Connected System filter and order by Id for consistent pagination
@@ -1916,6 +1928,110 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }).ToListAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<List<ConnectedSystemObjectChange>> GetConnectedSystemObjectChangesAsync(Guid connectedSystemObjectId, int limit = 100)
+    {
+        return await Repository.Database.ConnectedSystemObjectChanges
+            .AsSplitQuery()
+            .Where(c => c.ConnectedSystemObject != null && c.ConnectedSystemObject.Id == connectedSystemObjectId)
+            .OrderByDescending(c => c.ChangeTime)
+            .Take(limit)
+            .Include(c => c.ActivityRunProfileExecutionItem)
+            .ThenInclude(rpei => rpei!.Activity)
+            .Include(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.Attribute)
+            .Include(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.ValueChanges)
+            .ThenInclude(vc => vc.ReferenceValue)
+            .ThenInclude(rv => rv!.Type)
+            .Include(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.ValueChanges)
+            .ThenInclude(vc => vc.ReferenceValue)
+            .ThenInclude(rv => rv!.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<(List<ConnectedSystemObjectChange> Items, int TotalCount)> GetDeletedCsoChangesAsync(
+        int? connectedSystemId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? externalIdSearch = null,
+        int page = 1,
+        int pageSize = 50)
+    {
+        var query = Repository.Database.ConnectedSystemObjectChanges
+            .Where(c => c.ChangeType == ObjectChangeType.Deleted && c.ConnectedSystemObject == null);
+
+        // Apply filters
+        if (connectedSystemId.HasValue)
+            query = query.Where(c => c.ConnectedSystemId == connectedSystemId.Value);
+
+        if (fromDate.HasValue)
+            query = query.Where(c => c.ChangeTime >= fromDate.Value);
+
+        if (toDate.HasValue)
+            query = query.Where(c => c.ChangeTime <= toDate.Value);
+
+        if (!string.IsNullOrWhiteSpace(externalIdSearch))
+        {
+            query = query.Where(c =>
+                c.DeletedObjectExternalIdAttributeValue != null &&
+                c.DeletedObjectExternalIdAttributeValue.StringValue != null &&
+                c.DeletedObjectExternalIdAttributeValue.StringValue.Contains(externalIdSearch));
+        }
+
+        // Get total count before pagination
+        var totalCount = await query.CountAsync();
+
+        // Apply ordering and pagination
+        var items = await query
+            .OrderByDescending(c => c.ChangeTime)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Include(c => c.DeletedObjectType)
+            .Include(c => c.DeletedObjectExternalIdAttributeValue)
+            .ThenInclude(av => av!.Attribute)
+            .ToListAsync();
+
+        return (items, totalCount);
+    }
+
+    /// <inheritdoc />
+    public async Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId)
+    {
+        // First, get the deletion change to find the ConnectedSystemId and External ID
+        var targetChange = await Repository.Database.ConnectedSystemObjectChanges
+            .FirstOrDefaultAsync(c => c.Id == changeId);
+
+        if (targetChange == null)
+            return new List<ConnectedSystemObjectChange>();
+
+        // Use the DeletedObjectExternalId string field (populated on deletion changes)
+        var externalIdValue = targetChange.DeletedObjectExternalId;
+        if (string.IsNullOrEmpty(externalIdValue))
+            return new List<ConnectedSystemObjectChange> { targetChange };
+
+        // Get all changes for that CSO based on External ID string match
+        // This includes: the deletion change (has DeletedObjectExternalId) and
+        // earlier changes (have DeletedObjectExternalId populated since we now store it on all changes)
+        return await Repository.Database.ConnectedSystemObjectChanges
+            .AsSplitQuery()
+            .Where(c => c.ConnectedSystemId == targetChange.ConnectedSystemId &&
+                        c.DeletedObjectExternalId == externalIdValue)
+            .OrderByDescending(c => c.ChangeTime)
+            .Include(c => c.ActivityRunProfileExecutionItem)
+            .ThenInclude(rpei => rpei!.Activity)
+            .Include(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.Attribute)
+            .Include(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.ValueChanges)
+            .ThenInclude(vc => vc.ReferenceValue)
+            .ThenInclude(rv => rv!.Type)
+            .ToListAsync();
+    }
+
     public async Task<SyncRule?> GetSyncRuleAsync(int id)
     {
         return await Repository.Database.SyncRules
@@ -2139,14 +2255,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         Log.Information("DeleteAllConnectedSystemObjectsAndDependenciesAsync: Completed for Connected System {Id}", connectedSystemId);
     }
 
-    public async Task DeleteConnectedSystemAsync(int connectedSystemId)
+    public async Task DeleteConnectedSystemAsync(int connectedSystemId, bool deleteChangeHistory = false)
     {
         // Use raw SQL for bulk deletion - much faster than EF Core tracking
         // Delete order follows dependency graph from design doc
-        Log.Information("DeleteConnectedSystemAsync: Starting bulk deletion for Connected System {Id}", connectedSystemId);
+        Log.Information("DeleteConnectedSystemAsync: Starting bulk deletion for Connected System {Id}, deleteChangeHistory={DeleteHistory}",
+            connectedSystemId, deleteChangeHistory);
 
-        // 1. Delete all CSOs and their dependencies (preserving change history)
-        await DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory: false);
+        // 1. Delete all CSOs and their dependencies
+        await DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory);
 
         // 2. Delete Containers (child of Partition)
         await Repository.Database.Database.ExecuteSqlRawAsync(

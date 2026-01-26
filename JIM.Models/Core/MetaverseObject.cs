@@ -1,4 +1,5 @@
-﻿using JIM.Models.Security;
+﻿using JIM.Models.Activities;
+using JIM.Models.Security;
 using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Staging;
 
@@ -23,10 +24,33 @@ public class MetaverseObject
 
     /// <summary>
     /// When the last connector was disconnected from this MVO.
-    /// Used with MetaverseObjectType.DeletionGracePeriodDays to calculate deletion eligibility.
+    /// Used with MetaverseObjectType.DeletionGracePeriod to calculate deletion eligibility.
     /// Null = MVO has active connectors or was never connected.
     /// </summary>
     public DateTime? LastConnectorDisconnectedDate { get; set; }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Deletion initiator tracking - captures who triggered the deletion when MVO is marked for deferred deletion.
+    // This is set when LastConnectorDisconnectedDate is populated, so housekeeping can preserve the audit trail.
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The type of security principal that initiated the deletion (when marked for deferred deletion).
+    /// Populated when LastConnectorDisconnectedDate is set, used by housekeeping to preserve audit trail.
+    /// </summary>
+    public ActivityInitiatorType DeletionInitiatedByType { get; set; } = ActivityInitiatorType.NotSet;
+
+    /// <summary>
+    /// The unique identifier of the security principal that initiated the deletion.
+    /// Populated when LastConnectorDisconnectedDate is set, used by housekeeping to preserve audit trail.
+    /// </summary>
+    public Guid? DeletionInitiatedById { get; set; }
+
+    /// <summary>
+    /// The display name of the security principal that initiated the deletion.
+    /// Populated when LastConnectorDisconnectedDate is set, used by housekeeping to preserve audit trail.
+    /// </summary>
+    public string? DeletionInitiatedByName { get; set; }
 
     /// <summary>
     /// How this MVO was created - determines deletion rule applicability.
@@ -88,8 +112,8 @@ public class MetaverseObject
     /// Null if not pending deletion or no grace period configured.
     /// </summary>
     [NotMapped]
-    public DateTime? DeletionEligibleDate => IsPendingDeletion && Type?.DeletionGracePeriodDays > 0
-        ? LastConnectorDisconnectedDate!.Value.AddDays(Type.DeletionGracePeriodDays.Value)
+    public DateTime? DeletionEligibleDate => IsPendingDeletion && Type?.DeletionGracePeriod.HasValue == true && Type.DeletionGracePeriod.Value > TimeSpan.Zero
+        ? LastConnectorDisconnectedDate!.Value.Add(Type.DeletionGracePeriod.Value)
         : null;
     #endregion
 

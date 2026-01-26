@@ -31,11 +31,11 @@ public class MetaverseObjectType
     public MetaverseObjectDeletionRule DeletionRule { get; set; } = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
 
     /// <summary>
-    /// Optional grace period in days before a scheduled deletion is executed.
-    /// When set, deletion is delayed by this number of days after the deletion condition is met.
-    /// If null or 0, deletion occurs immediately when the condition is met.
+    /// Optional grace period before a scheduled deletion is executed.
+    /// When set, deletion is delayed by this duration after the deletion condition is met.
+    /// If null or TimeSpan.Zero, deletion occurs immediately when the condition is met.
     /// </summary>
-    public int? DeletionGracePeriodDays { get; set; }
+    public TimeSpan? DeletionGracePeriod { get; set; }
 
     /// <summary>
     /// Optional list of connected system IDs that trigger MVO deletion when disconnected.

@@ -1,0 +1,1307 @@
+@using JIM.Models.Core
+@using JIM.Models.Enums
+
+@if (Changes == null || !Changes.Any())
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary pa-5">No change history available.</MudText>
+}
+else
+{
+    <!-- Search and Filter Controls -->
+    <div style="display: flex; flex-direction: row; gap: 12px; margin-bottom: 16px;">
+        <div style="width: 250px;">
+            <MudTextField @bind-Value="_searchText"
+                          Label="Search"
+                          Variant="Variant.Outlined"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true"
+                          DebounceInterval="300"
+                          Margin="Margin.Dense" />
+        </div>
+        <div style="width: 150px;">
+            <MudSelect T="ValueChangeType?"
+                       @bind-Value="_filterChangeType"
+                       Label="Change type"
+                       Variant="Variant.Outlined"
+                       Dense="true"
+                       Margin="Margin.Dense">
+                <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)null)">All Changes</MudSelectItem>
+                <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Add)">Add</MudSelectItem>
+                <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Remove)">Remove</MudSelectItem>
+            </MudSelect>
+        </div>
+    </div>
+
+    <!-- Timeline -->
+    <MudTimeline TimelinePosition="TimelinePosition.Start" TimelineOrientation="TimelineOrientation.Vertical">
+        @foreach (var changeGroup in GetFilteredChangeGroups())
+        {
+            <MudTimelineItem Color="@GetChangeTypeColor(changeGroup.ChangeType)" Size="Size.Small" Elevation="0">
+                <ItemContent>
+                    <MudCard Outlined="true" Class="cursor-pointer" @onclick="() => OpenChangeDetails(changeGroup)">
+                        <MudCardContent>
+                            <MudStack Spacing="2">
+                                <!-- Change Header: {icon} {type}    {relative date}    {mechanism icon} {mechanism} by {initiator} -->
+                                <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center" Style="flex-wrap: wrap; gap: 6px;">
+                                    <MudIcon Icon="@GetChangeTypeIcon(changeGroup.ChangeType)"
+                                             Color="@GetChangeTypeColor(changeGroup.ChangeType)"
+                                             Size="Size.Small" />
+                                    <MudText Typo="Typo.body1" Style="margin-right: 12px;"><strong>@changeGroup.ChangeType</strong></MudText>
+                                    <MudTooltip Text="@changeGroup.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")" Placement="Placement.Top" Arrow="true">
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="margin-right: 12px;">@GetRelativeTime(changeGroup.ChangeTime)</MudText>
+                                    </MudTooltip>
+                                    @GetTimelineInitiatorDisplay(changeGroup)
+                                </MudStack>
+
+                                <!-- Summary of Changes -->
+                                @if (changeGroup.AttributeChanges.Any())
+                                {
+                                    <MudDivider />
+                                    <div class="change-summary">
+                                        @foreach (var change in GetVisibleDisplayChanges(changeGroup))
+                                        {
+                                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mb-1">
+                                                <MudText Typo="Typo.body2" Class="jim-text-code" Style="min-width: 120px;">
+                                                    @change.AttributeName
+                                                </MudText>
+                                                <MudChip T="string"
+                                                         Variant="Variant.Text"
+                                                         Size="Size.Small"
+                                                         Color="@GetDisplayChangeTypeColor(change)">
+                                                    @change.DisplayChangeType
+                                                </MudChip>
+                                                @* Value display with old value de-emphasised for updates *@
+                                                <div style="max-width: 700px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                    @if (change.IsUpdate)
+                                                    {
+                                                        @if (change.OldReferenceValue != null || change.NewReferenceValue != null)
+                                                        {
+                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;">@(change.OldReferenceValue?.DisplayName ?? "(none)")</MudText>
+                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;"> → </MudText>
+                                                            <MudText Typo="Typo.body2" Style="display: inline; font-weight: 600;">@(change.NewReferenceValue?.DisplayName ?? "(none)")</MudText>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;">@change.OldValue</MudText>
+                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;"> → </MudText>
+                                                            <MudText Typo="Typo.body2" Style="display: inline; font-weight: 600;">@change.NewValue</MudText>
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        @* Set/Add values get bold emphasis, Removed values get de-emphasised *@
+                                                        @if (change.DisplayChangeType == "Removed" || change.DisplayChangeType == "Remove")
+                                                        {
+                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@GetDisplayValue(change)</MudText>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText Typo="Typo.body2" Style="font-weight: 600;">@GetDisplayValue(change)</MudText>
+                                                        }
+                                                    }
+                                                </div>
+                                            </MudStack>
+                                        }
+                                        @if (ShouldShowMoreIndicatorForDisplay(changeGroup))
+                                        {
+                                            <div class="more-changes-indicator">
+                                                <MudChip T="string"
+                                                         Variant="Variant.Filled"
+                                                         Size="Size.Small"
+                                                         Color="Color.Primary">
+                                                    +@GetRemainingDisplayChangesCount(changeGroup) more
+                                                </MudChip>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                else if (changeGroup.ChangeType == ObjectChangeType.Deleted)
+                                {
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                        Object was deleted. Final attribute values were not captured.
+                                    </MudText>
+                                }
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </ItemContent>
+            </MudTimelineItem>
+        }
+    </MudTimeline>
+}
+
+<!-- Change Details Dialog -->
+<MudDialog @bind-Visible="_detailsDialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            <MudIcon Icon="@GetChangeTypeIcon(_selectedChange?.ChangeType ?? ObjectChangeType.Updated)"
+                     Color="@GetChangeTypeColor(_selectedChange?.ChangeType ?? ObjectChangeType.Updated)"
+                     Size="Size.Large" />
+            <div>
+                <MudText Typo="Typo.h6">@_selectedChange?.ChangeType</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    @_selectedChange?.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")
+                </MudText>
+            </div>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        @if (_selectedChange != null)
+        {
+            <!-- Initiator Context Section: Who | How | Activity -->
+            <MudPaper Class="pa-3 mb-4" Outlined="true">
+                <MudGrid Spacing="2">
+                    <!-- Initiated By (Who) - the principal that triggered the change -->
+                    <MudItem xs="12" sm="4">
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Initiated By</MudText>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            @GetModalPrincipalIcon(_selectedChange)
+                            @GetModalPrincipalText(_selectedChange)
+                        </MudStack>
+                    </MudItem>
+
+                    <!-- Mechanism (How) - how the change was triggered -->
+                    <MudItem xs="12" sm="4">
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Mechanism</MudText>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            @GetModalMechanismIcon(_selectedChange)
+                            @GetModalMechanismText(_selectedChange)
+                        </MudStack>
+                    </MudItem>
+
+                    <!-- Activity Link -->
+                    @if (_selectedChange.ActivityRunProfileExecutionItemId != null)
+                    {
+                        <MudItem xs="12" sm="4">
+                            <MudText Typo="Typo.overline" Class="mud-text-secondary">Activity</MudText>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Small" Class="mud-text-secondary" />
+                                <MudLink Href="@($"/activity/item/{_selectedChange.ActivityRunProfileExecutionItemId}")">View Activity</MudLink>
+                            </MudStack>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudPaper>
+
+            <!-- Aggregated Summary (shown when more than 1 change) -->
+            @if (_selectedChange.AttributeChanges.Count > 1)
+            {
+                <MudPaper Class="pa-3 mb-4" Outlined="true" Style="background-color: var(--mud-palette-background-grey);">
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary mb-2">Summary</MudText>
+                    <MudGrid Spacing="2">
+                        @foreach (var summary in GetAggregatedSummary(_selectedChange))
+                        {
+                            <MudItem xs="12" sm="6" md="4">
+                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                    <MudText Typo="Typo.body2" Class="jim-text-code" Style="min-width: 120px;">
+                                        @summary.AttributeName
+                                    </MudText>
+                                    @* SVA terminology: Set, Updated, Removed *@
+                                    @if (summary.SetCount > 0)
+                                    {
+                                        <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Success">
+                                            Set
+                                        </MudChip>
+                                    }
+                                    @if (summary.UpdateCount > 0)
+                                    {
+                                        <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Info">
+                                            Updated
+                                        </MudChip>
+                                    }
+                                    @if (summary.RemovedCount > 0)
+                                    {
+                                        <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Error">
+                                            Removed
+                                        </MudChip>
+                                    }
+                                    @* MVA terminology: Add (+count), Remove (-count) *@
+                                    @if (summary.AddCount > 0)
+                                    {
+                                        <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Success">
+                                            +@summary.AddCount
+                                        </MudChip>
+                                    }
+                                    @if (summary.RemoveCount > 0)
+                                    {
+                                        <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Error">
+                                            -@summary.RemoveCount
+                                        </MudChip>
+                                    }
+                                </MudStack>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </MudPaper>
+            }
+        }
+        @if (_selectedChange?.AttributeChanges.Any() == true)
+        {
+            <!-- Filter controls for the table -->
+            <div style="display: flex; flex-direction: row; gap: 12px; margin-bottom: 12px;">
+                <div style="width: 250px;">
+                    <MudTextField @bind-Value="_modalSearchText"
+                                  Label="Search"
+                                  Variant="Variant.Outlined"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Immediate="true"
+                                  DebounceInterval="300"
+                                  Margin="Margin.Dense" />
+                </div>
+                <div style="width: 180px;">
+                    <MudSelect T="string"
+                               @bind-Value="_modalFilterAttribute"
+                               Label="Attribute"
+                               Variant="Variant.Outlined"
+                               Dense="true"
+                               Margin="Margin.Dense">
+                        <MudSelectItem T="string" Value="@((string)null!)">All Attributes</MudSelectItem>
+                        @foreach (var attr in GetUniqueAttributes(_selectedChange))
+                        {
+                            <MudSelectItem T="string" Value="@attr">@attr</MudSelectItem>
+                        }
+                    </MudSelect>
+                </div>
+                <div style="width: 150px;">
+                    <MudSelect T="ValueChangeType?"
+                               @bind-Value="_modalFilterChangeType"
+                               Label="Change type"
+                               Variant="Variant.Outlined"
+                               Dense="true"
+                               Margin="Margin.Dense">
+                        <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)null)">All</MudSelectItem>
+                        <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Add)">Add</MudSelectItem>
+                        <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Remove)">Remove</MudSelectItem>
+                    </MudSelect>
+                </div>
+            </div>
+
+            <!-- Paginated table -->
+            <MudTable Items="@GetFilteredModalDisplayChanges()"
+                      Dense="true"
+                      Hover="true"
+                      Breakpoint="Breakpoint.Sm"
+                      Elevation="0"
+                      RowsPerPage="10"
+                      T="AttributeChangeDisplay">
+                <HeaderContent>
+                    <MudTh>Attribute</MudTh>
+                    <MudTh>Change</MudTh>
+                    <MudTh>Value</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Attribute">
+                        <MudText Class="jim-text-code">@context.AttributeName</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Change">
+                        <MudChip T="string"
+                                 Variant="Variant.Text"
+                                 Color="@GetDisplayChangeTypeColor(context)">
+                            @context.DisplayChangeType
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Value">
+                        @if (context.IsUpdate)
+                        {
+                            @* SVA Update - show old → new with old value de-emphasised *@
+                            @if (context.OldReferenceValue != null || context.NewReferenceValue != null)
+                            {
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    @if (context.OldReferenceValue != null)
+                                    {
+                                        <MudLink Href="@context.OldReferenceValue.Href" Class="mud-text-secondary">@context.OldReferenceValue.DisplayName</MudLink>
+                                    }
+                                    else
+                                    {
+                                        <MudText Class="mud-text-secondary">(none)</MudText>
+                                    }
+                                    <MudText Class="mud-text-secondary">→</MudText>
+                                    @if (context.NewReferenceValue != null)
+                                    {
+                                        <MudLink Href="@context.NewReferenceValue.Href" Style="font-weight: 600;">@context.NewReferenceValue.DisplayName</MudLink>
+                                    }
+                                    else
+                                    {
+                                        <MudText Class="mud-text-secondary">(none)</MudText>
+                                    }
+                                </MudStack>
+                            }
+                            else
+                            {
+                                @* Scalar update - render old value de-emphasised, new value bold *@
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudText Class="mud-text-secondary">@context.OldValue</MudText>
+                                    <MudText Class="mud-text-secondary">→</MudText>
+                                    <MudText Style="font-weight: 600;">@context.NewValue</MudText>
+                                </MudStack>
+                            }
+                        }
+                        else if (context.ReferenceValue != null)
+                        {
+                            @* MVA reference Add/Remove - bold for Add, de-emphasised for Remove *@
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudChip T="string" Color="Color.Default" Size="Size.Small">@context.ReferenceValue.TypeName</MudChip>
+                                @if (context.DisplayChangeType == "Remove")
+                                {
+                                    <MudLink Href="@context.ReferenceValue.Href">
+                                        @context.ReferenceValue.DisplayName
+                                    </MudLink>
+                                }
+                                else
+                                {
+                                    <MudLink Href="@context.ReferenceValue.Href" Style="font-weight: 600;">
+                                        @context.ReferenceValue.DisplayName
+                                    </MudLink>
+                                }
+                                @if (!string.IsNullOrEmpty(context.ReferenceValue.SecondaryId))
+                                {
+                                    <MudText Class="mud-text-secondary">(@context.ReferenceValue.SecondaryId)</MudText>
+                                }
+                            </MudStack>
+                        }
+                        else
+                        {
+                            @* Simple scalar Add/Remove - bold for Set/Add, de-emphasised for Removed/Remove *@
+                            @if (context.DisplayChangeType == "Removed" || context.DisplayChangeType == "Remove")
+                            {
+                                <MudText Class="mud-text-secondary">@context.DisplayValue</MudText>
+                            }
+                            else
+                            {
+                                <MudText Style="font-weight: 600;">@context.DisplayValue</MudText>
+                            }
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
+                </PagerContent>
+            </MudTable>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Object was deleted. Final attribute values were not captured.
+            </MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseDetailsDialog" Color="Color.Primary">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<style>
+    .change-summary {
+        position: relative;
+    }
+
+    .more-changes-indicator {
+        margin-top: 4px;
+    }
+
+    .cursor-pointer {
+        cursor: pointer;
+        transition: box-shadow 0.2s;
+    }
+
+    .cursor-pointer:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+</style>
+
+@code {
+    /// <summary>
+    /// The list of change groups to display (CSO or MVO changes).
+    /// </summary>
+    [Parameter]
+    public List<ChangeGroup> Changes { get; set; } = new();
+
+    private string _searchText = string.Empty;
+    private ValueChangeType? _filterChangeType = null;
+    private bool _detailsDialogVisible = false;
+    private ChangeGroup? _selectedChange = null;
+
+    // Modal filter state
+    private string _modalSearchText = string.Empty;
+    private string? _modalFilterAttribute = null;
+    private ValueChangeType? _modalFilterChangeType = null;
+
+    private DialogOptions _dialogOptions = new DialogOptions
+    {
+        MaxWidth = MaxWidth.Large,
+        FullWidth = true,
+        CloseButton = true
+    };
+
+    /// <summary>
+    /// Represents a group of changes that occurred at a specific point in time.
+    /// Works for both ConnectedSystemObjectChange and MetaverseObjectChange.
+    /// </summary>
+    public class ChangeGroup
+    {
+        public ObjectChangeType ChangeType { get; set; }
+        public DateTime ChangeTime { get; set; }
+        /// <summary>
+        /// The principal type (User, ApiKey, Import) that initiated this change - used for icon display.
+        /// </summary>
+        public string ChangeInitiatorType { get; set; } = string.Empty;
+        public string? ChangeInitiatorName { get; set; }
+        public Guid? ChangeInitiatorId { get; set; }
+        /// <summary>
+        /// The mechanism that triggered this change (SynchronisationRule, User, WorkflowInstance, Import, etc.).
+        /// Used to determine if this is a sync-initiated change.
+        /// </summary>
+        public string ChangeMechanismType { get; set; } = string.Empty;
+        /// <summary>
+        /// The sync rule that caused this change (if applicable).
+        /// </summary>
+        public int? SyncRuleId { get; set; }
+        public string? SyncRuleName { get; set; }
+        /// <summary>
+        /// Link to the RPEI for viewing the full activity context.
+        /// </summary>
+        public Guid? ActivityRunProfileExecutionItemId { get; set; }
+        /// <summary>
+        /// For CSO import changes: the connected system ID (for linking).
+        /// </summary>
+        public int? ConnectedSystemId { get; set; }
+        /// <summary>
+        /// For CSO import changes: the connected system name.
+        /// </summary>
+        public string? ConnectedSystemName { get; set; }
+        /// <summary>
+        /// For CSO import changes: the run profile name (e.g., "Full Import", "Delta Import").
+        /// </summary>
+        public string? RunProfileName { get; set; }
+        public List<AttributeChange> AttributeChanges { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Represents a single attribute change within a change group.
+    /// </summary>
+    public class AttributeChange
+    {
+        public string AttributeName { get; set; } = string.Empty;
+        public ValueChangeType ChangeType { get; set; }
+        public string? Value { get; set; }
+        public ReferenceValueInfo? ReferenceValue { get; set; }
+        /// <summary>
+        /// Whether this attribute is multi-valued. Used to determine display format:
+        /// - SVA (single-valued): Show as "Update" when there's both Add and Remove
+        /// - MVA (multi-valued): Show individual Add/Remove operations
+        /// </summary>
+        public bool IsMultiValued { get; set; }
+    }
+
+    /// <summary>
+    /// Reference value information (CSO or MVO).
+    /// </summary>
+    public class ReferenceValueInfo
+    {
+        public string TypeName { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string? SecondaryId { get; set; }
+        public string Href { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Display model for attribute changes that handles SVA vs MVA presentation.
+    /// For SVAs with both Add and Remove, this collapses them into a single "Update" row.
+    /// </summary>
+    public class AttributeChangeDisplay
+    {
+        public string AttributeName { get; set; } = string.Empty;
+        /// <summary>
+        /// Display change type: Add, Remove, or Update (for SVA with both).
+        /// </summary>
+        public string DisplayChangeType { get; set; } = string.Empty;
+        /// <summary>
+        /// For Update: "OldValue → NewValue". For Add/Remove: just the value.
+        /// </summary>
+        public string? DisplayValue { get; set; }
+        /// <summary>
+        /// For MVA reference values, the reference info.
+        /// </summary>
+        public ReferenceValueInfo? ReferenceValue { get; set; }
+        /// <summary>
+        /// For SVA reference updates: the old reference being removed.
+        /// </summary>
+        public ReferenceValueInfo? OldReferenceValue { get; set; }
+        /// <summary>
+        /// For SVA reference updates: the new reference being added.
+        /// </summary>
+        public ReferenceValueInfo? NewReferenceValue { get; set; }
+        /// <summary>
+        /// Whether this is an update (SVA with both Add and Remove).
+        /// </summary>
+        public bool IsUpdate { get; set; }
+        /// <summary>
+        /// For SVA scalar updates: the old value being removed.
+        /// </summary>
+        public string? OldValue { get; set; }
+        /// <summary>
+        /// For SVA scalar updates: the new value being added.
+        /// </summary>
+        public string? NewValue { get; set; }
+        /// <summary>
+        /// The underlying change type for filtering purposes.
+        /// </summary>
+        public ValueChangeType UnderlyingChangeType { get; set; }
+    }
+
+    /// <summary>
+    /// Converts raw AttributeChanges into display items, collapsing SVA Add+Remove pairs into Updates.
+    /// </summary>
+    private List<AttributeChangeDisplay> GetDisplayChanges(ChangeGroup changeGroup)
+    {
+        var result = new List<AttributeChangeDisplay>();
+
+        // Group changes by attribute name
+        var groupedByAttribute = changeGroup.AttributeChanges
+            .GroupBy(c => c.AttributeName)
+            .OrderBy(g => g.Key);
+
+        foreach (var group in groupedByAttribute)
+        {
+            var changes = group.ToList();
+            var isMultiValued = changes.FirstOrDefault()?.IsMultiValued ?? false;
+
+            if (!isMultiValued)
+            {
+                // SVA: Check if we have both Add and Remove (i.e., an update)
+                var addChange = changes.FirstOrDefault(c => c.ChangeType == ValueChangeType.Add);
+                var removeChange = changes.FirstOrDefault(c => c.ChangeType == ValueChangeType.Remove);
+
+                if (addChange != null && removeChange != null)
+                {
+                    // It's an update - combine into single display item
+                    result.Add(new AttributeChangeDisplay
+                    {
+                        AttributeName = group.Key,
+                        DisplayChangeType = "Updated",
+                        IsUpdate = true,
+                        UnderlyingChangeType = ValueChangeType.Add, // For filtering, treat as Add
+                        // For scalar updates, store old and new values separately for display styling
+                        OldValue = removeChange.ReferenceValue == null ? removeChange.Value : null,
+                        NewValue = addChange.ReferenceValue == null ? addChange.Value : null,
+                        // For reference updates, store the reference info
+                        OldReferenceValue = removeChange.ReferenceValue,
+                        NewReferenceValue = addChange.ReferenceValue
+                    });
+                }
+                else
+                {
+                    // SVA with only Add or only Remove
+                    foreach (var change in changes)
+                    {
+                        // For SVA Add without Remove, use "Set" to indicate first-time assignment
+                        // For SVA Remove without Add, use "Removed" for consistency
+                        var displayType = change.ChangeType == ValueChangeType.Add ? "Set" : "Removed";
+
+                        result.Add(new AttributeChangeDisplay
+                        {
+                            AttributeName = change.AttributeName,
+                            DisplayChangeType = displayType,
+                            IsUpdate = false,
+                            UnderlyingChangeType = change.ChangeType,
+                            DisplayValue = change.Value,
+                            ReferenceValue = change.ReferenceValue
+                        });
+                    }
+                }
+            }
+            else
+            {
+                // MVA: Show all individual Add/Remove operations
+                foreach (var change in changes)
+                {
+                    result.Add(new AttributeChangeDisplay
+                    {
+                        AttributeName = change.AttributeName,
+                        DisplayChangeType = change.ChangeType.ToString(),
+                        IsUpdate = false,
+                        UnderlyingChangeType = change.ChangeType,
+                        DisplayValue = change.Value,
+                        ReferenceValue = change.ReferenceValue
+                    });
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private IEnumerable<ChangeGroup> GetFilteredChangeGroups()
+    {
+        var filtered = Changes.AsEnumerable();
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(_searchText))
+        {
+            filtered = filtered.Select(cg => new ChangeGroup
+            {
+                ChangeType = cg.ChangeType,
+                ChangeTime = cg.ChangeTime,
+                ChangeInitiatorType = cg.ChangeInitiatorType,
+                ChangeInitiatorName = cg.ChangeInitiatorName,
+                ChangeInitiatorId = cg.ChangeInitiatorId,
+                SyncRuleId = cg.SyncRuleId,
+                SyncRuleName = cg.SyncRuleName,
+                ActivityRunProfileExecutionItemId = cg.ActivityRunProfileExecutionItemId,
+                AttributeChanges = cg.AttributeChanges
+                    .Where(ac => ac.AttributeName.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
+                    .ToList()
+            }).Where(cg => cg.AttributeChanges.Any() || cg.ChangeType == ObjectChangeType.Deleted);
+        }
+
+        // Apply change type filter
+        if (_filterChangeType.HasValue)
+        {
+            filtered = filtered.Select(cg => new ChangeGroup
+            {
+                ChangeType = cg.ChangeType,
+                ChangeTime = cg.ChangeTime,
+                ChangeInitiatorType = cg.ChangeInitiatorType,
+                ChangeInitiatorName = cg.ChangeInitiatorName,
+                ChangeInitiatorId = cg.ChangeInitiatorId,
+                SyncRuleId = cg.SyncRuleId,
+                SyncRuleName = cg.SyncRuleName,
+                ActivityRunProfileExecutionItemId = cg.ActivityRunProfileExecutionItemId,
+                AttributeChanges = cg.AttributeChanges
+                    .Where(ac => ac.ChangeType == _filterChangeType.Value)
+                    .ToList()
+            }).Where(cg => cg.AttributeChanges.Any() || cg.ChangeType == ObjectChangeType.Deleted);
+        }
+
+        return filtered.OrderByDescending(cg => cg.ChangeTime);
+    }
+
+    private const int MaxVisibleChanges = 3;
+
+    /// <summary>
+    /// Gets visible display changes for the timeline card (limited to MaxVisibleChanges).
+    /// Uses the display model which collapses SVA Add+Remove into Update.
+    /// </summary>
+    private IEnumerable<AttributeChangeDisplay> GetVisibleDisplayChanges(ChangeGroup changeGroup)
+    {
+        return GetDisplayChanges(changeGroup).Take(MaxVisibleChanges);
+    }
+
+    /// <summary>
+    /// Gets the remaining count of display changes not shown in the timeline card.
+    /// </summary>
+    private int GetRemainingDisplayChangesCount(ChangeGroup changeGroup)
+    {
+        return GetDisplayChanges(changeGroup).Count - MaxVisibleChanges;
+    }
+
+    /// <summary>
+    /// Determines if the "+N more" indicator should be shown for display changes.
+    /// </summary>
+    private bool ShouldShowMoreIndicatorForDisplay(ChangeGroup changeGroup)
+    {
+        return GetDisplayChanges(changeGroup).Count > MaxVisibleChanges;
+    }
+
+    /// <summary>
+    /// Gets the MudBlazor color for a display change type.
+    /// SVA terms: Set (green), Updated (blue), Removed (red)
+    /// MVA terms: Add (green), Remove (red)
+    /// </summary>
+    private Color GetDisplayChangeTypeColor(AttributeChangeDisplay change)
+    {
+        return change.DisplayChangeType switch
+        {
+            "Set" => Color.Success,     // SVA: null → value
+            "Updated" => Color.Info,    // SVA: value → value
+            "Removed" => Color.Error,   // SVA: value → null
+            "Add" => Color.Success,     // MVA: value added
+            "Remove" => Color.Error,    // MVA: value removed
+            _ => Color.Default
+        };
+    }
+
+    /// <summary>
+    /// Gets the display value string for an attribute change display item.
+    /// For updates: "OldValue → NewValue" or reference display names.
+    /// For add/remove: just the value or reference display name.
+    /// </summary>
+    private string GetDisplayValue(AttributeChangeDisplay change)
+    {
+        if (change.IsUpdate)
+        {
+            // SVA Update
+            if (change.OldReferenceValue != null || change.NewReferenceValue != null)
+            {
+                // Reference update
+                var oldName = change.OldReferenceValue?.DisplayName ?? "(none)";
+                var newName = change.NewReferenceValue?.DisplayName ?? "(none)";
+                return $"{oldName} → {newName}";
+            }
+            // Scalar update - combine old and new values
+            return $"{change.OldValue} → {change.NewValue}";
+        }
+
+        // Simple Add or Remove
+        return change.ReferenceValue?.DisplayName ?? change.DisplayValue ?? string.Empty;
+    }
+
+    private void OpenChangeDetails(ChangeGroup changeGroup)
+    {
+        _selectedChange = changeGroup;
+        // Reset modal filters when opening
+        _modalSearchText = string.Empty;
+        _modalFilterAttribute = null;
+        _modalFilterChangeType = null;
+        _detailsDialogVisible = true;
+    }
+
+    private void CloseDetailsDialog()
+    {
+        _detailsDialogVisible = false;
+        _selectedChange = null;
+    }
+
+    /// <summary>
+    /// Gets aggregated summary of changes grouped by attribute.
+    /// For SVAs: Shows "Updated" when there's both Add and Remove, "Set" for Add only, "Removed" for Remove only.
+    /// For MVAs: Shows individual Add and Remove counts.
+    /// </summary>
+    private List<AttributeChangeSummary> GetAggregatedSummary(ChangeGroup changeGroup)
+    {
+        return changeGroup.AttributeChanges
+            .GroupBy(c => c.AttributeName)
+            .Select(g =>
+            {
+                var changes = g.ToList();
+                var isMultiValued = changes.FirstOrDefault()?.IsMultiValued ?? false;
+                var addCount = changes.Count(c => c.ChangeType == ValueChangeType.Add);
+                var removeCount = changes.Count(c => c.ChangeType == ValueChangeType.Remove);
+
+                if (!isMultiValued)
+                {
+                    // SVA: Use Set/Updated/Removed terminology
+                    if (addCount > 0 && removeCount > 0)
+                    {
+                        // SVA with both Add and Remove = Updated
+                        return new AttributeChangeSummary
+                        {
+                            AttributeName = g.Key,
+                            UpdateCount = 1
+                        };
+                    }
+                    else if (addCount > 0)
+                    {
+                        // SVA with only Add = Set
+                        return new AttributeChangeSummary
+                        {
+                            AttributeName = g.Key,
+                            SetCount = 1
+                        };
+                    }
+                    else
+                    {
+                        // SVA with only Remove = Removed
+                        return new AttributeChangeSummary
+                        {
+                            AttributeName = g.Key,
+                            RemovedCount = 1
+                        };
+                    }
+                }
+
+                // MVA: Use Add/Remove terminology with counts
+                return new AttributeChangeSummary
+                {
+                    AttributeName = g.Key,
+                    AddCount = addCount,
+                    RemoveCount = removeCount
+                };
+            })
+            .OrderBy(s => s.AttributeName)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Gets unique attribute names from a change group for the filter dropdown.
+    /// </summary>
+    private IEnumerable<string> GetUniqueAttributes(ChangeGroup changeGroup)
+    {
+        return changeGroup.AttributeChanges
+            .Select(c => c.AttributeName)
+            .Distinct()
+            .OrderBy(n => n);
+    }
+
+    /// <summary>
+    /// Gets filtered display changes for the modal table based on current filter state.
+    /// Uses the display model which collapses SVA Add+Remove into Update.
+    /// </summary>
+    private IEnumerable<AttributeChangeDisplay> GetFilteredModalDisplayChanges()
+    {
+        if (_selectedChange == null)
+            return Enumerable.Empty<AttributeChangeDisplay>();
+
+        var displayChanges = GetDisplayChanges(_selectedChange).AsEnumerable();
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(_modalSearchText))
+        {
+            displayChanges = displayChanges.Where(c =>
+                c.AttributeName.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ||
+                (c.DisplayValue?.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (c.ReferenceValue?.DisplayName.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (c.OldReferenceValue?.DisplayName.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (c.NewReferenceValue?.DisplayName.Contains(_modalSearchText, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        // Apply attribute filter
+        if (!string.IsNullOrEmpty(_modalFilterAttribute))
+        {
+            displayChanges = displayChanges.Where(c => c.AttributeName == _modalFilterAttribute);
+        }
+
+        // Apply change type filter (Update matches Add filter since it represents a value being set)
+        if (_modalFilterChangeType.HasValue)
+        {
+            displayChanges = displayChanges.Where(c =>
+                c.UnderlyingChangeType == _modalFilterChangeType.Value ||
+                (c.IsUpdate && _modalFilterChangeType.Value == ValueChangeType.Add));
+        }
+
+        return displayChanges.OrderBy(c => c.AttributeName).ThenBy(c => c.DisplayChangeType);
+    }
+
+    /// <summary>
+    /// Represents an aggregated summary of changes for a single attribute.
+    /// SVA terminology: Set (null→value), Updated (value→value), Removed (value→null)
+    /// MVA terminology: Add (+count), Remove (-count)
+    /// </summary>
+    private class AttributeChangeSummary
+    {
+        public string AttributeName { get; set; } = string.Empty;
+        /// <summary>SVA: First-time value assignment (null → value).</summary>
+        public int SetCount { get; set; }
+        /// <summary>SVA: Value change (value → value).</summary>
+        public int UpdateCount { get; set; }
+        /// <summary>SVA: Value cleared (value → null).</summary>
+        public int RemovedCount { get; set; }
+        /// <summary>MVA: Values added.</summary>
+        public int AddCount { get; set; }
+        /// <summary>MVA: Values removed.</summary>
+        public int RemoveCount { get; set; }
+    }
+
+    private string GetRelativeTime(DateTime changeTime)
+    {
+        var localTime = changeTime.ToLocalTime();
+        var now = DateTime.Now;
+        var diff = now - localTime;
+
+        if (diff.TotalMinutes < 1)
+            return "Just now";
+        if (diff.TotalMinutes < 60)
+            return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24)
+            return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7)
+            return $"{(int)diff.TotalDays}d ago";
+        if (diff.TotalDays < 30)
+            return $"{(int)(diff.TotalDays / 7)}w ago";
+        if (diff.TotalDays < 365)
+            return $"{(int)(diff.TotalDays / 30)}mo ago";
+        return $"{(int)(diff.TotalDays / 365)}y ago";
+    }
+
+    /// <summary>
+    /// Generates the timeline card initiator display.
+    /// Format: "{icon} Synchronisation by {Name}" for sync changes
+    /// Format: "{icon} {Name}" for direct user changes
+    /// </summary>
+    private RenderFragment GetTimelineInitiatorDisplay(ChangeGroup changeGroup)
+    {
+        return builder =>
+        {
+            int seq = 0;
+
+            // Determine if this is a sync-initiated change (by mechanism type or sync rule context)
+            bool isSyncChange = changeGroup.ChangeMechanismType == "SynchronisationRule" ||
+                                changeGroup.SyncRuleId != null ||
+                                !string.IsNullOrEmpty(changeGroup.SyncRuleName);
+
+            if (isSyncChange)
+            {
+                // Sync icon
+                builder.OpenComponent<MudIcon>(seq++);
+                builder.AddAttribute(seq++, "Icon", Icons.Material.Filled.Sync);
+                builder.AddAttribute(seq++, "Size", Size.Small);
+                builder.AddAttribute(seq++, "Class", "mud-text-secondary");
+                builder.AddAttribute(seq++, "Style", "margin-right: 4px;");
+                builder.CloseComponent();
+
+                // "Synchronisation by {Name}"
+                builder.OpenComponent<MudText>(seq++);
+                builder.AddAttribute(seq++, "Typo", Typo.body2);
+                builder.AddAttribute(seq++, "Class", "mud-text-secondary");
+                if (!string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
+                {
+                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, $"Synchronisation by {changeGroup.ChangeInitiatorName}")));
+                }
+                else
+                {
+                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Synchronisation")));
+                }
+                builder.CloseComponent();
+            }
+            else
+            {
+                // Direct change by user/API key - use appropriate icon based on principal type
+                builder.OpenComponent<MudIcon>(seq++);
+                builder.AddAttribute(seq++, "Icon", Helpers.GetInitiatorIcon(changeGroup.ChangeInitiatorType));
+                builder.AddAttribute(seq++, "Size", Size.Small);
+                builder.AddAttribute(seq++, "Class", "mud-text-secondary");
+                builder.AddAttribute(seq++, "Style", "margin-right: 4px;");
+                builder.CloseComponent();
+
+                builder.OpenComponent<MudText>(seq++);
+                builder.AddAttribute(seq++, "Typo", Typo.body2);
+                builder.AddAttribute(seq++, "Class", "mud-text-secondary");
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ChangeInitiatorName ?? "Unknown")));
+                builder.CloseComponent();
+            }
+        };
+    }
+
+    /// <summary>
+    /// Generates the icon for the modal initiator display.
+    /// </summary>
+    private RenderFragment GetModalInitiatorIcon(ChangeGroup changeGroup)
+    {
+        return builder =>
+        {
+            // Check if this is a sync-initiated change (by mechanism type or sync rule context)
+            bool isSyncChange = changeGroup.ChangeMechanismType == "SynchronisationRule" ||
+                                changeGroup.SyncRuleId != null ||
+                                !string.IsNullOrEmpty(changeGroup.SyncRuleName);
+
+            string icon = isSyncChange ? Icons.Material.Filled.Sync : Helpers.GetInitiatorIcon(changeGroup.ChangeInitiatorType);
+
+            builder.OpenComponent<MudIcon>(0);
+            builder.AddAttribute(1, "Icon", icon);
+            builder.AddAttribute(2, "Size", Size.Small);
+            builder.AddAttribute(3, "Class", "mud-text-secondary");
+            builder.CloseComponent();
+        };
+    }
+
+    private RenderFragment GetModalInitiatorText(ChangeGroup changeGroup)
+    {
+        return builder =>
+        {
+            int seq = 0;
+
+            // Check if this is a sync-initiated change (by mechanism type or sync rule context)
+            bool isSyncChange = changeGroup.ChangeMechanismType == "SynchronisationRule" ||
+                                changeGroup.SyncRuleId != null ||
+                                !string.IsNullOrEmpty(changeGroup.SyncRuleName);
+
+            if (isSyncChange)
+            {
+                // For sync changes: "Synchronisation" or "Synchronisation by {Name}"
+                builder.OpenComponent<MudText>(seq++);
+                if (!string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
+                {
+                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, $"Synchronisation by {changeGroup.ChangeInitiatorName}")));
+                }
+                else
+                {
+                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Synchronisation")));
+                }
+                builder.CloseComponent();
+            }
+            else if (changeGroup.ChangeInitiatorId != null && !string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
+            {
+                // Linked initiator name
+                builder.OpenComponent<MudLink>(seq++);
+                builder.AddAttribute(seq++, "Href", GetInitiatorHref(changeGroup));
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ChangeInitiatorName)));
+                builder.CloseComponent();
+            }
+            else if (!string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
+            {
+                // Plain text initiator name
+                builder.OpenComponent<MudText>(seq++);
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ChangeInitiatorName)));
+                builder.CloseComponent();
+            }
+            else
+            {
+                // Unknown
+                builder.OpenComponent<MudText>(seq++);
+                builder.AddAttribute(seq++, "Class", "mud-text-secondary");
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Unknown")));
+                builder.CloseComponent();
+            }
+        };
+    }
+
+    /// <summary>
+    /// Generates the icon for the modal principal (who) display.
+    /// Shows User, ApiKey, or Import icon based on the principal type.
+    /// </summary>
+    private RenderFragment GetModalPrincipalIcon(ChangeGroup changeGroup)
+    {
+        return builder =>
+        {
+            builder.OpenComponent<MudIcon>(0);
+            builder.AddAttribute(1, "Icon", Helpers.GetInitiatorIcon(changeGroup.ChangeInitiatorType));
+            builder.AddAttribute(2, "Size", Size.Small);
+            builder.AddAttribute(3, "Class", "mud-text-secondary");
+            builder.CloseComponent();
+        };
+    }
+
+    /// <summary>
+    /// Generates the text/link for the modal principal (who) display.
+    /// Renders the principal name as a clickable link when ID is available.
+    /// </summary>
+    private RenderFragment GetModalPrincipalText(ChangeGroup changeGroup)
+    {
+        return builder =>
+        {
+            int seq = 0;
+
+            if (changeGroup.ChangeInitiatorId != null && !string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
+            {
+                // Linked principal name
+                builder.OpenComponent<MudLink>(seq++);
+                builder.AddAttribute(seq++, "Href", GetInitiatorHref(changeGroup));
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ChangeInitiatorName)));
+                builder.CloseComponent();
+            }
+            else if (!string.IsNullOrEmpty(changeGroup.ChangeInitiatorName))
+            {
+                // Plain text principal name (no ID to link to)
+                builder.OpenComponent<MudText>(seq++);
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ChangeInitiatorName)));
+                builder.CloseComponent();
+            }
+            else
+            {
+                // Unknown
+                builder.OpenComponent<MudText>(seq++);
+                builder.AddAttribute(seq++, "Class", "mud-text-secondary");
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "Unknown")));
+                builder.CloseComponent();
+            }
+        };
+    }
+
+    /// <summary>
+    /// Generates the icon for the modal mechanism (how) display.
+    /// Shows Sync, Person, Workflow, Group, or Import icon based on mechanism type.
+    /// </summary>
+    private RenderFragment GetModalMechanismIcon(ChangeGroup changeGroup)
+    {
+        return builder =>
+        {
+            // Determine the effective mechanism type, using RunProfileName as fallback
+            var effectiveMechanism = GetEffectiveMechanismType(changeGroup);
+
+            string icon = effectiveMechanism switch
+            {
+                "SynchronisationRule" => Icons.Material.Filled.Sync,
+                "User" => Icons.Material.Filled.Edit,
+                "WorkflowInstance" => Icons.Material.Filled.AccountTree,
+                "GroupMembershipRuleEvaluation" => Icons.Material.Filled.Group,
+                "Export" => Icons.Material.Filled.Output,
+                "Import" => Icons.Material.Filled.Input,
+                _ => Icons.Material.Filled.HelpOutline
+            };
+
+            builder.OpenComponent<MudIcon>(0);
+            builder.AddAttribute(1, "Icon", icon);
+            builder.AddAttribute(2, "Size", Size.Small);
+            builder.AddAttribute(3, "Class", "mud-text-secondary");
+            builder.CloseComponent();
+        };
+    }
+
+    /// <summary>
+    /// Determines the effective mechanism type by checking ChangeMechanismType first,
+    /// then falling back to parsing RunProfileName for legacy data where the run type may not be set.
+    /// </summary>
+    private static string GetEffectiveMechanismType(ChangeGroup changeGroup)
+    {
+        // If we already have a specific mechanism type (not generic "Import"), use it
+        if (changeGroup.ChangeMechanismType is "SynchronisationRule" or "Export" or "User" or "WorkflowInstance" or "GroupMembershipRuleEvaluation")
+            return changeGroup.ChangeMechanismType;
+
+        // For "Import" or unknown, check if RunProfileName suggests a different type
+        if (!string.IsNullOrEmpty(changeGroup.RunProfileName))
+        {
+            var name = changeGroup.RunProfileName.ToLowerInvariant();
+            if (name.Contains("sync") || name.Contains("synchronisation"))
+                return "SynchronisationRule";
+            if (name.Contains("export"))
+                return "Export";
+        }
+
+        // Default to Import for import run profiles or unknown
+        return "Import";
+    }
+
+    /// <summary>
+    /// Generates the text for the modal mechanism (how) display.
+    /// For sync changes, shows the sync rule as a link if available.
+    /// For import changes, shows "Import" with connected system link.
+    /// </summary>
+    private RenderFragment GetModalMechanismText(ChangeGroup changeGroup)
+    {
+        return builder =>
+        {
+            int seq = 0;
+
+            // Determine the effective mechanism type using the same logic as icon selection
+            var effectiveMechanism = GetEffectiveMechanismType(changeGroup);
+
+            // Check if we have connected system info (for both CSO and MVO run profile changes)
+            bool hasConnectedSystemInfo = changeGroup.ConnectedSystemId != null;
+
+            // Check if this is an MVO sync change with sync rule info
+            bool hasSyncRuleInfo = changeGroup.SyncRuleId != null || !string.IsNullOrEmpty(changeGroup.SyncRuleName);
+
+            // Check if this is a sync-type change
+            bool isSyncMechanism = effectiveMechanism == "SynchronisationRule";
+
+            if (hasConnectedSystemInfo)
+            {
+                // Show run profile name (e.g., "Full Import", "Delta Sync", "Export") with connected system link
+                var runProfileDisplayName = !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName : effectiveMechanism;
+                builder.OpenComponent<MudText>(seq++);
+                builder.AddAttribute(seq++, "Style", "display: inline;");
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, runProfileDisplayName)));
+                builder.CloseComponent();
+
+                // Show connected system as a link
+                if (!string.IsNullOrEmpty(changeGroup.ConnectedSystemName))
+                {
+                    builder.OpenComponent<MudText>(seq++);
+                    builder.AddAttribute(seq++, "Style", "display: inline; margin-left: 4px;");
+                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "on")));
+                    builder.CloseComponent();
+
+                    builder.OpenComponent<MudLink>(seq++);
+                    builder.AddAttribute(seq++, "Href", $"/admin/connected-systems/{changeGroup.ConnectedSystemId}");
+                    builder.AddAttribute(seq++, "Style", "margin-left: 4px;");
+                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.ConnectedSystemName)));
+                    builder.CloseComponent();
+                }
+
+                // For MVO sync changes, also show sync rule info if available
+                if (hasSyncRuleInfo)
+                {
+                    builder.OpenComponent<MudText>(seq++);
+                    builder.AddAttribute(seq++, "Style", "display: inline; margin-left: 4px;");
+                    builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, "via")));
+                    builder.CloseComponent();
+
+                    if (changeGroup.SyncRuleId != null)
+                    {
+                        builder.OpenComponent<MudLink>(seq++);
+                        builder.AddAttribute(seq++, "Href", $"/admin/connected-systems/sync-rules/{changeGroup.SyncRuleId}");
+                        builder.AddAttribute(seq++, "Style", "margin-left: 4px;");
+                        builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.SyncRuleName ?? "Sync Rule")));
+                        builder.CloseComponent();
+                    }
+                    else
+                    {
+                        // Sync rule was deleted, show name with "(deleted)" indicator
+                        builder.OpenComponent<MudText>(seq++);
+                        builder.AddAttribute(seq++, "Style", "display: inline; margin-left: 4px;");
+                        builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, $"{changeGroup.SyncRuleName} (deleted)")));
+                        builder.CloseComponent();
+                    }
+                }
+            }
+            else if (isSyncMechanism)
+            {
+                // Sync change without sync rule or connected system info - show run profile name or "Synchronisation"
+                var runProfileDisplayName = !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName : "Synchronisation";
+                builder.OpenComponent<MudText>(seq++);
+                builder.AddAttribute(seq++, "Style", "display: inline;");
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, runProfileDisplayName)));
+                builder.CloseComponent();
+            }
+            else
+            {
+                // Other mechanisms (User, Workflow, etc.)
+                string mechanismText = changeGroup.ChangeMechanismType switch
+                {
+                    "User" => "Direct Edit",
+                    "WorkflowInstance" => "Workflow",
+                    "GroupMembershipRuleEvaluation" => "Group Rule",
+                    "Import" => !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName : "Import",
+                    "Export" => !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName : "Export",
+                    _ => changeGroup.ChangeMechanismType
+                };
+
+                builder.OpenComponent<MudText>(seq++);
+                builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, mechanismText)));
+                builder.CloseComponent();
+            }
+        };
+    }
+
+    private string GetInitiatorHref(ChangeGroup changeGroup)
+    {
+        if (changeGroup.ChangeInitiatorId == null)
+            return "#";
+
+        return changeGroup.ChangeInitiatorType switch
+        {
+            "User" => $"/t/users/v/{changeGroup.ChangeInitiatorId}",
+            "ApiKey" => $"/admin/apikeys/{changeGroup.ChangeInitiatorId}",
+            "SynchronisationRule" => $"/admin/connected-systems/sync-rules/{changeGroup.ChangeInitiatorId}",
+            _ => "#"
+        };
+    }
+
+    private string GetChangeTypeIcon(ObjectChangeType changeType)
+    {
+        return changeType switch
+        {
+            // CSO Import operations
+            ObjectChangeType.Added => Icons.Material.Filled.Add,
+            ObjectChangeType.Updated => Icons.Material.Filled.Edit,
+            ObjectChangeType.Deleted => Icons.Material.Filled.Delete,
+
+            // MVO Sync operations
+            ObjectChangeType.Projected => Icons.Material.Filled.AddCircle,     // New MVO created
+            ObjectChangeType.Joined => Icons.Material.Filled.Link,              // CSO joined to existing MVO
+            ObjectChangeType.AttributeFlow => Icons.Material.Filled.SyncAlt,    // Attributes flowed to MVO
+
+            _ => Icons.Material.Filled.Info
+        };
+    }
+
+    private Color GetChangeTypeColor(ObjectChangeType changeType)
+    {
+        return changeType switch
+        {
+            // CSO Import operations
+            ObjectChangeType.Added => Color.Success,
+            ObjectChangeType.Updated => Color.Info,
+            ObjectChangeType.Deleted => Color.Error,
+
+            // MVO Sync operations
+            ObjectChangeType.Projected => Color.Success,      // New MVO = green (creation)
+            ObjectChangeType.Joined => Color.Tertiary,        // Join = purple/tertiary (linking)
+            ObjectChangeType.AttributeFlow => Color.Info,     // Attribute flow = blue (update)
+
+            _ => Color.Default
+        };
+    }
+}

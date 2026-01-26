@@ -487,5 +487,81 @@ public class ExportAttributeChangeStatusTests
             "ExportedPendingConfirmation change should NOT have LastExportedAt updated");
     }
 
+    /// <summary>
+    /// Tests that Delete exports with Exported status are NOT re-executed.
+    /// Delete is an all-or-nothing operation: once exported, the delete was sent to the target
+    /// and should only be cleaned up during import confirmation, not re-executed (which would
+    /// fail if the object was already deleted from the target system).
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_DeleteWithExportedStatus_ExcludedFromReExecutionAsync()
+    {
+        // Arrange - create a Delete export that was already exported (awaiting confirmation)
+        var cso = CreateTestCso();
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            ConnectedSystemObject = cso,
+            Status = PendingExportStatus.Exported,
+            ChangeType = PendingExportChangeType.Delete,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5),
+            LastAttemptedAt = DateTime.UtcNow.AddMinutes(-1),
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+        };
+        PendingExportsData.Add(pendingExport);
+
+        var mockConnector = new Mock<IConnector>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            TargetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewOnly);
+
+        // Assert
+        Assert.That(result.TotalPendingExports, Is.EqualTo(0),
+            "Delete export with Exported status should NOT be re-executed (awaiting import confirmation)");
+    }
+
+    /// <summary>
+    /// Tests that Delete exports with Pending status ARE included for execution.
+    /// A new delete export that hasn't been executed yet should be processed.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_DeleteWithPendingStatus_IncludedForExecutionAsync()
+    {
+        // Arrange - create a new Delete export that hasn't been executed yet
+        var cso = CreateTestCso();
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            ConnectedSystemObject = cso,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Delete,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+        };
+        PendingExportsData.Add(pendingExport);
+
+        var mockConnector = new Mock<IConnector>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            TargetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewOnly);
+
+        // Assert
+        Assert.That(result.TotalPendingExports, Is.EqualTo(1),
+            "Delete export with Pending status should be included for execution");
+        Assert.That(result.ProcessedPendingExportIds, Does.Contain(pendingExport.Id));
+    }
+
     #endregion
 }

@@ -537,9 +537,9 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 
 ---
 
-#### Scenario 4: MVO Deletion Rules and Deprovisioning
+#### Scenario 4: MVO Deletion Rules - Comprehensive Coverage
 
-**Purpose**: Validate MVO deletion rules including grace periods, reconnection, admin protection, and scope filter changes.
+**Purpose**: Validate ALL MVO deletion rule scenarios including synchronous deletion, asynchronous (grace period) deletion, manual rules, and internal object protection.
 
 **Systems**:
 - Source: CSV (HR system)
@@ -549,12 +549,25 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 
 | Step | Test Case | Description |
 |------|-----------|-------------|
-| 1 | **LeaverGracePeriod** | User removed from CSV -> MVO enters grace period, not immediately deleted |
-| 2 | **Reconnection** | User re-added within grace period -> MVO preserved, grace period cleared |
-| 3 | **SourceDeletion** | Authoritative source record deleted -> triggers MVO deletion rule processing |
-| 4 | **AdminProtection** | Admin accounts with Origin=Internal -> protected from auto-deletion |
-| 5 | **InboundScopeFilter** | Scoping criteria on import sync rule -> filters CSOs by department |
-| 6 | **OutboundScopeFilter** | Scoping criteria on export sync rule -> filters MVOs for export |
+| 1 | **SyncDelete** | `WhenLastConnectorDisconnected` + 0-day grace period -> MVO deleted immediately during sync. Validated via API and Deleted Objects view. |
+| 2 | **AsyncDelete** | `WhenLastConnectorDisconnected` + 1-day grace period -> MVO marked for deletion but NOT deleted (grace period deferral). Validates `isPendingDeletion` and `lastConnectorDisconnectedDate` states. |
+| 3 | **ManualRule** | `Manual` deletion rule -> MVO is NEVER automatically deleted, regardless of connector state. |
+| 4 | **AuthoritativeSourceDisconnected** | **DEFERRED** - see note below. |
+| 5 | **InternalProtection** | Admin MVO with `Origin=Internal` -> protected from auto-deletion even with aggressive deletion rules configured. |
+
+> **Deferred Test Case: WhenAuthoritativeSourceDisconnected**
+>
+> Test case 4 (`WhenAuthoritativeSourceDisconnected`) is deferred until **attribute precedence** functionality is implemented. Attribute precedence determines which Connected System's attribute values take priority when multiple systems contribute the same attribute to an MVO. Without this, configuring an "authoritative source" has no meaningful distinction from any other connector, making the deletion rule untestable in a representative scenario.
+>
+> When attribute precedence IS implemented, this test should:
+> 1. Create a second Connected System (e.g., "Staff Training System" - CSV-based)
+> 2. Define custom MVO attributes: "Mandatory Training Course 001 Complete" (Boolean), "Mandatory Training Course 002 Complete" (Boolean)
+> 3. Map training CSO attributes (`MandatoryTrainingCourse001Complete`, `MandatoryTrainingCourse002Complete`) to MVO attributes
+> 4. Configure the HR CSV system as the authoritative source using `DeletionTriggerConnectedSystemIds`
+> 5. Validate MVO is deleted when authoritative source disconnects (even if training connector remains)
+> 6. Validate MVO is NOT deleted when non-authoritative source disconnects
+>
+> See the script comments in `Invoke-Scenario4-DeletionRules.ps1` for the full specification.
 
 **Script**: `test/integration/scenarios/Invoke-Scenario4-DeletionRules.ps1`
 
@@ -562,14 +575,12 @@ The `-Step All` option includes built-in waits and JIM Run Profile triggers betw
 
 ```powershell
 # Individual steps
-./Invoke-Scenario4-DeletionRules.ps1 -Step LeaverGracePeriod -Template Small
-./Invoke-Scenario4-DeletionRules.ps1 -Step Reconnection -Template Small
-./Invoke-Scenario4-DeletionRules.ps1 -Step SourceDeletion -Template Small
-./Invoke-Scenario4-DeletionRules.ps1 -Step AdminProtection -Template Small
-./Invoke-Scenario4-DeletionRules.ps1 -Step InboundScopeFilter -Template Small
-./Invoke-Scenario4-DeletionRules.ps1 -Step OutboundScopeFilter -Template Small
+./Invoke-Scenario4-DeletionRules.ps1 -Step SyncDelete -Template Small
+./Invoke-Scenario4-DeletionRules.ps1 -Step AsyncDelete -Template Small
+./Invoke-Scenario4-DeletionRules.ps1 -Step ManualRule -Template Small
+./Invoke-Scenario4-DeletionRules.ps1 -Step InternalProtection -Template Small
 
-# Run all steps sequentially
+# Run all steps sequentially (includes deferred test case 4 as SKIPPED)
 ./Invoke-Scenario4-DeletionRules.ps1 -Step All -Template Small
 ```
 
@@ -1624,7 +1635,7 @@ JIM/
 | Invoke-Scenario1 | ✅ Complete | All 6 tests passing (Joiner, Mover, Mover-Rename, Mover-Move, Leaver, Reconnection) |
 | Scenario 2 | ✅ Complete | All 4 tests passing (Provision, ForwardSync, TargetImport, Conflict). Test 3 fixed to validate unidirectional sync. |
 | Scenario 3 | ⏳ Pending | Placeholder script exists |
-| Scenario 4 | ✅ Complete | Deletion rules - all tests passing |
+| Scenario 4 | ✅ Complete | Deletion rules - comprehensive coverage (SyncDelete, AsyncDelete, ManualRule, InternalProtection). WhenAuthoritativeSourceDisconnected deferred pending attribute precedence. |
 | Scenario 5 | ✅ Complete | Matching rules - 4/5 tests passing, 1 run separately (MultipleRules requires specific setup) |
 | Scenarios 6-7 | ⏸️ Deferred | Requires Internal MVO design (JIM-authoritative objects) |
 | Scenario 8 | ✅ Complete | All 6 tests implemented (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup) |

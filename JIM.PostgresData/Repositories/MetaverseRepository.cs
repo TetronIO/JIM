@@ -46,7 +46,7 @@ public class MetaverseRepository : IMetaverseRepository
             BuiltIn = t.BuiltIn,
             HasPredefinedSearches = t.PredefinedSearches.Count > 0,
             DeletionRule = t.DeletionRule,
-            DeletionGracePeriodDays = t.DeletionGracePeriodDays
+            DeletionGracePeriod = t.DeletionGracePeriod
         }).ToListAsync();
 
         return metaverseObjectTypeHeaders;
@@ -156,6 +156,42 @@ public class MetaverseRepository : IMetaverseRepository
             Include(mo => mo.AttributeValues).
             ThenInclude(av => av.ReferenceValue).
             ThenInclude(rv => rv!.Type).
+            SingleOrDefaultAsync(mo => mo.Id == id);
+    }
+
+    public async Task<MetaverseObject?> GetMetaverseObjectWithChangeHistoryAsync(Guid id)
+    {
+        return await Repository.Database.MetaverseObjects.
+            AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
+            Include(mo => mo.Type).
+            Include(mo => mo.AttributeValues).
+            ThenInclude(av => av.Attribute).
+            Include(mo => mo.AttributeValues).
+            ThenInclude(av => av.ReferenceValue).
+            ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
+            ThenInclude(rvav => rvav.Attribute).
+            Include(mo => mo.AttributeValues).
+            ThenInclude(av => av.ReferenceValue).
+            ThenInclude(rv => rv!.Type).
+            Include(mo => mo.Changes).
+            ThenInclude(c => c.AttributeChanges).
+            ThenInclude(ac => ac.Attribute).
+            Include(mo => mo.Changes).
+            ThenInclude(c => c.AttributeChanges).
+            ThenInclude(ac => ac.ValueChanges).
+            ThenInclude(vc => vc.ReferenceValue).
+            ThenInclude(rv => rv!.Type).
+            Include(mo => mo.Changes).
+            ThenInclude(c => c.AttributeChanges).
+            ThenInclude(ac => ac.ValueChanges).
+            ThenInclude(vc => vc.ReferenceValue).
+            ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
+            ThenInclude(rvav => rvav.Attribute).
+            Include(mo => mo.Changes).
+            ThenInclude(c => c.SyncRule).
+            Include(mo => mo.Changes).
+            ThenInclude(c => c.ActivityRunProfileExecutionItem).
+            ThenInclude(rpei => rpei!.Activity).
             SingleOrDefaultAsync(mo => mo.Id == id);
     }
 
@@ -732,12 +768,20 @@ public class MetaverseRepository : IMetaverseRepository
     /// <param name="metaverseObject">The Metaverse Object to delete.</param>
     public async Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
-        // Null out the FK reference in Activities to preserve audit history
+        // Null out the FK references in related tables to preserve audit history before deletion.
         // Only execute raw SQL if we have a real database connection (not mocked)
         try
         {
+            // Null out FK reference in Activities to preserve audit history
             await Repository.Database.Database.ExecuteSqlRawAsync(
                 @"UPDATE ""Activities"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
+                metaverseObject.Id);
+
+            // Null out FK reference in MetaverseObjectChanges to preserve change history audit trail
+            // The MetaverseObjectId column is nullable specifically to support this - DELETE change records
+            // intentionally have null MetaverseObjectId since the MVO no longer exists
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""MetaverseObjectChanges"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
                 metaverseObject.Id);
         }
         catch (Exception)
@@ -754,9 +798,9 @@ public class MetaverseRepository : IMetaverseRepository
     /// Gets Metaverse Objects that are eligible for automatic deletion based on deletion rules.
     /// Returns MVOs where:
     /// - Origin = Projected (not Internal - protects admin accounts)
-    /// - Type.DeletionRule = WhenLastConnectorDisconnected
-    /// - LastConnectorDisconnectedDate + GracePeriodDays less than or equal to now
-    /// - No connected system objects remain
+    /// - Type.DeletionRule = WhenLastConnectorDisconnected (requires no remaining CSOs)
+    ///   OR Type.DeletionRule = WhenAuthoritativeSourceDisconnected (may still have CSOs)
+    /// - LastConnectorDisconnectedDate + DeletionGracePeriod less than or equal to now
     /// </summary>
     public async Task<List<MetaverseObject>> GetMetaverseObjectsEligibleForDeletionAsync(int maxResults = 100)
     {
@@ -769,17 +813,22 @@ public class MetaverseRepository : IMetaverseRepository
             .Where(mvo =>
                 // Must be a projected object (not internal like admin accounts)
                 mvo.Origin == MetaverseObjectOrigin.Projected &&
-                // Must have a type with WhenLastConnectorDisconnected deletion rule
                 mvo.Type != null &&
-                mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected &&
-                // Must have been disconnected (has a last connector disconnected date)
+                // Must have been marked for deletion (has a last connector disconnected date)
                 mvo.LastConnectorDisconnectedDate != null &&
-                // Must have no remaining connected system objects
-                !mvo.ConnectedSystemObjects.Any() &&
+                // Must match a supported automatic deletion rule
+                (
+                    // WhenLastConnectorDisconnected: all CSOs must be gone
+                    (mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected &&
+                     !mvo.ConnectedSystemObjects.Any()) ||
+                    // WhenAuthoritativeSourceDisconnected: authoritative source triggered deletion,
+                    // MVO may still have remaining target CSOs (housekeeping will handle their export deletion)
+                    mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
+                ) &&
                 // Grace period must have elapsed (or no grace period configured)
-                (mvo.Type.DeletionGracePeriodDays == null ||
-                 mvo.Type.DeletionGracePeriodDays == 0 ||
-                 mvo.LastConnectorDisconnectedDate.Value.AddDays(mvo.Type.DeletionGracePeriodDays.Value) <= now))
+                (mvo.Type.DeletionGracePeriod == null ||
+                 mvo.Type.DeletionGracePeriod == TimeSpan.Zero ||
+                 mvo.LastConnectorDisconnectedDate.Value + mvo.Type.DeletionGracePeriod.Value <= now))
             .OrderBy(mvo => mvo.LastConnectorDisconnectedDate)
             .Take(maxResults)
             .ToListAsync();
@@ -909,6 +958,103 @@ public class MetaverseRepository : IMetaverseRepository
         }
 
         return await query.CountAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task CreateMetaverseObjectChangeAsync(MetaverseObjectChange change)
+    {
+        Repository.Database.MetaverseObjectChanges.Add(change);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<(List<MetaverseObjectChange> Items, int TotalCount)> GetDeletedMvoChangesAsync(
+        int? objectTypeId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? displayNameSearch = null,
+        int page = 1,
+        int pageSize = 50)
+    {
+        var query = Repository.Database.MetaverseObjectChanges
+            .Where(c => c.ChangeType == ObjectChangeType.Deleted && c.MetaverseObject == null);
+
+        // Apply filters
+        if (objectTypeId.HasValue)
+            query = query.Where(c => c.DeletedObjectTypeId == objectTypeId.Value);
+
+        if (fromDate.HasValue)
+            query = query.Where(c => c.ChangeTime >= fromDate.Value);
+
+        if (toDate.HasValue)
+            query = query.Where(c => c.ChangeTime <= toDate.Value);
+
+        if (!string.IsNullOrWhiteSpace(displayNameSearch))
+        {
+            query = query.Where(c =>
+                c.DeletedObjectDisplayName != null &&
+                c.DeletedObjectDisplayName.Contains(displayNameSearch));
+        }
+
+        // Get total count before pagination
+        var totalCount = await query.CountAsync();
+
+        // Apply ordering and pagination
+        var items = await query
+            .OrderByDescending(c => c.ChangeTime)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Include(c => c.DeletedObjectType)
+            .ToListAsync();
+
+        return (items, totalCount);
+    }
+
+    /// <inheritdoc />
+    public async Task<List<MetaverseObjectChange>> GetDeletedMvoChangeHistoryAsync(Guid changeId)
+    {
+        // First, get the Delete change record
+        var targetChange = await Repository.Database.MetaverseObjectChanges
+            .FirstOrDefaultAsync(c => c.Id == changeId);
+
+        if (targetChange == null)
+            return new List<MetaverseObjectChange>();
+
+        // Validate it's a Delete change with tombstone data
+        if (string.IsNullOrEmpty(targetChange.DeletedObjectDisplayName) || !targetChange.DeletedObjectTypeId.HasValue)
+            return new List<MetaverseObjectChange> { targetChange };
+
+        // Strategy: Find the original MetaverseObjectId by looking for other changes with the same
+        // deleted object identity. Earlier changes (Projected, AttributeFlow) still have the FK populated.
+        var mvoId = await Repository.Database.MetaverseObjectChanges
+            .Where(c => c.DeletedObjectTypeId == targetChange.DeletedObjectTypeId &&
+                        c.DeletedObjectDisplayName == targetChange.DeletedObjectDisplayName &&
+                        c.MetaverseObject != null) // Earlier changes still have the FK
+            .Select(c => c.MetaverseObject!.Id)
+            .FirstOrDefaultAsync();
+
+        // If we found the original MVO ID, fetch ALL changes (including Delete change)
+        if (mvoId != Guid.Empty)
+        {
+            return await Repository.Database.MetaverseObjectChanges
+                .AsSplitQuery()
+                .Where(c => c.MetaverseObject!.Id == mvoId || // Non-deleted changes
+                            (c.DeletedObjectTypeId == targetChange.DeletedObjectTypeId &&
+                             c.DeletedObjectDisplayName == targetChange.DeletedObjectDisplayName &&
+                             c.ChangeType == ObjectChangeType.Deleted)) // The Delete change
+                .OrderByDescending(c => c.ChangeTime)
+                .Include(c => c.ActivityRunProfileExecutionItem)
+                .ThenInclude(rpei => rpei!.Activity)
+                .Include(c => c.AttributeChanges)
+                .ThenInclude(ac => ac.Attribute)
+                .Include(c => c.AttributeChanges)
+                .ThenInclude(ac => ac.ValueChanges)
+                .ToListAsync();
+        }
+
+        // Fallback: If no earlier changes exist (edge case), return only the Delete change
+        // This can happen if an MVO was projected and immediately deleted in the same sync
+        return new List<MetaverseObjectChange> { targetChange };
     }
 
     private static List<MetaverseObjectAttributeValue> GetFilteredAttributeValuesList(PredefinedSearch predefinedSearch, MetaverseObject metaverseObject)

@@ -18,7 +18,7 @@ namespace JIM.PostgresData.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.11")
+                .HasAnnotation("ProductVersion", "9.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -73,6 +73,21 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int?>("DataGenerationTemplateId")
                         .HasColumnType("integer");
+
+                    b.Property<int?>("DeletedActivityCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DeletedCsoChangeCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DeletedMvoChangeCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("DeletedRecordsFromDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletedRecordsToDate")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ErrorMessage")
                         .HasColumnType("text");
@@ -198,9 +213,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("ExternalIdSnapshot")
                         .HasColumnType("text");
 
-                    b.Property<Guid?>("MetaverseObjectChangeId")
-                        .HasColumnType("uuid");
-
                     b.Property<int?>("NoChangeReason")
                         .HasColumnType("integer");
 
@@ -212,8 +224,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ActivityId");
 
                     b.HasIndex("ConnectedSystemObjectId");
-
-                    b.HasIndex("MetaverseObjectChangeId");
 
                     b.ToTable("ActivityRunProfileExecutionItems");
                 });
@@ -257,6 +267,15 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeletionInitiatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DeletionInitiatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("DeletionInitiatedByType")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("LastConnectorDisconnectedDate")
                         .HasColumnType("timestamp with time zone");
@@ -363,7 +382,7 @@ namespace JIM.PostgresData.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("ChangeInitiatorId")
+                    b.Property<Guid?>("ActivityRunProfileExecutionItemId")
                         .HasColumnType("uuid");
 
                     b.Property<int>("ChangeInitiatorType")
@@ -375,14 +394,40 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ChangeType")
                         .HasColumnType("integer");
 
+                    b.Property<string>("DeletedObjectDisplayName")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("DeletedObjectTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("InitiatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("InitiatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("InitiatedByType")
+                        .HasColumnType("integer");
+
                     b.Property<Guid?>("MetaverseObjectId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("SyncRuleId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SyncRuleName")
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("ChangeInitiatorId");
+                    b.HasIndex("ActivityRunProfileExecutionItemId")
+                        .IsUnique();
+
+                    b.HasIndex("DeletedObjectTypeId");
 
                     b.HasIndex("MetaverseObjectId");
+
+                    b.HasIndex("SyncRuleId");
 
                     b.ToTable("MetaverseObjectChanges");
                 });
@@ -464,8 +509,8 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int?>("DeletionGracePeriodDays")
-                        .HasColumnType("integer");
+                    b.Property<TimeSpan?>("DeletionGracePeriod")
+                        .HasColumnType("interval");
 
                     b.Property<int>("DeletionRule")
                         .HasColumnType("integer");
@@ -1678,10 +1723,25 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("ConnectedSystemObjectId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("DeletedObjectDisplayName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DeletedObjectExternalId")
+                        .HasColumnType("text");
+
                     b.Property<Guid?>("DeletedObjectExternalIdAttributeValueId")
                         .HasColumnType("uuid");
 
                     b.Property<int?>("DeletedObjectTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("InitiatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("InitiatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("InitiatedByType")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
@@ -2404,10 +2464,16 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ConnectedSystemId")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("DeleteChangeHistory")
+                        .HasColumnType("boolean");
+
                     b.ToTable("WorkerTasks", t =>
                         {
                             t.Property("ConnectedSystemId")
                                 .HasColumnName("ClearConnectedSystemObjectsWorkerTask_ConnectedSystemId");
+
+                            t.Property("DeleteChangeHistory")
+                                .HasColumnName("ClearConnectedSystemObjectsWorkerTask_DeleteChangeHistory");
                         });
 
                     b.HasDiscriminator().HasValue("ClearConnectedSystemObjectsWorkerTask");
@@ -2429,6 +2495,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("ConnectedSystemId")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("DeleteChangeHistory")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("EvaluateMvoDeletionRules")
                         .HasColumnType("boolean");
@@ -2525,15 +2594,9 @@ namespace JIM.PostgresData.Migrations
                         .HasForeignKey("ConnectedSystemObjectId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("JIM.Models.Core.MetaverseObjectChange", "MetaverseObjectChange")
-                        .WithMany()
-                        .HasForeignKey("MetaverseObjectChangeId");
-
                     b.Navigation("Activity");
 
                     b.Navigation("ConnectedSystemObject");
-
-                    b.Navigation("MetaverseObjectChange");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObject", b =>
@@ -2586,17 +2649,29 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObjectChange", b =>
                 {
-                    b.HasOne("JIM.Models.Core.MetaverseObject", "ChangeInitiator")
+                    b.HasOne("JIM.Models.Activities.ActivityRunProfileExecutionItem", "ActivityRunProfileExecutionItem")
+                        .WithOne("MetaverseObjectChange")
+                        .HasForeignKey("JIM.Models.Core.MetaverseObjectChange", "ActivityRunProfileExecutionItemId");
+
+                    b.HasOne("JIM.Models.Core.MetaverseObjectType", "DeletedObjectType")
                         .WithMany()
-                        .HasForeignKey("ChangeInitiatorId");
+                        .HasForeignKey("DeletedObjectTypeId");
 
                     b.HasOne("JIM.Models.Core.MetaverseObject", "MetaverseObject")
                         .WithMany("Changes")
                         .HasForeignKey("MetaverseObjectId");
 
-                    b.Navigation("ChangeInitiator");
+                    b.HasOne("JIM.Models.Logic.SyncRule", "SyncRule")
+                        .WithMany()
+                        .HasForeignKey("SyncRuleId");
+
+                    b.Navigation("ActivityRunProfileExecutionItem");
+
+                    b.Navigation("DeletedObjectType");
 
                     b.Navigation("MetaverseObject");
+
+                    b.Navigation("SyncRule");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObjectChangeAttribute", b =>
@@ -3354,6 +3429,8 @@ namespace JIM.PostgresData.Migrations
             modelBuilder.Entity("JIM.Models.Activities.ActivityRunProfileExecutionItem", b =>
                 {
                     b.Navigation("ConnectedSystemObjectChange");
+
+                    b.Navigation("MetaverseObjectChange");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseAttribute", b =>

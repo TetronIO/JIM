@@ -1321,6 +1321,14 @@
                     </MudAlert>
                 }
 
+                <MudCheckBox @bind-Value="_deleteChangeHistory" Class="mt-4" Color="Color.Primary">
+                    <MudText>Delete change history for deleted objects</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        When enabled, all change history records for the deleted CSOs will also be deleted.
+                        Leave unchecked to preserve the audit trail.
+                    </MudText>
+                </MudCheckBox>
+
                 <MudTextField
                     T="string"
                     @bind-Value="_deleteConfirmationText"
@@ -1463,6 +1471,7 @@
     private bool _deletionPreviewLoading;
     private bool _deletionInProgress;
     private string? _deleteConfirmationText;
+    private bool _deleteChangeHistory = false; // Default to false (preserves audit trail)
 
     // Object Matching Rules
     private int _selectedMatchingRuleTabIndex;
@@ -2567,7 +2576,7 @@
             var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
 
             // Perform the deletion
-            var result = await Jim.ConnectedSystems.DeleteAsync(Id, user);
+            var result = await Jim.ConnectedSystems.DeleteAsync(Id, user, _deleteChangeHistory);
 
             _deleteConfirmationDialogVisible = false;
             _deletionInProgress = false;

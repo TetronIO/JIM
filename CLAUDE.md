@@ -12,7 +12,9 @@
 4. **NEVER** create a PR without verifying build and tests pass
 5. **NEVER** assume tests will pass without running them
 
-**EXCEPTION: Scripts (.ps1, .sh, etc.) do not require dotnet build/test.** Only .NET code changes (C#, Razor, etc.) require running the build pipeline.
+**EXCEPTIONS:**
+- Scripts (.ps1, .sh, etc.) do not require dotnet build/test
+- **UI-only changes** (Blazor pages, Razor components, CSS) require `dotnet build` but do NOT require `dotnet test` - there are no UI tests, so running tests just wastes time
 
 **YOU MUST WRITE UNIT TESTS FOR NEW FUNCTIONALITY:**
 
@@ -353,6 +355,49 @@ public async Task GetObjectAsync_WithValidId_ReturnsObject()
 - Add defensive null checks with logging for navigation properties to catch missing `.Include()` at runtime
 - See `docs/TESTING_STRATEGY.md` for full details and real-world example (Drift Detection bug January 2026)
 
+## Test Data Generation
+
+**Change History UI Test Data:**
+
+For testing the Change History UI (CSO and MVO change timelines), use the SQL seed script rather than workflow tests for faster iteration:
+
+```bash
+# Run against your development/test database
+docker compose exec jim.database psql -U jim -d jim_test -f /workspaces/JIM/test/data/seed-change-history.sql
+```
+
+**Maintaining the SQL Script:**
+
+The SQL script at `test/data/seed-change-history.sql` generates realistic change history data for UI testing. **If the database schema changes** (e.g., new columns, renamed tables, changed relationships for MetaverseObjectChanges, ConnectedSystemObjectChanges, or related tables), you MUST regenerate this script:
+
+1. **When to regenerate:**
+   - Migrations added/changed for MetaverseObjectChanges, MetaverseObjectChangeAttributes, MetaverseObjectChangeAttributeValues tables
+   - Migrations added/changed for ConnectedSystemObjectChanges and related tables
+   - New enum values for ObjectChangeType, ValueChangeType, or ChangeInitiatorType
+   - Changes to MetaverseObject, MetaverseAttribute, or navigation property structures
+
+2. **How to regenerate:**
+   - Read the current `test/data/seed-change-history.sql` to understand the data scenario
+   - Review recent migrations in `JIM.PostgresData/Migrations/` to understand schema changes
+   - Rewrite the SQL script to match the new schema while preserving the same realistic test scenario:
+     - Alice (Person): 5-7 changes including promotions, department moves, email updates, salary changes
+     - Bob (Person): 7-9 changes including manager reference changes (add/remove/re-add Alice as manager)
+     - Engineers Group: 4-5 changes including name changes and member additions/removals (Alice, Bob)
+     - Platform Team Group: 1-3 changes including description updates
+   - Test the script works by running it against a fresh test database
+   - Document any schema-specific requirements in comments within the SQL file
+
+3. **Script design principles:**
+   - Self-contained: Creates MVOs and attributes if they don't exist
+   - Idempotent where possible: Check for existing data before inserting
+   - Realistic enterprise scenarios: Job titles, departments, salaries, dates that make sense
+   - Covers all attribute types: Text, Number, LongNumber, DateTime, Boolean, Reference
+   - Tests edge cases: Reference attributes being added/removed multiple times
+   - Output URLs at end: Print MVO IDs so user can immediately navigate to test pages
+
+4. **Alternative - Workflow Tests:**
+   If you prefer writing C# workflow tests instead of SQL, see `/workspaces/JIM/test/JIM.Workflow.Tests/ChangeHistoryScenarioTests.cs` for a starting point (incomplete as of Jan 2026). Workflow tests are slower to run but type-safe and easier to maintain if you understand the WorkflowTestHarness API.
+
 ## Design Principles
 
 **Minimise Environment Variables:**
@@ -414,6 +459,18 @@ public async Task GetObjectAsync_WithValidId_ReturnsObject()
   - MVP_DEFINITION.md - MVP scope and criteria
   - RELEASE_PROCESS.md - Release and deployment procedures
   - SSO_SETUP_GUIDE.md - SSO configuration instructions
+
+**AI Assistant Context Documents:**
+
+JIM has context documents for use with AI assistant platforms (Claude Desktop, ChatGPT, etc.) for ideation and research:
+- `docs/JIM_AI_ASSISTANT_INSTRUCTIONS.md` - System prompt/instructions to copy
+- `docs/JIM_AI_ASSISTANT_CONTEXT.md` - Comprehensive context document to upload
+
+**Keep these updated when:**
+- MVP status changes significantly (update Section 8 - Current Status)
+- New connectors are added (update Section 4 - Connectors)
+- Architecture changes materially (update Section 2 - Architecture)
+- Key terminology or concepts change (update Section 11 - Glossary)
 
 ## Architecture Quick Reference
 

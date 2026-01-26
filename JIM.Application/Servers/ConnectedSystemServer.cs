@@ -597,11 +597,12 @@ public class ConnectedSystemServer
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to delete.</param>
     /// <param name="initiatedBy">The user who initiated the deletion.</param>
+    /// <param name="deleteChangeHistory">Whether to delete change history for the deleted CSOs. Default: false (preserves audit trail).</param>
     /// <returns>The result of the deletion request.</returns>
-    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, MetaverseObject? initiatedBy)
+    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, MetaverseObject? initiatedBy, bool deleteChangeHistory = false)
     {
-        Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by {User}",
-            connectedSystemId, initiatedBy?.DisplayName ?? "System");
+        Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by {User}, deleteChangeHistory={DeleteHistory}",
+            connectedSystemId, initiatedBy?.DisplayName ?? "System", deleteChangeHistory);
 
         // Get the Connected System
         var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
@@ -632,8 +633,8 @@ public class ConnectedSystemServer
                 runningSyncTask.Id, connectedSystemId);
 
             var deleteTask = initiatedBy != null
-                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: true)
-                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true);
+                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: true, deleteChangeHistory)
+                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory);
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id);
@@ -649,8 +650,8 @@ public class ConnectedSystemServer
                 connectedSystemId, csoCount, BackgroundDeletionThreshold);
 
             var deleteTask = initiatedBy != null
-                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: true)
-                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true);
+                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: true, deleteChangeHistory)
+                : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory);
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id);
@@ -679,7 +680,7 @@ public class ConnectedSystemServer
             await Application.Metaverse.MarkOrphanedMvosForDeletionAsync(connectedSystemId);
 
             // Perform the deletion
-            await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId);
+            await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId, deleteChangeHistory);
 
             // Complete the activity
             await Application.Activities.CompleteActivityAsync(activity);
@@ -710,10 +711,11 @@ public class ConnectedSystemServer
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to delete.</param>
     /// <param name="evaluateMvoDeletionRules">Whether to mark orphaned MVOs for deletion before deleting the Connected System.</param>
-    public async Task ExecuteDeletionAsync(int connectedSystemId, bool evaluateMvoDeletionRules = true)
+    /// <param name="deleteChangeHistory">Whether to delete change history for the deleted CSOs. Default: false (preserves audit trail).</param>
+    public async Task ExecuteDeletionAsync(int connectedSystemId, bool evaluateMvoDeletionRules = true, bool deleteChangeHistory = false)
     {
-        Log.Information("ExecuteDeletionAsync: Starting for Connected System {Id}, EvaluateMvoDeletionRules={EvaluateMvo}",
-            connectedSystemId, evaluateMvoDeletionRules);
+        Log.Information("ExecuteDeletionAsync: Starting for Connected System {Id}, EvaluateMvoDeletionRules={EvaluateMvo}, deleteChangeHistory={DeleteHistory}",
+            connectedSystemId, evaluateMvoDeletionRules, deleteChangeHistory);
 
         if (evaluateMvoDeletionRules)
         {
@@ -722,7 +724,7 @@ public class ConnectedSystemServer
             await Application.Metaverse.MarkOrphanedMvosForDeletionAsync(connectedSystemId);
         }
 
-        await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId);
+        await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId, deleteChangeHistory);
 
         Log.Information("ExecuteDeletionAsync: Completed for Connected System {Id}", connectedSystemId);
     }
@@ -2090,22 +2092,35 @@ public class ConnectedSystemServer
     #region Connected System Objects
     /// <summary>
     /// Deletes a Connected System Object, and it's attribute values from a Connected System.
-    /// Also prepares a Connected System Object Change for persistence with the activityRunProfileExecutionItem by the caller.  
+    /// Also prepares a Connected System Object Change for persistence with the activityRunProfileExecutionItem by the caller.
     /// </summary>
     public async Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
     {
-        // Capture the external ID value string representation BEFORE deletion.
-        // We cannot reference the attribute value entity after deletion because it gets cascade deleted with the CSO.
-        var externalIdDisplayValue = connectedSystemObject.ExternalIdAttributeValue?.ToString();
+        // Capture the external ID and display name BEFORE deletion.
+        // We cannot reference attribute values after deletion because they get cascade deleted with the CSO.
+        // Use ToStringNoName() to get just the value without "attributeName: " prefix.
+        var externalIdDisplayValue = connectedSystemObject.ExternalIdAttributeValue?.ToStringNoName();
+        // Get the displayName attribute value directly (don't use DisplayNameOrId which falls back to External ID)
+        var displayNameAttr = connectedSystemObject.AttributeValues
+            .SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true);
+        var displayName = displayNameAttr?.StringValue;
 
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject);
+
+        // Check if CSO change tracking is enabled
+        var changeTrackingEnabled = await Application.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
+        if (!changeTrackingEnabled)
+        {
+            // Clear the navigation property and FK to the deleted CSO to prevent FK constraint violations.
+            activityRunProfileExecutionItem.ConnectedSystemObject = null;
+            activityRunProfileExecutionItem.ConnectedSystemObjectId = null;
+            return;
+        }
 
         // Create a Change Object for this deletion.
         // Note: ConnectedSystemObject and DeletedObjectExternalIdAttributeValue are intentionally NOT set
         // because the CSO and its attribute values have been cascade deleted from the database.
-        // The DeletedObjectType field preserves the object type information.
-        // TODO: Consider adding a DeletedObjectExternalIdValue (string) field to store the external ID value
-        // without requiring a FK reference to the deleted attribute value entity.
+        // The DeletedObjectType, DeletedObjectExternalId, and DeletedObjectDisplayName fields preserve the object identity.
         var change = new ConnectedSystemObjectChange
         {
             ConnectedSystemId = connectedSystemObject.ConnectedSystemId,
@@ -2114,10 +2129,17 @@ public class ConnectedSystemServer
             ChangeTime = DateTime.UtcNow,
             DeletedObjectType = connectedSystemObject.Type,
             // DeletedObjectExternalIdAttributeValue cannot be set - the attribute value is cascade deleted with the CSO
-            ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
+            // Use string fields to preserve the values for UI display:
+            DeletedObjectExternalId = externalIdDisplayValue,
+            DeletedObjectDisplayName = displayName,
+            ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,
+            // Copy initiator info from the Activity for audit trail (if Activity is loaded)
+            InitiatedByType = activityRunProfileExecutionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
+            InitiatedById = activityRunProfileExecutionItem.Activity?.InitiatedById,
+            InitiatedByName = activityRunProfileExecutionItem.Activity?.InitiatedByName
         };
 
-        // Log the external ID for audit purposes since we can't persist it via FK
+        // Log the external ID for audit purposes
         if (!string.IsNullOrEmpty(externalIdDisplayValue))
         {
             Log.Debug("DeleteConnectedSystemObjectAsync: Deleted CSO with external ID: {ExternalId}", externalIdDisplayValue);
@@ -2144,31 +2166,52 @@ public class ConnectedSystemServer
         if (connectedSystemObjects.Count != activityRunProfileExecutionItems.Count)
             throw new ArgumentException("CSO count must match execution item count");
 
-        // Capture external ID values before deletion
-        var externalIdValues = connectedSystemObjects
-            .Select(cso => cso.ExternalIdAttributeValue?.ToString())
+        // Capture external ID and display name values before deletion
+        // We cannot reference attribute values after deletion because they get cascade deleted with the CSO.
+        // Use ToStringNoName() to get just the value without "attributeName: " prefix.
+        // Get displayName attribute directly (don't use DisplayNameOrId which falls back to External ID).
+        var deletedObjectInfo = connectedSystemObjects
+            .Select(cso => (
+                ExternalId: cso.ExternalIdAttributeValue?.ToStringNoName(),
+                DisplayName: cso.AttributeValues
+                    .SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true)
+                    ?.StringValue))
             .ToList();
 
         // Batch delete from database
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
 
-        // Create change objects for each deletion
+        // Check if CSO change tracking is enabled
+        var changeTrackingEnabled = await Application.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
+
+        // Create change objects for each deletion (if enabled)
         for (int i = 0; i < connectedSystemObjects.Count; i++)
         {
             var cso = connectedSystemObjects[i];
             var executionItem = activityRunProfileExecutionItems[i];
-            var externalIdValue = externalIdValues[i];
+            var (externalId, displayName) = deletedObjectInfo[i];
 
-            var change = new ConnectedSystemObjectChange
+            if (changeTrackingEnabled)
             {
-                ConnectedSystemId = cso.ConnectedSystemId,
-                ChangeType = ObjectChangeType.Deleted,
-                ChangeTime = DateTime.UtcNow,
-                DeletedObjectType = cso.Type,
-                ActivityRunProfileExecutionItem = executionItem
-            };
+                var change = new ConnectedSystemObjectChange
+                {
+                    ConnectedSystemId = cso.ConnectedSystemId,
+                    ChangeType = ObjectChangeType.Deleted,
+                    ChangeTime = DateTime.UtcNow,
+                    DeletedObjectType = cso.Type,
+                    // Use string fields to preserve the values for UI display:
+                    DeletedObjectExternalId = externalId,
+                    DeletedObjectDisplayName = displayName,
+                    ActivityRunProfileExecutionItem = executionItem,
+                    // Copy initiator info from the Activity for audit trail (if Activity is loaded)
+                    InitiatedByType = executionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
+                    InitiatedById = executionItem.Activity?.InitiatedById,
+                    InitiatedByName = executionItem.Activity?.InitiatedByName
+                };
 
-            executionItem.ConnectedSystemObjectChange = change;
+                executionItem.ConnectedSystemObjectChange = change;
+            }
+
             executionItem.ConnectedSystemObject = null;
             executionItem.ConnectedSystemObjectId = null;
         }
@@ -2414,6 +2457,9 @@ public class ConnectedSystemServer
         // bulk persist csos creates
         await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjects);
 
+        // Check if CSO change tracking is enabled
+        var changeTrackingEnabled = await Application.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
+
         // add a Change Object to the relevant Activity Run Profile Execution Item for each cso.
         // they will be persisted further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
@@ -2425,7 +2471,7 @@ public class ConnectedSystemServer
             // This ensures the FK is properly tracked when the execution item is saved later.
             activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
 
-            AddConnectedSystemObjectChange(cso, activityRunProfileExecutionItem);
+            AddConnectedSystemObjectChange(cso, activityRunProfileExecutionItem, changeTrackingEnabled);
         }
     }
     
@@ -2443,6 +2489,9 @@ public class ConnectedSystemServer
     /// </summary>
     public async Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, List<ActivityRunProfileExecutionItem> activityRunProfileExecutionItems)
     {
+        // Check if CSO change tracking is enabled
+        var changeTrackingEnabled = await Application.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
+
         // add a change object to the relevant activity run profile execution item for each cso to be updated.
         // the change objects will be persisted later, further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
@@ -2456,7 +2505,7 @@ public class ConnectedSystemServer
                 // Explicitly set the FK to ensure it's properly tracked when the execution item is saved.
                 activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
 
-                ProcessConnectedSystemObjectAttributeValueChanges(cso, activityRunProfileExecutionItem);
+                ProcessConnectedSystemObjectAttributeValueChanges(cso, activityRunProfileExecutionItem, changeTrackingEnabled);
             }
             // If no RPEI exists, CSO was added to update list for reference resolution but had no changes - skip change tracking
         }
@@ -2468,8 +2517,11 @@ public class ConnectedSystemServer
     /// <summary>
     /// Adds a Change Object to a Run Profile Execution Item for a CSO that's being created.
     /// </summary>
-    private static void AddConnectedSystemObjectChange(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
+    private static void AddConnectedSystemObjectChange(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem, bool changeTrackingEnabled)
     {
+        if (!changeTrackingEnabled)
+            return;
+
         // now populate the Connected System Object Change Object with the cso attribute values.
         // create a change object we can add attribute changes to.
         var change = new ConnectedSystemObjectChange
@@ -2479,10 +2531,17 @@ public class ConnectedSystemServer
             ChangeType = ObjectChangeType.Added,
             ChangeTime = DateTime.UtcNow,
             ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,
-            ActivityRunProfileExecutionItemId = activityRunProfileExecutionItem.Id
+            ActivityRunProfileExecutionItemId = activityRunProfileExecutionItem.Id,
+            // Copy initiator info from the Activity for audit trail (if Activity is loaded)
+            InitiatedByType = activityRunProfileExecutionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
+            InitiatedById = activityRunProfileExecutionItem.Activity?.InitiatedById,
+            InitiatedByName = activityRunProfileExecutionItem.Activity?.InitiatedByName,
+            // Store external ID as string to enable linking change history even after CSO deletion
+            // Use ToStringNoName() to match the format used in deletion changes
+            DeletedObjectExternalId = connectedSystemObject.ExternalIdAttributeValue?.ToStringNoName()
         };
         activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
-        
+
         foreach (var attributeValue in connectedSystemObject.AttributeValues)
             AddChangeAttributeValueObject(change, attributeValue, ValueChangeType.Add);
     }
@@ -2490,7 +2549,7 @@ public class ConnectedSystemServer
     /// <summary>
     /// Adds a Change object to the Run Profile Execution Item for a CSO that's being updated.
     /// </summary>
-    private static void ProcessConnectedSystemObjectAttributeValueChanges(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
+    private static void ProcessConnectedSystemObjectAttributeValueChanges(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem, bool changeTrackingEnabled)
     {
         if (connectedSystemObject == null)
             throw new ArgumentNullException(nameof(connectedSystemObject));
@@ -2508,42 +2567,58 @@ public class ConnectedSystemServer
             return;
         }
 
-        // create a change object we can track attribute changes with
-        var change = new ConnectedSystemObjectChange
-        {
-            ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
-            ConnectedSystemObject = connectedSystemObject,
-            ChangeType = ObjectChangeType.Updated,
-            ChangeTime = DateTime.UtcNow,
-            ActivityRunProfileExecutionItem = activityRunProfileExecutionItem
-        };
-
-        // the change object will be persisted with the activity run profile execution item further up the stack.
-        // we just need to associate the change with the detail item.
-        // unsure if this is the right approach. should we persist the change here and just associate with the detail item?
-        activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
-
         // make sure the CSO is linked to the activity run profile execution item
         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
         activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
 
-        // persist new attribute values from addition list and create change object
+        // persist new attribute values from addition list and create change object (if enabled)
         foreach (var pendingAttributeValueAddition in connectedSystemObject.PendingAttributeValueAdditions)
         {
             connectedSystemObject.AttributeValues.Add(pendingAttributeValueAddition);
-                
-            // trigger auditing of this change
-            AddChangeAttributeValueObject(change, pendingAttributeValueAddition, ValueChangeType.Add);
         }
 
-        // delete attribute values to be removed and create change
+        // delete attribute values to be removed and create change (if enabled)
         foreach (var pendingAttributeValueRemoval in connectedSystemObject.PendingAttributeValueRemovals)
         {
             // this will cause a cascade delete of the attribute value object
             connectedSystemObject.AttributeValues.RemoveAll(av => av.Id == pendingAttributeValueRemoval.Id);
+        }
 
-            // trigger auditing of this change
-            AddChangeAttributeValueObject(change, pendingAttributeValueRemoval, ValueChangeType.Remove);
+        // Only create change object if tracking is enabled
+        if (changeTrackingEnabled)
+        {
+            // create a change object we can track attribute changes with
+            var change = new ConnectedSystemObjectChange
+            {
+                ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
+                ConnectedSystemObject = connectedSystemObject,
+                ChangeType = ObjectChangeType.Updated,
+                ChangeTime = DateTime.UtcNow,
+                ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,
+                // Copy initiator info from the Activity for audit trail (if Activity is loaded)
+                InitiatedByType = activityRunProfileExecutionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
+                InitiatedById = activityRunProfileExecutionItem.Activity?.InitiatedById,
+                InitiatedByName = activityRunProfileExecutionItem.Activity?.InitiatedByName,
+                // Store external ID as string to enable linking change history even after CSO deletion
+                // Use ToStringNoName() to match the format used in deletion changes
+                DeletedObjectExternalId = connectedSystemObject.ExternalIdAttributeValue?.ToStringNoName()
+            };
+
+            // the change object will be persisted with the activity run profile execution item further up the stack.
+            // we just need to associate the change with the detail item.
+            activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
+
+            // Record attribute additions
+            foreach (var pendingAttributeValueAddition in connectedSystemObject.PendingAttributeValueAdditions)
+            {
+                AddChangeAttributeValueObject(change, pendingAttributeValueAddition, ValueChangeType.Add);
+            }
+
+            // Record attribute removals
+            foreach (var pendingAttributeValueRemoval in connectedSystemObject.PendingAttributeValueRemovals)
+            {
+                AddChangeAttributeValueObject(change, pendingAttributeValueRemoval, ValueChangeType.Remove);
+            }
         }
         
         // we can now reset the pending attribute value lists
@@ -2563,10 +2638,12 @@ public class ConnectedSystemServer
     /// to remove all CSO-related data including change history (since objects will be re-imported).
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier for the connected system to clear.</param>
+    /// <param name="deleteChangeHistory">Whether to delete change history for the cleared CSOs. Default: true (recommended for re-import scenarios).</param>
     /// <exception cref="InvalidOperationException">Thrown if the Connected System is being deleted.</exception>
-    public async Task ClearConnectedSystemObjectsAsync(int connectedSystemId)
+    public async Task ClearConnectedSystemObjectsAsync(int connectedSystemId, bool deleteChangeHistory = true)
     {
-        Log.Information("ClearConnectedSystemObjectsAsync: Starting for Connected System {Id}", connectedSystemId);
+        Log.Information("ClearConnectedSystemObjectsAsync: Starting for Connected System {Id}, deleteChangeHistory={DeleteHistory}",
+            connectedSystemId, deleteChangeHistory);
 
         // Check for concurrency - don't clear if system is being deleted
         var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
@@ -2583,8 +2660,7 @@ public class ConnectedSystemServer
         }
 
         // Use the shared method that handles all CSO dependencies properly.
-        // deleteChangeHistory=true because we're clearing for re-import - the old change history is no longer relevant.
-        await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory: true);
+        await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory);
 
         Log.Information("ClearConnectedSystemObjectsAsync: Completed for Connected System {Id}", connectedSystemId);
 
@@ -3153,6 +3229,17 @@ public class ConnectedSystemServer
     public async Task<PendingExport?> GetPendingExportForObjectAsync(Guid connectedSystemObjectId)
     {
         return await Application.Repository.ConnectedSystems.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
+    }
+
+    /// <summary>
+    /// Retrieves the change history for a Connected System Object.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The unique identifier of the Connected System Object.</param>
+    /// <param name="limit">Maximum number of changes to return. Defaults to 100.</param>
+    /// <returns>List of changes ordered by ChangeTime descending (most recent first).</returns>
+    public async Task<List<ConnectedSystemObjectChange>> GetConnectedSystemObjectChangesAsync(Guid connectedSystemObjectId, int limit = 100)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectChangesAsync(connectedSystemObjectId, limit);
     }
     #endregion
 

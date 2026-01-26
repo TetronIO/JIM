@@ -237,6 +237,41 @@ public interface IConnectedSystemRepository
 
     public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();
 
+    /// <summary>
+    /// Gets the change history for a Connected System Object.
+    /// Includes all attribute changes and value changes for displaying in the UI.
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The unique identifier of the CSO.</param>
+    /// <param name="limit">Maximum number of changes to return. Defaults to 100.</param>
+    /// <returns>List of changes ordered by ChangeTime descending (most recent first).</returns>
+    Task<List<ConnectedSystemObjectChange>> GetConnectedSystemObjectChangesAsync(Guid connectedSystemObjectId, int limit = 100);
+
+    /// <summary>
+    /// Gets CSO changes where the CSO has been deleted (ChangeType = Deleted and ConnectedSystemObject is null).
+    /// Used for the deleted objects browser.
+    /// </summary>
+    /// <param name="connectedSystemId">Optional filter by connected system ID.</param>
+    /// <param name="fromDate">Optional filter for changes on or after this date.</param>
+    /// <param name="toDate">Optional filter for changes on or before this date.</param>
+    /// <param name="externalIdSearch">Optional search term for external ID.</param>
+    /// <param name="page">Page number (1-based).</param>
+    /// <param name="pageSize">Number of items per page.</param>
+    /// <returns>Paginated list of deleted CSO changes ordered by ChangeTime descending.</returns>
+    Task<(List<ConnectedSystemObjectChange> Items, int TotalCount)> GetDeletedCsoChangesAsync(
+        int? connectedSystemId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? externalIdSearch = null,
+        int page = 1,
+        int pageSize = 50);
+
+    /// <summary>
+    /// Gets the full change history for a deleted CSO by its change ID.
+    /// </summary>
+    /// <param name="changeId">The ID of the CSO change record.</param>
+    /// <returns>List of all changes for that CSO ordered by ChangeTime descending.</returns>
+    Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId);
+
     #region Sync Rule Mappings
     /// <summary>
     /// Gets all mappings for a sync rule.
@@ -465,7 +500,8 @@ public interface IConnectedSystemRepository
     /// Should only be called after verifying no sync operations are running.
     /// </summary>
     /// <param name="connectedSystemId">The ID of the Connected System to delete.</param>
-    Task DeleteConnectedSystemAsync(int connectedSystemId);
+    /// <param name="deleteChangeHistory">Whether to delete change history for the deleted CSOs. Default: false (preserves audit trail).</param>
+    Task DeleteConnectedSystemAsync(int connectedSystemId, bool deleteChangeHistory = false);
 
     /// <summary>
     /// Gets the count of Sync Rules for a Connected System.

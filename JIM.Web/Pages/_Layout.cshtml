@@ -20,6 +20,16 @@
 </head>
 <body>
     @RenderBody()
+
+    <!-- Blazor Server reconnection UI -->
+    <div id="components-reconnect-modal" class="jim-reconnect-modal">
+        <div class="jim-reconnect-content">
+            <div class="jim-reconnect-spinner"></div>
+            <p class="jim-reconnect-message">Attempting to reconnect to the server...</p>
+            <p class="jim-reconnect-retry"></p>
+        </div>
+    </div>
+
     <div id="blazor-error-ui">
         <environment include="Staging,Production">
             An error has occurred. This application may no longer respond until reloaded.

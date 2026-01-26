@@ -146,14 +146,45 @@ function Show-ScenarioMenu {
             }
         }
 
+        # Detect stub/unimplemented scenarios by checking for the banner pattern used in placeholder scripts.
+        # Must match the exact Write-Host banner to avoid false positives from incidental mentions
+        # (e.g., a test step warning containing "not yet implemented" in its message text).
+        $disabled = $false
+        $fileContent = Get-Content $file.FullName -Raw
+        if ($fileContent -match 'Write-Host\s+"[\s]*NOT YET IMPLEMENTED[\s]*"') {
+            $disabled = $true
+            $description = "$description (not yet implemented)"
+        }
+
         $scenarios += @{
             Name = $scenarioName
             Description = $description
+            Disabled = $disabled
         }
     }
 
+    # Find the first selectable (non-disabled) index
     $selectedIndex = 0
+    for ($i = 0; $i -lt $scenarios.Count; $i++) {
+        if (-not $scenarios[$i].Disabled) {
+            $selectedIndex = $i
+            break
+        }
+    }
     $exitMenu = $false
+
+    # Helper: find the next selectable index in a given direction (1=down, -1=up)
+    function Find-NextSelectable {
+        param([int]$Current, [int]$Direction)
+        $next = $Current + $Direction
+        while ($next -ge 0 -and $next -lt $scenarios.Count) {
+            if (-not $scenarios[$next].Disabled) {
+                return $next
+            }
+            $next += $Direction
+        }
+        return $Current  # Stay put if no selectable item found
+    }
 
     # Hide cursor
     [Console]::CursorVisible = $false
@@ -174,7 +205,12 @@ function Show-ScenarioMenu {
             for ($i = 0; $i -lt $scenarios.Count; $i++) {
                 $scenario = $scenarios[$i]
 
-                if ($i -eq $selectedIndex) {
+                if ($scenario.Disabled) {
+                    # Disabled items shown greyed out, not selectable
+                    Write-Host "${GRAY}  $($scenario.Name) (deferred)${NC}"
+                    Write-Host "${GRAY}  $($scenario.Description)${NC}"
+                }
+                elseif ($i -eq $selectedIndex) {
                     Write-Host "${GREEN}► $($scenario.Name)${NC}"
                     Write-Host "${GRAY}  $($scenario.Description)${NC}"
                 }
@@ -190,10 +226,10 @@ function Show-ScenarioMenu {
 
             switch ($key.VirtualKeyCode) {
                 38 { # Up arrow
-                    $selectedIndex = [Math]::Max(0, $selectedIndex - 1)
+                    $selectedIndex = Find-NextSelectable -Current $selectedIndex -Direction (-1)
                 }
                 40 { # Down arrow
-                    $selectedIndex = [Math]::Min($scenarios.Count - 1, $selectedIndex + 1)
+                    $selectedIndex = Find-NextSelectable -Current $selectedIndex -Direction 1
                 }
                 13 { # Enter
                     $exitMenu = $true
@@ -348,13 +384,35 @@ function Show-TemplateMenu {
 # Track if user explicitly set Template parameter
 $TemplateWasExplicitlySet = $PSBoundParameters.ContainsKey('Template')
 
+# Scenarios that provision their own fixed test data and don't use the Template parameter
+# for data sizing. These scenarios accept Template but it has no effect on test execution.
+$templateIrrelevantScenarios = @(
+    "*Scenario3*",   # GAL Sync - not yet implemented
+    "*Scenario4*"    # Deletion Rules - provisions individual test users, ignores template
+)
+
+function Test-TemplateRelevant {
+    param([string]$ScenarioName)
+    foreach ($pattern in $templateIrrelevantScenarios) {
+        if ($ScenarioName -like $pattern) {
+            return $false
+        }
+    }
+    return $true
+}
+
 # If no scenario specified, show interactive menu
 if (-not $Scenario) {
     $Scenario = Show-ScenarioMenu
 
-    # Also show template menu if Template wasn't explicitly provided
+    # Show template menu only if Template wasn't explicitly provided AND the scenario uses it
     if (-not $TemplateWasExplicitlySet) {
-        $Template = Show-TemplateMenu
+        if (Test-TemplateRelevant -ScenarioName $Scenario) {
+            $Template = Show-TemplateMenu
+        }
+        else {
+            $Template = "Nano"
+        }
     }
 }
 
@@ -402,9 +460,15 @@ $timings = @{}
 
 Write-Banner "JIM Integration Test Runner"
 
+$templateRelevant = Test-TemplateRelevant -ScenarioName $Scenario
+
 Write-Host "${GRAY}Configuration:${NC}"
 Write-Host "  Scenario:           ${CYAN}$Scenario${NC}"
-Write-Host "  Template:           ${CYAN}$Template${NC}"
+if ($templateRelevant) {
+    Write-Host "  Template:           ${CYAN}$Template${NC}"
+} else {
+    Write-Host "  Template:           ${GRAY}N/A (scenario uses fixed test data)${NC}"
+}
 Write-Host "  Step:               ${CYAN}$Step${NC}"
 Write-Host "  Skip Reset:         ${CYAN}$SkipReset${NC}"
 Write-Host "  Skip Build:         ${CYAN}$SkipBuild${NC}"
@@ -554,6 +618,38 @@ else {
 }
 $timings["2. Build"] = (Get-Date) - $step2Start
 
+# Step 2b: Generate API Key (before starting JIM so it picks up the key on first startup)
+Write-Section "Step 2b: Generating API Key"
+
+Write-Step "Generating infrastructure API key..."
+$randomBytes = New-Object byte[] 32
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+$rng.GetBytes($randomBytes)
+$randomString = [Convert]::ToBase64String($randomBytes).Replace("+", "").Replace("/", "").Replace("=", "")
+$apiKey = "jim_ak_$randomString"
+Write-Success "Generated key prefix: $($apiKey.Substring(0, 12))"
+
+# Update .env file
+Write-Step "Updating .env file..."
+$envFilePath = Join-Path $repoRoot ".env"
+$envContent = Get-Content $envFilePath -Raw
+if ($null -eq $envContent) { $envContent = "" }
+
+if ($envContent -match "JIM_INFRASTRUCTURE_API_KEY=") {
+    $envContent = $envContent -replace "JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$apiKey"
+}
+else {
+    $newLine = if ($envContent.EndsWith("`n")) { "" } else { "`n" }
+    $envContent = $envContent + $newLine + "JIM_INFRASTRUCTURE_API_KEY=$apiKey`n"
+}
+$envContent | Set-Content $envFilePath -NoNewline
+Write-Success "Updated .env file"
+
+# Save API key to file for scenario scripts
+$keyFilePath = Join-Path $scriptRoot ".api-key"
+$apiKey | Out-File -FilePath $keyFilePath -NoNewline -Encoding UTF8
+Write-Success "Saved API key to .api-key"
+
 # Step 3: Start services
 $step3Start = Get-Date
 Write-Section "Step 3: Starting Services"
@@ -665,6 +761,39 @@ if ($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") {
         exit 1
     }
 }
+# Wait for JIM Web API
+Write-Step "Waiting for JIM Web API to be ready..."
+$jimApiReady = $false
+$jimApiElapsed = 0
+$jimApiUrl = "http://localhost:5200/api/v1/health"
+
+while (-not $jimApiReady -and $jimApiElapsed -lt $TimeoutSeconds) {
+    try {
+        $healthResponse = Invoke-WebRequest -Uri $jimApiUrl -Method GET -TimeoutSec 5 -ErrorAction SilentlyContinue
+        if ($healthResponse.StatusCode -eq 200) {
+            $jimApiReady = $true
+            Write-Success "JIM Web API is healthy (HTTP 200)"
+        }
+    }
+    catch {
+        # Ignore connection errors during startup
+    }
+
+    if (-not $jimApiReady) {
+        Start-Sleep -Seconds 3
+        $jimApiElapsed += 3
+        if ($jimApiElapsed % 15 -eq 0) {
+            Write-Step "  Still waiting for JIM Web API... (${jimApiElapsed}s / ${TimeoutSeconds}s)"
+        }
+    }
+}
+
+if (-not $jimApiReady) {
+    Write-Failure "JIM Web API did not become ready within ${TimeoutSeconds}s"
+    Write-Host "${YELLOW}  Check logs: docker compose logs jim.web${NC}"
+    exit 1
+}
+
 $timings["4. Wait for Services"] = (Get-Date) - $step4Start
 
 # Step 4b: Prepare Samba AD for testing
@@ -724,83 +853,9 @@ if ($Scenario -like "*Scenario1*") {
     }
 }
 
-# Step 5: Setup API Key
+# Step 5: Run test scenario
 $step5Start = Get-Date
-Write-Section "Step 5: Setting Up API Key"
-
-# Generate API key
-Write-Step "Generating infrastructure API key..."
-$randomBytes = New-Object byte[] 32
-$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-$rng.GetBytes($randomBytes)
-$randomString = [Convert]::ToBase64String($randomBytes).Replace("+", "").Replace("/", "").Replace("=", "")
-$apiKey = "jim_ak_$randomString"
-Write-Success "Generated key prefix: $($apiKey.Substring(0, 12))"
-
-# Update .env file
-Write-Step "Updating .env file..."
-$envFilePath = Join-Path $repoRoot ".env"
-$envContent = Get-Content $envFilePath -Raw
-if ($null -eq $envContent) { $envContent = "" }
-
-if ($envContent -match "JIM_INFRASTRUCTURE_API_KEY=") {
-    $envContent = $envContent -replace "JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$apiKey"
-}
-else {
-    $newLine = if ($envContent.EndsWith("`n")) { "" } else { "`n" }
-    $envContent = $envContent + $newLine + "JIM_INFRASTRUCTURE_API_KEY=$apiKey`n"
-}
-$envContent | Set-Content $envFilePath -NoNewline
-Write-Success "Updated .env file"
-
-# Save API key to file for scenario scripts
-$keyFilePath = Join-Path $scriptRoot ".api-key"
-$apiKey | Out-File -FilePath $keyFilePath -NoNewline -Encoding UTF8
-Write-Success "Saved API key to .api-key"
-
-# Recreate jim.web to pick up new API key
-Write-Step "Recreating JIM.Web with new API key..."
-docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --force-recreate jim.web 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    Write-Failure "Failed to recreate JIM.Web"
-    exit 1
-}
-Write-Success "JIM.Web recreated"
-
-# Wait for JIM.Web to be ready
-Write-Step "Waiting for JIM.Web to be ready..."
-$maxAttempts = 30
-$attempt = 0
-$jimReady = $false
-
-while ($attempt -lt $maxAttempts -and -not $jimReady) {
-    $attempt++
-    try {
-        $response = Invoke-WebRequest -Uri "http://localhost:5200" -Method GET -TimeoutSec 2 -ErrorAction SilentlyContinue
-        if ($response.StatusCode -in @(200, 302)) {
-            $jimReady = $true
-        }
-    }
-    catch {
-        # Ignore errors, keep trying
-    }
-
-    if (-not $jimReady) {
-        Start-Sleep -Seconds 2
-    }
-}
-
-if (-not $jimReady) {
-    Write-Failure "JIM.Web did not become ready"
-    Write-Host "${YELLOW}  Check logs: docker logs jim.web${NC}"
-    exit 1
-}
-Write-Success "JIM.Web is ready"
-$timings["5. Setup API Key"] = (Get-Date) - $step5Start
-
-# Step 6: Run test scenario
-$step6Start = Get-Date
-Write-Section "Step 6: Running Test Scenario"
+Write-Section "Step 5: Running Test Scenario"
 
 $scenarioScript = Join-Path $scriptRoot "scenarios" "Invoke-$Scenario.ps1"
 if (-not (Test-Path $scenarioScript)) {
@@ -812,16 +867,46 @@ if (-not (Test-Path $scenarioScript)) {
     exit 1
 }
 
+# Check for unimplemented/deferred scenarios
+$scenarioContent = Get-Content $scenarioScript -Raw
+if ($scenarioContent -match 'Write-Host\s+"[\s]*NOT YET IMPLEMENTED[\s]*"') {
+    Write-Failure "Scenario '$Scenario' is not yet implemented (deferred)"
+    Write-Host "${GRAY}This scenario exists as a placeholder but has no test logic yet.${NC}"
+    Write-Host "${GRAY}Select a different scenario or check the project backlog for status.${NC}"
+    exit 1
+}
+
 Write-Step "Running: Invoke-$Scenario.ps1 -Template $Template -Step $Step"
 Write-Host ""
 
-& $scenarioScript -Template $Template -Step $Step -ApiKey $apiKey
-$scenarioExitCode = $LASTEXITCODE
-$timings["6. Run Tests"] = (Get-Date) - $step6Start
+# Capture scenario console output to a log file for diagnostics.
+# The log preserves all PASSED/FAILED step details, warnings, and errors that would
+# otherwise only be visible in the live console output.
+# Uses Start-Transcript because scenario scripts use Write-Host which bypasses the
+# standard output pipeline (Tee-Object/redirection cannot capture Write-Host output).
+$logDir = Join-Path $scriptRoot "results" "logs"
+if (-not (Test-Path $logDir)) {
+    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+}
+$logTimestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
+$scenarioLogFile = Join-Path $logDir "$Scenario-$Template-$logTimestamp.log"
 
-# Step 7: Capture Performance Metrics
-$step7Start = Get-Date
-Write-Section "Step 7: Capturing Performance Metrics"
+Start-Transcript -Path $scenarioLogFile -Append | Out-Null
+try {
+    & $scenarioScript -Template $Template -Step $Step -ApiKey $apiKey
+    $scenarioExitCode = $LASTEXITCODE
+}
+finally {
+    Stop-Transcript | Out-Null
+}
+$timings["5. Run Tests"] = (Get-Date) - $step5Start
+
+Write-Host ""
+Write-Step "Scenario log saved to: results/logs/$Scenario-$Template-$logTimestamp.log"
+
+# Step 6: Capture Performance Metrics
+$step6Start = Get-Date
+Write-Section "Step 6: Capturing Performance Metrics"
 
 Write-Step "Extracting diagnostic timing from worker logs..."
 
@@ -1078,7 +1163,7 @@ else {
     }
 }
 
-$timings["7. Capture Metrics"] = (Get-Date) - $step7Start
+$timings["6. Capture Metrics"] = (Get-Date) - $step6Start
 
 # Summary
 $endTime = Get-Date
@@ -1103,7 +1188,7 @@ foreach ($timing in $sortedTimings) {
 }
 
 Write-Host ""
-Write-Host "${GRAY}Note: '6. Run Tests' breakdown shown in 'Performance Breakdown (Test Steps)' section above${NC}"
+Write-Host "${GRAY}Note: '5. Run Tests' breakdown shown in 'Performance Breakdown (Test Steps)' section above${NC}"
 Write-Host ""
 Write-Host "${CYAN}Total Duration: ${NC}$($duration.ToString('hh\:mm\:ss')) (${totalSeconds}s)"
 Write-Host ""

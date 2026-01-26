@@ -155,8 +155,8 @@ public class PendingDeletionDto
     /// <summary>Number of days remaining until deletion (negative if overdue).</summary>
     public int? DaysUntilDeletion { get; set; }
 
-    /// <summary>The grace period configured for this object type (in days).</summary>
-    public int? GracePeriodDays { get; set; }
+    /// <summary>The grace period configured for this object type.</summary>
+    public TimeSpan? GracePeriod { get; set; }
 
     /// <summary>Number of connected system objects still linked to this MVO.</summary>
     public int ConnectedSystemObjectCount { get; set; }
@@ -201,7 +201,7 @@ public class PendingDeletionDto
             LastConnectorDisconnectedDate = entity.LastConnectorDisconnectedDate!.Value,
             DeletionEligibleDate = entity.DeletionEligibleDate,
             DaysUntilDeletion = daysUntilDeletion,
-            GracePeriodDays = entity.Type?.DeletionGracePeriodDays,
+            GracePeriod = entity.Type?.DeletionGracePeriod,
             ConnectedSystemObjectCount = connectorCount,
             Status = status
         };

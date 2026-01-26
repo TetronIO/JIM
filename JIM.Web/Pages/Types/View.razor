@@ -1,7 +1,10 @@
-﻿@page "/t/{TypeNameUrlParam}/v/{IdParam:guid}"
+@page "/t/{TypeNameUrlParam}/v/{IdParam:guid}"
 @attribute [Authorize(Roles = "User")]
 @using JIM.Application
 @using JIM.Models.Core
+@using JIM.Models.Enums
+@using JIM.Models.Staging
+@using JIM.Web.Shared
 @using Utilities;
 @inject JimApplication Jim
 @inject NavigationManager NavManager
@@ -10,55 +13,65 @@
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">@MetaverseObjectType?.Name:</span> @_displayName</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-<MudPaper Class="pa-5 mt-5" Outlined="true">
-    @if (MetaverseObject != null)
-    {
-        <MudGrid>
-            @foreach (var attributeValue in MetaverseObject.AttributeValues)
-            {
-                <MudItem xs="12" sm="6" md="4">
-                    <MudField Label="@attributeValue.Attribute.Name" Variant="Variant.Outlined">
-                        @if (attributeValue.Attribute.Type == AttributeDataType.Text)
-                        {
-                            if (attributeValue.Attribute.Name == Constants.BuiltInAttributes.Email && !string.IsNullOrEmpty(attributeValue.StringValue))
-                            {
-                                <MudLink Href="@($"mailto:{attributeValue.StringValue}")">@attributeValue.StringValue</MudLink>
-                            }
-                            else
-                            {
-                                @attributeValue.StringValue
-                            }
-                        }
-                        else if (attributeValue.Attribute.Type == AttributeDataType.Number)
-                        {
-                            @attributeValue.IntValue
-                        }
-                        else if (attributeValue.Attribute.Type == AttributeDataType.LongNumber)
-                        {
-                            @attributeValue.LongValue
-                        }
-                        else if (attributeValue.Attribute.Type == AttributeDataType.DateTime)
-                        {
-                            @attributeValue.DateTimeValue
-                        }
-                        else if (attributeValue.Attribute.Type == AttributeDataType.Guid)
-                        {
-                            @attributeValue.GuidValue.ToString()
-                        }
-                        else if (attributeValue.Attribute.Type == AttributeDataType.Boolean && attributeValue.BoolValue.HasValue)
-                        {
-                            @(attributeValue.BoolValue.Value ? "true" : "false")
-                        }
-                        else if (attributeValue.Attribute.Type == AttributeDataType.Reference && attributeValue.ReferenceValue != null)
-                        {
-                            <MudLink Href="@Utilities.GetMetaverseObjectHref(attributeValue.ReferenceValue)">@(attributeValue.ReferenceValue.DisplayName ?? attributeValue.ReferenceValue.Id.ToString())</MudLink>
-                        }
-                    </MudField>
-                </MudItem>
-            }
-        </MudGrid>
-    }
-</MudPaper>
+@if (MetaverseObject != null)
+{
+    <MudTabs @bind-ActivePanelIndex="_activeTabIndex" Elevation="0" Rounded="false" Class="mt-5" PanelClass="pa-0">
+        <MudTabPanel Text="Details" Icon="@Icons.Material.Filled.Info">
+            <MudPaper Class="pa-5 mt-3" Outlined="true">
+                <MudGrid>
+                    @foreach (var attributeValue in MetaverseObject.AttributeValues)
+                    {
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudField Label="@attributeValue.Attribute.Name" Variant="Variant.Outlined">
+                                @if (attributeValue.Attribute.Type == AttributeDataType.Text)
+                                {
+                                    if (attributeValue.Attribute.Name == Constants.BuiltInAttributes.Email && !string.IsNullOrEmpty(attributeValue.StringValue))
+                                    {
+                                        <MudLink Href="@($"mailto:{attributeValue.StringValue}")">@attributeValue.StringValue</MudLink>
+                                    }
+                                    else
+                                    {
+                                        @attributeValue.StringValue
+                                    }
+                                }
+                                else if (attributeValue.Attribute.Type == AttributeDataType.Number)
+                                {
+                                    @attributeValue.IntValue
+                                }
+                                else if (attributeValue.Attribute.Type == AttributeDataType.LongNumber)
+                                {
+                                    @attributeValue.LongValue
+                                }
+                                else if (attributeValue.Attribute.Type == AttributeDataType.DateTime)
+                                {
+                                    @attributeValue.DateTimeValue
+                                }
+                                else if (attributeValue.Attribute.Type == AttributeDataType.Guid)
+                                {
+                                    @attributeValue.GuidValue.ToString()
+                                }
+                                else if (attributeValue.Attribute.Type == AttributeDataType.Boolean && attributeValue.BoolValue.HasValue)
+                                {
+                                    @(attributeValue.BoolValue.Value ? "true" : "false")
+                                }
+                                else if (attributeValue.Attribute.Type == AttributeDataType.Reference && attributeValue.ReferenceValue != null)
+                                {
+                                    <MudLink Href="@Utilities.GetMetaverseObjectHref(attributeValue.ReferenceValue)">@(attributeValue.ReferenceValue.DisplayName ?? attributeValue.ReferenceValue.Id.ToString())</MudLink>
+                                }
+                            </MudField>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudPaper>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Changes" Icon="@Icons.Material.Filled.History" BadgeData="@GetChangeCount()" BadgeColor="Color.Primary">
+            <div class="mt-3">
+                <ChangeHistoryTimeline Changes="@GetChangeHistory()" />
+            </div>
+        </MudTabPanel>
+    </MudTabs>
+}
 
 @code {
     [Parameter]
@@ -68,6 +81,7 @@
     private MetaverseObject? MetaverseObject { get; set; }
     private MetaverseObjectType? MetaverseObjectType { get; set; }
     private string? _displayName;
+    private int _activeTabIndex = 0;
     private List<BreadcrumbItem> _breadcrumbs = null!;
 
     protected override async Task OnParametersSetAsync()
@@ -80,8 +94,8 @@
             return;
         }
 
-        // get the metaverse object...
-        MetaverseObject = await Jim.Metaverse.GetMetaverseObjectAsync(IdParam);
+        // get the metaverse object with change history...
+        MetaverseObject = await Jim.Metaverse.GetMetaverseObjectWithChangeHistoryAsync(IdParam);
         if (MetaverseObject == null)
         {
             NavManager.NavigateTo("/");
@@ -97,5 +111,72 @@
                 new(MetaverseObjectType.PluralName, href: $"/t/{MetaverseObjectType.PluralName.ToLower()}"),
                 new(MetaverseObject.DisplayName, href: null, disabled: true)
             };
+    }
+
+    private string GetChangeCount()
+    {
+        if (MetaverseObject?.Changes == null)
+            return "0";
+
+        return MetaverseObject.Changes.Count.ToString();
+    }
+
+    private List<ChangeHistoryTimeline.ChangeGroup> GetChangeHistory()
+    {
+        if (MetaverseObject?.Changes == null)
+            return new List<ChangeHistoryTimeline.ChangeGroup>();
+
+        return MetaverseObject.Changes
+            .OrderByDescending(c => c.ChangeTime)
+            .Select(change => new ChangeHistoryTimeline.ChangeGroup
+            {
+                ChangeType = change.ChangeType,
+                ChangeTime = change.ChangeTime,
+                // Initiator info is now stored directly on the change object (self-contained audit trail)
+                // ChangeInitiatorType = the principal type (User, ApiKey) for icon display
+                // ChangeMechanismType = how the change was triggered (SynchronisationRule, User, etc.)
+                ChangeInitiatorType = change.InitiatedByType.ToString(),
+                ChangeInitiatorName = change.InitiatedByName,
+                ChangeInitiatorId = change.InitiatedById,
+                ChangeMechanismType = MapRunTypeToMechanismType(change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemRunType),
+                // Run profile and connected system context
+                RunProfileName = change.ActivityRunProfileExecutionItem?.Activity?.TargetName,
+                ConnectedSystemId = change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemId,
+                ConnectedSystemName = change.ActivityRunProfileExecutionItem?.Activity?.TargetContext,
+                // Sync rule context
+                SyncRuleId = change.SyncRuleId,
+                SyncRuleName = change.SyncRuleName,
+                // Activity link for drill-down (optional - RPEI may be cleaned up)
+                ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
+                AttributeChanges = change.AttributeChanges
+                    .OrderBy(ac => ac.Attribute.Name)
+                    .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
+                    {
+                        AttributeName = ac.Attribute.Name,
+                        ChangeType = vc.ValueChangeType,
+                        Value = vc.ReferenceValue == null ? vc.ToString() : null,
+                        ReferenceValue = vc.ReferenceValue != null ? new ChangeHistoryTimeline.ReferenceValueInfo
+                        {
+                            TypeName = vc.ReferenceValue.Type.Name,
+                            DisplayName = vc.ReferenceValue.DisplayName ?? vc.ReferenceValue.Id.ToString(),
+                            SecondaryId = null, // MVO doesn't have secondary external ID
+                            Href = Utilities.GetMetaverseObjectHref(vc.ReferenceValue)
+                        } : null,
+                        IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued
+                    }))
+                    .ToList()
+            })
+            .ToList();
+    }
+
+    private static string MapRunTypeToMechanismType(ConnectedSystemRunType? runType)
+    {
+        return runType switch
+        {
+            ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport => "Import",
+            ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation => "SynchronisationRule",
+            ConnectedSystemRunType.Export => "Export",
+            _ => "SynchronisationRule" // Default to sync for MVO changes
+        };
     }
 }

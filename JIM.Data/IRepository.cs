@@ -5,6 +5,7 @@ public interface IRepository : IDisposable
 {
     public IActivityRepository Activity { get; }
     public IApiKeyRepository ApiKeys { get; }
+    public IChangeHistoryRepository ChangeHistory { get; }
     public IConnectedSystemRepository ConnectedSystems { get; }
     public IDataGenerationRepository DataGeneration { get; }
     public IMetaverseRepository Metaverse { get; }

@@ -27,6 +27,8 @@ public interface IMetaverseRepository
     #region objects
     public Task<MetaverseObject?> GetMetaverseObjectAsync(Guid id);
 
+    public Task<MetaverseObject?> GetMetaverseObjectWithChangeHistoryAsync(Guid id);
+
     public Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id);
 
     public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject);
@@ -161,6 +163,40 @@ public interface IMetaverseRepository
     /// <param name="objectTypeId">Optional object type ID to filter by.</param>
     /// <returns>The count of MVOs pending deletion.</returns>
     public Task<int> GetMetaverseObjectsPendingDeletionCountAsync(int? objectTypeId = null);
+
+    /// <summary>
+    /// Creates a MetaverseObjectChange record directly in the database.
+    /// Used for DELETE operations where the change should not be linked via navigation property
+    /// because the MVO is about to be deleted.
+    /// </summary>
+    /// <param name="change">The change record to create.</param>
+    public Task CreateMetaverseObjectChangeAsync(MetaverseObjectChange change);
+
+    /// <summary>
+    /// Gets MVO changes where the MVO has been deleted (ChangeType = Deleted and MetaverseObject is null).
+    /// Used for the deleted objects browser.
+    /// </summary>
+    /// <param name="objectTypeId">Optional filter by object type ID.</param>
+    /// <param name="fromDate">Optional filter for changes on or after this date.</param>
+    /// <param name="toDate">Optional filter for changes on or before this date.</param>
+    /// <param name="displayNameSearch">Optional search term for display name.</param>
+    /// <param name="page">Page number (1-based).</param>
+    /// <param name="pageSize">Number of items per page.</param>
+    /// <returns>Paginated list of deleted MVO changes ordered by ChangeTime descending.</returns>
+    Task<(List<MetaverseObjectChange> Items, int TotalCount)> GetDeletedMvoChangesAsync(
+        int? objectTypeId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? displayNameSearch = null,
+        int page = 1,
+        int pageSize = 50);
+
+    /// <summary>
+    /// Gets the full change history for a deleted MVO by its change ID.
+    /// </summary>
+    /// <param name="changeId">The ID of the MVO change record.</param>
+    /// <returns>List of all changes for that MVO ordered by ChangeTime descending.</returns>
+    Task<List<MetaverseObjectChange>> GetDeletedMvoChangeHistoryAsync(Guid changeId);
     #endregion
 
     #region attributes

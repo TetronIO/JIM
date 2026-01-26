@@ -46,10 +46,18 @@
                     <MudSelectItem Value="MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected">When Authoritative Source Disconnected</MudSelectItem>
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12" sm="6" md="4">
-                <MudNumericField T="int?" Label="Grace Period (Days)" @bind-Value="_gracePeriodDays"
+            <MudItem xs="4" sm="2" md="2">
+                <MudNumericField T="int" Label="Days" @bind-Value="_gracePeriodDays"
                     Variant="Variant.Outlined" Min="0" Max="3650"
-                    HelperText="Days to wait before deletion. 0 or empty for immediate." />
+                    HelperText="Grace period" />
+            </MudItem>
+            <MudItem xs="4" sm="2" md="2">
+                <MudNumericField T="int" Label="Hours" @bind-Value="_gracePeriodHours"
+                    Variant="Variant.Outlined" Min="0" Max="23" />
+            </MudItem>
+            <MudItem xs="4" sm="2" md="2">
+                <MudNumericField T="int" Label="Minutes" @bind-Value="_gracePeriodMinutes"
+                    Variant="Variant.Outlined" Min="0" Max="59" />
             </MudItem>
         </MudGrid>
 
@@ -195,13 +203,17 @@
 
     // Deletion rules state
     private MetaverseObjectDeletionRule _deletionRule;
-    private int? _gracePeriodDays;
+    private int _gracePeriodDays;
+    private int _gracePeriodHours;
+    private int _gracePeriodMinutes;
     private HashSet<int> _selectedAuthoritativeSources = new();
     private List<ConnectedSystem> _contributingSystems = new();
 
     // Original values for change detection
     private MetaverseObjectDeletionRule _originalDeletionRule;
-    private int? _originalGracePeriodDays;
+    private int _originalGracePeriodDays;
+    private int _originalGracePeriodHours;
+    private int _originalGracePeriodMinutes;
     private HashSet<int> _originalAuthoritativeSources = new();
 
     protected override async Task OnInitializedAsync()
@@ -250,12 +262,17 @@
         if (_metaverseObjectType == null) return;
 
         _deletionRule = _metaverseObjectType.DeletionRule;
-        _gracePeriodDays = _metaverseObjectType.DeletionGracePeriodDays;
+        var gp = _metaverseObjectType.DeletionGracePeriod ?? TimeSpan.Zero;
+        _gracePeriodDays = gp.Days;
+        _gracePeriodHours = gp.Hours;
+        _gracePeriodMinutes = gp.Minutes;
         _selectedAuthoritativeSources = new HashSet<int>(_metaverseObjectType.DeletionTriggerConnectedSystemIds ?? new List<int>());
 
         // Store original values
         _originalDeletionRule = _deletionRule;
         _originalGracePeriodDays = _gracePeriodDays;
+        _originalGracePeriodHours = _gracePeriodHours;
+        _originalGracePeriodMinutes = _gracePeriodMinutes;
         _originalAuthoritativeSources = new HashSet<int>(_selectedAuthoritativeSources);
     }
 
@@ -263,6 +280,8 @@
     {
         _deletionRule = _originalDeletionRule;
         _gracePeriodDays = _originalGracePeriodDays;
+        _gracePeriodHours = _originalGracePeriodHours;
+        _gracePeriodMinutes = _originalGracePeriodMinutes;
         _selectedAuthoritativeSources = new HashSet<int>(_originalAuthoritativeSources);
     }
 
@@ -302,6 +321,8 @@
     {
         if (_deletionRule != _originalDeletionRule) return true;
         if (_gracePeriodDays != _originalGracePeriodDays) return true;
+        if (_gracePeriodHours != _originalGracePeriodHours) return true;
+        if (_gracePeriodMinutes != _originalGracePeriodMinutes) return true;
         if (!_selectedAuthoritativeSources.SetEquals(_originalAuthoritativeSources)) return true;
         return false;
     }
@@ -314,7 +335,8 @@
         {
             // Update the object type
             _metaverseObjectType.DeletionRule = _deletionRule;
-            _metaverseObjectType.DeletionGracePeriodDays = _gracePeriodDays == 0 ? null : _gracePeriodDays;
+            var gracePeriod = new TimeSpan(_gracePeriodDays, _gracePeriodHours, _gracePeriodMinutes, 0);
+            _metaverseObjectType.DeletionGracePeriod = gracePeriod == TimeSpan.Zero ? null : gracePeriod;
             _metaverseObjectType.DeletionTriggerConnectedSystemIds = _deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
                 ? _selectedAuthoritativeSources.ToList()
                 : new List<int>();
@@ -324,6 +346,8 @@
             // Update original values to reflect saved state
             _originalDeletionRule = _deletionRule;
             _originalGracePeriodDays = _gracePeriodDays;
+            _originalGracePeriodHours = _gracePeriodHours;
+            _originalGracePeriodMinutes = _gracePeriodMinutes;
             _originalAuthoritativeSources = new HashSet<int>(_selectedAuthoritativeSources);
 
             Snackbar.Add("Deletion rules saved successfully.", Severity.Success);

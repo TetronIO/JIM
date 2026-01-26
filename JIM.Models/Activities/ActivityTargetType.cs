@@ -11,5 +11,6 @@ public enum ActivityTargetType
     TrustedCertificate = 6,
     ObjectMatchingRule = 7,
     MetaverseAttribute = 8,
-    ServiceSetting = 9
+    ServiceSetting = 9,
+    HistoryRetentionCleanup = 10
 }

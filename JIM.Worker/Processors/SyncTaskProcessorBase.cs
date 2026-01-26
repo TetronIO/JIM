@@ -68,6 +68,12 @@ public abstract class SyncTaskProcessorBase
     // Batch collection for deferred MVO deletions (for immediate 0-grace-period deletions)
     protected readonly List<MetaverseObject> _pendingMvoDeletions = [];
 
+    // Batch collection for MVO change object creation (deferred to page boundary for performance)
+    // Stores: (MVO, Additions, Removals, ChangeType, RPEI) - captured BEFORE applying pending changes
+    // ChangeType indicates how the MVO was created/modified (Projected, Joined, AttributeFlow, Updated)
+    // RPEI links MVO changes to the Activity for initiator context (User, ApiKey, etc.)
+    protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> Additions, List<MetaverseObjectAttributeValue> Removals, ObjectChangeType ChangeType, ActivityRunProfileExecutionItem Rpei)> _pendingMvoChanges = [];
+
     // Batch collection for deferred reference attribute processing.
     // Reference attributes must be processed AFTER all CSOs in the page have been processed (joined/projected)
     // because group member references may point to user CSOs that come later in the processing order.
@@ -154,13 +160,24 @@ public abstract class SyncTaskProcessorBase
             {
                 _activity.RunProfileExecutionItems.Add(obsoleteExecutionItem);
             }
-            // Create execution item for successful changes (join, projection, attribute flow)
+            // Handle execution item for successful changes (join, projection, attribute flow)
             else if (changeResult.HasChanges)
             {
-                var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
-                runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
-                runProfileExecutionItem.ObjectChangeType = changeResult.ChangeType;
-                _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+                // Check if an RPEI was already created for this CSO (in ProcessMetaverseObjectChangesAsync when MVO changes were captured)
+                var existingRpei = _activity.RunProfileExecutionItems.FirstOrDefault(r => r.ConnectedSystemObject?.Id == connectedSystemObject.Id);
+                if (existingRpei != null)
+                {
+                    // Update the existing RPEI with the ObjectChangeType
+                    existingRpei.ObjectChangeType = changeResult.ChangeType;
+                }
+                else
+                {
+                    // Create a new RPEI (for cases like join/project without attribute changes)
+                    var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+                    runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+                    runProfileExecutionItem.ObjectChangeType = changeResult.ChangeType;
+                    _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+                }
             }
         }
         catch (SyncJoinException joinEx)
@@ -427,6 +444,28 @@ public abstract class SyncTaskProcessorBase
                 mvo.PendingAttributeValueRemovals.Add(attributeValue);
                 Log.Verbose($"ProcessObsoleteConnectedSystemObjectAsync: Marking attribute '{attributeValue.Attribute?.Name}' for removal from MVO {mvo.Id}.");
             }
+
+            // Apply attribute removals and queue the MVO for export evaluation and persistence.
+            // ProcessMetaverseObjectChangesAsync is skipped for obsolete CSOs (it's guarded by
+            // Status != Obsolete), so we must handle this here to ensure target systems are
+            // notified of the recalled attributes via pending exports.
+            if (mvo.PendingAttributeValueRemovals.Count > 0)
+            {
+                var changedAttributes = mvo.PendingAttributeValueRemovals.ToList();
+                var removedAttributes = mvo.PendingAttributeValueRemovals.ToHashSet();
+
+                Log.Information("ProcessObsoleteConnectedSystemObjectAsync: Applying {Count} attribute removals to MVO {MvoId} and queueing for export evaluation",
+                    changedAttributes.Count, mvo.Id);
+
+                ApplyPendingMetaverseObjectAttributeChanges(mvo);
+
+                // Queue for batch persistence (MVO attributes have changed)
+                _pendingMvoUpdates.Add(mvo);
+
+                // Queue for export evaluation so target systems receive pending exports
+                // for the recalled attribute values
+                _pendingExportEvaluations.Add((mvo, changedAttributes, removedAttributes));
+            }
         }
 
         // Break the CSO-MVO join
@@ -557,9 +596,9 @@ public abstract class SyncTaskProcessorBase
     /// <param name="reason">A description of why the MVO is being deleted (for logging).</param>
     private async Task MarkMvoForDeletionAsync(MetaverseObject mvo, string reason)
     {
-        var gracePeriodDays = mvo.Type!.DeletionGracePeriodDays;
+        var gracePeriod = mvo.Type!.DeletionGracePeriod;
 
-        if (!gracePeriodDays.HasValue || gracePeriodDays.Value == 0)
+        if (!gracePeriod.HasValue || gracePeriod.Value == TimeSpan.Zero)
         {
             // No grace period - delete synchronously during this sync page flush
             // Check if already queued (multiple CSOs from same MVO may disconnect in same page)
@@ -574,12 +613,16 @@ public abstract class SyncTaskProcessorBase
         else
         {
             // Grace period configured - mark for deferred deletion by housekeeping
+            // Capture initiator info NOW so housekeeping can preserve the audit trail
             mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
+            mvo.DeletionInitiatedByType = _activity.InitiatedByType;
+            mvo.DeletionInitiatedById = _activity.InitiatedById;
+            mvo.DeletionInitiatedByName = _activity.InitiatedByName;
             Log.Information(
-                "MarkMvoForDeletionAsync: MVO {MvoId} marked for deletion ({Reason}). Eligible after {Days} days.",
-                mvo.Id, reason, gracePeriodDays.Value);
+                "MarkMvoForDeletionAsync: MVO {MvoId} marked for deletion ({Reason}). Eligible after {GracePeriod}. Initiator: {Initiator}",
+                mvo.Id, reason, gracePeriod.Value, _activity.InitiatedByName ?? "Unknown");
 
-            // Persist the LastConnectorDisconnectedDate
+            // Persist the LastConnectorDisconnectedDate and initiator info
             await _jim.Metaverse.UpdateMetaverseObjectAsync(mvo);
         }
     }
@@ -693,6 +736,24 @@ public abstract class SyncTaskProcessorBase
             var removedAttributes = connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.Count > 0
                 ? connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.ToHashSet()
                 : null;
+
+            // Capture MVO changes for change tracking (before applying, so we have the pending lists)
+            // Change objects will be created in batch at page boundary for performance
+            // Create RPEI here so MVO changes can link to it for initiator context (User, ApiKey)
+            if (attributesAdded > 0 || attributesRemoved > 0)
+            {
+                var additions = connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions.ToList();
+                var removals = connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.ToList();
+                // Determine the correct ObjectChangeType based on how the MVO was created/modified
+                var changeType = wasProjected ? ObjectChangeType.Projected
+                    : wasJoined ? ObjectChangeType.Joined
+                    : ObjectChangeType.AttributeFlow;
+                // Create RPEI for this CSO change - will be used to link MVO change to Activity for initiator context
+                var rpei = _activity.PrepareRunProfileExecutionItem();
+                rpei.ConnectedSystemObject = connectedSystemObject;
+                _activity.RunProfileExecutionItems.Add(rpei);
+                _pendingMvoChanges.Add((connectedSystemObject.MetaverseObject, additions, removals, changeType, rpei));
+            }
 
             // Apply pending attribute value changes to the MVO
             ApplyPendingMetaverseObjectAttributeChanges(connectedSystemObject.MetaverseObject);
@@ -889,22 +950,51 @@ public abstract class SyncTaskProcessorBase
                     .FirstOrDefault(r => r.ConnectedSystemObjectId == cso.Id ||
                                         (r.ConnectedSystemObject != null && r.ConnectedSystemObject.Id == cso.Id));
 
-                if (existingRpei == null)
+                // Capture additions and removals BEFORE applying changes (they get cleared by ApplyPendingMetaverseObjectAttributeChanges)
+                // This is needed for both export (Remove changes for MVAs) and MVO change tracking
+                var refAddedAttributes = mvo.PendingAttributeValueAdditions
+                    .Where(av => av.ReferenceValue != null)
+                    .ToList();
+                var refRemovedAttributesList = mvo.PendingAttributeValueRemovals
+                    .Where(av => av.ReferenceValue != null)
+                    .ToList();
+                // Also keep as HashSet for export evaluation (existing code expects HashSet)
+                var refRemovedAttributes = refRemovedAttributesList.Count > 0
+                    ? refRemovedAttributesList.ToHashSet()
+                    : null;
+
+                // Ensure we have an RPEI for this CSO (needed for MVO change tracking and activity visibility)
+                var rpei = existingRpei;
+                if (rpei == null)
                 {
                     // No RPEI exists for this CSO - create one for the reference attribute flow
-                    var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
-                    runProfileExecutionItem.ConnectedSystemObject = cso;
-                    runProfileExecutionItem.ObjectChangeType = ObjectChangeType.AttributeFlow;
-                    _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+                    rpei = _activity.PrepareRunProfileExecutionItem();
+                    rpei.ConnectedSystemObject = cso;
+                    rpei.ObjectChangeType = ObjectChangeType.AttributeFlow;
+                    _activity.RunProfileExecutionItems.Add(rpei);
                     Log.Debug("ProcessDeferredReferenceAttributes: Created RPEI for CSO {CsoId} with reference-only changes",
                         cso.Id);
                 }
 
-                // Capture removals BEFORE applying changes (they get cleared by ApplyPendingMetaverseObjectAttributeChanges)
-                // This is needed so export can create Remove changes for multi-valued reference attributes
-                var refRemovedAttributes = mvo.PendingAttributeValueRemovals.Count > 0
-                    ? mvo.PendingAttributeValueRemovals.ToHashSet()
-                    : null;
+                // Capture MVO changes for change tracking (reference attributes processed separately from scalar attributes)
+                // Try to find an existing pending change entry for this MVO (from scalar attribute processing)
+                // and merge reference changes into it, rather than creating duplicate entries
+                if (refAddedAttributes.Count > 0 || refRemovedAttributesList.Count > 0)
+                {
+                    var existingChangeEntry = _pendingMvoChanges.FirstOrDefault(p => p.Mvo == mvo);
+                    if (existingChangeEntry.Mvo != null)
+                    {
+                        // Merge reference changes into existing entry (keeps existing ChangeType)
+                        existingChangeEntry.Additions.AddRange(refAddedAttributes);
+                        existingChangeEntry.Removals.AddRange(refRemovedAttributesList);
+                    }
+                    else
+                    {
+                        // No existing entry - create new one (reference-only change scenario)
+                        // Use AttributeFlow since this is just attribute changes on an existing MVO
+                        _pendingMvoChanges.Add((mvo, refAddedAttributes, refRemovedAttributesList, ObjectChangeType.AttributeFlow, rpei));
+                    }
+                }
 
                 // Apply the reference attribute changes to the MVO
                 ApplyPendingMetaverseObjectAttributeChanges(mvo);
@@ -1085,8 +1175,12 @@ public abstract class SyncTaskProcessorBase
                         deleteExports.Count, mvo.Id);
                 }
 
-                // Delete the MVO
-                await _jim.Metaverse.DeleteMetaverseObjectAsync(mvo);
+                // Delete the MVO, passing initiator info from the activity
+                await _jim.Metaverse.DeleteMetaverseObjectAsync(
+                    mvo,
+                    _activity.InitiatedByType,
+                    _activity.InitiatedById,
+                    _activity.InitiatedByName);
                 Log.Information(
                     "FlushPendingMvoDeletionsAsync: Deleted MVO {MvoId} ({DisplayName})",
                     mvo.Id, mvo.DisplayName ?? "No display name");
@@ -1105,6 +1199,121 @@ public abstract class SyncTaskProcessorBase
 
         _pendingMvoDeletions.Clear();
         span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Creates MetaverseObjectChange records for all pending MVO changes in the current page batch.
+    /// Called at page boundary after MVOs are persisted (so IDs are available).
+    /// Respects the MVO change tracking feature flag.
+    /// </summary>
+    protected async Task CreatePendingMvoChangeObjectsAsync()
+    {
+        if (_pendingMvoChanges.Count == 0)
+            return;
+
+        // Check feature flag
+        var changeTrackingEnabled = await _jim.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
+        if (!changeTrackingEnabled)
+        {
+            _pendingMvoChanges.Clear();
+            return;
+        }
+
+        using var span = Diagnostics.Sync.StartSpan("CreatePendingMvoChangeObjects");
+        span.SetTag("changeCount", _pendingMvoChanges.Count);
+
+        foreach (var (mvo, additions, removals, changeType, rpei) in _pendingMvoChanges)
+        {
+            // Create MVO change object with the specific ChangeType (Projected, Joined, AttributeFlow, etc.)
+            // Initiator info copied directly from Activity for self-contained audit trail
+            var change = new MetaverseObjectChange
+            {
+                MetaverseObject = mvo,
+                ChangeType = changeType,
+                ChangeTime = DateTime.UtcNow,
+                ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule,
+                // Copy initiator info directly from Activity for self-contained audit trail
+                InitiatedByType = _activity.InitiatedByType,
+                InitiatedById = _activity.InitiatedById,
+                InitiatedByName = _activity.InitiatedByName,
+                // Link to RPEI for additional context (optional - RPEI may be cleaned up)
+                ActivityRunProfileExecutionItem = rpei
+            };
+
+            // Create attribute change records for additions
+            foreach (var addition in additions)
+            {
+                AddMvoChangeAttributeValueObject(change, addition, ValueChangeType.Add);
+            }
+
+            // Create attribute change records for removals
+            foreach (var removal in removals)
+            {
+                AddMvoChangeAttributeValueObject(change, removal, ValueChangeType.Remove);
+            }
+
+            // Add to MVO's Changes collection - will be persisted when Activity is saved (MVO already tracked)
+            mvo.Changes.Add(change);
+        }
+
+        _pendingMvoChanges.Clear();
+        span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Creates the necessary attribute change audit item for when an MVO is updated or deleted, and adds it to the change object.
+    /// </summary>
+    /// <param name="metaverseObjectChange">The MetaverseObjectChange being built.</param>
+    /// <param name="metaverseObjectAttributeValue">The attribute and value pair for the change.</param>
+    /// <param name="valueChangeType">The type of change (Add or Remove).</param>
+    private static void AddMvoChangeAttributeValueObject(MetaverseObjectChange metaverseObjectChange, MetaverseObjectAttributeValue metaverseObjectAttributeValue, ValueChangeType valueChangeType)
+    {
+        var attributeChange = metaverseObjectChange.AttributeChanges.SingleOrDefault(ac => ac.Attribute.Id == metaverseObjectAttributeValue.Attribute.Id);
+        if (attributeChange == null)
+        {
+            // Create the attribute change object that provides an audit trail of changes to an MVO's attributes
+            attributeChange = new MetaverseObjectChangeAttribute
+            {
+                Attribute = metaverseObjectAttributeValue.Attribute,
+                MetaverseObjectChange = metaverseObjectChange
+            };
+            metaverseObjectChange.AttributeChanges.Add(attributeChange);
+        }
+
+        switch (metaverseObjectAttributeValue.Attribute.Type)
+        {
+            case AttributeDataType.Text when metaverseObjectAttributeValue.StringValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, metaverseObjectAttributeValue.StringValue));
+                break;
+            case AttributeDataType.Number when metaverseObjectAttributeValue.IntValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, (int)metaverseObjectAttributeValue.IntValue));
+                break;
+            case AttributeDataType.LongNumber when metaverseObjectAttributeValue.LongValue != null:
+                // TODO: MetaverseObjectChangeAttributeValue model needs LongValue property and constructor
+                // For now, cast to int (may lose precision for very large longs)
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, (int)metaverseObjectAttributeValue.LongValue.Value));
+                break;
+            case AttributeDataType.Guid when metaverseObjectAttributeValue.GuidValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, (Guid)metaverseObjectAttributeValue.GuidValue));
+                break;
+            case AttributeDataType.Boolean when metaverseObjectAttributeValue.BoolValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, (bool)metaverseObjectAttributeValue.BoolValue));
+                break;
+            case AttributeDataType.DateTime when metaverseObjectAttributeValue.DateTimeValue.HasValue:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, metaverseObjectAttributeValue.DateTimeValue.Value));
+                break;
+            case AttributeDataType.Binary when metaverseObjectAttributeValue.ByteValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, true, metaverseObjectAttributeValue.ByteValue.Length));
+                break;
+            case AttributeDataType.Reference when metaverseObjectAttributeValue.ReferenceValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(attributeChange, valueChangeType, metaverseObjectAttributeValue.ReferenceValue));
+                break;
+            case AttributeDataType.Reference when metaverseObjectAttributeValue.UnresolvedReferenceValue != null:
+                // We do not log changes for unresolved references. Only resolved references get change tracked.
+                break;
+            default:
+                throw new NotImplementedException($"Attribute data type {metaverseObjectAttributeValue.Attribute.Type} is not yet supported for MVO change tracking.");
+        }
     }
 
     /// <summary>

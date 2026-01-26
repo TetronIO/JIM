@@ -412,9 +412,9 @@
                                 <MudIcon Icon="@Icons.Material.Filled.LinkOff" Size="Size.Small" Color="Color.Info" />
                                 <MudText Typo="Typo.body2">
                                     <strong>Delete when last connector disconnects.</strong> The metaverse object will be
-                                    @if (_metaverseObjectType.DeletionGracePeriodDays > 0)
+                                    @if (_metaverseObjectType.DeletionGracePeriod.HasValue && _metaverseObjectType.DeletionGracePeriod.Value > TimeSpan.Zero)
                                     {
-                                        <text>marked for deletion with a <strong>@_metaverseObjectType.DeletionGracePeriodDays day</strong> grace period</text>
+                                        <text>marked for deletion with a <strong>@FormatGracePeriod(_metaverseObjectType.DeletionGracePeriod.Value)</strong> grace period</text>
                                     }
                                     else
                                     {
@@ -430,9 +430,9 @@
                                 <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" Color="Color.Info" />
                                 <MudText Typo="Typo.body2">
                                     <strong>Delete when authoritative source disconnects.</strong> The metaverse object will be
-                                    @if (_metaverseObjectType.DeletionGracePeriodDays > 0)
+                                    @if (_metaverseObjectType.DeletionGracePeriod.HasValue && _metaverseObjectType.DeletionGracePeriod.Value > TimeSpan.Zero)
                                     {
-                                        <text>marked for deletion with a <strong>@_metaverseObjectType.DeletionGracePeriodDays day</strong> grace period</text>
+                                        <text>marked for deletion with a <strong>@FormatGracePeriod(_metaverseObjectType.DeletionGracePeriod.Value)</strong> grace period</text>
                                     }
                                     else
                                     {
@@ -511,9 +511,9 @@
                   Elevation="0"
                   Class="mb-5">
             <HeaderContent>
-                <MudTh Style="width: 25%;">Attribute</MudTh>
-                <MudTh Style="width: 15%;">Change</MudTh>
-                <MudTh Style="width: 60%;">Value</MudTh>
+                <MudTh Style="width: 1%; white-space: nowrap;">Attribute</MudTh>
+                <MudTh Style="width: 1%; white-space: nowrap;">Change</MudTh>
+                <MudTh>Value</MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Attribute">
@@ -646,10 +646,10 @@
                 </MudText>
                 <MudTable Items="@_pendingExport.AttributeValueChanges" Hover="true" Dense="true" Outlined="true" Elevation="0" Class="mb-5">
                     <HeaderContent>
-                        <MudTh Style="width: 25%;">Attribute</MudTh>
-                        <MudTh Style="width: 15%;">Change Type</MudTh>
-                        <MudTh Style="width: 20%;">Status</MudTh>
-                        <MudTh Style="width: 40%;">Value</MudTh>
+                        <MudTh Style="width: 1%; white-space: nowrap;">Attribute</MudTh>
+                        <MudTh Style="width: 1%; white-space: nowrap;">Change Type</MudTh>
+                        <MudTh Style="width: 1%; white-space: nowrap;">Status</MudTh>
+                        <MudTh>Value</MudTh>
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Attribute">
@@ -705,6 +705,15 @@ else
     private PendingExport? _pendingExport;
     private MetaverseObjectType? _metaverseObjectType;
     private List<ConnectedSystemHeader>? _deletionTriggerSystems;
+
+    private static string FormatGracePeriod(TimeSpan period)
+    {
+        var parts = new List<string>();
+        if (period.Days > 0) parts.Add($"{period.Days} day{(period.Days != 1 ? "s" : "")}");
+        if (period.Hours > 0) parts.Add($"{period.Hours} hour{(period.Hours != 1 ? "s" : "")}");
+        if (period.Minutes > 0) parts.Add($"{period.Minutes} minute{(period.Minutes != 1 ? "s" : "")}");
+        return parts.Count > 0 ? string.Join(", ", parts) : "0";
+    }
 
     /// <summary>
     /// Helper record for flattened changes display in the table.

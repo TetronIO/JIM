@@ -1,0 +1,55 @@
+@using JIM.Models.Staging
+@using JIM.Models.Core
+@using JIM.Utilities
+
+@* Renders a single CSO attribute value with appropriate formatting based on type *@
+
+@if (Value.ReferenceValue != null)
+{
+    <span class="jim-attr-reference">
+        <MudChip T="string" Color="Color.Default" Size="Size.Small" Class="mr-1">
+            @Value.ReferenceValue.Type.Name
+        </MudChip>
+        <MudLink Href="@Utilities.GetConnectedSystemObjectHref(Value.ReferenceValue)">
+            @Value.ReferenceValue.DisplayNameOrId
+        </MudLink>
+        @if (Value.ReferenceValue.SecondaryExternalIdAttributeValue != null)
+        {
+            <span class="mud-text-secondary ml-1">
+                (@Value.ReferenceValue.SecondaryExternalIdAttributeValue.ToStringNoName())
+            </span>
+        }
+    </span>
+}
+else if (Value.UnresolvedReferenceValue != null)
+{
+    <span class="jim-attr-unresolved">
+        <MudIcon Icon="@Icons.Material.Filled.LinkOff" Size="Size.Small" Class="mr-1" />
+        <span class="mud-text-secondary">@Value.UnresolvedReferenceValue</span>
+    </span>
+}
+else if (Value.Attribute.Type == AttributeDataType.DateTime && Value.DateTimeValue.HasValue)
+{
+    <MudTooltip Text="@Value.DateTimeValue.Value.ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+        <span>@Value.DateTimeValue.Value.ToRelativeTime()</span>
+    </MudTooltip>
+}
+else if (Value.Attribute.Type == AttributeDataType.Boolean && Value.BoolValue.HasValue)
+{
+    <MudIcon Icon="@(Value.BoolValue.Value ? Icons.Material.Filled.Check : Icons.Material.Filled.Close)"
+             Size="Size.Small"
+             Color="@(Value.BoolValue.Value ? Color.Success : Color.Default)" />
+}
+else if (Value.Attribute.Type == AttributeDataType.Binary && Value.ByteValue != null)
+{
+    <span class="mud-text-secondary">[Binary: @Value.ByteValue.Length bytes]</span>
+}
+else
+{
+    @Value.ToStringNoName()
+}
+
+@code {
+    [Parameter]
+    public ConnectedSystemObjectAttributeValue Value { get; set; } = null!;
+}
