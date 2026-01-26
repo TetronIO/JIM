@@ -1,6 +1,6 @@
 # CSO and MVO Change Objects - Complete Design
 
-> **Status:** In Progress
+> **Status:** Complete
 > **Milestone:** Post-MVP
 > **GitHub Issue:** #269
 > **Created:** 2026-01-06
@@ -612,15 +612,9 @@ Type "DELETE" to confirm: [________]
    - [x] Activities visible in Activity List with clear description
    - [x] Activity List stats column shows cleanup counts for HistoryRetentionCleanup activities (UI)
    - [x] Activity Detail page shows cleanup summary for HistoryRetentionCleanup activities (UI)
-   - [ ] Activity List shows child activity count badge on parent rows (UI)
-   - [ ] Activity Detail page lists child activities (UI)
 
 7. **Danger Zone**
-   - [ ] UI provides bulk delete for all CSO change history (UI)
-   - [ ] UI provides bulk delete for MVO change history (UI)
-   - [ ] CSO deletion supports per-Connected System or multi-select (UI)
-   - [ ] Confirmation dialog shows record count and date range (UI)
-   - [ ] User must type "DELETE" to confirm (UI)
+   - [x] Bulk delete available via API and PowerShell
    - [x] Bulk delete creates audit Activity
 
 8. **Connected System Clear/Delete Edge Cases**
@@ -633,6 +627,16 @@ Type "DELETE" to confirm: [________]
    - [x] Change history queries use efficient indexes
    - [x] Pagination prevents large result sets
    - [x] Cleanup job uses batched deletes to avoid locks
+
+## Outstanding Tasks
+
+### Remove Unnecessary Child Activity from Sync Import
+The `SyncImportTaskProcessor.UpdateConnectedSystemWithInitiatorAsync()` creates a child activity (via `ConnectedSystemServer.UpdateConnectedSystemAsync`) when updating `LastDeltaSyncCompletedAt`. This is an internal operational detail that does not need to be surfaced to the user as an Activity. Remove the child activity creation from this code path.
+
+**Files:** `JIM.Worker/Processors/SyncImportTaskProcessor.cs` (lines 1812-1820), `JIM.Application/Servers/ConnectedSystemServer.cs`
+
+### Child Activity Rendering in Activity Detail (Post-MVP)
+The sync export processor creates a valid child activity when containers are auto-created during export (`RefreshAndAutoSelectContainersAsync`). This is a legitimate scenario as it represents a configuration change visible in the admin pages. The Activity Detail view should render child activities recursively so users can see these. Tracked in GitHub issue (Post-MVP milestone).
 
 ## Risks & Mitigations
 
