@@ -348,13 +348,35 @@ function Show-TemplateMenu {
 # Track if user explicitly set Template parameter
 $TemplateWasExplicitlySet = $PSBoundParameters.ContainsKey('Template')
 
+# Scenarios that provision their own fixed test data and don't use the Template parameter
+# for data sizing. These scenarios accept Template but it has no effect on test execution.
+$templateIrrelevantScenarios = @(
+    "*Scenario3*",   # GAL Sync - not yet implemented
+    "*Scenario4*"    # Deletion Rules - provisions individual test users, ignores template
+)
+
+function Test-TemplateRelevant {
+    param([string]$ScenarioName)
+    foreach ($pattern in $templateIrrelevantScenarios) {
+        if ($ScenarioName -like $pattern) {
+            return $false
+        }
+    }
+    return $true
+}
+
 # If no scenario specified, show interactive menu
 if (-not $Scenario) {
     $Scenario = Show-ScenarioMenu
 
-    # Also show template menu if Template wasn't explicitly provided
+    # Show template menu only if Template wasn't explicitly provided AND the scenario uses it
     if (-not $TemplateWasExplicitlySet) {
-        $Template = Show-TemplateMenu
+        if (Test-TemplateRelevant -ScenarioName $Scenario) {
+            $Template = Show-TemplateMenu
+        }
+        else {
+            $Template = "Nano"
+        }
     }
 }
 
@@ -402,9 +424,15 @@ $timings = @{}
 
 Write-Banner "JIM Integration Test Runner"
 
+$templateRelevant = Test-TemplateRelevant -ScenarioName $Scenario
+
 Write-Host "${GRAY}Configuration:${NC}"
 Write-Host "  Scenario:           ${CYAN}$Scenario${NC}"
-Write-Host "  Template:           ${CYAN}$Template${NC}"
+if ($templateRelevant) {
+    Write-Host "  Template:           ${CYAN}$Template${NC}"
+} else {
+    Write-Host "  Template:           ${GRAY}N/A (scenario uses fixed test data)${NC}"
+}
 Write-Host "  Step:               ${CYAN}$Step${NC}"
 Write-Host "  Skip Reset:         ${CYAN}$SkipReset${NC}"
 Write-Host "  Skip Build:         ${CYAN}$SkipBuild${NC}"
@@ -697,6 +725,39 @@ if ($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") {
         exit 1
     }
 }
+# Wait for JIM Web API
+Write-Step "Waiting for JIM Web API to be ready..."
+$jimApiReady = $false
+$jimApiElapsed = 0
+$jimApiUrl = "http://localhost:5200/api/v1/health"
+
+while (-not $jimApiReady -and $jimApiElapsed -lt $TimeoutSeconds) {
+    try {
+        $healthResponse = Invoke-WebRequest -Uri $jimApiUrl -Method GET -TimeoutSec 5 -ErrorAction SilentlyContinue
+        if ($healthResponse.StatusCode -eq 200) {
+            $jimApiReady = $true
+            Write-Success "JIM Web API is healthy (HTTP 200)"
+        }
+    }
+    catch {
+        # Ignore connection errors during startup
+    }
+
+    if (-not $jimApiReady) {
+        Start-Sleep -Seconds 3
+        $jimApiElapsed += 3
+        if ($jimApiElapsed % 15 -eq 0) {
+            Write-Step "  Still waiting for JIM Web API... (${jimApiElapsed}s / ${TimeoutSeconds}s)"
+        }
+    }
+}
+
+if (-not $jimApiReady) {
+    Write-Failure "JIM Web API did not become ready within ${TimeoutSeconds}s"
+    Write-Host "${YELLOW}  Check logs: docker compose logs jim.web${NC}"
+    exit 1
+}
+
 $timings["4. Wait for Services"] = (Get-Date) - $step4Start
 
 # Step 4b: Prepare Samba AD for testing
