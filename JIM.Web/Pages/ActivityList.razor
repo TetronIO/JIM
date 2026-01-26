@@ -169,6 +169,53 @@
                     </MudChip>
                 </MudTooltip>
             }
+            else if (context.TargetType == ActivityTargetType.HistoryRetentionCleanup
+                     && context.Status != ActivityStatus.InProgress)
+            {
+                @* History retention cleanup stats *@
+                var totalDeleted = (context.DeletedCsoChangeCount ?? 0) + (context.DeletedMvoChangeCount ?? 0) + (context.DeletedActivityCount ?? 0);
+                @if (totalDeleted > 0)
+                {
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                        @if (context.DeletedCsoChangeCount > 0)
+                        {
+                            <MudTooltip Text="CSO Changes Deleted" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text"
+                                         Icon="@Icons.Material.Filled.DeleteSweep" Class="px-2">
+                                    @context.DeletedCsoChangeCount
+                                </MudChip>
+                            </MudTooltip>
+                        }
+                        @if (context.DeletedMvoChangeCount > 0)
+                        {
+                            <MudTooltip Text="MVO Changes Deleted" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text"
+                                         Icon="@Icons.Material.Filled.DeleteSweep" Class="px-2">
+                                    @context.DeletedMvoChangeCount
+                                </MudChip>
+                            </MudTooltip>
+                        }
+                        @if (context.DeletedActivityCount > 0)
+                        {
+                            <MudTooltip Text="Activities Deleted" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text"
+                                         Icon="@Icons.Material.Filled.CleaningServices" Class="px-2">
+                                    @context.DeletedActivityCount
+                                </MudChip>
+                            </MudTooltip>
+                        }
+                    </MudStack>
+                }
+                else
+                {
+                    <MudTooltip Text="No records to clean up" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Text"
+                                 Icon="@Icons.Material.Outlined.CheckCircle" Class="px-2">
+                            0
+                        </MudChip>
+                    </MudTooltip>
+                }
+            }
             else
             {
                 @* Stats not applicable for this activity type *@

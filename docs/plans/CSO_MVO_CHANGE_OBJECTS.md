@@ -1,6 +1,6 @@
 # CSO and MVO Change Objects - Complete Design
 
-> **Status:** Planned
+> **Status:** In Progress
 > **Milestone:** Post-MVP
 > **GitHub Issue:** #269
 > **Created:** 2026-01-06
@@ -576,62 +576,63 @@ Type "DELETE" to confirm: [________]
 ## Success Criteria
 
 1. **Feature Flags**
-   - [ ] CSO change tracking can be enabled/disabled via service setting
-   - [ ] MVO change tracking can be enabled/disabled via service setting
-   - [ ] Both default to enabled
-   - [ ] Disabling does not delete existing change objects
+   - [x] CSO change tracking can be enabled/disabled via service setting
+   - [x] MVO change tracking can be enabled/disabled via service setting
+   - [x] Both default to enabled
+   - [x] Disabling does not delete existing change objects
 
 2. **Change History Visibility**
-   - [ ] CSO detail page shows complete change timeline
-   - [ ] MVO detail page shows complete change timeline
-   - [ ] Changes are searchable by attribute name and value
-   - [ ] Changes are filterable by date range and change type
+   - [x] CSO detail page shows complete change timeline
+   - [x] MVO detail page shows complete change timeline
+   - [x] Changes are searchable by attribute name and value
+   - [x] Changes are filterable by date range and change type
 
 3. **MVO Change Tracking**
-   - [ ] MVO changes created during sync operations (when enabled)
-   - [ ] MVO changes created during direct updates (when enabled)
-   - [ ] MVO deletion creates final change record (when enabled)
+   - [x] MVO changes created during sync operations (when enabled)
+   - [x] MVO changes created during direct updates (when enabled)
+   - [x] MVO deletion creates final change record (when enabled)
 
 4. **Deleted Object Access**
-   - [ ] Admins can browse deleted CSOs by connected system
-   - [ ] Admins can browse deleted MVOs by object type
-   - [ ] Admins can view full change history of deleted objects
+   - [x] Admins can browse deleted CSOs by connected system
+   - [x] Admins can browse deleted MVOs by object type
+   - [x] Admins can view full change history of deleted objects
 
 5. **Lifecycle Management**
-   - [ ] Automated cleanup runs during worker housekeeping
-   - [ ] Retention periods are configurable per change type
-   - [ ] Manual cleanup trigger available via API
-   - [ ] Cleanup statistics logged
-   - [ ] "Last Cleanup Run" timestamp visible in UI
+   - [x] Automated cleanup runs during worker housekeeping
+   - [x] Retention periods are configurable per change type
+   - [x] Manual cleanup trigger available via API
+   - [x] Cleanup statistics logged
+   - [x] Cleanup runs visible via Activity List (search "History Retention Cleanup")
 
 6. **Audit Logging for Deletions**
-   - [ ] All change object deletions create an Activity record
-   - [ ] Activity captures summary (count, date range) not individual items
-   - [ ] Housekeeping deletions show "System" as initiator
-   - [ ] Manual/danger zone deletions show user as initiator
-   - [ ] Activities visible in Activity List with clear description
-   - [ ] CS Clear/Delete with change history deletion creates parent-child Activities
-   - [ ] Activity List shows child activity count badge on parent rows
-   - [ ] Activity Detail page lists child activities
+   - [x] All change object deletions create an Activity record
+   - [x] Activity captures summary (count, date range) not individual items
+   - [x] Housekeeping deletions show "System" as initiator
+   - [x] Manual/danger zone deletions show user as initiator
+   - [x] Activities visible in Activity List with clear description
+   - [x] Activity List stats column shows cleanup counts for HistoryRetentionCleanup activities (UI)
+   - [x] Activity Detail page shows cleanup summary for HistoryRetentionCleanup activities (UI)
+   - [ ] Activity List shows child activity count badge on parent rows (UI)
+   - [ ] Activity Detail page lists child activities (UI)
 
 7. **Danger Zone**
-   - [ ] UI provides bulk delete for all CSO change history
-   - [ ] UI provides bulk delete for MVO change history
-   - [ ] CSO deletion supports per-Connected System or multi-select
-   - [ ] Confirmation dialog shows record count and date range
-   - [ ] User must type "DELETE" to confirm
-   - [ ] Bulk delete creates audit Activity
+   - [ ] UI provides bulk delete for all CSO change history (UI)
+   - [ ] UI provides bulk delete for MVO change history (UI)
+   - [ ] CSO deletion supports per-Connected System or multi-select (UI)
+   - [ ] Confirmation dialog shows record count and date range (UI)
+   - [ ] User must type "DELETE" to confirm (UI)
+   - [x] Bulk delete creates audit Activity
 
 8. **Connected System Clear/Delete Edge Cases**
-   - [ ] CS clear dialog offers option to delete change history (default: keep)
-   - [ ] CS delete dialog offers option to delete change history (default: keep)
-   - [ ] API supports `deleteChangeHistory` query parameter
-   - [ ] Orphaned change objects remain queryable in Deleted Objects Browser
+   - [x] CS clear dialog offers option to delete change history (default: keep)
+   - [x] CS delete dialog offers option to delete change history (default: keep)
+   - [x] API supports `deleteChangeHistory` query parameter
+   - [x] Orphaned change objects remain queryable in Deleted Objects Browser
 
 9. **Performance**
-   - [ ] Change history queries use efficient indexes
-   - [ ] Pagination prevents large result sets
-   - [ ] Cleanup job uses batched deletes to avoid locks
+   - [x] Change history queries use efficient indexes
+   - [x] Pagination prevents large result sets
+   - [x] Cleanup job uses batched deletes to avoid locks
 
 ## Risks & Mitigations
 
