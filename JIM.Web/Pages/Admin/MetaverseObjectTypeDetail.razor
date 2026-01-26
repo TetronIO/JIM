@@ -46,16 +46,18 @@
                     <MudSelectItem Value="MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected">When Authoritative Source Disconnected</MudSelectItem>
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12" sm="6" md="6">
-                <MudText Typo="Typo.caption" Class="mb-1">Grace Period (empty or all zeros for immediate)</MudText>
-                <MudStack Row="true" Spacing="2">
-                    <MudNumericField T="int" Label="Days" @bind-Value="_gracePeriodDays"
-                        Variant="Variant.Outlined" Min="0" Max="3650" Style="max-width: 120px;" />
-                    <MudNumericField T="int" Label="Hours" @bind-Value="_gracePeriodHours"
-                        Variant="Variant.Outlined" Min="0" Max="23" Style="max-width: 120px;" />
-                    <MudNumericField T="int" Label="Minutes" @bind-Value="_gracePeriodMinutes"
-                        Variant="Variant.Outlined" Min="0" Max="59" Style="max-width: 120px;" />
-                </MudStack>
+            <MudItem xs="4" sm="2" md="2">
+                <MudNumericField T="int" Label="Days" @bind-Value="_gracePeriodDays"
+                    Variant="Variant.Outlined" Min="0" Max="3650"
+                    HelperText="Grace period" />
+            </MudItem>
+            <MudItem xs="4" sm="2" md="2">
+                <MudNumericField T="int" Label="Hours" @bind-Value="_gracePeriodHours"
+                    Variant="Variant.Outlined" Min="0" Max="23" />
+            </MudItem>
+            <MudItem xs="4" sm="2" md="2">
+                <MudNumericField T="int" Label="Minutes" @bind-Value="_gracePeriodMinutes"
+                    Variant="Variant.Outlined" Min="0" Max="59" />
             </MudItem>
         </MudGrid>
 
