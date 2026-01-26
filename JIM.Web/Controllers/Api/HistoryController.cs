@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Asp.Versioning;
 using JIM.Application;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.Web.Models.Api;
@@ -126,7 +127,145 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
         return Ok(response);
     }
 
+    /// <summary>
+    /// Gets a paginated list of deleted CSOs (Connected System Objects).
+    /// </summary>
+    /// <remarks>
+    /// Returns CSOs that have been deleted, with their identity preserved at deletion time.
+    /// These records are retained for audit and compliance purposes.
+    /// </remarks>
+    /// <param name="connectedSystemId">Optional filter by Connected System ID.</param>
+    /// <param name="externalIdSearch">Optional search term for external ID (contains match).</param>
+    /// <param name="fromDate">Optional filter for deletions on or after this date (UTC).</param>
+    /// <param name="toDate">Optional filter for deletions on or before this date (UTC).</param>
+    /// <param name="page">Page number (1-based, default: 1).</param>
+    /// <param name="pageSize">Items per page (default: 50, max: 1000).</param>
+    /// <returns>Paginated list of deleted CSO records.</returns>
+    /// <response code="200">Returns the paginated list of deleted CSOs.</response>
+    /// <response code="401">If the user is not authenticated.</response>
+    [HttpGet("deleted-objects/cso", Name = "GetDeletedCsos")]
+    [ProducesResponseType(typeof(DeletedObjectsPagedResponse<DeletedCsoResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetDeletedCsosAsync(
+        [FromQuery] int? connectedSystemId = null,
+        [FromQuery] string? externalIdSearch = null,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50)
+    {
+        _logger.LogDebug("Getting deleted CSOs - CS:{ConnectedSystemId}, Search:{Search}, Page:{Page}",
+            connectedSystemId, externalIdSearch, page);
+
+        pageSize = Math.Clamp(pageSize, 1, 1000);
+        page = Math.Max(page, 1);
+
+        var (items, totalCount) = await _application.Repository.ConnectedSystems.GetDeletedCsoChangesAsync(
+            connectedSystemId: connectedSystemId,
+            fromDate: fromDate,
+            toDate: toDate,
+            externalIdSearch: string.IsNullOrWhiteSpace(externalIdSearch) ? null : externalIdSearch,
+            page: page,
+            pageSize: pageSize);
+
+        // Resolve connected system names
+        var csHeaders = await _application.ConnectedSystems.GetConnectedSystemHeadersAsync();
+        var csLookup = csHeaders.ToDictionary(h => h.Id, h => h.Name);
+
+        var response = new DeletedObjectsPagedResponse<DeletedCsoResponse>
+        {
+            Items = items.Select(c => new DeletedCsoResponse
+            {
+                Id = c.Id,
+                ExternalId = c.DeletedObjectExternalId,
+                DisplayName = c.DeletedObjectDisplayName,
+                ObjectTypeName = c.DeletedObjectType?.Name,
+                ConnectedSystemId = c.ConnectedSystemId,
+                ConnectedSystemName = csLookup.TryGetValue(c.ConnectedSystemId, out var name) ? name : null,
+                ChangeTime = c.ChangeTime,
+                InitiatedByType = MapInitiatorType(c.InitiatedByType),
+                InitiatedByName = c.InitiatedByName
+            }).ToList(),
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Gets a paginated list of deleted MVOs (Metaverse Objects).
+    /// </summary>
+    /// <remarks>
+    /// Returns MVOs that have been deleted, with their identity preserved at deletion time.
+    /// These records are retained for audit and compliance purposes.
+    /// </remarks>
+    /// <param name="objectTypeId">Optional filter by Metaverse Object Type ID.</param>
+    /// <param name="displayNameSearch">Optional search term for display name (contains match).</param>
+    /// <param name="fromDate">Optional filter for deletions on or after this date (UTC).</param>
+    /// <param name="toDate">Optional filter for deletions on or before this date (UTC).</param>
+    /// <param name="page">Page number (1-based, default: 1).</param>
+    /// <param name="pageSize">Items per page (default: 50, max: 1000).</param>
+    /// <returns>Paginated list of deleted MVO records.</returns>
+    /// <response code="200">Returns the paginated list of deleted MVOs.</response>
+    /// <response code="401">If the user is not authenticated.</response>
+    [HttpGet("deleted-objects/mvo", Name = "GetDeletedMvos")]
+    [ProducesResponseType(typeof(DeletedObjectsPagedResponse<DeletedMvoResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetDeletedMvosAsync(
+        [FromQuery] int? objectTypeId = null,
+        [FromQuery] string? displayNameSearch = null,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50)
+    {
+        _logger.LogDebug("Getting deleted MVOs - Type:{ObjectTypeId}, Search:{Search}, Page:{Page}",
+            objectTypeId, displayNameSearch, page);
+
+        pageSize = Math.Clamp(pageSize, 1, 1000);
+        page = Math.Max(page, 1);
+
+        var (items, totalCount) = await _application.Repository.Metaverse.GetDeletedMvoChangesAsync(
+            objectTypeId: objectTypeId,
+            fromDate: fromDate,
+            toDate: toDate,
+            displayNameSearch: string.IsNullOrWhiteSpace(displayNameSearch) ? null : displayNameSearch,
+            page: page,
+            pageSize: pageSize);
+
+        var response = new DeletedObjectsPagedResponse<DeletedMvoResponse>
+        {
+            Items = items.Select(c => new DeletedMvoResponse
+            {
+                Id = c.Id,
+                DisplayName = c.DeletedObjectDisplayName,
+                ObjectTypeName = c.DeletedObjectType?.Name,
+                ObjectTypeId = c.DeletedObjectTypeId,
+                ChangeTime = c.ChangeTime,
+                InitiatedByType = MapInitiatorType(c.InitiatedByType),
+                InitiatedByName = c.InitiatedByName
+            }).ToList(),
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+
+        return Ok(response);
+    }
+
     #region Private Helpers
+
+    private static string MapInitiatorType(ActivityInitiatorType initiatorType)
+    {
+        return initiatorType switch
+        {
+            ActivityInitiatorType.User => "User",
+            ActivityInitiatorType.ApiKey => "ApiKey",
+            _ => "Unknown"
+        };
+    }
 
     /// <summary>
     /// Checks if the current authentication is via API key.
