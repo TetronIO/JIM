@@ -425,6 +425,14 @@ internal class LdapConnectorExport
         var deleteRequest = new DeleteRequest(dn);
         var response = (DeleteResponse)_connection.SendRequest(deleteRequest);
 
+        if (response.ResultCode == ResultCode.NoSuchObject)
+        {
+            // Object already deleted - treat as idempotent success.
+            // The desired state (object gone) is already achieved.
+            _logger.Information("LdapConnectorExport.ProcessHardDelete: Object at '{Dn}' does not exist (already deleted), treating as success", dn);
+            return;
+        }
+
         if (response.ResultCode != ResultCode.Success)
         {
             throw new LdapException((int)response.ResultCode, response.ErrorMessage);

@@ -193,9 +193,21 @@ public class ExportExecutionServer
         // For Create and Delete, we proceed even if there are no attribute changes
         // (Create might have no initial attributes, Delete just needs the operation)
 
+        // Delete exports that have already been exported should not be re-executed.
+        // Unlike Create/Update exports which may have attribute changes needing retry,
+        // a Delete is an all-or-nothing operation. Once exported (status=Exported), the
+        // delete was sent to the target system and should only be cleaned up during
+        // import confirmation, not re-executed (which would fail if the object is already gone).
+        if (pendingExport.ChangeType == PendingExportChangeType.Delete &&
+            pendingExport.Status == PendingExportStatus.Exported)
+        {
+            return false;
+        }
+
         // Execute if status is Pending, Exported (for retry), or ExportNotConfirmed
         // - Pending: New export, not yet processed
         // - Exported: Was exported, but has attribute changes needing retry (ExportedNotConfirmed)
+        //             (Delete exports excluded above - they don't have attribute-level retries)
         // - ExportNotConfirmed: Previous export indicated not all values persisted
         if (pendingExport.Status != PendingExportStatus.Pending &&
             pendingExport.Status != PendingExportStatus.Exported &&

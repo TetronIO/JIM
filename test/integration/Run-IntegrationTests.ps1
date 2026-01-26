@@ -146,14 +146,45 @@ function Show-ScenarioMenu {
             }
         }
 
+        # Detect stub/unimplemented scenarios by checking for the banner pattern used in placeholder scripts.
+        # Must match the exact Write-Host banner to avoid false positives from incidental mentions
+        # (e.g., a test step warning containing "not yet implemented" in its message text).
+        $disabled = $false
+        $fileContent = Get-Content $file.FullName -Raw
+        if ($fileContent -match 'Write-Host\s+"[\s]*NOT YET IMPLEMENTED[\s]*"') {
+            $disabled = $true
+            $description = "$description (not yet implemented)"
+        }
+
         $scenarios += @{
             Name = $scenarioName
             Description = $description
+            Disabled = $disabled
         }
     }
 
+    # Find the first selectable (non-disabled) index
     $selectedIndex = 0
+    for ($i = 0; $i -lt $scenarios.Count; $i++) {
+        if (-not $scenarios[$i].Disabled) {
+            $selectedIndex = $i
+            break
+        }
+    }
     $exitMenu = $false
+
+    # Helper: find the next selectable index in a given direction (1=down, -1=up)
+    function Find-NextSelectable {
+        param([int]$Current, [int]$Direction)
+        $next = $Current + $Direction
+        while ($next -ge 0 -and $next -lt $scenarios.Count) {
+            if (-not $scenarios[$next].Disabled) {
+                return $next
+            }
+            $next += $Direction
+        }
+        return $Current  # Stay put if no selectable item found
+    }
 
     # Hide cursor
     [Console]::CursorVisible = $false
@@ -174,7 +205,12 @@ function Show-ScenarioMenu {
             for ($i = 0; $i -lt $scenarios.Count; $i++) {
                 $scenario = $scenarios[$i]
 
-                if ($i -eq $selectedIndex) {
+                if ($scenario.Disabled) {
+                    # Disabled items shown greyed out, not selectable
+                    Write-Host "${GRAY}  $($scenario.Name) (deferred)${NC}"
+                    Write-Host "${GRAY}  $($scenario.Description)${NC}"
+                }
+                elseif ($i -eq $selectedIndex) {
                     Write-Host "${GREEN}► $($scenario.Name)${NC}"
                     Write-Host "${GRAY}  $($scenario.Description)${NC}"
                 }
@@ -190,10 +226,10 @@ function Show-ScenarioMenu {
 
             switch ($key.VirtualKeyCode) {
                 38 { # Up arrow
-                    $selectedIndex = [Math]::Max(0, $selectedIndex - 1)
+                    $selectedIndex = Find-NextSelectable -Current $selectedIndex -Direction (-1)
                 }
                 40 { # Down arrow
-                    $selectedIndex = [Math]::Min($scenarios.Count - 1, $selectedIndex + 1)
+                    $selectedIndex = Find-NextSelectable -Current $selectedIndex -Direction 1
                 }
                 13 { # Enter
                     $exitMenu = $true
@@ -831,12 +867,42 @@ if (-not (Test-Path $scenarioScript)) {
     exit 1
 }
 
+# Check for unimplemented/deferred scenarios
+$scenarioContent = Get-Content $scenarioScript -Raw
+if ($scenarioContent -match 'Write-Host\s+"[\s]*NOT YET IMPLEMENTED[\s]*"') {
+    Write-Failure "Scenario '$Scenario' is not yet implemented (deferred)"
+    Write-Host "${GRAY}This scenario exists as a placeholder but has no test logic yet.${NC}"
+    Write-Host "${GRAY}Select a different scenario or check the project backlog for status.${NC}"
+    exit 1
+}
+
 Write-Step "Running: Invoke-$Scenario.ps1 -Template $Template -Step $Step"
 Write-Host ""
 
-& $scenarioScript -Template $Template -Step $Step -ApiKey $apiKey
-$scenarioExitCode = $LASTEXITCODE
+# Capture scenario console output to a log file for diagnostics.
+# The log preserves all PASSED/FAILED step details, warnings, and errors that would
+# otherwise only be visible in the live console output.
+# Uses Start-Transcript because scenario scripts use Write-Host which bypasses the
+# standard output pipeline (Tee-Object/redirection cannot capture Write-Host output).
+$logDir = Join-Path $scriptRoot "results" "logs"
+if (-not (Test-Path $logDir)) {
+    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+}
+$logTimestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
+$scenarioLogFile = Join-Path $logDir "$Scenario-$Template-$logTimestamp.log"
+
+Start-Transcript -Path $scenarioLogFile -Append | Out-Null
+try {
+    & $scenarioScript -Template $Template -Step $Step -ApiKey $apiKey
+    $scenarioExitCode = $LASTEXITCODE
+}
+finally {
+    Stop-Transcript | Out-Null
+}
 $timings["5. Run Tests"] = (Get-Date) - $step5Start
+
+Write-Host ""
+Write-Step "Scenario log saved to: results/logs/$Scenario-$Template-$logTimestamp.log"
 
 # Step 6: Capture Performance Metrics
 $step6Start = Get-Date

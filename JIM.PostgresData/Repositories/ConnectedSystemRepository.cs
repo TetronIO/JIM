@@ -583,6 +583,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // in SyncRuleMappingProcessor.ProcessReferenceAttribute can detect existing MVO reference values
             // and avoid creating spurious "new" values for unchanged references.
             // IMPORTANT: MVO Type must be included for deletion rule evaluation in ProcessMvoDeletionRuleAsync.
+            // IMPORTANT: MVO AttributeValues must include ContributedBySystem so that
+            // ProcessObsoleteConnectedSystemObjectAsync can identify and recall attributes contributed
+            // by the disconnecting system when RemoveContributedAttributesOnObsoletion is enabled.
             query = Repository.Database.ConnectedSystemObjects
                 .AsSplitQuery()
                 .Include(cso => cso.Type)
@@ -598,7 +601,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .ThenInclude(av => av.Attribute)
                 .Include(cso => cso.MetaverseObject)
                     .ThenInclude(mvo => mvo!.AttributeValues)
-                    .ThenInclude(av => av.ReferenceValue);
+                    .ThenInclude(av => av.ReferenceValue)
+                .Include(cso => cso.MetaverseObject)
+                    .ThenInclude(mvo => mvo!.AttributeValues)
+                    .ThenInclude(av => av.ContributedBySystem);
         }
         else
         {
@@ -611,6 +617,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // in SyncRuleMappingProcessor.ProcessReferenceAttribute can detect existing MVO reference values
             // and avoid creating spurious "new" values for unchanged references.
             // IMPORTANT: MVO Type must be included for deletion rule evaluation in ProcessMvoDeletionRuleAsync.
+            // IMPORTANT: MVO AttributeValues must include ContributedBySystem so that
+            // ProcessObsoleteConnectedSystemObjectAsync can identify and recall attributes contributed
+            // by the disconnecting system when RemoveContributedAttributesOnObsoletion is enabled.
             query = Repository.Database.ConnectedSystemObjects
                 .AsSplitQuery()
                 .Include(cso => cso.Type)
@@ -626,7 +635,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .ThenInclude(av => av.Attribute)
                 .Include(cso => cso.MetaverseObject)
                     .ThenInclude(mvo => mvo!.AttributeValues)
-                    .ThenInclude(av => av.ReferenceValue);
+                    .ThenInclude(av => av.ReferenceValue)
+                .Include(cso => cso.MetaverseObject)
+                    .ThenInclude(mvo => mvo!.AttributeValues)
+                    .ThenInclude(av => av.ContributedBySystem);
         }
 
         // add the Connected System filter and order by Id for consistent pagination

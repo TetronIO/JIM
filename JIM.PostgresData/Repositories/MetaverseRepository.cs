@@ -798,9 +798,9 @@ public class MetaverseRepository : IMetaverseRepository
     /// Gets Metaverse Objects that are eligible for automatic deletion based on deletion rules.
     /// Returns MVOs where:
     /// - Origin = Projected (not Internal - protects admin accounts)
-    /// - Type.DeletionRule = WhenLastConnectorDisconnected
+    /// - Type.DeletionRule = WhenLastConnectorDisconnected (requires no remaining CSOs)
+    ///   OR Type.DeletionRule = WhenAuthoritativeSourceDisconnected (may still have CSOs)
     /// - LastConnectorDisconnectedDate + DeletionGracePeriod less than or equal to now
-    /// - No connected system objects remain
     /// </summary>
     public async Task<List<MetaverseObject>> GetMetaverseObjectsEligibleForDeletionAsync(int maxResults = 100)
     {
@@ -813,13 +813,18 @@ public class MetaverseRepository : IMetaverseRepository
             .Where(mvo =>
                 // Must be a projected object (not internal like admin accounts)
                 mvo.Origin == MetaverseObjectOrigin.Projected &&
-                // Must have a type with WhenLastConnectorDisconnected deletion rule
                 mvo.Type != null &&
-                mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected &&
-                // Must have been disconnected (has a last connector disconnected date)
+                // Must have been marked for deletion (has a last connector disconnected date)
                 mvo.LastConnectorDisconnectedDate != null &&
-                // Must have no remaining connected system objects
-                !mvo.ConnectedSystemObjects.Any() &&
+                // Must match a supported automatic deletion rule
+                (
+                    // WhenLastConnectorDisconnected: all CSOs must be gone
+                    (mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected &&
+                     !mvo.ConnectedSystemObjects.Any()) ||
+                    // WhenAuthoritativeSourceDisconnected: authoritative source triggered deletion,
+                    // MVO may still have remaining target CSOs (housekeeping will handle their export deletion)
+                    mvo.Type.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
+                ) &&
                 // Grace period must have elapsed (or no grace period configured)
                 (mvo.Type.DeletionGracePeriod == null ||
                  mvo.Type.DeletionGracePeriod == TimeSpan.Zero ||

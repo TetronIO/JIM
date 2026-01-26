@@ -118,6 +118,7 @@ Write-Host ""
 $testResults = @{
     Scenario = "MVO Deletion Rules - Comprehensive Coverage"
     Template = $Template
+    StartTime = (Get-Date).ToString("o")
     Steps = @()
     Success = $false
 }
@@ -511,14 +512,15 @@ try {
         if ($mvoStillExists) {
             # Assert 2: Check that CSV-contributed attributes were recalled
             # After recall, attributes like department, title etc. contributed by CSV should be removed
-            $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test WLCD Recall" -PageSize 10 -ErrorAction SilentlyContinue) |
+            $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test WLCD Recall" -Attributes Department -PageSize 10 -ErrorAction SilentlyContinue) |
                 Where-Object { $_.displayName -eq "Test WLCD Recall" } | Select-Object -First 1
 
             if ($mvoDetail) {
                 # Check if source-contributed attributes (e.g., department, title) are now empty/null
+                # The API returns requested attributes in the 'attributes' dictionary property
                 $deptValue = $null
-                if ($mvoDetail.PSObject.Properties.Name -contains 'department') {
-                    $deptValue = $mvoDetail.department
+                if ($mvoDetail.attributes -and $mvoDetail.attributes.PSObject.Properties.Name -contains 'Department') {
+                    $deptValue = $mvoDetail.attributes.Department
                 }
                 if (-not $deptValue) {
                     Write-Host "  PASSED: CSV-contributed attribute 'department' has been recalled (empty/null)" -ForegroundColor Green
@@ -600,13 +602,14 @@ try {
 
         if ($mvoStillExists) {
             # Assert 2: Attributes should remain on MVO (not recalled)
-            $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test WLCD NoRecall" -PageSize 10 -ErrorAction SilentlyContinue) |
+            $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test WLCD NoRecall" -Attributes Department -PageSize 10 -ErrorAction SilentlyContinue) |
                 Where-Object { $_.displayName -eq "Test WLCD NoRecall" } | Select-Object -First 1
 
             if ($mvoDetail) {
+                # The API returns requested attributes in the 'attributes' dictionary property
                 $deptValue = $null
-                if ($mvoDetail.PSObject.Properties.Name -contains 'department') {
-                    $deptValue = $mvoDetail.department
+                if ($mvoDetail.attributes -and $mvoDetail.attributes.PSObject.Properties.Name -contains 'Department') {
+                    $deptValue = $mvoDetail.attributes.Department
                 }
                 if ($deptValue) {
                     Write-Host "  PASSED: CSV-contributed attribute 'department' retained: $deptValue" -ForegroundColor Green
@@ -858,13 +861,14 @@ try {
 
         if ($mvoStillExists) {
             # Assert 2: Check that CSV-contributed attributes were recalled
-            $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Manual Recall" -PageSize 10 -ErrorAction SilentlyContinue) |
+            $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Manual Recall" -Attributes Department -PageSize 10 -ErrorAction SilentlyContinue) |
                 Where-Object { $_.displayName -eq "Test Manual Recall" } | Select-Object -First 1
 
             if ($mvoDetail) {
+                # The API returns requested attributes in the 'attributes' dictionary property
                 $deptValue = $null
-                if ($mvoDetail.PSObject.Properties.Name -contains 'department') {
-                    $deptValue = $mvoDetail.department
+                if ($mvoDetail.attributes -and $mvoDetail.attributes.PSObject.Properties.Name -contains 'Department') {
+                    $deptValue = $mvoDetail.attributes.Department
                 }
                 if (-not $deptValue) {
                     Write-Host "  PASSED: CSV-contributed attribute 'department' has been recalled (empty/null)" -ForegroundColor Green
@@ -951,13 +955,14 @@ try {
 
         if ($mvoStillExists) {
             # Assert 2: Attributes should remain on MVO (not recalled)
-            $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Manual NoRecall" -PageSize 10 -ErrorAction SilentlyContinue) |
+            $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Manual NoRecall" -Attributes Department -PageSize 10 -ErrorAction SilentlyContinue) |
                 Where-Object { $_.displayName -eq "Test Manual NoRecall" } | Select-Object -First 1
 
             if ($mvoDetail) {
+                # The API returns requested attributes in the 'attributes' dictionary property
                 $deptValue = $null
-                if ($mvoDetail.PSObject.Properties.Name -contains 'department') {
-                    $deptValue = $mvoDetail.department
+                if ($mvoDetail.attributes -and $mvoDetail.attributes.PSObject.Properties.Name -contains 'Department') {
+                    $deptValue = $mvoDetail.attributes.Department
                 }
                 if ($deptValue) {
                     Write-Host "  PASSED: CSV-contributed attribute 'department' retained: $deptValue" -ForegroundColor Green
@@ -1068,6 +1073,21 @@ try {
     }
 
     $testResults.Success = ($successCount -eq $totalCount)
+    $testResults.EndTime = (Get-Date).ToString("o")
+    $testResults.TotalTests = $totalCount
+    $testResults.PassedTests = $successCount
+    $testResults.FailedTests = $failCount
+
+    # Save structured test results to JSON for diagnostics
+    $resultsDir = Join-Path $PSScriptRoot ".." "results" "test-results"
+    if (-not (Test-Path $resultsDir)) {
+        New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
+    }
+    $resultsTimestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
+    $resultsFile = Join-Path $resultsDir "Scenario4-DeletionRules-$Template-$resultsTimestamp.json"
+    $testResults | ConvertTo-Json -Depth 5 | Set-Content $resultsFile
+    Write-Host ""
+    Write-Host "Test results saved to: $resultsFile" -ForegroundColor Gray
 
     if ($testResults.Success) {
         Write-Host ""
@@ -1085,5 +1105,17 @@ catch {
     Write-Host "Scenario 4 failed: $_" -ForegroundColor Red
     Write-Host "  Stack trace: $($_.ScriptStackTrace)" -ForegroundColor Gray
     $testResults.Error = $_.Exception.Message
+    $testResults.EndTime = (Get-Date).ToString("o")
+
+    # Save structured test results even on failure
+    $resultsDir = Join-Path $PSScriptRoot ".." "results" "test-results"
+    if (-not (Test-Path $resultsDir)) {
+        New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
+    }
+    $resultsTimestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
+    $resultsFile = Join-Path $resultsDir "Scenario4-DeletionRules-$Template-$resultsTimestamp.json"
+    $testResults | ConvertTo-Json -Depth 5 | Set-Content $resultsFile
+    Write-Host "Test results saved to: $resultsFile" -ForegroundColor Gray
+
     exit 1
 }

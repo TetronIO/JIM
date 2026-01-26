@@ -431,17 +431,17 @@ public class Worker : BackgroundService
 
             if (mvosToDelete.Count > 0)
             {
-                Log.Information("PerformHousekeepingAsync: Found {Count} orphaned MVOs eligible for deletion", mvosToDelete.Count);
+                Log.Information("PerformHousekeepingAsync: Found {Count} MVOs eligible for deletion", mvosToDelete.Count);
 
                 foreach (var mvo in mvosToDelete)
                 {
                     try
                     {
-                        Log.Information("PerformHousekeepingAsync: Deleting orphaned MVO {MvoId} ({DisplayName}) - disconnected at {DisconnectedDate}",
-                            mvo.Id, mvo.DisplayName ?? "No display name", mvo.LastConnectorDisconnectedDate);
+                        Log.Information("PerformHousekeepingAsync: Deleting MVO {MvoId} ({DisplayName}) - disconnected at {DisconnectedDate}, rule: {DeletionRule}",
+                            mvo.Id, mvo.DisplayName ?? "No display name", mvo.LastConnectorDisconnectedDate, mvo.Type?.DeletionRule);
 
                         // Evaluate export rules for the MVO deletion (create delete pending exports for provisioned CSOs)
-                        // Note: Most orphaned MVOs won't have CSOs, but this handles edge cases
+                        // WhenAuthoritativeSourceDisconnected MVOs may still have target CSOs that need delete exports
                         await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
 
                         // Delete the MVO using the initiator info captured when it was marked for deletion
@@ -452,11 +452,11 @@ public class Worker : BackgroundService
                             mvo.DeletionInitiatedById,
                             mvo.DeletionInitiatedByName);
 
-                        Log.Information("PerformHousekeepingAsync: Successfully deleted orphaned MVO {MvoId}", mvo.Id);
+                        Log.Information("PerformHousekeepingAsync: Successfully deleted MVO {MvoId}", mvo.Id);
                     }
                     catch (Exception ex)
                     {
-                        Log.Error(ex, "PerformHousekeepingAsync: Failed to delete orphaned MVO {MvoId}", mvo.Id);
+                        Log.Error(ex, "PerformHousekeepingAsync: Failed to delete MVO {MvoId}", mvo.Id);
                     }
                 }
             }

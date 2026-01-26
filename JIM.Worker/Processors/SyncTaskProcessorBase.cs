@@ -444,6 +444,28 @@ public abstract class SyncTaskProcessorBase
                 mvo.PendingAttributeValueRemovals.Add(attributeValue);
                 Log.Verbose($"ProcessObsoleteConnectedSystemObjectAsync: Marking attribute '{attributeValue.Attribute?.Name}' for removal from MVO {mvo.Id}.");
             }
+
+            // Apply attribute removals and queue the MVO for export evaluation and persistence.
+            // ProcessMetaverseObjectChangesAsync is skipped for obsolete CSOs (it's guarded by
+            // Status != Obsolete), so we must handle this here to ensure target systems are
+            // notified of the recalled attributes via pending exports.
+            if (mvo.PendingAttributeValueRemovals.Count > 0)
+            {
+                var changedAttributes = mvo.PendingAttributeValueRemovals.ToList();
+                var removedAttributes = mvo.PendingAttributeValueRemovals.ToHashSet();
+
+                Log.Information("ProcessObsoleteConnectedSystemObjectAsync: Applying {Count} attribute removals to MVO {MvoId} and queueing for export evaluation",
+                    changedAttributes.Count, mvo.Id);
+
+                ApplyPendingMetaverseObjectAttributeChanges(mvo);
+
+                // Queue for batch persistence (MVO attributes have changed)
+                _pendingMvoUpdates.Add(mvo);
+
+                // Queue for export evaluation so target systems receive pending exports
+                // for the recalled attribute values
+                _pendingExportEvaluations.Add((mvo, changedAttributes, removedAttributes));
+            }
         }
 
         // Break the CSO-MVO join

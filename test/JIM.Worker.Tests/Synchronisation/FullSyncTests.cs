@@ -1132,11 +1132,14 @@ public class FullSyncTests
         var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem, runProfile, activity, new CancellationTokenSource());
         await syncFullSyncTaskProcessor.PerformFullSyncAsync();
 
-        // verify that the MVO has pending attribute value removals for the attributes contributed by this system
-        Assert.That(mvo.PendingAttributeValueRemovals, Is.Not.Empty,
-            "Expected pending attribute value removals when RemoveContributedAttributesOnObsoletion is enabled.");
-        Assert.That(mvo.PendingAttributeValueRemovals.Count, Is.EqualTo(2),
-            "Expected 2 pending attribute value removals (DisplayName and EmployeeNumber).");
+        // verify that the contributed attributes were actually removed from the MVO
+        // (ApplyPendingMetaverseObjectAttributeChanges is called during obsoletion to apply the removals)
+        Assert.That(mvo.AttributeValues, Is.Empty,
+            "Expected MVO attribute values to be empty after recall (both attributes contributed by this system).");
+
+        // verify that pending removals were cleared after being applied
+        Assert.That(mvo.PendingAttributeValueRemovals, Is.Empty,
+            "Expected pending attribute value removals to be cleared after being applied.");
 
         // verify the CSO-MVO join was broken
         Assert.That(cso.MetaverseObject, Is.Null, "Expected CSO-MVO join to be broken.");

@@ -14,9 +14,9 @@ namespace JIM.Worker.Tests.Repositories;
 /// Tests for GetMetaverseObjectsEligibleForDeletionAsync in MetaverseRepository.
 /// These tests verify that the housekeeping query correctly identifies MVOs that:
 /// - Are projected (not internal admin accounts)
-/// - Have deletion rule WhenLastConnectorDisconnected
+/// - Have deletion rule WhenLastConnectorDisconnected (requires no remaining CSOs)
+///   OR WhenAuthoritativeSourceDisconnected (may still have remaining target CSOs)
 /// - Have passed their grace period
-/// - Have no remaining connected system objects
 /// </summary>
 [TestFixture]
 public class MetaverseRepositoryEligibleForDeletionTests
@@ -31,6 +31,8 @@ public class MetaverseRepositoryEligibleForDeletionTests
     private MetaverseObjectType _personTypeWithGracePeriod = null!;
     private MetaverseObjectType _personTypeWithManualDeletion = null!;
     private MetaverseObjectType _personTypeWithZeroGracePeriod = null!;
+    private MetaverseObjectType _personTypeWithAuthSourceDeletion = null!;
+    private MetaverseObjectType _personTypeWithAuthSourceAndGracePeriod = null!;
 
     [TearDown]
     public void TearDown()
@@ -73,6 +75,24 @@ public class MetaverseRepositoryEligibleForDeletionTests
             Name = "PersonZeroGrace",
             DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
             DeletionGracePeriod = TimeSpan.Zero
+        };
+
+        _personTypeWithAuthSourceDeletion = new MetaverseObjectType
+        {
+            Id = 5,
+            Name = "PersonAuthSource",
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            DeletionGracePeriod = null,
+            DeletionTriggerConnectedSystemIds = new List<int> { 1 }
+        };
+
+        _personTypeWithAuthSourceAndGracePeriod = new MetaverseObjectType
+        {
+            Id = 6,
+            Name = "PersonAuthSourceWithGrace",
+            DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            DeletionGracePeriod = TimeSpan.FromMinutes(1),
+            DeletionTriggerConnectedSystemIds = new List<int> { 1 }
         };
 
         // Initialise empty data - tests will populate as needed
@@ -285,9 +305,9 @@ public class MetaverseRepositoryEligibleForDeletionTests
     #region Connected System Object Tests
 
     [Test]
-    public async Task GetMetaverseObjectsEligibleForDeletionAsync_WithRemainingCso_DoesNotReturnMvoAsync()
+    public async Task GetMetaverseObjectsEligibleForDeletionAsync_WhenLastConnector_WithRemainingCso_DoesNotReturnMvoAsync()
     {
-        // Arrange - MVO still has a connected system object
+        // Arrange - MVO with WhenLastConnectorDisconnected still has a connected system object
         var mvo = CreateProjectedMvo(_personTypeWithDeletionRule);
         mvo.LastConnectorDisconnectedDate = DateTime.UtcNow.AddDays(-1);
         mvo.ConnectedSystemObjects.Add(new ConnectedSystemObject
@@ -303,7 +323,109 @@ public class MetaverseRepositoryEligibleForDeletionTests
         // Act
         var result = await _repository.Metaverse.GetMetaverseObjectsEligibleForDeletionAsync();
 
-        // Assert - Cannot delete MVO that still has CSOs
+        // Assert - WhenLastConnectorDisconnected requires all CSOs to be gone
+        Assert.That(result, Is.Empty);
+    }
+
+    #endregion
+
+    #region WhenAuthoritativeSourceDisconnected Tests
+
+    [Test]
+    public async Task GetMetaverseObjectsEligibleForDeletionAsync_AuthSource_NoGracePeriod_ReturnsMvoAsync()
+    {
+        // Arrange - MVO with WhenAuthoritativeSourceDisconnected and no grace period
+        var mvo = CreateProjectedMvo(_personTypeWithAuthSourceDeletion);
+        mvo.LastConnectorDisconnectedDate = DateTime.UtcNow.AddSeconds(-1);
+        _metaverseObjectsData.Add(mvo);
+        SetupMockDbContext();
+
+        // Act
+        var result = await _repository.Metaverse.GetMetaverseObjectsEligibleForDeletionAsync();
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result[0].Id, Is.EqualTo(mvo.Id));
+    }
+
+    [Test]
+    public async Task GetMetaverseObjectsEligibleForDeletionAsync_AuthSource_WithRemainingCsos_StillReturnsMvoAsync()
+    {
+        // Arrange - MVO with WhenAuthoritativeSourceDisconnected still has a target CSO (e.g., LDAP)
+        // Unlike WhenLastConnectorDisconnected, this rule deletes even when target CSOs remain
+        var mvo = CreateProjectedMvo(_personTypeWithAuthSourceDeletion);
+        mvo.LastConnectorDisconnectedDate = DateTime.UtcNow.AddDays(-1);
+        mvo.ConnectedSystemObjects.Add(new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = 2, // Target system CSO
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id
+        });
+        _metaverseObjectsData.Add(mvo);
+        SetupMockDbContext();
+
+        // Act
+        var result = await _repository.Metaverse.GetMetaverseObjectsEligibleForDeletionAsync();
+
+        // Assert - Should be eligible even with remaining target CSOs
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result[0].Id, Is.EqualTo(mvo.Id));
+    }
+
+    [Test]
+    public async Task GetMetaverseObjectsEligibleForDeletionAsync_AuthSource_GracePeriodNotExpired_DoesNotReturnMvoAsync()
+    {
+        // Arrange - 1-minute grace period, disconnected 30 seconds ago
+        var mvo = CreateProjectedMvo(_personTypeWithAuthSourceAndGracePeriod);
+        mvo.LastConnectorDisconnectedDate = DateTime.UtcNow.AddSeconds(-30);
+        _metaverseObjectsData.Add(mvo);
+        SetupMockDbContext();
+
+        // Act
+        var result = await _repository.Metaverse.GetMetaverseObjectsEligibleForDeletionAsync();
+
+        // Assert - Grace period hasn't elapsed yet
+        Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetMetaverseObjectsEligibleForDeletionAsync_AuthSource_GracePeriodExpired_ReturnsMvoAsync()
+    {
+        // Arrange - 1-minute grace period, disconnected 2 minutes ago
+        var mvo = CreateProjectedMvo(_personTypeWithAuthSourceAndGracePeriod);
+        mvo.LastConnectorDisconnectedDate = DateTime.UtcNow.AddMinutes(-2);
+        // Still has a target CSO
+        mvo.ConnectedSystemObjects.Add(new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = 2,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id
+        });
+        _metaverseObjectsData.Add(mvo);
+        SetupMockDbContext();
+
+        // Act
+        var result = await _repository.Metaverse.GetMetaverseObjectsEligibleForDeletionAsync();
+
+        // Assert - Grace period has elapsed, eligible despite remaining target CSO
+        Assert.That(result, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task GetMetaverseObjectsEligibleForDeletionAsync_AuthSource_NoDisconnectedDate_DoesNotReturnMvoAsync()
+    {
+        // Arrange - WhenAuthoritativeSourceDisconnected but never marked for deletion
+        var mvo = CreateProjectedMvo(_personTypeWithAuthSourceDeletion);
+        mvo.LastConnectorDisconnectedDate = null;
+        _metaverseObjectsData.Add(mvo);
+        SetupMockDbContext();
+
+        // Act
+        var result = await _repository.Metaverse.GetMetaverseObjectsEligibleForDeletionAsync();
+
+        // Assert - Not eligible without disconnection date
         Assert.That(result, Is.Empty);
     }
 
@@ -386,9 +508,20 @@ public class MetaverseRepositoryEligibleForDeletionTests
     {
         // Arrange - Various MVOs with different eligibility status
 
-        // Eligible: Projected, disconnected 31 days ago, 30-day grace, no CSOs
-        var eligibleMvo = CreateProjectedMvo(_personTypeWithGracePeriod);
-        eligibleMvo.LastConnectorDisconnectedDate = DateTime.UtcNow.AddDays(-31);
+        // Eligible: Projected, WhenLastConnectorDisconnected, disconnected 31 days ago, 30-day grace, no CSOs
+        var eligibleLastConnector = CreateProjectedMvo(_personTypeWithGracePeriod);
+        eligibleLastConnector.LastConnectorDisconnectedDate = DateTime.UtcNow.AddDays(-31);
+
+        // Eligible: Projected, WhenAuthoritativeSourceDisconnected, disconnected, still has target CSO
+        var eligibleAuthSource = CreateProjectedMvo(_personTypeWithAuthSourceDeletion);
+        eligibleAuthSource.LastConnectorDisconnectedDate = DateTime.UtcNow.AddDays(-1);
+        eligibleAuthSource.ConnectedSystemObjects.Add(new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = 2, // Target system CSO
+            MetaverseObject = eligibleAuthSource,
+            MetaverseObjectId = eligibleAuthSource.Id
+        });
 
         // Not eligible: Internal origin
         var internalMvo = CreateInternalMvo(_personTypeWithDeletionRule);
@@ -402,7 +535,7 @@ public class MetaverseRepositoryEligibleForDeletionTests
         var gracePeriodMvo = CreateProjectedMvo(_personTypeWithGracePeriod);
         gracePeriodMvo.LastConnectorDisconnectedDate = DateTime.UtcNow.AddDays(-10);
 
-        // Not eligible: Has remaining CSO
+        // Not eligible: WhenLastConnectorDisconnected but has remaining CSO
         var withCsoMvo = CreateProjectedMvo(_personTypeWithDeletionRule);
         withCsoMvo.LastConnectorDisconnectedDate = DateTime.UtcNow.AddDays(-1);
         withCsoMvo.ConnectedSystemObjects.Add(new ConnectedSystemObject
@@ -419,16 +552,18 @@ public class MetaverseRepositoryEligibleForDeletionTests
 
         _metaverseObjectsData.AddRange(new[]
         {
-            eligibleMvo, internalMvo, manualMvo, gracePeriodMvo, withCsoMvo, neverDisconnectedMvo
+            eligibleLastConnector, eligibleAuthSource, internalMvo, manualMvo, gracePeriodMvo, withCsoMvo, neverDisconnectedMvo
         });
         SetupMockDbContext();
 
         // Act
         var result = await _repository.Metaverse.GetMetaverseObjectsEligibleForDeletionAsync();
 
-        // Assert - Only the first MVO should be eligible
-        Assert.That(result, Has.Count.EqualTo(1));
-        Assert.That(result[0].Id, Is.EqualTo(eligibleMvo.Id));
+        // Assert - Both eligible MVOs should be returned (WhenLastConnectorDisconnected + WhenAuthoritativeSourceDisconnected)
+        Assert.That(result, Has.Count.EqualTo(2));
+        var resultIds = result.Select(r => r.Id).ToList();
+        Assert.That(resultIds, Does.Contain(eligibleLastConnector.Id));
+        Assert.That(resultIds, Does.Contain(eligibleAuthSource.Id));
     }
 
     #endregion
