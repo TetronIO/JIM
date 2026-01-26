@@ -62,7 +62,7 @@
                 <MudText>Refresh</MudText>
             }
         </MudButton>
-        <MudSwitch T="bool" @bind-Value="_autoRefresh" Color="Color.Primary" Label="Auto-refresh (5s)" />
+        <MudSwitch T="bool" Value="_autoRefresh" ValueChanged="OnAutoRefreshChanged" Color="Color.Primary" Label="Auto-refresh (5s)" />
         <MudSpacer />
         <MudText Typo="Typo.body2" Class="mud-text-secondary">
             @if (_logEntries != null)
@@ -331,8 +331,9 @@
         }
     }
 
-    protected override void OnParametersSet()
+    private void OnAutoRefreshChanged(bool value)
     {
+        _autoRefresh = value;
         UpdateAutoRefreshTimer();
     }
 
