@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Version** | 1.13 |
-| **Last Updated** | 2026-01-21 |
+| **Version** | 1.14 |
+| **Last Updated** | 2026-01-26 |
 | **Status** | In Progress (~94% Complete) |
 
 ---
@@ -16,13 +16,13 @@
 | Inbound Sync | `██████████` | 18 | 18 | 100% |
 | Outbound Sync | `██████████` | 15 | 15 | 100% |
 | Scheduling | `██████░░░░` | 5 | 10 | 50% |
-| Admin UI | `█████████░` | 16 | 17 | 94% |
+| Admin UI | `█████████░` | 19 | 20 | 95% |
 | Security | `██████████` | 5 | 5 | 100% |
 | Operations | `██████████` | 6 | 6 | 100% |
 | API Coverage | `██████████` | 7 | 7 | 100% |
 | Tooling | `██████████` | 5 | 5 | 100% |
 | Release | `██████████` | 9 | 9 | 100% |
-| **Overall** | `█████████░` | **96** | **102** | **94%** |
+| **Overall** | `█████████░` | **99** | **105** | **94%** |
 
 ### Priority Order for Remaining Work
 
@@ -31,14 +31,20 @@
 
 **Nice to Have (Can follow MVP):**
 - Dashboard admin home page (#169)
-- Progress indication on Operations page (#246)
 - Unique value generation (#242)
-- Sync processor refactoring (#252)
 - Full RBAC (#21) and Synchronisation Readers role (#9)
-- Change history (#14)
 - Sync preview
 
 ### Recently Completed ✓
+- ~~CSO/MVO Change Tracking (#14, #269)~~ - Full change history with timeline UI, initiator/mechanism tracking, deleted objects view, retention cleanup
+- ~~Progress Indication (#246)~~ - Real-time progress bars, percentage tracking, and contextual messages on Operations page
+- ~~Sync Processor Refactoring (#252)~~ - Extracted shared logic into SyncTaskProcessorBase, eliminated ~2,100 lines of duplication
+- ~~WhenAuthoritativeSourceDisconnected (#115)~~ - Full deletion rule with UI configuration, API validation, unit and integration tests
+- ~~Defensive Deduplication (#284)~~ - Multi-valued reference attribute deduplication during sync
+- ~~PendingExportStatus Rename (#285)~~ - ExportNotImported renamed to ExportNotConfirmed for consistent terminology
+- ~~API Container Selection (#283)~~ - Container selection endpoints for LDAP connector
+- ~~Same-batch Import Deduplication (#280)~~ - Detect duplicate external IDs within a single import batch
+- ~~Unconfirmed Export Surfacing (#287)~~ - Sync surfaces unconfirmed pending exports with confirmation stats
 - ~~Integration Testing Framework (#173)~~ - Phase 1 complete with 5 scenarios (1, 2, 4, 5, 8), Samba AD infrastructure
 - ~~Scenario 8 Cross-domain Entitlement Sync~~ - Groups sync between AD domains with reference attribute translation
 - ~~Synchronous MVO Deletion~~ - MVOs with 0-grace-period now delete immediately during sync
@@ -113,7 +119,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - Multi-valued attribute flow ✓
 
 #### 2.3 MVO Lifecycle Management
-- MVO deletion rules (Manual, WhenLastConnectorDisconnected) ✓
+- MVO deletion rules (Manual, WhenLastConnectorDisconnected, WhenAuthoritativeSourceDisconnected) ✓
 - Deletion grace period support ✓
 - Scheduled deletion date tracking ✓
 - Reconnection clears scheduled deletion ✓
@@ -174,12 +180,15 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - API Key management (#175) ✓
 - Certificate management ✓
 - Pending deletions view (#203) ✓
+- Change history timeline and audit trail (#14) ✓
+- Deleted objects view with change audit ✓
 
 #### 5.2 Synchronisation Management
 - Manual run profile execution ✓
 - Activity monitoring ✓
 - Pending Export review/management (#25) ✓
 - Server-side file browser for connector settings (#177) ✓
+- Progress indication for running operations (#246) ✓
 - Sync preview (what-if analysis)
 
 ### 6. Security & Access Control
@@ -267,11 +276,11 @@ JIM MVP is complete when:
 
 The following are explicitly out of scope for MVP:
 
-- Delta/incremental sync (full sync is sufficient for MVP)
+- ~~Delta/incremental sync~~ (implemented: delta import and delta sync processors)
 - Multiple connector types beyond LDAP and File
-- Advanced deletion rules (authoritative source, conditional deletion)
+- ~~Authoritative source deletion rules~~ (implemented: WhenAuthoritativeSourceDisconnected #115)
+- Conditional deletion rules
 - Soft delete / recycle bin
-- Group membership management
 - Self-service portal
 - Approval workflows
 - Password synchronisation
