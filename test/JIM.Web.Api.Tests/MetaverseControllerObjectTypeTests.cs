@@ -312,6 +312,106 @@ public class MetaverseControllerObjectTypeTests
     }
 
     [Test]
+    public async Task UpdateObjectTypeAsync_SubDayGracePeriod_SetsCorrectly()
+    {
+        var objectType = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "User",
+            PluralName = "Users",
+            DeletionGracePeriod = null
+        };
+
+        MetaverseObjectType? capturedObjectType = null;
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false))
+            .ReturnsAsync(objectType);
+        _mockMetaverseRepo.Setup(r => r.UpdateMetaverseObjectTypeAsync(It.IsAny<MetaverseObjectType>()))
+            .Callback<MetaverseObjectType>(ot => capturedObjectType = ot)
+            .Returns(Task.CompletedTask);
+
+        var request = new UpdateMetaverseObjectTypeRequest
+        {
+            DeletionGracePeriod = TimeSpan.FromMinutes(1)
+        };
+
+        var result = await _controller.UpdateObjectTypeAsync(1, request) as OkObjectResult;
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(capturedObjectType, Is.Not.Null);
+        Assert.That(capturedObjectType!.DeletionGracePeriod, Is.EqualTo(TimeSpan.FromMinutes(1)));
+
+        var dto = result!.Value as MetaverseObjectTypeDetailDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.DeletionGracePeriod, Is.EqualTo(TimeSpan.FromMinutes(1)));
+    }
+
+    [Test]
+    public async Task UpdateObjectTypeAsync_MixedDaysHoursMinutesGracePeriod_SetsCorrectly()
+    {
+        var objectType = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "User",
+            PluralName = "Users",
+            DeletionGracePeriod = null
+        };
+
+        MetaverseObjectType? capturedObjectType = null;
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false))
+            .ReturnsAsync(objectType);
+        _mockMetaverseRepo.Setup(r => r.UpdateMetaverseObjectTypeAsync(It.IsAny<MetaverseObjectType>()))
+            .Callback<MetaverseObjectType>(ot => capturedObjectType = ot)
+            .Returns(Task.CompletedTask);
+
+        // 2 days, 6 hours, 30 minutes
+        var gracePeriod = new TimeSpan(2, 6, 30, 0);
+        var request = new UpdateMetaverseObjectTypeRequest
+        {
+            DeletionGracePeriod = gracePeriod
+        };
+
+        var result = await _controller.UpdateObjectTypeAsync(1, request) as OkObjectResult;
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(capturedObjectType, Is.Not.Null);
+        Assert.That(capturedObjectType!.DeletionGracePeriod, Is.EqualTo(gracePeriod));
+
+        var dto = result!.Value as MetaverseObjectTypeDetailDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.DeletionGracePeriod, Is.EqualTo(gracePeriod));
+    }
+
+    [Test]
+    public async Task UpdateObjectTypeAsync_NullGracePeriodInRequest_DoesNotOverwriteExisting()
+    {
+        var objectType = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "User",
+            PluralName = "Users",
+            DeletionGracePeriod = TimeSpan.FromDays(7)
+        };
+
+        MetaverseObjectType? capturedObjectType = null;
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false))
+            .ReturnsAsync(objectType);
+        _mockMetaverseRepo.Setup(r => r.UpdateMetaverseObjectTypeAsync(It.IsAny<MetaverseObjectType>()))
+            .Callback<MetaverseObjectType>(ot => capturedObjectType = ot)
+            .Returns(Task.CompletedTask);
+
+        // Request does NOT include DeletionGracePeriod - should leave existing value untouched
+        var request = new UpdateMetaverseObjectTypeRequest
+        {
+            DeletionRule = MetaverseObjectDeletionRule.Manual
+        };
+
+        await _controller.UpdateObjectTypeAsync(1, request);
+
+        Assert.That(capturedObjectType, Is.Not.Null);
+        Assert.That(capturedObjectType!.DeletionGracePeriod, Is.EqualTo(TimeSpan.FromDays(7)));
+    }
+
+    [Test]
     public async Task UpdateObjectTypeAsync_WhenAuthoritativeSourceDisconnected_WithTriggerIds_Succeeds()
     {
         var objectType = new MetaverseObjectType
