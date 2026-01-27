@@ -1,11 +1,8 @@
 /*
- * JIM Colour Theme: Default Light
+ * JIM Colour Theme: Neutral Nav Light
  *
- * This file defines all colour variables for the light mode theme.
- * To create a new light theme, copy this file and change the values.
- *
- * MudBlazor palette variables (--mud-palette-*) override MudBlazor's
- * built-in palette. JIM variables (--jim-*) are used by custom styles.
+ * Variant of the default light theme with neutral (dark grey) navigation
+ * links instead of blue-accented top-level items. Inspired by Untitled UI.
  *
  * We use html[lang] instead of :root so that these declarations have
  * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
@@ -61,8 +58,9 @@ html[lang] {
     --jim-json-null: #0000ff;
 
     /* === JIM Custom: Navigation === */
-    --jim-nav-top-level-color: var(--mud-palette-primary);
-    --jim-nav-active-color: var(--mud-palette-primary);
+    /* Neutral dark grey nav links instead of blue accent */
+    --jim-nav-top-level-color: #344054;
+    --jim-nav-active-color: #101828;
 
     /* === JIM Custom: Link Hover === */
     --jim-link-hover-color: #ff4081ff;

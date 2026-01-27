@@ -134,13 +134,33 @@
 .jim-nav-menu>.jim-nav-top-level .mud-nav-link-text,
 .jim-nav-menu>.jim-nav-top-level>button>.mud-nav-link-text {
     font-weight: 600;
-    color: var(--mud-palette-primary);
+    color: var(--jim-nav-top-level-color);
 }
 
 /* Ensure icon colour matches for top-level items */
 .jim-nav-menu>.jim-nav-top-level .mud-nav-link-icon,
 .jim-nav-menu>.jim-nav-top-level>button>.mud-icon-root {
-    color: var(--mud-palette-primary);
+    color: var(--jim-nav-top-level-color);
+}
+
+/* Active/selected nav item - stronger colour to stand out */
+.jim-nav-menu .mud-nav-link.active .mud-nav-link-text {
+    color: var(--jim-nav-active-color) !important;
+}
+
+.jim-nav-menu .mud-nav-link.active .mud-nav-link-icon {
+    color: var(--jim-nav-active-color) !important;
+}
+
+/* Nav group expand/collapse chevron icons - MudBlazor uses color for
+   collapsed state and fill for expanded (.mud-transform) state */
+.jim-nav-menu .mud-nav-link-expand-icon {
+    color: var(--jim-nav-top-level-color) !important;
+}
+
+.jim-nav-menu .mud-nav-link-expand-icon.mud-transform {
+    color: var(--jim-nav-top-level-color) !important;
+    fill: var(--jim-nav-top-level-color) !important;
 }
 
 /* Child nav items - keep default styling (lighter weight, secondary colour) */
