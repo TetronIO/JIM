@@ -32,6 +32,7 @@ Docker Stack Management:
   jim-stack-dev      - Start Docker stack + Adminer
   jim-stack-logs     - View Docker stack logs
   jim-stack-down     - Stop Docker stack
+  jim-restart        - Restart stack (re-reads .env, no rebuild)
 
 Docker Builds (rebuild + start):
   jim-build          - Rebuild all services + start
@@ -68,6 +69,7 @@ alias jim-stack='docker compose -f docker-compose.yml -f docker-compose.override
 alias jim-stack-dev='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml -f docker-compose.dev-tools.yml --profile with-db up -d'
 alias jim-stack-logs='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db logs -f'
 alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml -f docker-compose.dev-tools.yml --profile with-db down && docker compose -f docker-compose.integration-tests.yml down 2>/dev/null || true'
+alias jim-restart='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml -f docker-compose.dev-tools.yml --profile with-db down && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d'
 
 # Docker builds (rebuild and start services)
 alias jim-build='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build'
