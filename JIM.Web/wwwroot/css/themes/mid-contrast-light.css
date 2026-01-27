@@ -81,4 +81,7 @@ html[lang] {
 
     /* === JIM Custom: Link Hover === */
     --jim-link-hover-color: #e0406a;
+
+    /* === JIM Custom: Logo text === */
+    --jim-logo-text-color: #ffffff;
 }

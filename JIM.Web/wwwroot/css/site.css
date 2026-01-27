@@ -182,7 +182,7 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     font-size: 1.3rem;
     letter-spacing: 0.2em;
     vertical-align: text-top;
-    color: #ffffff !important;
+    color: var(--jim-logo-text-color, #ffffff) !important;
 }
 
 .jim-drawer-footer {
