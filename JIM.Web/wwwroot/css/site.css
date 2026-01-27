@@ -62,10 +62,19 @@ a.mud-link.mud-primary-text {
     font-size: 1rem;
 }
 
+/* Consistent 8px border radius for container elements (papers, tables, alerts).
+   Applied directly rather than via --mud-default-borderradius to avoid affecting
+   buttons, inputs, and other interactive controls that should keep their default radius. */
 .mud-paper,
 .mud-paper-outlined,
+.mud-table,
 .mud-alert {
     border-radius: 8px !important;
+}
+
+/* Clip table content to respect rounded corners (prevents hover highlight overflow) */
+.mud-table {
+    overflow: hidden;
 }
 
 /* Give container elements a subtle border for better definition against the background.
