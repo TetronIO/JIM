@@ -394,7 +394,8 @@ public class GroupMembershipSyncTests
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithGuidAttribute("objectId")
             .WithStringAttribute("displayName")
-            .WithStringAttribute("cn"));
+            .WithStringAttribute("cn")
+            .WithStringAttribute("Type"));
 
         var groupType = await _harness.CreateMetaverseObjectTypeAsync("Group", t => t
             .WithGuidAttribute("objectId")
@@ -422,6 +423,7 @@ public class GroupMembershipSyncTests
         var mvPersonCn = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "cn" && a.MetaverseObjectTypes.Any(t => t.Name == "Person"));
         var mvGroupCn = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "cn" && a.MetaverseObjectTypes.Any(t => t.Name == "Group"));
         var mvGroupMember = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "member");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type" && a.MetaverseObjectTypes.Any(t => t.Name == "Person"));
 
         // Create Source import sync rules
         await _harness.CreateSyncRuleAsync(
@@ -432,7 +434,8 @@ public class GroupMembershipSyncTests
             SyncRuleDirection.Import,
             r => r
                 .WithProjection()
-                .WithAttributeFlow(mvPersonCn, sourceUserCn));
+                .WithAttributeFlow(mvPersonCn, sourceUserCn)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
 
         await _harness.CreateSyncRuleAsync(
             "Source Group Import",

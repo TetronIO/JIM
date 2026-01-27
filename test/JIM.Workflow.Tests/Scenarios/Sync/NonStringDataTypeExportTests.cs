@@ -331,7 +331,8 @@ public class NonStringDataTypeExportTests
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithGuidAttribute("employeeId")
             .WithStringAttribute("displayName")
-            .WithBoolAttribute("isActive"));
+            .WithBoolAttribute("isActive")
+            .WithStringAttribute("Type"));
 
         // Get attributes for flow rules
         var hrUserType = _harness.GetObjectType("HR", "User");
@@ -347,6 +348,7 @@ public class NonStringDataTypeExportTests
         // Get MV attributes
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
         var mvIsActive = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "isActive");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
         // Create import sync rule
         await _harness.CreateSyncRuleAsync(
@@ -358,7 +360,8 @@ public class NonStringDataTypeExportTests
             r => r
                 .WithProjection()
                 .WithAttributeFlow(mvDisplayName, hrDisplayName)
-                .WithAttributeFlow(mvIsActive, hrIsActive));
+                .WithAttributeFlow(mvIsActive, hrIsActive)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
 
         // Create export sync rule
         await _harness.CreateSyncRuleAsync(
@@ -395,7 +398,8 @@ public class NonStringDataTypeExportTests
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithGuidAttribute("employeeId")
             .WithStringAttribute("displayName")
-            .WithGuidAttribute("correlationId"));
+            .WithGuidAttribute("correlationId")
+            .WithStringAttribute("Type"));
 
         // Get attributes for flow rules
         var hrUserType = _harness.GetObjectType("HR", "User");
@@ -411,6 +415,7 @@ public class NonStringDataTypeExportTests
         // Get MV attributes
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
         var mvCorrelationId = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "correlationId");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
         // Create import sync rule
         await _harness.CreateSyncRuleAsync(
@@ -422,7 +427,8 @@ public class NonStringDataTypeExportTests
             r => r
                 .WithProjection()
                 .WithAttributeFlow(mvDisplayName, hrDisplayName)
-                .WithAttributeFlow(mvCorrelationId, hrCorrelationId));
+                .WithAttributeFlow(mvCorrelationId, hrCorrelationId)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
 
         // Create export sync rule
         await _harness.CreateSyncRuleAsync(
@@ -459,7 +465,8 @@ public class NonStringDataTypeExportTests
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithGuidAttribute("employeeId")
             .WithStringAttribute("displayName")
-            .WithDateTimeAttribute("startDate"));
+            .WithDateTimeAttribute("startDate")
+            .WithStringAttribute("Type"));
 
         // Get attributes for flow rules
         var hrUserType = _harness.GetObjectType("HR", "User");
@@ -475,6 +482,7 @@ public class NonStringDataTypeExportTests
         // Get MV attributes
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
         var mvStartDate = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "startDate");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
         // Create import sync rule
         await _harness.CreateSyncRuleAsync(
@@ -486,7 +494,8 @@ public class NonStringDataTypeExportTests
             r => r
                 .WithProjection()
                 .WithAttributeFlow(mvDisplayName, hrDisplayName)
-                .WithAttributeFlow(mvStartDate, hrStartDate));
+                .WithAttributeFlow(mvStartDate, hrStartDate)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
 
         // Create export sync rule
         await _harness.CreateSyncRuleAsync(
@@ -523,7 +532,8 @@ public class NonStringDataTypeExportTests
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithGuidAttribute("employeeId")
             .WithStringAttribute("displayName")
-            .WithIntAttribute("badgeNumber"));
+            .WithIntAttribute("badgeNumber")
+            .WithStringAttribute("Type"));
 
         // Get attributes for flow rules
         var hrUserType = _harness.GetObjectType("HR", "User");
@@ -539,6 +549,7 @@ public class NonStringDataTypeExportTests
         // Get MV attributes
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
         var mvBadgeNumber = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "badgeNumber");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
         // Create import sync rule
         await _harness.CreateSyncRuleAsync(
@@ -550,7 +561,8 @@ public class NonStringDataTypeExportTests
             r => r
                 .WithProjection()
                 .WithAttributeFlow(mvDisplayName, hrDisplayName)
-                .WithAttributeFlow(mvBadgeNumber, hrBadgeNumber));
+                .WithAttributeFlow(mvBadgeNumber, hrBadgeNumber)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
 
         // Create export sync rule
         await _harness.CreateSyncRuleAsync(

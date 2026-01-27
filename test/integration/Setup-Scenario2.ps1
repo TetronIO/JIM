@@ -717,6 +717,25 @@ try {
         }
         Write-Host "  ✓ Source import mappings configured ($importMappingsCreated new)" -ForegroundColor Green
 
+        # Add constant expression mapping for Type = PersonEntity on source import rule
+        $typeAttr = $mvAttributes | Where-Object { $_.name -eq "Type" }
+        if ($typeAttr) {
+            $existingTypeMapping = $existingImportMappings | Where-Object {
+                $_.targetMetaverseAttributeId -eq $typeAttr.id
+            }
+            if (-not $existingTypeMapping) {
+                try {
+                    New-JIMSyncRuleMapping -SyncRuleId $sourceImportRule.id `
+                        -TargetMetaverseAttributeId $typeAttr.id `
+                        -Expression '"PersonEntity"' | Out-Null
+                    Write-Host "  ✓ Source import Type=PersonEntity expression mapping configured" -ForegroundColor Green
+                }
+                catch {
+                    Write-Host "    ⚠ Could not create Type expression mapping: $_" -ForegroundColor Yellow
+                }
+            }
+        }
+
         # Create export mappings (Metaverse -> Target LDAP)
         $existingExportMappings = Get-JIMSyncRuleMapping -SyncRuleId $targetExportRule.id
         $exportMappingsCreated = 0

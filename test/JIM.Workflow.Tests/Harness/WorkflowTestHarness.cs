@@ -747,6 +747,23 @@ public class SyncRuleBuilder
         return this;
     }
 
+    public SyncRuleBuilder WithExpressionFlow(string expression, MetaverseAttribute targetMvAttr)
+    {
+        var flow = new SyncRuleMapping();
+
+        var source = new SyncRuleMappingSource
+        {
+            Expression = expression
+        };
+        flow.Sources.Add(source);
+
+        flow.TargetMetaverseAttribute = targetMvAttr;
+        flow.TargetMetaverseAttributeId = targetMvAttr.Id;
+
+        _attributeFlows.Add(flow);
+        return this;
+    }
+
     public SyncRule Build()
     {
         return new SyncRule

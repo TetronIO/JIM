@@ -335,7 +335,7 @@ internal class SeedingServer
                     new() {
                         ComparisonType = SearchComparisonType.Equals,
                         MetaverseAttribute = typeAttribute,
-                        StringValue = "Person"
+                        StringValue = "PersonEntity"
                     }
                 }
             });
@@ -367,7 +367,7 @@ internal class SeedingServer
                     new() {
                         ComparisonType = SearchComparisonType.Equals,
                         MetaverseAttribute = typeAttribute,
-                        StringValue = "Service"
+                        StringValue = "NonPersonEntity"
                     }
                 }
             });
@@ -1194,7 +1194,7 @@ internal class SeedingServer
             userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Type),
-                Pattern = "Person",
+                Pattern = "PersonEntity",
                 PopulatedValuesPercentage = 100
             });
         }

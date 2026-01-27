@@ -756,7 +756,8 @@ public class DriftDetectionWorkflowTests
         // Create MV type
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithGuidAttribute("employeeId")
-            .WithStringAttribute("displayName"));
+            .WithStringAttribute("displayName")
+            .WithStringAttribute("Type"));
 
         // Get attributes for flow rules
         var hrUserType = _harness.GetObjectType("HR", "User");
@@ -768,6 +769,7 @@ public class DriftDetectionWorkflowTests
 
         // Get MV attributes
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
         // Create import sync rule (HR → MV) - HR is the contributor
         await _harness.CreateSyncRuleAsync(
@@ -778,7 +780,8 @@ public class DriftDetectionWorkflowTests
             SyncRuleDirection.Import,
             r => r
                 .WithProjection()
-                .WithAttributeFlow(mvDisplayName, hrDisplayName));
+                .WithAttributeFlow(mvDisplayName, hrDisplayName)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
 
         // Create export sync rule (MV → AD) - AD is the target (non-contributor)
         await _harness.CreateSyncRuleAsync(
@@ -812,7 +815,8 @@ public class DriftDetectionWorkflowTests
         // Create MV type
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithGuidAttribute("employeeId")
-            .WithStringAttribute("displayName"));
+            .WithStringAttribute("displayName")
+            .WithStringAttribute("Type"));
 
         // Get attributes
         var hrUserType = _harness.GetObjectType("HR", "User");
@@ -823,6 +827,7 @@ public class DriftDetectionWorkflowTests
         var adDn = adUserType.Attributes.First(a => a.Name == "distinguishedName");
 
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
         // HR Import - HR contributes to displayName
         await _harness.CreateSyncRuleAsync(
@@ -833,7 +838,8 @@ public class DriftDetectionWorkflowTests
             SyncRuleDirection.Import,
             r => r
                 .WithProjection()
-                .WithAttributeFlow(mvDisplayName, hrDisplayName));
+                .WithAttributeFlow(mvDisplayName, hrDisplayName)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
 
         // AD Import - AD ALSO contributes to displayName (bidirectional)
         await _harness.CreateSyncRuleAsync(
@@ -843,7 +849,8 @@ public class DriftDetectionWorkflowTests
             personType,
             SyncRuleDirection.Import,
             r => r
-                .WithAttributeFlow(mvDisplayName, adCn));
+                .WithAttributeFlow(mvDisplayName, adCn)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
 
         // AD Export - exports displayName to AD
         await _harness.CreateSyncRuleAsync(
@@ -886,7 +893,8 @@ public class DriftDetectionWorkflowTests
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithGuidAttribute("employeeId")
             .WithStringAttribute("displayName")
-            .WithDateTimeAttribute("Employee End Date"));
+            .WithDateTimeAttribute("Employee End Date")
+            .WithStringAttribute("Type"));
 
         // Get attributes for flow rules
         var hrUserType = _harness.GetObjectType("HR", "User");
@@ -902,6 +910,7 @@ public class DriftDetectionWorkflowTests
         // Get MV attributes
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
         var mvEndDate = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Employee End Date");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
         // Create import sync rule (HR → MV)
         await _harness.CreateSyncRuleAsync(
@@ -913,7 +922,8 @@ public class DriftDetectionWorkflowTests
             r => r
                 .WithProjection()
                 .WithAttributeFlow(mvDisplayName, hrDisplayName)
-                .WithAttributeFlow(mvEndDate, hrEndDate));
+                .WithAttributeFlow(mvEndDate, hrEndDate)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
 
         // Create export sync rule (MV → AD) with expression-based mapping
         // ToFileTime converts DateTime to Windows FILETIME (long) — same as real accountExpires flow
@@ -1082,7 +1092,8 @@ public class DriftDetectionWorkflowTests
         // Create MV types
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithGuidAttribute("objectId")
-            .WithStringAttribute("cn"));
+            .WithStringAttribute("cn")
+            .WithStringAttribute("Type"));
 
         var groupType = await _harness.CreateMetaverseObjectTypeAsync("Group", t => t
             .WithGuidAttribute("objectId")
@@ -1110,6 +1121,7 @@ public class DriftDetectionWorkflowTests
         var mvPersonCn = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "cn" && a.MetaverseObjectTypes.Any(t => t.Name == "Person"));
         var mvGroupCn = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "cn" && a.MetaverseObjectTypes.Any(t => t.Name == "Group"));
         var mvGroupMember = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "member");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type" && a.MetaverseObjectTypes.Any(t => t.Name == "Person"));
 
         // Create Source import sync rules (Source is the contributor)
         await _harness.CreateSyncRuleAsync(
@@ -1120,7 +1132,8 @@ public class DriftDetectionWorkflowTests
             SyncRuleDirection.Import,
             r => r
                 .WithProjection()
-                .WithAttributeFlow(mvPersonCn, sourceUserCn));
+                .WithAttributeFlow(mvPersonCn, sourceUserCn)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
 
         await _harness.CreateSyncRuleAsync(
             "Source Group Import",

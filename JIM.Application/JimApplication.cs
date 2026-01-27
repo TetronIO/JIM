@@ -172,7 +172,7 @@ public class JimApplication : IDisposable
             {
                 MetaverseObject = user,
                 Attribute = typeAttribute,
-                StringValue = "Person"
+                StringValue = "PersonEntity"
             });
 
             Log.Information($"InitialiseSSOAsync: Creating metaverse object user ({initialAdminUniqueIdentifierClaimValue}) and assigning the {Constants.BuiltInRoles.Administrator} role.");
