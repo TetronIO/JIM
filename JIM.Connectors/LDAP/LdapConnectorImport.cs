@@ -863,7 +863,22 @@ internal class LdapConnectorImport
                     case AttributeDataType.LongNumber:
                         var longNumberValues = LdapConnectorUtilities.GetEntryAttributeLongValues(searchResult, attributeName);
                         if (longNumberValues is { Count: > 0 })
-                            importObjectAttribute.LongValues.AddRange(longNumberValues);
+                        {
+                            // Filter out protected attribute default values.
+                            // AD has "protected" attributes that cannot be cleared — they store a sentinel
+                            // value instead of null (e.g., accountExpires uses 9223372036854775807 for "never expires").
+                            // On export, JIM substitutes null → sentinel. On import, we reverse that:
+                            // sentinel → null (by not importing the value), so JIM consistently sees null
+                            // for "no value" and drift detection doesn't produce false positives.
+                            var protectedDefault = LdapConnectorExport.GetProtectedAttributeDefault(attributeName);
+                            if (protectedDefault != null && long.TryParse(protectedDefault, out var defaultLongValue))
+                            {
+                                longNumberValues = longNumberValues.Where(v => v != defaultLongValue).ToList();
+                            }
+
+                            if (longNumberValues.Count > 0)
+                                importObjectAttribute.LongValues.AddRange(longNumberValues);
+                        }
                         break;
 
                     case AttributeDataType.Boolean:
