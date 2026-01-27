@@ -1,0 +1,81 @@
+/*
+ * JIM Colour Theme: Mid-Contrast Dark
+ *
+ * A neutral dark theme using exact colours from a modern SaaS dashboard.
+ * Cool greys without purple tint — clean, industrial, and high-contrast.
+ * The sidebar uses the first-tier box colour (#121315) to sit flush
+ * with content-area cards, creating a cohesive panel layout.
+ *
+ * We use html[lang] instead of :root so that these declarations have
+ * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
+ * styles, ensuring our theme values always win.
+ */
+
+html[lang] {
+    /* === Primary Palette === */
+    --mud-palette-primary: #4488ff;
+    --mud-palette-primary-darken: #3070ee;
+    --mud-palette-primary-lighten: #66a0ff;
+    --mud-palette-primary-text: #ffffffff;
+    --mud-palette-secondary: #4488ff;
+    --mud-palette-secondary-text: #ffffffff;
+
+    /* === Background & Surface (exact screenshot colours) === */
+    --mud-palette-background: #1e1f23;
+    --mud-palette-surface: #121315;
+    --mud-palette-background-grey: rgba(255, 255, 255, 0.03);
+
+    /* === Appbar === */
+    --mud-palette-appbar-background: #0a0b0c;
+    --mud-palette-appbar-text: #ffffffff;
+
+    /* === Drawer (first-tier box colour, flush with content cards) === */
+    --mud-palette-drawer-background: #121315;
+    --mud-palette-drawer-text: #b0b2b8;
+    --mud-palette-drawer-icon: #6a6c74;
+
+    /* === Text (neutral grey, no purple tint) === */
+    --mud-palette-text-primary: #e4e4e8;
+    --mud-palette-text-secondary: #9a9aa4;
+    --mud-palette-text-disabled: #55555e;
+
+    /* === Action === */
+    --mud-palette-action-default: #b0b2b8;
+    --mud-palette-action-default-hover: rgba(68, 136, 255, 0.15);
+    --mud-palette-action-disabled: rgba(255, 255, 255, 0.38);
+    --mud-palette-action-disabled-background: rgba(255, 255, 255, 0.10);
+
+    /* === Lines & Dividers (first-tier box border from screenshot) === */
+    --mud-palette-lines-default: #2a2b2f;
+    --mud-palette-lines-inputs: #3e3f44;
+    --mud-palette-divider: #2a2b2f;
+    --mud-palette-divider-light: rgba(255, 255, 255, 0.06);
+
+    /* === Table === */
+    --mud-palette-table-lines: #2a2b2f;
+    --mud-palette-table-striped: rgba(255, 255, 255, 0.02);
+    --mud-palette-table-hover: #05090a;
+
+    /* === JIM Custom: JSON Syntax Highlighting === */
+    --jim-json-key: #82aaff;        /* Soft blue */
+    --jim-json-string: #a5d6a7;     /* Soft green */
+    --jim-json-number: #ffb74d;     /* Warm amber */
+    --jim-json-boolean: #4dd0e1;    /* Teal/cyan */
+    --jim-json-null: #ff8a80;       /* Soft coral */
+
+    /* === JIM Custom: Navigation === */
+    --jim-nav-top-level-color: #b0b2b8;
+    --jim-nav-active-color: #f0f0f4;
+
+    /* === JIM Custom: Drawer border === */
+    --jim-drawer-border-color: #2a2b2f;
+
+    /* === JIM Custom: Paper border === */
+    --jim-paper-border-color: #2a2b2f;
+
+    /* === JIM Custom: Content Links === */
+    --jim-link-color: #6e99cc;
+
+    /* === JIM Custom: Link Hover === */
+    --jim-link-hover-color: #ff4081ff;
+}

@@ -1,0 +1,81 @@
+/*
+ * JIM Colour Theme: Mid-Purple Light
+ *
+ * A cool lavender-white light theme paired with the same dark sidebar
+ * as the mid-purple dark variant. The deep blue primary harmonises
+ * with both the dark sidebar and the light content area, creating a
+ * modern split-panel look.
+ *
+ * We use html[lang] instead of :root so that these declarations have
+ * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
+ * styles, ensuring our theme values always win.
+ */
+
+html[lang] {
+    /* === Primary Palette === */
+    --mud-palette-primary: #3858e0;
+    --mud-palette-primary-darken: #2c48c8;
+    --mud-palette-primary-lighten: #5a75ea;
+    --mud-palette-primary-text: #ffffffff;
+    --mud-palette-secondary: #3858e0;
+    --mud-palette-secondary-text: #ffffffff;
+
+    /* === Background & Surface (cool lavender-white content area) === */
+    --mud-palette-background: #f0f0f8;
+    --mud-palette-surface: #ffffffff;
+    --mud-palette-background-grey: rgba(0, 0, 0, 0.024);
+
+    /* === Appbar (dark, matching sidebar) === */
+    --mud-palette-appbar-background: #1a1a32;
+    --mud-palette-appbar-text: #ffffffff;
+
+    /* === Drawer (dark sidebar - shared with dark variant) === */
+    --mud-palette-drawer-background: #252545;
+    --mud-palette-drawer-text: #c0c4d8;
+    --mud-palette-drawer-icon: #8088a8;
+
+    /* === Text (light content area) === */
+    --mud-palette-text-primary: #2a2a40;
+    --mud-palette-text-secondary: #5c5c80;
+    --mud-palette-text-disabled: rgba(0, 0, 0, 0.36);
+
+    /* === Action === */
+    --mud-palette-action-default: rgba(0, 0, 0, 0.54);
+    --mud-palette-action-default-hover: rgba(56, 88, 224, 0.12);
+    --mud-palette-action-disabled: rgba(0, 0, 0, 0.38);
+    --mud-palette-action-disabled-background: rgba(0, 0, 0, 0.10);
+
+    /* === Lines & Dividers === */
+    --mud-palette-lines-default: rgba(42, 42, 64, 0.14);
+    --mud-palette-lines-inputs: rgba(120, 120, 160, 0.40);
+    --mud-palette-divider: rgba(42, 42, 64, 0.14);
+    --mud-palette-divider-light: rgba(0, 0, 0, 0.06);
+
+    /* === Table === */
+    --mud-palette-table-lines: rgba(42, 42, 64, 0.14);
+    --mud-palette-table-striped: rgba(0, 0, 0, 0.02);
+    --mud-palette-table-hover: rgba(56, 88, 224, 0.04);
+
+    /* === JIM Custom: JSON Syntax Highlighting === */
+    --jim-json-key: #2a4dc0;
+    --jim-json-string: #a31515;
+    --jim-json-number: #098658;
+    --jim-json-boolean: #0000dd;
+    --jim-json-null: #0000dd;
+
+    /* === JIM Custom: Navigation (light-on-dark sidebar) === */
+    --jim-nav-top-level-color: #c0c4d8;
+    --jim-nav-active-color: #f0f0f8;
+
+    /* === JIM Custom: Drawer border === */
+    --jim-drawer-border-color: #353560;
+
+    /* === JIM Custom: Paper border === */
+    --jim-paper-border-color: rgba(42, 42, 64, 0.18);
+
+    /* === JIM Custom: Content Links === */
+    --jim-link-color: #3858e0;
+
+    /* === JIM Custom: Link Hover === */
+    --jim-link-hover-color: #e0406a;
+}
