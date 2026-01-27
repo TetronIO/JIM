@@ -74,6 +74,32 @@ html[lang] .mud-table-outlined {
     border: 1px solid var(--jim-paper-border-color, transparent) !important;
 }
 
+/* Nested containers: tables and tab panels inside papers use a deeper surface colour
+   when the theme defines --jim-inner-surface (mid-contrast themes). Falls back to
+   transparent so other themes are unaffected. */
+html[lang] .mud-paper .mud-table,
+html[lang] .mud-paper .mud-simple-table {
+    background-color: var(--jim-inner-surface, transparent);
+}
+
+html[lang] .mud-paper .mud-table-outlined,
+html[lang] .mud-paper .mud-simple-table-outlined {
+    border-color: var(--jim-inner-border-color, var(--jim-paper-border-color, transparent)) !important;
+}
+
+html[lang] .mud-paper .mud-tabs-panels {
+    background-color: var(--jim-inner-surface, transparent);
+    border-radius: 0 0 8px 8px;
+}
+
+html[lang] .mud-paper .mud-card {
+    background-color: var(--jim-inner-surface, var(--mud-palette-surface));
+}
+
+html[lang] .mud-paper .mud-card-outlined {
+    border-color: var(--jim-inner-border-color, var(--jim-paper-border-color, transparent)) !important;
+}
+
 /* Strengthen tab bar separator line to match container borders */
 html[lang] .mud-tabs-tabbar.mud-tabs-border-bottom {
     border-top-color: var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;

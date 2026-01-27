@@ -24,6 +24,10 @@ html[lang] {
     --mud-palette-surface: #ffffffff;
     --mud-palette-background-grey: rgba(0, 0, 0, 0.024);
 
+    /* === Inner Surface (slightly recessed for nested containers) === */
+    --jim-inner-surface: #f0f0f2;
+    --jim-inner-border-color: rgba(42, 42, 48, 0.22);
+
     /* === Appbar (dark, matching sidebar) === */
     --mud-palette-appbar-background: #0a0b0c;
     --mud-palette-appbar-text: #ffffffff;
@@ -44,14 +48,14 @@ html[lang] {
     --mud-palette-action-disabled: rgba(0, 0, 0, 0.38);
     --mud-palette-action-disabled-background: rgba(0, 0, 0, 0.10);
 
-    /* === Lines & Dividers === */
-    --mud-palette-lines-default: rgba(42, 42, 48, 0.14);
-    --mud-palette-lines-inputs: rgba(120, 120, 140, 0.40);
-    --mud-palette-divider: rgba(42, 42, 48, 0.14);
-    --mud-palette-divider-light: rgba(0, 0, 0, 0.06);
+    /* === Lines & Dividers (strengthened for visibility) === */
+    --mud-palette-lines-default: rgba(42, 42, 48, 0.20);
+    --mud-palette-lines-inputs: rgba(120, 120, 140, 0.45);
+    --mud-palette-divider: rgba(42, 42, 48, 0.20);
+    --mud-palette-divider-light: rgba(0, 0, 0, 0.08);
 
     /* === Table === */
-    --mud-palette-table-lines: rgba(42, 42, 48, 0.14);
+    --mud-palette-table-lines: rgba(42, 42, 48, 0.20);
     --mud-palette-table-striped: rgba(0, 0, 0, 0.02);
     --mud-palette-table-hover: rgba(42, 109, 217, 0.04);
 
@@ -69,8 +73,8 @@ html[lang] {
     /* === JIM Custom: Drawer border === */
     --jim-drawer-border-color: #2a2b2f;
 
-    /* === JIM Custom: Paper border === */
-    --jim-paper-border-color: rgba(42, 42, 48, 0.18);
+    /* === JIM Custom: Paper border (strengthened for visibility) === */
+    --jim-paper-border-color: rgba(42, 42, 48, 0.28);
 
     /* === JIM Custom: Content Links === */
     --jim-link-color: #2a6dd9;

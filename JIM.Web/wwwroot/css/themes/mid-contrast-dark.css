@@ -25,6 +25,10 @@ html[lang] {
     --mud-palette-surface: #121315;
     --mud-palette-background-grey: rgba(255, 255, 255, 0.03);
 
+    /* === Inner Surface (second-tier box from screenshot: #05090a) === */
+    --jim-inner-surface: #05090a;
+    --jim-inner-border-color: #2a2b2f;
+
     /* === Appbar === */
     --mud-palette-appbar-background: #0a0b0c;
     --mud-palette-appbar-text: #ffffffff;
@@ -45,14 +49,14 @@ html[lang] {
     --mud-palette-action-disabled: rgba(255, 255, 255, 0.38);
     --mud-palette-action-disabled-background: rgba(255, 255, 255, 0.10);
 
-    /* === Lines & Dividers (first-tier box border from screenshot) === */
-    --mud-palette-lines-default: #2a2b2f;
-    --mud-palette-lines-inputs: #3e3f44;
-    --mud-palette-divider: #2a2b2f;
-    --mud-palette-divider-light: rgba(255, 255, 255, 0.06);
+    /* === Lines & Dividers (brightened from screenshot's #2a2b2f for visibility) === */
+    --mud-palette-lines-default: #3a3b40;
+    --mud-palette-lines-inputs: #4a4b52;
+    --mud-palette-divider: #3a3b40;
+    --mud-palette-divider-light: rgba(255, 255, 255, 0.08);
 
     /* === Table === */
-    --mud-palette-table-lines: #2a2b2f;
+    --mud-palette-table-lines: #3a3b40;
     --mud-palette-table-striped: rgba(255, 255, 255, 0.02);
     --mud-palette-table-hover: #05090a;
 
@@ -68,13 +72,13 @@ html[lang] {
     --jim-nav-active-color: #f0f0f4;
 
     /* === JIM Custom: Drawer border === */
-    --jim-drawer-border-color: #2a2b2f;
+    --jim-drawer-border-color: #3a3b40;
 
     /* === JIM Custom: Paper border === */
-    --jim-paper-border-color: #2a2b2f;
+    --jim-paper-border-color: #404248;
 
-    /* === JIM Custom: Content Links === */
-    --jim-link-color: #6e99cc;
+    /* === JIM Custom: Content Links (saturated blue matching Inbound chip) === */
+    --jim-link-color: #42a5f5;
 
     /* === JIM Custom: Link Hover === */
     --jim-link-hover-color: #ff4081ff;
