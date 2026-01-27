@@ -1,5 +1,7 @@
 ﻿using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Application.Utilities;
+using Serilog;
 
 namespace JIM.Application.Servers
 {
@@ -135,8 +137,16 @@ namespace JIM.Application.Servers
         /// </summary>
         public async Task<TimeSpan> GetHistoryRetentionPeriodAsync()
         {
-            var days = await GetSettingValueAsync(Constants.SettingKeys.HistoryRetentionPeriod, 90);
-            return TimeSpan.FromDays(days);
+            var retentionPeriod = await GetSettingValueAsync(Constants.SettingKeys.HistoryRetentionPeriod, TimeSpan.FromDays(90));
+
+            // Guard against zero or negative retention period which would delete all records
+            if (retentionPeriod <= TimeSpan.Zero)
+            {
+                Log.Warning("History retention period is {RetentionPeriod}, which would delete all records. Using default of 90 days", retentionPeriod);
+                return TimeSpan.FromDays(90);
+            }
+
+            return retentionPeriod;
         }
 
         /// <summary>
@@ -172,8 +182,7 @@ namespace JIM.Application.Servers
             }
 
             setting.Value = newValue;
-            setting.LastModified = DateTime.UtcNow;
-            setting.LastModifiedBy = initiatedBy?.ToString() ?? "System";
+            AuditHelper.SetUpdated(setting, initiatedBy);
 
             // Create activity for audit trail
             var activity = new Activity
@@ -203,8 +212,7 @@ namespace JIM.Application.Servers
                 throw new InvalidOperationException($"Setting '{setting.DisplayName}' is read-only and cannot be modified.");
 
             setting.Value = null; // null means use default
-            setting.LastModified = DateTime.UtcNow;
-            setting.LastModifiedBy = initiatedBy?.ToString() ?? "System";
+            AuditHelper.SetUpdated(setting, initiatedBy);
 
             // Create activity for audit trail
             var activity = new Activity

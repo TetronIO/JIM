@@ -81,13 +81,21 @@
             </MudChip>
         </MudTd>
         <MudTd DataLabel="Target">
-            @if (!string.IsNullOrEmpty(context.TargetContext))
+            @if (!string.IsNullOrEmpty(context.TargetContext) && !string.IsNullOrEmpty(context.TargetName))
             {
-                <span><strong>@context.TargetContext</strong> → @(!string.IsNullOrEmpty(context.TargetName) ? context.TargetName : "(no name)")</span>
+                <span><strong>@context.TargetContext</strong> → @context.TargetName</span>
+            }
+            else if (!string.IsNullOrEmpty(context.TargetContext))
+            {
+                <span><strong>@context.TargetContext</strong></span>
+            }
+            else if (!string.IsNullOrEmpty(context.TargetName))
+            {
+                @context.TargetName
             }
             else
             {
-                @(!string.IsNullOrEmpty(context.TargetName) ? context.TargetName : "(no name)")
+                <MudText Typo="Typo.body2" Class="mud-text-disabled">-</MudText>
             }
         </MudTd>
         <MudTd DataLabel="Stats">
@@ -252,7 +260,16 @@
                 @context.Status.ToString().SplitOnCapitalLetters()
             </MudChip>
         </MudTd>
-        <MudTd DataLabel="Execution Time">@(context.ExecutionTime?.ToCasualString() ?? "-")</MudTd>
+        <MudTd DataLabel="Execution Time">
+            @if (context.ExecutionTime.HasValue)
+            {
+                @context.ExecutionTime.Value.ToCasualString()
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-disabled">-</MudText>
+            }
+        </MudTd>
     </RowTemplate>
     <NoRecordsContent>
         There is no activity to show yet.
