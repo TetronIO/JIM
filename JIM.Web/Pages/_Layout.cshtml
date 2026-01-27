@@ -41,7 +41,48 @@
         <a href="" class="reload">Reload</a>
         <a class="dismiss">🗙</a>
     </div>
-    <script src="_framework/blazor.server.js"></script>
+    <script src="_framework/blazor.server.js" autostart="false"></script>
+    <script>
+        // Custom reconnection handler: after the server is replaced (e.g. jim-build),
+        // the old Blazor circuit no longer exists. Rather than spinning on "Attempting
+        // to reconnect" forever, reload the page after a few failed attempts so the
+        // browser gets a fresh circuit from the new server.
+        Blazor.start({
+            reconnectionOptions: {
+                maxRetries: 5,
+                retryIntervalMilliseconds: 2000
+            },
+            reconnectionHandler: {
+                onConnectionDown: function (options, _error) {
+                    var modal = document.getElementById('components-reconnect-modal');
+                    if (modal) modal.style.display = 'flex';
+
+                    var retries = 0;
+                    var interval = setInterval(async function () {
+                        retries++;
+                        if (retries > options.maxRetries) {
+                            clearInterval(interval);
+                            location.reload();
+                            return;
+                        }
+                        try {
+                            var result = await Blazor.reconnect();
+                            if (result) {
+                                clearInterval(interval);
+                                location.reload();
+                            }
+                        } catch (_e) {
+                            // server not ready yet, keep retrying
+                        }
+                    }, options.retryIntervalMilliseconds);
+                },
+                onConnectionUp: function () {
+                    var modal = document.getElementById('components-reconnect-modal');
+                    if (modal) modal.style.display = 'none';
+                }
+            }
+        });
+    </script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="js/preferences.js"></script>
 </body>
