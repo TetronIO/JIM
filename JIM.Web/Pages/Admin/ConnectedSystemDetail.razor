@@ -1038,7 +1038,7 @@
                 else
                 {
                     @* Multiple object types - use tabs for navigation *@
-                    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pt-4" Outlined="true" @bind-ActivePanelIndex="_selectedMatchingRuleTabIndex">
+                    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-4" Outlined="true" @bind-ActivePanelIndex="_selectedMatchingRuleTabIndex">
                         @foreach (var objectType in selectedObjectTypes)
                         {
                             <MudTabPanel Text="@objectType.Name" Tag="@objectType">
