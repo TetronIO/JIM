@@ -1409,22 +1409,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
-    public async Task MergeAttributeChangesIntoPendingExportAsync(
-        PendingExport pendingExport,
-        List<PendingExportAttributeValueChange> newAttributeChanges,
-        bool updateHasUnresolvedReferences)
-    {
-        // The pending export must already be tracked by EF Core (loaded via a query without AsNoTracking).
-        // We add new child entities to the tracked collection and call SaveChangesAsync directly.
-        // We do NOT call Update() as that would cause a DbUpdateConcurrencyException for already-tracked entities.
-        pendingExport.AttributeValueChanges.AddRange(newAttributeChanges);
-
-        if (updateHasUnresolvedReferences)
-            pendingExport.HasUnresolvedReferences = true;
-
-        await Repository.Database.SaveChangesAsync();
-    }
-
     public async Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
         var exportList = pendingExports.ToList();

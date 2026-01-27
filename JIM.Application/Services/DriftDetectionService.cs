@@ -87,8 +87,8 @@ public class DriftDetectionService
     /// <param name="mvo">The Metaverse Object the CSO is joined to.</param>
     /// <param name="exportRules">Export rules targeting this CSO's connected system (pre-loaded for efficiency).</param>
     /// <param name="importMappingsByAttribute">Cache of import mappings by (ConnectedSystemId, MvoAttributeId) for checking if system is a contributor.</param>
-    /// <returns>Result indicating what drift was detected and corrective exports created.</returns>
-    public async Task<DriftDetectionResult> EvaluateDriftAsync(
+    /// <returns>Result indicating what drift was detected and corrective exports staged (not yet persisted).</returns>
+    public DriftDetectionResult EvaluateDrift(
         ConnectedSystemObject cso,
         MetaverseObject? mvo,
         List<SyncRule> exportRules,
@@ -98,7 +98,7 @@ public class DriftDetectionService
 
         if (cso.MetaverseObject == null && mvo == null)
         {
-            Log.Debug("EvaluateDriftAsync: CSO {CsoId} is not joined to an MVO, skipping drift detection", cso.Id);
+            Log.Debug("EvaluateDrift: CSO {CsoId} is not joined to an MVO, skipping drift detection", cso.Id);
             return result;
         }
 
@@ -107,7 +107,7 @@ public class DriftDetectionService
         // so there's nothing to "drift" from - they haven't received their expected values yet.
         if (cso.Status == ConnectedSystemObjectStatus.PendingProvisioning)
         {
-            Log.Debug("EvaluateDriftAsync: CSO {CsoId} is in PendingProvisioning status, skipping drift detection", cso.Id);
+            Log.Debug("EvaluateDrift: CSO {CsoId} is in PendingProvisioning status, skipping drift detection", cso.Id);
             return result;
         }
 
@@ -119,7 +119,7 @@ public class DriftDetectionService
         // This prevents silent failures where no export rules would match.
         if (targetMvo.Type == null)
         {
-            Log.Warning("EvaluateDriftAsync: MVO {MvoId} has null Type - navigation property not loaded. " +
+            Log.Warning("EvaluateDrift: MVO {MvoId} has null Type - navigation property not loaded. " +
                 "Drift detection cannot filter by MVO type. CSO: {CsoId}. " +
                 "Ensure GetConnectedSystemObjectsModifiedSinceAsync includes MVO.Type",
                 targetMvo.Id, cso.Id);
@@ -140,12 +140,12 @@ public class DriftDetectionService
 
         if (applicableExportRules.Count == 0)
         {
-            Log.Debug("EvaluateDriftAsync: No applicable export rules with EnforceState=true for CSO {CsoId} in system {SystemId}",
+            Log.Debug("EvaluateDrift: No applicable export rules with EnforceState=true for CSO {CsoId} in system {SystemId}",
                 cso.Id, cso.ConnectedSystemId);
             return result;
         }
 
-        Log.Debug("EvaluateDriftAsync: Evaluating {RuleCount} export rules for drift detection on CSO {CsoId}",
+        Log.Debug("EvaluateDrift: Evaluating {RuleCount} export rules for drift detection on CSO {CsoId}",
             applicableExportRules.Count, cso.Id);
 
         // Build the MVO attribute dictionary once for all expression evaluations
@@ -159,7 +159,7 @@ public class DriftDetectionService
             {
                 if (mapping.TargetConnectedSystemAttribute == null)
                 {
-                    Log.Warning("EvaluateDriftAsync: Export mapping has no TargetConnectedSystemAttribute set, skipping");
+                    Log.Warning("EvaluateDrift: Export mapping has no TargetConnectedSystemAttribute set, skipping");
                     continue;
                 }
 
@@ -189,7 +189,7 @@ public class DriftDetectionService
                             importMappingsByAttribute);
                     }
 
-                    Log.Debug("EvaluateDriftAsync: Contributor check for CSO {CsoId}, attribute {AttrName}: " +
+                    Log.Debug("EvaluateDrift: Contributor check for CSO {CsoId}, attribute {AttrName}: " +
                         "mvoAttributeId={MvoAttrId}, csoConnectedSystemId={CsoSystemId}, isContributor={IsContributor}, " +
                         "hasExpression={HasExpression}, cacheKeys=[{CacheKeys}]",
                         cso.Id, mapping.TargetConnectedSystemAttribute.Name,
@@ -201,7 +201,7 @@ public class DriftDetectionService
 
                     if (isContributor)
                     {
-                        Log.Debug("EvaluateDriftAsync: Skipping attribute {AttrName} for CSO {CsoId} - system is a contributor (has import rules)",
+                        Log.Debug("EvaluateDrift: Skipping attribute {AttrName} for CSO {CsoId} - system is a contributor (has import rules)",
                             mapping.TargetConnectedSystemAttribute.Name, cso.Id);
                         continue;
                     }
@@ -217,7 +217,7 @@ public class DriftDetectionService
                     // Compare values
                     if (!ValuesEqual(expectedValue, actualValue))
                     {
-                        Log.Information("EvaluateDriftAsync: Drift detected on CSO {CsoId} attribute {AttrName}. " +
+                        Log.Information("EvaluateDrift: Drift detected on CSO {CsoId} attribute {AttrName}. " +
                             "Expected: '{ExpectedValue}', Actual: '{ActualValue}'",
                             cso.Id, mapping.TargetConnectedSystemAttribute.Name,
                             FormatValueForLog(expectedValue), FormatValueForLog(actualValue));
@@ -237,12 +237,12 @@ public class DriftDetectionService
         // If drift was detected, queue corrective pending exports
         if (result.HasDrift)
         {
-            Log.Information("EvaluateDriftAsync: Detected {DriftCount} drifted attributes on CSO {CsoId}. Staging corrective exports.",
+            Log.Information("EvaluateDrift: Detected {DriftCount} drifted attributes on CSO {CsoId}. Staging corrective exports.",
                 result.DriftedAttributes.Count, cso.Id);
 
             // Use the existing export evaluation infrastructure to create pending exports
             // The existing logic already handles all the complexity of pending export creation
-            var pendingExports = await CreateCorrectiveExportsAsync(cso, targetMvo, result.DriftedAttributes);
+            var pendingExports = CreateCorrectiveExports(cso, targetMvo, result.DriftedAttributes);
             result.CorrectiveExports.AddRange(pendingExports);
         }
 
@@ -669,11 +669,11 @@ public class DriftDetectionService
     }
 
     /// <summary>
-    /// Creates corrective pending exports for drifted attributes.
-    /// Uses the existing ExportEvaluation infrastructure to ensure consistency.
+    /// Creates corrective pending exports for drifted attributes (in-memory only, not persisted).
+    /// The caller is responsible for adding these to the batch list for persistence.
     /// For multi-valued attributes, creates atomic ADD/REMOVE changes for the specific differences.
     /// </summary>
-    private async Task<List<PendingExport>> CreateCorrectiveExportsAsync(
+    private List<PendingExport> CreateCorrectiveExports(
         ConnectedSystemObject cso,
         MetaverseObject mvo,
         List<DriftedAttribute> driftedAttributes)
@@ -787,11 +787,10 @@ public class DriftDetectionService
                     pendingExport.Id, attributeChanges.Count(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue)));
             }
 
-            await _jim.Repository.ConnectedSystems.CreatePendingExportAsync(pendingExport);
             pendingExports.Add(pendingExport);
 
-            Log.Information("CreateCorrectiveExportsAsync: Created corrective PendingExport {ExportId} for CSO {CsoId} " +
-                "with {AttrCount} attribute corrections via rule '{RuleName}'",
+            Log.Information("CreateCorrectiveExportsAsync: Staged corrective PendingExport {ExportId} for CSO {CsoId} " +
+                "with {AttrCount} attribute corrections via rule '{RuleName}' (deferred for batch save)",
                 pendingExport.Id, cso.Id, attributeChanges.Count, exportRule.Name);
         }
 
