@@ -1,8 +1,8 @@
 /*
- * JIM Colour Theme: Neutral Nav Light
+ * JIM Colour Theme: Refined Light
  *
- * Variant of the default light theme with neutral (dark grey) navigation
- * links instead of blue-accented top-level items. Inspired by Untitled UI.
+ * A refined light theme with purple primary, neutral navigation links,
+ * and softer content link colours. Inspired by Untitled UI.
  *
  * We use html[lang] instead of :root so that these declarations have
  * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
@@ -11,9 +11,11 @@
 
 html[lang] {
     /* === Primary Palette === */
-    --mud-palette-primary: rgb(60, 148, 255);
+    --mud-palette-primary: #594ae2;
+    --mud-palette-primary-darken: #4834d4;
+    --mud-palette-primary-lighten: #7c6fe8;
     --mud-palette-primary-text: #ffffffff;
-    --mud-palette-secondary: #5b8a8a;
+    --mud-palette-secondary: #594ae2;
     --mud-palette-secondary-text: #ffffffff;
 
     /* === Background & Surface === */
@@ -22,7 +24,7 @@ html[lang] {
     --mud-palette-background-grey: rgba(0, 0, 0, 0.024);
 
     /* === Appbar === */
-    --mud-palette-appbar-background: rgb(60, 148, 255);
+    --mud-palette-appbar-background: #594ae2;
     --mud-palette-appbar-text: #ffffffff;
 
     /* === Drawer === */
@@ -38,7 +40,7 @@ html[lang] {
     /* === Action === */
     --mud-palette-action-default: rgba(0, 0, 0, 0.54);
     --mud-palette-action-default-hover: rgba(41, 112, 255, 0.15);
-    --mud-palette-action-disabled: rgba(0, 0, 0, 0.26);
+    --mud-palette-action-disabled: rgba(0, 0, 0, 0.42);
     --mud-palette-action-disabled-background: rgba(0, 0, 0, 0.12);
 
     /* === Lines & Dividers === */
@@ -63,6 +65,10 @@ html[lang] {
     /* Neutral dark grey nav links instead of blue accent */
     --jim-nav-top-level-color: #344054;
     --jim-nav-active-color: #101828;
+
+    /* === JIM Custom: Content Links === */
+    /* Softer cornflower for data/content links, distinct from UI primary */
+    --jim-link-color: #4a7fb5;
 
     /* === JIM Custom: Link Hover === */
     --jim-link-hover-color: #ff4081ff;

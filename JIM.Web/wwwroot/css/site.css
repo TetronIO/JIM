@@ -12,6 +12,11 @@
     font-size: 1rem;
 }
 
+/* Content/data links use --jim-link-color (softer than UI primary) */
+a.mud-link.mud-primary-text {
+    color: var(--jim-link-color) !important;
+}
+
 .mud-link-underline-hover:hover {
     text-decoration: none !important;
     color: var(--jim-link-hover-color) !important;
@@ -62,6 +67,12 @@
 }
 
 /* JIM CUSTOM */
+
+/* Title accent colour for entity/target names in page headings */
+.jim-title-accent {
+    color: var(--jim-link-color);
+}
+
 .jim-header-title {
     font-weight: 300;
 }

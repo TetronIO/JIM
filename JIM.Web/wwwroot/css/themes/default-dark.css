@@ -64,6 +64,9 @@ html[lang] {
     --jim-nav-top-level-color: var(--mud-palette-primary);
     --jim-nav-active-color: var(--mud-palette-primary);
 
+    /* === JIM Custom: Content Links === */
+    --jim-link-color: var(--mud-palette-primary);
+
     /* === JIM Custom: Link Hover === */
     --jim-link-hover-color: #ff4081ff;
 }
