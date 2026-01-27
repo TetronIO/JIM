@@ -1,10 +1,7 @@
 /* reference: https://github.com/MudBlazor/MudBlazor/blob/ff672a8b988fdfb1f5ab9f556813823d885118d4/src/MudBlazor.UnitTests/Components/ThemeProviderTests.cs#L92 */
 
 /* MUDBLAZOR CUSTOMISATIONS */
-html,
-body {
-    --mud-palette-action-default-hover: rgba(41, 112, 255, 0.15);
-}
+/* Note: Colour palettes are defined in css/themes/ files, not here. */
 
 .mud-simple-table table * tr>th {
     font-weight: 700;
@@ -17,8 +14,7 @@ body {
 
 .mud-link-underline-hover:hover {
     text-decoration: none !important;
-    color: #ff4081ff !important;
-    /* secondary text colour */
+    color: var(--jim-link-hover-color) !important;
     transition: color 0.3s !important;
 }
 
@@ -323,28 +319,7 @@ body {
     box-shadow: none !important;
 }
 
-/* JSON syntax highlighting - define CSS custom properties for light/dark mode */
-:root {
-    --jim-json-key: #0451a5;
-    --jim-json-string: #a31515;
-    --jim-json-number: #098658;
-    --jim-json-boolean: #0000ff;
-    --jim-json-null: #0000ff;
-}
-
-/* Dark mode JSON colours - JIM logo-inspired vibrant colours */
-body.jim-dark-mode {
-    --jim-json-key: #c792ea;
-    /* Purple/violet from logo */
-    --jim-json-string: #a5d6a7;
-    /* Soft green for readability */
-    --jim-json-number: #f9a825;
-    /* Orange/yellow from logo */
-    --jim-json-boolean: #4dd0e1;
-    /* Teal/cyan from logo */
-    --jim-json-null: #ff8a80;
-    /* Soft coral/pink from logo */
-}
+/* JSON syntax highlighting colours are defined in css/themes/ files */
 
 .jim-json-syntax {
     font-family: "Lucida Console", "Courier New", monospace;

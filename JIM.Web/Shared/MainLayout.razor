@@ -1,5 +1,4 @@
 ﻿@inherits LayoutComponentBase
-@using MudBlazor.Utilities
 @inject IJSRuntime JSRuntime
 <MudThemeProvider @bind-IsDarkMode="@IsDarkMode" Theme="_theme" @ref="@_mudThemeProvider" />
 <MudPopoverProvider/>
@@ -72,6 +71,8 @@
 
 @code
 {
+    // Colour palettes are defined in CSS theme files (wwwroot/css/themes/).
+    // To experiment with colours, edit or create new theme CSS files.
     private readonly MudTheme _theme = new()
     {
         Typography = new Typography()
@@ -89,33 +90,6 @@
                 FontWeight = "400",
                 FontSize = "16px"
             }
-        },
-        PaletteLight = new PaletteLight()
-        {
-            AppbarBackground = new MudColor("rgb(60,148,255)"),
-            Background = new MudColor("#f6f9fc"),
-            DrawerBackground = new MudColor("#eef2f6"),
-            Primary = new MudColor("rgb(60,148,255)")
-        },
-        PaletteDark = new PaletteDark()
-        {
-            ActionDefault = new MudColor("#acb0b3"), // pagination arrow link text
-            // ActionDisabled = new MudColor("#2c3441"), // disabled button
-            AppbarBackground = new MudColor("#1a273b"),
-            Background = new MudColor("#0e1420"),
-            Divider = new MudColor("#292838ff"),
-            DrawerBackground = new MudColor("#111926"),
-            DrawerIcon = new MudColor("#46545f"),
-            DrawerText = new MudColor("#acb0b3"),
-            LinesDefault = new MudColor("#2a303c"),
-            LinesInputs = new MudColor("#595d68"),
-            Primary = new MudColor("rgb(60,148,255)"),
-            Surface = new MudColor("#121826"),
-            TableHover = new MudColor("#151b2b"),
-            TableLines = new MudColor("#2a303c"),
-            TextDisabled = new MudColor("#535861"),
-            TextPrimary = new MudColor("#acb0b3"),
-            TextSecondary = new MudColor("#515560")
         },
         LayoutProperties = new LayoutProperties()
         {
@@ -152,7 +126,7 @@
     {
         if (firstRender)
         {
-            // Get dark mode preference
+            // Get dark mode preference and apply matching theme CSS
             if (_mudThemeProvider != null)
             {
                 _isDarkMode = await _mudThemeProvider.GetSystemDarkModeAsync();
@@ -170,10 +144,20 @@
         }
     }
 
+    private const string LightThemePath = "css/themes/default-light.css";
+    private const string DarkThemePath = "css/themes/default-dark.css";
+
     private async Task UpdateDarkModeClassAsync(bool isDark)
     {
         try
         {
+            var themePath = isDark ? DarkThemePath : LightThemePath;
+
+            // Swap the theme CSS file
+            await JSRuntime.InvokeVoidAsync("eval",
+                $"document.getElementById('jim-theme').setAttribute('href', '{themePath}')");
+
+            // Maintain body class for any custom CSS selectors
             if (isDark)
                 await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('jim-dark-mode')");
             else

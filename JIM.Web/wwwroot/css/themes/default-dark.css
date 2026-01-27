@@ -1,0 +1,65 @@
+/*
+ * JIM Colour Theme: Default Dark
+ *
+ * This file defines all colour variables for the dark mode theme.
+ * To create a new dark theme, copy this file and change the values.
+ *
+ * MudBlazor palette variables (--mud-palette-*) override MudBlazor's
+ * built-in palette. JIM variables (--jim-*) are used by custom styles.
+ *
+ * We use html[lang] instead of :root so that these declarations have
+ * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
+ * styles, ensuring our theme values always win.
+ */
+
+html[lang] {
+    /* === Primary Palette === */
+    --mud-palette-primary: rgb(60, 148, 255);
+    --mud-palette-primary-text: #ffffffff;
+
+    /* === Background & Surface === */
+    --mud-palette-background: #0e1420;
+    --mud-palette-surface: #121826;
+    --mud-palette-background-grey: rgba(255, 255, 255, 0.032);
+
+    /* === Appbar === */
+    --mud-palette-appbar-background: #1a273b;
+    --mud-palette-appbar-text: #ffffffff;
+
+    /* === Drawer === */
+    --mud-palette-drawer-background: #111926;
+    --mud-palette-drawer-text: #acb0b3;
+    --mud-palette-drawer-icon: #46545f;
+
+    /* === Text === */
+    --mud-palette-text-primary: #acb0b3;
+    --mud-palette-text-secondary: #515560;
+    --mud-palette-text-disabled: #535861;
+
+    /* === Action === */
+    --mud-palette-action-default: #acb0b3;
+    --mud-palette-action-default-hover: rgba(41, 112, 255, 0.15);
+    --mud-palette-action-disabled: rgba(255, 255, 255, 0.26);
+    --mud-palette-action-disabled-background: rgba(255, 255, 255, 0.12);
+
+    /* === Lines & Dividers === */
+    --mud-palette-lines-default: #2a303c;
+    --mud-palette-lines-inputs: #595d68;
+    --mud-palette-divider: #292838ff;
+    --mud-palette-divider-light: rgba(255, 255, 255, 0.06);
+
+    /* === Table === */
+    --mud-palette-table-lines: #2a303c;
+    --mud-palette-table-striped: rgba(255, 255, 255, 0.02);
+    --mud-palette-table-hover: #151b2b;
+
+    /* === JIM Custom: JSON Syntax Highlighting (logo-inspired) === */
+    --jim-json-key: #c792ea;        /* Purple/violet from logo */
+    --jim-json-string: #a5d6a7;     /* Soft green */
+    --jim-json-number: #f9a825;     /* Orange/yellow from logo */
+    --jim-json-boolean: #4dd0e1;    /* Teal/cyan from logo */
+    --jim-json-null: #ff8a80;       /* Soft coral/pink from logo */
+
+    /* === JIM Custom: Link Hover === */
+    --jim-link-hover-color: #ff4081ff;
+}
