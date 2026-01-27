@@ -1211,7 +1211,7 @@ else
                     if (changeGroup.SyncRuleId != null)
                     {
                         builder.OpenComponent<MudLink>(seq++);
-                        builder.AddAttribute(seq++, "Href", $"/admin/connected-systems/sync-rules/{changeGroup.SyncRuleId}");
+                        builder.AddAttribute(seq++, "Href", $"/admin/sync-rules/{changeGroup.SyncRuleId}");
                         builder.AddAttribute(seq++, "Style", "margin-left: 4px;");
                         builder.AddAttribute(seq++, "ChildContent", (RenderFragment)(b => b.AddContent(0, changeGroup.SyncRuleName ?? "Sync Rule")));
                         builder.CloseComponent();
@@ -1264,7 +1264,7 @@ else
         {
             "User" => $"/t/users/v/{changeGroup.ChangeInitiatorId}",
             "ApiKey" => $"/admin/apikeys/{changeGroup.ChangeInitiatorId}",
-            "SynchronisationRule" => $"/admin/connected-systems/sync-rules/{changeGroup.ChangeInitiatorId}",
+            "SynchronisationRule" => $"/admin/sync-rules/{changeGroup.ChangeInitiatorId}",
             _ => "#"
         };
     }

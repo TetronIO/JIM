@@ -46,7 +46,7 @@
                             <MudLink Href="@Utilities.GetMetaverseObjectHref(_metaverseObjectHeader)">@Utilities.GetMetaverseObjectHrefText(_metaverseObjectHeader)</MudLink>
                             break;
                         case ActivityTargetType.SyncRule:
-                            <MudLink Href="@($"/admin/connected-systems/sync-rules/{_activity.SyncRuleId}")">@_activity.TargetName</MudLink>
+                            <MudLink Href="@($"/admin/sync-rules/{_activity.SyncRuleId}")">@_activity.TargetName</MudLink>
                             break;
                         case ActivityTargetType.TrustedCertificate:
                             <MudLink Href="/admin/certificates">@_activity.TargetName</MudLink>

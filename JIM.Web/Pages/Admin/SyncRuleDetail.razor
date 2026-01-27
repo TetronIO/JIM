@@ -1,5 +1,5 @@
-﻿@page "/admin/connected-systems/sync-rules/new"
-@page "/admin/connected-systems/sync-rules/{Id:int}"
+﻿@page "/admin/sync-rules/new"
+@page "/admin/sync-rules/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application
 @using JIM.Models.Core
@@ -767,7 +767,7 @@ else if (_syncRule != null)
         _breadcrumbs =
         [
         new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-new BreadcrumbItem("Synchronisation Rules", href: "/admin/connected-systems/sync-rules/")
+new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
         ];
 
         if (Id != null)
@@ -1039,7 +1039,7 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/connected-systems/sync
             // send the user to the existing-sync-rule view.
             // this helps ensure links are good to be shared/bookmarked, etc.
             case true when isSyncRuleNew:
-                NavManager.NavigateTo($"/admin/connected-systems/sync-rules/{_syncRule.Id}");
+                NavManager.NavigateTo($"/admin/sync-rules/{_syncRule.Id}");
                 break;
             case true:
                 Snackbar.Add("Changes saved.", Severity.Success);
@@ -1152,7 +1152,7 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/connected-systems/sync
             // attribute the operation to the signed-in user
             var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
             await Jim.ConnectedSystems.DeleteSyncRuleAsync(_syncRule, user);
-            NavManager.NavigateTo("/admin/connected-systems/sync-rules");
+            NavManager.NavigateTo("/admin/sync-rules");
         }
     }
 }
