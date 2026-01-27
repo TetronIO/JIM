@@ -771,7 +771,9 @@ public abstract class SyncTaskProcessorBase
             }
 
             // Queue for export evaluation after MVOs are persisted (need valid IDs for pending export FKs)
-            if (changedAttributes.Count > 0)
+            // Dedup check: if the same MVO is already queued (e.g., multiple CSOs joined to the same MVO),
+            // skip to avoid creating duplicate pending exports for the same target CSO.
+            if (changedAttributes.Count > 0 && !_pendingExportEvaluations.Any(e => e.Mvo == connectedSystemObject.MetaverseObject))
             {
                 _pendingExportEvaluations.Add((connectedSystemObject.MetaverseObject, changedAttributes, removedAttributes));
             }

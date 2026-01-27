@@ -967,6 +967,47 @@ public class ExportEvaluationServer
 
         var csoId = csoForExport?.Id;
 
+        // Check if a pending export already exists for this CSO (e.g., created by drift detection during a
+        // previous sync step). If so, merge our attribute changes into the existing one to avoid duplicates.
+        // Duplicates would cause the confirming import to fail with DuplicatePendingExportException.
+        if (csoId.HasValue && changeType == PendingExportChangeType.Update)
+        {
+            var existingPendingExport = await Application.Repository.ConnectedSystems
+                .GetPendingExportByConnectedSystemObjectIdAsync(csoId.Value);
+
+            if (existingPendingExport != null)
+            {
+                // Merge: add any attribute changes that don't already exist in the existing pending export.
+                var existingAttributeIds = existingPendingExport.AttributeValueChanges
+                    .Select(avc => avc.AttributeId)
+                    .ToHashSet();
+
+                var newChanges = attributeChanges.Where(ac => !existingAttributeIds.Contains(ac.AttributeId)).ToList();
+                if (newChanges.Count > 0)
+                {
+                    var updateUnresolvedReferences = newChanges.Any(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue));
+
+                    // Use dedicated repository method that adds child entities to the already-tracked PE
+                    // and calls SaveChangesAsync without calling Update() (which would cause concurrency errors).
+                    await Application.Repository.ConnectedSystems.MergeAttributeChangesIntoPendingExportAsync(
+                        existingPendingExport, newChanges, updateUnresolvedReferences);
+
+                    Log.Information("CreateOrUpdatePendingExportWithNoNetChangeAsync: Merged {NewCount} attribute changes into existing PendingExport {ExistingPeId} for CSO {CsoId} " +
+                        "(existing had {ExistingCount} changes, now has {TotalCount}). Source: MVO {MvoId}",
+                        newChanges.Count, existingPendingExport.Id, csoId.Value,
+                        existingAttributeIds.Count, existingPendingExport.AttributeValueChanges.Count, mvo.Id);
+                }
+                else
+                {
+                    Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: All attribute changes for CSO {CsoId} already present in existing PendingExport {ExistingPeId}. No merge needed.",
+                        csoId.Value, existingPendingExport.Id);
+                }
+
+                // Return null for PendingExport since we merged into an existing one (no new PE to batch-create)
+                return (null, provisioningCso, csoAlreadyCurrentCount);
+            }
+        }
+
         // Check if any attribute changes have unresolved reference values
         // This is used to defer exports with reference attributes until the referenced objects have been exported
         var hasUnresolvedReferences = attributeChanges.Any(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue));

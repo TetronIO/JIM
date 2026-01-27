@@ -111,11 +111,28 @@ public interface IConnectedSystemRepository
     public Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId);
 
     /// <summary>
+    /// Merges additional attribute value changes into an existing Pending Export.
+    /// Used when export evaluation finds a PE already exists for a CSO (e.g., created by drift detection)
+    /// and needs to add new attribute changes rather than creating a duplicate PE.
+    /// The pending export must already be tracked by EF Core (loaded via a query without AsNoTracking).
+    /// </summary>
+    /// <param name="pendingExport">The already-tracked Pending Export entity to merge changes into.</param>
+    /// <param name="newAttributeChanges">The new attribute value changes to add.</param>
+    /// <param name="updateHasUnresolvedReferences">Whether to set HasUnresolvedReferences to true.</param>
+    public Task MergeAttributeChangesIntoPendingExportAsync(
+        PendingExport pendingExport,
+        List<PendingExportAttributeValueChange> newAttributeChanges,
+        bool updateHasUnresolvedReferences);
+
+    /// <summary>
     /// Retrieves Pending Exports for multiple Connected System Objects in a single query.
     /// More efficient than calling GetPendingExportByConnectedSystemObjectIdAsync multiple times.
     /// </summary>
     /// <param name="connectedSystemObjectIds">The CSO IDs to retrieve pending exports for.</param>
     /// <returns>A dictionary mapping CSO ID to its pending export (if any).</returns>
+    /// <exception cref="JIM.Models.Exceptions.DuplicatePendingExportException">
+    /// Thrown when duplicate pending exports are found for the same CSO, indicating a data integrity violation.
+    /// </exception>
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
     /// <summary>

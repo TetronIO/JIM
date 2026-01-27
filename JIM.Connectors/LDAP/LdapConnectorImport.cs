@@ -348,6 +348,10 @@ internal class LdapConnectorImport
         // ensure we are also retrieving the unique identifier attribute(s)
         attributes.AddRange(connectedSystemObjectType.Attributes.Where(a => a.IsExternalId).Select(a => a.Name));
 
+        // ensure we also retrieve the secondary external ID attribute (e.g., distinguishedName) so that
+        // export confirmation can verify DN changes (moves/renames) were applied successfully
+        attributes.AddRange(connectedSystemObjectType.Attributes.Where(a => a.IsSecondaryExternalId).Select(a => a.Name));
+
         // we also need the objectClass for type matching purposes
         attributes.Add("objectClass");
 
@@ -433,6 +437,7 @@ internal class LdapConnectorImport
         // Build attribute list
         var attributes = objectType.Attributes.Where(a => a.Selected).Select(a => a.Name).ToList();
         attributes.AddRange(objectType.Attributes.Where(a => a.IsExternalId).Select(a => a.Name));
+        attributes.AddRange(objectType.Attributes.Where(a => a.IsSecondaryExternalId).Select(a => a.Name));
         attributes.Add("objectClass");
         attributes.Add("isDeleted"); // To detect deleted objects (when searching deleted objects container)
         var queryAttributes = attributes.Distinct().ToArray();

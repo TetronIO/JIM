@@ -94,7 +94,9 @@ internal class FileConnectorImport
             }
 
             // enumerate the schema and extract the field from the csv row
-            foreach (var attribute in objectType.Attributes.Where(q => q.Selected))
+            // include selected attributes, plus external ID and secondary external ID attributes
+            // to ensure identity and export confirmation attributes are always imported
+            foreach (var attribute in objectType.Attributes.Where(q => q.Selected || q.IsExternalId || q.IsSecondaryExternalId).DistinctBy(a => a.Name))
             {
                 var importObjectAttribute = new ConnectedSystemImportObjectAttribute
                 {
