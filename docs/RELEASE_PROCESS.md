@@ -12,6 +12,15 @@ JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the Git
 4. Creates an air-gapped deployment bundle
 5. Creates a GitHub Release with all assets
 
+## Release History
+
+| Version | Date | Notes |
+|---------|------|-------|
+| `0.2.0-alpha` | 2026-01-27 | PowerShell module expanded from 3 to 64 cmdlets. Published to [PSGallery](https://www.powershellgallery.com/packages/JIM/0.2.0-alpha) manually (no git tag created). |
+| `0.1.0-alpha` | 2025-12-12 | Initial preview. PowerShell module published to [PSGallery](https://www.powershellgallery.com/packages/JIM/0.1.0-alpha) with 3 connection cmdlets. Published manually (no git tag created). |
+
+> **Note:** Keep this table updated whenever a release is published so the project has a single source of truth for what has shipped, independent of external services like PSGallery or GHCR.
+
 ## Version Management
 
 ### VERSION File

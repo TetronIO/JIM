@@ -149,64 +149,65 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
-## 0.1.0 - Initial Release
+## 0.2.0 - Full Management Cmdlets
 
-### Connection
-- Connect-JIM: Connect to JIM instance with API key authentication
-- Disconnect-JIM: Disconnect from JIM instance
-- Test-JIMConnection: Test connection to JIM instance
+Major expansion from 3 to 64 cmdlets, providing complete administrative coverage of JIM.
 
-### Connected Systems
-- Get-JIMConnectedSystem: Get connected systems (list, by ID, by name)
-- New-JIMConnectedSystem: Create a new connected system
-- Set-JIMConnectedSystem: Update connected system properties and settings
-- Remove-JIMConnectedSystem: Remove a connected system
+### New in 0.2.0
 
-### Sync Rules
-- Get-JIMSyncRule: Get synchronisation rules
-- New-JIMSyncRule: Create a new sync rule
-- Set-JIMSyncRule: Update sync rule properties
-- Remove-JIMSyncRule: Delete a sync rule
+#### Connected Systems (12 cmdlets)
+- Full CRUD for connected systems
+- Schema import and attribute/object type configuration
+- Hierarchy import with partition and container management
+- Connector definition discovery
 
-### Run Profiles
-- Get-JIMRunProfile: Get run profiles for a connected system
-- New-JIMRunProfile: Create a new run profile
-- Set-JIMRunProfile: Update run profile properties
-- Remove-JIMRunProfile: Delete a run profile
-- Start-JIMRunProfile: Execute a run profile with optional wait
+#### Sync Rules (4 cmdlets)
+- Full CRUD for synchronisation rules
 
-### Activities
-- Get-JIMActivity: Get activities with pagination and filtering
-- Get-JIMActivityStats: Get execution statistics for activities
+#### Sync Rule Mappings (3 cmdlets)
+- Mapping management with expression support
 
-### Metaverse
-- Get-JIMMetaverseObject: Get metaverse objects with attribute selection
-- Get-JIMMetaverseObjectType: Get metaverse object type definitions
-- Get-JIMMetaverseAttribute: Get metaverse attribute definitions
+#### Object Matching Rules (4 cmdlets)
+- Full CRUD for object matching rules with reordering
 
-### API Keys
-- Get-JIMApiKey: Get API keys
-- New-JIMApiKey: Create a new API key
-- Set-JIMApiKey: Update an API key
-- Remove-JIMApiKey: Delete an API key
+#### Scoping Criteria (5 cmdlets)
+- Group and criterion management for sync rule scoping
 
-### Certificates
-- Get-JIMCertificate: Get trusted certificates
-- Add-JIMCertificate: Add a certificate to the store
-- Set-JIMCertificate: Update certificate properties
-- Remove-JIMCertificate: Remove a certificate
-- Test-JIMCertificate: Validate a certificate
-- Export-JIMCertificate: Download certificate data
+#### Run Profiles (5 cmdlets)
+- Full CRUD plus execution with real-time progress tracking
 
-### Security
-- Get-JIMRole: Get security role definitions
+#### Metaverse (7 cmdlets)
+- Object and object type queries
+- Full attribute CRUD (create, update, remove)
+- MVO deletion rule configuration
 
-### Data Generation
-- Get-JIMExampleDataSet: Get example data sets
-- Get-JIMDataGenerationTemplate: Get data generation templates
-- Invoke-JIMDataGenerationTemplate: Execute a data generation template
+#### Activities (2 cmdlets)
+- Activity queries with pagination and filtering
+- Execution statistics
 
-This is an early preview release. For full documentation, see: https://github.com/TetronIO/JIM
+#### API Keys (4 cmdlets)
+- Full CRUD for API key management
+
+#### Certificates (6 cmdlets)
+- Full CRUD plus validation and export
+
+#### Security (1 cmdlet)
+- Role definitions
+
+#### Data Generation (3 cmdlets)
+- Example data sets, templates, and execution
+
+#### Expressions (1 cmdlet)
+- Expression testing and validation
+
+#### History (3 cmdlets)
+- Deleted object queries, history counts, and cleanup
+
+#### General
+- Name-based parameter alternatives for all cmdlets
+- Consistent error handling and pagination support
+
+For full documentation, see: https://github.com/TetronIO/JIM
 '@
 
             # Prerelease string of this module
