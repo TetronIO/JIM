@@ -4,6 +4,7 @@ using JIM.Application;
 using JIM.Application.Expressions;
 using JIM.Application.Services;
 using JIM.Data;
+using JIM.Web.Models;
 using JIM.Web.Services;
 using JIM.Models.Core;
 using JIM.PostgresData;
@@ -48,6 +49,7 @@ using System.Security.Claims;
 // JIM_LOG_REQUESTS
 // JIM_INFRASTRUCTURE_API_KEY - Creates an infrastructure API key on startup for CI/CD automation (24hr expiry)
 // JIM_ENCRYPTION_KEY_PATH - Custom path for encryption key storage (default: /data/keys or app data directory)
+// JIM_THEME - Built-in colour theme name (default: mid-contrast)
 
 // initial logging setup for when the application has not yet been created (bootstrapping)...
 InitialiseLogging(new LoggerConfiguration(), true);
@@ -95,6 +97,14 @@ try
     });
     builder.Services.AddSingleton<LogReaderService>();
     builder.Services.AddExpressionEvaluation();
+
+    // Register UI theme settings from environment variable
+    var themeName = Environment.GetEnvironmentVariable(Constants.Config.Theme) ?? "mid-contrast";
+    builder.Services.AddSingleton(new ThemeSettings
+    {
+        LightThemePath = $"css/themes/{themeName}-light.css",
+        DarkThemePath = $"css/themes/{themeName}-dark.css"
+    });
 
     // Configure ASP.NET Core Data Protection for credential encryption
     // Using AES-256-GCM (FIPS-approved authenticated encryption) for future-proofing

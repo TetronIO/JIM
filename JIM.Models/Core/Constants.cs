@@ -31,6 +31,9 @@ public static class Constants
 
         // Encryption
         public static string EncryptionKeyPath => "JIM_ENCRYPTION_KEY_PATH";
+
+        // UI
+        public static string Theme => "JIM_THEME";
     }
 
     public static class BuiltInObjectTypes

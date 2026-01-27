@@ -1,6 +1,8 @@
 ﻿@using Microsoft.AspNetCore.Components.Web
+@using JIM.Web.Models
 @namespace JIM.Web.Pages
 @addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@inject ThemeSettings ThemeSettings
 
 <!DOCTYPE html>
 <html lang="en">
@@ -11,7 +13,7 @@
     <link href="css/fonts/roboto.css" rel="stylesheet" />
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="css/site.css" />
-    <link id="jim-theme" rel="stylesheet" href="css/themes/default-light.css" />
+    <link id="jim-theme" rel="stylesheet" href="@ThemeSettings.LightThemePath" />
     <link rel="stylesheet" href="JIM.Web.styles.css" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">

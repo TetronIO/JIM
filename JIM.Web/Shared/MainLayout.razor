@@ -1,6 +1,7 @@
 ﻿@inherits LayoutComponentBase
 @inject IJSRuntime JSRuntime
 @inject IUserPreferenceService PreferenceService
+@inject JIM.Web.Models.ThemeSettings ThemeSettings
 <MudThemeProvider @bind-IsDarkMode="@IsDarkMode" Theme="_theme" @ref="@_mudThemeProvider" />
 <MudPopoverProvider/>
 <MudDialogProvider />
@@ -157,8 +158,8 @@
         }
     }
 
-    private const string LightThemePath = "css/themes/mid-contrast-light.css";
-    private const string DarkThemePath = "css/themes/mid-contrast-dark.css";
+    private string LightThemePath => ThemeSettings.LightThemePath;
+    private string DarkThemePath => ThemeSettings.DarkThemePath;
 
     private async Task UpdateDarkModeClassAsync(bool isDark)
     {
