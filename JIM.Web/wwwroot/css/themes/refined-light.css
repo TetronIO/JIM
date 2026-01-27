@@ -69,6 +69,9 @@ html[lang] {
     /* === JIM Custom: Drawer border === */
     --jim-drawer-border-color: var(--mud-palette-lines-default);
 
+    /* === JIM Custom: Paper border (stronger than default for light backgrounds) === */
+    --jim-paper-border-color: rgba(0, 0, 0, 0.22);
+
     /* === JIM Custom: Content Links === */
     /* Softer cornflower for data/content links, distinct from UI primary */
     --jim-link-color: #4a7fb5;

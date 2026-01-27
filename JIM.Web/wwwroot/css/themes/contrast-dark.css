@@ -69,6 +69,9 @@ html[lang] {
     /* === JIM Custom: Drawer border === */
     --jim-drawer-border-color: #2a303c;
 
+    /* === JIM Custom: Paper border (not needed in dark mode - surface contrast is sufficient) === */
+    --jim-paper-border-color: transparent;
+
     /* === JIM Custom: Content Links === */
     --jim-link-color: #6e99cc;
 

@@ -66,6 +66,23 @@ a.mud-link.mud-primary-text {
     border-radius: 8px !important;
 }
 
+/* Give container elements a subtle border for better definition against the background.
+   Use html[lang] parent for higher specificity (0,2,1) to beat MudBlazor's (0,1,0) rules. */
+html[lang] .mud-paper,
+html[lang] .mud-paper-outlined,
+html[lang] .mud-table-outlined {
+    border: 1px solid var(--jim-paper-border-color, transparent) !important;
+}
+
+/* Strengthen tab bar separator line to match container borders */
+html[lang] .mud-tabs-tabbar.mud-tabs-border-bottom {
+    border-top-color: var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
+}
+
+html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
+    border-bottom-color: var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
+}
+
 /* JIM CUSTOM */
 
 /* Title accent colour for entity/target names in page headings */
