@@ -39,7 +39,7 @@
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.PendingExportObjectsCount)"><MudText Typo="Typo.button">Pending Exports (%)</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.ConnectorName)"><MudText Typo="Typo.button">Connector</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudText Typo="Typo.button">Action</MudText></MudTh>
+        <MudTh Style="text-align: center"><MudText Typo="Typo.button">Action</MudText></MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name"><MudLink Href="@(Utilities.GetConnectedSystemHref(context))">@context.Name</MudLink></MudTd>
@@ -53,11 +53,11 @@
                 @context.Created.ToLocalTime().ToRelativeTime()
             </MudTooltip>
         </MudTd>
-            <MudTd DataLabel="Action">
+            <MudTd DataLabel="Action" Style="text-align: center">
                 <MudTooltip Text="View Objects" Arrow="true" Placement="Placement.Top">
                     <MudIconButton Href="@Utilities.GetConnectedSystemObjectsHref(context)"
                                    Icon="@Icons.Material.Outlined.List"
-                                   Variant="Variant.Filled"
+                                   Variant="Variant.Outlined"
                                    Size="Size.Small" />
                 </MudTooltip>
             </MudTd>
