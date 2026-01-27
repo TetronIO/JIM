@@ -1043,10 +1043,27 @@ public class ExportEvaluationServer
             if (dbPendingExport != null)
             {
                 // Build merged attribute changes: start with export eval changes (takes precedence),
-                // then add any drift-only changes not covered by export eval
+                // then add any drift-only changes not covered by export eval.
+                // Clone drift-only changes with new IDs because DeletePendingExportAsync cascade-deletes
+                // child entities, making the tracked instances unusable for a new PE.
                 var exportEvalAttributeIds = attributeChanges.Select(ac => ac.AttributeId).ToHashSet();
                 var driftOnlyChanges = dbPendingExport.AttributeValueChanges
                     .Where(avc => !exportEvalAttributeIds.Contains(avc.AttributeId))
+                    .Select(avc => new PendingExportAttributeValueChange
+                    {
+                        Id = Guid.NewGuid(),
+                        AttributeId = avc.AttributeId,
+                        Attribute = avc.Attribute,
+                        StringValue = avc.StringValue,
+                        DateTimeValue = avc.DateTimeValue,
+                        IntValue = avc.IntValue,
+                        LongValue = avc.LongValue,
+                        ByteValue = avc.ByteValue,
+                        GuidValue = avc.GuidValue,
+                        BoolValue = avc.BoolValue,
+                        UnresolvedReferenceValue = avc.UnresolvedReferenceValue,
+                        ChangeType = avc.ChangeType
+                    })
                     .ToList();
 
                 var mergedChanges = new List<PendingExportAttributeValueChange>(attributeChanges);
