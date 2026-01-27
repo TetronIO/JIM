@@ -373,6 +373,21 @@ try
     if (enableRequestLogging != null && bool.Parse(enableRequestLogging))
         app.UseSerilogRequestLogging();
 
+    // Eager initialisation: warm up EF Core compiled model and database connection pool
+    // before accepting requests. This prevents the first browser request from hanging while
+    // .NET JIT-compiles the EF Core model, establishes the initial DB connection, and builds
+    // the Blazor component tree. The cost is a slightly longer container startup, but the
+    // first request will be as fast as any subsequent request.
+    app.Logger.LogInformation("Warming up EF Core model and database connection pool...");
+    using (var warmupScope = app.Services.CreateScope())
+    {
+        var factory = warmupScope.ServiceProvider.GetRequiredService<IDbContextFactory<JimDbContext>>();
+        await using var warmupContext = await factory.CreateDbContextAsync();
+        // Force EF Core to build and cache its compiled model by executing a trivial query
+        _ = await warmupContext.Database.CanConnectAsync();
+    }
+    app.Logger.LogInformation("Warmup complete");
+
     app.Logger.LogInformation("The JIM Web has started");
     app.Run();
     return 0;
