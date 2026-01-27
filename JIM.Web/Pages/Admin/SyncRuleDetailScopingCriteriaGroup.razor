@@ -11,7 +11,7 @@
             <MudText Typo="Typo.overline"><span class="mud-text-secondary">CRITERIA GROUP. LOGIC TYPE:</span> @SyncRuleScopingCriteriaGroup.Type.ToString().SplitOnCapitalLetters().ToUpper()</MudText>
         </MudItem>
         <MudItem xs="6" Class="d-flex align-center justify-end">
-            <MudIconButton Icon="@Icons.Material.Filled.Delete" Variant="Variant.Filled" DropShadow="false" aria-label="delete" OnClick="@(() => HandleScopingCriteriaGroupDeleteClick(SyncRuleScopingCriteriaGroup))"></MudIconButton>
+            <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Outlined" DropShadow="false" aria-label="delete" OnClick="@(() => HandleScopingCriteriaGroupDeleteClick(SyncRuleScopingCriteriaGroup))"></MudIconButton>
         </MudItem>
     </MudGrid>
 
@@ -53,11 +53,11 @@
             </MudChip>
             <MudChip T="string">@criteria.ComparisonType.ToString().SplitOnCapitalLetters()</MudChip>
             <MudChip T="string">@criteria.ToString()</MudChip>
-            <MudIconButton 
-                Icon="@Icons.Material.Filled.Delete" 
-                Variant="Variant.Filled"
+            <MudIconButton
+                Icon="@Icons.Material.Outlined.Delete"
+                Variant="Variant.Outlined"
                 DropShadow="false"
-                Size="Size.Small" 
+                Size="Size.Small"
                 aria-label="delete"
                 OnClick="@(() => HandleDeleteCriteria(criteria))"></MudIconButton>
         </div>

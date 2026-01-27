@@ -304,13 +304,13 @@ else if (_syncRule != null)
                                             ValueChanged="@(value => HandleToggleMatchingRuleCaseSensitive(objectMatchingRule, value))"
                                             Label="Case Sensitive" Color="Color.Primary" Size="Size.Small" Class="ms-4" />
                                         <MudSpacer />
-                                        <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Color="Color.Default" Size="Size.Small"
+                                        <MudIconButton Icon="@Icons.Material.Outlined.ArrowUpward" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
                                             Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "up"))"
                                             Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "up")" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Color="Color.Default" Size="Size.Small"
+                                        <MudIconButton Icon="@Icons.Material.Outlined.ArrowDownward" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
                                             Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "down"))"
                                             Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "down")" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
                                             aria-label="delete" OnClick="@(() => HandleObjectMatchingRuleDeleteClickAsync(objectMatchingRule))">
                                         </MudIconButton>
                                     </MudItem>
@@ -601,7 +601,7 @@ else if (_syncRule != null)
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
                     <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span>
                         @attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
-                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
                         Style="flex-shrink: 0;" aria-label="delete"
                         OnClick="@(() => HandleAttributeFlowRuleDeleteClick(attributeFlowRule))">
                     </MudIconButton>

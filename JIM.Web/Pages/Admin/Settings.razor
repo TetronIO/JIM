@@ -71,12 +71,12 @@
                     @if (_revealedSecrets.Contains(settingContext.Key))
                     {
                         <span class="jim-text-code">@(GetDecryptedValue(settingContext) ?? "(not set)")</span>
-                        <MudIconButton Icon="@Icons.Material.Filled.VisibilityOff" Size="Size.Small" OnClick="() => HideSecret(settingContext.Key)" />
+                        <MudIconButton Icon="@Icons.Material.Outlined.VisibilityOff" Variant="Variant.Outlined" Size="Size.Small" OnClick="() => HideSecret(settingContext.Key)" />
                     }
                     else
                     {
                         <span class="jim-text-code">********</span>
-                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" OnClick="() => RevealSecret(settingContext.Key)" />
+                        <MudIconButton Icon="@Icons.Material.Outlined.Visibility" Variant="Variant.Outlined" Size="Size.Small" OnClick="() => RevealSecret(settingContext.Key)" />
                     }
                 }
                 else
@@ -103,12 +103,12 @@
                     @if (!settingContext.IsReadOnly)
                     {
                         <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => ShowEditDialog(settingContext)" />
+                            <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Outlined" Size="Size.Small" OnClick="_ => ShowEditDialog(settingContext)" />
                         </MudTooltip>
                         @if (settingContext.IsOverridden)
                         {
                             <MudTooltip Text="Revert to Default" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton Icon="@Icons.Material.Outlined.RestartAlt" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => HandleRevertAsync(settingContext)" />
+                                <MudIconButton Icon="@Icons.Material.Outlined.RestartAlt" Variant="Variant.Outlined" Size="Size.Small" OnClick="_ => HandleRevertAsync(settingContext)" />
                             </MudTooltip>
                         }
                     }

@@ -2679,14 +2679,16 @@
                         </MudTd>
                         <MudTd>
                             <MudTooltip Text="Move up" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
+                                <MudIconButton Icon="@Icons.Material.Outlined.ArrowUpward"
+                                               Variant="Variant.Outlined"
                                                Size="Size.Small"
                                                Color="Color.Default"
                                                Disabled="@(context.Order == 0)"
                                                OnClick="() => HandleMoveMatchingRuleUpAsync(context, objectType)" />
                             </MudTooltip>
                             <MudTooltip Text="Move down" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
+                                <MudIconButton Icon="@Icons.Material.Outlined.ArrowDownward"
+                                               Variant="Variant.Outlined"
                                                Size="Size.Small"
                                                Color="Color.Default"
                                                Disabled="@(context.Order == objectType.ObjectMatchingRules.Max(r => r.Order))"
@@ -2694,8 +2696,8 @@
                             </MudTooltip>
                             <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton
-                                    Icon="@Icons.Material.Filled.Delete"
-                                    Variant="Variant.Filled"
+                                    Icon="@Icons.Material.Outlined.Delete"
+                                    Variant="Variant.Outlined"
                                     Size="Size.Small"
                                     Color="Color.Error"
                                     OnClick="() => HandleDeleteMatchingRuleAsync(context, objectType)" />
