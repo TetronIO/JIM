@@ -1,5 +1,6 @@
 ﻿@inherits LayoutComponentBase
 @inject IJSRuntime JSRuntime
+@inject IUserPreferenceService PreferenceService
 <MudThemeProvider @bind-IsDarkMode="@IsDarkMode" Theme="_theme" @ref="@_mudThemeProvider" />
 <MudPopoverProvider/>
 <MudDialogProvider />
@@ -109,6 +110,7 @@
     private bool IsDrawerOpen { get; set; }
     private bool IsDrawerPinned { get; set; }
     private bool _isDarkMode;
+    private bool _darkModeInitialised;
     private bool IsDarkMode
     {
         get => _isDarkMode;
@@ -118,6 +120,11 @@
             {
                 _isDarkMode = value;
                 _ = UpdateDarkModeClassAsync(value);
+                // Persist the user's explicit choice (skip during initial load)
+                if (_darkModeInitialised)
+                {
+                    _ = PreferenceService.SetDarkModeAsync(value);
+                }
             }
         }
     }
@@ -126,12 +133,18 @@
     {
         if (firstRender)
         {
-            // Get dark mode preference and apply matching theme CSS
-            if (_mudThemeProvider != null)
+            // Check for a saved dark mode preference first, fall back to system setting
+            var savedDarkMode = await PreferenceService.GetDarkModeAsync();
+            if (savedDarkMode.HasValue)
+            {
+                _isDarkMode = savedDarkMode.Value;
+            }
+            else if (_mudThemeProvider != null)
             {
                 _isDarkMode = await _mudThemeProvider.GetSystemDarkModeAsync();
-                await UpdateDarkModeClassAsync(_isDarkMode);
             }
+            await UpdateDarkModeClassAsync(_isDarkMode);
+            _darkModeInitialised = true;
 
             // Detect screen width and set drawer state accordingly
             var windowWidth = await JSRuntime.InvokeAsync<int>("eval", "window.innerWidth");
@@ -144,8 +157,8 @@
         }
     }
 
-    private const string LightThemePath = "css/themes/refined-light.css";
-    private const string DarkThemePath = "css/themes/refined-dark.css";
+    private const string LightThemePath = "css/themes/contrast-light.css";
+    private const string DarkThemePath = "css/themes/contrast-dark.css";
 
     private async Task UpdateDarkModeClassAsync(bool isDark)
     {

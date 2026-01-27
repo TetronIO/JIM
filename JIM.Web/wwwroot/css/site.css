@@ -99,7 +99,7 @@ a.mud-link.mud-primary-text {
 }
 
 .jim-drawer {
-    border-right: 1px solid var(--mud-palette-lines-default);
+    border-right: 1px solid var(--jim-drawer-border-color);
     position: fixed !important;
     top: 0;
     left: 0;
@@ -111,12 +111,13 @@ a.mud-link.mud-primary-text {
     vertical-align: middle;
 }
 
-.jim-drawer-logo p {
+.jim-drawer-logo p,
+.jim-drawer-logo span {
     margin: 4px 0 0 10px;
     font-weight: 700;
     font-size: 1.2rem;
     vertical-align: text-top;
-    color: var(--mud-palette-text-secondary);
+    color: var(--mud-palette-drawer-text) !important;
 }
 
 .jim-drawer-footer {
@@ -127,8 +128,14 @@ a.mud-link.mud-primary-text {
     margin: 0 6px;
     border-top-style: solid;
     border-top-width: 1px;
-    border-top-color: var(--mud-palette-lines-default);
+    border-top-color: var(--jim-drawer-border-color);
     padding: 8px 0;
+    color: var(--mud-palette-drawer-icon) !important;
+}
+
+/* Ensure drawer footer icons use drawer colours, not content area colours */
+.jim-drawer-footer .mud-icon-root {
+    color: var(--mud-palette-drawer-icon) !important;
 }
 
 /* When drawer is expanded, show buttons horizontally */

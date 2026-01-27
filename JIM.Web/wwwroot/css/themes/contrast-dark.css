@@ -1,8 +1,9 @@
 /*
- * JIM Colour Theme: Refined Dark
+ * JIM Colour Theme: Contrast Dark
  *
- * A refined dark theme with purple primary, neutral navigation links,
- * and softer content link colours. Inspired by Untitled UI.
+ * The dark counterpart to the contrast theme. Since the dark theme
+ * already features a dark sidebar, this is functionally identical
+ * to refined-dark but maintains a consistent theme pair.
  *
  * We use html[lang] instead of :root so that these declarations have
  * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
@@ -62,16 +63,13 @@ html[lang] {
     --jim-json-null: #ff8a80;       /* Soft coral/pink from logo */
 
     /* === JIM Custom: Navigation === */
-    /* Neutral nav links matching drawer text instead of blue accent */
     --jim-nav-top-level-color: #acb0b3;
-    /* Selected item stands out with near-white */
     --jim-nav-active-color: #f0f0f4;
 
     /* === JIM Custom: Drawer border === */
-    --jim-drawer-border-color: var(--mud-palette-lines-default);
+    --jim-drawer-border-color: #2a303c;
 
     /* === JIM Custom: Content Links === */
-    /* Softer cornflower for data/content links, distinct from UI primary */
     --jim-link-color: #6e99cc;
 
     /* === JIM Custom: Link Hover === */
