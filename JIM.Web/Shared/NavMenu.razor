@@ -119,22 +119,15 @@
     protected override void OnParametersSet()
     {
         // When drawer closes, collapse all groups
-        // When drawer opens, expand only the active group
+        // When drawer opens, restore saved preferences
         if (DrawerOpen != _previousDrawerOpen)
         {
             _previousDrawerOpen = DrawerOpen;
 
             if (DrawerOpen)
             {
-                // Drawer just opened - expand only the active group
-                _usersExpanded = IsGroupActive("users");
-                _groupsExpanded = IsGroupActive("groups");
-                _dashboardExpanded = IsGroupActive("dashboard");
-                _adminExpanded = IsGroupActive("admin");
-
-                // Activity is expanded by default, or when on an activity page
-                _activityExpanded = IsGroupActive("activity") ||
-                    (!_usersExpanded && !_groupsExpanded && !_dashboardExpanded && !_adminExpanded);
+                // Drawer just opened - restore saved preferences asynchronously
+                _ = RestoreSavedGroupStatesAsync();
             }
             else
             {
@@ -146,6 +139,24 @@
                 _adminExpanded = false;
             }
         }
+    }
+
+    private async Task RestoreSavedGroupStatesAsync()
+    {
+        var savedUsers = await PreferenceService.GetNavGroupExpandedAsync("users");
+        var savedGroups = await PreferenceService.GetNavGroupExpandedAsync("groups");
+        var savedDashboard = await PreferenceService.GetNavGroupExpandedAsync("dashboard");
+        var savedAdmin = await PreferenceService.GetNavGroupExpandedAsync("admin");
+        var savedActivity = await PreferenceService.GetNavGroupExpandedAsync("activity");
+
+        // Apply saved preferences, also ensuring the active group is always expanded
+        _usersExpanded = savedUsers || IsGroupActive("users");
+        _groupsExpanded = savedGroups || IsGroupActive("groups");
+        _dashboardExpanded = savedDashboard || IsGroupActive("dashboard");
+        _adminExpanded = savedAdmin || IsGroupActive("admin");
+        _activityExpanded = savedActivity || IsGroupActive("activity");
+
+        StateHasChanged();
     }
 
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)

@@ -32,6 +32,18 @@ public interface IUserPreferenceService
     /// <param name="groupName">The name of the nav group (e.g., "users", "groups", "admin").</param>
     /// <param name="expanded">Whether the group is expanded.</param>
     Task SetNavGroupExpandedAsync(string groupName, bool expanded);
+
+    /// <summary>
+    /// Gets the user's dark mode preference.
+    /// </summary>
+    /// <returns>True if the user chose dark mode, false if light mode, null if no preference saved (use system default).</returns>
+    Task<bool?> GetDarkModeAsync();
+
+    /// <summary>
+    /// Sets the user's dark mode preference.
+    /// </summary>
+    /// <param name="isDarkMode">Whether dark mode is enabled.</param>
+    Task SetDarkModeAsync(bool isDarkMode);
 }
 
 /// <summary>
@@ -41,6 +53,7 @@ public class UserPreferenceService : IUserPreferenceService
 {
     private readonly IJSRuntime _jsRuntime;
     private const string RowsPerPageKey = "rowsPerPage";
+    private const string DarkModeKey = "darkMode";
     private const int DefaultRowsPerPage = 10;
 
     /// <summary>
@@ -130,6 +143,48 @@ public class UserPreferenceService : IUserPreferenceService
         {
             var key = $"navGroup_{groupName}";
             await _jsRuntime.InvokeVoidAsync("jimPreferences.set", key, expanded ? "true" : "false");
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, ignore
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), ignore
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool?> GetDarkModeAsync()
+    {
+        try
+        {
+            var value = await _jsRuntime.InvokeAsync<string?>("jimPreferences.get", DarkModeKey);
+            return value switch
+            {
+                "true" => true,
+                "false" => false,
+                _ => null // No preference saved - use system default
+            };
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, return default
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), return default
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc />
+    public async Task SetDarkModeAsync(bool isDarkMode)
+    {
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("jimPreferences.set", DarkModeKey, isDarkMode ? "true" : "false");
         }
         catch (JSDisconnectedException)
         {
