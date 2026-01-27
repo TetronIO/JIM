@@ -13,6 +13,8 @@ html[lang] {
     /* === Primary Palette === */
     --mud-palette-primary: rgb(60, 148, 255);
     --mud-palette-primary-text: #ffffffff;
+    --mud-palette-secondary: #7fb5b5;
+    --mud-palette-secondary-text: #ffffffff;
 
     /* === Background & Surface === */
     --mud-palette-background: #0e1420;
