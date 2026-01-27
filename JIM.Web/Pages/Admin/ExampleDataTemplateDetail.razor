@@ -24,7 +24,7 @@
             <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.MetaverseAttribute!.Name)"><MudText Typo="Typo.button">Attribute</MudText></MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.MetaverseAttribute!.Type)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.PopulatedValuesPercentage!)"><MudText Typo="Typo.button">Population %</MudText></MudTableSortLabel></MudTh>
-                <MudTh>Rules</MudTh>
+                <MudTh><MudText Typo="Typo.button">Rules</MudText></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Attribute">@context.MetaverseAttribute?.Name</MudTd>

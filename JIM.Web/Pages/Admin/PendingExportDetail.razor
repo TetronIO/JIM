@@ -203,10 +203,10 @@
                     {
                         <MudTable Items="@_pendingExport.AttributeValueChanges" Hover="true" Dense="true" Outlined="true" Elevation="0">
                             <HeaderContent>
-                                <MudTh>Attribute</MudTh>
-                                <MudTh>Change Type</MudTh>
-                                <MudTh>Status</MudTh>
-                                <MudTh>Value</MudTh>
+                                <MudTh><MudText Typo="Typo.button">Attribute</MudText></MudTh>
+                                <MudTh><MudText Typo="Typo.button">Change Type</MudText></MudTh>
+                                <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
+                                <MudTh><MudText Typo="Typo.button">Value</MudText></MudTh>
                             </HeaderContent>
                             <RowTemplate>
                                 <MudTd DataLabel="Attribute">@(context.Attribute?.Name ?? $"Attribute {context.AttributeId}")</MudTd>

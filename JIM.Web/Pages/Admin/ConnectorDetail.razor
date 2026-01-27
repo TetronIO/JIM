@@ -12,8 +12,11 @@
 
 @if (_connector != null)
 {
-    <MudText Typo="Typo.h5" Class="mt-5">Details</MudText>
-    <MudPaper Class="pa-5 mt-5" Outlined="true">
+    <div class="d-flex justify-space-between align-center mt-5">
+        <MudText Typo="Typo.h5">Details</MudText>
+        <AuditInfo Entity="@_connector" />
+    </div>
+    <MudPaper Class="pa-5 mt-3" Outlined="true">
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
                 <MudField Label="Description" Variant="Variant.Outlined">@_connector.Description</MudField>
@@ -23,12 +26,6 @@
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudField Label="Built-in?" Variant="Variant.Outlined">@(_connector.BuiltIn ? "Yes" : "No")</MudField>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="4">
-                    <MudField Label="Created" Variant="Variant.Outlined">@_connector.Created</MudField>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="4">
-                    <MudField Label="Last Updated" Variant="Variant.Outlined">@(_connector.LastUpdated.HasValue ? _connector.LastUpdated : "-")</MudField>
             </MudItem>
         </MudGrid>
     </MudPaper>
@@ -48,10 +45,10 @@
             <MudText Typo="Typo.h6">Files</MudText>
         </ToolBarContent>
         <HeaderContent>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionFile, object>(x => x.Filename)">Filename</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionFile, object>(x => x.FileSizeBytes)">Filesize (kb)</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionFile, object>(x => GetFileInterfaces(x))">Interfaces</MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionFile, object>(x => x.Version)">Version</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionFile, object>(x => x.Filename)"><MudText Typo="Typo.button">Filename</MudText></MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionFile, object>(x => x.FileSizeBytes)"><MudText Typo="Typo.button">Filesize (kb)</MudText></MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionFile, object>(x => GetFileInterfaces(x))"><MudText Typo="Typo.button">Interfaces</MudText></MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionFile, object>(x => x.Version)"><MudText Typo="Typo.button">Version</MudText></MudTableSortLabel></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Filename">@context.Filename</MudTd>

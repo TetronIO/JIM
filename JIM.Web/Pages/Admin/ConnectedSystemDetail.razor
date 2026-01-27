@@ -24,6 +24,10 @@
 
 @if (_connectedSystem != null)
 {
+    <div class="d-flex justify-end mt-3">
+        <AuditInfo Entity="@_connectedSystem" />
+    </div>
+
     <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-5" Class="mt-5" Outlined="true">
 
         <MudTabPanel Text="Details">
@@ -549,18 +553,18 @@
                         Outlined="true"
                         Elevation="0">
                         <HeaderContent>
-                            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Selected)">Selected</MudTableSortLabel></MudTh>
-                            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.IsExternalId)">External ID</MudTableSortLabel></MudTh>
-                            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Selected)"><MudText Typo="Typo.button">Selected</MudText></MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.IsExternalId)"><MudText Typo="Typo.button">External ID</MudText></MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
                             @if (_selectedObjectTypeHasClasses)
                             {
-                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.ClassName!)">Class</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.ClassName!)"><MudText Typo="Typo.button">Class</MudText></MudTableSortLabel></MudTh>
                             }
-                            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Type)">Type</MudTableSortLabel></MudTh>
-                            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.AttributePlurality)">Plurality</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Type)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.AttributePlurality)"><MudText Typo="Typo.button">Plurality</MudText></MudTableSortLabel></MudTh>
                             @if (_selectedObjectTypeHasDescriptions)
                             {
-                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Description!)">Description</MudTableSortLabel></MudTh>
+                                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Description!)"><MudText Typo="Typo.button">Description</MudText></MudTableSortLabel></MudTh>
                             }
                             @if (_connectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes)
                             {
@@ -2640,11 +2644,11 @@
                           Elevation="0"
                           Class="mb-4">
                     <HeaderContent>
-                        <MudTh>Connected System Attribute</MudTh>
-                        <MudTh>Operator</MudTh>
-                        <MudTh>Metaverse Attribute</MudTh>
-                        <MudTh>Case Sensitive</MudTh>
-                        <MudTh>Actions</MudTh>
+                        <MudTh><MudText Typo="Typo.button">Connected System Attribute</MudText></MudTh>
+                        <MudTh><MudText Typo="Typo.button">Operator</MudText></MudTh>
+                        <MudTh><MudText Typo="Typo.button">Metaverse Attribute</MudText></MudTh>
+                        <MudTh><MudText Typo="Typo.button">Case Sensitive</MudText></MudTh>
+                        <MudTh><MudText Typo="Typo.button">Actions</MudText></MudTh>
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Source">

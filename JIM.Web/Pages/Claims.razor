@@ -8,8 +8,8 @@
 {
     <MudTable Items="@User.Claims.OrderBy(q=> q.Type)" Hover="true" Breakpoint="Breakpoint.Sm" HorizontalScrollbar="false" Class="mt-5">
         <HeaderContent>
-            <MudTh>Claim Type</MudTh>
-            <MudTh>Claim Value</MudTh>
+            <MudTh><MudText Typo="Typo.button">Claim Type</MudText></MudTh>
+            <MudTh><MudText Typo="Typo.button">Claim Value</MudText></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Claim Type">@context.Type</MudTd>
