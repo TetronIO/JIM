@@ -30,7 +30,7 @@ a.mud-link.mud-primary-text {
 .mud-table-empty-row {
     font-weight: normal;
     color: var(--mud-palette-text-primary) !important;
-    background-color: var(--jim-inner-surface, var(--mud-palette-surface)) !important;
+    background-color: inherit !important;
 }
 
 /* Normalize MudTable text size to match body text */
