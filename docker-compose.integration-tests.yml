@@ -2,6 +2,12 @@
 # This compose file defines external systems used for integration testing
 # See docs/INTEGRATION_TESTING.md for usage instructions
 #
+# PROJECT NAME:
+# Uses a separate project name ('jim-integration') to avoid Docker Compose
+# "orphan container" warnings when the main JIM stack (project 'jim') is
+# started independently. Without this, Samba AD containers appear as orphans
+# to the main stack because they aren't defined in docker-compose.yml.
+#
 # ARCHITECTURE SUPPORT:
 # The base Samba AD image (diegogslomp/samba-ad-dc) supports both AMD64 and ARM64.
 # Docker will automatically pull the correct architecture for your platform.
@@ -19,6 +25,8 @@
 #
 # To fall back to standard images (slow, but no pre-build required):
 #   SAMBA_IMAGE=diegogslomp/samba-ad-dc docker compose -f docker-compose.integration-tests.yml up -d
+
+name: jim-integration
 
 services:
   # Phase 1 - Scenario 1 & 3: HR to Directory, GALSYNC
