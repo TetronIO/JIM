@@ -14,11 +14,9 @@
 
 @if (_template != null)
 {
-    <MudGrid Class="mt-3" Justify="Justify.FlexEnd">
-        <MudItem>
-            <AuditInfo Entity="@_template" />
-        </MudItem>
-    </MudGrid>
+    <MudStack Row Justify="Justify.FlexEnd" Class="mt-3">
+        <AuditInfo Entity="@_template" />
+    </MudStack>
 
     foreach (var objectType in _template.ObjectTypes)
     {
