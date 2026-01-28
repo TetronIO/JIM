@@ -116,6 +116,9 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="connectedSystemObjectIds">The CSO IDs to retrieve pending exports for.</param>
     /// <returns>A dictionary mapping CSO ID to its pending export (if any).</returns>
+    /// <exception cref="JIM.Models.Exceptions.DuplicatePendingExportException">
+    /// Thrown when duplicate pending exports are found for the same CSO, indicating a data integrity violation.
+    /// </exception>
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
     /// <summary>

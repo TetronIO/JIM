@@ -147,6 +147,7 @@ Synchronisation operations are the core of JIM. Data integrity and reliability a
 - `jim-stack-dev` - Start Docker stack + Adminer
 - `jim-stack-logs` - View Docker stack logs
 - `jim-stack-down` - Stop Docker stack
+- `jim-restart` - Restart stack (re-reads .env, no rebuild)
 
 **Docker Builds (rebuild and start services):**
 - `jim-build` - Build all services + start (no dev tools)

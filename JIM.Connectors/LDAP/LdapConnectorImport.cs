@@ -348,6 +348,10 @@ internal class LdapConnectorImport
         // ensure we are also retrieving the unique identifier attribute(s)
         attributes.AddRange(connectedSystemObjectType.Attributes.Where(a => a.IsExternalId).Select(a => a.Name));
 
+        // ensure we also retrieve the secondary external ID attribute (e.g., distinguishedName) so that
+        // export confirmation can verify DN changes (moves/renames) were applied successfully
+        attributes.AddRange(connectedSystemObjectType.Attributes.Where(a => a.IsSecondaryExternalId).Select(a => a.Name));
+
         // we also need the objectClass for type matching purposes
         attributes.Add("objectClass");
 
@@ -433,6 +437,7 @@ internal class LdapConnectorImport
         // Build attribute list
         var attributes = objectType.Attributes.Where(a => a.Selected).Select(a => a.Name).ToList();
         attributes.AddRange(objectType.Attributes.Where(a => a.IsExternalId).Select(a => a.Name));
+        attributes.AddRange(objectType.Attributes.Where(a => a.IsSecondaryExternalId).Select(a => a.Name));
         attributes.Add("objectClass");
         attributes.Add("isDeleted"); // To detect deleted objects (when searching deleted objects container)
         var queryAttributes = attributes.Distinct().ToArray();
@@ -858,7 +863,22 @@ internal class LdapConnectorImport
                     case AttributeDataType.LongNumber:
                         var longNumberValues = LdapConnectorUtilities.GetEntryAttributeLongValues(searchResult, attributeName);
                         if (longNumberValues is { Count: > 0 })
-                            importObjectAttribute.LongValues.AddRange(longNumberValues);
+                        {
+                            // Filter out protected attribute default values.
+                            // AD has "protected" attributes that cannot be cleared — they store a sentinel
+                            // value instead of null (e.g., accountExpires uses 9223372036854775807 for "never expires").
+                            // On export, JIM substitutes null → sentinel. On import, we reverse that:
+                            // sentinel → null (by not importing the value), so JIM consistently sees null
+                            // for "no value" and drift detection doesn't produce false positives.
+                            var protectedDefault = LdapConnectorExport.GetProtectedAttributeDefault(attributeName);
+                            if (protectedDefault != null && long.TryParse(protectedDefault, out var defaultLongValue))
+                            {
+                                longNumberValues = longNumberValues.Where(v => v != defaultLongValue).ToList();
+                            }
+
+                            if (longNumberValues.Count > 0)
+                                importObjectAttribute.LongValues.AddRange(longNumberValues);
+                        }
                         break;
 
                     case AttributeDataType.Boolean:

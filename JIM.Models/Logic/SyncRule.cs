@@ -8,7 +8,7 @@ namespace JIM.Models.Logic;
 /// <summary>
 /// Defines the rules for how one or more attributes should flow between JIM and a connected system, or visa-versa.
 /// </summary>
-public class SyncRule: IValidated
+public class SyncRule : IAuditable, IValidated
 {
     public int Id { get; set; }
         
@@ -16,12 +16,42 @@ public class SyncRule: IValidated
 
     public DateTime Created { get; set; } = DateTime.UtcNow;
 
-    public MetaverseObject? CreatedBy { get; set; }
-        
+    /// <summary>
+    /// The type of security principal that created this entity.
+    /// </summary>
+    public ActivityInitiatorType CreatedByType { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the principal that created this entity.
+    /// Null for system-created (seeded) entities.
+    /// </summary>
+    public Guid? CreatedById { get; set; }
+
+    /// <summary>
+    /// The display name of the principal at the time of creation.
+    /// Retained even if the principal is later deleted.
+    /// </summary>
+    public string? CreatedByName { get; set; }
+
     /// <summary>
     /// When the sync rule was last modified by an admin. Not the last time it was evaluated during a sync run.
     /// </summary>
     public DateTime? LastUpdated { get; set; }
+
+    /// <summary>
+    /// The type of security principal that last modified this entity.
+    /// </summary>
+    public ActivityInitiatorType LastUpdatedByType { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the principal that last modified this entity.
+    /// </summary>
+    public Guid? LastUpdatedById { get; set; }
+
+    /// <summary>
+    /// The display name of the principal at the time of the last modification.
+    /// </summary>
+    public string? LastUpdatedByName { get; set; }
         
     /// <summary>
     /// The connected system this sync rule applies to. A sync rule applies to a single connected system only.

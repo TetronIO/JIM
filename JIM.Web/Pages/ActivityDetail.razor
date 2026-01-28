@@ -15,7 +15,7 @@
 @inject IUserPreferenceService PreferenceService
 
 <PageTitle>Activity: @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters()@(ShowTargetInTitle() ? $": {GetTargetDisplayText()}" : "")</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Activity:</span> @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters()@if (ShowTargetInTitle()) {<span>: </span><span class="mud-primary-text">@GetTargetDisplayText()</span>}</MudText>
+<MudText Typo="Typo.h4"><span class="mud-secondary-text">Activity:</span> @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters()@if (ShowTargetInTitle()) {<span>: </span><span class="jim-title-accent">@GetTargetDisplayText()</span>}</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @if (_activity != null)
@@ -46,7 +46,7 @@
                             <MudLink Href="@Utilities.GetMetaverseObjectHref(_metaverseObjectHeader)">@Utilities.GetMetaverseObjectHrefText(_metaverseObjectHeader)</MudLink>
                             break;
                         case ActivityTargetType.SyncRule:
-                            <MudLink Href="@($"/admin/connected-systems/sync-rules/{_activity.SyncRuleId}")">@_activity.TargetName</MudLink>
+                            <MudLink Href="@($"/admin/sync-rules/{_activity.SyncRuleId}")">@_activity.TargetName</MudLink>
                             break;
                         case ActivityTargetType.TrustedCertificate:
                             <MudLink Href="/admin/certificates">@_activity.TargetName</MudLink>
@@ -338,8 +338,8 @@
                             @foreach (var changeType in GetAvailableChangeTypes())
                             {
                                 <MudChip Value="@changeType"
-                                         Color="@Helpers.GetRunItemMudBlazorColorForType(changeType)"
-                                         Variant="@(IsChangeTypeSelected(changeType) ? Variant.Filled : Variant.Outlined)"
+                                         Color="@(IsChangeTypeSelected(changeType) ? Color.Default : Helpers.GetRunItemMudBlazorColorForType(changeType))"
+                                         Variant="@(IsChangeTypeSelected(changeType) ? Variant.Outlined : Variant.Text)"
                                          SelectedColor="@Helpers.GetRunItemMudBlazorColorForType(changeType)">
                                     @Helpers.GetChangeTypeDisplayName(changeType)
                                     @if (GetChangeTypeCount(changeType) is var count && count > 0)
@@ -350,7 +350,7 @@
                             }
                             @* Disabled Unchanged chip *@
                             <MudChip T="ObjectChangeType"
-                                     Variant="Variant.Outlined"
+                                     Variant="Variant.Text"
                                      Color="Color.Default"
                                      Disabled="true">
                                 Unchanged
@@ -373,7 +373,7 @@
                             {
                                 <MudChip Value="@objectType.Key"
                                          Color="Color.Default"
-                                         Variant="@(IsObjectTypeSelected(objectType.Key) ? Variant.Filled : Variant.Outlined)"
+                                         Variant="@(IsObjectTypeSelected(objectType.Key) ? Variant.Outlined : Variant.Text)"
                                          SelectedColor="Color.Default">
                                     @objectType.Key.SplitOnCapitalLetters()
                                     <MudText Typo="Typo.caption" Class="ml-1">(@objectType.Value.ToString("N0"))</MudText>
@@ -395,8 +395,8 @@
                             @foreach (var errorType in GetAvailableErrorTypes())
                             {
                                 <MudChip Value="@errorType.Key"
-                                         Color="Color.Error"
-                                         Variant="@(IsErrorTypeSelected(errorType.Key) ? Variant.Filled : Variant.Outlined)"
+                                         Color="@(IsErrorTypeSelected(errorType.Key) ? Color.Default : Color.Error)"
+                                         Variant="@(IsErrorTypeSelected(errorType.Key) ? Variant.Outlined : Variant.Text)"
                                          SelectedColor="Color.Error">
                                     @errorType.Key.ToString().SplitOnCapitalLetters()
                                     <MudText Typo="Typo.caption" Class="ml-1">(@errorType.Value.ToString("N0"))</MudText>

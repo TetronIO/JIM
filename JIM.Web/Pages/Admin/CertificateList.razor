@@ -40,7 +40,7 @@
             AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
     </ToolBarContent>
     <HeaderContent>
-        <MudTh>Actions</MudTh>
+        <MudTh><MudText Typo="Typo.button">Actions</MudText></MudTh>
         <MudTh>
             <MudTableSortLabel SortBy="new Func<TrustedCertificate, object>(x => x.Name)">
                 <MudText Typo="Typo.button">Name</MudText>
@@ -245,13 +245,8 @@
                         <MudField Label="File Path" Variant="Variant.Outlined">@_selectedCertificate.FilePath</MudField>
                     </MudItem>
                 }
-                <MudItem xs="6">
-                    <MudField Label="Created At" Variant="Variant.Outlined">@_selectedCertificate.CreatedAt.ToFriendlyDate()
-                    </MudField>
-                </MudItem>
-                <MudItem xs="6">
-                    <MudField Label="Created By" Variant="Variant.Outlined">@(_selectedCertificate.CreatedBy ?? "-")
-                    </MudField>
+                <MudItem xs="12">
+                    <AuditInfo Entity="@_selectedCertificate" />
                 </MudItem>
                 @if (!string.IsNullOrEmpty(_selectedCertificate.Notes))
                 {

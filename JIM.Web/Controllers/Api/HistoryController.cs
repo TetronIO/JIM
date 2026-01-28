@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Asp.Versioning;
 using JIM.Application;
+using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Security;
@@ -60,11 +61,12 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
             // Get current API key for initiator tracking
             var apiKey = await GetCurrentApiKeyAsync();
 
-            // Perform cleanup (pass null for initiator since this is manual/admin triggered)
-            var result = await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(
-                cutoffDate,
-                batchSize,
-                initiatedBy: null);
+            // Perform cleanup, attributing the activity to the calling API key (or System if no key)
+            ChangeHistoryServer.ChangeHistoryCleanupResult result;
+            if (apiKey != null)
+                result = await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, batchSize, apiKey);
+            else
+                result = await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, batchSize);
 
             _logger.LogInformation(
                 "History cleanup completed - CSO: {CsoCount}, MVO: {MvoCount}, Activity: {ActivityCount}",

@@ -1,4 +1,5 @@
 using JIM.Models.Activities;
+using JIM.Models.Security;
 using Serilog;
 
 namespace JIM.Application.Servers;
@@ -26,38 +27,53 @@ public class ChangeHistoryServer
 
     /// <summary>
     /// Deletes expired change history and activity records based on retention policy.
-    /// Creates an Activity record to audit the cleanup operation.
-    /// For system-initiated cleanup (housekeeping), pass null for initiatedBy.
+    /// Creates a system-initiated Activity record to audit the cleanup operation.
+    /// Use this overload for automated/scheduled cleanup (worker housekeeping).
     /// </summary>
-    /// <param name="olderThan">Delete records with timestamps older than this date</param>
-    /// <param name="maxRecordsPerType">Maximum number of records to delete per type (CSO/MVO/Activity)</param>
-    /// <param name="initiatedBy">User or API key initiating cleanup (null for system/housekeeping)</param>
-    /// <returns>Cleanup result with counts and date range</returns>
+    public async Task<ChangeHistoryCleanupResult> DeleteExpiredChangeHistoryAsync(
+        DateTime olderThan,
+        int maxRecordsPerType)
+    {
+        var activity = CreateCleanupActivity();
+        await _application.Activities.CreateSystemActivityAsync(activity);
+        return await ExecuteCleanupAsync(activity, olderThan, maxRecordsPerType);
+    }
+
+    /// <summary>
+    /// Deletes expired change history and activity records based on retention policy.
+    /// Creates an Activity record attributed to the specified API key.
+    /// Use this overload for API-initiated cleanup.
+    /// </summary>
     public async Task<ChangeHistoryCleanupResult> DeleteExpiredChangeHistoryAsync(
         DateTime olderThan,
         int maxRecordsPerType,
-        Models.Core.MetaverseObject? initiatedBy = null)
+        ApiKey initiatedByApiKey)
     {
-        // Create activity to audit the cleanup operation
-        var activity = new Activity
+        var activity = CreateCleanupActivity();
+        await _application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        return await ExecuteCleanupAsync(activity, olderThan, maxRecordsPerType);
+    }
+
+    private static Activity CreateCleanupActivity()
+    {
+        return new Activity
         {
             Id = Guid.NewGuid(),
             TargetType = ActivityTargetType.HistoryRetentionCleanup,
             TargetOperationType = ActivityTargetOperationType.Delete,
             Message = "Change history and activity retention cleanup"
         };
+    }
 
-        await _application.Activities.CreateActivityAsync(activity, initiatedBy);
-
+    private async Task<ChangeHistoryCleanupResult> ExecuteCleanupAsync(
+        Activity activity,
+        DateTime olderThan,
+        int maxRecordsPerType)
+    {
         var result = new ChangeHistoryCleanupResult();
 
         try
         {
-            // Track all deleted record IDs for date range calculation
-            var deletedCsoIds = new List<Guid>();
-            var deletedMvoIds = new List<Guid>();
-            var deletedActivityIds = new List<Guid>();
-
             // Delete CSO changes
             Log.Information("ChangeHistoryCleanup: Deleting expired CSO changes (older than {OlderThan})", olderThan);
             result.CsoChangesDeleted = await _application.Repository.ChangeHistory.DeleteExpiredCsoChangesAsync(olderThan, maxRecordsPerType);

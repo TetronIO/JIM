@@ -18,7 +18,10 @@
 
 @if (_apiKey != null && _preferencesLoaded)
 {
-    <MudText Typo="Typo.h5" Class="mt-5">Details</MudText>
+    <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mt-3">
+        <MudText Typo="Typo.h5">Details</MudText>
+        <AuditInfo Entity="@_apiKey" />
+    </MudStack>
     <MudPaper Class="pa-5 mt-3" Outlined="true">
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
@@ -46,11 +49,6 @@
                 {
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Class="ml-0">Disabled</MudChip>
                 }
-            </MudItem>
-
-            <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">Created:</MudText>
-                <MudText Class="mud-text-secondary">@_apiKey.CreatedAt.ToLocalTime().ToFriendlyDate()</MudText>
             </MudItem>
 
             <MudItem xs="12" sm="6" md="4">

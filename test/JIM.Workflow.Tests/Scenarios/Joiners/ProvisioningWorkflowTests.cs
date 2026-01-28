@@ -346,7 +346,8 @@ public class ProvisioningWorkflowTests
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithGuidAttribute("employeeId")
             .WithStringAttribute("displayName")
-            .WithStringAttribute("department"));
+            .WithStringAttribute("department")
+            .WithStringAttribute("Type"));
 
         // Get attributes for flow rules
         var hrUserType = _harness.GetObjectType("HR", "User");
@@ -361,6 +362,7 @@ public class ProvisioningWorkflowTests
         // Get MV attributes
         var mvEmployeeId = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "employeeId");
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
         // Create import sync rule (HR → MV) with attribute flows
         await _harness.CreateSyncRuleAsync(
@@ -371,7 +373,8 @@ public class ProvisioningWorkflowTests
             SyncRuleDirection.Import,
             r => r
                 .WithProjection()
-                .WithAttributeFlow(mvDisplayName, hrDisplayName));
+                .WithAttributeFlow(mvDisplayName, hrDisplayName)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
 
         // Create export sync rule (MV → AD) with provisioning enabled
         await _harness.CreateSyncRuleAsync(

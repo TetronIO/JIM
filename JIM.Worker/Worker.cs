@@ -413,6 +413,13 @@ public class Worker : BackgroundService
     private DateTime _lastHousekeepingRun = DateTime.MinValue;
 
     /// <summary>
+    /// Tracks when the last history retention cleanup occurred.
+    /// History cleanup runs on a longer interval (every 6 hours) as it only
+    /// deals with records that are 90+ days old and doesn't need frequent checks.
+    /// </summary>
+    private DateTime _lastHistoryCleanupRun = DateTime.MinValue;
+
+    /// <summary>
     /// Performs housekeeping tasks during worker idle time.
     /// Currently includes: orphaned MVO cleanup based on deletion rules.
     /// </summary>
@@ -460,13 +467,17 @@ public class Worker : BackgroundService
                     }
                 }
             }
-
-            // Perform change history cleanup
-            await PerformChangeHistoryCleanupAsync(jim);
         }
         catch (Exception ex)
         {
             Log.Error(ex, "PerformHousekeepingAsync: Error during housekeeping");
+        }
+
+        // History retention cleanup runs on its own schedule (every 6 hours)
+        if ((DateTime.UtcNow - _lastHistoryCleanupRun).TotalHours >= 6)
+        {
+            _lastHistoryCleanupRun = DateTime.UtcNow;
+            await PerformChangeHistoryCleanupAsync(jim);
         }
     }
 
@@ -485,7 +496,7 @@ public class Worker : BackgroundService
             var cutoffDate = DateTime.UtcNow - retentionPeriod;
 
             // Perform cleanup (creates its own Activity for audit)
-            var result = await jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, batchSize, initiatedBy: null);
+            var result = await jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, batchSize);
 
             // Log results if anything was deleted
             if (result.CsoChangesDeleted > 0 || result.MvoChangesDeleted > 0 || result.ActivitiesDeleted > 0)

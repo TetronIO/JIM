@@ -1,0 +1,95 @@
+/*
+ * JIM Colour Theme: Blended Nav Dark
+ *
+ * The dark counterpart to blended-nav-light. The navigation sidebar
+ * shares the same background as the page, creating a seamless layout
+ * with no visual border between nav and content. Very dark palette
+ * with purple primary accent.
+ *
+ * Depth model (from reference):
+ *   Page background:    #121314
+ *   Container surface:  #151617
+ *   Nested containers:  #222325
+ *
+ * We use html[lang] instead of :root so that these declarations have
+ * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
+ * styles, ensuring our theme values always win.
+ */
+
+html[lang] {
+    /* === Primary Palette (JIM purple — vivid for dark backgrounds) === */
+    --mud-palette-primary: #4488ff;
+    --mud-palette-primary-darken: #3070ee;
+    --mud-palette-primary-lighten: #66a0ff;
+    --mud-palette-primary-text: #ffffffff;
+    --mud-palette-secondary: #4488ff;
+    --mud-palette-secondary-text: #ffffffff;
+
+    /* === Background & Surface (from reference screenshot) === */
+    --mud-palette-background: #121314;
+    --mud-palette-surface: #151617;
+    --mud-palette-background-grey: rgba(255, 255, 255, 0.03);
+
+    /* === Inner Surface (nested containers) === */
+    --jim-inner-surface: #222325;
+    --jim-inner-border-color: #2e2f32;
+
+    /* === Appbar (matching page background for blended look) === */
+    --mud-palette-appbar-background: #121314;
+    --mud-palette-appbar-text: #ffffffff;
+
+    /* === Drawer (same as page background — the blended effect) === */
+    --mud-palette-drawer-background: #121314;
+    --mud-palette-drawer-text: #b0b2b8;
+    --mud-palette-drawer-icon: #6a6c74;
+
+    /* === Text === */
+    --mud-palette-text-primary: #e4e4e8;
+    --mud-palette-text-secondary: #9a9aa4;
+    --mud-palette-text-disabled: #55555e;
+
+    /* === Action === */
+    --mud-palette-action-default: #b0b2b8;
+    --mud-palette-action-default-hover: rgba(102, 136, 255, 0.15);
+    --mud-palette-action-disabled: rgba(255, 255, 255, 0.38);
+    --mud-palette-action-disabled-background: rgba(255, 255, 255, 0.10);
+
+    /* === Lines & Dividers === */
+    --mud-palette-lines-default: #2e2f32;
+    --mud-palette-lines-inputs: #3e3f44;
+    --mud-palette-divider: #2e2f32;
+    --mud-palette-divider-light: rgba(255, 255, 255, 0.06);
+
+    /* === Table === */
+    --mud-palette-table-lines: #2e2f32;
+    --mud-palette-table-striped: rgba(255, 255, 255, 0.02);
+    --mud-palette-table-hover: #222325;
+
+    /* === JIM Custom: JSON Syntax Highlighting === */
+    --jim-json-key: #b8a0e8;        /* Soft purple */
+    --jim-json-string: #a5d6a7;     /* Soft green */
+    --jim-json-number: #ffb74d;     /* Warm amber */
+    --jim-json-boolean: #64b5f6;    /* Light blue */
+    --jim-json-null: #ff8a80;       /* Soft coral */
+
+    /* === JIM Custom: Navigation === */
+    --jim-nav-top-level-color: #b0b2b8;
+    --jim-nav-child-color: #808490;
+    --jim-nav-hover-color: #f0f0f4;
+    --jim-nav-active-color: #f0f0f4;
+
+    /* === JIM Custom: Drawer border (transparent — no separator) === */
+    --jim-drawer-border-color: transparent;
+
+    /* === JIM Custom: Paper border === */
+    --jim-paper-border-color: #2e2f32;
+
+    /* === JIM Custom: Content Links === */
+    --jim-link-color: #4488ff;
+
+    /* === JIM Custom: Link Hover (matches nav active text) === */
+    --jim-link-hover-color: #f0f0f4;
+
+    /* === JIM Custom: Logo text === */
+    --jim-logo-text-color: #ffffff;
+}

@@ -1,9 +1,10 @@
 ﻿using JIM.Models.Activities;
+using JIM.Models.Interfaces;
 using JIM.Models.Transactional;
 using System.ComponentModel.DataAnnotations;
 namespace JIM.Models.Staging;
 
-public class ConnectedSystem
+public class ConnectedSystem : IAuditable
 {
     public int Id { get; set; }
 
@@ -13,8 +14,14 @@ public class ConnectedSystem
     public string? Description { get; set; }
 
     public DateTime Created { get; set; } = DateTime.UtcNow;
+    public ActivityInitiatorType CreatedByType { get; set; }
+    public Guid? CreatedById { get; set; }
+    public string? CreatedByName { get; set; }
 
-    public DateTime LastUpdated { get; set; }
+    public DateTime? LastUpdated { get; set; }
+    public ActivityInitiatorType LastUpdatedByType { get; set; }
+    public Guid? LastUpdatedById { get; set; }
+    public string? LastUpdatedByName { get; set; }
 
     /// <summary>
     /// The operational status of the Connected System.

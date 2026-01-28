@@ -11,7 +11,7 @@ public class ConnectedSystemDetailDto
     public string Name { get; set; } = null!;
     public string? Description { get; set; }
     public DateTime Created { get; set; }
-    public DateTime LastUpdated { get; set; }
+    public DateTime? LastUpdated { get; set; }
     public ConnectedSystemStatus Status { get; set; }
     public bool SettingValuesValid { get; set; }
     public ConnectorReferenceDto Connector { get; set; } = null!;

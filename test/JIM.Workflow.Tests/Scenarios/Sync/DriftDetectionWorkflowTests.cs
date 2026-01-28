@@ -591,6 +591,148 @@ public class DriftDetectionWorkflowTests
         };
     }
 
+    /// <summary>
+    /// Verifies that drift detection does not produce false positives for expression-based
+    /// export mappings that evaluate to a LongNumber value (e.g., accountExpires).
+    ///
+    /// Scenario (mirrors real-world accountExpires flow):
+    /// - HR imports employeeEndDate as DateTime
+    /// - MVO stores Employee End Date as DateTime
+    /// - Export rule uses ToFileTime(mv["Employee End Date"]) expression → exports to accountExpires (LongNumber)
+    /// - After export + confirm, CSO has the expression-evaluated long value
+    /// - Full sync on AD should detect NO drift because the expression re-evaluates to the same value
+    ///
+    /// This is a regression test for a bug where 69 of 100 users with null end dates caused
+    /// false drift because the LDAP connector stored the AD sentinel value (9223372036854775807)
+    /// instead of null, causing a mismatch with the expression result (null).
+    /// </summary>
+    [Test]
+    public async Task DriftNotDetected_ExpressionBasedLongNumberExport_NoDriftWhenValueMatchesAsync()
+    {
+        // Arrange: HR (source) with DateTime attribute → MV → AD (target) with LongNumber attribute via expression
+        await SetUpExpressionBasedLongNumberExportScenarioAsync();
+
+        // A specific DateTime that ToFileTime will convert to a known long value
+        var testEndDate = new DateTime(2026, 12, 31, 23, 59, 59, DateTimeKind.Utc);
+        var expectedFileTime = testEndDate.ToFileTimeUtc();
+
+        // Step 1: Import from HR with an employee end date
+        var hrConnector = _harness.GetConnector("HR");
+        hrConnector.QueueImportObjects(new List<ConnectedSystemImportObject>
+        {
+            new()
+            {
+                ChangeType = ObjectChangeType.NotSet,
+                ObjectType = "User",
+                Attributes = new List<ConnectedSystemImportObjectAttribute>
+                {
+                    new() { Name = "employeeId", GuidValues = new List<Guid> { Guid.NewGuid() } },
+                    new() { Name = "displayName", StringValues = new List<string> { "Test User with End Date" } },
+                    new() { Name = "employeeEndDate", DateTimeValue = testEndDate }
+                }
+            }
+        });
+
+        await _harness.ExecuteFullImportAsync("HR");
+        await _harness.ExecuteFullSyncAsync("HR");
+        var afterInitialSync = await _harness.TakeSnapshotAsync("After Initial Sync");
+
+        Assert.That(afterInitialSync.PendingExportCount, Is.EqualTo(1),
+            "Should have 1 pending export after initial sync");
+
+        // Verify the pending export has the expected long value from ToFileTime expression
+        var pendingExport = await _harness.DbContext.PendingExports
+            .Include(pe => pe.AttributeValueChanges)
+            .ThenInclude(avc => avc.Attribute)
+            .FirstAsync();
+
+        var accountExpiresChange = pendingExport.AttributeValueChanges
+            .FirstOrDefault(avc => avc.Attribute?.Name == "accountExpires");
+
+        Assert.That(accountExpiresChange, Is.Not.Null,
+            "Should have accountExpires attribute value change from ToFileTime expression");
+        Assert.That(accountExpiresChange!.LongValue, Is.EqualTo(expectedFileTime),
+            "accountExpires should contain the FileTime value of the employee end date");
+
+        // Step 2: Execute exports and populate CSO values (simulating confirming import)
+        await _harness.ExecuteExportAsync("AD");
+        await PopulateCsoAttributeValuesFromPendingExportsAsync();
+        await ClearPendingExportsAsync();
+
+        var beforeDriftCheck = await _harness.TakeSnapshotAsync("Before Drift Check");
+        Assert.That(beforeDriftCheck.PendingExportCount, Is.EqualTo(0),
+            "Should have no pending exports before drift check");
+
+        // Step 3: Run full sync on AD — should detect NO drift
+        // The expression will re-evaluate to the same long value that's on the CSO
+        await _harness.ExecuteFullSyncAsync("AD");
+        var afterDriftCheck = await _harness.TakeSnapshotAsync("After Drift Check");
+
+        Assert.That(afterDriftCheck.PendingExportCount, Is.EqualTo(0),
+            "Should have NO pending exports — expression-evaluated LongNumber value matches CSO, no drift. " +
+            "If there are pending exports, the drift detection expression evaluation may not be comparing correctly.");
+    }
+
+    /// <summary>
+    /// Verifies that drift detection does not produce false positives for expression-based
+    /// export mappings that evaluate to null (e.g., accountExpires when there is no end date).
+    ///
+    /// This is the specific scenario that caused 69 false drift corrections in integration tests:
+    /// - User has no end date → ToFileTime(null) returns null
+    /// - CSO should also have null (no accountExpires value)
+    /// - Drift detection should see null == null → no drift
+    /// </summary>
+    [Test]
+    public async Task DriftNotDetected_ExpressionBasedLongNumberExport_NullValueNoDriftAsync()
+    {
+        // Arrange: HR (source) with DateTime attribute → MV → AD (target) with LongNumber attribute via expression
+        await SetUpExpressionBasedLongNumberExportScenarioAsync();
+
+        // Step 1: Import from HR WITHOUT an employee end date (null)
+        var hrConnector = _harness.GetConnector("HR");
+        hrConnector.QueueImportObjects(new List<ConnectedSystemImportObject>
+        {
+            new()
+            {
+                ChangeType = ObjectChangeType.NotSet,
+                ObjectType = "User",
+                Attributes = new List<ConnectedSystemImportObjectAttribute>
+                {
+                    new() { Name = "employeeId", GuidValues = new List<Guid> { Guid.NewGuid() } },
+                    new() { Name = "displayName", StringValues = new List<string> { "Active Employee (no end date)" } }
+                    // Note: employeeEndDate is intentionally omitted — null value
+                }
+            }
+        });
+
+        await _harness.ExecuteFullImportAsync("HR");
+        await _harness.ExecuteFullSyncAsync("HR");
+        var afterInitialSync = await _harness.TakeSnapshotAsync("After Initial Sync");
+
+        // The pending export should have cn and distinguishedName but accountExpires
+        // should either not be present or have a null LongValue (since ToFileTime(null) = null)
+        Assert.That(afterInitialSync.PendingExportCount, Is.EqualTo(1),
+            "Should have 1 pending export after initial sync");
+
+        // Step 2: Execute exports and populate CSO values
+        await _harness.ExecuteExportAsync("AD");
+        await PopulateCsoAttributeValuesFromPendingExportsAsync();
+        await ClearPendingExportsAsync();
+
+        var beforeDriftCheck = await _harness.TakeSnapshotAsync("Before Drift Check");
+        Assert.That(beforeDriftCheck.PendingExportCount, Is.EqualTo(0));
+
+        // Step 3: Run full sync on AD — should detect NO drift
+        // ToFileTime(null) returns null, CSO has no accountExpires value → null == null, no drift
+        await _harness.ExecuteFullSyncAsync("AD");
+        var afterDriftCheck = await _harness.TakeSnapshotAsync("After Drift Check");
+
+        Assert.That(afterDriftCheck.PendingExportCount, Is.EqualTo(0),
+            "Should have NO pending exports — null expression result matches null CSO value, no drift. " +
+            "In production, AD stores 9223372036854775807 for null accountExpires, but the LDAP connector " +
+            "import filter converts that sentinel back to null. This test verifies the sync engine side.");
+    }
+
     #endregion
 
     #region Setup Helpers
@@ -614,7 +756,8 @@ public class DriftDetectionWorkflowTests
         // Create MV type
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithGuidAttribute("employeeId")
-            .WithStringAttribute("displayName"));
+            .WithStringAttribute("displayName")
+            .WithStringAttribute("Type"));
 
         // Get attributes for flow rules
         var hrUserType = _harness.GetObjectType("HR", "User");
@@ -626,6 +769,7 @@ public class DriftDetectionWorkflowTests
 
         // Get MV attributes
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
         // Create import sync rule (HR → MV) - HR is the contributor
         await _harness.CreateSyncRuleAsync(
@@ -636,7 +780,8 @@ public class DriftDetectionWorkflowTests
             SyncRuleDirection.Import,
             r => r
                 .WithProjection()
-                .WithAttributeFlow(mvDisplayName, hrDisplayName));
+                .WithAttributeFlow(mvDisplayName, hrDisplayName)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
 
         // Create export sync rule (MV → AD) - AD is the target (non-contributor)
         await _harness.CreateSyncRuleAsync(
@@ -670,7 +815,8 @@ public class DriftDetectionWorkflowTests
         // Create MV type
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithGuidAttribute("employeeId")
-            .WithStringAttribute("displayName"));
+            .WithStringAttribute("displayName")
+            .WithStringAttribute("Type"));
 
         // Get attributes
         var hrUserType = _harness.GetObjectType("HR", "User");
@@ -681,6 +827,7 @@ public class DriftDetectionWorkflowTests
         var adDn = adUserType.Attributes.First(a => a.Name == "distinguishedName");
 
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
         // HR Import - HR contributes to displayName
         await _harness.CreateSyncRuleAsync(
@@ -691,7 +838,8 @@ public class DriftDetectionWorkflowTests
             SyncRuleDirection.Import,
             r => r
                 .WithProjection()
-                .WithAttributeFlow(mvDisplayName, hrDisplayName));
+                .WithAttributeFlow(mvDisplayName, hrDisplayName)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
 
         // AD Import - AD ALSO contributes to displayName (bidirectional)
         await _harness.CreateSyncRuleAsync(
@@ -701,7 +849,8 @@ public class DriftDetectionWorkflowTests
             personType,
             SyncRuleDirection.Import,
             r => r
-                .WithAttributeFlow(mvDisplayName, adCn));
+                .WithAttributeFlow(mvDisplayName, adCn)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
 
         // AD Export - exports displayName to AD
         await _harness.CreateSyncRuleAsync(
@@ -714,6 +863,81 @@ public class DriftDetectionWorkflowTests
                 .WithProvisioning()
                 .WithEnforceState(true)
                 .WithAttributeFlow(mvDisplayName, adCn)
+                .WithExpressionFlow("\"CN=\" + mv[\"displayName\"] + \",OU=Users,DC=test,DC=local\"", adDn));
+    }
+
+    /// <summary>
+    /// Sets up a scenario that mirrors the real-world accountExpires flow:
+    /// - HR has employeeEndDate (DateTime)
+    /// - MVO has Employee End Date (DateTime)
+    /// - AD has accountExpires (LongNumber) exported via ToFileTime expression
+    /// </summary>
+    private async Task SetUpExpressionBasedLongNumberExportScenarioAsync()
+    {
+        // Create HR (source) system with DateTime attribute
+        await _harness.CreateConnectedSystemAsync("HR");
+        await _harness.CreateObjectTypeAsync("HR", "User", t => t
+            .WithGuidExternalId("employeeId")
+            .WithStringAttribute("displayName")
+            .WithDateTimeAttribute("employeeEndDate"));
+
+        // Create AD (target) system with LongNumber attribute (like accountExpires)
+        await _harness.CreateConnectedSystemAsync("AD");
+        await _harness.CreateObjectTypeAsync("AD", "User", t => t
+            .WithGuidExternalId("objectGUID")
+            .WithStringSecondaryExternalId("distinguishedName")
+            .WithStringAttribute("cn")
+            .WithLongAttribute("accountExpires"));
+
+        // Create MV type with DateTime attribute
+        var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
+            .WithGuidAttribute("employeeId")
+            .WithStringAttribute("displayName")
+            .WithDateTimeAttribute("Employee End Date")
+            .WithStringAttribute("Type"));
+
+        // Get attributes for flow rules
+        var hrUserType = _harness.GetObjectType("HR", "User");
+        var adUserType = _harness.GetObjectType("AD", "User");
+
+        var hrDisplayName = hrUserType.Attributes.First(a => a.Name == "displayName");
+        var hrEndDate = hrUserType.Attributes.First(a => a.Name == "employeeEndDate");
+
+        var adCn = adUserType.Attributes.First(a => a.Name == "cn");
+        var adDn = adUserType.Attributes.First(a => a.Name == "distinguishedName");
+        var adAccountExpires = adUserType.Attributes.First(a => a.Name == "accountExpires");
+
+        // Get MV attributes
+        var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
+        var mvEndDate = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Employee End Date");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
+
+        // Create import sync rule (HR → MV)
+        await _harness.CreateSyncRuleAsync(
+            "HR Import",
+            "HR",
+            "User",
+            personType,
+            SyncRuleDirection.Import,
+            r => r
+                .WithProjection()
+                .WithAttributeFlow(mvDisplayName, hrDisplayName)
+                .WithAttributeFlow(mvEndDate, hrEndDate)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
+
+        // Create export sync rule (MV → AD) with expression-based mapping
+        // ToFileTime converts DateTime to Windows FILETIME (long) — same as real accountExpires flow
+        await _harness.CreateSyncRuleAsync(
+            "AD Export",
+            "AD",
+            "User",
+            personType,
+            SyncRuleDirection.Export,
+            r => r
+                .WithProvisioning()
+                .WithEnforceState(true)
+                .WithAttributeFlow(mvDisplayName, adCn)
+                .WithExpressionFlow("ToFileTime(mv[\"Employee End Date\"])", adAccountExpires)
                 .WithExpressionFlow("\"CN=\" + mv[\"displayName\"] + \",OU=Users,DC=test,DC=local\"", adDn));
     }
 
@@ -805,8 +1029,11 @@ public class DriftDetectionWorkflowTests
                 // Copy values from pending export
                 existingAttrValue.StringValue = avc.StringValue;
                 existingAttrValue.IntValue = avc.IntValue;
+                existingAttrValue.LongValue = avc.LongValue;
                 existingAttrValue.DateTimeValue = avc.DateTimeValue;
                 existingAttrValue.ByteValue = avc.ByteValue;
+                existingAttrValue.GuidValue = avc.GuidValue;
+                existingAttrValue.BoolValue = avc.BoolValue;
                 existingAttrValue.UnresolvedReferenceValue = avc.UnresolvedReferenceValue;
             }
 
@@ -865,7 +1092,8 @@ public class DriftDetectionWorkflowTests
         // Create MV types
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithGuidAttribute("objectId")
-            .WithStringAttribute("cn"));
+            .WithStringAttribute("cn")
+            .WithStringAttribute("Type"));
 
         var groupType = await _harness.CreateMetaverseObjectTypeAsync("Group", t => t
             .WithGuidAttribute("objectId")
@@ -893,6 +1121,7 @@ public class DriftDetectionWorkflowTests
         var mvPersonCn = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "cn" && a.MetaverseObjectTypes.Any(t => t.Name == "Person"));
         var mvGroupCn = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "cn" && a.MetaverseObjectTypes.Any(t => t.Name == "Group"));
         var mvGroupMember = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "member");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type" && a.MetaverseObjectTypes.Any(t => t.Name == "Person"));
 
         // Create Source import sync rules (Source is the contributor)
         await _harness.CreateSyncRuleAsync(
@@ -903,7 +1132,8 @@ public class DriftDetectionWorkflowTests
             SyncRuleDirection.Import,
             r => r
                 .WithProjection()
-                .WithAttributeFlow(mvPersonCn, sourceUserCn));
+                .WithAttributeFlow(mvPersonCn, sourceUserCn)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
 
         await _harness.CreateSyncRuleAsync(
             "Source Group Import",

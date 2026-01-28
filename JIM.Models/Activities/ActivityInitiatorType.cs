@@ -19,5 +19,10 @@ public enum ActivityInitiatorType
     /// <summary>
     /// The activity was initiated via an API key (automation, CI/CD, integration testing).
     /// </summary>
-    ApiKey = 2
+    ApiKey = 2,
+
+    /// <summary>
+    /// The action was performed by the system itself (seeding, SSO initialisation, scheduled maintenance).
+    /// </summary>
+    System = 3
 }

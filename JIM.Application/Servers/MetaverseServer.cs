@@ -8,6 +8,7 @@ using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
+using JIM.Application.Utilities;
 using Serilog;
 namespace JIM.Application.Servers;
 
@@ -110,6 +111,7 @@ public class MetaverseServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
+        AuditHelper.SetCreated(attribute, initiatedBy);
         await Application.Repository.Metaverse.CreateMetaverseAttributeAsync(attribute);
 
         await Application.Activities.CompleteActivityAsync(activity);
@@ -135,6 +137,7 @@ public class MetaverseServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
+        AuditHelper.SetUpdated(attribute, initiatedBy);
         await Application.Repository.Metaverse.UpdateMetaverseAttributeAsync(attribute);
 
         await Application.Activities.CompleteActivityAsync(activity);
@@ -185,6 +188,7 @@ public class MetaverseServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
+        AuditHelper.SetCreated(attribute, initiatedByApiKey);
         await Application.Repository.Metaverse.CreateMetaverseAttributeAsync(attribute);
 
         await Application.Activities.CompleteActivityAsync(activity);
@@ -210,6 +214,7 @@ public class MetaverseServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
+        AuditHelper.SetUpdated(attribute, initiatedByApiKey);
         await Application.Repository.Metaverse.UpdateMetaverseAttributeAsync(attribute);
 
         await Application.Activities.CompleteActivityAsync(activity);

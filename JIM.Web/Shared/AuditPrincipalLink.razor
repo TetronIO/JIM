@@ -1,0 +1,50 @@
+@using JIM.Application
+@using JIM.Models.Activities
+@inject JimApplication Jim
+
+@if (PrincipalType == ActivityInitiatorType.User && PrincipalId.HasValue)
+{
+    @if (_mvoHref != null)
+    {
+        <MudLink Href="@_mvoHref" Typo="Typo.inherit">@(PrincipalName ?? PrincipalId.ToString())</MudLink>
+    }
+    else
+    {
+        <span>@(PrincipalName ?? PrincipalId.ToString())</span>
+    }
+}
+else if (PrincipalType == ActivityInitiatorType.ApiKey && PrincipalId.HasValue)
+{
+    <MudLink Href="@($"/admin/apikeys/{PrincipalId}")" Typo="Typo.inherit">@(PrincipalName ?? "API Key")</MudLink>
+}
+else if (PrincipalType == ActivityInitiatorType.System)
+{
+    <MudIcon Icon="@Icons.Material.Filled.Settings" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+    <span>System</span>
+}
+else
+{
+    <span class="mud-text-secondary">--</span>
+}
+
+@code {
+    [Parameter] public ActivityInitiatorType PrincipalType { get; set; }
+    [Parameter] public Guid? PrincipalId { get; set; }
+    [Parameter] public string? PrincipalName { get; set; }
+
+    private string? _mvoHref;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _mvoHref = null;
+
+        if (PrincipalType == ActivityInitiatorType.User && PrincipalId.HasValue)
+        {
+            var mvo = await Jim.Metaverse.GetMetaverseObjectAsync(PrincipalId.Value);
+            if (mvo?.Type != null)
+            {
+                _mvoHref = $"/t/{mvo.Type.PluralName.ToLower()}/v/{mvo.Id}";
+            }
+        }
+    }
+}

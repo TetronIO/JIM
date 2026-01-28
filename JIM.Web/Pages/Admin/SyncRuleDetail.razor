@@ -1,5 +1,5 @@
-﻿@page "/admin/connected-systems/sync-rules/new"
-@page "/admin/connected-systems/sync-rules/{Id:int}"
+﻿@page "/admin/sync-rules/new"
+@page "/admin/sync-rules/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application
 @using JIM.Models.Core
@@ -29,28 +29,13 @@ else if (_syncRule != null)
 {
     <MudPaper Class="pa-4 mt-5" Outlined="true">
 
-        <div class="d-flex justify-space-between align-center">
-            <MudText Typo="Typo.h5" Class="mb-5">Details</MudText>
+        <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+            <MudText Typo="Typo.h5">Details</MudText>
             @if (_syncRule.Id > 0)
             {
-                <div class="d-flex gap-2">
-                    <MudTooltip Text="@_syncRule.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info">
-                            Created @_syncRule.Created.ToLocalTime().ToRelativeTime()@if (_syncRule.CreatedBy != null)
-                            {<text> by @_syncRule.CreatedBy.DisplayName</text>}
-                        </MudChip>
-                    </MudTooltip>
-                    @if (_syncRule.LastUpdated.HasValue)
-                    {
-                        <MudTooltip Text="@_syncRule.LastUpdated.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                            <MudChip T="string" Variant="Variant.Text" Color="Color.Info">
-                                Updated @_syncRule.LastUpdated.Value.ToLocalTime().ToRelativeTime()
-                            </MudChip>
-                        </MudTooltip>
-                    }
-                </div>
+                <AuditInfo Entity="@_syncRule" />
             }
-        </div>
+        </MudStack>
 
         <MudForm @bind-IsValid="@_isDetailsFormValid" @bind-Errors="@_detailsFormErrors">
             <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="_syncRule.Name"
@@ -304,13 +289,13 @@ else if (_syncRule != null)
                                             ValueChanged="@(value => HandleToggleMatchingRuleCaseSensitive(objectMatchingRule, value))"
                                             Label="Case Sensitive" Color="Color.Primary" Size="Size.Small" Class="ms-4" />
                                         <MudSpacer />
-                                        <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Color="Color.Default" Size="Size.Small"
+                                        <MudIconButton Icon="@Icons.Material.Outlined.ArrowUpward" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
                                             Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "up"))"
                                             Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "up")" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Color="Color.Default" Size="Size.Small"
+                                        <MudIconButton Icon="@Icons.Material.Outlined.ArrowDownward" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
                                             Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "down"))"
                                             Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "down")" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
                                             aria-label="delete" OnClick="@(() => HandleObjectMatchingRuleDeleteClickAsync(objectMatchingRule))">
                                         </MudIconButton>
                                     </MudItem>
@@ -601,7 +586,7 @@ else if (_syncRule != null)
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
                     <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span>
                         @attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
-                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
                         Style="flex-shrink: 0;" aria-label="delete"
                         OnClick="@(() => HandleAttributeFlowRuleDeleteClick(attributeFlowRule))">
                     </MudIconButton>
@@ -640,7 +625,7 @@ else if (_syncRule != null)
                             <MudChip T="string">
                                 <AvatarContent>
                                     <MudTooltip Text="Expression" Arrow="true" Placement="Placement.Top">
-                                        <MudAvatar Color="Color.Secondary">Fx</MudAvatar>
+                                        <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
                                     </MudTooltip>
                                 </AvatarContent>
                                 <ChildContent>@source.Expression</ChildContent>
@@ -670,7 +655,7 @@ else if (_syncRule != null)
                             <MudChip T="string">
                                 <AvatarContent>
                                     <MudTooltip Text="Expression" Arrow="true" Placement="Placement.Top">
-                                        <MudAvatar Color="Color.Secondary">Fx</MudAvatar>
+                                        <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
                                     </MudTooltip>
                                 </AvatarContent>
                                 <ChildContent>@source.Expression</ChildContent>
@@ -767,7 +752,7 @@ else if (_syncRule != null)
         _breadcrumbs =
         [
         new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-new BreadcrumbItem("Synchronisation Rules", href: "/admin/connected-systems/sync-rules/")
+new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
         ];
 
         if (Id != null)
@@ -1039,7 +1024,7 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/connected-systems/sync
             // send the user to the existing-sync-rule view.
             // this helps ensure links are good to be shared/bookmarked, etc.
             case true when isSyncRuleNew:
-                NavManager.NavigateTo($"/admin/connected-systems/sync-rules/{_syncRule.Id}");
+                NavManager.NavigateTo($"/admin/sync-rules/{_syncRule.Id}");
                 break;
             case true:
                 Snackbar.Add("Changes saved.", Severity.Success);
@@ -1152,7 +1137,7 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/connected-systems/sync
             // attribute the operation to the signed-in user
             var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
             await Jim.ConnectedSystems.DeleteSyncRuleAsync(_syncRule, user);
-            NavManager.NavigateTo("/admin/connected-systems/sync-rules");
+            NavManager.NavigateTo("/admin/sync-rules");
         }
     }
 }

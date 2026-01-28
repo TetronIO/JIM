@@ -142,6 +142,31 @@ catch (Exception ex)
 }
 ```
 
+**GUID/UUID Handling**:
+
+JIM exchanges identifiers with external systems that may use different binary representations (Microsoft GUID vs RFC 4122 UUID). Follow these rules to prevent identifier corruption:
+
+```csharp
+// SAFE: String-based exchange (preferred for all external interfaces)
+var guid = Guid.TryParse(externalValue, out var parsed) ? parsed : (Guid?)null;
+var canonical = guid.ToString("D"); // Standard hyphenated format
+
+// SAFE: AD/Samba objectGUID - uses Microsoft byte order, matches .NET Guid
+var objectGuid = new Guid(adBinaryBytes); // Only for AD/Samba LDAP attributes
+
+// UNSAFE: Unknown-source binary bytes - may be RFC 4122 (different byte order)
+var guid = new Guid(unknownBytes); // DO NOT do this without knowing the source
+```
+
+Rules:
+- **Always use `Guid.TryParse()` in production code** - never `Guid.Parse()` for external input
+- **Always use string format for API contracts** - JSON, CSV, and REST APIs exchange GUIDs as strings
+- **Never construct `new Guid(byte[])` without documenting the source byte order** - AD uses Microsoft order, most non-Microsoft systems use RFC 4122
+- **Never compare raw byte arrays from different sources** - parse to `Guid` first, then compare
+- **Use `Guid.ToByteArray()` only for Microsoft-format targets** (AD, SQL Server) - RFC 4122 systems need byte-swapped first 3 components
+
+For full details and connector-specific guidance, see [`docs/plans/GUID_UUID_HANDLING.md`](plans/GUID_UUID_HANDLING.md).
+
 ### 3. Database & Migrations
 
 **Entity Framework Core**:

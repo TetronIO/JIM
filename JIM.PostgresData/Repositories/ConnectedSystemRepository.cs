@@ -1,6 +1,7 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
@@ -1642,7 +1643,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
 
         // Build dictionary mapping CSO ID to pending export
-        // There should only be one pending export per CSO - if duplicates exist, log warning and take the first
+        // There MUST only be one pending export per CSO - duplicates indicate a data integrity violation
         var filteredExports = pendingExports.Where(pe => pe.ConnectedSystemObject != null).ToList();
         var result = new Dictionary<Guid, PendingExport>();
 
@@ -1651,11 +1652,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             var csoId = pe.ConnectedSystemObject!.Id;
             if (result.ContainsKey(csoId))
             {
-                // This is unexpected - indicates a bug in how pending exports are created
-                Log.Warning("GetPendingExportsByConnectedSystemObjectIdsAsync: Found duplicate pending export for CSO {CsoId}. " +
-                    "Existing PE: {ExistingPeId}, Duplicate PE: {DuplicatePeId}. Using first one.",
+                // Data integrity violation: duplicate pending exports for the same CSO.
+                // This indicates a bug in how pending exports are created and must be investigated.
+                // Failing hard to prevent data corruption from processing ambiguous export state.
+                Log.Error("GetPendingExportsByConnectedSystemObjectIdsAsync: DUPLICATE PENDING EXPORT detected for CSO {CsoId}. " +
+                    "Existing PE: {ExistingPeId}, Duplicate PE: {DuplicatePeId}. " +
+                    "This is a data integrity violation - failing the operation.",
                     csoId, result[csoId].Id, pe.Id);
-                continue;
+
+                throw new DuplicatePendingExportException(
+                    $"Duplicate pending exports detected for Connected System Object {csoId}. " +
+                    $"Pending Export IDs: {result[csoId].Id} and {pe.Id}. " +
+                    $"This indicates a data integrity issue that must be investigated before sync can continue.");
             }
             result[csoId] = pe;
         }
@@ -2056,8 +2064,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(g => g.ChildGroups)
             .ThenInclude(cg => cg.Criteria)
             .ThenInclude(c => c.MetaverseAttribute)
-            .Include(sr => sr.CreatedBy) // needs basic attributes included to use as a link to the user in the ui
-            .ThenInclude(cb => cb!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+            // CreatedByName is now a string property on SyncRule (IAuditable) - no Include needed
             .Include(sr => sr.MetaverseObjectType)
             .ThenInclude(mvot => mvot.Attributes.OrderBy(a => a.Name))
             .Include(sr => sr.ObjectMatchingRules.OrderBy(q => q.Order))

@@ -642,6 +642,25 @@ foreach ($mapping in $userImportMappings) {
 }
 Write-Host "    ✓ Source user import mappings ($userImportMappingsCreated new)" -ForegroundColor Green
 
+# Add constant expression mapping for Type = PersonEntity on source user import rule
+$typeAttr = $mvAttributes | Where-Object { $_.name -eq "Type" }
+if ($typeAttr) {
+    $existingTypeMapping = $existingSourceUserImportMappings | Where-Object {
+        $_.targetMetaverseAttributeId -eq $typeAttr.id
+    }
+    if (-not $existingTypeMapping) {
+        try {
+            New-JIMSyncRuleMapping -SyncRuleId $sourceUserImportRule.id `
+                -TargetMetaverseAttributeId $typeAttr.id `
+                -Expression '"PersonEntity"' | Out-Null
+            Write-Host "    ✓ Source user import Type=PersonEntity expression mapping configured" -ForegroundColor Green
+        }
+        catch {
+            Write-Host "    ⚠ Could not create Type expression mapping: $_" -ForegroundColor Yellow
+        }
+    }
+}
+
 # Create user export mappings (MV -> Target)
 $existingTargetUserExportMappings = Get-JIMSyncRuleMapping -SyncRuleId $targetUserExportRule.id
 $userExportMappingsCreated = 0

@@ -564,7 +564,8 @@ public class NoNetChangeWorkflowTests
         // Create MV type
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithGuidAttribute("employeeId")
-            .WithStringAttribute("displayName"));
+            .WithStringAttribute("displayName")
+            .WithStringAttribute("Type"));
 
         // Get attributes for flow rules
         var hrUserType = _harness.GetObjectType("HR", "User");
@@ -576,6 +577,7 @@ public class NoNetChangeWorkflowTests
 
         // Get MV attributes
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
         // Create import sync rule (HR → MV)
         await _harness.CreateSyncRuleAsync(
@@ -586,7 +588,8 @@ public class NoNetChangeWorkflowTests
             SyncRuleDirection.Import,
             r => r
                 .WithProjection()
-                .WithAttributeFlow(mvDisplayName, hrDisplayName));
+                .WithAttributeFlow(mvDisplayName, hrDisplayName)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
 
         // Create export sync rule (MV → AD)
         await _harness.CreateSyncRuleAsync(
@@ -622,7 +625,8 @@ public class NoNetChangeWorkflowTests
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithGuidAttribute("employeeId")
             .WithStringAttribute("displayName")
-            .WithStringAttribute("department"));
+            .WithStringAttribute("department")
+            .WithStringAttribute("Type"));
 
         // Get attributes for flow rules
         var hrUserType = _harness.GetObjectType("HR", "User");
@@ -637,6 +641,7 @@ public class NoNetChangeWorkflowTests
         // Get MV attributes
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
         var mvDepartment = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "department");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
         // Create import sync rule (HR → MV)
         await _harness.CreateSyncRuleAsync(
@@ -648,7 +653,8 @@ public class NoNetChangeWorkflowTests
             r => r
                 .WithProjection()
                 .WithAttributeFlow(mvDisplayName, hrDisplayName)
-                .WithAttributeFlow(mvDepartment, hrDepartment));
+                .WithAttributeFlow(mvDepartment, hrDepartment)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
 
         // Create export sync rule (MV → AD)
         await _harness.CreateSyncRuleAsync(
@@ -685,7 +691,8 @@ public class NoNetChangeWorkflowTests
         var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
             .WithGuidAttribute("employeeId")
             .WithStringAttribute("displayName")
-            .WithIntAttribute("employeeNumber"));
+            .WithIntAttribute("employeeNumber")
+            .WithStringAttribute("Type"));
 
         // Get attributes for flow rules
         var hrUserType = _harness.GetObjectType("HR", "User");
@@ -700,6 +707,7 @@ public class NoNetChangeWorkflowTests
         // Get MV attributes
         var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
         var mvEmployeeNumber = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "employeeNumber");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
 
         // Create import sync rule (HR → MV)
         await _harness.CreateSyncRuleAsync(
@@ -711,7 +719,8 @@ public class NoNetChangeWorkflowTests
             r => r
                 .WithProjection()
                 .WithAttributeFlow(mvDisplayName, hrDisplayName)
-                .WithAttributeFlow(mvEmployeeNumber, hrEmployeeNumber));
+                .WithAttributeFlow(mvEmployeeNumber, hrEmployeeNumber)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
 
         // Create export sync rule (MV → AD)
         await _harness.CreateSyncRuleAsync(

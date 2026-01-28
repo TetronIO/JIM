@@ -1,6 +1,8 @@
 ﻿@using Microsoft.AspNetCore.Components.Web
+@using JIM.Web.Models
 @namespace JIM.Web.Pages
 @addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@inject ThemeSettings ThemeSettings
 
 <!DOCTYPE html>
 <html lang="en">
@@ -8,9 +10,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="~/" />
-    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
+    <link href="css/fonts/roboto.css" rel="stylesheet" />
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="css/site.css" />
+    <link id="jim-theme" rel="stylesheet" href="@ThemeSettings.LightThemePath" />
     <link rel="stylesheet" href="JIM.Web.styles.css" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -40,7 +43,48 @@
         <a href="" class="reload">Reload</a>
         <a class="dismiss">🗙</a>
     </div>
-    <script src="_framework/blazor.server.js"></script>
+    <script src="_framework/blazor.server.js" autostart="false"></script>
+    <script>
+        // Custom reconnection handler: after the server is replaced (e.g. jim-build),
+        // the old Blazor circuit no longer exists. Rather than spinning on "Attempting
+        // to reconnect" forever, reload the page after a few failed attempts so the
+        // browser gets a fresh circuit from the new server.
+        Blazor.start({
+            reconnectionOptions: {
+                maxRetries: 5,
+                retryIntervalMilliseconds: 2000
+            },
+            reconnectionHandler: {
+                onConnectionDown: function (options, _error) {
+                    var modal = document.getElementById('components-reconnect-modal');
+                    if (modal) modal.style.display = 'flex';
+
+                    var retries = 0;
+                    var interval = setInterval(async function () {
+                        retries++;
+                        if (retries > options.maxRetries) {
+                            clearInterval(interval);
+                            location.reload();
+                            return;
+                        }
+                        try {
+                            var result = await Blazor.reconnect();
+                            if (result) {
+                                clearInterval(interval);
+                                location.reload();
+                            }
+                        } catch (_e) {
+                            // server not ready yet, keep retrying
+                        }
+                    }, options.retryIntervalMilliseconds);
+                },
+                onConnectionUp: function () {
+                    var modal = document.getElementById('components-reconnect-modal');
+                    if (modal) modal.style.display = 'none';
+                }
+            }
+        });
+    </script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="js/preferences.js"></script>
 </body>

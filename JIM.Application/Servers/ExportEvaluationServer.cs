@@ -323,6 +323,9 @@ public class ExportEvaluationServer
     /// <param name="deferSave">When true, pending exports are not saved to the database. The caller is responsible
     /// for batch saving the pending exports returned in the result. Default is false for backwards compatibility.</param>
     /// <param name="removedAttributes">Optional set of attribute values that were removed (for multi-valued attr handling).</param>
+    /// <param name="existingPendingExports">Optional list of pending exports already staged for batch save (e.g., from drift detection).
+    /// Used to merge attribute changes into existing PEs instead of creating duplicates for the same CSO.
+    /// Export evaluation values take precedence over existing values on attribute conflicts.</param>
     /// <returns>ExportEvaluationResult containing pending exports and no-net-change counts.</returns>
     public async Task<ExportEvaluationResult> EvaluateExportRulesWithNoNetChangeDetectionAsync(
         MetaverseObject mvo,
@@ -330,7 +333,8 @@ public class ExportEvaluationServer
         ConnectedSystem? sourceSystem,
         ExportEvaluationCache cache,
         bool deferSave = false,
-        HashSet<MetaverseObjectAttributeValue>? removedAttributes = null)
+        HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
+        List<PendingExport>? existingPendingExports = null)
     {
         var result = new ExportEvaluationResult();
 
@@ -380,7 +384,7 @@ public class ExportEvaluationServer
                 .SetTag("targetSystem", exportRule.ConnectedSystem?.Name ?? exportRule.ConnectedSystemId.ToString()))
             {
                 var (pendingExport, provisioningCso, csoAlreadyCurrentCount) = await CreateOrUpdatePendingExportWithNoNetChangeAsync(
-                    mvo, exportRule, changedAttributes, cache, deferSave, removedAttributes);
+                    mvo, exportRule, changedAttributes, cache, deferSave, removedAttributes, existingPendingExports);
 
                 result.CsoAlreadyCurrentCount += csoAlreadyCurrentCount;
 
@@ -867,6 +871,8 @@ public class ExportEvaluationServer
     /// <param name="deferSave">When true, pending exports and provisioning CSOs are not saved to the database
     /// and the caller is responsible for batch saving. Default is false for backwards compatibility.</param>
     /// <param name="removedAttributes">Optional set of attribute values that were removed (for multi-valued attr handling).</param>
+    /// <param name="existingPendingExports">Optional list of pending exports already staged for batch save (e.g., from drift detection).
+    /// Used to merge attribute changes in-memory instead of creating duplicates. Export evaluation values win on conflict.</param>
     /// <returns>Tuple containing the pending export (if created), CSO created for provisioning (if any), and no-net-change count.</returns>
     private async Task<(PendingExport? PendingExport, ConnectedSystemObject? ProvisioningCso, int CsoAlreadyCurrentCount)> CreateOrUpdatePendingExportWithNoNetChangeAsync(
         MetaverseObject mvo,
@@ -874,7 +880,8 @@ public class ExportEvaluationServer
         List<MetaverseObjectAttributeValue> changedAttributes,
         ExportEvaluationCache cache,
         bool deferSave = false,
-        HashSet<MetaverseObjectAttributeValue>? removedAttributes = null)
+        HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
+        List<PendingExport>? existingPendingExports = null)
     {
         // Find existing CSO using cached lookup instead of database query
         var lookupKey = (mvo.Id, exportRule.ConnectedSystemId);
@@ -966,6 +973,114 @@ public class ExportEvaluationServer
         }
 
         var csoId = csoForExport?.Id;
+
+        // Check if a pending export already exists for this CSO in the in-memory batch list
+        // (e.g., created by drift detection earlier in the same page). If so, merge our attribute
+        // changes into the existing one to avoid duplicates. Export evaluation values take precedence
+        // over drift values on attribute conflicts (export eval uses the latest MVO state).
+        if (csoId.HasValue && changeType == PendingExportChangeType.Update && existingPendingExports != null)
+        {
+            var existingPendingExport = existingPendingExports
+                .FirstOrDefault(pe => pe.ConnectedSystemObjectId == csoId.Value);
+
+            if (existingPendingExport != null)
+            {
+                // Merge: for each attribute change from export evaluation, either replace the drift
+                // value (export eval has newer MVO state) or add it if not already present.
+                var existingChangesByAttributeId = existingPendingExport.AttributeValueChanges
+                    .ToDictionary(avc => avc.AttributeId);
+
+                var mergedCount = 0;
+                var addedCount = 0;
+
+                foreach (var newChange in attributeChanges)
+                {
+                    if (existingChangesByAttributeId.TryGetValue(newChange.AttributeId, out var existingChange))
+                    {
+                        // Same attribute exists in drift PE — replace with export eval value (more current)
+                        existingPendingExport.AttributeValueChanges.Remove(existingChange);
+                        existingPendingExport.AttributeValueChanges.Add(newChange);
+                        mergedCount++;
+                    }
+                    else
+                    {
+                        // New attribute not in drift PE — add it
+                        existingPendingExport.AttributeValueChanges.Add(newChange);
+                        addedCount++;
+                    }
+                }
+
+                // Update unresolved references flag if any new changes have them
+                if (attributeChanges.Any(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue)))
+                    existingPendingExport.HasUnresolvedReferences = true;
+
+                if (mergedCount > 0 || addedCount > 0)
+                {
+                    Log.Information("CreateOrUpdatePendingExportWithNoNetChangeAsync: Merged attribute changes into existing PendingExport {ExistingPeId} for CSO {CsoId}: " +
+                        "{MergedCount} replaced (export eval wins), {AddedCount} added, total now {TotalCount}. Source: MVO {MvoId}",
+                        existingPendingExport.Id, csoId.Value,
+                        mergedCount, addedCount, existingPendingExport.AttributeValueChanges.Count, mvo.Id);
+                }
+                else
+                {
+                    Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: All attribute changes for CSO {CsoId} already present in existing PendingExport {ExistingPeId}. No merge needed.",
+                        csoId.Value, existingPendingExport.Id);
+                }
+
+                // Return null for PendingExport since we merged into an existing one (no new PE to batch-create)
+                return (null, provisioningCso, csoAlreadyCurrentCount);
+            }
+        }
+
+        // Fallback: check if a pending export exists in the database from a previous activity
+        // (e.g., drift detection ran in a previous sync step and its PE hasn't been exported yet).
+        // If found, delete the old PE and return a new merged PE for batch creation.
+        if (csoId.HasValue && changeType == PendingExportChangeType.Update)
+        {
+            var dbPendingExport = await Application.Repository.ConnectedSystems
+                .GetPendingExportByConnectedSystemObjectIdAsync(csoId.Value);
+
+            if (dbPendingExport != null)
+            {
+                // Build merged attribute changes: start with export eval changes (takes precedence),
+                // then add any drift-only changes not covered by export eval.
+                // Clone drift-only changes with new IDs because DeletePendingExportAsync cascade-deletes
+                // child entities, making the tracked instances unusable for a new PE.
+                var exportEvalAttributeIds = attributeChanges.Select(ac => ac.AttributeId).ToHashSet();
+                var driftOnlyChanges = dbPendingExport.AttributeValueChanges
+                    .Where(avc => !exportEvalAttributeIds.Contains(avc.AttributeId))
+                    .Select(avc => new PendingExportAttributeValueChange
+                    {
+                        Id = Guid.NewGuid(),
+                        AttributeId = avc.AttributeId,
+                        Attribute = avc.Attribute,
+                        StringValue = avc.StringValue,
+                        DateTimeValue = avc.DateTimeValue,
+                        IntValue = avc.IntValue,
+                        LongValue = avc.LongValue,
+                        ByteValue = avc.ByteValue,
+                        GuidValue = avc.GuidValue,
+                        BoolValue = avc.BoolValue,
+                        UnresolvedReferenceValue = avc.UnresolvedReferenceValue,
+                        ChangeType = avc.ChangeType
+                    })
+                    .ToList();
+
+                var mergedChanges = new List<PendingExportAttributeValueChange>(attributeChanges);
+                mergedChanges.AddRange(driftOnlyChanges);
+
+                Log.Information("CreateOrUpdatePendingExportWithNoNetChangeAsync: Found existing PendingExport {ExistingPeId} in database for CSO {CsoId}. " +
+                    "Deleting old PE and creating merged replacement with {ExportEvalCount} export eval + {DriftOnlyCount} drift-only = {TotalCount} attribute changes. Source: MVO {MvoId}",
+                    dbPendingExport.Id, csoId.Value,
+                    attributeChanges.Count, driftOnlyChanges.Count, mergedChanges.Count, mvo.Id);
+
+                // Delete the old PE from the database
+                await Application.Repository.ConnectedSystems.DeletePendingExportAsync(dbPendingExport);
+
+                // Replace attributeChanges with merged set so the new PE created below includes everything
+                attributeChanges = mergedChanges;
+            }
+        }
 
         // Check if any attribute changes have unresolved reference values
         // This is used to defer exports with reference attributes until the referenced objects have been exported

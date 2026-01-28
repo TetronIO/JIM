@@ -1,0 +1,89 @@
+/*
+ * JIM Colour Theme: Blended Nav Light
+ *
+ * A clean, modern light theme where the navigation sidebar blends
+ * seamlessly into the page background — no visual separation or
+ * border line between nav and content. Inspired by contemporary
+ * SaaS dashboards (e.g. PayFit) that favour a unified layout.
+ *
+ * We use html[lang] instead of :root so that these declarations have
+ * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
+ * styles, ensuring our theme values always win.
+ */
+
+html[lang] {
+    /* === Primary Palette === */
+    --mud-palette-primary: #2a6dd9;
+    --mud-palette-primary-darken: #1e5abf;
+    --mud-palette-primary-lighten: #4a88e8;
+    --mud-palette-primary-text: #ffffffff;
+    --mud-palette-secondary: #2a6dd9;
+    --mud-palette-secondary-text: #ffffffff;
+
+    /* === Background & Surface (unified light background) === */
+    --mud-palette-background: #f7f9fc;
+    --mud-palette-surface: #ffffffff;
+    --mud-palette-background-grey: rgba(0, 0, 0, 0.024);
+
+    /* === Inner Surface (slightly recessed for nested containers) === */
+    --jim-inner-surface: #f0f1f4;
+    --jim-inner-border-color: rgba(42, 42, 48, 0.22);
+
+    /* === Appbar (matching page background for blended look) === */
+    --mud-palette-appbar-background: #f7f9fc;
+    --mud-palette-appbar-text: #2a2a30;
+
+    /* === Drawer (same as page background — the blended effect) === */
+    --mud-palette-drawer-background: #f7f9fc;
+    --mud-palette-drawer-text: rgba(66, 66, 66, 1);
+    --mud-palette-drawer-icon: rgba(66, 66, 66, 0.7);
+
+    /* === Text (light content area) === */
+    --mud-palette-text-primary: #2a2a30;
+    --mud-palette-text-secondary: #5c5c66;
+    --mud-palette-text-disabled: rgba(0, 0, 0, 0.36);
+
+    /* === Action === */
+    --mud-palette-action-default: rgba(0, 0, 0, 0.54);
+    --mud-palette-action-default-hover: rgba(42, 109, 217, 0.12);
+    --mud-palette-action-disabled: rgba(0, 0, 0, 0.38);
+    --mud-palette-action-disabled-background: rgba(0, 0, 0, 0.10);
+
+    /* === Lines & Dividers === */
+    --mud-palette-lines-default: rgba(42, 42, 48, 0.20);
+    --mud-palette-lines-inputs: rgba(120, 120, 140, 0.45);
+    --mud-palette-divider: rgba(42, 42, 48, 0.20);
+    --mud-palette-divider-light: rgba(0, 0, 0, 0.08);
+
+    /* === Table === */
+    --mud-palette-table-lines: rgba(42, 42, 48, 0.20);
+    --mud-palette-table-striped: rgba(0, 0, 0, 0.02);
+    --mud-palette-table-hover: rgba(42, 109, 217, 0.04);
+
+    /* === JIM Custom: JSON Syntax Highlighting === */
+    --jim-json-key: #1a5ea0;
+    --jim-json-string: #a31515;
+    --jim-json-number: #098658;
+    --jim-json-boolean: #0000dd;
+    --jim-json-null: #0000dd;
+
+    /* === JIM Custom: Navigation (dark text on light sidebar) === */
+    --jim-nav-top-level-color: var(--mud-palette-primary);
+    --jim-nav-child-color: rgba(66, 66, 66, 0.7);
+    --jim-nav-active-color: var(--mud-palette-primary);
+
+    /* === JIM Custom: Drawer border (transparent — no separator) === */
+    --jim-drawer-border-color: transparent;
+
+    /* === JIM Custom: Paper border === */
+    --jim-paper-border-color: rgba(42, 42, 48, 0.22);
+
+    /* === JIM Custom: Content Links === */
+    --jim-link-color: #2a6dd9;
+
+    /* === JIM Custom: Link Hover === */
+    --jim-link-hover-color: #e0406a;
+
+    /* === JIM Custom: Logo text (dark for light sidebar) === */
+    --jim-logo-text-color: #2a2a30;
+}

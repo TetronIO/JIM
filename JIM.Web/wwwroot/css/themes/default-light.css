@@ -1,0 +1,82 @@
+/*
+ * JIM Colour Theme: Default Light
+ *
+ * This file defines all colour variables for the light mode theme.
+ * To create a new light theme, copy this file and change the values.
+ *
+ * MudBlazor palette variables (--mud-palette-*) override MudBlazor's
+ * built-in palette. JIM variables (--jim-*) are used by custom styles.
+ *
+ * We use html[lang] instead of :root so that these declarations have
+ * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
+ * styles, ensuring our theme values always win.
+ */
+
+html[lang] {
+    /* === Primary Palette === */
+    --mud-palette-primary: rgb(60, 148, 255);
+    --mud-palette-primary-text: #ffffffff;
+
+    /* === Background & Surface === */
+    --mud-palette-background: #f6f9fc;
+    --mud-palette-surface: #ffffffff;
+    --mud-palette-background-grey: rgba(0, 0, 0, 0.024);
+
+    /* === Appbar === */
+    --mud-palette-appbar-background: rgb(60, 148, 255);
+    --mud-palette-appbar-text: #ffffffff;
+
+    /* === Drawer === */
+    --mud-palette-drawer-background: #eef2f6;
+    --mud-palette-drawer-text: rgba(66, 66, 66, 1);
+    --mud-palette-drawer-icon: rgba(66, 66, 66, 1);
+
+    /* === Text === */
+    --mud-palette-text-primary: rgba(66, 66, 66, 1);
+    --mud-palette-text-secondary: rgba(0, 0, 0, 0.54);
+    --mud-palette-text-disabled: rgba(0, 0, 0, 0.38);
+
+    /* === Action === */
+    --mud-palette-action-default: rgba(0, 0, 0, 0.54);
+    --mud-palette-action-default-hover: rgba(41, 112, 255, 0.15);
+    --mud-palette-action-disabled: rgba(0, 0, 0, 0.26);
+    --mud-palette-action-disabled-background: rgba(0, 0, 0, 0.12);
+
+    /* === Lines & Dividers === */
+    --mud-palette-lines-default: rgba(0, 0, 0, 0.12);
+    --mud-palette-lines-inputs: rgba(189, 189, 189, 1);
+    --mud-palette-divider: rgba(0, 0, 0, 0.12);
+    --mud-palette-divider-light: rgba(0, 0, 0, 0.06);
+
+    /* === Table === */
+    --mud-palette-table-lines: rgba(224, 224, 224, 1);
+    --mud-palette-table-striped: rgba(0, 0, 0, 0.02);
+    --mud-palette-table-hover: rgba(0, 0, 0, 0.04);
+
+    /* === JIM Custom: JSON Syntax Highlighting === */
+    --jim-json-key: #0451a5;
+    --jim-json-string: #a31515;
+    --jim-json-number: #098658;
+    --jim-json-boolean: #0000ff;
+    --jim-json-null: #0000ff;
+
+    /* === JIM Custom: Navigation === */
+    --jim-nav-top-level-color: var(--mud-palette-primary);
+    --jim-nav-child-color: rgba(66, 66, 66, 0.7);
+    --jim-nav-active-color: var(--mud-palette-primary);
+
+    /* === JIM Custom: Paper border (stronger than default for light backgrounds) === */
+    --jim-paper-border-color: rgba(0, 0, 0, 0.22);
+
+    /* === JIM Custom: Content Links === */
+    --jim-link-color: var(--mud-palette-primary);
+
+    /* === JIM Custom: Drawer border === */
+    --jim-drawer-border-color: var(--mud-palette-lines-default);
+
+    /* === JIM Custom: Link Hover === */
+    --jim-link-hover-color: #ff4081ff;
+
+    /* === JIM Custom: Logo text (dark for light sidebar) === */
+    --jim-logo-text-color: #2a2a30;
+}

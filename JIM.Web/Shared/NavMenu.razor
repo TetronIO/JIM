@@ -31,8 +31,8 @@
     <AuthorizeView Roles="Administrator">
         <MudNavGroup Title="Admin" Expanded="_adminExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "admin"))" Icon="@Icons.Material.Filled.Settings" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
             <MudNavLink Href="/admin/operations" Match="NavLinkMatch.Prefix" Class="jim-nav-child">Operations</MudNavLink>
-            <MudNavLink Href="/admin/connected-systems" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">Connected Systems</MudNavLink>
-            <MudNavLink Href="/admin/connected-systems/sync-rules" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">Synchronisation Rules</MudNavLink>
+            <MudNavLink Href="/admin/connected-systems" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Connected Systems</MudNavLink>
+            <MudNavLink Href="/admin/sync-rules" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Synchronisation Rules</MudNavLink>
             <MudNavLink Href="/admin/schema" Match="NavLinkMatch.Prefix" Class="jim-nav-child">Schema</MudNavLink>
             <MudNavLink Href="/admin/predefined-searches" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Predefined Searches</MudNavLink>
             <MudNavLink Href="/admin/example-data" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Example Data</MudNavLink>
@@ -45,8 +45,8 @@
     </AuthorizeView>
 
     <MudNavGroup Title="Activity" Expanded="_activityExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "activity"))" Icon="@Icons.Material.Filled.DynamicFeed" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
-        <MudNavLink Href="/activity" Match="NavLinkMatch.All" Class="jim-nav-child">Activity</MudNavLink>
-        <MudNavLink Href="/activity/mine" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">My Activity</MudNavLink>
+        <MudNavLink Href="/activity" Match="NavLinkMatch.Prefix" Class="jim-nav-child">Activity</MudNavLink>
+        <MudNavLink Href="/activity/mine" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">My Activity</MudNavLink>
     </MudNavGroup>
 </MudNavMenu>
 
@@ -119,22 +119,15 @@
     protected override void OnParametersSet()
     {
         // When drawer closes, collapse all groups
-        // When drawer opens, expand only the active group
+        // When drawer opens, restore saved preferences
         if (DrawerOpen != _previousDrawerOpen)
         {
             _previousDrawerOpen = DrawerOpen;
 
             if (DrawerOpen)
             {
-                // Drawer just opened - expand only the active group
-                _usersExpanded = IsGroupActive("users");
-                _groupsExpanded = IsGroupActive("groups");
-                _dashboardExpanded = IsGroupActive("dashboard");
-                _adminExpanded = IsGroupActive("admin");
-
-                // Activity is expanded by default, or when on an activity page
-                _activityExpanded = IsGroupActive("activity") ||
-                    (!_usersExpanded && !_groupsExpanded && !_dashboardExpanded && !_adminExpanded);
+                // Drawer just opened - restore saved preferences asynchronously
+                _ = RestoreSavedGroupStatesAsync();
             }
             else
             {
@@ -146,6 +139,24 @@
                 _adminExpanded = false;
             }
         }
+    }
+
+    private async Task RestoreSavedGroupStatesAsync()
+    {
+        var savedUsers = await PreferenceService.GetNavGroupExpandedAsync("users");
+        var savedGroups = await PreferenceService.GetNavGroupExpandedAsync("groups");
+        var savedDashboard = await PreferenceService.GetNavGroupExpandedAsync("dashboard");
+        var savedAdmin = await PreferenceService.GetNavGroupExpandedAsync("admin");
+        var savedActivity = await PreferenceService.GetNavGroupExpandedAsync("activity");
+
+        // Apply saved preferences, also ensuring the active group is always expanded
+        _usersExpanded = savedUsers || IsGroupActive("users");
+        _groupsExpanded = savedGroups || IsGroupActive("groups");
+        _dashboardExpanded = savedDashboard || IsGroupActive("dashboard");
+        _adminExpanded = savedAdmin || IsGroupActive("admin");
+        _activityExpanded = savedActivity || IsGroupActive("activity");
+
+        StateHasChanged();
     }
 
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)

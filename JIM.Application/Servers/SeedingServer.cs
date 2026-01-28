@@ -6,6 +6,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
+using JIM.Application.Utilities;
 using Serilog;
 using System.Diagnostics;
 
@@ -152,6 +153,7 @@ internal class SeedingServer
         if (userObjectType == null)
         {
             userObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.User, PluralName = "Users", BuiltIn = true };
+            AuditHelper.SetCreatedBySystem(userObjectType);
             objectTypesToCreate.Add(userObjectType);
             Log.Information("SeedAsync: Preparing MetaverseObjectType User");
         }
@@ -243,6 +245,7 @@ internal class SeedingServer
         if (groupObjectType == null)
         {
             groupObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.Group, PluralName = "Groups", BuiltIn = true };
+            AuditHelper.SetCreatedBySystem(groupObjectType);
             objectTypesToCreate.Add(groupObjectType);
             Log.Information("SeedAsync: Preparing MetaverseObjectType Group");
         }
@@ -306,6 +309,7 @@ internal class SeedingServer
             usersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = emailAttribute, Position = 4 });
             usersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = statusAttribute, Position = 5 });
                 
+            AuditHelper.SetCreatedBySystem(usersPredefinedSearch);
             predefinedSearchesToCreate.Add(usersPredefinedSearch);
             Log.Information("SeedAsync: Preparing User default PredefinedSearch");
         }
@@ -335,11 +339,12 @@ internal class SeedingServer
                     new() {
                         ComparisonType = SearchComparisonType.Equals,
                         MetaverseAttribute = typeAttribute,
-                        StringValue = "Person"
+                        StringValue = "PersonEntity"
                     }
                 }
             });
 
+            AuditHelper.SetCreatedBySystem(peopleUsersPredefinedSearch);
             predefinedSearchesToCreate.Add(peopleUsersPredefinedSearch);
             Log.Information("SeedAsync: Preparing People PredefinedSearch");
         }
@@ -367,11 +372,12 @@ internal class SeedingServer
                     new() {
                         ComparisonType = SearchComparisonType.Equals,
                         MetaverseAttribute = typeAttribute,
-                        StringValue = "Service"
+                        StringValue = "NonPersonEntity"
                     }
                 }
             });
 
+            AuditHelper.SetCreatedBySystem(servicePrincipleUsersPredefinedSearch);
             predefinedSearchesToCreate.Add(servicePrincipleUsersPredefinedSearch);
             Log.Information("SeedAsync: Preparing Service Principals PredefinedSearch");
         }
@@ -394,6 +400,7 @@ internal class SeedingServer
             groupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = emailAttribute, Position = 3 });
             groupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = statusAttribute, Position = 4 });
                 
+            AuditHelper.SetCreatedBySystem(groupsPredefinedSearch);
             predefinedSearchesToCreate.Add(groupsPredefinedSearch);
             Log.Information("SeedAsync: Preparing Group default PredefinedSearch");
         }
@@ -426,6 +433,7 @@ internal class SeedingServer
                 }
             });
 
+            AuditHelper.SetCreatedBySystem(securityGroupsPredefinedSearch);
             predefinedSearchesToCreate.Add(securityGroupsPredefinedSearch);
             Log.Information("SeedAsync: Preparing Security Groups PredefinedSearch");
         }
@@ -459,6 +467,7 @@ internal class SeedingServer
                 }
             });
 
+            AuditHelper.SetCreatedBySystem(distributionGroupsPredefinedSearch);
             predefinedSearchesToCreate.Add(distributionGroupsPredefinedSearch);
             Log.Information("SeedAsync: Preparing Distribution Groups PredefinedSearch");
         }
@@ -474,6 +483,7 @@ internal class SeedingServer
                 BuiltIn = true,
                 Name = Constants.BuiltInRoles.Administrator
             };
+            AuditHelper.SetCreatedBySystem(administratorRole);
             rolesToCreate.Add(administratorRole);
             Log.Information($"SeedAsync: Preparing Role: {Constants.BuiltInRoles.Administrator}");
         }
@@ -536,7 +546,10 @@ internal class SeedingServer
         #region DataGenerationTemplates
         var template = await PrepareUsersAndGroupsDataGenerationTemplateAsync(userObjectType, groupObjectType, exampleDataSetsToCreate, attributesToCreate);
         if (template != null)
+        {
+            AuditHelper.SetCreatedBySystem(template);
             dataGenerationTemplatesToCreate.Add(template);
+        }
         #endregion
 
         #region Connector Definitions
@@ -987,6 +1000,7 @@ internal class SeedingServer
                 Type = attributeDataType,
                 BuiltIn = true
             };
+            AuditHelper.SetCreatedBySystem(attribute);
             attributeList.Add(attribute);
             Log.Verbose($"GetOrPrepareMetaverseAttributeAsync: Prepared {name}");
         }
@@ -1194,7 +1208,7 @@ internal class SeedingServer
             userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Type),
-                Pattern = "Person",
+                Pattern = "PersonEntity",
                 PopulatedValuesPercentage = 100
             });
         }

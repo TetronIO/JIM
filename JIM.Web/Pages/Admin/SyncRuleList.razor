@@ -1,4 +1,4 @@
-﻿@page "/admin/connected-systems/sync-rules"
+﻿@page "/admin/sync-rules"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application
 @using JIM.Models.Logic;
@@ -14,12 +14,12 @@
 
 <MudPaper Elevation="0" Class="mt-2" Outlined="true">
     <MudToolBar>
-        <MudButton Href="/admin/connected-systems/sync-rules" Color="Color.Primary" DropShadow="false" Disabled="true">Synchronisation Rules</MudButton>
+        <MudButton Href="/admin/sync-rules" Color="Color.Primary" DropShadow="false" Disabled="true">Synchronisation Rules</MudButton>
         <MudSpacer />
         <MudButton 
             StartIcon="@Icons.Material.Filled.Add" 
             Variant="Variant.Filled" 
-            Href="/admin/connected-systems/sync-rules/new" 
+            Href="/admin/sync-rules/new" 
             Color="Color.Primary"
             Disabled="@(!_canCreateSyncRules)"
             DropShadow="false">Create Synchronisation Rule</MudButton>
@@ -48,7 +48,7 @@
         <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd DataLabel="Name"><MudLink Href="@("/admin/connected-systems/sync-rules/"+context.Id)">@context.Name</MudLink></MudTd>
+        <MudTd DataLabel="Name"><MudLink Href="@("/admin/sync-rules/"+context.Id)">@context.Name</MudLink></MudTd>
         <MudTd DataLabel="Direction">
             @if (context.Direction == SyncRuleDirection.Import)
             {

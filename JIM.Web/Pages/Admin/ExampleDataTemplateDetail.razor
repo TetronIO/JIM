@@ -14,6 +14,10 @@
 
 @if (_template != null)
 {
+    <MudStack Row Justify="Justify.FlexEnd">
+        <AuditInfo Entity="@_template" />
+    </MudStack>
+
     foreach (var objectType in _template.ObjectTypes)
     {
         <MudTable Items="@objectType.TemplateAttributes" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Outlined="true" Elevation="0">
@@ -24,7 +28,7 @@
             <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.MetaverseAttribute!.Name)"><MudText Typo="Typo.button">Attribute</MudText></MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.MetaverseAttribute!.Type)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.PopulatedValuesPercentage!)"><MudText Typo="Typo.button">Population %</MudText></MudTableSortLabel></MudTh>
-                <MudTh>Rules</MudTh>
+                <MudTh><MudText Typo="Typo.button">Rules</MudText></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Attribute">@context.MetaverseAttribute?.Name</MudTd>

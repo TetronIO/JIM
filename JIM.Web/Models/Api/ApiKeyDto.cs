@@ -69,7 +69,7 @@ public class ApiKeyDto
             Name = entity.Name,
             Description = entity.Description,
             KeyPrefix = entity.KeyPrefix,
-            CreatedAt = entity.CreatedAt,
+            CreatedAt = entity.Created,
             ExpiresAt = entity.ExpiresAt,
             LastUsedAt = entity.LastUsedAt,
             LastUsedFromIp = entity.LastUsedFromIp,

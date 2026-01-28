@@ -427,6 +427,151 @@ public class FileConnectorImportTests
         Assert.That(guidAttr3!.GuidValues, Has.Count.EqualTo(1));
     }
 
+    [Test]
+    public async Task ImportAsync_WithUnselectedExternalIdAttribute_StillImportsItAsync()
+    {
+        // Arrange - "Id" attribute is NOT selected but IS the ExternalId.
+        // The import should still include it because ExternalId attributes are critical for identity.
+        var filePath = Path.Combine(_testFilesPath, "valid_users.csv");
+        var objectType = new ConnectedSystemObjectType
+        {
+            Id = 1,
+            Name = "User",
+            Selected = true,
+            Attributes = new List<ConnectedSystemObjectTypeAttribute>
+            {
+                new() { Id = 1, Name = "Id", Type = AttributeDataType.Number, Selected = false, IsExternalId = true },
+                new() { Id = 2, Name = "Name", Type = AttributeDataType.Text, Selected = true },
+                new() { Id = 3, Name = "Age", Type = AttributeDataType.Number, Selected = true },
+                new() { Id = 4, Name = "StartDate", Type = AttributeDataType.DateTime, Selected = true },
+                new() { Id = 5, Name = "IsActive", Type = AttributeDataType.Boolean, Selected = true }
+            }
+        };
+
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test File Connector",
+            ObjectTypes = new List<ConnectedSystemObjectType> { objectType },
+            SettingValues = CreateSettingValues(filePath, "User")
+        };
+
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            FilePath = filePath,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+
+        // Act
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+
+        // Assert - the unselected ExternalId attribute should still be imported
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.ImportObjects, Has.Count.EqualTo(3));
+
+        var firstObject = result.ImportObjects[0];
+        var idAttr = firstObject.Attributes.SingleOrDefault(a => a.Name == "Id");
+        Assert.That(idAttr, Is.Not.Null, "ExternalId attribute 'Id' should be imported even though it is not selected");
+        Assert.That(idAttr!.IntValues, Has.Count.EqualTo(1));
+        Assert.That(idAttr.IntValues[0], Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task ImportAsync_WithUnselectedSecondaryExternalIdAttribute_StillImportsItAsync()
+    {
+        // Arrange - "Name" attribute is NOT selected but IS the SecondaryExternalId.
+        // The import should still include it because SecondaryExternalId attributes are needed for export confirmation.
+        var filePath = Path.Combine(_testFilesPath, "valid_users.csv");
+        var objectType = new ConnectedSystemObjectType
+        {
+            Id = 1,
+            Name = "User",
+            Selected = true,
+            Attributes = new List<ConnectedSystemObjectTypeAttribute>
+            {
+                new() { Id = 1, Name = "Id", Type = AttributeDataType.Number, Selected = true, IsExternalId = true },
+                new() { Id = 2, Name = "Name", Type = AttributeDataType.Text, Selected = false, IsSecondaryExternalId = true },
+                new() { Id = 3, Name = "Age", Type = AttributeDataType.Number, Selected = true },
+                new() { Id = 4, Name = "StartDate", Type = AttributeDataType.DateTime, Selected = true },
+                new() { Id = 5, Name = "IsActive", Type = AttributeDataType.Boolean, Selected = true }
+            }
+        };
+
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test File Connector",
+            ObjectTypes = new List<ConnectedSystemObjectType> { objectType },
+            SettingValues = CreateSettingValues(filePath, "User")
+        };
+
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            FilePath = filePath,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+
+        // Act
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+
+        // Assert - the unselected SecondaryExternalId attribute should still be imported
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.ImportObjects, Has.Count.EqualTo(3));
+
+        var firstObject = result.ImportObjects[0];
+        var nameAttr = firstObject.Attributes.SingleOrDefault(a => a.Name == "Name");
+        Assert.That(nameAttr, Is.Not.Null, "SecondaryExternalId attribute 'Name' should be imported even though it is not selected");
+        Assert.That(nameAttr!.StringValues, Has.Count.EqualTo(1));
+        Assert.That(nameAttr.StringValues[0], Is.EqualTo("John Smith"));
+    }
+
+    [Test]
+    public async Task ImportAsync_WithSelectedExternalIdAttribute_DoesNotDuplicateItAsync()
+    {
+        // Arrange - "Id" attribute IS selected AND IS the ExternalId.
+        // The DistinctBy should prevent duplication.
+        var filePath = Path.Combine(_testFilesPath, "valid_users.csv");
+        var objectType = new ConnectedSystemObjectType
+        {
+            Id = 1,
+            Name = "User",
+            Selected = true,
+            Attributes = new List<ConnectedSystemObjectTypeAttribute>
+            {
+                new() { Id = 1, Name = "Id", Type = AttributeDataType.Number, Selected = true, IsExternalId = true },
+                new() { Id = 2, Name = "Name", Type = AttributeDataType.Text, Selected = true },
+                new() { Id = 3, Name = "Age", Type = AttributeDataType.Number, Selected = true },
+                new() { Id = 4, Name = "StartDate", Type = AttributeDataType.DateTime, Selected = true },
+                new() { Id = 5, Name = "IsActive", Type = AttributeDataType.Boolean, Selected = true }
+            }
+        };
+
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test File Connector",
+            ObjectTypes = new List<ConnectedSystemObjectType> { objectType },
+            SettingValues = CreateSettingValues(filePath, "User")
+        };
+
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            FilePath = filePath,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+
+        // Act
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+
+        // Assert - "Id" should appear exactly once (not duplicated)
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.ImportObjects, Has.Count.EqualTo(3));
+
+        var firstObject = result.ImportObjects[0];
+        var idAttributes = firstObject.Attributes.Where(a => a.Name == "Id").ToList();
+        Assert.That(idAttributes, Has.Count.EqualTo(1), "ExternalId attribute that is also selected should not be duplicated");
+    }
+
     #endregion
 
     #region ValidateSettingValues Tests

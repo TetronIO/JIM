@@ -1,0 +1,40 @@
+@using JIM.Models.Activities
+@using JIM.Models.Interfaces
+
+@* Standardised audit info display for IAuditable configuration objects.
+   Chips show a compact label and expand on hover to reveal full details. *@
+
+<div class="d-flex flex-wrap gap-2 align-center">
+    <MudTooltip Text="@Entity.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+        <div class="jim-audit-chip">
+            <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Small" />
+            <span class="jim-audit-chip-label">Created</span>
+            <span class="jim-audit-chip-detail">@Entity.Created.ToLocalTime().ToRelativeTime()@if (Entity.CreatedByType != ActivityInitiatorType.NotSet)
+                {<text> by&nbsp;</text><AuditPrincipalLink PrincipalType="@Entity.CreatedByType"
+                            PrincipalId="@Entity.CreatedById"
+                            PrincipalName="@Entity.CreatedByName" />}</span>
+        </div>
+    </MudTooltip>
+
+    @if (Entity.LastUpdated.HasValue)
+    {
+        <MudTooltip Text="@Entity.LastUpdated.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+            <div class="jim-audit-chip">
+                <MudIcon Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" />
+                <span class="jim-audit-chip-label">Updated</span>
+                <span class="jim-audit-chip-detail">@Entity.LastUpdated.Value.ToLocalTime().ToRelativeTime()@if (Entity.LastUpdatedByType != ActivityInitiatorType.NotSet)
+                    {<text> by&nbsp;</text><AuditPrincipalLink PrincipalType="@Entity.LastUpdatedByType"
+                                PrincipalId="@Entity.LastUpdatedById"
+                                PrincipalName="@Entity.LastUpdatedByName" />}</span>
+            </div>
+        </MudTooltip>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The auditable entity whose Created/LastUpdated fields should be displayed.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IAuditable Entity { get; set; } = null!;
+}

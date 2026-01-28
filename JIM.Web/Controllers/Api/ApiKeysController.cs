@@ -123,6 +123,7 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
             Roles = roles
         };
 
+        apiKey.Created = DateTime.UtcNow;
         var createdKey = await _application.Repository.ApiKeys.CreateAsync(apiKey);
 
         _logger.LogInformation("Created API key {ApiKeyId} with prefix {KeyPrefix}", createdKey.Id, keyPrefix);
@@ -134,7 +135,7 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
             Name = createdKey.Name,
             Description = createdKey.Description,
             KeyPrefix = createdKey.KeyPrefix,
-            CreatedAt = createdKey.CreatedAt,
+            CreatedAt = createdKey.Created,
             ExpiresAt = createdKey.ExpiresAt,
             LastUsedAt = createdKey.LastUsedAt,
             LastUsedFromIp = createdKey.LastUsedFromIp,

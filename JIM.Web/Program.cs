@@ -4,6 +4,7 @@ using JIM.Application;
 using JIM.Application.Expressions;
 using JIM.Application.Services;
 using JIM.Data;
+using JIM.Web.Models;
 using JIM.Web.Services;
 using JIM.Models.Core;
 using JIM.PostgresData;
@@ -48,6 +49,7 @@ using System.Security.Claims;
 // JIM_LOG_REQUESTS
 // JIM_INFRASTRUCTURE_API_KEY - Creates an infrastructure API key on startup for CI/CD automation (24hr expiry)
 // JIM_ENCRYPTION_KEY_PATH - Custom path for encryption key storage (default: /data/keys or app data directory)
+// JIM_THEME - Built-in colour theme name (default: refined)
 
 // initial logging setup for when the application has not yet been created (bootstrapping)...
 InitialiseLogging(new LoggerConfiguration(), true);
@@ -95,6 +97,14 @@ try
     });
     builder.Services.AddSingleton<LogReaderService>();
     builder.Services.AddExpressionEvaluation();
+
+    // Register UI theme settings from environment variable
+    var themeName = Environment.GetEnvironmentVariable(Constants.Config.Theme) ?? "refined";
+    builder.Services.AddSingleton(new ThemeSettings
+    {
+        LightThemePath = $"css/themes/{themeName}-light.css",
+        DarkThemePath = $"css/themes/{themeName}-dark.css"
+    });
 
     // Configure ASP.NET Core Data Protection for credential encryption
     // Using AES-256-GCM (FIPS-approved authenticated encryption) for future-proofing
@@ -373,6 +383,21 @@ try
     if (enableRequestLogging != null && bool.Parse(enableRequestLogging))
         app.UseSerilogRequestLogging();
 
+    // Eager initialisation: warm up EF Core compiled model and database connection pool
+    // before accepting requests. This prevents the first browser request from hanging while
+    // .NET JIT-compiles the EF Core model, establishes the initial DB connection, and builds
+    // the Blazor component tree. The cost is a slightly longer container startup, but the
+    // first request will be as fast as any subsequent request.
+    app.Logger.LogInformation("Warming up EF Core model and database connection pool...");
+    using (var warmupScope = app.Services.CreateScope())
+    {
+        var factory = warmupScope.ServiceProvider.GetRequiredService<IDbContextFactory<JimDbContext>>();
+        await using var warmupContext = await factory.CreateDbContextAsync();
+        // Force EF Core to build and cache its compiled model by executing a trivial query
+        _ = await warmupContext.Database.CanConnectAsync();
+    }
+    app.Logger.LogInformation("Warmup complete");
+
     app.Logger.LogInformation("The JIM Web has started");
     app.Run();
     return 0;
@@ -539,7 +564,9 @@ static async Task InitialiseInfrastructureApiKeyAsync(JimApplication jim)
         Description = "Auto-created from the JIM_INFRASTRUCTURE_API_KEY environment variable. This key expires 24 hours after creation.",
         KeyHash = keyHash,
         KeyPrefix = keyPrefix,
-        CreatedAt = DateTime.UtcNow,
+        Created = DateTime.UtcNow,
+        CreatedByType = JIM.Models.Activities.ActivityInitiatorType.System,
+        CreatedByName = "System",
         ExpiresAt = DateTime.UtcNow.AddHours(24),
         IsEnabled = true,
         IsInfrastructureKey = true,

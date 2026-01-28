@@ -245,6 +245,27 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreatedByType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastUpdatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastUpdatedByType")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -509,6 +530,15 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreatedByType")
+                        .HasColumnType("integer");
+
                     b.Property<TimeSpan?>("DeletionGracePeriod")
                         .HasColumnType("interval");
 
@@ -518,6 +548,18 @@ namespace JIM.PostgresData.Migrations
                     b.PrimitiveCollection<List<int>>("DeletionTriggerConnectedSystemIds")
                         .IsRequired()
                         .HasColumnType("integer[]");
+
+                    b.Property<DateTime?>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastUpdatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastUpdatedByType")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -546,6 +588,18 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("Category")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreatedByType")
+                        .HasColumnType("integer");
+
                     b.Property<string>("DefaultValue")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
@@ -566,12 +620,17 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("IsReadOnly")
                         .HasColumnType("boolean");
 
-                    b.Property<DateTime?>("LastModified")
+                    b.Property<DateTime?>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("LastModifiedBy")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                    b.Property<Guid?>("LastUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastUpdatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastUpdatedByType")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Value")
                         .HasMaxLength(2000)
@@ -636,11 +695,17 @@ namespace JIM.PostgresData.Migrations
                     b.Property<byte[]>("CertificateData")
                         .HasColumnType("bytea");
 
-                    b.Property<DateTime>("CreatedAt")
+                    b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("CreatedBy")
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByName")
                         .HasColumnType("text");
+
+                    b.Property<int>("CreatedByType")
+                        .HasColumnType("integer");
 
                     b.Property<string>("FilePath")
                         .HasColumnType("text");
@@ -651,6 +716,18 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("Issuer")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastUpdatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastUpdatedByType")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -727,6 +804,27 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreatedByType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastUpdatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastUpdatedByType")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -953,6 +1051,27 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreatedByType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastUpdatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastUpdatedByType")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Order")
                         .HasColumnType("integer");
 
@@ -1074,6 +1193,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("CreatedById")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreatedByType")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Direction")
                         .HasColumnType("integer");
 
@@ -1088,6 +1213,15 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<DateTime?>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastUpdatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastUpdatedByType")
+                        .HasColumnType("integer");
 
                     b.Property<int>("MetaverseObjectTypeId")
                         .HasColumnType("integer");
@@ -1111,8 +1245,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemObjectTypeId");
 
-                    b.HasIndex("CreatedById");
-
                     b.HasIndex("MetaverseObjectTypeId");
 
                     b.ToTable("SyncRules");
@@ -1132,6 +1264,24 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("CreatedById")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreatedByType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastUpdatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastUpdatedByType")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("SyncRuleId")
                         .HasColumnType("integer");
 
@@ -1142,8 +1292,6 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("CreatedById");
 
                     b.HasIndex("SyncRuleId");
 
@@ -1325,8 +1473,29 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreatedByType")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("IsDefaultForMetaverseObjectType")
                         .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastUpdatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastUpdatedByType")
+                        .HasColumnType("integer");
 
                     b.Property<int>("MetaverseObjectTypeId")
                         .HasColumnType("integer");
@@ -1439,8 +1608,17 @@ namespace JIM.PostgresData.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime>("CreatedAt")
+                    b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreatedByType")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Description")
                         .HasColumnType("text");
@@ -1461,6 +1639,18 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("KeyPrefix")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastUpdatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastUpdatedByType")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("LastUsedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1495,6 +1685,27 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreatedByType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastUpdatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastUpdatedByType")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1520,14 +1731,32 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreatedByType")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("LastDeltaSyncCompletedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime>("LastUpdated")
+                    b.Property<DateTime?>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastUpdatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastUpdatedByType")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1944,8 +2173,32 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ConnectedSystemId")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreatedByType")
+                        .HasColumnType("integer");
+
                     b.Property<string>("FilePath")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastUpdatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastUpdatedByType")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -2048,11 +2301,29 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreatedByType")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastUpdatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastUpdatedByType")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -2884,10 +3155,6 @@ namespace JIM.PostgresData.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("JIM.Models.Core.MetaverseObject", "CreatedBy")
-                        .WithMany()
-                        .HasForeignKey("CreatedById");
-
                     b.HasOne("JIM.Models.Core.MetaverseObjectType", "MetaverseObjectType")
                         .WithMany()
                         .HasForeignKey("MetaverseObjectTypeId")
@@ -2898,17 +3165,11 @@ namespace JIM.PostgresData.Migrations
 
                     b.Navigation("ConnectedSystemObjectType");
 
-                    b.Navigation("CreatedBy");
-
                     b.Navigation("MetaverseObjectType");
                 });
 
             modelBuilder.Entity("JIM.Models.Logic.SyncRuleMapping", b =>
                 {
-                    b.HasOne("JIM.Models.Core.MetaverseObject", "CreatedBy")
-                        .WithMany()
-                        .HasForeignKey("CreatedById");
-
                     b.HasOne("JIM.Models.Logic.SyncRule", "SyncRule")
                         .WithMany("AttributeFlowRules")
                         .HasForeignKey("SyncRuleId");
@@ -2920,8 +3181,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasOne("JIM.Models.Core.MetaverseAttribute", "TargetMetaverseAttribute")
                         .WithMany()
                         .HasForeignKey("TargetMetaverseAttributeId");
-
-                    b.Navigation("CreatedBy");
 
                     b.Navigation("SyncRule");
 

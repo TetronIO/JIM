@@ -153,10 +153,10 @@
         <MudTd DataLabel="Actions">
             <div class="d-flex justify-end gap-2">
                 <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
-                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => ShowEditDialog(context)" />
+                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Outlined" Size="Size.Small" OnClick="_ => ShowEditDialog(context)" />
                 </MudTooltip>
                 <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
-                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Size="Size.Small" Color="Color.Error" OnClick="_ => HandleDeleteAsync(context)" />
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Outlined" Size="Size.Small" Color="Color.Error" OnClick="_ => HandleDeleteAsync(context)" />
                 </MudTooltip>
             </div>
         </MudTd>
@@ -400,6 +400,7 @@
                 Roles = roles
             };
 
+            apiKey.Created = DateTime.UtcNow;
             await Jim.Repository.ApiKeys.CreateAsync(apiKey);
 
             Snackbar.Add("API key created successfully.", Severity.Success);

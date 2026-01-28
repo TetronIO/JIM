@@ -301,6 +301,14 @@ Each scenario script supports a `-Step` parameter that controls which test case 
 
 ## Architecture
 
+### Docker Compose Project Separation
+
+The integration test stack uses a **separate Docker Compose project name** (`jim-integration`) from the main JIM stack (project `jim`). This is configured via the top-level `name: jim-integration` property in `docker-compose.integration-tests.yml`.
+
+**Why?** Without separate project names, Docker Compose treats all containers from the same directory as belonging to one project. When you run `jim-build` (main stack), Compose sees the Samba AD containers from integration tests as "orphans" and emits warnings. Separate project names cleanly isolate the two stacks while still sharing the `jim-network` Docker network.
+
+Both stacks communicate via the shared `jim-network` (defined as `external: true` in the integration tests file).
+
 ### Container Stack
 
 All external systems run as Docker containers defined in `docker-compose.integration-tests.yml`:

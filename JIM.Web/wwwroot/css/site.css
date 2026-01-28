@@ -1,25 +1,37 @@
 /* reference: https://github.com/MudBlazor/MudBlazor/blob/ff672a8b988fdfb1f5ab9f556813823d885118d4/src/MudBlazor.UnitTests/Components/ThemeProviderTests.cs#L92 */
 
 /* MUDBLAZOR CUSTOMISATIONS */
-html,
-body {
-    --mud-palette-action-default-hover: rgba(41, 112, 255, 0.15);
-}
+/* Note: Colour palettes are defined in css/themes/ files, not here. */
 
 .mud-simple-table table * tr>th {
-    font-weight: 700;
+    font-weight: 500;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02857em;
 }
 
 .mud-table-root .mud-table-head .mud-table-cell {
-    font-weight: 700;
-    font-size: 1rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02857em;
+}
+
+/* Content/data links use --jim-link-color (softer than UI primary).
+   Transition on the base state so colour animates smoothly both ways. */
+a.mud-link.mud-primary-text {
+    color: var(--jim-link-color) !important;
+    transition: color 0.25s ease !important;
+}
+
+a.mud-link.mud-primary-text:hover {
+    color: var(--jim-link-hover-color) !important;
 }
 
 .mud-link-underline-hover:hover {
     text-decoration: none !important;
-    color: #ff4081ff !important;
-    /* secondary text colour */
-    transition: color 0.3s !important;
+    color: var(--jim-link-hover-color) !important;
+    transition: color 0.25s ease !important;
 }
 
 .mud-main-content {
@@ -28,6 +40,8 @@ body {
 
 .mud-table-empty-row {
     font-weight: normal;
+    color: var(--mud-palette-text-primary) !important;
+    background-color: inherit !important;
 }
 
 /* Normalize MudTable text size to match body text */
@@ -59,13 +73,81 @@ body {
     font-size: 1rem;
 }
 
+/* Consistent 8px border radius for container elements (papers, tables, alerts).
+   Applied directly rather than via --mud-default-borderradius to avoid affecting
+   buttons, inputs, and other interactive controls that should keep their default radius. */
 .mud-paper,
 .mud-paper-outlined,
+.mud-table,
 .mud-alert {
     border-radius: 8px !important;
 }
 
+/* Clip table content to respect rounded corners (prevents hover highlight overflow) */
+.mud-table {
+    overflow: hidden;
+}
+
+/* Give container elements a subtle border for better definition against the background.
+   Use html[lang] parent for higher specificity (0,2,1) to beat MudBlazor's (0,1,0) rules. */
+html[lang] .mud-paper,
+html[lang] .mud-paper-outlined,
+html[lang] .mud-table-outlined {
+    border: 1px solid var(--jim-paper-border-color, transparent) !important;
+}
+
+/* Nested containers: tables and tab panels inside papers use a deeper surface colour
+   when the theme defines --jim-inner-surface (mid-contrast themes). Falls back to
+   transparent so other themes are unaffected. */
+html[lang] .mud-paper .mud-table,
+html[lang] .mud-paper .mud-simple-table {
+    background-color: var(--jim-inner-surface, transparent);
+}
+
+html[lang] .mud-paper .mud-table-outlined,
+html[lang] .mud-paper .mud-simple-table-outlined {
+    border-color: var(--jim-inner-border-color, var(--jim-paper-border-color, transparent)) !important;
+}
+
+/* Ensure table pagination footer inside inner surfaces inherits the inner background */
+html[lang] .mud-paper .mud-table .mud-table-pagination-toolbar {
+    background-color: var(--jim-inner-surface, transparent);
+}
+
+html[lang] .mud-paper .mud-tabs-panels {
+    background-color: var(--jim-inner-surface, transparent);
+    border-radius: 0 0 8px 8px;
+}
+
+html[lang] .mud-paper .mud-card {
+    background-color: var(--jim-inner-surface, var(--mud-palette-surface));
+}
+
+html[lang] .mud-paper .mud-card-outlined {
+    border-color: var(--jim-inner-border-color, var(--jim-paper-border-color, transparent)) !important;
+}
+
+/* Timeline arrow triangle: fill with inner surface colour so it matches the card background */
+html[lang] .mud-paper .mud-card::after {
+    border-right-color: var(--jim-inner-surface, var(--mud-palette-surface)) !important;
+}
+
+/* Strengthen tab bar separator line to match container borders */
+html[lang] .mud-tabs-tabbar.mud-tabs-border-bottom {
+    border-top-color: var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
+}
+
+html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
+    border-bottom-color: var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
+}
+
 /* JIM CUSTOM */
+
+/* Title accent colour for entity/target names in page headings */
+.jim-title-accent {
+    color: var(--jim-link-color);
+}
+
 .jim-header-title {
     font-weight: 300;
 }
@@ -92,7 +174,7 @@ body {
 }
 
 .jim-drawer {
-    border-right: 1px solid var(--mud-palette-lines-default);
+    border-right: 1px solid var(--jim-drawer-border-color);
     position: fixed !important;
     top: 0;
     left: 0;
@@ -104,12 +186,15 @@ body {
     vertical-align: middle;
 }
 
-.jim-drawer-logo p {
+.jim-drawer-logo p,
+.jim-drawer-logo span {
     margin: 4px 0 0 10px;
     font-weight: 700;
-    font-size: 1.2rem;
+    font-size: 1.3rem;
+    letter-spacing: 0.2em;
     vertical-align: text-top;
-    color: var(--mud-palette-text-secondary);
+    color: var(--jim-logo-text-color, #ffffff) !important;
+    opacity: 0.6;
 }
 
 .jim-drawer-footer {
@@ -120,8 +205,14 @@ body {
     margin: 0 6px;
     border-top-style: solid;
     border-top-width: 1px;
-    border-top-color: var(--mud-palette-lines-default);
+    border-top-color: var(--jim-drawer-border-color);
     padding: 8px 0;
+    color: var(--mud-palette-drawer-icon) !important;
+}
+
+/* Ensure drawer footer icons use drawer colours, not content area colours */
+.jim-drawer-footer .mud-icon-root {
+    color: var(--mud-palette-drawer-icon) !important;
 }
 
 /* When drawer is expanded, show buttons horizontally */
@@ -138,26 +229,89 @@ body {
 .jim-nav-menu>.jim-nav-top-level .mud-nav-link-text,
 .jim-nav-menu>.jim-nav-top-level>button>.mud-nav-link-text {
     font-weight: 600;
-    color: var(--mud-palette-primary);
+    color: var(--jim-nav-top-level-color);
 }
 
 /* Ensure icon colour matches for top-level items */
 .jim-nav-menu>.jim-nav-top-level .mud-nav-link-icon,
 .jim-nav-menu>.jim-nav-top-level>button>.mud-icon-root {
-    color: var(--mud-palette-primary);
+    color: var(--jim-nav-top-level-color);
 }
 
-/* Child nav items - keep default styling (lighter weight, secondary colour) */
+/* Active/selected nav item - stronger colour to stand out */
+.jim-nav-menu .mud-nav-link.active .mud-nav-link-text {
+    color: var(--jim-nav-active-color) !important;
+}
+
+.jim-nav-menu .mud-nav-link.active .mud-nav-link-icon {
+    color: var(--jim-nav-active-color) !important;
+}
+
+/* Nav group expand/collapse chevron icons - MudBlazor uses color for
+   collapsed state and fill for expanded (.mud-transform) state */
+.jim-nav-menu .mud-nav-link-expand-icon {
+    color: var(--jim-nav-top-level-color) !important;
+}
+
+.jim-nav-menu .mud-nav-link-expand-icon.mud-transform {
+    color: var(--jim-nav-top-level-color) !important;
+    fill: var(--jim-nav-top-level-color) !important;
+}
+
+/* Nav item hover - brighten text and icon when hovering (uses --jim-nav-hover-color
+   if the theme defines it, otherwise falls back to --jim-nav-active-color) */
+.jim-nav-menu .mud-nav-link:hover .mud-nav-link-text {
+    color: var(--jim-nav-hover-color, var(--jim-nav-active-color)) !important;
+}
+
+.jim-nav-menu .mud-nav-link:hover .mud-nav-link-icon {
+    color: var(--jim-nav-hover-color, var(--jim-nav-active-color)) !important;
+}
+
+/* Child nav items - dimmed colour and lighter weight for visual hierarchy */
 .jim-nav-child .mud-nav-link-text {
     font-weight: 400 !important;
+    color: var(--jim-nav-child-color) !important;
+}
+
+/* Align child nav item text with parent text.
+   MudBlazor sets padding-left/padding-inline-start: 36px on nested nav links.
+   Increase to 38px to align child text with parent text (after icon).
+   Note: jim-nav-child is on the parent div.mud-nav-item, not the anchor. */
+.jim-nav-child .mud-nav-link {
+    padding-left: 38px !important;
+    padding-inline-start: 38px !important;
+}
+
+/* Danger zone tab header - red text, icon and underline only when active */
+#danger-zone.mud-tab-active,
+#danger-zone.mud-tab.mud-tab-active,
+.mud-tab.mud-tab-active#danger-zone {
+    color: #f44336 !important;
+}
+
+#danger-zone.mud-tab-active .mud-icon-root,
+#danger-zone.mud-tab.mud-tab-active .mud-icon-root,
+.mud-tab.mud-tab-active#danger-zone .mud-icon-root {
+    color: #f44336 !important;
+}
+
+/* Active indicator line - try both ::after and child element approaches */
+#danger-zone.mud-tab-active::after,
+.mud-tab.mud-tab-active#danger-zone::after {
+    background-color: #f44336 !important;
+}
+
+#danger-zone.mud-tab-active .mud-tab-indicator,
+.mud-tab.mud-tab-active#danger-zone .mud-tab-indicator {
+    background-color: #f44336 !important;
 }
 
 /* Danger zone styling for high-risk actions */
-.jim-paper-danger-zone {
-    border: 2px solid #f44336;
-    /* Matches MudBlazor red/default */
+html[lang] .jim-paper-danger-zone {
+    border: 2px solid #f44336 !important;
     background-color: rgba(183, 28, 28, 0.09);
-    /* Approx of Colors.Red.Darken4 with low opacity */
+    box-shadow: none !important;
 }
 
 /* Error alert styling - accessible alternative to filled red backgrounds */
@@ -323,28 +477,7 @@ body {
     box-shadow: none !important;
 }
 
-/* JSON syntax highlighting - define CSS custom properties for light/dark mode */
-:root {
-    --jim-json-key: #0451a5;
-    --jim-json-string: #a31515;
-    --jim-json-number: #098658;
-    --jim-json-boolean: #0000ff;
-    --jim-json-null: #0000ff;
-}
-
-/* Dark mode JSON colours - JIM logo-inspired vibrant colours */
-body.jim-dark-mode {
-    --jim-json-key: #c792ea;
-    /* Purple/violet from logo */
-    --jim-json-string: #a5d6a7;
-    /* Soft green for readability */
-    --jim-json-number: #f9a825;
-    /* Orange/yellow from logo */
-    --jim-json-boolean: #4dd0e1;
-    /* Teal/cyan from logo */
-    --jim-json-null: #ff8a80;
-    /* Soft coral/pink from logo */
-}
+/* JSON syntax highlighting colours are defined in css/themes/ files */
 
 .jim-json-syntax {
     font-family: "Lucida Console", "Courier New", monospace;
@@ -391,8 +524,11 @@ body.jim-dark-mode {
 
 .jim-attribute-table thead tr th {
     background-color: var(--mud-palette-background-grey);
-    font-weight: 600;
+    font-weight: 500;
+    font-size: 0.875rem;
     padding: 12px 16px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.02857em;
 }
 
 .jim-attr-header-name {
@@ -547,4 +683,47 @@ body.jim-dark-mode {
 #components-reconnect-modal.components-reconnect-failed .jim-reconnect-message::after,
 #components-reconnect-modal.components-reconnect-rejected .jim-reconnect-message::after {
     content: " Reload the page to try again.";
+}
+
+/* Audit info chips - compact label that expands on hover */
+.jim-audit-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 16px;
+    font-size: 0.8125rem;
+    white-space: nowrap;
+    cursor: default;
+    background-color: var(--mud-palette-surface);
+    border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+    color: var(--mud-palette-text-primary);
+    transition: background-color 0.2s ease;
+}
+
+.jim-audit-chip:hover {
+    background-color: var(--mud-palette-background-gray);
+}
+
+.jim-audit-chip .mud-icon-root {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.jim-audit-chip-detail {
+    display: inline-flex;
+    align-items: center;
+    max-width: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-width 0.4s ease, opacity 0.3s ease 0.05s;
+}
+
+.jim-audit-chip:hover .jim-audit-chip-detail {
+    max-width: 500px;
+    opacity: 1;
+}
+
+.jim-audit-chip-label {
+    flex-shrink: 0;
 }

@@ -309,10 +309,10 @@ public class DriftDetectionTests
 
     #endregion
 
-    #region EvaluateDriftAsync Tests
+    #region EvaluateDrift Tests
 
     [Test]
-    public async Task EvaluateDriftAsync_WhenNoDrift_ReturnsEmptyResult()
+    public void EvaluateDrift_WhenNoDrift_ReturnsEmptyResult()
     {
         // Arrange
         var mvo = CreateTestMvo();
@@ -338,7 +338,7 @@ public class DriftDetectionTests
         var exportRule = CreateExportRule(enforceState: true);
 
         // Act
-        var result = await Jim.DriftDetection.EvaluateDriftAsync(
+        var result = Jim.DriftDetection.EvaluateDrift(
             cso,
             mvo,
             new List<SyncRule> { exportRule },
@@ -350,7 +350,7 @@ public class DriftDetectionTests
     }
 
     [Test]
-    public async Task EvaluateDriftAsync_WhenDriftDetected_ReturnsDriftedAttributes()
+    public void EvaluateDrift_WhenDriftDetected_ReturnsDriftedAttributes()
     {
         // Arrange
         var mvo = CreateTestMvo();
@@ -376,7 +376,7 @@ public class DriftDetectionTests
         var exportRule = CreateExportRule(enforceState: true);
 
         // Act
-        var result = await Jim.DriftDetection.EvaluateDriftAsync(
+        var result = Jim.DriftDetection.EvaluateDrift(
             cso,
             mvo,
             new List<SyncRule> { exportRule },
@@ -390,7 +390,7 @@ public class DriftDetectionTests
     }
 
     [Test]
-    public async Task EvaluateDriftAsync_WhenEnforceStateFalse_SkipsRule()
+    public void EvaluateDrift_WhenEnforceStateFalse_SkipsRule()
     {
         // Arrange
         var mvo = CreateTestMvo();
@@ -416,7 +416,7 @@ public class DriftDetectionTests
         var exportRule = CreateExportRule(enforceState: false);
 
         // Act
-        var result = await Jim.DriftDetection.EvaluateDriftAsync(
+        var result = Jim.DriftDetection.EvaluateDrift(
             cso,
             mvo,
             new List<SyncRule> { exportRule },
@@ -427,7 +427,7 @@ public class DriftDetectionTests
     }
 
     [Test]
-    public async Task EvaluateDriftAsync_WhenSystemIsContributor_DoesNotFlagAsDrift()
+    public void EvaluateDrift_WhenSystemIsContributor_DoesNotFlagAsDrift()
     {
         // Arrange
         var mvo = CreateTestMvo();
@@ -457,7 +457,7 @@ public class DriftDetectionTests
         var importMappingCache = DriftDetectionService.BuildImportMappingCache(SyncRulesData);
 
         // Act
-        var result = await Jim.DriftDetection.EvaluateDriftAsync(
+        var result = Jim.DriftDetection.EvaluateDrift(
             cso,
             mvo,
             new List<SyncRule> { exportRule },
@@ -468,7 +468,7 @@ public class DriftDetectionTests
     }
 
     [Test]
-    public async Task EvaluateDriftAsync_WhenCsoNotJoined_ReturnsEmptyResult()
+    public void EvaluateDrift_WhenCsoNotJoined_ReturnsEmptyResult()
     {
         // Arrange
         var cso = CreateTestCso(null); // Not joined to any MVO
@@ -476,7 +476,7 @@ public class DriftDetectionTests
         var exportRule = CreateExportRule(enforceState: true);
 
         // Act
-        var result = await Jim.DriftDetection.EvaluateDriftAsync(
+        var result = Jim.DriftDetection.EvaluateDrift(
             cso,
             null,
             new List<SyncRule> { exportRule },
@@ -487,7 +487,7 @@ public class DriftDetectionTests
     }
 
     [Test]
-    public async Task EvaluateDriftAsync_WhenNoApplicableExportRules_ReturnsEmptyResult()
+    public void EvaluateDrift_WhenNoApplicableExportRules_ReturnsEmptyResult()
     {
         // Arrange
         var mvo = CreateTestMvo();
@@ -499,7 +499,7 @@ public class DriftDetectionTests
         exportRule.ConnectedSystemId = 999; // Different system
 
         // Act
-        var result = await Jim.DriftDetection.EvaluateDriftAsync(
+        var result = Jim.DriftDetection.EvaluateDrift(
             cso,
             mvo,
             new List<SyncRule> { exportRule },
@@ -515,7 +515,7 @@ public class DriftDetectionTests
     /// This test validates the defensive check added in Phase 4 of the fix.
     /// </summary>
     [Test]
-    public async Task EvaluateDriftAsync_WhenMvoTypeIsNull_ReturnsEmptyResultAsync()
+    public void EvaluateDrift_WhenMvoTypeIsNull_ReturnsEmptyResult()
     {
         // Arrange
         var mvo = CreateTestMvo();
@@ -543,7 +543,7 @@ public class DriftDetectionTests
         var exportRule = CreateExportRule(enforceState: true);
 
         // Act
-        var result = await Jim.DriftDetection.EvaluateDriftAsync(
+        var result = Jim.DriftDetection.EvaluateDrift(
             cso,
             mvo,
             new List<SyncRule> { exportRule },
@@ -561,7 +561,7 @@ public class DriftDetectionTests
     /// repository correctly loads the navigation property.
     /// </summary>
     [Test]
-    public async Task EvaluateDriftAsync_WhenMvoTypeIsLoaded_FindsApplicableExportRulesAsync()
+    public void EvaluateDrift_WhenMvoTypeIsLoaded_FindsApplicableExportRules()
     {
         // Arrange
         var mvo = CreateTestMvo();
@@ -594,7 +594,7 @@ public class DriftDetectionTests
             "Test setup: Export rule should target the same MVO type");
 
         // Act
-        var result = await Jim.DriftDetection.EvaluateDriftAsync(
+        var result = Jim.DriftDetection.EvaluateDrift(
             cso,
             mvo,
             new List<SyncRule> { exportRule },
@@ -613,7 +613,7 @@ public class DriftDetectionTests
     /// This validates the export rule filtering logic.
     /// </summary>
     [Test]
-    public async Task EvaluateDriftAsync_WhenMvoTypeIdDoesNotMatch_DoesNotFindRulesAsync()
+    public void EvaluateDrift_WhenMvoTypeIdDoesNotMatch_DoesNotFindRules()
     {
         // Arrange
         var mvo = CreateTestMvo();
@@ -643,7 +643,7 @@ public class DriftDetectionTests
         exportRule.MetaverseObjectTypeId = 999;
 
         // Act
-        var result = await Jim.DriftDetection.EvaluateDriftAsync(
+        var result = Jim.DriftDetection.EvaluateDrift(
             cso,
             mvo,
             new List<SyncRule> { exportRule },
@@ -664,7 +664,7 @@ public class DriftDetectionTests
     /// exports should remove the extra values.
     /// </summary>
     [Test]
-    public async Task EvaluateDriftAsync_WithMultiValuedAttribute_ExtraValueInCso_DetectsDriftAsync()
+    public void EvaluateDrift_WithMultiValuedAttribute_ExtraValueInCso_DetectsDrift()
     {
         // Arrange - Create a multi-valued attribute (like 'member' for groups)
         var memberMvAttr = new MetaverseAttribute
@@ -775,7 +775,7 @@ public class DriftDetectionTests
         SyncRulesData.Add(exportRule);
 
         // Act
-        var result = await Jim.DriftDetection.EvaluateDriftAsync(
+        var result = Jim.DriftDetection.EvaluateDrift(
             groupCso,
             groupMvo,
             new List<SyncRule> { exportRule },
@@ -802,7 +802,7 @@ public class DriftDetectionTests
     /// is missing values that should be present. This simulates an unauthorised removal.
     /// </summary>
     [Test]
-    public async Task EvaluateDriftAsync_WithMultiValuedAttribute_MissingValueInCso_DetectsDriftAsync()
+    public void EvaluateDrift_WithMultiValuedAttribute_MissingValueInCso_DetectsDrift()
     {
         // Arrange - Create a multi-valued attribute
         var memberMvAttr = new MetaverseAttribute
@@ -901,7 +901,7 @@ public class DriftDetectionTests
         SyncRulesData.Add(exportRule);
 
         // Act
-        var result = await Jim.DriftDetection.EvaluateDriftAsync(
+        var result = Jim.DriftDetection.EvaluateDrift(
             groupCso,
             groupMvo,
             new List<SyncRule> { exportRule },

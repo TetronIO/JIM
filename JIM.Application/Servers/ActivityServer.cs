@@ -39,6 +39,22 @@ public class ActivityServer
     }
 
     /// <summary>
+    /// Creates and persists a system-initiated Activity (seeding, scheduled maintenance, housekeeping).
+    /// All activities MUST be attributed to a security principal for audit compliance.
+    /// </summary>
+    /// <param name="activity">The Activity to create.</param>
+    public async Task CreateSystemActivityAsync(Activity activity)
+    {
+        activity.Status = ActivityStatus.InProgress;
+        activity.Executed = DateTime.UtcNow;
+        activity.InitiatedByType = ActivityInitiatorType.System;
+        activity.InitiatedByName = "System";
+
+        ValidateActivity(activity);
+        await Application.Repository.Activity.CreateActivityAsync(activity);
+    }
+
+    /// <summary>
     /// Creates and persists an Activity, attributing it to an API key.
     /// All activities MUST be attributed to a security principal for audit compliance.
     /// </summary>
@@ -66,7 +82,9 @@ public class ActivityServer
         if (activity.InitiatedByType == ActivityInitiatorType.NotSet)
             throw new InvalidOperationException("Activity must be attributed to a security principal. InitiatedByType has not been set.");
 
-        if (activity.InitiatedById == null)
+        // System activities have no principal entity, so InitiatedById is allowed to be null.
+        // User and ApiKey activities must have an InitiatedById.
+        if (activity.InitiatedByType != ActivityInitiatorType.System && activity.InitiatedById == null)
             throw new InvalidOperationException("Activity must be attributed to a security principal. InitiatedById has not been set.");
 
         if (string.IsNullOrWhiteSpace(activity.InitiatedByName))

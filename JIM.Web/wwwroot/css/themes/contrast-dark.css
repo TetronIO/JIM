@@ -1,0 +1,84 @@
+/*
+ * JIM Colour Theme: Contrast Dark
+ *
+ * The dark counterpart to the contrast theme. Since the dark theme
+ * already features a dark sidebar, this is functionally identical
+ * to refined-dark but maintains a consistent theme pair.
+ *
+ * We use html[lang] instead of :root so that these declarations have
+ * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
+ * styles, ensuring our theme values always win.
+ */
+
+html[lang] {
+    /* === Primary Palette === */
+    --mud-palette-primary: #776be7;
+    --mud-palette-primary-darken: #6558d9;
+    --mud-palette-primary-lighten: #9a91ee;
+    --mud-palette-primary-text: #ffffffff;
+    --mud-palette-secondary: #776be7;
+    --mud-palette-secondary-text: #ffffffff;
+
+    /* === Background & Surface === */
+    --mud-palette-background: #0e1420;
+    --mud-palette-surface: #121826;
+    --mud-palette-background-grey: rgba(255, 255, 255, 0.032);
+
+    /* === Appbar === */
+    --mud-palette-appbar-background: #1a1730;
+    --mud-palette-appbar-text: #ffffffff;
+
+    /* === Drawer === */
+    --mud-palette-drawer-background: #111926;
+    --mud-palette-drawer-text: #acb0b3;
+    --mud-palette-drawer-icon: #46545f;
+
+    /* === Text === */
+    --mud-palette-text-primary: #acb0b3;
+    --mud-palette-text-secondary: #515560;
+    --mud-palette-text-disabled: #535861;
+
+    /* === Action === */
+    --mud-palette-action-default: #acb0b3;
+    --mud-palette-action-default-hover: rgba(41, 112, 255, 0.15);
+    --mud-palette-action-disabled: rgba(255, 255, 255, 0.42);
+    --mud-palette-action-disabled-background: rgba(255, 255, 255, 0.12);
+
+    /* === Lines & Dividers === */
+    --mud-palette-lines-default: #2a303c;
+    --mud-palette-lines-inputs: #595d68;
+    --mud-palette-divider: #292838ff;
+    --mud-palette-divider-light: rgba(255, 255, 255, 0.06);
+
+    /* === Table === */
+    --mud-palette-table-lines: #2a303c;
+    --mud-palette-table-striped: rgba(255, 255, 255, 0.02);
+    --mud-palette-table-hover: #151b2b;
+
+    /* === JIM Custom: JSON Syntax Highlighting (logo-inspired) === */
+    --jim-json-key: #c792ea;        /* Purple/violet from logo */
+    --jim-json-string: #a5d6a7;     /* Soft green */
+    --jim-json-number: #f9a825;     /* Orange/yellow from logo */
+    --jim-json-boolean: #4dd0e1;    /* Teal/cyan from logo */
+    --jim-json-null: #ff8a80;       /* Soft coral/pink from logo */
+
+    /* === JIM Custom: Navigation === */
+    --jim-nav-top-level-color: #acb0b3;
+    --jim-nav-child-color: #7a8088;
+    --jim-nav-active-color: #f0f0f4;
+
+    /* === JIM Custom: Drawer border === */
+    --jim-drawer-border-color: #2a303c;
+
+    /* === JIM Custom: Paper border (use subtle line colour so borders remain visible in dark mode) === */
+    --jim-paper-border-color: var(--mud-palette-lines-default);
+
+    /* === JIM Custom: Content Links === */
+    --jim-link-color: #6e99cc;
+
+    /* === JIM Custom: Link Hover === */
+    --jim-link-hover-color: #ff4081ff;
+
+    /* === JIM Custom: Logo text === */
+    --jim-logo-text-color: #ffffff;
+}

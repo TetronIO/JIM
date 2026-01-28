@@ -525,6 +525,11 @@ public class ObjectTypeBuilder
         return WithAttribute(name, AttributeDataType.Number);
     }
 
+    public ObjectTypeBuilder WithLongAttribute(string name)
+    {
+        return WithAttribute(name, AttributeDataType.LongNumber);
+    }
+
     public ObjectTypeBuilder WithBoolAttribute(string name)
     {
         return WithAttribute(name, AttributeDataType.Boolean);
@@ -603,6 +608,11 @@ public class MetaverseObjectTypeBuilder
     public MetaverseObjectTypeBuilder WithIntAttribute(string name)
     {
         return WithAttribute(name, AttributeDataType.Number);
+    }
+
+    public MetaverseObjectTypeBuilder WithLongAttribute(string name)
+    {
+        return WithAttribute(name, AttributeDataType.LongNumber);
     }
 
     public MetaverseObjectTypeBuilder WithGuidAttribute(string name)
@@ -732,6 +742,23 @@ public class SyncRuleBuilder
 
         flow.TargetConnectedSystemAttribute = targetCsAttr;
         flow.TargetConnectedSystemAttributeId = targetCsAttr.Id;
+
+        _attributeFlows.Add(flow);
+        return this;
+    }
+
+    public SyncRuleBuilder WithExpressionFlow(string expression, MetaverseAttribute targetMvAttr)
+    {
+        var flow = new SyncRuleMapping();
+
+        var source = new SyncRuleMappingSource
+        {
+            Expression = expression
+        };
+        flow.Sources.Add(source);
+
+        flow.TargetMetaverseAttribute = targetMvAttr;
+        flow.TargetMetaverseAttributeId = targetMvAttr.Id;
 
         _attributeFlows.Add(flow);
         return this;

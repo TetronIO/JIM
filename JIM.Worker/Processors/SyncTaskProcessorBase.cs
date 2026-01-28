@@ -771,17 +771,19 @@ public abstract class SyncTaskProcessorBase
             }
 
             // Queue for export evaluation after MVOs are persisted (need valid IDs for pending export FKs)
-            if (changedAttributes.Count > 0)
+            // Dedup check: if the same MVO is already queued (e.g., multiple CSOs joined to the same MVO),
+            // skip to avoid creating duplicate pending exports for the same target CSO.
+            if (changedAttributes.Count > 0 && !_pendingExportEvaluations.Any(e => e.Mvo == connectedSystemObject.MetaverseObject))
             {
                 _pendingExportEvaluations.Add((connectedSystemObject.MetaverseObject, changedAttributes, removedAttributes));
             }
 
             // Evaluate drift detection: check if the CSO has drifted from expected state
-            // This detects unauthorized changes made directly in the target system
-            // and stages corrective pending exports to remediate the drift
+            // This detects unauthorised changes made directly in the target system
+            // and stages corrective pending exports (added to _pendingExportsToCreate for batch save)
             using (Diagnostics.Sync.StartSpan("EvaluateDrift"))
             {
-                await EvaluateDriftAndEnforceStateAsync(connectedSystemObject, connectedSystemObject.MetaverseObject);
+                EvaluateDriftAndEnforceState(connectedSystemObject, connectedSystemObject.MetaverseObject);
             }
 
             // Return appropriate result based on what happened
@@ -836,7 +838,8 @@ public abstract class SyncTaskProcessorBase
                 _connectedSystem,
                 _exportEvaluationCache,
                 deferSave: true,
-                removedAttributes: removedAttributes);
+                removedAttributes: removedAttributes,
+                existingPendingExports: _pendingExportsToCreate);
 
             // Aggregate no-net-change counts for statistics
             _totalCsoAlreadyCurrentCount += result.CsoAlreadyCurrentCount;
@@ -1665,7 +1668,7 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     /// <param name="cso">The Connected System Object that was just processed.</param>
     /// <param name="mvo">The Metaverse Object the CSO is joined to.</param>
-    protected async Task EvaluateDriftAndEnforceStateAsync(ConnectedSystemObject cso, MetaverseObject? mvo)
+    protected void EvaluateDriftAndEnforceState(ConnectedSystemObject cso, MetaverseObject? mvo)
     {
         // Skip if no drift detection export rules exist
         if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0)
@@ -1685,7 +1688,7 @@ public abstract class SyncTaskProcessorBase
         span.SetTag("csoId", cso.Id);
         span.SetTag("mvoId", targetMvo.Id);
 
-        var result = await _jim.DriftDetection.EvaluateDriftAsync(
+        var result = _jim.DriftDetection.EvaluateDrift(
             cso,
             targetMvo,
             _driftDetectionExportRules,
@@ -1693,12 +1696,16 @@ public abstract class SyncTaskProcessorBase
 
         if (result.HasDrift)
         {
-            Log.Information("EvaluateDriftAndEnforceStateAsync: Detected {DriftCount} drifted attributes on CSO {CsoId}, " +
-                "created {ExportCount} corrective pending exports",
+            Log.Information("EvaluateDriftAndEnforceState: Detected {DriftCount} drifted attributes on CSO {CsoId}, " +
+                "staged {ExportCount} corrective pending exports for batch save",
                 result.DriftedAttributes.Count, cso.Id, result.CorrectiveExports.Count);
 
             span.SetTag("driftedAttributeCount", result.DriftedAttributes.Count);
             span.SetTag("correctiveExportCount", result.CorrectiveExports.Count);
+
+            // Add corrective pending exports to the batch list for persistence during FlushPendingExportOperationsAsync.
+            // These will be merged with any export evaluation PEs for the same CSO during export evaluation.
+            _pendingExportsToCreate.AddRange(result.CorrectiveExports);
 
             // Create RPEI for drift correction to provide visibility in Activity UI
             // This shows that the delta sync detected unauthorised changes and staged corrective exports

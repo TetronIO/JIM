@@ -251,13 +251,24 @@ public abstract class WorkflowTestBase
             PredefinedSearchAttributes = new List<JIM.Models.Search.PredefinedSearchAttribute>()
         };
 
+        var typeAttr = new MetaverseAttribute
+        {
+            Name = "Type",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued,
+            MetaverseObjectTypes = new List<MetaverseObjectType> { mvType },
+            PredefinedSearchAttributes = new List<JIM.Models.Search.PredefinedSearchAttribute>()
+        };
+
         DbContext.MetaverseAttributes.Add(displayNameAttr);
         DbContext.MetaverseAttributes.Add(employeeIdAttr);
+        DbContext.MetaverseAttributes.Add(typeAttr);
         await DbContext.SaveChangesAsync();
 
         // Refresh the mvType's attributes collection
         mvType.Attributes.Add(displayNameAttr);
         mvType.Attributes.Add(employeeIdAttr);
+        mvType.Attributes.Add(typeAttr);
 
         return mvType;
     }

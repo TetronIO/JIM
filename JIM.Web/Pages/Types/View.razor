@@ -15,7 +15,7 @@
 
 @if (MetaverseObject != null)
 {
-    <MudTabs @bind-ActivePanelIndex="_activeTabIndex" Elevation="0" Rounded="false" Class="mt-5" PanelClass="pa-0">
+    <MudTabs @bind-ActivePanelIndex="_activeTabIndex" Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" Class="mt-5" PanelClass="pa-0">
         <MudTabPanel Text="Details" Icon="@Icons.Material.Filled.Info">
             <MudPaper Class="pa-5 mt-3" Outlined="true">
                 <MudGrid>
