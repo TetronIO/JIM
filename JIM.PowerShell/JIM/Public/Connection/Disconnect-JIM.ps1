@@ -7,6 +7,12 @@ function Disconnect-JIM {
         Clears the connection state and removes stored credentials from the session.
         After disconnecting, you must use Connect-JIM again before using other JIM cmdlets.
 
+        For OAuth sessions, this clears the access token and refresh token from memory.
+        Note: This does not sign you out of your identity provider.
+
+    .OUTPUTS
+        None.
+
     .EXAMPLE
         Disconnect-JIM
 
@@ -20,9 +26,20 @@ function Disconnect-JIM {
     param()
 
     if ($script:JIMConnection) {
-        Write-Verbose "Disconnecting from JIM at $($script:JIMConnection.Url)"
+        $authMethod = $script:JIMConnection.AuthMethod ?? 'Unknown'
+        $url = $script:JIMConnection.Url
+
+        Write-Verbose "Disconnecting from JIM at $url (auth method: $authMethod)"
+
+        # Clear all connection data
         $script:JIMConnection = $null
-        Write-Verbose "Disconnected successfully"
+
+        Write-Host "Disconnected from JIM at $url" -ForegroundColor Cyan
+
+        if ($authMethod -eq 'OAuth') {
+            Write-Verbose "OAuth tokens cleared from memory"
+            Write-Host "Note: You are still signed into your identity provider. To fully sign out, close your browser or sign out from your identity provider." -ForegroundColor Gray
+        }
     }
     else {
         Write-Verbose "No active JIM connection to disconnect"

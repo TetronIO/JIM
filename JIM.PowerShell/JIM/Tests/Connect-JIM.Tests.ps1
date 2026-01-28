@@ -24,9 +24,19 @@ Describe 'Connect-JIM' {
             $command.Parameters['Url'].Attributes.Mandatory | Should -Contain $true
         }
 
-        It 'Should have a mandatory ApiKey parameter' {
+        It 'Should have an ApiKey parameter' {
             $command = Get-Command Connect-JIM
-            $command.Parameters['ApiKey'].Attributes.Mandatory | Should -Contain $true
+            $command.Parameters['ApiKey'] | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have a Force switch parameter' {
+            $command = Get-Command Connect-JIM
+            $command.Parameters['Force'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'Should have a TimeoutSeconds parameter' {
+            $command = Get-Command Connect-JIM
+            $command.Parameters['TimeoutSeconds'] | Should -Not -BeNullOrEmpty
         }
 
         It 'Should reject invalid URL format' {
@@ -37,8 +47,47 @@ Describe 'Connect-JIM' {
             { Connect-JIM -Url '' -ApiKey 'test-key' } | Should -Throw
         }
 
-        It 'Should reject empty ApiKey' {
+        It 'Should reject empty ApiKey when ApiKey parameter set is used' {
             { Connect-JIM -Url 'http://localhost' -ApiKey '' } | Should -Throw
+        }
+    }
+
+    Context 'Parameter Sets' {
+
+        It 'Should have an Interactive parameter set' {
+            $command = Get-Command Connect-JIM
+            $command.ParameterSets.Name | Should -Contain 'Interactive'
+        }
+
+        It 'Should have an ApiKey parameter set' {
+            $command = Get-Command Connect-JIM
+            $command.ParameterSets.Name | Should -Contain 'ApiKey'
+        }
+
+        It 'Should default to Interactive parameter set' {
+            $command = Get-Command Connect-JIM
+            $command.DefaultParameterSet | Should -Be 'Interactive'
+        }
+
+        It 'ApiKey should be mandatory in ApiKey parameter set' {
+            $command = Get-Command Connect-JIM
+            $apiKeyParam = $command.Parameters['ApiKey']
+            $apiKeyParamSet = $apiKeyParam.ParameterSets['ApiKey']
+            $apiKeyParamSet.IsMandatory | Should -BeTrue
+        }
+
+        It 'Force should only be in Interactive parameter set' {
+            $command = Get-Command Connect-JIM
+            $forceParam = $command.Parameters['Force']
+            $forceParam.ParameterSets.Keys | Should -Contain 'Interactive'
+            $forceParam.ParameterSets.Keys | Should -Not -Contain 'ApiKey'
+        }
+
+        It 'TimeoutSeconds should only be in Interactive parameter set' {
+            $command = Get-Command Connect-JIM
+            $timeoutParam = $command.Parameters['TimeoutSeconds']
+            $timeoutParam.ParameterSets.Keys | Should -Contain 'Interactive'
+            $timeoutParam.ParameterSets.Keys | Should -Not -Contain 'ApiKey'
         }
     }
 
@@ -68,8 +117,24 @@ Describe 'Connect-JIM' {
             $help.Parameters.Parameter | Where-Object { $_.Name -eq 'ApiKey' } | Should -Not -BeNullOrEmpty
         }
 
+        It 'Should document the Force parameter' {
+            $help.Parameters.Parameter | Where-Object { $_.Name -eq 'Force' } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should document the TimeoutSeconds parameter' {
+            $help.Parameters.Parameter | Where-Object { $_.Name -eq 'TimeoutSeconds' } | Should -Not -BeNullOrEmpty
+        }
+
         It 'Should have related links' {
             $help.RelatedLinks | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should mention interactive authentication in description' {
+            $help.Description.Text | Should -Match 'interactive|browser|SSO'
+        }
+
+        It 'Should mention API key authentication in description' {
+            $help.Description.Text | Should -Match 'API key'
         }
     }
 }
@@ -100,6 +165,10 @@ Describe 'Disconnect-JIM' {
 
         It 'Should have a description' {
             $help.Description | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should mention OAuth in description' {
+            $help.Description.Text | Should -Match 'OAuth|token'
         }
     }
 }
@@ -134,6 +203,21 @@ Describe 'Test-JIMConnection' {
             $result = Test-JIMConnection
             $result.Message | Should -Match 'Connect-JIM'
         }
+
+        It 'Should include AuthMethod property' {
+            $result = Test-JIMConnection
+            $result.PSObject.Properties.Name | Should -Contain 'AuthMethod'
+        }
+
+        It 'Should include TokenExpiresAt property' {
+            $result = Test-JIMConnection
+            $result.PSObject.Properties.Name | Should -Contain 'TokenExpiresAt'
+        }
+
+        It 'Should have null AuthMethod when not connected' {
+            $result = Test-JIMConnection
+            $result.AuthMethod | Should -BeNullOrEmpty
+        }
     }
 
     Context 'Help Documentation' {
@@ -148,6 +232,12 @@ Describe 'Test-JIMConnection' {
 
         It 'Should have examples' {
             $help.Examples | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should document AuthMethod in description' {
+            # AuthMethod is documented in the description since PowerShell help
+            # doesn't always parse .OUTPUTS structured data the same way
+            $help.Description.Text | Should -Match 'AuthMethod|authentication method'
         }
     }
 }

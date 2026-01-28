@@ -142,7 +142,7 @@ try
         .AddApiKeyAuthentication()
         .AddCookie(options =>
         {
-            // Forward to API Key authentication when X-API-Key header is present
+            // Forward to appropriate authentication scheme based on request headers
             options.ForwardDefaultSelector = context =>
             {
                 // Check if the request has an API key header
@@ -150,6 +150,14 @@ try
                 {
                     return ApiKeyAuthenticationHandler.SchemeName;
                 }
+
+                // Check if the request has a Bearer token (JWT)
+                var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
+                if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    return JwtBearerDefaults.AuthenticationScheme;
+                }
+
                 // Otherwise use default Cookie authentication
                 return null;
             };
@@ -176,10 +184,23 @@ try
             };
 
             // Prevent OIDC redirects for API requests - they should return 401 instead
+            // Exception: endpoints marked with [AllowAnonymous] should not trigger authentication
             options.Events.OnRedirectToIdentityProvider = async ctx =>
             {
                 if (ctx.Request.Path.StartsWithSegments("/api"))
                 {
+                    // Check if the endpoint allows anonymous access
+                    var endpoint = ctx.HttpContext.GetEndpoint();
+                    var allowAnonymous = endpoint?.Metadata?.GetMetadata<Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute>() != null;
+
+                    if (allowAnonymous)
+                    {
+                        Log.Debug("Skipping OIDC redirect for anonymous API endpoint: {Path}", ctx.Request.Path);
+                        // Don't handle the response - let the request continue to the controller
+                        ctx.HandleResponse();
+                        return;
+                    }
+
                     Log.Debug("Suppressing OIDC redirect for API request: {Path}, returning 401", ctx.Request.Path);
                     ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
                     ctx.Response.ContentType = "application/json";
