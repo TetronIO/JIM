@@ -154,7 +154,10 @@ function Invoke-OAuthBrowserFlow {
         $response = $context.Response
 
         # Verify the request path matches our callback path (defence in depth)
-        if ($request.Url.AbsolutePath -ne $callbackPath.TrimEnd('/')) {
+        # Normalise both paths by trimming trailing slashes for comparison
+        $expectedPath = $callbackPath.TrimEnd('/')
+        $actualPath = $request.Url.AbsolutePath.TrimEnd('/')
+        if ($actualPath -ne $expectedPath) {
             Send-CallbackResponse -Response $response -Success $false -Message "Authentication failed: Invalid callback path"
             throw "Received callback on unexpected path. This could indicate a security issue."
         }
@@ -366,9 +369,13 @@ function Send-CallbackResponse {
         [string]$Message
     )
 
-    $bgColour = if ($Success) { '#d4edda' } else { '#f8d7da' }
-    $textColour = if ($Success) { '#155724' } else { '#721c24' }
-    $borderColour = if ($Success) { '#c3e6cb' } else { '#f5c6cb' }
+    # JIM brand colours (matches JIM.Web dark theme)
+    $bgPage = '#0e1420'
+    $bgCard = '#121826'
+    $borderColour = '#2a303c'
+    $accentColour = if ($Success) { '#7c4dff' } else { '#f44336' }
+    $textColour = '#ffffffde'
+    $subtitleColour = '#ffffff99'
     $icon = if ($Success) { '&#10003;' } else { '&#10007;' }
 
     $html = @"
@@ -385,34 +392,44 @@ function Send-CallbackResponse {
             align-items: center;
             height: 100vh;
             margin: 0;
-            background: #f8f9fa;
+            background: $bgPage;
         }
         .container {
             text-align: center;
             padding: 40px 60px;
-            background: $bgColour;
+            background: $bgCard;
             border: 1px solid $borderColour;
-            border-radius: 8px;
+            border-radius: 12px;
             max-width: 400px;
+            box-shadow: 0 4px 24px rgba(124, 77, 255, 0.15);
         }
         .icon {
             font-size: 48px;
-            color: $textColour;
+            color: $accentColour;
             margin-bottom: 16px;
         }
         .message {
             font-size: 18px;
             color: $textColour;
             margin-bottom: 8px;
+            font-weight: 500;
         }
         .subtitle {
             font-size: 14px;
-            color: #6c757d;
+            color: $subtitleColour;
+        }
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+            color: $accentColour;
+            margin-bottom: 24px;
+            letter-spacing: 2px;
         }
     </style>
 </head>
 <body>
     <div class="container">
+        <div class="logo">JIM</div>
         <div class="icon">$icon</div>
         <div class="message">$Message</div>
         <div class="subtitle">You can close this window and return to PowerShell.</div>

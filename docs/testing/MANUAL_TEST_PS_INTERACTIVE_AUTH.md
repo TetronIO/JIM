@@ -324,7 +324,10 @@ Get-Module JIM
 - Check firewall isn't blocking localhost ports
 
 ### Authentication fails after browser login
-- Verify loopback redirect URI is configured in IDP (`http://127.0.0.1`)
+- Verify loopback redirect URI is configured in IDP:
+  - **Entra ID**: `http://localhost:8400/callback/` (exact match required)
+  - **AD FS**: `http://127.0.0.1` (supports dynamic port/path)
+  - **Keycloak**: `http://127.0.0.1/*` (supports wildcards)
 - Check IDP allows public client flows (Entra ID) or is a public client (Keycloak)
 - Look for errors in browser developer console
 

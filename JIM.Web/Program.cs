@@ -142,7 +142,7 @@ try
         .AddApiKeyAuthentication()
         .AddCookie(options =>
         {
-            // Forward to API Key authentication when X-API-Key header is present
+            // Forward to appropriate authentication scheme based on request headers
             options.ForwardDefaultSelector = context =>
             {
                 // Check if the request has an API key header
@@ -150,6 +150,14 @@ try
                 {
                     return ApiKeyAuthenticationHandler.SchemeName;
                 }
+
+                // Check if the request has a Bearer token (JWT)
+                var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
+                if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    return JwtBearerDefaults.AuthenticationScheme;
+                }
+
                 // Otherwise use default Cookie authentication
                 return null;
             };
