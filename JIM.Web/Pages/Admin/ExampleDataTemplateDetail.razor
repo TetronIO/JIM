@@ -14,9 +14,8 @@
 
 @if (_template != null)
 {
-    <MudGrid Class="mt-3">
-        <MudItem xs="6"></MudItem>
-        <MudItem xs="6" Class="d-flex justify-end">
+    <MudGrid Class="mt-3" Justify="Justify.FlexEnd">
+        <MudItem>
             <AuditInfo Entity="@_template" />
         </MudItem>
     </MudGrid>
