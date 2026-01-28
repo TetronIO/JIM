@@ -6,25 +6,25 @@
 {
     @if (_mvoHref != null)
     {
-        <MudLink Href="@_mvoHref">@(PrincipalName ?? PrincipalId.ToString())</MudLink>
+        <MudLink Href="@_mvoHref" Typo="Typo.inherit">@(PrincipalName ?? PrincipalId.ToString())</MudLink>
     }
     else
     {
-        <MudText Typo="Typo.body2">@(PrincipalName ?? PrincipalId.ToString())</MudText>
+        <span>@(PrincipalName ?? PrincipalId.ToString())</span>
     }
 }
 else if (PrincipalType == ActivityInitiatorType.ApiKey && PrincipalId.HasValue)
 {
-    <MudLink Href="@($"/admin/apikeys/{PrincipalId}")">@(PrincipalName ?? "API Key")</MudLink>
+    <MudLink Href="@($"/admin/apikeys/{PrincipalId}")" Typo="Typo.inherit">@(PrincipalName ?? "API Key")</MudLink>
 }
 else if (PrincipalType == ActivityInitiatorType.System)
 {
     <MudIcon Icon="@Icons.Material.Filled.Settings" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-    <MudText Typo="Typo.body2" Inline="true">System</MudText>
+    <span>System</span>
 }
 else
 {
-    <MudText Typo="Typo.body2" Class="mud-text-secondary">--</MudText>
+    <span class="mud-text-secondary">--</span>
 }
 
 @code {

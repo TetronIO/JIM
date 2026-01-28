@@ -5,54 +5,26 @@
    Shows Created and Last Updated as compact chips with tooltips and principal links. *@
 
 <div class="d-flex flex-wrap gap-2 align-center">
-    <MudTooltip Arrow="true" Placement="Placement.Top">
-        <TooltipContent>
-            <div class="d-flex flex-column pa-1">
-                <MudText Typo="Typo.caption">@Entity.Created.ToLocalTime().ToFriendlyDate()</MudText>
-                @if (Entity.CreatedByType != ActivityInitiatorType.NotSet)
-                {
-                    <div class="d-flex align-center gap-1 mt-1">
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">by</MudText>
-                        <AuditPrincipalLink PrincipalType="@Entity.CreatedByType"
-                                            PrincipalId="@Entity.CreatedById"
-                                            PrincipalName="@Entity.CreatedByName" />
-                    </div>
-                }
-            </div>
-        </TooltipContent>
-        <ChildContent>
-            <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Default"
-                     Icon="@Icons.Material.Outlined.Schedule">
-                Created @Entity.Created.ToLocalTime().ToRelativeTime()@if (Entity.CreatedByName != null)
-                {<text> by @Entity.CreatedByName</text>}
-            </MudChip>
-        </ChildContent>
+    <MudTooltip Text="@Entity.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+        <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Default"
+                 Icon="@Icons.Material.Outlined.Schedule">
+            Created @Entity.Created.ToLocalTime().ToRelativeTime()@if (Entity.CreatedByType != ActivityInitiatorType.NotSet)
+            {<text> by&nbsp;</text><AuditPrincipalLink PrincipalType="@Entity.CreatedByType"
+                        PrincipalId="@Entity.CreatedById"
+                        PrincipalName="@Entity.CreatedByName" />}
+        </MudChip>
     </MudTooltip>
 
     @if (Entity.LastUpdated.HasValue)
     {
-        <MudTooltip Arrow="true" Placement="Placement.Top">
-            <TooltipContent>
-                <div class="d-flex flex-column pa-1">
-                    <MudText Typo="Typo.caption">@Entity.LastUpdated.Value.ToLocalTime().ToFriendlyDate()</MudText>
-                    @if (Entity.LastUpdatedByType != ActivityInitiatorType.NotSet)
-                    {
-                        <div class="d-flex align-center gap-1 mt-1">
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">by</MudText>
-                            <AuditPrincipalLink PrincipalType="@Entity.LastUpdatedByType"
-                                                PrincipalId="@Entity.LastUpdatedById"
-                                                PrincipalName="@Entity.LastUpdatedByName" />
-                        </div>
-                    }
-                </div>
-            </TooltipContent>
-            <ChildContent>
-                <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Default"
-                         Icon="@Icons.Material.Outlined.Edit">
-                    Updated @Entity.LastUpdated.Value.ToLocalTime().ToRelativeTime()@if (Entity.LastUpdatedByName != null)
-                    {<text> by @Entity.LastUpdatedByName</text>}
-                </MudChip>
-            </ChildContent>
+        <MudTooltip Text="@Entity.LastUpdated.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+            <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Default"
+                     Icon="@Icons.Material.Outlined.Edit">
+                Updated @Entity.LastUpdated.Value.ToLocalTime().ToRelativeTime()@if (Entity.LastUpdatedByType != ActivityInitiatorType.NotSet)
+                {<text> by&nbsp;</text><AuditPrincipalLink PrincipalType="@Entity.LastUpdatedByType"
+                            PrincipalId="@Entity.LastUpdatedById"
+                            PrincipalName="@Entity.LastUpdatedByName" />}
+            </MudChip>
         </MudTooltip>
     }
 </div>
