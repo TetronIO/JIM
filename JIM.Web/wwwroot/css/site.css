@@ -673,3 +673,47 @@ html[lang] .jim-paper-danger-zone {
 #components-reconnect-modal.components-reconnect-rejected .jim-reconnect-message::after {
     content: " Reload the page to try again.";
 }
+
+/* Audit info chips - compact label that expands on hover */
+.jim-audit-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 16px;
+    font-size: 0.8125rem;
+    white-space: nowrap;
+    cursor: default;
+    background-color: var(--mud-palette-surface);
+    border: 1px solid var(--mud-palette-lines-default);
+    color: var(--mud-palette-text-secondary);
+    transition: background-color 0.2s ease;
+}
+
+.jim-audit-chip:hover {
+    background-color: var(--mud-palette-background-gray);
+}
+
+.jim-audit-chip .mud-icon-root {
+    font-size: 1rem;
+    opacity: 0.7;
+    flex-shrink: 0;
+}
+
+.jim-audit-chip-detail {
+    display: inline-flex;
+    align-items: center;
+    max-width: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-width 0.4s ease, opacity 0.3s ease 0.05s;
+}
+
+.jim-audit-chip:hover .jim-audit-chip-detail {
+    max-width: 500px;
+    opacity: 1;
+}
+
+.jim-audit-chip-label {
+    flex-shrink: 0;
+}
