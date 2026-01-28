@@ -178,10 +178,10 @@ The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based
 3. Select **Native application**
 4. Click **Next**
 5. Note the **Client Identifier** (or use the same ID as the web application)
-6. Add the **Redirect URI**: `http://127.0.0.1`
+6. Add the **Redirect URI**: `http://localhost:8400/callback/`
 7. Click **Next** and then **Close**
 
-> **Note**: The PowerShell module uses loopback redirect URIs (`http://127.0.0.1:PORT/callback/...`) which are handled specially by OAuth 2.0 per [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252). AD FS native applications support PKCE, which the PowerShell module uses for security.
+> **Note**: The PowerShell module uses loopback redirect URIs per [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252). AD FS native applications support PKCE, which the PowerShell module uses for security. If port 8400 is busy, you may need to add additional redirect URIs for ports 8401-8409.
 
 ### Step 5: Create the Web API
 
@@ -349,14 +349,14 @@ The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based
 6. Click **Next**
 7. Configure login settings:
    - **Root URL**: Leave empty
-   - **Valid redirect URIs**: `http://127.0.0.1/*`
+   - **Valid redirect URIs**: `http://localhost:8400/callback/`
    - **Web origins**: `+` (allows all origins from redirect URIs)
 8. Click **Save**
 9. Go to the **Client scopes** tab
 10. Click **Add client scope**
 11. Select `jim-api` and add as **Optional**
 
-> **Note**: The PowerShell module uses loopback redirect URIs (`http://127.0.0.1:PORT/callback/...`) which are handled specially by OAuth 2.0 per [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252). The `/*` wildcard allows the dynamic port and callback path used by the module.
+> **Note**: The PowerShell module uses loopback redirect URIs per [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252). If port 8400 is busy, you may need to add additional redirect URIs for ports 8401-8409 (e.g., `http://localhost:8401/callback/`).
 
 ### Step 7: Configure JIM Environment Variables
 

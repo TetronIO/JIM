@@ -326,8 +326,9 @@ Get-Module JIM
 ### Authentication fails after browser login
 - Verify loopback redirect URI is configured in IDP:
   - **Entra ID**: `http://localhost:8400/callback/` (exact match required)
-  - **AD FS**: `http://127.0.0.1` (supports dynamic port/path)
-  - **Keycloak**: `http://127.0.0.1/*` (supports wildcards)
+  - **AD FS**: `http://localhost:8400/callback/` (exact match recommended)
+  - **Keycloak**: `http://localhost:8400/callback/` (exact match recommended)
+- If port 8400 is busy, add additional URIs for ports 8401-8409
 - Check IDP allows public client flows (Entra ID) or is a public client (Keycloak)
 - Look for errors in browser developer console
 
