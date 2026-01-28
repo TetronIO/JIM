@@ -17,12 +17,12 @@
  */
 
 html[lang] {
-    /* === Primary Palette (JIM purple) === */
-    --mud-palette-primary: #6688ff;
-    --mud-palette-primary-darken: #5070ee;
-    --mud-palette-primary-lighten: #88a4ff;
+    /* === Primary Palette (JIM purple — vivid for dark backgrounds) === */
+    --mud-palette-primary: #4488ff;
+    --mud-palette-primary-darken: #3070ee;
+    --mud-palette-primary-lighten: #66a0ff;
     --mud-palette-primary-text: #ffffffff;
-    --mud-palette-secondary: #6688ff;
+    --mud-palette-secondary: #4488ff;
     --mud-palette-secondary-text: #ffffffff;
 
     /* === Background & Surface (from reference screenshot) === */
@@ -74,6 +74,7 @@ html[lang] {
 
     /* === JIM Custom: Navigation === */
     --jim-nav-top-level-color: #b0b2b8;
+    --jim-nav-hover-color: #f0f0f4;
     --jim-nav-active-color: #f0f0f4;
 
     /* === JIM Custom: Drawer border (transparent — no separator) === */
@@ -83,10 +84,10 @@ html[lang] {
     --jim-paper-border-color: #2e2f32;
 
     /* === JIM Custom: Content Links === */
-    --jim-link-color: #88a4ff;
+    --jim-link-color: #4488ff;
 
-    /* === JIM Custom: Link Hover === */
-    --jim-link-hover-color: #ff6090;
+    /* === JIM Custom: Link Hover (matches nav active text) === */
+    --jim-link-hover-color: #f0f0f4;
 
     /* === JIM Custom: Logo text === */
     --jim-logo-text-color: #ffffff;

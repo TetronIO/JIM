@@ -64,7 +64,7 @@ html[lang] {
     /* === JIM Custom: Navigation === */
     /* Neutral nav links matching drawer text instead of blue accent */
     --jim-nav-top-level-color: #acb0b3;
-    /* Selected item stands out with near-white */
+    --jim-nav-hover-color: #f0f0f4;
     --jim-nav-active-color: #f0f0f4;
 
     /* === JIM Custom: Drawer border === */
@@ -74,8 +74,7 @@ html[lang] {
     --jim-paper-border-color: var(--mud-palette-lines-default);
 
     /* === JIM Custom: Content Links === */
-    /* Softer cornflower for data/content links, distinct from UI primary */
-    --jim-link-color: #6e99cc;
+    --jim-link-color: #5ca0ff;
 
     /* === JIM Custom: Link Hover === */
     --jim-link-hover-color: #ff4081ff;

@@ -251,6 +251,16 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     fill: var(--jim-nav-top-level-color) !important;
 }
 
+/* Nav item hover - brighten text and icon when hovering (uses --jim-nav-hover-color
+   if the theme defines it, otherwise falls back to --jim-nav-active-color) */
+.jim-nav-menu .mud-nav-link:hover .mud-nav-link-text {
+    color: var(--jim-nav-hover-color, var(--jim-nav-active-color)) !important;
+}
+
+.jim-nav-menu .mud-nav-link:hover .mud-nav-link-icon {
+    color: var(--jim-nav-hover-color, var(--jim-nav-active-color)) !important;
+}
+
 /* Child nav items - keep default styling (lighter weight, secondary colour) */
 .jim-nav-child .mud-nav-link-text {
     font-weight: 400 !important;
