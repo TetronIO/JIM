@@ -5,7 +5,10 @@ function Invoke-JIMApi {
 
     .DESCRIPTION
         This is a private helper function that handles all REST API calls to JIM.
-        It manages authentication headers, error handling, and response processing.
+        It manages authentication headers (API key or Bearer token), error handling,
+        and response processing.
+
+        Supports automatic token refresh for OAuth connections.
 
     .PARAMETER Endpoint
         The API endpoint path (without base URL), e.g., '/api/v1/synchronisation/connected-systems'
@@ -46,20 +49,59 @@ function Invoke-JIMApi {
         throw "Not connected to JIM. Use Connect-JIM first."
     }
 
+    # Check if we need to refresh the OAuth token
+    if ($script:JIMConnection.AuthMethod -eq 'OAuth') {
+        if ($script:JIMConnection.TokenExpiresAt -and $script:JIMConnection.TokenExpiresAt -lt (Get-Date).AddMinutes(2)) {
+            # Token is expired or about to expire, try to refresh
+            if ($script:JIMConnection.RefreshToken -and $script:JIMConnection.OAuthConfig) {
+                try {
+                    Write-Verbose "Access token expired or expiring soon, refreshing..."
+                    $tokens = Invoke-OAuthTokenRefresh `
+                        -TokenEndpoint $script:JIMConnection.OAuthConfig.TokenEndpoint `
+                        -ClientId $script:JIMConnection.OAuthConfig.ClientId `
+                        -RefreshToken $script:JIMConnection.RefreshToken `
+                        -Scopes $script:JIMConnection.OAuthConfig.Scopes
+
+                    $script:JIMConnection.AccessToken = $tokens.AccessToken
+                    $script:JIMConnection.RefreshToken = $tokens.RefreshToken
+                    $script:JIMConnection.TokenExpiresAt = $tokens.ExpiresAt
+                    Write-Verbose "Successfully refreshed access token"
+                }
+                catch {
+                    throw "Access token expired and refresh failed. Please run Connect-JIM again to re-authenticate."
+                }
+            }
+            else {
+                throw "Access token expired. Please run Connect-JIM again to re-authenticate."
+            }
+        }
+    }
+
     # Build the full URI
     $uri = "$($script:JIMConnection.Url.TrimEnd('/'))$Endpoint"
 
     Write-Debug "Invoking JIM API: $Method $uri"
 
-    # Build request parameters
+    # Build request parameters with appropriate authentication header
+    $headers = @{
+        'Accept' = 'application/json'
+    }
+
+    if ($script:JIMConnection.AuthMethod -eq 'ApiKey') {
+        $headers['X-API-Key'] = $script:JIMConnection.ApiKey
+    }
+    elseif ($script:JIMConnection.AuthMethod -eq 'OAuth') {
+        $headers['Authorization'] = "Bearer $($script:JIMConnection.AccessToken)"
+    }
+    else {
+        throw "Unknown authentication method: $($script:JIMConnection.AuthMethod)"
+    }
+
     $params = @{
         Uri         = $uri
         Method      = $Method
         ContentType = $ContentType
-        Headers     = @{
-            'X-API-Key' = $script:JIMConnection.ApiKey
-            'Accept'    = 'application/json'
-        }
+        Headers     = $headers
     }
 
     # Add body if provided
@@ -94,10 +136,15 @@ function Invoke-JIMApi {
 
         switch ($statusCode) {
             401 {
-                throw "Authentication failed. Your API key may be invalid or expired. Use Connect-JIM to reconnect."
+                if ($script:JIMConnection.AuthMethod -eq 'OAuth') {
+                    throw "Authentication failed. Your session may have expired. Use Connect-JIM to reconnect."
+                }
+                else {
+                    throw "Authentication failed. Your API key may be invalid or expired. Use Connect-JIM to reconnect."
+                }
             }
             403 {
-                throw "Access denied. Your API key does not have permission to perform this operation."
+                throw "Access denied. You do not have permission to perform this operation."
             }
             404 {
                 throw "Resource not found: $errorMessage"
