@@ -63,7 +63,8 @@ html[lang] {
     --jim-json-null: #ff8a80;       /* Soft coral/pink from logo */
 
     /* === JIM Custom: Navigation === */
-    --jim-nav-top-level-color: #cdd0d4;
+    --jim-nav-top-level-color: #acb0b3;
+    --jim-nav-child-color: #7a8088;
     --jim-nav-active-color: #f0f0f4;
 
     /* === JIM Custom: Drawer border === */

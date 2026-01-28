@@ -69,6 +69,7 @@ html[lang] {
 
     /* === JIM Custom: Navigation (dark text on light sidebar) === */
     --jim-nav-top-level-color: var(--mud-palette-primary);
+    --jim-nav-child-color: rgba(66, 66, 66, 0.7);
     --jim-nav-active-color: var(--mud-palette-primary);
 
     /* === JIM Custom: Drawer border (transparent — no separator) === */

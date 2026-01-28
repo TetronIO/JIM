@@ -64,6 +64,7 @@ html[lang] {
     /* === JIM Custom: Navigation === */
     /* Neutral dark grey nav links instead of blue accent */
     --jim-nav-top-level-color: #344054;
+    --jim-nav-child-color: #667085;
     --jim-nav-active-color: #101828;
 
     /* === JIM Custom: Drawer border === */

@@ -267,9 +267,10 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     color: var(--jim-nav-hover-color, var(--jim-nav-active-color)) !important;
 }
 
-/* Child nav items - keep default styling (lighter weight, secondary colour) */
+/* Child nav items - dimmed colour and lighter weight for visual hierarchy */
 .jim-nav-child .mud-nav-link-text {
     font-weight: 400 !important;
+    color: var(--jim-nav-child-color) !important;
 }
 
 /* Danger zone tab header - red text, icon and underline only when active */

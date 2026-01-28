@@ -62,7 +62,8 @@ html[lang] {
     --jim-json-null: #0000ff;
 
     /* === JIM Custom: Navigation (light-on-dark sidebar) === */
-    --jim-nav-top-level-color: #dcdee4;
+    --jim-nav-top-level-color: #c0c4cc;
+    --jim-nav-child-color: #9098a4;
     --jim-nav-active-color: #f0f0f4;
 
     /* === JIM Custom: Drawer border (dark sidebar needs dark border) === */
