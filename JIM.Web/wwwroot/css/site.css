@@ -273,6 +273,15 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     color: var(--jim-nav-child-color) !important;
 }
 
+/* Align child nav item text with parent text.
+   MudBlazor sets padding-left/padding-inline-start: 36px on nested nav links.
+   Increase to 38px to align child text with parent text (after icon).
+   Note: jim-nav-child is on the parent div.mud-nav-item, not the anchor. */
+.jim-nav-child .mud-nav-link {
+    padding-left: 38px !important;
+    padding-inline-start: 38px !important;
+}
+
 /* Danger zone tab header - red text, icon and underline only when active */
 #danger-zone.mud-tab-active,
 #danger-zone.mud-tab.mud-tab-active,
