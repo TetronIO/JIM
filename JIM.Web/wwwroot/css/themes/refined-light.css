@@ -88,8 +88,8 @@ html[lang] {
     --jim-paper-border-color: rgba(0, 0, 0, 0.22);
 
     /* === JIM Custom: Content Links === */
-    /* Softer cornflower for data/content links, distinct from UI primary */
-    --jim-link-color: #4a7fb5;
+    /* Vibrant blue for data/content links, matching dark mode punch */
+    --jim-link-color: #0969da;
 
     /* === JIM Custom: Link Hover === */
     --jim-link-hover-color: #ff4081ff;
