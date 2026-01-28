@@ -58,16 +58,22 @@ After registration, note these values from the **Overview** page:
 ### Step 4: Configure API Permissions
 
 1. Go to **API permissions**
-2. Click **Add a permission**
-3. Select **Microsoft Graph**
-4. Select **Delegated permissions**
-5. Add these permissions:
-   - `openid`
-   - `profile`
-   - `email`
-   - `offline_access` (for refresh tokens)
-6. Click **Add permissions**
-7. If required by your organisation, click **Grant admin consent**
+2. Verify `User.Read` (Delegated) is present - this is added by default and provides the OpenID Connect scopes needed for authentication
+
+> **Note**: The standard OIDC scopes (`openid`, `profile`, `email`, `offline_access`) are requested at runtime and don't need to be added as Graph API permissions.
+
+### Step 4a: Configure PowerShell Module Authentication (Optional)
+
+To enable interactive browser-based authentication for the JIM PowerShell module:
+
+1. Go to **Authentication**
+2. Click **Add Redirect URI**
+3. Select **Mobile and desktop applications**
+4. Add custom redirect URI: `http://127.0.0.1`
+5. Click **Configure**
+6. Click the **Settings** tab
+7. Set **Allow public client flows** to **Yes**
+8. Click **Save**
 
 ### Step 5: Expose an API
 
@@ -87,6 +93,16 @@ This step creates the API scope that JIM uses for JWT Bearer token validation (f
    - **User consent description**: `Allows this app to access JIM API on your behalf`
    - **State**: Enabled
 5. Click **Add scope**
+
+### Step 5a: Configure Swagger UI Authentication (Optional)
+
+To enable OAuth authentication in the Swagger UI:
+
+1. Go to **Authentication**
+2. Click **Add Redirect URI**
+3. Select **Single-page application**
+4. Add redirect URI: `https://your-jim-url/api/swagger/oauth2-redirect.html`
+5. Click **Configure**
 
 ### Step 6: Configure JIM Environment Variables
 
@@ -149,6 +165,20 @@ SSO_API_SCOPE=api://12345678-1234-1234-1234-123456789abc/access_as_user
 
 1. Select **openid** and **profile** scopes
 2. Click **Next** and then **Close**
+
+### Step 4a: Configure PowerShell Module Authentication (Optional)
+
+The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based authentication. AD FS supports this through native applications.
+
+1. Right-click your Application Group and select **Properties**
+2. Click **Add application**
+3. Select **Native application**
+4. Click **Next**
+5. Note the **Client Identifier** (or use the same ID as the web application)
+6. Add the **Redirect URI**: `http://127.0.0.1`
+7. Click **Next** and then **Close**
+
+> **Note**: The PowerShell module uses loopback redirect URIs (`http://127.0.0.1:PORT/callback/...`) which are handled specially by OAuth 2.0 per [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252). AD FS native applications support PKCE, which the PowerShell module uses for security.
 
 ### Step 5: Create the Web API
 
@@ -299,6 +329,32 @@ If you need separate API clients for service-to-service communication:
 3. Click **Add client scope**
 4. Select `jim-api` and add as **Optional**
 
+### Step 6a: Configure PowerShell Module Authentication (Optional)
+
+The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based authentication. This requires creating a public client in Keycloak.
+
+1. Navigate to **Clients**
+2. Click **Create client**
+3. Configure the client:
+   - **Client type**: OpenID Connect
+   - **Client ID**: `jim-powershell`
+4. Click **Next**
+5. Configure capability:
+   - **Client authentication**: OFF (this makes it a public client)
+   - **Authorization**: OFF
+   - **Authentication flow**: Check **Standard flow** (Authorization Code)
+6. Click **Next**
+7. Configure login settings:
+   - **Root URL**: Leave empty
+   - **Valid redirect URIs**: `http://127.0.0.1/*`
+   - **Web origins**: `+` (allows all origins from redirect URIs)
+8. Click **Save**
+9. Go to the **Client scopes** tab
+10. Click **Add client scope**
+11. Select `jim-api` and add as **Optional**
+
+> **Note**: The PowerShell module uses loopback redirect URIs (`http://127.0.0.1:PORT/callback/...`) which are handled specially by OAuth 2.0 per [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252). The `/*` wildcard allows the dynamic port and callback path used by the module.
+
 ### Step 7: Configure JIM Environment Variables
 
 ```bash
@@ -373,6 +429,29 @@ You should see a JSON response with endpoints for `authorization_endpoint`, `tok
 2. Click **Authorize**
 3. Log in with your identity provider
 4. Try an API endpoint (e.g., GET /api/v1/health)
+
+### 5. Test the PowerShell Module
+
+If you configured PowerShell module authentication:
+
+```powershell
+# Import the module
+Import-Module ./JIM.PowerShell/JIM -Force
+
+# Connect interactively - opens browser for SSO
+Connect-JIM -Url "https://your-jim-url"
+
+# Verify the connection
+Test-JIMConnection
+
+# You should see:
+# Connected      : True
+# Url            : https://your-jim-url
+# AuthMethod     : OAuth
+# Status         : Healthy
+# Message        : Connection successful
+# TokenExpiresAt : <date/time>
+```
 
 ---
 
