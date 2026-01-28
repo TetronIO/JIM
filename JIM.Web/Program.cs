@@ -49,7 +49,7 @@ using System.Security.Claims;
 // JIM_LOG_REQUESTS
 // JIM_INFRASTRUCTURE_API_KEY - Creates an infrastructure API key on startup for CI/CD automation (24hr expiry)
 // JIM_ENCRYPTION_KEY_PATH - Custom path for encryption key storage (default: /data/keys or app data directory)
-// JIM_THEME - Built-in colour theme name (default: mid-contrast)
+// JIM_THEME - Built-in colour theme name (default: refined)
 
 // initial logging setup for when the application has not yet been created (bootstrapping)...
 InitialiseLogging(new LoggerConfiguration(), true);
@@ -99,7 +99,7 @@ try
     builder.Services.AddExpressionEvaluation();
 
     // Register UI theme settings from environment variable
-    var themeName = Environment.GetEnvironmentVariable(Constants.Config.Theme) ?? "mid-contrast";
+    var themeName = Environment.GetEnvironmentVariable(Constants.Config.Theme) ?? "refined";
     builder.Services.AddSingleton(new ThemeSettings
     {
         LightThemePath = $"css/themes/{themeName}-light.css",
