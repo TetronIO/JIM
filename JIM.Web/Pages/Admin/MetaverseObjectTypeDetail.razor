@@ -15,14 +15,10 @@
 
 @if (_metaverseObjectType != null)
 {
-    <MudGrid Class="mt-5">
-        <MudItem xs="6">
-            <MudText Typo="Typo.h5">Details</MudText>
-        </MudItem>
-        <MudItem xs="6" Class="d-flex justify-end">
-            <AuditInfo Entity="@_metaverseObjectType" />
-        </MudItem>
-    </MudGrid>
+    <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mt-3">
+        <MudText Typo="Typo.h5">Details</MudText>
+        <AuditInfo Entity="@_metaverseObjectType" />
+    </MudStack>
     <MudPaper Class="pa-5 mt-3" Outlined="true">
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">

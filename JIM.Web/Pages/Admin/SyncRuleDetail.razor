@@ -29,17 +29,13 @@ else if (_syncRule != null)
 {
     <MudPaper Class="pa-4 mt-5" Outlined="true">
 
-        <MudGrid Class="mb-5">
-            <MudItem xs="6">
-                <MudText Typo="Typo.h5">Details</MudText>
-            </MudItem>
-            <MudItem xs="6" Class="d-flex justify-end">
-                @if (_syncRule.Id > 0)
-                {
-                    <AuditInfo Entity="@_syncRule" />
-                }
-            </MudItem>
-        </MudGrid>
+        <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+            <MudText Typo="Typo.h5">Details</MudText>
+            @if (_syncRule.Id > 0)
+            {
+                <AuditInfo Entity="@_syncRule" />
+            }
+        </MudStack>
 
         <MudForm @bind-IsValid="@_isDetailsFormValid" @bind-Errors="@_detailsFormErrors">
             <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="_syncRule.Name"
