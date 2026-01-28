@@ -1,5 +1,6 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.Staging;
+using JIM.Utilities;
 using Serilog;
 using System.DirectoryServices.Protocols;
 namespace JIM.Connectors.LDAP;
@@ -38,6 +39,29 @@ internal static class LdapConnectorUtilities
         return null;
     }
 
+    /// <summary>
+    /// Returns all values of an LDAP SearchResultEntry attribute, cast to Guid.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method assumes the binary attribute uses <b>Microsoft GUID byte order</b> (little-endian
+    /// for the first three components: time_low, time_mid, time_hi_version). This is correct for:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item>Active Directory <c>objectGUID</c></item>
+    ///   <item>Samba AD <c>objectGUID</c></item>
+    ///   <item>Any attribute stored in Microsoft GUID binary format</item>
+    /// </list>
+    /// <para>
+    /// <b>Do NOT use this method</b> for RFC 4122 UUID binary attributes (big-endian first three
+    /// components), such as custom binary UUID attributes in OpenLDAP or 389DS. For those, use
+    /// <see cref="JIM.Utilities.IdentifierParser.FromRfc4122Bytes"/> after retrieving the raw bytes.
+    /// </para>
+    /// <para>
+    /// Note: OpenLDAP's <c>entryUUID</c> is a string attribute (RFC 4530), not binary, so standard
+    /// string parsing applies.
+    /// </para>
+    /// </remarks>
     internal static List<Guid>? GetEntryAttributeGuidValues(SearchResultEntry entry, string attributeName)
     {
         if (entry == null) return null;
@@ -46,7 +70,7 @@ internal static class LdapConnectorUtilities
 
         var guidValues = new List<Guid>();
         foreach (byte[] byteValue in entry.Attributes[attributeName])
-            guidValues.Add(new Guid(byteValue));
+            guidValues.Add(IdentifierParser.FromMicrosoftBytes(byteValue));
 
         if (guidValues.Count == 0)
             return null;
@@ -68,12 +92,32 @@ internal static class LdapConnectorUtilities
     /// Returns the first value of an LDAP SearchResultEntry attribute, cast to Guid.
     /// If there are multiple values, only the first is returned.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method assumes the binary attribute uses <b>Microsoft GUID byte order</b> (little-endian
+    /// for the first three components: time_low, time_mid, time_hi_version). This is correct for:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item>Active Directory <c>objectGUID</c></item>
+    ///   <item>Samba AD <c>objectGUID</c></item>
+    ///   <item>Any attribute stored in Microsoft GUID binary format</item>
+    /// </list>
+    /// <para>
+    /// <b>Do NOT use this method</b> for RFC 4122 UUID binary attributes (big-endian first three
+    /// components), such as custom binary UUID attributes in OpenLDAP or 389DS. For those, use
+    /// <see cref="JIM.Utilities.IdentifierParser.FromRfc4122Bytes"/> after retrieving the raw bytes.
+    /// </para>
+    /// <para>
+    /// Note: OpenLDAP's <c>entryUUID</c> is a string attribute (RFC 4530), not binary, so standard
+    /// string parsing applies.
+    /// </para>
+    /// </remarks>
     internal static Guid? GetEntryAttributeGuidValue(SearchResultEntry entry, string attributeName)
     {
         if (entry == null) return null;
         if (!entry.Attributes.Contains(attributeName)) return null;
         if (entry.Attributes[attributeName].Count != 1) return null;
-        return new Guid((byte[])entry.Attributes[attributeName][0]);
+        return IdentifierParser.FromMicrosoftBytes((byte[])entry.Attributes[attributeName][0]);
     }
 
     
