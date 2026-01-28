@@ -17,15 +17,21 @@
     letter-spacing: 0.02857em;
 }
 
-/* Content/data links use --jim-link-color (softer than UI primary) */
+/* Content/data links use --jim-link-color (softer than UI primary).
+   Transition on the base state so colour animates smoothly both ways. */
 a.mud-link.mud-primary-text {
     color: var(--jim-link-color) !important;
+    transition: color 0.25s ease !important;
+}
+
+a.mud-link.mud-primary-text:hover {
+    color: var(--jim-link-hover-color) !important;
 }
 
 .mud-link-underline-hover:hover {
     text-decoration: none !important;
     color: var(--jim-link-hover-color) !important;
-    transition: color 0.3s !important;
+    transition: color 0.25s ease !important;
 }
 
 .mud-main-content {
