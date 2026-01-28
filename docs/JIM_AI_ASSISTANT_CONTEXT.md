@@ -277,8 +277,11 @@ FormatDateTime(hireDate, "yyyy-MM-dd")
 35 cmdlets for automation:
 
 ```powershell
-# Connect
-Connect-JIM -BaseUrl "http://localhost:5200" -ApiKey "jim_xxx"
+# Connect interactively (opens browser for SSO)
+Connect-JIM -Url "http://localhost:5200"
+
+# Connect with API key (for automation/scripts)
+Connect-JIM -Url "http://localhost:5200" -ApiKey "jim_xxx"
 
 # Query
 Get-JIMMetaverseObject -ObjectType Person

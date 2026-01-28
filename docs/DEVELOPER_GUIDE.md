@@ -805,12 +805,48 @@ Get-Module JIM
 
 ### Connecting to JIM
 
+JIM supports two authentication methods for the PowerShell module:
+
+#### Interactive Browser Authentication (Default)
+
+Opens your default browser for SSO sign-in. This is the recommended method for interactive sessions:
+
+```powershell
+# Connect interactively - opens browser for SSO authentication
+Connect-JIM -Url "http://localhost:5200"
+
+# Force re-authentication even if already connected
+Connect-JIM -Url "http://localhost:5200" -Force
+
+# Specify custom timeout for browser authentication (default: 300 seconds)
+Connect-JIM -Url "http://localhost:5200" -TimeoutSeconds 120
+```
+
+#### API Key Authentication (Automation)
+
+Use API keys for scripts and automation where interactive sign-in isn't possible:
+
 ```powershell
 # Connect using an API key (recommended for automation)
-Connect-JIM -BaseUrl "http://localhost:5200" -ApiKey "jim_xxxxxxxxxxxx"
+Connect-JIM -Url "http://localhost:5200" -ApiKey "jim_xxxxxxxxxxxx"
+```
 
-# Test the connection
+#### Testing and Managing Connections
+
+```powershell
+# Test the connection and view status
 Test-JIMConnection
+
+# Example output for OAuth connection:
+# Connected      : True
+# Url            : http://localhost:5200
+# AuthMethod     : OAuth
+# Status         : Healthy
+# Message        : Connection successful
+# TokenExpiresAt : 28/01/2026 22:30:00
+
+# Quick check if connected (returns $true/$false)
+Test-JIMConnection -Quiet
 
 # Disconnect when done
 Disconnect-JIM
@@ -818,23 +854,9 @@ Disconnect-JIM
 
 ### Running Pester Tests
 
-```powershell
+```bash
 # Run all PowerShell module tests
-pwsh -NoProfile -Command "
-    Import-Module Pester -MinimumVersion 5.0 -Force
-    \$config = New-PesterConfiguration
-    \$config.Run.Path = './JIM.PowerShell/JIM/Tests'
-    \$config.Run.Exit = \$true
-    \$config.Output.Verbosity = 'Detailed'
-    Invoke-Pester -Configuration \$config
-"
-```
-
-Or use the simpler form:
-
-```powershell
-cd JIM.PowerShell/JIM
-Invoke-Pester -Path ./Tests -Output Detailed
+jim-test-ps
 ```
 
 ### Adding a New Cmdlet
