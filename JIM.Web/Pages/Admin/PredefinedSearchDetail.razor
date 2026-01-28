@@ -11,6 +11,10 @@
 
 @if (_predefinedSearch != null)
 {
+    <div class="d-flex justify-end mt-3">
+        <AuditInfo Entity="@_predefinedSearch" />
+    </div>
+
     <MudText Typo="Typo.h5" Class="mt-5">Details</MudText>
     <MudPaper Class="pa-5 mt-5" Outlined="true">
         <MudGrid>

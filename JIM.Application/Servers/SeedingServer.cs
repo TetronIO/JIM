@@ -309,6 +309,7 @@ internal class SeedingServer
             usersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = emailAttribute, Position = 4 });
             usersPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = statusAttribute, Position = 5 });
                 
+            AuditHelper.SetCreatedBySystem(usersPredefinedSearch);
             predefinedSearchesToCreate.Add(usersPredefinedSearch);
             Log.Information("SeedAsync: Preparing User default PredefinedSearch");
         }
@@ -343,6 +344,7 @@ internal class SeedingServer
                 }
             });
 
+            AuditHelper.SetCreatedBySystem(peopleUsersPredefinedSearch);
             predefinedSearchesToCreate.Add(peopleUsersPredefinedSearch);
             Log.Information("SeedAsync: Preparing People PredefinedSearch");
         }
@@ -375,6 +377,7 @@ internal class SeedingServer
                 }
             });
 
+            AuditHelper.SetCreatedBySystem(servicePrincipleUsersPredefinedSearch);
             predefinedSearchesToCreate.Add(servicePrincipleUsersPredefinedSearch);
             Log.Information("SeedAsync: Preparing Service Principals PredefinedSearch");
         }
@@ -397,6 +400,7 @@ internal class SeedingServer
             groupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = emailAttribute, Position = 3 });
             groupsPredefinedSearch.Attributes.Add(new() { MetaverseAttribute = statusAttribute, Position = 4 });
                 
+            AuditHelper.SetCreatedBySystem(groupsPredefinedSearch);
             predefinedSearchesToCreate.Add(groupsPredefinedSearch);
             Log.Information("SeedAsync: Preparing Group default PredefinedSearch");
         }
@@ -429,6 +433,7 @@ internal class SeedingServer
                 }
             });
 
+            AuditHelper.SetCreatedBySystem(securityGroupsPredefinedSearch);
             predefinedSearchesToCreate.Add(securityGroupsPredefinedSearch);
             Log.Information("SeedAsync: Preparing Security Groups PredefinedSearch");
         }
@@ -462,6 +467,7 @@ internal class SeedingServer
                 }
             });
 
+            AuditHelper.SetCreatedBySystem(distributionGroupsPredefinedSearch);
             predefinedSearchesToCreate.Add(distributionGroupsPredefinedSearch);
             Log.Information("SeedAsync: Preparing Distribution Groups PredefinedSearch");
         }
