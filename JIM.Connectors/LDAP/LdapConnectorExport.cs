@@ -1,6 +1,7 @@
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Serilog;
 using System.DirectoryServices.Protocols;
 namespace JIM.Connectors.LDAP;
@@ -241,7 +242,8 @@ internal class LdapConnectorExport
                 var guidBytes = entry.Attributes["objectGUID"][0] as byte[];
                 if (guidBytes != null && guidBytes.Length == 16)
                 {
-                    var guid = new Guid(guidBytes);
+                    // AD objectGUID uses Microsoft GUID byte order (little-endian first 3 components)
+                    var guid = IdentifierParser.FromMicrosoftBytes(guidBytes);
                     return guid.ToString();
                 }
             }
@@ -605,7 +607,10 @@ internal class LdapConnectorExport
             return attrChange.ByteValue;
 
         if (attrChange.GuidValue.HasValue)
-            return attrChange.GuidValue.Value.ToByteArray();
+            // ToMicrosoftBytes() produces Microsoft GUID byte order (little-endian first 3 components).
+            // This is correct for AD/Samba AD targets. For RFC 4122 targets (OpenLDAP binary UUIDs),
+            // use IdentifierParser.ToRfc4122Bytes() instead when that connector path is implemented.
+            return IdentifierParser.ToMicrosoftBytes(attrChange.GuidValue.Value);
 
         if (attrChange.BoolValue.HasValue)
             return attrChange.BoolValue.Value.ToString().ToUpperInvariant();

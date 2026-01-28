@@ -18,6 +18,20 @@ html[lang] {
     --mud-palette-secondary: #594ae2;
     --mud-palette-secondary-text: #ffffffff;
 
+    /* === Semantic Colours (WCAG AA Accessible) === */
+    /* MudBlazor defaults fail WCAG AA contrast on white backgrounds.
+       These darker variants achieve 4.5:1+ contrast ratio for text chips. */
+    --mud-palette-success: #1b7d3e;
+    --mud-palette-success-text: #ffffffff;
+    --mud-palette-warning: #c65102;
+    --mud-palette-warning-text: #ffffffff;
+    --mud-palette-info: #0066cc;
+    --mud-palette-info-text: #ffffffff;
+    --mud-palette-error: #c62828;
+    --mud-palette-error-text: #ffffffff;
+    --mud-palette-tertiary: #0d7d5f;
+    --mud-palette-tertiary-text: #ffffffff;
+
     /* === Background & Surface (light content area) === */
     --mud-palette-background: #f6f9fc;
     --mud-palette-surface: #ffffffff;
