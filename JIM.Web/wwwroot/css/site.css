@@ -686,8 +686,8 @@ html[lang] .jim-paper-danger-zone {
     white-space: nowrap;
     cursor: default;
     background-color: var(--mud-palette-surface);
-    border: 1px solid var(--mud-palette-lines-default);
-    color: var(--mud-palette-text-secondary);
+    border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+    color: var(--mud-palette-text-primary);
     transition: background-color 0.2s ease;
 }
 
@@ -697,7 +697,6 @@ html[lang] .jim-paper-danger-zone {
 
 .jim-audit-chip .mud-icon-root {
     font-size: 1rem;
-    opacity: 0.7;
     flex-shrink: 0;
 }
 
