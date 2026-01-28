@@ -28,7 +28,7 @@ html[lang] {
     --mud-palette-appbar-text: #ffffffff;
 
     /* === Drawer === */
-    --mud-palette-drawer-background: #eef2f6;
+    --mud-palette-drawer-background: #f6f9fc;
     --mud-palette-drawer-text: rgba(66, 66, 66, 1);
     --mud-palette-drawer-icon: rgba(66, 66, 66, 1);
 
