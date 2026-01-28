@@ -387,6 +387,7 @@ $TemplateWasExplicitlySet = $PSBoundParameters.ContainsKey('Template')
 # Scenarios that provision their own fixed test data and don't use the Template parameter
 # for data sizing. These scenarios accept Template but it has no effect on test execution.
 $templateIrrelevantScenarios = @(
+    "*Scenario2*",   # Cross-Domain Sync - uses fixed test users (crossdomain.test1, etc.)
     "*Scenario3*",   # GAL Sync - not yet implemented
     "*Scenario4*"    # Deletion Rules - provisions individual test users, ignores template
 )
