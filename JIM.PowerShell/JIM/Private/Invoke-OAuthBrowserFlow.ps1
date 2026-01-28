@@ -13,10 +13,10 @@ function Invoke-OAuthBrowserFlow {
 
         Security measures implemented per RFC 8252:
         - Binds to 127.0.0.1 loopback only (not 0.0.0.0)
-        - Uses random ephemeral port
-        - Uses hard-to-guess callback path with GUID
+        - Uses random ephemeral port if default is busy
         - Accepts exactly one request then shuts down
         - Validates state parameter for CSRF protection
+        - Uses PKCE (code_challenge) to prevent authorization code interception
 
     .PARAMETER AuthorizeEndpoint
         The OAuth authorization endpoint URL.
@@ -71,9 +71,10 @@ function Invoke-OAuthBrowserFlow {
 
     Write-Verbose "Generated PKCE code verifier and challenge"
 
-    # Generate a random callback path for security (RFC 8252 defence in depth)
-    $callbackId = [Guid]::NewGuid().ToString('N')
-    $callbackPath = "/callback/$callbackId/"
+    # Use a fixed callback path for IDP compatibility
+    # Security is provided by PKCE + state parameter, not by path obscurity
+    # Entra ID and other IDPs require exact redirect URI matching
+    $callbackPath = "/callback/"
 
     # Find an available port on 127.0.0.1 loopback only (RFC 8252 Section 7.3)
     $listener = $null
@@ -83,12 +84,12 @@ function Invoke-OAuthBrowserFlow {
     for ($i = 0; $i -lt $maxPortAttempts; $i++) {
         try {
             $listener = [System.Net.HttpListener]::new()
-            # SECURITY: Bind to 127.0.0.1 explicitly, not localhost or 0.0.0.0
-            # This ensures the listener only accepts connections from the local machine
-            $redirectUri = "http://127.0.0.1:$actualPort$callbackPath"
+            # Use localhost for IDP compatibility (Entra ID prefers http://localhost)
+            # HttpListener on localhost still only accepts local connections
+            $redirectUri = "http://localhost:$actualPort$callbackPath"
             $listener.Prefixes.Add($redirectUri)
             $listener.Start()
-            Write-Verbose "Started HTTP listener on 127.0.0.1:$actualPort with callback path $callbackPath"
+            Write-Verbose "Started HTTP listener on localhost:$actualPort with callback path $callbackPath"
             break
         }
         catch {
@@ -104,7 +105,7 @@ function Invoke-OAuthBrowserFlow {
     }
 
     try {
-        $redirectUri = "http://127.0.0.1:$actualPort$callbackPath"
+        $redirectUri = "http://localhost:$actualPort$callbackPath"
 
         # Generate cryptographically random state for CSRF protection
         $stateBytes = [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)

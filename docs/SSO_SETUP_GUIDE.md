@@ -67,13 +67,16 @@ After registration, note these values from the **Overview** page:
 To enable interactive browser-based authentication for the JIM PowerShell module:
 
 1. Go to **Authentication**
-2. Click **Add Redirect URI**
+2. Click **Add a platform**
 3. Select **Mobile and desktop applications**
-4. Add custom redirect URI: `http://127.0.0.1`
-5. Click **Configure**
-6. Click the **Settings** tab
-7. Set **Allow public client flows** to **Yes**
-8. Click **Save**
+4. Check the suggested redirect URI: `https://login.microsoftonline.com/common/oauth2/nativeclient`
+5. In **Custom redirect URIs**, add: `http://localhost`
+6. Click **Configure**
+7. Scroll down to **Advanced settings**
+8. Set **Allow public client flows** to **Yes**
+9. Click **Save**
+
+> **Note**: The `http://localhost` redirect URI enables RFC 8252 loopback authentication. Entra ID will accept any port on localhost (e.g., `http://localhost:8400/callback/`).
 
 ### Step 5: Expose an API
 
