@@ -66,8 +66,8 @@ html[lang] {
     --jim-json-null: #ff8a80;       /* Soft coral/pink from logo */
 
     /* === JIM Custom: Navigation === */
-    /* Neutral nav links matching drawer text instead of blue accent */
-    --jim-nav-top-level-color: #acb0b3;
+    /* Parent nav items brighter than drawer text for visual hierarchy */
+    --jim-nav-top-level-color: #cdd0d4;
     --jim-nav-hover-color: #f0f0f4;
     --jim-nav-active-color: #f0f0f4;
 
