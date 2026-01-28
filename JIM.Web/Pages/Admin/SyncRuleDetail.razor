@@ -33,22 +33,7 @@ else if (_syncRule != null)
             <MudText Typo="Typo.h5" Class="mb-5">Details</MudText>
             @if (_syncRule.Id > 0)
             {
-                <div class="d-flex gap-2">
-                    <MudTooltip Text="@_syncRule.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info">
-                            Created @_syncRule.Created.ToLocalTime().ToRelativeTime()@if (_syncRule.CreatedBy != null)
-                            {<text> by @_syncRule.CreatedBy.DisplayName</text>}
-                        </MudChip>
-                    </MudTooltip>
-                    @if (_syncRule.LastUpdated.HasValue)
-                    {
-                        <MudTooltip Text="@_syncRule.LastUpdated.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                            <MudChip T="string" Variant="Variant.Text" Color="Color.Info">
-                                Updated @_syncRule.LastUpdated.Value.ToLocalTime().ToRelativeTime()
-                            </MudChip>
-                        </MudTooltip>
-                    }
-                </div>
+                <AuditInfo Entity="@_syncRule" />
             }
         </div>
 

@@ -1,4 +1,6 @@
+using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 namespace JIM.Models.Logic;
 
@@ -13,7 +15,7 @@ namespace JIM.Models.Logic;
 ///
 /// Multiple rules can be defined with different Order values for cascading/fallback matching.
 /// </summary>
-public class ObjectMatchingRule
+public class ObjectMatchingRule : IAuditable
 {
     public int Id { get; set; }
 
@@ -24,6 +26,43 @@ public class ObjectMatchingRule
     public int Order { get; set; }
 
     public DateTime Created { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// The type of security principal that created this entity.
+    /// </summary>
+    public ActivityInitiatorType CreatedByType { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the principal that created this entity.
+    /// Null for system-created (seeded) entities.
+    /// </summary>
+    public Guid? CreatedById { get; set; }
+
+    /// <summary>
+    /// The display name of the principal at the time of creation.
+    /// Retained even if the principal is later deleted.
+    /// </summary>
+    public string? CreatedByName { get; set; }
+
+    /// <summary>
+    /// When the entity was last modified (UTC). Null if never modified after creation.
+    /// </summary>
+    public DateTime? LastUpdated { get; set; }
+
+    /// <summary>
+    /// The type of security principal that last modified this entity.
+    /// </summary>
+    public ActivityInitiatorType LastUpdatedByType { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the principal that last modified this entity.
+    /// </summary>
+    public Guid? LastUpdatedById { get; set; }
+
+    /// <summary>
+    /// The display name of the principal at the time of the last modification.
+    /// </summary>
+    public string? LastUpdatedByName { get; set; }
 
     /// <summary>
     /// Optional backlink to a SyncRule when this rule is defined at the sync rule level (Mode B).

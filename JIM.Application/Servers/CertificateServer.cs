@@ -2,6 +2,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Interfaces;
+using JIM.Application.Utilities;
 using Serilog;
 using System.Security.Cryptography.X509Certificates;
 
@@ -79,11 +80,10 @@ public class CertificateServer : ICertificateProvider
                 CertificateData = certificateData,
                 FilePath = null,
                 IsEnabled = true,
-                CreatedAt = DateTime.UtcNow,
-                CreatedBy = initiatedBy?.DisplayName,
                 Notes = notes
             };
 
+            AuditHelper.SetCreated(certificate, initiatedBy);
             Log.Information("Adding trusted certificate '{Name}' (Thumbprint: {Thumbprint}) from uploaded data", name, thumbprint);
             var result = await Application.Repository.TrustedCertificates.CreateAsync(certificate);
 
@@ -140,11 +140,10 @@ public class CertificateServer : ICertificateProvider
                 CertificateData = null,
                 FilePath = filePath,
                 IsEnabled = true,
-                CreatedAt = DateTime.UtcNow,
-                CreatedBy = initiatedBy?.DisplayName,
                 Notes = notes
             };
 
+            AuditHelper.SetCreated(certificate, initiatedBy);
             Log.Information("Adding trusted certificate '{Name}' (Thumbprint: {Thumbprint}) from file path: {FilePath}", name, thumbprint, filePath);
             var result = await Application.Repository.TrustedCertificates.CreateAsync(certificate);
 
@@ -197,6 +196,7 @@ public class CertificateServer : ICertificateProvider
                 certificate.IsEnabled = isEnabled.Value;
             }
 
+            AuditHelper.SetUpdated(certificate, initiatedBy);
             Log.Information("Updating trusted certificate '{Name}' (ID: {Id})", certificate.Name, id);
             await Application.Repository.TrustedCertificates.UpdateAsync(certificate);
 

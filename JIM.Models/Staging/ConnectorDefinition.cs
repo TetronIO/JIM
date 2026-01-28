@@ -1,7 +1,8 @@
-﻿using JIM.Models.Interfaces;
+﻿using JIM.Models.Activities;
+using JIM.Models.Interfaces;
 namespace JIM.Models.Staging;
 
-public class ConnectorDefinition : IConnectorCapabilities
+public class ConnectorDefinition : IAuditable, IConnectorCapabilities
 {
     public int Id { get; set; }
 
@@ -13,7 +14,39 @@ public class ConnectorDefinition : IConnectorCapabilities
 
     public DateTime Created { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// The type of security principal that created this entity.
+    /// </summary>
+    public ActivityInitiatorType CreatedByType { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the principal that created this entity.
+    /// Null for system-created (seeded) entities.
+    /// </summary>
+    public Guid? CreatedById { get; set; }
+
+    /// <summary>
+    /// The display name of the principal at the time of creation.
+    /// Retained even if the principal is later deleted.
+    /// </summary>
+    public string? CreatedByName { get; set; }
+
     public DateTime? LastUpdated { get; set; }
+
+    /// <summary>
+    /// The type of security principal that last modified this entity.
+    /// </summary>
+    public ActivityInitiatorType LastUpdatedByType { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the principal that last modified this entity.
+    /// </summary>
+    public Guid? LastUpdatedById { get; set; }
+
+    /// <summary>
+    /// The display name of the principal at the time of the last modification.
+    /// </summary>
+    public string? LastUpdatedByName { get; set; }
 
     /// <summary>
     /// Is this a Connector built-in to JIM itself, or third-party supplied?

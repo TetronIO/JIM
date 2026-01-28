@@ -1,10 +1,13 @@
+using JIM.Models.Activities;
+using JIM.Models.Interfaces;
+
 namespace JIM.Models.Core;
 
 /// <summary>
 /// Represents a trusted CA certificate stored in the JIM certificate store.
 /// Used by connectors for validating secure connections (LDAPS, HTTPS, etc.).
 /// </summary>
-public class TrustedCertificate
+public class TrustedCertificate : IAuditable
 {
     /// <summary>
     /// Unique identifier for the certificate record.
@@ -70,14 +73,46 @@ public class TrustedCertificate
     public bool IsEnabled { get; set; } = true;
 
     /// <summary>
-    /// When the certificate record was created.
+    /// When the entity was created (UTC).
     /// </summary>
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime Created { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// Username or identifier of who added the certificate.
+    /// The type of security principal that created this entity.
     /// </summary>
-    public string? CreatedBy { get; set; }
+    public ActivityInitiatorType CreatedByType { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the principal that created this entity.
+    /// Null for system-created (seeded) entities.
+    /// </summary>
+    public Guid? CreatedById { get; set; }
+
+    /// <summary>
+    /// The display name of the principal at the time of creation.
+    /// Retained even if the principal is later deleted.
+    /// </summary>
+    public string? CreatedByName { get; set; }
+
+    /// <summary>
+    /// When the entity was last modified (UTC). Null if never modified after creation.
+    /// </summary>
+    public DateTime? LastUpdated { get; set; }
+
+    /// <summary>
+    /// The type of security principal that last modified this entity.
+    /// </summary>
+    public ActivityInitiatorType LastUpdatedByType { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the principal that last modified this entity.
+    /// </summary>
+    public Guid? LastUpdatedById { get; set; }
+
+    /// <summary>
+    /// The display name of the principal at the time of the last modification.
+    /// </summary>
+    public string? LastUpdatedByName { get; set; }
 
     /// <summary>
     /// Optional notes about the certificate (e.g., purpose, renewal info).

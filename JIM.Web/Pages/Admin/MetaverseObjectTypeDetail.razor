@@ -15,17 +15,17 @@
 
 @if (_metaverseObjectType != null)
 {
-    <MudText Typo="Typo.h5" Class="mt-5">Details</MudText>
-    <MudPaper Class="pa-5 mt-5" Outlined="true">
+    <div class="d-flex justify-space-between align-center mt-5">
+        <MudText Typo="Typo.h5">Details</MudText>
+        <AuditInfo Entity="@_metaverseObjectType" />
+    </div>
+    <MudPaper Class="pa-5 mt-3" Outlined="true">
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
                 <MudField Label="Name" Variant="Variant.Outlined">@_metaverseObjectType.Name</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudField Label="Plural Name" Variant="Variant.Outlined">@_metaverseObjectType.PluralName</MudField>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Created" Variant="Variant.Outlined">@_metaverseObjectType.Created</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudField Label="Built-in?" Variant="Variant.Outlined">@(_metaverseObjectType.BuiltIn ? "Yes" : "No")</MudField>

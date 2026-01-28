@@ -6,6 +6,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
+using JIM.Application.Utilities;
 using Serilog;
 using System.Diagnostics;
 
@@ -152,6 +153,7 @@ internal class SeedingServer
         if (userObjectType == null)
         {
             userObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.User, PluralName = "Users", BuiltIn = true };
+            AuditHelper.SetCreatedBySystem(userObjectType);
             objectTypesToCreate.Add(userObjectType);
             Log.Information("SeedAsync: Preparing MetaverseObjectType User");
         }
@@ -243,6 +245,7 @@ internal class SeedingServer
         if (groupObjectType == null)
         {
             groupObjectType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.Group, PluralName = "Groups", BuiltIn = true };
+            AuditHelper.SetCreatedBySystem(groupObjectType);
             objectTypesToCreate.Add(groupObjectType);
             Log.Information("SeedAsync: Preparing MetaverseObjectType Group");
         }
@@ -474,6 +477,7 @@ internal class SeedingServer
                 BuiltIn = true,
                 Name = Constants.BuiltInRoles.Administrator
             };
+            AuditHelper.SetCreatedBySystem(administratorRole);
             rolesToCreate.Add(administratorRole);
             Log.Information($"SeedAsync: Preparing Role: {Constants.BuiltInRoles.Administrator}");
         }
@@ -987,6 +991,7 @@ internal class SeedingServer
                 Type = attributeDataType,
                 BuiltIn = true
             };
+            AuditHelper.SetCreatedBySystem(attribute);
             attributeList.Add(attribute);
             Log.Verbose($"GetOrPrepareMetaverseAttributeAsync: Prepared {name}");
         }

@@ -110,7 +110,7 @@ public class ActivityServerValidationTests
             KeyPrefix = "jim_ak_1234",
             KeyHash = "dummy_hash",
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow
+            Created = DateTime.UtcNow
         };
 
         var activity = new Activity
@@ -195,7 +195,7 @@ public class ActivityServerValidationTests
             KeyPrefix = "jim_ak_test",
             KeyHash = "dummy_hash",
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow
+            Created = DateTime.UtcNow
         };
 
         // The CreateActivityAsync overload for ApiKey will set proper values
@@ -238,7 +238,7 @@ public class ActivityServerValidationTests
             KeyPrefix = "jim_ak_test",
             KeyHash = "dummy_hash",
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow
+            Created = DateTime.UtcNow
         };
 
         var activity = new Activity
@@ -275,7 +275,7 @@ public class ActivityServerValidationTests
             KeyPrefix = "jim_ak_test",
             KeyHash = "dummy_hash",
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow
+            Created = DateTime.UtcNow
         };
 
         var activity = new Activity

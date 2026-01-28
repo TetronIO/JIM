@@ -1,10 +1,12 @@
-﻿using JIM.Models.DataGeneration;
+﻿using JIM.Models.Activities;
+using JIM.Models.DataGeneration;
+using JIM.Models.Interfaces;
 using JIM.Models.Search;
 using Microsoft.EntityFrameworkCore;
 namespace JIM.Models.Core;
 
 [Index(nameof(Name))]
-public class MetaverseObjectType
+public class MetaverseObjectType : IAuditable
 {
     public int Id { get; set; }
 
@@ -19,6 +21,44 @@ public class MetaverseObjectType
     public string PluralName { get; set; } = null!;
 
     public DateTime Created { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// The type of security principal that created this entity.
+    /// </summary>
+    public ActivityInitiatorType CreatedByType { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the principal that created this entity.
+    /// Null for system-created (seeded) entities.
+    /// </summary>
+    public Guid? CreatedById { get; set; }
+
+    /// <summary>
+    /// The display name of the principal at the time of creation.
+    /// Retained even if the principal is later deleted.
+    /// </summary>
+    public string? CreatedByName { get; set; }
+
+    /// <summary>
+    /// When the entity was last modified (UTC). Null if never modified after creation.
+    /// </summary>
+    public DateTime? LastUpdated { get; set; }
+
+    /// <summary>
+    /// The type of security principal that last modified this entity.
+    /// </summary>
+    public ActivityInitiatorType LastUpdatedByType { get; set; }
+
+    /// <summary>
+    /// The unique identifier of the principal that last modified this entity.
+    /// </summary>
+    public Guid? LastUpdatedById { get; set; }
+
+    /// <summary>
+    /// The display name of the principal at the time of the last modification.
+    /// </summary>
+    public string? LastUpdatedByName { get; set; }
+
     public List<MetaverseAttribute> Attributes { get; set; } = new();
     public bool BuiltIn { get; set; }
     public List<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; } = null!;

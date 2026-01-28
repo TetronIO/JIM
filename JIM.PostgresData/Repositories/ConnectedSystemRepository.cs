@@ -2064,8 +2064,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(g => g.ChildGroups)
             .ThenInclude(cg => cg.Criteria)
             .ThenInclude(c => c.MetaverseAttribute)
-            .Include(sr => sr.CreatedBy) // needs basic attributes included to use as a link to the user in the ui
-            .ThenInclude(cb => cb!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+            // CreatedByName is now a string property on SyncRule (IAuditable) - no Include needed
             .Include(sr => sr.MetaverseObjectType)
             .ThenInclude(mvot => mvot.Attributes.OrderBy(a => a.Name))
             .Include(sr => sr.ObjectMatchingRules.OrderBy(q => q.Order))

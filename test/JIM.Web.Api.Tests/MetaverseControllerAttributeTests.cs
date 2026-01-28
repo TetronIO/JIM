@@ -55,7 +55,7 @@ public class MetaverseControllerAttributeTests
             KeyHash = "test-hash",
             KeyPrefix = "test",
             IsEnabled = true,
-            CreatedAt = DateTime.UtcNow
+            Created = DateTime.UtcNow
         };
 
         // Set up the API key repository to return our test API key

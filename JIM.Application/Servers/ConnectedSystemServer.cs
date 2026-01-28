@@ -13,6 +13,7 @@ using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
+using JIM.Application.Utilities;
 using Serilog;
 
 namespace JIM.Application.Servers;
@@ -141,6 +142,7 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Create
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        AuditHelper.SetCreated(connectedSystem, initiatedBy);
         await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -195,6 +197,7 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Create
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        AuditHelper.SetCreated(connectedSystem, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -213,7 +216,7 @@ public class ConnectedSystemServer
         var validationResults = ValidateConnectedSystemSettings(connectedSystem);
         connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
 
-        connectedSystem.LastUpdated = DateTime.UtcNow;
+        AuditHelper.SetUpdated(connectedSystem, initiatedBy);
 
         // every CRUD operation requires tracking with an activity...
         var activity = new Activity
@@ -225,7 +228,7 @@ public class ConnectedSystemServer
             ConnectedSystemId = connectedSystem.Id
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
-            
+
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
@@ -249,7 +252,7 @@ public class ConnectedSystemServer
         var validationResults = ValidateConnectedSystemSettings(connectedSystem);
         connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
 
-        connectedSystem.LastUpdated = DateTime.UtcNow;
+        AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
 
         // every CRUD operation requires tracking with an activity...
         var activity = new Activity
@@ -329,7 +332,7 @@ public class ConnectedSystemServer
 
         // Update the Connected System mode
         connectedSystem.ObjectMatchingRuleMode = newMode;
-        connectedSystem.LastUpdated = DateTime.UtcNow;
+        AuditHelper.SetUpdated(connectedSystem, initiatedBy);
 
         // Create activity for tracking
         var activity = new Activity
@@ -2852,6 +2855,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
+        AuditHelper.SetCreated(mapping, initiatedBy);
         await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
 
         await Application.Activities.CompleteActivityAsync(activity);
@@ -2877,6 +2881,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
+        AuditHelper.SetCreated(mapping, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
 
         await Application.Activities.CompleteActivityAsync(activity);
@@ -2904,6 +2909,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
+        AuditHelper.SetUpdated(mapping, initiatedBy);
         await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingAsync(mapping);
 
         await Application.Activities.CompleteActivityAsync(activity);
@@ -2985,6 +2991,7 @@ public class ConnectedSystemServer
             ConnectedSystemId = connectedSystemRunProfile.ConnectedSystemId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        AuditHelper.SetCreated(connectedSystemRunProfile, initiatedBy);
         await Application.Repository.ConnectedSystems.CreateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
 
         // now the run profile has been persisted, associated it with the activity and complete it.
@@ -3013,6 +3020,7 @@ public class ConnectedSystemServer
             ConnectedSystemId = connectedSystemRunProfile.ConnectedSystemId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        AuditHelper.SetCreated(connectedSystemRunProfile, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.CreateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
 
         activity.ConnectedSystemRunProfileId = connectedSystemRunProfile.Id;
@@ -3061,6 +3069,7 @@ public class ConnectedSystemServer
             ConnectedSystemId = connectedSystemRunProfile.ConnectedSystemId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        AuditHelper.SetUpdated(connectedSystemRunProfile, initiatedBy);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -3331,7 +3340,7 @@ public class ConnectedSystemServer
         {
             // new sync rule - create
             activity.TargetOperationType = ActivityTargetOperationType.Create;
-            syncRule.CreatedBy = initiatedBy;
+            AuditHelper.SetCreated(syncRule, initiatedBy);
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
             await Application.Repository.ConnectedSystems.CreateSyncRuleAsync(syncRule);
         }
@@ -3339,7 +3348,7 @@ public class ConnectedSystemServer
         {
             // existing sync rule - update
             activity.TargetOperationType = ActivityTargetOperationType.Update;
-            syncRule.LastUpdated = DateTime.UtcNow;
+            AuditHelper.SetUpdated(syncRule, initiatedBy);
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
         }
@@ -3403,13 +3412,14 @@ public class ConnectedSystemServer
         if (syncRule.Id == 0)
         {
             activity.TargetOperationType = ActivityTargetOperationType.Create;
+            AuditHelper.SetCreated(syncRule, initiatedByApiKey);
             await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
             await Application.Repository.ConnectedSystems.CreateSyncRuleAsync(syncRule);
         }
         else
         {
             activity.TargetOperationType = ActivityTargetOperationType.Update;
-            syncRule.LastUpdated = DateTime.UtcNow;
+            AuditHelper.SetUpdated(syncRule, initiatedByApiKey);
             await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
         }
@@ -3487,6 +3497,7 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Create
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        AuditHelper.SetCreated(rule, initiatedBy);
         await Application.Repository.ConnectedSystems.CreateObjectMatchingRuleAsync(rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -3504,6 +3515,7 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Create
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        AuditHelper.SetCreated(rule, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.CreateObjectMatchingRuleAsync(rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -3521,6 +3533,7 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Update
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        AuditHelper.SetUpdated(rule, initiatedBy);
         await Application.Repository.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }

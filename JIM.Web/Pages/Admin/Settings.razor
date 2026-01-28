@@ -91,7 +91,21 @@
                 }
                 else if (settingContext.IsOverridden)
                 {
-                    <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit">Modified</MudChip>
+                    <MudTooltip Arrow="true" Placement="Placement.Top">
+                        <TooltipContent>
+                            @if (settingContext.LastUpdated.HasValue)
+                            {
+                                <MudText Typo="Typo.caption">Modified @settingContext.LastUpdated.Value.ToLocalTime().ToFriendlyDate()</MudText>
+                                @if (settingContext.LastUpdatedByName != null)
+                                {
+                                    <MudText Typo="Typo.caption">by @settingContext.LastUpdatedByName</MudText>
+                                }
+                            }
+                        </TooltipContent>
+                        <ChildContent>
+                            <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit">Modified</MudChip>
+                        </ChildContent>
+                    </MudTooltip>
                 }
                 else
                 {

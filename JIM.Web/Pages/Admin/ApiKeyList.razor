@@ -400,6 +400,7 @@
                 Roles = roles
             };
 
+            apiKey.Created = DateTime.UtcNow;
             await Jim.Repository.ApiKeys.CreateAsync(apiKey);
 
             Snackbar.Add("API key created successfully.", Severity.Success);
