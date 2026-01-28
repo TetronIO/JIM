@@ -1,14 +1,26 @@
-﻿using JIM.Models.Exceptions;
+﻿using JIM.Models.Activities;
+using JIM.Models.Exceptions;
+using JIM.Models.Interfaces;
 using Microsoft.EntityFrameworkCore;
 namespace JIM.Models.DataGeneration;
 
 [Index(nameof(Name))]
-public class DataGenerationTemplate
+public class DataGenerationTemplate : IAuditable
 {
     public int Id { get; set; }
     public string Name { get; set; } = null!;
     public bool BuiltIn { get; set; }
-    public DateTime Created { set; get; } = DateTime.UtcNow;
+
+    public DateTime Created { get; set; } = DateTime.UtcNow;
+    public ActivityInitiatorType CreatedByType { get; set; }
+    public Guid? CreatedById { get; set; }
+    public string? CreatedByName { get; set; }
+
+    public DateTime? LastUpdated { get; set; }
+    public ActivityInitiatorType LastUpdatedByType { get; set; }
+    public Guid? LastUpdatedById { get; set; }
+    public string? LastUpdatedByName { get; set; }
+
     public List<DataGenerationObjectType> ObjectTypes { get; } = new();
 
     public void Validate()

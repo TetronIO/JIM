@@ -546,7 +546,10 @@ internal class SeedingServer
         #region DataGenerationTemplates
         var template = await PrepareUsersAndGroupsDataGenerationTemplateAsync(userObjectType, groupObjectType, exampleDataSetsToCreate, attributesToCreate);
         if (template != null)
+        {
+            AuditHelper.SetCreatedBySystem(template);
             dataGenerationTemplatesToCreate.Add(template);
+        }
         #endregion
 
         #region Connector Definitions
