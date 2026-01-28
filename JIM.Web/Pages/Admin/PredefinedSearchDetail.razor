@@ -11,11 +11,15 @@
 
 @if (_predefinedSearch != null)
 {
-    <div class="d-flex justify-space-between align-center mt-5">
-        <MudText Typo="Typo.h5">Details</MudText>
-        <AuditInfo Entity="@_predefinedSearch" />
-    </div>
-    <MudPaper Class="pa-5 mt-5" Outlined="true">
+    <MudGrid Class="mt-5">
+        <MudItem xs="6">
+            <MudText Typo="Typo.h5">Details</MudText>
+        </MudItem>
+        <MudItem xs="6" Class="d-flex justify-end">
+            <AuditInfo Entity="@_predefinedSearch" />
+        </MudItem>
+    </MudGrid>
+    <MudPaper Class="pa-5 mt-3" Outlined="true">
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
                 <MudField Label="Name" Variant="Variant.Outlined">@_predefinedSearch.Name</MudField>
