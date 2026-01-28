@@ -23,6 +23,10 @@ html[lang] {
     --mud-palette-surface: #121826;
     --mud-palette-background-grey: rgba(255, 255, 255, 0.032);
 
+    /* === Inner Surface (nested containers — subtle step deeper than surface) === */
+    --jim-inner-surface: #1a2030;
+    --jim-inner-border-color: #252b3a;
+
     /* === Appbar === */
     --mud-palette-appbar-background: #1a1730;
     --mud-palette-appbar-text: #ffffffff;
