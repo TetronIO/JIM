@@ -217,6 +217,25 @@ public class ActivityServer
         return await Application.Repository.Activity.GetActivitiesAsync(page, pageSize, searchQuery, sortBy, sortDescending, initiatedById);
     }
 
+    /// <summary>
+    /// Retrieves a page's worth of worker task activities (run profile executions, data generation, system operations).
+    /// Filtered to show only activities related to worker tasks for the Operations page History tab.
+    /// </summary>
+    /// <param name="page">The page number (1-based).</param>
+    /// <param name="pageSize">The number of items per page.</param>
+    /// <param name="searchQuery">Optional search query to filter by TargetName or TargetContext.</param>
+    /// <param name="sortBy">Optional column to sort by.</param>
+    /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
+    public async Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
+        int page = 1,
+        int pageSize = 20,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true)
+    {
+        return await Application.Repository.Activity.GetWorkerTaskActivitiesAsync(page, pageSize, searchQuery, sortBy, sortDescending);
+    }
+
     #region synchronisation related
     /// <summary>
     /// Retrieves a page's worth of sync execution item headers for a specific activity.

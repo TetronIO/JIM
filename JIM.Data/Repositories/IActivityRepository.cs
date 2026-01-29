@@ -24,6 +24,13 @@ public interface IActivityRepository
         bool sortDescending = true,
         Guid? initiatedById = null);
 
+    public Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
+        int page,
+        int pageSize,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true);
+
     public Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(
         Guid activityId,
         int page,

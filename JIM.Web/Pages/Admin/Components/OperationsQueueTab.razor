@@ -1,0 +1,262 @@
+@using JIM.Application
+@using JIM.Models.Core
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+@using JIM.Models.Tasking
+@using JIM.Models.Tasking.DTOs
+@using JIM.PostgresData
+@using JIM.Utilities
+@inject JimApplication Jim
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@implements IDisposable
+
+<MudPaper Outlined="true" Class="pa-4">
+    <MudText Typo="Typo.h6">Execute a Run Profile</MudText>
+    <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Add a Synchronisation Run to the queue. If it's empty, it'll run immediately, if not, it'll run when all other queued tasks are complete.</MudText>
+
+    @if (_connectedSystemHeaders is { Count: > 0 })
+    {
+        <MudForm>
+            <MudGrid Class="mt-3">
+                <MudItem xs="12" sm="5">
+                    <MudSelect T="ConnectedSystemHeader" ValueChanged="HandleConnectedSystemHeaderChangedAsync" Label="Connected System" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true" RequiredError="Please select a Connected System">
+                        @foreach (var connectedSystem in _connectedSystemHeaders)
+                        {
+                            <MudSelectItem Value="@connectedSystem" />
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="5">
+                    <MudSelect T="ConnectedSystemRunProfile" @bind-Value="_selectedConnectedSystemRunProfile" Label="Run Profile" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true" RequiredError="A run profile is required" Disabled="@(_connectedSystemRunProfiles == null)">
+                        @if (_connectedSystemRunProfiles != null)
+                        {
+                            @foreach (var runProfile in _connectedSystemRunProfiles)
+                            {
+                                <MudSelectItem Value="@runProfile" />
+                            }
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="2" Class="d-flex align-end pb-2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleExecuteRunProfileSubmitAsync" DropShadow="false" FullWidth="true" Style="height: 50px;">Execute</MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    }
+    else
+    {
+        <MudAlert Class="mt-5" Severity="Severity.Warning">Please create a <MudLink Href="/admin/connected-systems/">Connected System</MudLink> first.</MudAlert>
+    }
+</MudPaper>
+
+<MudTable T="WorkerTaskHeader" Items="@_workerTaskHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
+    <HeaderContent>
+        <MudTh><MudText Typo="Typo.button">Type</MudText></MudTh>
+        <MudTh><MudText Typo="Typo.button">Name</MudText></MudTh>
+        <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
+        <MudTh Style="min-width: 200px;"><MudText Typo="Typo.button">Progress</MudText></MudTh>
+        <MudTh><MudText Typo="Typo.button">Created</MudText></MudTh>
+        <MudTh><MudText Typo="Typo.button">Initiated By</MudText></MudTh>
+        <MudTh Style="text-align: right;"><MudText Typo="Typo.button">Actions</MudText></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Type">@context.Type</MudTd>
+        <MudTd DataLabel="Name">@context.Name</MudTd>
+        <MudTd DataLabel="Status">@context.Status.ToString().SplitOnCapitalLetters()</MudTd>
+        <MudTd DataLabel="Progress">
+            @if (context.Status == WorkerTaskStatus.Processing)
+            {
+                @if (context.ObjectsToProcess > 0)
+                {
+                    var percentage = (double)context.ObjectsProcessed!.Value / context.ObjectsToProcess.Value * 100;
+                    <MudProgressLinear Value="@percentage" Color="Color.Primary" Rounded="true" Size="Size.Small" />
+                    <MudText Typo="Typo.caption" Class="mt-2">@context.ObjectsProcessed / @context.ObjectsToProcess@(!string.IsNullOrEmpty(context.ProgressMessage) ? $" - {context.ProgressMessage}" : "")</MudText>
+                }
+                else
+                {
+                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Rounded="true" Size="Size.Small" />
+                    @if (!string.IsNullOrEmpty(context.ProgressMessage))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.ProgressMessage</MudText>
+                    }
+                }
+            }
+            else if (context.Status == WorkerTaskStatus.Queued)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Waiting...</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Created">
+            <MudTooltip Text="@context.Timestamp.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                @context.Timestamp.ToLocalTime().ToRelativeTime()
+            </MudTooltip>
+        </MudTd>
+        <MudTd DataLabel="Initiated By">
+            @if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.User && context.InitiatedById != null)
+            {
+                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                <span>@context.InitiatedByName</span>
+            }
+            else if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.ApiKey)
+            {
+                <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                <span>@context.InitiatedByName</span>
+            }
+            else if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.System)
+            {
+                <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                <span>@(context.InitiatedByName ?? "Scheduler")</span>
+            }
+            else if (!string.IsNullOrEmpty(context.InitiatedByName))
+            {
+                <span>@context.InitiatedByName</span>
+            }
+        </MudTd>
+        <MudTd DataLabel="Actions" Style="text-align: right;">
+            <MudTooltip Text="Cancel" Arrow="true" Placement="Placement.Left">
+                <MudIconButton Icon="@Icons.Material.Outlined.Cancel" Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" OnClick="() => HandleCancelTaskAsync(context)" />
+            </MudTooltip>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        There are no service tasks queued.
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private List<ConnectedSystemHeader>? _connectedSystemHeaders;
+    private List<ConnectedSystemRunProfile>? _connectedSystemRunProfiles;
+    private ConnectedSystemHeader? _selectedConnectedSystemHeader;
+    private ConnectedSystemRunProfile? _selectedConnectedSystemRunProfile;
+    private List<WorkerTaskHeader> _workerTaskHeaders = new();
+    private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+
+        // Get initial data for worker task table rendering
+        _workerTaskHeaders = await Jim.Tasking.GetWorkerTaskHeadersAsync();
+
+        // Setup polling for worker task header updates
+        var token = _pollingCancellationTokenSource.Token;
+        _ = Task.Factory.StartNew(async () =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                // Get a new JIM instance so we bypass Entity Framework caching
+                var iterationJim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
+
+                var stateHasChanged = false;
+                var newWorkerTaskHeaders = await iterationJim.Tasking.GetWorkerTaskHeadersAsync();
+
+                // Look for additions or updates
+                foreach (var newWorkerTaskHeader in newWorkerTaskHeaders)
+                {
+                    var workerTaskHeader = _workerTaskHeaders.SingleOrDefault(q => q.Id == newWorkerTaskHeader.Id);
+                    if (workerTaskHeader == null)
+                    {
+                        _workerTaskHeaders.Add(newWorkerTaskHeader);
+                        stateHasChanged = true;
+                    }
+                    else if (HasWorkerTaskHeaderChanged(workerTaskHeader, newWorkerTaskHeader))
+                    {
+                        var position = _workerTaskHeaders.IndexOf(workerTaskHeader);
+                        _workerTaskHeaders.Remove(workerTaskHeader);
+                        _workerTaskHeaders.Insert(position, newWorkerTaskHeader);
+                        stateHasChanged = true;
+                    }
+                }
+
+                // Look for removals
+                var workerTaskHeadersToRemove = _workerTaskHeaders.Where(sth => newWorkerTaskHeaders.All(sth2 => sth2.Id != sth.Id)).ToList();
+                foreach (var workerTaskHeaderToRemove in workerTaskHeadersToRemove)
+                {
+                    _workerTaskHeaders.Remove(workerTaskHeaderToRemove);
+                    stateHasChanged = true;
+                }
+
+                if (stateHasChanged)
+                    await InvokeAsync(StateHasChanged);
+
+                // Use the configurable polling interval from settings
+                var pollingInterval = await iterationJim.ServiceSettings.GetSettingValueAsync(
+                    Constants.SettingKeys.ProgressUpdateInterval,
+                    TimeSpan.FromSeconds(1));
+
+                try
+                {
+                    await Task.Delay(pollingInterval, token);
+                }
+                catch (TaskCanceledException)
+                {
+                    break;
+                }
+            }
+        }, token);
+    }
+
+    void IDisposable.Dispose()
+    {
+        _pollingCancellationTokenSource.Cancel();
+    }
+
+    private async Task HandleConnectedSystemHeaderChangedAsync(ConnectedSystemHeader connectedSystemHeader)
+    {
+        _selectedConnectedSystemHeader = connectedSystemHeader;
+        _connectedSystemRunProfiles = await Jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemHeader.Id);
+    }
+
+    private async Task HandleExecuteRunProfileSubmitAsync()
+    {
+        if (_selectedConnectedSystemHeader == null || _selectedConnectedSystemRunProfile == null)
+            return;
+
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        var task = new SynchronisationWorkerTask(_selectedConnectedSystemHeader.Id, _selectedConnectedSystemRunProfile.Id, user);
+        var result = await Jim.Tasking.CreateWorkerTaskAsync(task);
+
+        if (!result.Success)
+        {
+            Snackbar.Add(result.ErrorMessage ?? "Failed to create task.", Severity.Error);
+            return;
+        }
+
+        foreach (var warning in result.Warnings)
+        {
+            Snackbar.Add(warning, Severity.Warning);
+        }
+
+        Snackbar.Add("Synchronisation task added.", Severity.Success);
+    }
+
+    private async Task HandleCancelTaskAsync(WorkerTaskHeader workerTaskHeader)
+    {
+        if (workerTaskHeader == null)
+            return;
+
+        var result = await DialogService.ShowMessageBox(
+            "Cancel Task",
+            $"Are you sure you want to cancel the task '{workerTaskHeader.Name}'?",
+            yesText: "Cancel Task",
+            cancelText: "Keep Running");
+
+        if (result != true)
+            return;
+
+        await Jim.Tasking.CancelWorkerTaskAsync(workerTaskHeader.Id);
+        Snackbar.Add("Worker task cancellation requested.", Severity.Success);
+    }
+
+    private static bool HasWorkerTaskHeaderChanged(WorkerTaskHeader existing, WorkerTaskHeader updated)
+    {
+        return existing.Status != updated.Status ||
+               existing.ObjectsProcessed != updated.ObjectsProcessed ||
+               existing.ObjectsToProcess != updated.ObjectsToProcess ||
+               existing.ProgressMessage != updated.ProgressMessage;
+    }
+}

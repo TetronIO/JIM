@@ -482,6 +482,54 @@ html[lang] .jim-paper-danger-zone {
     box-shadow: none !important;
 }
 
+/* Activity detail slide-out panel (Operations History) */
+.jim-activity-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 500px;
+    max-width: 90vw;
+    height: 100vh;
+    background: var(--mud-palette-surface);
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.2);
+    transform: translateX(100%);
+    transition: transform 0.25s ease-in-out;
+    z-index: 1300;
+    overflow: hidden;
+}
+
+.jim-activity-panel-open {
+    transform: translateX(0);
+}
+
+/* Activity panel expansion panels - remove extra margins and shadows */
+.jim-activity-panel .mud-expand-panels {
+    margin: 0 !important;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 8px;
+}
+
+.jim-activity-panel .mud-expand-panel {
+    margin: 0 !important;
+    box-shadow: none !important;
+}
+
+.jim-activity-panel .mud-expand-panel::before {
+    box-shadow: none !important;
+}
+
+/* Remove default gutters from expansion panel content */
+.jim-activity-panel .mud-expand-panel-content.mud-expand-panel-gutters {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+}
+
+/* Remove shadow from tables inside the activity panel */
+.jim-activity-panel .mud-table,
+.jim-activity-panel .mud-simple-table {
+    box-shadow: none !important;
+}
+
 /* JSON syntax highlighting colours are defined in css/themes/ files */
 
 .jim-json-syntax {

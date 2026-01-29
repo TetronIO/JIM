@@ -145,6 +145,116 @@ public class ActivityRepository : IActivityRepository
             .SingleOrDefaultAsync(a => a.Id == id);
     }
 
+    /// <summary>
+    /// Retrieves a page's worth of worker task activities - operations executed by the worker service
+    /// such as run profile executions, data generation, and connected system operations.
+    /// </summary>
+    public async Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
+        int page,
+        int pageSize,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true)
+    {
+        if (pageSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
+
+        if (page < 1)
+            page = 1;
+
+        // limit page size to avoid increasing latency unnecessarily
+        if (pageSize > 100)
+            pageSize = 100;
+
+        // Worker task activity types - operations executed by the worker service
+        var workerTaskTargetTypes = new[]
+        {
+            ActivityTargetType.ConnectedSystemRunProfile,
+            ActivityTargetType.DataGenerationTemplate,
+            ActivityTargetType.ConnectedSystem,
+            ActivityTargetType.HistoryRetentionCleanup
+        };
+
+        // Worker task operations
+        var workerTaskOperations = new[]
+        {
+            ActivityTargetOperationType.Execute,
+            ActivityTargetOperationType.Clear,
+            ActivityTargetOperationType.Delete
+        };
+
+        var query = Repository.Database.Activities
+            .AsSplitQuery()
+            .Include(a => a.InitiatedByMetaverseObject)
+            .ThenInclude(ib => ib!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
+            .ThenInclude(av => av.Attribute)
+            .Include(st => st.InitiatedByMetaverseObject)
+            .ThenInclude(ib => ib!.Type)
+            .Include(a => a.InitiatedByApiKey)
+            .Where(a => a.ParentActivityId == null)
+            .Where(a => workerTaskTargetTypes.Contains(a.TargetType) && workerTaskOperations.Contains(a.TargetOperationType))
+            .AsQueryable();
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            var searchLower = searchQuery.ToLower();
+            query = query.Where(a =>
+                (a.TargetName != null && a.TargetName.ToLower().Contains(searchLower)) ||
+                EF.Functions.ILike(a.TargetType.ToString(), $"%{searchQuery}%"));
+        }
+
+        // Apply sorting
+        query = sortBy?.ToLower() switch
+        {
+            "targettype" or "type" => sortDescending
+                ? query.OrderByDescending(a => a.TargetType)
+                : query.OrderBy(a => a.TargetType),
+            "targetname" or "target" => sortDescending
+                ? query.OrderByDescending(a => a.TargetName)
+                : query.OrderBy(a => a.TargetName),
+            "targetoperationtype" or "operation" => sortDescending
+                ? query.OrderByDescending(a => a.TargetOperationType)
+                : query.OrderBy(a => a.TargetOperationType),
+            "initiatedbyname" or "initiatedby" => sortDescending
+                ? query.OrderByDescending(a => a.InitiatedByName)
+                : query.OrderBy(a => a.InitiatedByName),
+            "status" => sortDescending
+                ? query.OrderByDescending(a => a.Status)
+                : query.OrderBy(a => a.Status),
+            "executiontime" => sortDescending
+                ? query.OrderByDescending(a => a.ExecutionTime)
+                : query.OrderBy(a => a.ExecutionTime),
+            _ => sortDescending
+                ? query.OrderByDescending(a => a.Created)
+                : query.OrderBy(a => a.Created)
+        };
+
+        // Get total count for pagination
+        var grossCount = await query.CountAsync();
+        var offset = (page - 1) * pageSize;
+        var results = await query.Skip(offset).Take(pageSize).ToListAsync();
+
+        var pagedResultSet = new PagedResultSet<Activity>
+        {
+            PageSize = pageSize,
+            TotalResults = grossCount,
+            CurrentPage = page,
+            Results = results
+        };
+
+        if (page == 1 && pagedResultSet.TotalPages == 0)
+            return pagedResultSet;
+
+        // don't let users try and request a page that doesn't exist
+        if (page <= pagedResultSet.TotalPages)
+            return pagedResultSet;
+
+        pagedResultSet.TotalResults = 0;
+        pagedResultSet.Results.Clear();
+        return pagedResultSet;
+    }
+
     #region synchronisation related
     public async Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(
         Guid activityId,
