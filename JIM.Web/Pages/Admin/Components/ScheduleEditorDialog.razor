@@ -124,7 +124,7 @@
                         <MudPaper Outlined="true" Class="pa-4">
                             <MudStack Spacing="3">
                                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                                    <MudText Typo="Typo.h6">@(_editingStep.Id == Guid.Empty ? "Add Step" : "Edit Step")</MudText>
+                                    <MudText Typo="Typo.h6">@(_isNewStep ? "Add Step" : "Edit Step")</MudText>
                                     <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="CancelStepEditor" Size="Size.Small" />
                                 </MudStack>
 
@@ -164,15 +164,6 @@
 
                                 <MudDivider Class="my-2" />
 
-                                <MudSelect T="StepExecutionMode" @bind-Value="_editingStep.ExecutionMode" Label="Execution Mode" Variant="Variant.Outlined">
-                                    <MudSelectItem Value="StepExecutionMode.Sequential">
-                                        Sequential - Wait for previous step(s) to complete
-                                    </MudSelectItem>
-                                    <MudSelectItem Value="StepExecutionMode.ParallelWithPrevious">
-                                        Parallel - Run concurrently with previous step
-                                    </MudSelectItem>
-                                </MudSelect>
-
                                 <MudSwitch @bind-Value="_editingStep.ContinueOnFailure" Color="Color.Warning"
                                            Label="@(_editingStep.ContinueOnFailure ? "Continue schedule if this step fails" : "Stop schedule if this step fails")" />
 
@@ -185,65 +176,104 @@
                     }
                     else
                     {
-                        @* Step List *@
-                        <MudStack Spacing="3">
+                        @* Block-based Step List *@
+                        <MudStack Spacing="4">
                             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                    Steps execute in order. Use parallel mode to run steps concurrently.
+                                    Steps in the same block run in parallel. Blocks execute sequentially.
                                 </MudText>
                                 <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
-                                           StartIcon="@Icons.Material.Filled.Add" OnClick="HandleAddStepAsync" Size="Size.Small">
-                                    Add Step
+                                           StartIcon="@Icons.Material.Filled.Add" OnClick="HandleAddBlockAsync" Size="Size.Small">
+                                    Add Block
                                 </MudButton>
                             </MudStack>
 
                             @if (_schedule.Steps.Count == 0)
                             {
                                 <MudAlert Severity="Severity.Info">
-                                    No steps have been added yet. Click "Add Step" to create the first step in this schedule.
+                                    No steps have been added yet. Click "Add Block" to create the first execution block.
                                 </MudAlert>
                             }
                             else
                             {
-                                <MudDropContainer T="ScheduleStep" Items="_schedule.Steps" ItemsSelector="@((item, zone) => true)"
-                                                  ItemDropped="HandleStepDropped" Class="d-flex flex-column">
-                                    <ChildContent>
-                                        <MudDropZone T="ScheduleStep" Identifier="steps" Class="jim-step-drop-zone d-flex flex-column gap-2"
-                                                     CanDropClass="mud-border-primary" NoDropClass="mud-border-error"
-                                                     AllowReorder="true" />
-                                    </ChildContent>
-                                    <ItemRenderer>
-                                        <MudPaper Outlined="true" Class="pa-3 jim-step-item">
-                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                                <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Class="jim-drag-handle" />
-
-                                                <MudStack Spacing="0" Style="flex: 1;">
+                                @* Render blocks grouped by StepIndex *@
+                                @foreach (var block in GetStepBlocks())
+                                {
+                                    <MudPaper Outlined="true" Class="jim-step-block">
+                                        <MudStack Spacing="0">
+                                            @* Block Header *@
+                                            <div class="jim-step-block-header">
+                                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
                                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                                        <MudText Typo="Typo.body1">@context.Name</MudText>
-                                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
-                                                                 Color="@(context.ExecutionMode == StepExecutionMode.ParallelWithPrevious ? Color.Info : Color.Default)">
-                                                            @(context.ExecutionMode == StepExecutionMode.ParallelWithPrevious ? "Parallel" : "Sequential")
-                                                        </MudChip>
+                                                        <MudText Typo="Typo.subtitle2">
+                                                            @if (block.Steps.Count > 1)
+                                                            {
+                                                                <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small" Class="mr-1" Style="vertical-align: middle; transform: rotate(180deg);" />
+                                                                @:Parallel Block @(block.BlockIndex + 1)
+                                                            }
+                                                            else
+                                                            {
+                                                                @:Block @(block.BlockIndex + 1)
+                                                            }
+                                                        </MudText>
+                                                        @if (block.Steps.Count > 1)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Info">
+                                                                @block.Steps.Count steps run together
+                                                            </MudChip>
+                                                        }
                                                     </MudStack>
-                                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                                        @GetStepTypeDescription(context)
-                                                    </MudText>
+                                                    <MudStack Row="true" Spacing="0">
+                                                        <MudTooltip Text="Add step to this block" Arrow="true" Placement="Placement.Top">
+                                                            <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small"
+                                                                           OnClick="@(() => HandleAddStepToBlockAsync(block.BlockIndex))" />
+                                                        </MudTooltip>
+                                                        <MudTooltip Text="Move block up" Arrow="true" Placement="Placement.Top">
+                                                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small"
+                                                                           Disabled="@(block.BlockIndex == 0)"
+                                                                           OnClick="@(() => MoveBlockUp(block.BlockIndex))" />
+                                                        </MudTooltip>
+                                                        <MudTooltip Text="Move block down" Arrow="true" Placement="Placement.Top">
+                                                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small"
+                                                                           Disabled="@(block.BlockIndex == GetMaxBlockIndex())"
+                                                                           OnClick="@(() => MoveBlockDown(block.BlockIndex))" />
+                                                        </MudTooltip>
+                                                        <MudTooltip Text="Delete entire block" Arrow="true" Placement="Placement.Top">
+                                                            <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error"
+                                                                           OnClick="@(() => HandleRemoveBlock(block.BlockIndex))" />
+                                                        </MudTooltip>
+                                                    </MudStack>
                                                 </MudStack>
-
-                                                <MudStack Row="true" Spacing="1">
-                                                    <MudTooltip Text="Edit Step" Arrow="true" Placement="Placement.Top">
-                                                        <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small"
-                                                                       OnClick="@(() => HandleEditStepAsync(context))" />
-                                                    </MudTooltip>
-                                                    <MudTooltip Text="Remove Step" Arrow="true" Placement="Placement.Top">
-                                                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error"
-                                                                       OnClick="@(() => HandleRemoveStep(context))" />
-                                                    </MudTooltip>
-                                                </MudStack>
-                                            </MudStack>
-                                        </MudPaper>
-                                    </ItemRenderer>
-                                </MudDropContainer>
+                                            </div>
+                                            @* Steps in Block *@
+                                            <div class="jim-step-block-content">
+                                                @foreach (var step in block.Steps)
+                                                {
+                                                    <div class="jim-step-item-in-block">
+                                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                                            <MudStack Spacing="0" Style="flex: 1;">
+                                                                <MudText Typo="Typo.body2">@step.Name</MudText>
+                                                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                                                    @GetStepTypeDescription(step)
+                                                                </MudText>
+                                                            </MudStack>
+                                                            <MudStack Row="true" Spacing="0">
+                                                                <MudTooltip Text="Edit step" Arrow="true" Placement="Placement.Top">
+                                                                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small"
+                                                                                   OnClick="@(() => HandleEditStepAsync(step))" />
+                                                                </MudTooltip>
+                                                                <MudTooltip Text="Remove step from block" Arrow="true" Placement="Placement.Top">
+                                                                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error"
+                                                                                   OnClick="@(() => HandleRemoveStep(step))" />
+                                                                </MudTooltip>
+                                                            </MudStack>
+                                                        </MudStack>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </MudStack>
+                                    </MudPaper>
+                                }
                             }
                         </MudStack>
                     }
@@ -606,15 +636,75 @@
         }
     }
 
-    // Step management
-    private Task HandleAddStepAsync()
+    // Block management - blocks are groups of steps that run in parallel (same StepIndex)
+    private bool _isNewStep;
+    private int _editingBlockIndex;
+
+    private record StepBlock(int BlockIndex, List<ScheduleStep> Steps);
+
+    private List<StepBlock> GetStepBlocks()
     {
+        if (_schedule == null)
+            return new List<StepBlock>();
+
+        return _schedule.Steps
+            .GroupBy(s => s.StepIndex)
+            .OrderBy(g => g.Key)
+            .Select((g, idx) => new StepBlock(idx, g.ToList()))
+            .ToList();
+    }
+
+    private int GetMaxBlockIndex()
+    {
+        if (_schedule == null || _schedule.Steps.Count == 0)
+            return -1;
+
+        return _schedule.Steps.Max(s => s.StepIndex);
+    }
+
+    private Task HandleAddBlockAsync()
+    {
+        // Add a new block (step with a new StepIndex)
+        var newBlockIndex = _schedule?.Steps.Count > 0
+            ? _schedule.Steps.Max(s => s.StepIndex) + 1
+            : 0;
+
+        _isNewStep = true;
+        _editingBlockIndex = newBlockIndex;
         _editingStep = new ScheduleStep
         {
             Id = Guid.NewGuid(),
             Name = "",
             StepType = ScheduleStepType.RunProfile,
-            ExecutionMode = StepExecutionMode.Sequential
+            ExecutionMode = StepExecutionMode.Sequential,
+            StepIndex = newBlockIndex
+        };
+        _selectedConnectedSystemId = 0;
+        _selectedRunProfileId = 0;
+        _runProfiles = null;
+        return Task.CompletedTask;
+    }
+
+    private Task HandleAddStepToBlockAsync(int blockIndex)
+    {
+        // Add a step to an existing block (same StepIndex = parallel execution)
+        _isNewStep = true;
+        _editingBlockIndex = blockIndex;
+
+        // Get the actual StepIndex from existing steps in this block
+        var actualStepIndex = _schedule?.Steps
+            .GroupBy(s => s.StepIndex)
+            .OrderBy(g => g.Key)
+            .Skip(blockIndex)
+            .FirstOrDefault()?.Key ?? blockIndex;
+
+        _editingStep = new ScheduleStep
+        {
+            Id = Guid.NewGuid(),
+            Name = "",
+            StepType = ScheduleStepType.RunProfile,
+            ExecutionMode = StepExecutionMode.ParallelWithPrevious, // Mark as parallel since it's in an existing block
+            StepIndex = actualStepIndex
         };
         _selectedConnectedSystemId = 0;
         _selectedRunProfileId = 0;
@@ -624,6 +714,8 @@
 
     private async Task HandleEditStepAsync(ScheduleStep step)
     {
+        _isNewStep = false;
+        _editingBlockIndex = step.StepIndex;
         _editingStep = new ScheduleStep
         {
             Id = step.Id,
@@ -671,45 +763,102 @@
 
     private void HandleRemoveStep(ScheduleStep step)
     {
-        _schedule?.Steps.Remove(step);
+        if (_schedule == null) return;
+
+        var stepIndex = step.StepIndex;
+        _schedule.Steps.Remove(step);
+
+        // If this was the last step in the block, renumber subsequent blocks
+        var stepsInBlock = _schedule.Steps.Count(s => s.StepIndex == stepIndex);
+        if (stepsInBlock == 0)
+        {
+            // Renumber all steps with higher indices
+            foreach (var s in _schedule.Steps.Where(s => s.StepIndex > stepIndex))
+            {
+                s.StepIndex--;
+            }
+        }
     }
 
-    private void HandleStepDropped(MudItemDropInfo<ScheduleStep> dropItem)
+    private void HandleRemoveBlock(int blockIndex)
     {
-        if (_schedule == null || dropItem.Item == null)
-            return;
+        if (_schedule == null) return;
 
-        var steps = _schedule.Steps;
-        var oldIndex = steps.IndexOf(dropItem.Item);
-        var newIndex = dropItem.IndexInZone;
+        // Get the actual StepIndex for this display block
+        var blocks = GetStepBlocks();
+        if (blockIndex >= blocks.Count) return;
 
-        // Ensure indices are valid
-        if (oldIndex < 0 || oldIndex >= steps.Count)
-            return;
+        var actualStepIndex = blocks[blockIndex].Steps.First().StepIndex;
 
-        // Clamp newIndex to valid range
-        newIndex = Math.Max(0, Math.Min(newIndex, steps.Count - 1));
+        // Remove all steps in this block
+        _schedule.Steps.RemoveAll(s => s.StepIndex == actualStepIndex);
 
-        if (oldIndex != newIndex)
+        // Renumber subsequent blocks
+        foreach (var s in _schedule.Steps.Where(s => s.StepIndex > actualStepIndex))
         {
-            // Remove from old position
-            steps.RemoveAt(oldIndex);
+            s.StepIndex--;
+        }
+    }
 
-            // Adjust newIndex if needed after removal
-            if (newIndex > oldIndex)
-                newIndex--;
+    private void MoveBlockUp(int blockIndex)
+    {
+        if (_schedule == null || blockIndex <= 0) return;
 
-            // Clamp again after adjustment
-            newIndex = Math.Max(0, Math.Min(newIndex, steps.Count));
+        var blocks = GetStepBlocks();
+        if (blockIndex >= blocks.Count) return;
 
-            // Insert at new position
-            steps.Insert(newIndex, dropItem.Item);
+        var currentBlockStepIndex = blocks[blockIndex].Steps.First().StepIndex;
+        var previousBlockStepIndex = blocks[blockIndex - 1].Steps.First().StepIndex;
 
-            // Update step indices
-            for (var i = 0; i < steps.Count; i++)
-            {
-                steps[i].StepIndex = i;
-            }
+        // Swap StepIndex values between blocks
+        foreach (var step in _schedule.Steps.Where(s => s.StepIndex == currentBlockStepIndex))
+        {
+            step.StepIndex = previousBlockStepIndex;
+        }
+        foreach (var step in _schedule.Steps.Where(s => s.StepIndex == previousBlockStepIndex && !blocks[blockIndex].Steps.Contains(s)))
+        {
+            step.StepIndex = currentBlockStepIndex;
+        }
+
+        // Renormalize indices to be sequential
+        NormalizeStepIndices();
+    }
+
+    private void MoveBlockDown(int blockIndex)
+    {
+        if (_schedule == null) return;
+
+        var blocks = GetStepBlocks();
+        if (blockIndex >= blocks.Count - 1) return;
+
+        var currentBlockStepIndex = blocks[blockIndex].Steps.First().StepIndex;
+        var nextBlockStepIndex = blocks[blockIndex + 1].Steps.First().StepIndex;
+
+        // Swap StepIndex values between blocks
+        foreach (var step in _schedule.Steps.Where(s => s.StepIndex == currentBlockStepIndex))
+        {
+            step.StepIndex = nextBlockStepIndex;
+        }
+        foreach (var step in _schedule.Steps.Where(s => s.StepIndex == nextBlockStepIndex && !blocks[blockIndex].Steps.Contains(s)))
+        {
+            step.StepIndex = currentBlockStepIndex;
+        }
+
+        // Renormalize indices to be sequential
+        NormalizeStepIndices();
+    }
+
+    private void NormalizeStepIndices()
+    {
+        if (_schedule == null) return;
+
+        // Get unique step indices in order and renumber to be sequential starting from 0
+        var uniqueIndices = _schedule.Steps.Select(s => s.StepIndex).Distinct().OrderBy(i => i).ToList();
+        var indexMap = uniqueIndices.Select((oldIdx, newIdx) => (oldIdx, newIdx)).ToDictionary(x => x.oldIdx, x => x.newIdx);
+
+        foreach (var step in _schedule.Steps)
+        {
+            step.StepIndex = indexMap[step.StepIndex];
         }
     }
 

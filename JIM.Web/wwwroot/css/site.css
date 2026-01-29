@@ -389,6 +389,12 @@ html[lang] .jim-paper-danger-zone {
     padding: 24px !important;
 }
 
+/* Dialog/Modal background - use lighter surface colour where defined for better elevation */
+html[lang] .mud-dialog {
+    background-color: var(--jim-dialog-surface, var(--mud-palette-surface)) !important;
+    border-radius: 8px !important;
+}
+
 /* Remove drop shadows from all MudBlazor buttons */
 .mud-button-root {
     box-shadow: none !important;
@@ -831,4 +837,35 @@ html[lang] .jim-paper-danger-zone {
 
 .jim-step-item:active .jim-drag-handle {
     cursor: grabbing;
+}
+
+/* Schedule Step Block Styles */
+.jim-step-block {
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.jim-step-block-header {
+    background-color: var(--mud-palette-background-grey);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.jim-step-block-content {
+    padding: 0;
+}
+
+.jim-step-item-in-block {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+    transition: background-color 0.15s ease;
+}
+
+.jim-step-item-in-block:last-child {
+    border-bottom: none;
+}
+
+.jim-step-item-in-block:hover {
+    background-color: var(--mud-palette-action-default-hover);
 }
