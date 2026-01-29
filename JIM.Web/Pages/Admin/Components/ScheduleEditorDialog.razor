@@ -128,9 +128,6 @@
                                     <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="CancelStepEditor" Size="Size.Small" />
                                 </MudStack>
 
-                                <MudTextField @bind-Value="_editingStep.Name" Label="Step Name" Variant="Variant.Outlined"
-                                              Required="true" RequiredError="Step name is required" />
-
                                 <MudSelect T="ScheduleStepType" @bind-Value="_editingStep.StepType" Label="Step Type" Variant="Variant.Outlined">
                                     <MudSelectItem Value="ScheduleStepType.RunProfile">Run Profile</MudSelectItem>
                                     <MudSelectItem Value="ScheduleStepType.PowerShell" Disabled="true">PowerShell Script (Post-MVP)</MudSelectItem>
@@ -236,9 +233,9 @@
                                             <div class="jim-step-block-content">
                                                 <div class="jim-step-item-in-block">
                                                     <MudStack Spacing="0">
-                                                        <MudText Typo="Typo.body2">@step.Name</MudText>
+                                                        <MudText Typo="Typo.body2">@GetStepDisplayName(step)</MudText>
                                                         <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                                            @GetStepTypeDescription(step)
+                                                            @GetStepSubtitle(step)
                                                         </MudText>
                                                     </MudStack>
                                                 </div>
@@ -247,7 +244,7 @@
                                     }
                                     else
                                     {
-                                        @* Multiple steps in parallel - show as parallel block *@
+                                        @* Multiple steps in parallel - show as parallel group *@
                                         <MudPaper Outlined="true" Class="jim-step-block">
                                             <MudStack Spacing="0">
                                                 @* Block Header *@
@@ -291,9 +288,9 @@
                                                         <div class="jim-step-item-in-block">
                                                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                                                 <MudStack Spacing="0" Style="flex: 1;">
-                                                                    <MudText Typo="Typo.body2">@step.Name</MudText>
+                                                                    <MudText Typo="Typo.body2">@GetStepDisplayName(step)</MudText>
                                                                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                                                        @GetStepTypeDescription(step)
+                                                                        @GetStepSubtitle(step)
                                                                     </MudText>
                                                                 </MudStack>
                                                                 <MudStack Row="true" Spacing="0">
@@ -925,11 +922,8 @@
 
     private Task SaveStepAsync()
     {
-        if (_editingStep == null || string.IsNullOrWhiteSpace(_editingStep.Name))
-        {
-            Snackbar.Add("Please enter a name for the step.", Severity.Warning);
+        if (_editingStep == null)
             return Task.CompletedTask;
-        }
 
         if (_editingStep.StepType == ScheduleStepType.RunProfile)
         {
@@ -944,6 +938,17 @@
                 ConnectedSystemId = _selectedConnectedSystemId,
                 RunProfileId = _selectedRunProfileId
             });
+
+            // Auto-generate name from run profile if not set
+            if (string.IsNullOrWhiteSpace(_editingStep.Name))
+            {
+                var runProfile = _runProfiles?.FirstOrDefault(rp => rp.Id == _selectedRunProfileId);
+                var connectedSystem = _connectedSystems.FirstOrDefault(cs => cs.Id == _selectedConnectedSystemId);
+                if (runProfile != null && connectedSystem != null)
+                {
+                    _editingStep.Name = $"{connectedSystem.Name}: {runProfile.Name}";
+                }
+            }
         }
 
         // Find if this is an edit or new
@@ -959,6 +964,43 @@
 
         _editingStep = null;
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Gets the primary display name for a step. Uses the stored step name which is auto-generated
+    /// from "ConnectedSystem: RunProfile" when the step is saved.
+    /// </summary>
+    private string GetStepDisplayName(ScheduleStep step)
+    {
+        // The step name is auto-generated when saving (e.g., "HR CSV Source: Delta Sync")
+        // so we can just use it directly
+        if (!string.IsNullOrWhiteSpace(step.Name))
+        {
+            return step.Name;
+        }
+
+        // Fallback for steps without a name
+        return GetStepTypeName(step.StepType);
+    }
+
+    /// <summary>
+    /// Gets the subtitle/secondary text for a step. For run profiles, shows the step type.
+    /// </summary>
+    private string GetStepSubtitle(ScheduleStep step)
+    {
+        return GetStepTypeName(step.StepType);
+    }
+
+    private static string GetStepTypeName(ScheduleStepType stepType)
+    {
+        return stepType switch
+        {
+            ScheduleStepType.RunProfile => "Run Profile",
+            ScheduleStepType.PowerShell => "PowerShell Script",
+            ScheduleStepType.Executable => "Executable",
+            ScheduleStepType.SqlScript => "SQL Script",
+            _ => "Unknown"
+        };
     }
 
     private string GetStepTypeDescription(ScheduleStep step)
@@ -980,14 +1022,7 @@
             }
         }
 
-        return step.StepType switch
-        {
-            ScheduleStepType.RunProfile => "Run Profile",
-            ScheduleStepType.PowerShell => "PowerShell Script",
-            ScheduleStepType.Executable => "Executable",
-            ScheduleStepType.SqlScript => "SQL Script",
-            _ => "Unknown"
-        };
+        return GetStepTypeName(step.StepType);
     }
 
     private class RunProfileStepConfig
