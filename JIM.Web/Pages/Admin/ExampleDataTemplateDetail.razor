@@ -245,7 +245,7 @@
 
         // attribute the execution to the user
         var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-        _task = new DataGenerationTemplateWorkerTask(_template.Id, user);
+        _task = DataGenerationTemplateWorkerTask.ForUser(_template.Id, user.Id, user.DisplayName ?? "Unknown User");
         var result = await Jim.Tasking.CreateWorkerTaskAsync(_task);
 
         if (!result.Success)

@@ -217,7 +217,7 @@
             return;
 
         var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-        var task = new SynchronisationWorkerTask(_selectedConnectedSystemHeader.Id, _selectedConnectedSystemRunProfile.Id, user);
+        var task = SynchronisationWorkerTask.ForUser(_selectedConnectedSystemHeader.Id, _selectedConnectedSystemRunProfile.Id, user.Id, user.DisplayName ?? "Unknown User");
         var result = await Jim.Tasking.CreateWorkerTaskAsync(task);
 
         if (!result.Success)

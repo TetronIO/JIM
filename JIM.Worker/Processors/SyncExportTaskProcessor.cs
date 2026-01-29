@@ -1,10 +1,8 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Models.Activities;
-using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Interfaces;
-using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
@@ -25,8 +23,9 @@ public class SyncExportTaskProcessor
     private readonly Activity _activity;
     private readonly CancellationTokenSource _cancellationTokenSource;
     private readonly SyncRunMode _runMode;
-    private readonly MetaverseObject? _initiatedByMetaverseObject;
-    private readonly ApiKey? _initiatedByApiKey;
+    private readonly ActivityInitiatorType _initiatedByType;
+    private readonly Guid? _initiatedById;
+    private readonly string? _initiatedByName;
 
     public SyncExportTaskProcessor(
         JimApplication jimApplication,
@@ -44,8 +43,9 @@ public class SyncExportTaskProcessor
         _activity = workerTask.Activity;
         _cancellationTokenSource = cancellationTokenSource;
         _runMode = runMode;
-        _initiatedByMetaverseObject = workerTask.InitiatedByMetaverseObject;
-        _initiatedByApiKey = workerTask.InitiatedByApiKey;
+        _initiatedByType = workerTask.InitiatedByType;
+        _initiatedById = workerTask.InitiatedById;
+        _initiatedByName = workerTask.InitiatedByName;
     }
 
     /// <summary>
@@ -145,12 +145,13 @@ public class SyncExportTaskProcessor
 
                 using (Diagnostics.Sync.StartSpan("AutoSelectContainers").SetTag("containerCount", result.CreatedContainerExternalIds.Count))
                 {
-                    await _jim.ConnectedSystems.RefreshAndAutoSelectContainersAsync(
+                    await _jim.ConnectedSystems.RefreshAndAutoSelectContainersWithTriadAsync(
                         _connectedSystem,
                         _connector,
                         result.CreatedContainerExternalIds,
-                        _initiatedByApiKey,
-                        _initiatedByMetaverseObject,
+                        _initiatedByType,
+                        _initiatedById,
+                        _initiatedByName,
                         _activity);
                 }
 

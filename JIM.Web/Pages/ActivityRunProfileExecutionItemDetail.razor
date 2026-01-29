@@ -70,22 +70,13 @@
             @* Initiated By *@
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.overline" Class="mud-text-secondary">Initiated By</MudText>
-                @if (_activity is { InitiatedByType: ActivityInitiatorType.User, InitiatedByMetaverseObject: not null })
+                @if (_activity is { InitiatedByType: ActivityInitiatorType.User })
                 {
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                         <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mud-text-secondary" />
-                        <MudLink Href="@(Utilities.GetMetaverseObjectHref(_activity.InitiatedByMetaverseObject))" Typo="Typo.body1">
-                            @_activity.InitiatedByMetaverseObject.DisplayName
-                        </MudLink>
-                    </MudStack>
-                }
-                else if (_activity is { InitiatedByType: ActivityInitiatorType.ApiKey })
-                {
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mud-text-secondary" />
-                        @if (_activity.InitiatedByApiKey != null)
+                        @if (_activity.InitiatedById.HasValue)
                         {
-                            <MudLink Href="@Utilities.GetApiKeyHref(_activity.InitiatedByApiKey.Id)" Typo="Typo.body1">
+                            <MudLink Href="@($"/identity/person/{_activity.InitiatedById.Value}")" Typo="Typo.body1">
                                 @_activity.InitiatedByName
                             </MudLink>
                         }
@@ -93,6 +84,29 @@
                         {
                             <MudText Typo="Typo.body1">@_activity.InitiatedByName</MudText>
                         }
+                    </MudStack>
+                }
+                else if (_activity is { InitiatedByType: ActivityInitiatorType.ApiKey })
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mud-text-secondary" />
+                        @if (_activity.InitiatedById.HasValue)
+                        {
+                            <MudLink Href="@Utilities.GetApiKeyHref(_activity.InitiatedById.Value)" Typo="Typo.body1">
+                                @_activity.InitiatedByName
+                            </MudLink>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body1">@_activity.InitiatedByName</MudText>
+                        }
+                    </MudStack>
+                }
+                else if (_activity is { InitiatedByType: ActivityInitiatorType.System })
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="mud-text-secondary" />
+                        <MudText Typo="Typo.body1">@(_activity.InitiatedByName ?? "System")</MudText>
                     </MudStack>
                 }
                 else if (_activity != null && !string.IsNullOrEmpty(_activity.InitiatedByName))

@@ -1,6 +1,4 @@
 ﻿using JIM.Models.Activities;
-using JIM.Models.Core;
-using JIM.Models.Security;
 namespace JIM.Models.Tasking;
 
 public class DataGenerationTemplateWorkerTask : WorkerTask
@@ -15,26 +13,30 @@ public class DataGenerationTemplateWorkerTask : WorkerTask
 	}
 
 	/// <summary>
-	/// When data generation is triggered by a user, this overload should be used to attribute the action to the user.
+	/// Factory method for creating a task triggered by a user.
 	/// </summary>
-	public DataGenerationTemplateWorkerTask(int templateId, MetaverseObject initiatedBy)
+	public static DataGenerationTemplateWorkerTask ForUser(int templateId, Guid userId, string userName)
 	{
-		TemplateId = templateId;
-		InitiatedByType = ActivityInitiatorType.User;
-		InitiatedById = initiatedBy.Id;
-		InitiatedByMetaverseObject = initiatedBy;
-		InitiatedByName = initiatedBy.DisplayName;
+		return new DataGenerationTemplateWorkerTask
+		{
+			TemplateId = templateId,
+			InitiatedByType = ActivityInitiatorType.User,
+			InitiatedById = userId,
+			InitiatedByName = userName
+		};
 	}
 
 	/// <summary>
-	/// When data generation is triggered by an API key, this overload should be used to attribute the action to the API key.
+	/// Factory method for creating a task triggered by an API key.
 	/// </summary>
-	public DataGenerationTemplateWorkerTask(int templateId, ApiKey apiKey)
+	public static DataGenerationTemplateWorkerTask ForApiKey(int templateId, Guid apiKeyId, string apiKeyName)
 	{
-		TemplateId = templateId;
-		InitiatedByType = ActivityInitiatorType.ApiKey;
-		InitiatedById = apiKey.Id;
-		InitiatedByApiKey = apiKey;
-		InitiatedByName = apiKey.Name;
+		return new DataGenerationTemplateWorkerTask
+		{
+			TemplateId = templateId,
+			InitiatedByType = ActivityInitiatorType.ApiKey,
+			InitiatedById = apiKeyId,
+			InitiatedByName = apiKeyName
+		};
 	}
 }

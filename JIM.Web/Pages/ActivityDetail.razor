@@ -74,11 +74,18 @@
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Initiated By:</MudText>
                 @{
-                    if (_activity.InitiatedByType == ActivityInitiatorType.User && _activity.InitiatedByMetaverseObject != null)
+                    if (_activity.InitiatedByType == ActivityInitiatorType.User)
                     {
                         <MudText>
                             <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                            <MudLink Href="@Utilities.GetMetaverseObjectHref(_activity.InitiatedByMetaverseObject)">@Utilities.GetMetaverseObjectHrefText(_activity.InitiatedByMetaverseObject)</MudLink>
+                            @if (_activity.InitiatedById.HasValue)
+                            {
+                                <MudLink Href="@($"/identity/person/{_activity.InitiatedById.Value}")">@_activity.InitiatedByName</MudLink>
+                            }
+                            else
+                            {
+                                <span>@_activity.InitiatedByName</span>
+                            }
                         </MudText>
                     }
                     else if (_activity.InitiatedByType == ActivityInitiatorType.ApiKey)
@@ -93,6 +100,13 @@
                             {
                                 <span>@_activity.InitiatedByName</span>
                             }
+                        </MudText>
+                    }
+                    else if (_activity.InitiatedByType == ActivityInitiatorType.System)
+                    {
+                        <MudText>
+                            <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                            <span>@(_activity.InitiatedByName ?? "System")</span>
                         </MudText>
                     }
                     else if (!string.IsNullOrEmpty(_activity.InitiatedByName))

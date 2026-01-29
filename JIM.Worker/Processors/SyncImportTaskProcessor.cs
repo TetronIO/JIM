@@ -7,7 +7,6 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
-using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using Serilog;
@@ -22,8 +21,8 @@ public class SyncImportTaskProcessor
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
     private readonly ActivityInitiatorType _initiatedByType;
-    private readonly MetaverseObject? _initiatedByMetaverseObject;
-    private readonly ApiKey? _initiatedByApiKey;
+    private readonly Guid? _initiatedById;
+    private readonly string? _initiatedByName;
     private readonly JIM.Models.Activities.Activity _activity;
     private readonly List<ActivityRunProfileExecutionItem> _activityRunProfileExecutionItems;
     private readonly CancellationTokenSource _cancellationTokenSource;
@@ -42,8 +41,8 @@ public class SyncImportTaskProcessor
         _cancellationTokenSource = cancellationTokenSource;
         _connectedSystemRunProfile = connectedSystemRunProfile;
         _initiatedByType = workerTask.InitiatedByType;
-        _initiatedByMetaverseObject = workerTask.InitiatedByMetaverseObject;
-        _initiatedByApiKey = workerTask.InitiatedByApiKey;
+        _initiatedById = workerTask.InitiatedById;
+        _initiatedByName = workerTask.InitiatedByName;
         _activity = workerTask.Activity;
 
         // we will maintain this list separate from the activity, and add the items to the activity when all CSOs are persisted
@@ -1807,17 +1806,15 @@ public class SyncImportTaskProcessor
     }
 
     /// <summary>
-    /// Updates the connected system with the appropriate initiator (MetaverseObject or ApiKey).
+    /// Updates the connected system with the appropriate initiator using the initiator triad.
     /// </summary>
     private async Task UpdateConnectedSystemWithInitiatorAsync()
     {
-        if (_initiatedByType == ActivityInitiatorType.ApiKey && _initiatedByApiKey != null)
-        {
-            await _jim.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem, _initiatedByApiKey, _activity);
-        }
-        else
-        {
-            await _jim.ConnectedSystems.UpdateConnectedSystemAsync(_connectedSystem, _initiatedByMetaverseObject, _activity);
-        }
+        await _jim.ConnectedSystems.UpdateConnectedSystemWithTriadAsync(
+            _connectedSystem,
+            _initiatedByType,
+            _initiatedById,
+            _initiatedByName,
+            _activity);
     }
 }

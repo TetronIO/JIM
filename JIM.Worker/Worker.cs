@@ -201,7 +201,7 @@ public class Worker : BackgroundService
                                 }
                                 case SynchronisationWorkerTask syncWorkerTask:
                                 {
-                                    var initiatedByDisplay = newWorkerTask.InitiatedByMetaverseObject?.DisplayName ?? newWorkerTask.InitiatedByName ?? "Unknown";
+                                    var initiatedByDisplay = newWorkerTask.InitiatedByName ?? "Unknown";
                                     Log.Information("ExecuteAsync: SynchronisationWorkerTask received for run profile id: {RunProfileId}, initiated by: {InitiatedBy}",
                                         syncWorkerTask.ConnectedSystemRunProfileId, initiatedByDisplay);
                                     {

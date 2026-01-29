@@ -1,6 +1,4 @@
 ﻿using JIM.Models.Activities;
-using JIM.Models.Core;
-using JIM.Models.Security;
 namespace JIM.Models.Tasking;
 
 public class SynchronisationWorkerTask : WorkerTask
@@ -29,26 +27,33 @@ public class SynchronisationWorkerTask : WorkerTask
     /// <summary>
     /// When a synchronisation service task is triggered by a user, this overload should be used to attribute the action to the user.
     /// </summary>
-    public SynchronisationWorkerTask(int connectedSystemId, int connectedSystemRunProfileId, MetaverseObject initiatingBy)
+    public SynchronisationWorkerTask(int connectedSystemId, int connectedSystemRunProfileId, Guid initiatedById, string initiatedByName)
     {
         ConnectedSystemId = connectedSystemId;
         ConnectedSystemRunProfileId = connectedSystemRunProfileId;
         InitiatedByType = ActivityInitiatorType.User;
-        InitiatedById = initiatingBy.Id;
-        InitiatedByMetaverseObject = initiatingBy;
-        InitiatedByName = initiatingBy.DisplayName;
+        InitiatedById = initiatedById;
+        InitiatedByName = initiatedByName;
     }
 
     /// <summary>
-    /// When a synchronisation service task is triggered by an API key (automation), this overload should be used to attribute the action to the API key.
+    /// Factory method for creating a task triggered by a user.
     /// </summary>
-    public SynchronisationWorkerTask(int connectedSystemId, int connectedSystemRunProfileId, ApiKey apiKey)
+    public static SynchronisationWorkerTask ForUser(int connectedSystemId, int connectedSystemRunProfileId, Guid userId, string userName)
     {
-        ConnectedSystemId = connectedSystemId;
-        ConnectedSystemRunProfileId = connectedSystemRunProfileId;
-        InitiatedByType = ActivityInitiatorType.ApiKey;
-        InitiatedById = apiKey.Id;
-        InitiatedByApiKey = apiKey;
-        InitiatedByName = apiKey.Name;
+        return new SynchronisationWorkerTask(connectedSystemId, connectedSystemRunProfileId, userId, userName);
+    }
+
+    /// <summary>
+    /// Factory method for creating a task triggered by an API key.
+    /// </summary>
+    public static SynchronisationWorkerTask ForApiKey(int connectedSystemId, int connectedSystemRunProfileId, Guid apiKeyId, string apiKeyName)
+    {
+        return new SynchronisationWorkerTask(connectedSystemId, connectedSystemRunProfileId)
+        {
+            InitiatedByType = ActivityInitiatorType.ApiKey,
+            InitiatedById = apiKeyId,
+            InitiatedByName = apiKeyName
+        };
     }
 }

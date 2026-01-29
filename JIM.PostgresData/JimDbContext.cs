@@ -360,13 +360,6 @@ public class JimDbContext : DbContext
             .HasForeignKey(wt => wt.ScheduleExecutionId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        // ScheduleExecution initiator relationships
-        modelBuilder.Entity<ScheduleExecution>()
-            .HasOne(se => se.InitiatedByMetaverseObject)
-            .WithMany()
-            .HasForeignKey(se => se.InitiatedById)
-            .OnDelete(DeleteBehavior.SetNull);
-
         // Index for schedule name uniqueness (optional but useful)
         modelBuilder.Entity<Schedule>()
             .HasIndex(s => s.Name)

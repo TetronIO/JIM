@@ -1,6 +1,4 @@
 using JIM.Models.Activities;
-using JIM.Models.Core;
-using JIM.Models.Security;
 namespace JIM.Models.Scheduling;
 
 /// <summary>
@@ -61,7 +59,7 @@ public class ScheduleExecution
     public DateTime? CompletedAt { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
-    // Initiator tracking - reuses the pattern from Activity/WorkerTask
+    // Initiator tracking - uses the standard triad pattern (Type + Id + Name) to survive principal deletion.
     // -----------------------------------------------------------------------------------------------------------------
 
     /// <summary>
@@ -78,16 +76,6 @@ public class ScheduleExecution
     /// The name of the security principal at the time of execution, retained for audit trail.
     /// </summary>
     public string? InitiatedByName { get; set; }
-
-    /// <summary>
-    /// If this execution was initiated by a user, reference them here.
-    /// </summary>
-    public MetaverseObject? InitiatedByMetaverseObject { get; set; }
-
-    /// <summary>
-    /// If this execution was initiated via API key, reference it here.
-    /// </summary>
-    public ApiKey? InitiatedByApiKey { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
     // Results

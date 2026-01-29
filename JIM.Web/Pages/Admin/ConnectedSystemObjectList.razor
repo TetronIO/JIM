@@ -406,7 +406,7 @@ else
 
         // attribute the execution to the user
         var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-        var task = new ClearConnectedSystemObjectsWorkerTask(Id, user, _clearDeleteChangeHistory);
+        var task = ClearConnectedSystemObjectsWorkerTask.ForUser(Id, user.Id, user.DisplayName ?? "Unknown User", _clearDeleteChangeHistory);
         var result = await Jim.Tasking.CreateWorkerTaskAsync(task);
 
         if (!result.Success)

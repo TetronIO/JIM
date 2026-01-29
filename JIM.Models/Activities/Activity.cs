@@ -1,6 +1,4 @@
 ﻿using System.ComponentModel.DataAnnotations.Schema;
-using JIM.Models.Core;
-using JIM.Models.Security;
 using JIM.Models.Staging;
 namespace JIM.Models.Activities;
 
@@ -34,6 +32,7 @@ public class Activity
 
     // -----------------------------------------------------------------------------------------------------------------
     // Initiator tracking - all activities MUST be attributed to a security principal for audit compliance
+    // Uses the standard triad pattern (Type + Id + Name) to survive principal deletion.
     // -----------------------------------------------------------------------------------------------------------------
 
     /// <summary>
@@ -52,18 +51,6 @@ public class Activity
     /// Retained even if the principal is deleted to maintain audit trail readability.
     /// </summary>
     public string? InitiatedByName { get; set; }
-
-    /// <summary>
-    /// Reference to the MetaverseObject if this activity was initiated by a user.
-    /// May be null if the user has been deleted or if initiated by an API key.
-    /// </summary>
-    public MetaverseObject? InitiatedByMetaverseObject { get; set; }
-
-    /// <summary>
-    /// Reference to the ApiKey if this activity was initiated via API key authentication.
-    /// May be null if the API key has been deleted or if initiated by a user.
-    /// </summary>
-    public ApiKey? InitiatedByApiKey { get; set; }
 
     public string? ErrorMessage { get; set; }
 

@@ -72,7 +72,6 @@ public class ActivityServerValidationTests
         Assert.That(capturedActivity, Is.Not.Null);
         Assert.That(capturedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.User));
         Assert.That(capturedActivity.InitiatedById, Is.EqualTo(user.Id));
-        Assert.That(capturedActivity.InitiatedByMetaverseObject, Is.EqualTo(user));
         Assert.That(capturedActivity.InitiatedByName, Is.EqualTo("Test User"));
         Assert.That(capturedActivity.Status, Is.EqualTo(ActivityStatus.InProgress));
     }
@@ -133,7 +132,6 @@ public class ActivityServerValidationTests
         Assert.That(capturedActivity, Is.Not.Null);
         Assert.That(capturedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.ApiKey));
         Assert.That(capturedActivity.InitiatedById, Is.EqualTo(apiKey.Id));
-        Assert.That(capturedActivity.InitiatedByApiKey, Is.EqualTo(apiKey));
         Assert.That(capturedActivity.InitiatedByName, Is.EqualTo("Test Integration API Key"));
         Assert.That(capturedActivity.Status, Is.EqualTo(ActivityStatus.InProgress));
     }
@@ -220,7 +218,8 @@ public class ActivityServerValidationTests
         // Assert
         Assert.That(capturedActivity, Is.Not.Null);
         Assert.That(capturedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.ApiKey));
-        Assert.That(capturedActivity.InitiatedByApiKey, Is.Not.Null);
+        Assert.That(capturedActivity.InitiatedById, Is.Not.Null);
+        Assert.That(capturedActivity.InitiatedByName, Is.Not.Null);
     }
 
     #endregion

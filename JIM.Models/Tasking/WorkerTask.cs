@@ -1,7 +1,5 @@
 using JIM.Models.Activities;
-using JIM.Models.Core;
 using JIM.Models.Scheduling;
-using JIM.Models.Security;
 namespace JIM.Models.Tasking;
 
 public abstract class WorkerTask
@@ -20,6 +18,7 @@ public abstract class WorkerTask
 
 	// -----------------------------------------------------------------------------------------------------------------
 	// Initiator tracking - all tasks MUST be attributed to a security principal for audit compliance
+	// Uses the standard triad pattern (Type + Id + Name) to survive principal deletion.
 	// -----------------------------------------------------------------------------------------------------------------
 
 	/// <summary>
@@ -36,16 +35,6 @@ public abstract class WorkerTask
 	/// The name of the security principal at the time of task creation, retained for audit trail.
 	/// </summary>
 	public string? InitiatedByName { get; set; }
-
-	/// <summary>
-	/// If this task was initiated by a user, reference them here.
-	/// </summary>
-	public MetaverseObject? InitiatedByMetaverseObject { get; set; }
-
-	/// <summary>
-	/// If this task was initiated via API key, reference it here.
-	/// </summary>
-	public ApiKey? InitiatedByApiKey { get; set; }
 
 	/// <summary>
 	/// If this worker task has already resulted in an activity being created, then it can be found here, and when the worker task

@@ -84,4 +84,26 @@ public static class AuditHelper
         entity.LastUpdatedById = null;
         entity.LastUpdatedByName = "System";
     }
+
+    /// <summary>
+    /// Stamps Created audit fields using initiator triad.
+    /// </summary>
+    public static void SetCreated(IAuditable entity, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName)
+    {
+        entity.Created = DateTime.UtcNow;
+        entity.CreatedByType = initiatorType;
+        entity.CreatedById = initiatorId;
+        entity.CreatedByName = initiatorName ?? (initiatorType == ActivityInitiatorType.System ? "System" : "Unknown");
+    }
+
+    /// <summary>
+    /// Stamps LastUpdated audit fields using initiator triad.
+    /// </summary>
+    public static void SetUpdated(IAuditable entity, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName)
+    {
+        entity.LastUpdated = DateTime.UtcNow;
+        entity.LastUpdatedByType = initiatorType;
+        entity.LastUpdatedById = initiatorId;
+        entity.LastUpdatedByName = initiatorName ?? (initiatorType == ActivityInitiatorType.System ? "System" : "Unknown");
+    }
 }

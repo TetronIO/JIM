@@ -1,7 +1,6 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
-using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
@@ -56,13 +55,6 @@ public class ActivityRepository : IActivityRepository
             pageSize = 100;
 
         var query = Repository.Database.Activities
-            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
-            .Include(a => a.InitiatedByMetaverseObject)
-            .ThenInclude(ib => ib!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
-            .ThenInclude(av => av.Attribute)
-            .Include(st => st.InitiatedByMetaverseObject)
-            .ThenInclude(ib => ib!.Type)
-            .Include(a => a.InitiatedByApiKey)
             .Where(a => a.ParentActivityId == null)
             .AsQueryable();
 
@@ -135,13 +127,6 @@ public class ActivityRepository : IActivityRepository
     public async Task<Activity?> GetActivityAsync(Guid id)
     {
         return await Repository.Database.Activities
-            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
-            .Include(a => a.InitiatedByMetaverseObject)
-            .ThenInclude(ib => ib!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
-            .ThenInclude(av => av.Attribute)
-            .Include(st => st.InitiatedByMetaverseObject)
-            .ThenInclude(ib => ib!.Type)
-            .Include(a => a.InitiatedByApiKey)
             .SingleOrDefaultAsync(a => a.Id == id);
     }
 
@@ -184,13 +169,6 @@ public class ActivityRepository : IActivityRepository
         };
 
         var query = Repository.Database.Activities
-            .AsSplitQuery()
-            .Include(a => a.InitiatedByMetaverseObject)
-            .ThenInclude(ib => ib!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
-            .ThenInclude(av => av.Attribute)
-            .Include(st => st.InitiatedByMetaverseObject)
-            .ThenInclude(ib => ib!.Type)
-            .Include(a => a.InitiatedByApiKey)
             .Where(a => a.ParentActivityId == null)
             .Where(a => workerTaskTargetTypes.Contains(a.TargetType) && workerTaskOperations.Contains(a.TargetOperationType))
             .AsQueryable();
