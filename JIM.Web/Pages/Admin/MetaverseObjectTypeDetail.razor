@@ -162,7 +162,7 @@
         </div>
     </MudStack>
 
-    <MudTable Items="@_metaverseObjectType.Attributes.OrderBy(a => a.Name)" Hover="true" Breakpoint="Breakpoint.Sm" Class="mb-5" SortLabel="Sort By" Elevation="0" Outlined="true" Filter="new Func<MetaverseAttribute, bool>(FilterAttributes)">
+    <MudTable Items="@_metaverseObjectType.Attributes.OrderBy(a => a.Name)" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mb-5" SortLabel="Sort By" Elevation="0" Outlined="true" Filter="new Func<MetaverseAttribute, bool>(FilterAttributes)">
         <ToolBarContent>
             <MudSpacer />
             <MudTextField @bind-Value="_attributeSearchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>

@@ -16,12 +16,13 @@
     Configure service-wide settings. Read-only settings are defined by environment variables and cannot be modified here.
 </MudText>
 
-<MudTable Items="@_filteredSettings" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By"
+<MudTable Items="@_filteredSettings" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By"
     Filter="new Func<ServiceSetting, bool>(FilterFunc)" Outlined="true" Elevation="0" Loading="@_loading"
     GroupBy="@_groupDefinition">
     <ToolBarContent>
         <MudText Typo="Typo.h6">Settings</MudText>
         <MudSpacer />
+        <MudCheckBox @bind-Value="_showConfigurableOnly" @bind-Value:after="UpdateFilteredSettings" Label="Show configurable only" Color="Color.Primary" Class="mr-4" />
         <MudCheckBox @bind-Value="_showOverriddenOnly" @bind-Value:after="UpdateFilteredSettings" Label="Show overridden only" Color="Color.Primary" Class="mr-4" />
         <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start"
             AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Immediate="true"></MudTextField>
@@ -117,12 +118,12 @@
                     @if (!settingContext.IsReadOnly)
                     {
                         <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Outlined" Size="Size.Small" OnClick="_ => ShowEditDialog(settingContext)" />
+                            <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary" OnClick="_ => ShowEditDialog(settingContext)" />
                         </MudTooltip>
                         @if (settingContext.IsOverridden)
                         {
                             <MudTooltip Text="Revert to Default" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton Icon="@Icons.Material.Outlined.RestartAlt" Variant="Variant.Outlined" Size="Size.Small" OnClick="_ => HandleRevertAsync(settingContext)" />
+                                <MudIconButton Icon="@Icons.Material.Outlined.RestartAlt" Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary" OnClick="_ => HandleRevertAsync(settingContext)" />
                             </MudTooltip>
                         }
                     }
@@ -139,6 +140,7 @@
     private List<ServiceSetting> _settings = new();
     private List<ServiceSetting> _filteredSettings = new();
     private string _searchString = string.Empty;
+    private bool _showConfigurableOnly;
     private bool _showOverriddenOnly;
     private bool _loading = true;
     private HashSet<string> _revealedSecrets = new();
@@ -185,6 +187,7 @@
     private void UpdateFilteredSettings()
     {
         _filteredSettings = _settings
+            .Where(s => !_showConfigurableOnly || !s.IsReadOnly)
             .Where(s => !_showOverriddenOnly || (s.IsOverridden && !s.IsReadOnly))
             .Where(s => FilterFunc(s))
             .ToList();

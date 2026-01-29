@@ -19,7 +19,7 @@
     </MudToolBar>
 </MudPaper>
 
-<MudTable Items="@_attributeHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<MetaverseAttributeHeader,bool>(FilterFunc1)" Elevation="0" Outlined="true">
+<MudTable Items="@_attributeHeaders" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<MetaverseAttributeHeader,bool>(FilterFunc1)" Elevation="0" Outlined="true">
     <ToolBarContent>
         <MudText Typo="Typo.h6">Attributes</MudText>
         <MudSpacer />
@@ -49,7 +49,7 @@
                 foreach (var stub in context.MetaverseObjectTypes)
                 {
                     var attributeUrl = $"/admin/schema/object-types/{stub.Key}";
-                    <MudChip T="string" Color="Color.Primary" Href="@attributeUrl">@stub.Value</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Href="@attributeUrl">@stub.Value</MudChip>
                 }
             }
         </MudTd>
