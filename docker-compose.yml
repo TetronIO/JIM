@@ -67,7 +67,6 @@ services:
       # Docker-specific overrides
       - JIM_DB_HOSTNAME=${JIM_DB_HOSTNAME:-jim.database}
       - JIM_LOG_PATH=/var/log/jim
-      - JIM_LOG_LEVEL=Error
     volumes:
       - jim-logs-volume:/var/log/jim
     build:
