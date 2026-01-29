@@ -194,6 +194,29 @@ public class TaskingRepository : ITaskingRepository
         }
     }
 
+    // -----------------------------------------------------------------------------------------------------------------
+    // Scheduler Service Queries
+    // -----------------------------------------------------------------------------------------------------------------
+
+    public async Task<List<WorkerTask>> GetWorkerTasksByScheduleExecutionAsync(Guid scheduleExecutionId)
+    {
+        return await Repository.Database.WorkerTasks
+            .Include(st => st.Activity)
+            .Where(st => st.ScheduleExecutionId == scheduleExecutionId)
+            .OrderBy(st => st.ScheduleStepIndex)
+            .ThenBy(st => st.Timestamp)
+            .ToListAsync();
+    }
+
+    public async Task<List<WorkerTask>> GetWorkerTasksByScheduleExecutionStepAsync(Guid scheduleExecutionId, int stepIndex)
+    {
+        return await Repository.Database.WorkerTasks
+            .Include(st => st.Activity)
+            .Where(st => st.ScheduleExecutionId == scheduleExecutionId && st.ScheduleStepIndex == stepIndex)
+            .OrderBy(st => st.Timestamp)
+            .ToListAsync();
+    }
+
     #region private methods
     private static async Task<string> GetWorkerHeaderNameAsync(WorkerTask workerTask)
     {

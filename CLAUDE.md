@@ -425,6 +425,46 @@ The SQL script at `test/data/seed-change-history.sql` generates realistic change
   - "enterprise identity platforms" for general comparisons
 - Exception: Generic industry terms and standards (SCIM, LDAP, OIDC, etc.) are acceptable
 
+## Third-Party Dependency Governance
+
+**IMPORTANT: JIM maintains strict supply chain security standards for SBOM compliance and customer assurance.**
+
+**Before Adding ANY New NuGet Package or Third-Party Dependency:**
+
+1. **Notify the user first** - State the need for the dependency and that you will conduct a suitability analysis
+2. **Research and document** the following for each candidate package:
+   - **License**: Must be permissive (MIT, Apache 2.0, BSD) and compatible with commercial use
+   - **Author/Maintainer**: Identifiable individuals or organisations with verifiable professional presence
+   - **Provenance**: Organisation location, business registration (if applicable), corporate affiliation
+   - **Maintenance Status**: Recent commits, responsiveness to issues, release frequency
+   - **Community Trust**: Download counts, GitHub stars, usage by other reputable projects
+   - **Security**: Known vulnerabilities, security advisory history
+
+3. **Present findings to the user** with:
+   - A comparison table if multiple alternatives exist
+   - Clear recommendation with rationale
+   - Any concerns or trade-offs
+
+4. **Await user approval** before adding the dependency
+
+**Preferred Package Sources:**
+- Microsoft-maintained packages (highest preference)
+- Packages from established Western technology companies with clear corporate backing
+- Well-maintained open-source projects with identifiable maintainers in NATO-aligned countries
+- .NET Foundation projects
+
+**Package Selection Criteria:**
+- Prefer packages with corporate backing or foundation governance
+- Prefer packages with multiple maintainers (bus factor > 1)
+- Prefer packages with clear security policies and vulnerability disclosure processes
+- Avoid packages with unclear ownership or governance
+- Avoid packages that haven't been updated in >12 months (unless stable/complete)
+
+**Documentation Requirements:**
+- All third-party dependencies must be justifiable for SBOM audits
+- Keep a mental note of why each dependency was chosen over alternatives
+- If a dependency is replaced, document the reason in the commit message
+
 ## Feature Planning
 
 **IMPORTANT: When creating plans for new features or significant changes:**
