@@ -80,7 +80,7 @@ html[lang] {
     --jim-nav-active-color: var(--mud-palette-primary);
 
     /* === JIM Custom: Paper border (stronger than default for light backgrounds) === */
-    --jim-paper-border-color: rgba(0, 0, 0, 0.22);
+    --jim-paper-border-color: rgba(0, 0, 0, 0.18);
 
     /* === JIM Custom: Content Links === */
     --jim-link-color: var(--mud-palette-primary);

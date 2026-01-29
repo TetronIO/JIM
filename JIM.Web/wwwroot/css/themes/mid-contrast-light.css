@@ -89,7 +89,7 @@ html[lang] {
     --jim-drawer-border-color: #2a2b2f;
 
     /* === JIM Custom: Paper border (strengthened for visibility) === */
-    --jim-paper-border-color: rgba(42, 42, 48, 0.28);
+    --jim-paper-border-color: rgba(42, 42, 48, 0.22);
 
     /* === JIM Custom: Content Links === */
     --jim-link-color: #2a6dd9;
