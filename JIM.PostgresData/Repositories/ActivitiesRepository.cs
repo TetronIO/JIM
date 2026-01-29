@@ -152,12 +152,12 @@ public class ActivityRepository : IActivityRepository
             pageSize = 100;
 
         // Worker task activity types - operations executed by the worker service
+        // Note: HistoryRetentionCleanup is intentionally excluded as it's a background maintenance task
         var workerTaskTargetTypes = new[]
         {
             ActivityTargetType.ConnectedSystemRunProfile,
             ActivityTargetType.DataGenerationTemplate,
-            ActivityTargetType.ConnectedSystem,
-            ActivityTargetType.HistoryRetentionCleanup
+            ActivityTargetType.ConnectedSystem
         };
 
         // Worker task operations
