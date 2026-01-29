@@ -30,6 +30,14 @@ public class SchedulingRepository : ISchedulingRepository
             .SingleOrDefaultAsync(s => s.Id == id);
     }
 
+    public async Task<Schedule?> GetScheduleWithStepsAsNoTrackingAsync(Guid id)
+    {
+        return await Repository.Database.Schedules
+            .AsNoTracking()
+            .Include(s => s.Steps.OrderBy(st => st.StepIndex))
+            .SingleOrDefaultAsync(s => s.Id == id);
+    }
+
     public async Task<List<Schedule>> GetAllSchedulesAsync()
     {
         return await Repository.Database.Schedules

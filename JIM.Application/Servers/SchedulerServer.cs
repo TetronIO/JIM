@@ -2,6 +2,7 @@ using System.Text.Json;
 using JIM.Models.Activities;
 using JIM.Models.Scheduling;
 using JIM.Models.Tasking;
+using JIM.Models.Utility;
 using NCrontab;
 using Serilog;
 
@@ -38,9 +39,68 @@ public class SchedulerServer
         return await Application.Repository.Scheduling.GetScheduleWithStepsAsync(id);
     }
 
+    public async Task<Schedule?> GetScheduleWithStepsAsNoTrackingAsync(Guid id)
+    {
+        return await Application.Repository.Scheduling.GetScheduleWithStepsAsNoTrackingAsync(id);
+    }
+
     public async Task<List<Schedule>> GetAllSchedulesAsync()
     {
         return await Application.Repository.Scheduling.GetAllSchedulesAsync();
+    }
+
+    public async Task<PagedResultSet<Schedule>> GetSchedulesAsync(
+        int page,
+        int pageSize,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = false)
+    {
+        return await Application.Repository.Scheduling.GetSchedulesAsync(page, pageSize, searchQuery, sortBy, sortDescending);
+    }
+
+    public async Task CreateScheduleAsync(Schedule schedule)
+    {
+        await Application.Repository.Scheduling.CreateScheduleAsync(schedule);
+    }
+
+    public async Task UpdateScheduleAsync(Schedule schedule)
+    {
+        await Application.Repository.Scheduling.UpdateScheduleAsync(schedule);
+    }
+
+    public async Task DeleteScheduleAsync(Schedule schedule)
+    {
+        await Application.Repository.Scheduling.DeleteScheduleAsync(schedule);
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Schedule Steps
+    // -----------------------------------------------------------------------------------------------------------------
+
+    public async Task<List<ScheduleStep>> GetScheduleStepsAsync(Guid scheduleId)
+    {
+        return await Application.Repository.Scheduling.GetScheduleStepsAsync(scheduleId);
+    }
+
+    public async Task<ScheduleStep?> GetScheduleStepAsync(Guid stepId)
+    {
+        return await Application.Repository.Scheduling.GetScheduleStepAsync(stepId);
+    }
+
+    public async Task CreateScheduleStepAsync(ScheduleStep step)
+    {
+        await Application.Repository.Scheduling.CreateScheduleStepAsync(step);
+    }
+
+    public async Task UpdateScheduleStepAsync(ScheduleStep step)
+    {
+        await Application.Repository.Scheduling.UpdateScheduleStepAsync(step);
+    }
+
+    public async Task DeleteScheduleStepAsync(ScheduleStep step)
+    {
+        await Application.Repository.Scheduling.DeleteScheduleStepAsync(step);
     }
 
     // -----------------------------------------------------------------------------------------------------------------

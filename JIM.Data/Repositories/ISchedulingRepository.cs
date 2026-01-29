@@ -13,6 +13,8 @@ public interface ISchedulingRepository
 
     Task<Schedule?> GetScheduleWithStepsAsync(Guid id);
 
+    Task<Schedule?> GetScheduleWithStepsAsNoTrackingAsync(Guid id);
+
     Task<List<Schedule>> GetAllSchedulesAsync();
 
     Task<PagedResultSet<Schedule>> GetSchedulesAsync(

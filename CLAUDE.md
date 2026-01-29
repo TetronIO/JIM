@@ -527,6 +527,49 @@ JIM has context documents for use with AI assistant platforms (Claude Desktop, C
 3. JIM.Models (Domain)
 4. JIM.Data, JIM.PostgresData (Data Access)
 
+**⚠️ CRITICAL: Respect N-Tier Architecture - NEVER Bypass Layers:**
+
+JIM follows strict n-tier architecture. Each layer may ONLY call the layer directly below it:
+
+```
++------------------+
+|     JIM.Web      |  Blazor pages, API controllers
++--------+---------+
+         | ONLY calls JimApplication (never Repository directly)
+         v
++------------------+
+| JIM.Application  |  Business logic, orchestration (Servers/)
++--------+---------+
+         | ONLY calls Repository interfaces
+         v
++------------------+
+|    JIM.Data      |  Repository interfaces
++------------------+
+         |
+         v
++------------------+
+| JIM.PostgresData |  EF Core implementations
++------------------+
+```
+
+**Rules:**
+- **JIM.Web** (UI/API) must ONLY access data through `JimApplication` facade (e.g., `Jim.Metaverse`, `Jim.Scheduler`, `Jim.ConnectedSystems`)
+- **NEVER** call `Jim.Repository.*` directly from Blazor pages or API controllers
+- If a method doesn't exist on the Application layer, ADD IT there - don't bypass to the repository
+- This separation ensures business logic stays in one place and can be tested independently
+
+**Bad - Bypassing layers:**
+```csharp
+// In a Blazor page - WRONG!
+var schedule = await Jim.Repository.Scheduling.GetScheduleAsync(id);
+```
+
+**Good - Respecting layers:**
+```csharp
+// In a Blazor page - CORRECT!
+var schedule = await Jim.Scheduler.GetScheduleAsync(id);
+```
+
 **Access Pattern:**
 ```csharp
 // Access via JimApplication facade

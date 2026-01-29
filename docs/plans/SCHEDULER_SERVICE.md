@@ -408,7 +408,7 @@ All parallel steps share a logical "step group" - progression happens when ALL t
 
 ---
 
-## Phase 4: Schedules Tab UI
+## Phase 4: Schedules Tab UI ✅ COMPLETE
 
 ### Goal
 Implement the schedule management UI.
@@ -450,10 +450,21 @@ Multi-step wizard or tabbed dialog:
 - **PowerShell**: Script path or inline script
 - **Executable**: Program path, arguments, working directory
 
-### Files to Create
-- `JIM.Web/Pages/Admin/Components/OperationsSchedulesTab.razor`
-- `JIM.Web/Pages/Admin/Components/ScheduleEditorDialog.razor`
-- `JIM.Web/Pages/Admin/Components/ScheduleStepEditor.razor`
+### Files Created
+- `JIM.Web/Pages/Admin/Components/OperationsSchedulesTab.razor` - Schedule list with actions
+- `JIM.Web/Pages/Admin/Components/ScheduleEditorDialog.razor` - Schedule editor with inline step editing
+
+### Files Modified
+- `JIM.Web/Pages/Admin/Operations.razor` - Enabled Schedules tab
+
+### Implementation Notes
+- User-friendly scheduling UI with frequency selection (daily, weekdays, weekends, weekly, hourly, every N minutes)
+- Time picker for scheduled runs
+- Human-readable preview of schedule (e.g., "Runs Monday through Friday at 6:00 AM")
+- Inline step editor within the schedule dialog (rather than nested dialogs)
+- Drag-and-drop step reordering using MudDropContainer
+- Enable/disable toggle and manual "Run Now" actions
+- Server-side pagination and search
 
 ---
 

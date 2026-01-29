@@ -780,3 +780,55 @@ html[lang] .jim-paper-danger-zone {
 .jim-audit-chip-label {
     flex-shrink: 0;
 }
+
+/* Schedule Step Drag and Drop Styles */
+.jim-step-drop-zone {
+    min-height: 50px;
+    transition: background-color 0.2s ease;
+}
+
+.jim-step-drop-zone.mud-drop-zone-drag {
+    background-color: var(--mud-palette-action-default-hover);
+    border-radius: 4px;
+}
+
+/* Drop indicator line - shows where item will be placed */
+.jim-step-drop-zone .mud-drop-item-preview {
+    position: relative;
+    height: 4px;
+    background-color: var(--mud-palette-primary);
+    border-radius: 2px;
+    margin: 4px 0;
+    opacity: 0.8;
+}
+
+/* Step item being dragged */
+.jim-step-item {
+    transition: transform 0.1s ease, box-shadow 0.2s ease;
+    cursor: grab;
+}
+
+.jim-step-item:active {
+    cursor: grabbing;
+}
+
+.jim-step-item.mud-drop-item-dragging {
+    opacity: 0.6;
+    transform: scale(0.98);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Drag handle visual feedback */
+.jim-drag-handle {
+    cursor: grab;
+    opacity: 0.5;
+    transition: opacity 0.2s ease;
+}
+
+.jim-drag-handle:hover {
+    opacity: 1;
+}
+
+.jim-step-item:active .jim-drag-handle {
+    cursor: grabbing;
+}
