@@ -232,10 +232,11 @@
                                             </div>
                                             <div class="jim-step-block-content">
                                                 <div class="jim-step-item-in-block">
+                                                    @{ var (primaryText, secondaryText) = GetStepDisplayTexts(step); }
                                                     <MudStack Spacing="0">
-                                                        <MudText Typo="Typo.body2">@GetStepDisplayName(step)</MudText>
+                                                        <MudText Typo="Typo.body2">@primaryText</MudText>
                                                         <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                                            @GetStepSubtitle(step)
+                                                            @secondaryText
                                                         </MudText>
                                                     </MudStack>
                                                 </div>
@@ -282,15 +283,17 @@
                                                     </MudStack>
                                                 </div>
                                                 @* Steps in Block *@
+                                                @* Steps in Block *@
                                                 <div class="jim-step-block-content">
                                                     @foreach (var step in block.Steps)
                                                     {
+                                                        var (stepPrimary, stepSecondary) = GetStepDisplayTexts(step);
                                                         <div class="jim-step-item-in-block">
                                                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                                                 <MudStack Spacing="0" Style="flex: 1;">
-                                                                    <MudText Typo="Typo.body2">@GetStepDisplayName(step)</MudText>
+                                                                    <MudText Typo="Typo.body2">@stepPrimary</MudText>
                                                                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                                                        @GetStepSubtitle(step)
+                                                                        @stepSecondary
                                                                     </MudText>
                                                                 </MudStack>
                                                                 <MudStack Row="true" Spacing="0">
@@ -967,28 +970,45 @@
     }
 
     /// <summary>
-    /// Gets the primary display name for a step. Uses the stored step name which is auto-generated
-    /// from "ConnectedSystem: RunProfile" when the step is saved.
+    /// Gets display texts for a step. Returns (primaryText, secondaryText) tuple.
+    /// For run profiles: primary = run profile name, secondary = connected system name.
     /// </summary>
-    private string GetStepDisplayName(ScheduleStep step)
+    private (string Primary, string Secondary) GetStepDisplayTexts(ScheduleStep step)
     {
-        // The step name is auto-generated when saving (e.g., "HR CSV Source: Delta Sync")
-        // so we can just use it directly
-        if (!string.IsNullOrWhiteSpace(step.Name))
+        if (step.StepType == ScheduleStepType.RunProfile && !string.IsNullOrEmpty(step.Configuration))
         {
-            return step.Name;
+            try
+            {
+                var config = JsonSerializer.Deserialize<RunProfileStepConfig>(step.Configuration);
+                if (config != null)
+                {
+                    var cs = _connectedSystems.FirstOrDefault(c => c.Id == config.ConnectedSystemId);
+
+                    // Try to parse run profile name from stored Name (format: "ConnectedSystem: RunProfile")
+                    if (!string.IsNullOrWhiteSpace(step.Name) && step.Name.Contains(':'))
+                    {
+                        var colonIndex = step.Name.IndexOf(':');
+                        var runProfileName = step.Name[(colonIndex + 1)..].Trim();
+                        var connectedSystemName = cs?.Name ?? step.Name[..colonIndex].Trim();
+                        return (runProfileName, connectedSystemName);
+                    }
+
+                    // Fallback if name doesn't have expected format
+                    if (cs != null)
+                    {
+                        return (!string.IsNullOrWhiteSpace(step.Name) ? step.Name : "Run Profile", cs.Name);
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore parse errors
+            }
         }
 
-        // Fallback for steps without a name
-        return GetStepTypeName(step.StepType);
-    }
-
-    /// <summary>
-    /// Gets the subtitle/secondary text for a step. For run profiles, shows the step type.
-    /// </summary>
-    private string GetStepSubtitle(ScheduleStep step)
-    {
-        return GetStepTypeName(step.StepType);
+        // Fallback for non-run-profile types or if parsing fails
+        var primary = !string.IsNullOrWhiteSpace(step.Name) ? step.Name : GetStepTypeName(step.StepType);
+        return (primary, GetStepTypeName(step.StepType));
     }
 
     private static string GetStepTypeName(ScheduleStepType stepType)
