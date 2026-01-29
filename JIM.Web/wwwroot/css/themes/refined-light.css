@@ -85,7 +85,7 @@ html[lang] {
     --jim-drawer-border-color: var(--mud-palette-lines-default);
 
     /* === JIM Custom: Paper border (stronger than default for light backgrounds) === */
-    --jim-paper-border-color: rgba(0, 0, 0, 0.22);
+    --jim-paper-border-color: rgba(0, 0, 0, 0.18);
 
     /* === JIM Custom: Content Links === */
     /* Vibrant blue for data/content links, matching dark mode punch */
