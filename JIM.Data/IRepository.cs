@@ -9,6 +9,7 @@ public interface IRepository : IDisposable
     public IConnectedSystemRepository ConnectedSystems { get; }
     public IDataGenerationRepository DataGeneration { get; }
     public IMetaverseRepository Metaverse { get; }
+    public ISchedulingRepository Scheduling { get; }
     public ISearchRepository Search { get; }
     public ISecurityRepository Security { get; }
     public ISeedingRepository Seeding { get; }

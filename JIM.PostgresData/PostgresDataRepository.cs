@@ -14,6 +14,7 @@ public class PostgresDataRepository : IRepository
     public IConnectedSystemRepository ConnectedSystems { get; }
     public IDataGenerationRepository DataGeneration { get; }
     public IMetaverseRepository Metaverse { get; }
+    public ISchedulingRepository Scheduling { get; }
     public ISearchRepository Search { get; }
     public ISecurityRepository Security { get; }
     public ISeedingRepository Seeding { get; }
@@ -58,6 +59,7 @@ public class PostgresDataRepository : IRepository
         DataGeneration = new DataGenerationRepository(this);
         Database = jimDbContext; // the db context is passed in, so we can unit test jim and the data repository by passing in either a mock or the actual db context.
         Metaverse = new MetaverseRepository(this);
+        Scheduling = new SchedulingRepository(this);
         Search = new SearchRepository(this);
         Security = new SecurityRepository(this);
         Seeding = new SeedingRepository(this);

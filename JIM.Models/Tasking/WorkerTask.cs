@@ -1,5 +1,6 @@
-﻿using JIM.Models.Activities;
+using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Scheduling;
 using JIM.Models.Security;
 namespace JIM.Models.Tasking;
 
@@ -51,4 +52,20 @@ public abstract class WorkerTask
 	/// is initiated then the execution time must be set, and when complete, the activity must also be completed.
 	/// </summary>
 	public Activity Activity { get; set; } = null!;
+
+	// -----------------------------------------------------------------------------------------------------------------
+	// Schedule execution link - when this task is part of a scheduled execution
+	// -----------------------------------------------------------------------------------------------------------------
+
+	/// <summary>
+	/// If this task is part of a schedule execution, link to it here.
+	/// </summary>
+	public Guid? ScheduleExecutionId { get; set; }
+	public ScheduleExecution? ScheduleExecution { get; set; }
+
+	/// <summary>
+	/// The step index within the schedule this task corresponds to.
+	/// Used to track which step this task is executing.
+	/// </summary>
+	public int? ScheduleStepIndex { get; set; }
 }

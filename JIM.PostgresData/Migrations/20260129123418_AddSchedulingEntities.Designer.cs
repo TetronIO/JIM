@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260129123418_AddSchedulingEntities")]
+    partial class AddSchedulingEntities
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1468,20 +1471,14 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("CreatedById")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("CreatedByName")
-                        .HasColumnType("text");
-
-                    b.Property<int>("CreatedByType")
-                        .HasColumnType("integer");
-
                     b.Property<string>("CronExpression")
                         .HasColumnType("text");
 
                     b.Property<string>("Description")
                         .HasColumnType("text");
+
+                    b.Property<TimeSpan?>("Interval")
+                        .HasColumnType("interval");
 
                     b.Property<bool>("IsEnabled")
                         .HasColumnType("boolean");
@@ -1489,17 +1486,8 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("LastRunTime")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("LastUpdated")
+                    b.Property<DateTime?>("Modified")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("LastUpdatedById")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("LastUpdatedByName")
-                        .HasColumnType("text");
-
-                    b.Property<int>("LastUpdatedByType")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1599,31 +1587,7 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("ContinueOnFailure")
                         .HasColumnType("boolean");
 
-                    b.Property<DateTime>("Created")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CreatedById")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("CreatedByName")
-                        .HasColumnType("text");
-
-                    b.Property<int>("CreatedByType")
-                        .HasColumnType("integer");
-
                     b.Property<int>("ExecutionMode")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("LastUpdated")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("LastUpdatedById")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("LastUpdatedByName")
-                        .HasColumnType("text");
-
-                    b.Property<int>("LastUpdatedByType")
                         .HasColumnType("integer");
 
                     b.Property<string>("Name")

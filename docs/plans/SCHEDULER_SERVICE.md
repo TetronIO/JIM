@@ -1,6 +1,6 @@
 # Plan: Implement Scheduler Service (Issue #168)
 
-- **Status:** Planned
+- **Status:** In Progress
 - **Milestone:** MVP
 - **GitHub Issue:** [#168](https://github.com/TetronIO/JIM/issues/168)
 
@@ -10,7 +10,7 @@ Implement a scheduler service to automate synchronisation workflows. A **Schedul
 
 ### Key Concepts
 
-- **Schedule**: A reusable plan defining a sequence of steps with timing (cron/interval)
+- **Schedule**: A reusable plan defining a sequence of steps with timing (cron or manual)
 - **ScheduleStep**: An individual task within a schedule (run profile, PowerShell, SQL, executable)
 - **ScheduleExecution**: A running instance of a schedule, tracking progress through its steps
 - **WorkerTask**: Individual tasks in the Worker queue (can be standalone or part of a ScheduleExecution)
@@ -57,7 +57,7 @@ Scheduler Service                    Worker Service
 +------------------+              +------------------+
 | Schedule         |              | WorkerTask Queue |
 | - Steps[]        |   triggers   | - Task 1         |
-| - Cron/Interval  | -----------> | - Task 2         |
+| - Cron/Manual    | -----------> | - Task 2         |
 +------------------+              | - Task 3         |
                                   +------------------+
                                          |
@@ -70,7 +70,7 @@ Scheduler Service                    Worker Service
 
 ---
 
-## Phase 1: Operations Page Redesign (Tabbed Interface)
+## Phase 1: Operations Page Redesign (Tabbed Interface) ✅ COMPLETE
 
 ### Goal
 Transform the Operations page into a "Task Management Centre" with three tabs: Queue, History, and Schedules.
@@ -134,7 +134,7 @@ Legend: Y = Completed, * = Processing, o = Waiting (not yet queued)
 
 ---
 
-## Phase 2: Scheduler Data Model
+## Phase 2: Scheduler Data Model ✅ COMPLETE
 
 ### Goal
 Create the data model for schedules, steps, and executions.
@@ -151,9 +151,8 @@ public class Schedule
     public string? Description { get; set; }
 
     // Timing
-    public ScheduleTriggerType TriggerType { get; set; }  // Cron, Interval, Manual
+    public ScheduleTriggerType TriggerType { get; set; }  // Cron or Manual
     public string? CronExpression { get; set; }  // e.g., "0 6 * * 1-5" (6am Mon-Fri)
-    public TimeSpan? Interval { get; set; }
 
     // State
     public bool IsEnabled { get; set; }
@@ -168,8 +167,18 @@ public class Schedule
     public DateTime? Modified { get; set; }
 }
 
-public enum ScheduleTriggerType { Cron, Interval, Manual }
+public enum ScheduleTriggerType { Cron, Manual }
 ```
+
+> **IMPORTANT: User-Friendly Scheduling UI**
+>
+> Users will NOT enter cron syntax directly. The UI must provide a user-friendly scheduling interface
+> (dropdowns, checkboxes, time pickers) that translates the user's scheduling requirements to cron
+> expressions under the hood. Example UI components:
+> - Frequency selector: "Every day", "Specific days of week", "Specific days of month"
+> - Time picker for run time(s)
+> - Preview showing "Runs at 6:00 AM on Monday, Tuesday, Wednesday, Thursday, Friday"
+> - Advanced users can optionally view/edit the generated cron expression
 
 **2.2 ScheduleStep (Task Definition)**
 
@@ -406,8 +415,12 @@ Multi-step wizard or tabbed dialog:
 
 **Tab 1: General**
 - Name, Description
-- Trigger type (Cron / Interval / Manual)
-- Cron builder with presets (hourly, daily, weekly, custom)
+- Trigger type (Scheduled / Manual)
+- User-friendly scheduling interface (NOT raw cron input):
+  - Frequency: "Every day", "Specific days of week", "Specific days of month"
+  - Time picker(s) for when to run
+  - Preview text showing human-readable schedule (e.g., "Runs at 6:00 AM on weekdays")
+  - Optional: "Show cron expression" toggle for advanced users
 
 **Tab 2: Steps**
 - Drag-and-drop step ordering
@@ -464,7 +477,7 @@ POST   /api/schedule-executions/{id}/pause  - Pause execution (post-MVP)
 ```powershell
 # Schedule management
 Get-JimSchedule [-Id <Guid>] [-Name <string>]
-New-JimSchedule -Name <string> -TriggerType <Cron|Interval|Manual> [-CronExpression <string>] [-Interval <TimeSpan>]
+New-JimSchedule -Name <string> -TriggerType <Cron|Manual> [-CronExpression <string>]
 Set-JimSchedule -Id <Guid> [-Name <string>] [-Enabled <bool>] ...
 Remove-JimSchedule -Id <Guid> [-Force]
 Enable-JimSchedule -Id <Guid>
@@ -567,7 +580,7 @@ Enable-JimSchedule -Id $schedule.Id
 1. **Schedule Definition**: Users can create schedules with multiple steps
 2. **Parallel Execution**: Steps can run in parallel where appropriate
 3. **Hierarchical Queue View**: Clear visibility of schedule progress
-4. **Timing Control**: Cron and interval-based triggering
+4. **Timing Control**: Cron-based scheduling with user-friendly UI (no raw cron input required)
 5. **Overlap Prevention**: Same schedule doesn't stack up
 6. **Audit Trail**: Full execution history via Activities
 7. **API & PowerShell**: Automation support
