@@ -395,6 +395,15 @@ html[lang] .mud-dialog {
     border-radius: 8px !important;
 }
 
+/* Dialog inner elements - slightly lighter backgrounds for nested content */
+html[lang] .mud-dialog .mud-tabs-tabbar {
+    background-color: var(--jim-dialog-inner-surface, transparent) !important;
+}
+
+html[lang] .mud-dialog .jim-step-item-in-block {
+    background-color: var(--jim-dialog-inner-surface, transparent) !important;
+}
+
 /* Remove drop shadows from all MudBlazor buttons */
 .mud-button-root {
     box-shadow: none !important;
@@ -869,3 +878,4 @@ html[lang] .mud-dialog {
 .jim-step-item-in-block:hover {
     background-color: var(--mud-palette-action-default-hover);
 }
+

@@ -245,25 +245,25 @@
                     <MudStack Row="true" Spacing="3" Justify="Justify.SpaceEvenly">
                         <div class="text-center">
                             <MudText Typo="Typo.h5" Color="Color.Success">@_selectedActivity.TotalObjectCreates</MudText>
-                            <MudText Typo="Typo.caption">Creates</MudText>
+                            <MudText Typo="Typo.caption">@(_selectedActivity.TotalObjectCreates == 1 ? "Create" : "Creates")</MudText>
                         </div>
                         <div class="text-center">
                             <MudText Typo="Typo.h5" Color="Color.Info">@_selectedActivity.TotalObjectUpdates</MudText>
-                            <MudText Typo="Typo.caption">Updates</MudText>
+                            <MudText Typo="Typo.caption">@(_selectedActivity.TotalObjectUpdates == 1 ? "Update" : "Updates")</MudText>
                         </div>
                         <div class="text-center">
                             <MudText Typo="Typo.h5" Color="Color.Info">@_selectedActivity.TotalObjectFlows</MudText>
-                            <MudText Typo="Typo.caption">Flows</MudText>
+                            <MudText Typo="Typo.caption">@(_selectedActivity.TotalObjectFlows == 1 ? "Flow" : "Flows")</MudText>
                         </div>
                         <div class="text-center">
                             <MudText Typo="Typo.h5" Color="Color.Warning">@_selectedActivity.TotalObjectDeletes</MudText>
-                            <MudText Typo="Typo.caption">Deletes</MudText>
+                            <MudText Typo="Typo.caption">@(_selectedActivity.TotalObjectDeletes == 1 ? "Delete" : "Deletes")</MudText>
                         </div>
                         <div class="text-center">
                             <MudText Typo="Typo.h5" Color="@(_selectedActivity.TotalObjectErrors > 0 ? Color.Error : Color.Default)">
                                 @_selectedActivity.TotalObjectErrors
                             </MudText>
-                            <MudText Typo="Typo.caption">Errors</MudText>
+                            <MudText Typo="Typo.caption">@(_selectedActivity.TotalObjectErrors == 1 ? "Error" : "Errors")</MudText>
                         </div>
                     </MudStack>
                 </MudPaper>

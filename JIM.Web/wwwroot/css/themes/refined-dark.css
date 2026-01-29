@@ -18,6 +18,10 @@ html[lang] {
     --mud-palette-secondary: #776be7;
     --mud-palette-secondary-text: #ffffffff;
 
+    /* === Status Colours (darker shades for dark mode with white text) === */
+    --mud-palette-success: #1b7d3e;
+    --mud-palette-success-text: #ffffffff;
+
     /* === Background & Surface === */
     --mud-palette-background: #0e1420;
     --mud-palette-surface: #121826;
@@ -25,6 +29,7 @@ html[lang] {
 
     /* === Dialog/Modal Surface (10% lighter than surface for better elevation) === */
     --jim-dialog-surface: #181e2e;
+    --jim-dialog-inner-surface: #1e2536;
 
     /* === Inner Surface (nested containers — subtle step deeper than surface) === */
     --jim-inner-surface: #1a2030;

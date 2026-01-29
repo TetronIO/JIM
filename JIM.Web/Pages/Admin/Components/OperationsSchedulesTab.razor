@@ -57,14 +57,14 @@
         </HeaderContent>
         <RowTemplate Context="context">
             <MudTd DataLabel="Name">
-                <MudText Typo="Typo.body2">@context.Name</MudText>
+                <MudText Typo="Typo.body1">@context.Name</MudText>
                 @if (!string.IsNullOrEmpty(context.Description))
                 {
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Description</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.Description</MudText>
                 }
             </MudTd>
             <MudTd DataLabel="Steps">
-                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default">
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Default">
                     @context.Steps.Count step@(context.Steps.Count != 1 ? "s" : "")
                 </MudChip>
             </MudTd>
@@ -72,7 +72,7 @@
                 @if (context.TriggerType == ScheduleTriggerType.Cron)
                 {
                     <MudTooltip Text="@context.CronExpression" Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Info"
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info"
                                  Icon="@Icons.Material.Filled.Schedule">
                             @GetCronDescription(context.CronExpression)
                         </MudChip>
@@ -80,7 +80,7 @@
                 }
                 else
                 {
-                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default"
                              Icon="@Icons.Material.Filled.TouchApp">
                         Manual
                     </MudChip>
@@ -90,36 +90,36 @@
                 @if (context.NextRunTime.HasValue && context.IsEnabled && context.TriggerType == ScheduleTriggerType.Cron)
                 {
                     <MudTooltip Text="@context.NextRunTime.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                        @context.NextRunTime.Value.ToLocalTime().ToRelativeTime()
+                        <MudText Typo="Typo.body1">@context.NextRunTime.Value.ToLocalTime().ToRelativeTime()</MudText>
                     </MudTooltip>
                 }
                 else
                 {
-                    <MudText Typo="Typo.body2" Class="mud-text-disabled">-</MudText>
+                    <MudText Typo="Typo.body1" Class="mud-text-disabled">-</MudText>
                 }
             </MudTd>
             <MudTd DataLabel="Last Run">
                 @if (context.LastRunTime.HasValue)
                 {
                     <MudTooltip Text="@context.LastRunTime.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                        @context.LastRunTime.Value.ToLocalTime().ToRelativeTime()
+                        <MudText Typo="Typo.body1">@context.LastRunTime.Value.ToLocalTime().ToRelativeTime()</MudText>
                     </MudTooltip>
                 }
                 else
                 {
-                    <MudText Typo="Typo.body2" Class="mud-text-disabled">Never</MudText>
+                    <MudText Typo="Typo.body1" Class="mud-text-disabled">Never</MudText>
                 }
             </MudTd>
             <MudTd DataLabel="Status">
                 @if (context.IsEnabled)
                 {
-                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Success">
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Success">
                         Enabled
                     </MudChip>
                 }
                 else
                 {
-                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default">
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default">
                         Disabled
                     </MudChip>
                 }
@@ -129,24 +129,24 @@
                     @if (context.IsEnabled)
                     {
                         <MudTooltip Text="Disable" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Pause" Size="Size.Small"
+                            <MudIconButton Icon="@Icons.Material.Outlined.Pause"
                                            OnClick="@(() => HandleToggleEnabledAsync(context))" />
                         </MudTooltip>
                     }
                     else
                     {
                         <MudTooltip Text="Enable" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Outlined.PlayArrow" Size="Size.Small"
+                            <MudIconButton Icon="@Icons.Material.Outlined.PlayArrow"
                                            OnClick="@(() => HandleToggleEnabledAsync(context))" />
                         </MudTooltip>
                     }
                     <MudTooltip Text="Run Now" Arrow="true" Placement="Placement.Top">
-                        <MudIconButton Icon="@Icons.Material.Outlined.PlayCircle" Size="Size.Small" Color="Color.Primary"
+                        <MudIconButton Icon="@Icons.Material.Outlined.PlayCircle" Color="Color.Primary"
                                        OnClick="@(() => HandleRunNowAsync(context))"
                                        Disabled="@(context.Steps.Count == 0)" />
                     </MudTooltip>
                     <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
-                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error"
+                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error"
                                        OnClick="@(() => HandleDeleteAsync(context))" />
                     </MudTooltip>
                 </MudStack>
