@@ -4,7 +4,6 @@
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Tasking
 @using JIM.Models.Tasking.DTOs
-@using JIM.PostgresData
 @using JIM.Utilities
 @inject JimApplication Jim
 @inject ISnackbar Snackbar
@@ -144,57 +143,55 @@
 
         // Setup polling for worker task header updates
         var token = _pollingCancellationTokenSource.Token;
-        _ = Task.Factory.StartNew(async () =>
+        _ = Task.Run(async () =>
         {
             while (!token.IsCancellationRequested)
             {
-                // Get a new JIM instance so we bypass Entity Framework caching
-                var iterationJim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
-
-                var stateHasChanged = false;
-                var newWorkerTaskHeaders = await iterationJim.Tasking.GetWorkerTaskHeadersAsync();
-
-                // Look for additions or updates
-                foreach (var newWorkerTaskHeader in newWorkerTaskHeaders)
-                {
-                    var workerTaskHeader = _workerTaskHeaders.SingleOrDefault(q => q.Id == newWorkerTaskHeader.Id);
-                    if (workerTaskHeader == null)
-                    {
-                        _workerTaskHeaders.Add(newWorkerTaskHeader);
-                        stateHasChanged = true;
-                    }
-                    else if (HasWorkerTaskHeaderChanged(workerTaskHeader, newWorkerTaskHeader))
-                    {
-                        var position = _workerTaskHeaders.IndexOf(workerTaskHeader);
-                        _workerTaskHeaders.Remove(workerTaskHeader);
-                        _workerTaskHeaders.Insert(position, newWorkerTaskHeader);
-                        stateHasChanged = true;
-                    }
-                }
-
-                // Look for removals
-                var workerTaskHeadersToRemove = _workerTaskHeaders.Where(sth => newWorkerTaskHeaders.All(sth2 => sth2.Id != sth.Id)).ToList();
-                foreach (var workerTaskHeaderToRemove in workerTaskHeadersToRemove)
-                {
-                    _workerTaskHeaders.Remove(workerTaskHeaderToRemove);
-                    stateHasChanged = true;
-                }
-
-                if (stateHasChanged)
-                    await InvokeAsync(StateHasChanged);
-
-                // Use the configurable polling interval from settings
-                var pollingInterval = await iterationJim.ServiceSettings.GetSettingValueAsync(
-                    Constants.SettingKeys.ProgressUpdateInterval,
-                    TimeSpan.FromSeconds(1));
-
                 try
                 {
-                    await Task.Delay(pollingInterval, token);
+                    var stateHasChanged = false;
+                    var newWorkerTaskHeaders = await Jim.Tasking.GetWorkerTaskHeadersAsync();
+
+                    // Look for additions or updates
+                    foreach (var newWorkerTaskHeader in newWorkerTaskHeaders)
+                    {
+                        var workerTaskHeader = _workerTaskHeaders.SingleOrDefault(q => q.Id == newWorkerTaskHeader.Id);
+                        if (workerTaskHeader == null)
+                        {
+                            _workerTaskHeaders.Add(newWorkerTaskHeader);
+                            stateHasChanged = true;
+                        }
+                        else if (HasWorkerTaskHeaderChanged(workerTaskHeader, newWorkerTaskHeader))
+                        {
+                            var position = _workerTaskHeaders.IndexOf(workerTaskHeader);
+                            _workerTaskHeaders.Remove(workerTaskHeader);
+                            _workerTaskHeaders.Insert(position, newWorkerTaskHeader);
+                            stateHasChanged = true;
+                        }
+                    }
+
+                    // Look for removals
+                    var workerTaskHeadersToRemove = _workerTaskHeaders.Where(sth => newWorkerTaskHeaders.All(sth2 => sth2.Id != sth.Id)).ToList();
+                    foreach (var workerTaskHeaderToRemove in workerTaskHeadersToRemove)
+                    {
+                        _workerTaskHeaders.Remove(workerTaskHeaderToRemove);
+                        stateHasChanged = true;
+                    }
+
+                    if (stateHasChanged)
+                        await InvokeAsync(StateHasChanged);
+
+                    // Use a reasonable polling interval (1 second for queue updates)
+                    await Task.Delay(TimeSpan.FromSeconds(1), token);
                 }
                 catch (TaskCanceledException)
                 {
                     break;
+                }
+                catch
+                {
+                    // Ignore errors during polling, will retry on next interval
+                    await Task.Delay(TimeSpan.FromSeconds(1), token);
                 }
             }
         }, token);

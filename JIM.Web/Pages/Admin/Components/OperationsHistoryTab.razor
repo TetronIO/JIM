@@ -7,6 +7,7 @@
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject IUserPreferenceService PreferenceService
+@implements IDisposable
 
 @if (_preferencesLoaded)
 {
@@ -356,6 +357,7 @@
     private bool _preferencesLoaded;
     private bool _panelOpen;
     private Activity? _selectedActivity;
+    private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
 
     // Filter for worker task activities only
     private static readonly ActivityTargetType[] WorkerTaskTargetTypes =
@@ -371,6 +373,38 @@
         ActivityTargetOperationType.Clear,
         ActivityTargetOperationType.Delete
     ];
+
+    protected override void OnInitialized()
+    {
+        // Setup polling for auto-refresh
+        var token = _pollingCancellationTokenSource.Token;
+        _ = Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    // Use a reasonable default polling interval (5 seconds for history is fine)
+                    await Task.Delay(TimeSpan.FromSeconds(5), token);
+
+                    // Only auto-refresh when on page 1 and panel is closed to avoid jarring UX
+                    // When on other pages, items shifting would be confusing
+                    if (_table != null && !_loading && _currentPage == 0 && !_panelOpen)
+                    {
+                        await InvokeAsync(() => _table.ReloadServerData());
+                    }
+                }
+                catch (TaskCanceledException)
+                {
+                    break;
+                }
+                catch
+                {
+                    // Ignore errors during polling, will retry on next interval
+                }
+            }
+        }, token);
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -388,6 +422,11 @@
                 // JS interop not yet available, will retry on next render
             }
         }
+    }
+
+    void IDisposable.Dispose()
+    {
+        _pollingCancellationTokenSource.Cancel();
     }
 
     private async Task OnRowsPerPageChanged(int newSize)
