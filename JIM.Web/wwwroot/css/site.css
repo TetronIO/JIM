@@ -879,3 +879,13 @@ html[lang] .mud-dialog .jim-step-item-in-block {
     background-color: var(--mud-palette-action-default-hover);
 }
 
+/* Subtle text emphasis - semi-bold for visual hierarchy without colour change */
+.jim-text-emphasis {
+    font-weight: 500;
+}
+
+/* Run profile name in schedule step display - uses teal/cyan for contrast */
+.jim-step-run-profile {
+    color: var(--jim-json-boolean);
+}
+

@@ -234,7 +234,7 @@
                                                 <div class="jim-step-item-in-block">
                                                     @{ var (runProfileName, connectedSystemName) = GetStepDisplayTexts(step); }
                                                     <MudText Typo="Typo.body2">
-                                                        <strong>@connectedSystemName</strong> <span class="mud-text-secondary">/</span> @runProfileName
+                                                        <span class="jim-text-emphasis">@connectedSystemName</span> <span class="mud-text-secondary">/</span> <span class="jim-step-run-profile">@runProfileName</span>
                                                     </MudText>
                                                 </div>
                                             </div>
@@ -288,7 +288,7 @@
                                                         <div class="jim-step-item-in-block">
                                                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                                                 <MudText Typo="Typo.body2" Style="flex: 1;">
-                                                                    <strong>@connectedSystem</strong> <span class="mud-text-secondary">/</span> @runProfile
+                                                                    <span class="jim-text-emphasis">@connectedSystem</span> <span class="mud-text-secondary">/</span> <span class="jim-step-run-profile">@runProfile</span>
                                                                 </MudText>
                                                                 <MudStack Row="true" Spacing="0">
                                                                     <MudTooltip Text="Edit step" Arrow="true" Placement="Placement.Top">
