@@ -53,7 +53,7 @@
                                 <MudText Typo="Typo.subtitle2" Class="mb-3">Schedule Configuration</MudText>
 
                                 <MudStack Spacing="3">
-                                    <MudSelect T="string" @bind-Value="_scheduleFrequency" Label="Frequency" Variant="Variant.Outlined">
+                                    <MudSelect T="string" Value="_scheduleFrequency" ValueChanged="HandleFrequencyChanged" Label="Frequency" Variant="Variant.Outlined">
                                         <MudSelectItem Value="@("daily")">Every Day</MudSelectItem>
                                         <MudSelectItem Value="@("weekdays")">Weekdays (Mon-Fri)</MudSelectItem>
                                         <MudSelectItem Value="@("weekends")">Weekends (Sat-Sun)</MudSelectItem>
@@ -80,18 +80,18 @@
 
                                     @if (_scheduleFrequency is "daily" or "weekdays" or "weekends" or "weekly")
                                     {
-                                        <MudTimePicker @bind-Time="_scheduleTime" Label="Run Time" Variant="Variant.Outlined"
+                                        <MudTimePicker Time="_scheduleTime" TimeChanged="HandleTimeChanged" Label="Run Time" Variant="Variant.Outlined"
                                                        Editable="true" AmPm="true" />
                                     }
                                     else if (_scheduleFrequency == "hourly")
                                     {
-                                        <MudNumericField T="int" @bind-Value="_minuteOffset" Label="Minute Offset"
+                                        <MudNumericField T="int" Value="_minuteOffset" ValueChanged="HandleMinuteOffsetChanged" Label="Minute Offset"
                                                          Variant="Variant.Outlined" Min="0" Max="59"
                                                          HelperText="Run at this minute of every hour (0-59)" />
                                     }
                                     else if (_scheduleFrequency == "minutes")
                                     {
-                                        <MudNumericField T="int" @bind-Value="_minuteInterval" Label="Interval (minutes)"
+                                        <MudNumericField T="int" Value="_minuteInterval" ValueChanged="HandleMinuteIntervalChanged" Label="Interval (minutes)"
                                                          Variant="Variant.Outlined" Min="1" Max="59"
                                                          HelperText="Run every N minutes" />
                                     }
@@ -110,7 +110,7 @@
                                     {
                                         <MudExpansionPanels Elevation="0">
                                             <MudExpansionPanel Text="Advanced: Cron Expression" Expanded="false">
-                                                <MudTextField @bind-Value="_schedule.CronExpression" Label="Cron Expression"
+                                                <MudTextField Value="@BuildCronExpression()" Label="Cron Expression"
                                                               Variant="Variant.Outlined" ReadOnly="true"
                                                               HelperText="Generated from schedule configuration above" />
                                             </MudExpansionPanel>
@@ -599,6 +599,31 @@
             _selectedDays.Remove(day);
         else
             _selectedDays.Add(day);
+        // Cron expression updates automatically via BuildCronExpression() binding
+    }
+
+    private void HandleFrequencyChanged(string value)
+    {
+        _scheduleFrequency = value;
+        // Cron expression updates automatically via BuildCronExpression() binding
+    }
+
+    private void HandleTimeChanged(TimeSpan? value)
+    {
+        _scheduleTime = value;
+        // Cron expression updates automatically via BuildCronExpression() binding
+    }
+
+    private void HandleMinuteOffsetChanged(int value)
+    {
+        _minuteOffset = value;
+        // Cron expression updates automatically via BuildCronExpression() binding
+    }
+
+    private void HandleMinuteIntervalChanged(int value)
+    {
+        _minuteInterval = value;
+        // Cron expression updates automatically via BuildCronExpression() binding
     }
 
     private void Cancel() => MudDialog.Cancel();
