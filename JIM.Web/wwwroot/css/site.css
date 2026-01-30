@@ -404,8 +404,8 @@ html[lang] .mud-dialog .jim-step-item-in-block {
     background-color: var(--jim-dialog-inner-surface, transparent) !important;
 }
 
-/* Nested expansion panels inside dialog papers use lighter inner surface */
-html[lang] .mud-dialog .mud-paper-outlined .mud-expand-panel {
+/* Outlined papers inside dialogs use lighter inner surface */
+html[lang] .mud-dialog .mud-paper-outlined {
     background-color: var(--jim-dialog-inner-surface, transparent) !important;
 }
 

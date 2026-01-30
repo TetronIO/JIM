@@ -79,7 +79,7 @@ html[lang] {
 
     /* === JIM Custom: Dialog surfaces (lighter than main surface for elevation) === */
     --jim-dialog-surface: #181e2e;
-    --jim-dialog-inner-surface: #1e2536;
+    --jim-dialog-inner-surface: #1b1f2c;
 
     /* === JIM Custom: Content Links === */
     --jim-link-color: #6e99cc;
