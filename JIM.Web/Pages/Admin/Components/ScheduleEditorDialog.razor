@@ -122,9 +122,9 @@
                                                 <MudText>Every</MudText>
                                                 <MudNumericField T="int" @bind-Value="_intervalValue" Variant="Variant.Outlined"
                                                                  Min="1" Max="@(_intervalUnit == ScheduleIntervalUnit.Hours ? 12 : 59)"
-                                                                 Style="width: 80px; flex: 0 0 auto;" Margin="Margin.Dense" />
+                                                                 Class="jim-interval-number" Margin="Margin.Dense" />
                                                 <MudSelect T="ScheduleIntervalUnit" @bind-Value="_intervalUnit" Variant="Variant.Outlined"
-                                                           Style="width: 120px; flex: 0 0 auto;" Margin="Margin.Dense">
+                                                           Class="jim-interval-unit" Margin="Margin.Dense">
                                                     <MudSelectItem Value="ScheduleIntervalUnit.Minutes">minutes</MudSelectItem>
                                                     <MudSelectItem Value="ScheduleIntervalUnit.Hours">hours</MudSelectItem>
                                                 </MudSelect>

@@ -894,3 +894,16 @@ html[lang] .mud-dialog .mud-paper-outlined {
     color: var(--jim-json-boolean);
 }
 
+/* Interval configuration controls - constrain widths */
+.jim-interval-number {
+    width: 80px !important;
+    max-width: 80px !important;
+    flex: 0 0 80px !important;
+}
+
+.jim-interval-unit {
+    width: 120px !important;
+    max-width: 120px !important;
+    flex: 0 0 120px !important;
+}
+
