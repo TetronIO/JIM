@@ -770,4 +770,97 @@ public class SchedulesControllerTests
     // These are better tested via integration tests.
 
     #endregion
+
+    #region ScheduleDto Pattern Configuration tests
+
+    [Test]
+    public void ScheduleDto_FromEntity_MapsPatternTypeCorrectly()
+    {
+        var schedule = new Schedule
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test Schedule",
+            PatternType = SchedulePatternType.SpecificTimes,
+            DaysOfWeek = "1,2,3,4,5",
+            RunTimes = "09:00,12:00,15:00,18:00"
+        };
+
+        var dto = ScheduleDto.FromEntity(schedule);
+
+        Assert.That(dto.PatternType, Is.EqualTo(SchedulePatternType.SpecificTimes));
+        Assert.That(dto.DaysOfWeek, Is.EqualTo("1,2,3,4,5"));
+        Assert.That(dto.RunTimes, Is.EqualTo("09:00,12:00,15:00,18:00"));
+    }
+
+    [Test]
+    public void ScheduleDto_FromEntity_MapsIntervalConfigurationCorrectly()
+    {
+        var schedule = new Schedule
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test Schedule",
+            PatternType = SchedulePatternType.Interval,
+            DaysOfWeek = "1,2,3,4,5",
+            IntervalValue = 2,
+            IntervalUnit = ScheduleIntervalUnit.Hours,
+            IntervalWindowStart = "06:00",
+            IntervalWindowEnd = "18:00"
+        };
+
+        var dto = ScheduleDto.FromEntity(schedule);
+
+        Assert.That(dto.PatternType, Is.EqualTo(SchedulePatternType.Interval));
+        Assert.That(dto.IntervalValue, Is.EqualTo(2));
+        Assert.That(dto.IntervalUnit, Is.EqualTo(ScheduleIntervalUnit.Hours));
+        Assert.That(dto.IntervalWindowStart, Is.EqualTo("06:00"));
+        Assert.That(dto.IntervalWindowEnd, Is.EqualTo("18:00"));
+    }
+
+    [Test]
+    public void ScheduleDto_FromEntity_MapsCustomPatternCorrectly()
+    {
+        var schedule = new Schedule
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test Schedule",
+            PatternType = SchedulePatternType.Custom,
+            CronExpression = "0 9,12,15,18 * * 1-5"
+        };
+
+        var dto = ScheduleDto.FromEntity(schedule);
+
+        Assert.That(dto.PatternType, Is.EqualTo(SchedulePatternType.Custom));
+        Assert.That(dto.CronExpression, Is.EqualTo("0 9,12,15,18 * * 1-5"));
+        Assert.That(dto.DaysOfWeek, Is.Null);
+        Assert.That(dto.RunTimes, Is.Null);
+    }
+
+    [Test]
+    public async Task GetByIdAsync_ReturnsScheduleWithPatternConfigurationAsync()
+    {
+        var id = Guid.NewGuid();
+        var schedule = new Schedule
+        {
+            Id = id,
+            Name = "Test Schedule",
+            PatternType = SchedulePatternType.SpecificTimes,
+            DaysOfWeek = "1,2,3,4,5",
+            RunTimes = "09:00,12:00",
+            CronExpression = "0 9,12 * * 1,2,3,4,5",
+            Steps = new List<ScheduleStep>()
+        };
+
+        _mockSchedulingRepository.Setup(r => r.GetScheduleWithStepsAsync(id))
+            .ReturnsAsync(schedule);
+
+        var result = await _controller.GetByIdAsync(id) as OkObjectResult;
+        var response = result?.Value as ScheduleDetailDto;
+
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.PatternType, Is.EqualTo(SchedulePatternType.SpecificTimes));
+        Assert.That(response.DaysOfWeek, Is.EqualTo("1,2,3,4,5"));
+        Assert.That(response.RunTimes, Is.EqualTo("09:00,12:00"));
+    }
+
+    #endregion
 }
