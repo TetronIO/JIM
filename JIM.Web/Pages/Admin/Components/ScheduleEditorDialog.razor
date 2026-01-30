@@ -352,16 +352,29 @@
     private int _minuteInterval = 15;
     private HashSet<int> _selectedDays = new() { 1, 2, 3, 4, 5 }; // Mon-Fri default
 
-    private readonly (string Label, int Value)[] _daysOfWeek =
-    [
-        ("Sun", 0),
-        ("Mon", 1),
-        ("Tue", 2),
-        ("Wed", 3),
-        ("Thu", 4),
-        ("Fri", 5),
-        ("Sat", 6)
-    ];
+    // Days ordered according to the current culture's first day of week
+    private (string Label, int Value)[] _daysOfWeek = null!;
+
+    private static (string Label, int Value)[] GetDaysOfWeekForCulture()
+    {
+        // Cron day values: 0=Sunday, 1=Monday, ..., 6=Saturday
+        var allDays = new (string Label, int Value)[]
+        {
+            ("Sun", 0),
+            ("Mon", 1),
+            ("Tue", 2),
+            ("Wed", 3),
+            ("Thu", 4),
+            ("Fri", 5),
+            ("Sat", 6)
+        };
+
+        // Get the first day of week for the current culture (e.g., Monday for en-GB, Sunday for en-US)
+        var firstDay = (int)System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.FirstDayOfWeek;
+
+        // Reorder the array to start from the culture's first day
+        return allDays.Skip(firstDay).Concat(allDays.Take(firstDay)).ToArray();
+    }
 
     // Step editor state
     private ScheduleStep? _editingStep;
@@ -373,6 +386,9 @@
     protected override async Task OnInitializedAsync()
     {
         _loading = true;
+
+        // Initialise days of week ordered by current culture (e.g., Mon-Sun for en-GB, Sun-Sat for en-US)
+        _daysOfWeek = GetDaysOfWeekForCulture();
 
         // Load connected systems for step configuration
         _connectedSystems = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
