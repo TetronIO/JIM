@@ -232,13 +232,10 @@
                                             </div>
                                             <div class="jim-step-block-content">
                                                 <div class="jim-step-item-in-block">
-                                                    @{ var (primaryText, secondaryText) = GetStepDisplayTexts(step); }
-                                                    <MudStack Spacing="0">
-                                                        <MudText Typo="Typo.body2">@primaryText</MudText>
-                                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                                            @secondaryText
-                                                        </MudText>
-                                                    </MudStack>
+                                                    @{ var (runProfileName, connectedSystemName) = GetStepDisplayTexts(step); }
+                                                    <MudText Typo="Typo.body2">
+                                                        <strong>@connectedSystemName</strong> <span class="mud-text-secondary">/</span> @runProfileName
+                                                    </MudText>
                                                 </div>
                                             </div>
                                         </MudPaper>
@@ -287,15 +284,12 @@
                                                 <div class="jim-step-block-content">
                                                     @foreach (var step in block.Steps)
                                                     {
-                                                        var (stepPrimary, stepSecondary) = GetStepDisplayTexts(step);
+                                                        var (runProfile, connectedSystem) = GetStepDisplayTexts(step);
                                                         <div class="jim-step-item-in-block">
                                                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                                                <MudStack Spacing="0" Style="flex: 1;">
-                                                                    <MudText Typo="Typo.body2">@stepPrimary</MudText>
-                                                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                                                        @stepSecondary
-                                                                    </MudText>
-                                                                </MudStack>
+                                                                <MudText Typo="Typo.body2" Style="flex: 1;">
+                                                                    <strong>@connectedSystem</strong> <span class="mud-text-secondary">/</span> @runProfile
+                                                                </MudText>
                                                                 <MudStack Row="true" Spacing="0">
                                                                     <MudTooltip Text="Edit step" Arrow="true" Placement="Placement.Top">
                                                                         <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small"

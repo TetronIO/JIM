@@ -857,7 +857,7 @@ html[lang] .mud-dialog .jim-step-item-in-block {
 
 .jim-step-block-header {
     background-color: var(--mud-palette-background-grey);
-    padding: 8px 12px;
+    padding: 4px 12px;
     border-bottom: 1px solid var(--mud-palette-lines-default);
 }
 
@@ -866,7 +866,7 @@ html[lang] .mud-dialog .jim-step-item-in-block {
 }
 
 .jim-step-item-in-block {
-    padding: 12px 16px;
+    padding: 6px 12px;
     border-bottom: 1px solid var(--mud-palette-lines-default);
     transition: background-color 0.15s ease;
 }
