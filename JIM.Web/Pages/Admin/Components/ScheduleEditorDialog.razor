@@ -49,7 +49,7 @@
 
                         @if (_schedule.TriggerType == ScheduleTriggerType.Cron)
                         {
-                            <MudPaper Outlined="true" Class="pa-4 mt-2">
+                            <MudPaper Outlined="true" Class="pa-4 mt-2" Style="overflow: visible;">
                                 <MudText Typo="Typo.subtitle2" Class="mb-3">Schedule Configuration</MudText>
 
                                 <MudStack Spacing="3">
@@ -104,9 +104,8 @@
                                                         @FormatTimeSpan(time)
                                                     </MudChip>
                                                 }
-                                                <MudTimePicker @ref="_addTimePicker" Time="null" Label="Add time" Variant="Variant.Outlined"
-                                                               Editable="true" AmPm="true" Style="max-width: 140px;"
-                                                               TimeChanged="HandleAddRunTime" />
+                                                <MudTimePicker @ref="_addTimePicker" Time="_newRunTime" Label="Add time"
+                                                               AmPm="true" TimeChanged="HandleAddRunTime" />
                                             </MudStack>
                                             @if (_runTimes.Count == 0)
                                             {
@@ -119,32 +118,37 @@
                                         {
                                             @* Interval Configuration *@
                                             <MudText Typo="Typo.body2" Class="mud-text-secondary">Interval</MudText>
-                                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                                                <MudText>Every</MudText>
-                                                <MudNumericField T="int" @bind-Value="_intervalValue" Variant="Variant.Outlined"
-                                                                 Min="1" Max="@(_intervalUnit == ScheduleIntervalUnit.Hours ? 12 : 59)"
-                                                                 Style="max-width: 80px;" />
-                                                <MudSelect T="ScheduleIntervalUnit" @bind-Value="_intervalUnit" Variant="Variant.Outlined"
-                                                           Style="max-width: 120px;">
-                                                    <MudSelectItem Value="ScheduleIntervalUnit.Minutes">minutes</MudSelectItem>
-                                                    <MudSelectItem Value="ScheduleIntervalUnit.Hours">hours</MudSelectItem>
-                                                </MudSelect>
-                                            </MudStack>
-
-                                            <MudCheckBox T="bool" @bind-Value="_restrictToWindow" Color="Color.Primary" Dense="true">
-                                                Restrict to time window
-                                            </MudCheckBox>
+                                            <MudGrid Spacing="2">
+                                                <MudItem xs="12" sm="6">
+                                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                                        <MudText>Every</MudText>
+                                                        <MudNumericField T="int" @bind-Value="_intervalValue" Variant="Variant.Outlined"
+                                                                         Min="1" Max="@(_intervalUnit == ScheduleIntervalUnit.Hours ? 12 : 59)"
+                                                                         Style="width: 80px;" Margin="Margin.Dense" />
+                                                        <MudSelect T="ScheduleIntervalUnit" @bind-Value="_intervalUnit" Variant="Variant.Outlined"
+                                                                   Style="width: 120px;" Margin="Margin.Dense">
+                                                            <MudSelectItem Value="ScheduleIntervalUnit.Minutes">minutes</MudSelectItem>
+                                                            <MudSelectItem Value="ScheduleIntervalUnit.Hours">hours</MudSelectItem>
+                                                        </MudSelect>
+                                                    </MudStack>
+                                                </MudItem>
+                                                <MudItem xs="12" sm="6">
+                                                    <MudCheckBox T="bool" @bind-Value="_restrictToWindow" Color="Color.Primary" Dense="true">
+                                                        Restrict to time window
+                                                    </MudCheckBox>
+                                                </MudItem>
+                                            </MudGrid>
 
                                             @if (_restrictToWindow)
                                             {
-                                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                                                    <MudText>Between</MudText>
-                                                    <MudTimePicker @bind-Time="_intervalWindowStart" Variant="Variant.Outlined"
-                                                                   Editable="true" AmPm="true" Style="max-width: 140px;" />
-                                                    <MudText>and</MudText>
-                                                    <MudTimePicker @bind-Time="_intervalWindowEnd" Variant="Variant.Outlined"
-                                                                   Editable="true" AmPm="true" Style="max-width: 140px;" />
-                                                </MudStack>
+                                                <MudGrid Class="mt-2">
+                                                    <MudItem xs="12" sm="6">
+                                                        <MudTimePicker @bind-Time="_intervalWindowStart" Label="Start time" AmPm="true" />
+                                                    </MudItem>
+                                                    <MudItem xs="12" sm="6">
+                                                        <MudTimePicker @bind-Time="_intervalWindowEnd" Label="End time" AmPm="true" />
+                                                    </MudItem>
+                                                </MudGrid>
                                             }
                                         }
                                     }
@@ -426,6 +430,7 @@
     private TimeSpan? _intervalWindowEnd = new TimeSpan(18, 0, 0);
     private string _customCronExpression = "0 6 * * 1-5"; // Default for custom mode
     private MudTimePicker? _addTimePicker;
+    private TimeSpan? _newRunTime;
 
     // Days ordered according to the current culture's first day of week
     private (string Label, int Value)[] _daysOfWeek = null!;
@@ -720,12 +725,14 @@
 
     private async Task HandleAddRunTime(TimeSpan? time)
     {
+        _newRunTime = time;
         if (time.HasValue && !_runTimes.Contains(time.Value))
         {
             _runTimes.Add(time.Value);
             _runTimes.Sort();
         }
         // Reset the time picker by clearing and refreshing
+        _newRunTime = null;
         if (_addTimePicker != null)
         {
             await _addTimePicker.ClearAsync();
