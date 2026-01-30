@@ -907,3 +907,8 @@ html[lang] .mud-dialog .mud-paper-outlined {
     flex: 0 0 120px !important;
 }
 
+.jim-interval-checkbox {
+    flex: 0 0 auto !important;
+    margin-left: 8px !important;
+}
+
