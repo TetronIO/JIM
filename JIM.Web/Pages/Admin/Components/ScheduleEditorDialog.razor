@@ -118,7 +118,7 @@
                                         {
                                             @* Interval Configuration *@
                                             <MudText Typo="Typo.body2" Class="mud-text-secondary">Interval</MudText>
-                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap" Justify="Justify.FlexStart">
                                                 <MudText>Every</MudText>
                                                 <MudNumericField T="int" @bind-Value="_intervalValue" Variant="Variant.Outlined"
                                                                  Min="1" Max="@(_intervalUnit == ScheduleIntervalUnit.Hours ? 12 : 59)"
@@ -128,7 +128,8 @@
                                                     <MudSelectItem Value="ScheduleIntervalUnit.Minutes">minutes</MudSelectItem>
                                                     <MudSelectItem Value="ScheduleIntervalUnit.Hours">hours</MudSelectItem>
                                                 </MudSelect>
-                                                <MudCheckBox T="bool" @bind-Value="_restrictToWindow" Color="Color.Primary" Dense="true">
+                                                <MudCheckBox T="bool" @bind-Value="_restrictToWindow" Color="Color.Primary" Dense="true"
+                                                             Style="flex: 0 0 auto;">
                                                     Restrict to time window
                                                 </MudCheckBox>
                                             </MudStack>
