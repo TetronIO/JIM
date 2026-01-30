@@ -73,7 +73,7 @@
                 {
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Info"
                              Icon="@Icons.Material.Filled.Schedule">
-                        @GetCronDescription(context.CronExpression)
+                        @GetScheduleDescription(context)
                     </MudChip>
                 }
                 else
@@ -354,6 +354,117 @@
         await Jim.Scheduler.DeleteScheduleAsync(schedule);
         Snackbar.Add($"Schedule '{schedule.Name}' has been deleted.", Severity.Success);
         _table?.ReloadServerData();
+    }
+
+    /// <summary>
+    /// Gets a concise human-readable description of a schedule using its pattern metadata.
+    /// </summary>
+    private static string GetScheduleDescription(Schedule schedule)
+    {
+        if (schedule.TriggerType != ScheduleTriggerType.Cron)
+            return "Manual";
+
+        // Use pattern metadata for concise descriptions
+        var dayDesc = GetDayDescriptionFromSchedule(schedule.DaysOfWeek);
+
+        switch (schedule.PatternType)
+        {
+            case SchedulePatternType.Interval:
+                var unit = schedule.IntervalUnit == ScheduleIntervalUnit.Hours ? "hr" : "min";
+                var intervalDesc = $"Every {schedule.IntervalValue ?? 1} {unit}";
+
+                if (!string.IsNullOrEmpty(schedule.IntervalWindowStart) &&
+                    !string.IsNullOrEmpty(schedule.IntervalWindowEnd))
+                {
+                    var start = FormatTimeString(schedule.IntervalWindowStart);
+                    var end = FormatTimeString(schedule.IntervalWindowEnd);
+                    return $"{dayDesc}, {intervalDesc} ({start}-{end})";
+                }
+                return $"{dayDesc}, {intervalDesc}";
+
+            case SchedulePatternType.SpecificTimes:
+                if (!string.IsNullOrEmpty(schedule.RunTimes))
+                {
+                    var times = schedule.RunTimes.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                    if (times.Length == 1)
+                    {
+                        return $"{dayDesc} at {FormatTimeString(times[0].Trim())}";
+                    }
+                    if (times.Length <= 3)
+                    {
+                        var timeList = string.Join(", ", times.Select(t => FormatTimeString(t.Trim())));
+                        return $"{dayDesc} at {timeList}";
+                    }
+                    // Many times - summarise
+                    return $"{dayDesc}, {times.Length} times/day";
+                }
+                break;
+
+            case SchedulePatternType.Custom:
+                // Fall back to cron parsing for custom expressions
+                return GetCronDescription(schedule.CronExpression);
+        }
+
+        // Fallback to cron parsing if pattern metadata isn't available
+        return GetCronDescription(schedule.CronExpression);
+    }
+
+    /// <summary>
+    /// Gets day description from DaysOfWeek string (e.g., "1,2,3,4,5").
+    /// </summary>
+    private static string GetDayDescriptionFromSchedule(string? daysOfWeek)
+    {
+        if (string.IsNullOrEmpty(daysOfWeek))
+            return "Daily";
+
+        var days = daysOfWeek.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Where(d => int.TryParse(d.Trim(), out _))
+            .Select(d => int.Parse(d.Trim()))
+            .OrderBy(d => d)
+            .ToList();
+
+        if (days.Count == 0 || days.Count == 7)
+            return "Daily";
+        if (days.SequenceEqual(new[] { 1, 2, 3, 4, 5 }))
+            return "Weekdays";
+        if (days.SequenceEqual(new[] { 0, 6 }))
+            return "Weekends";
+
+        // For 6 days, show which day is excluded
+        if (days.Count == 6)
+        {
+            var missing = Enumerable.Range(0, 7).Except(days).First();
+            var missingName = missing switch
+            {
+                0 => "Sun", 1 => "Mon", 2 => "Tue", 3 => "Wed",
+                4 => "Thu", 5 => "Fri", 6 => "Sat", _ => "?"
+            };
+            return $"Daily exc. {missingName}";
+        }
+
+        // Short list of days
+        var dayNames = days.Select(d => d switch
+        {
+            0 => "Sun", 1 => "Mon", 2 => "Tue", 3 => "Wed",
+            4 => "Thu", 5 => "Fri", 6 => "Sat", _ => "?"
+        });
+        return string.Join(", ", dayNames);
+    }
+
+    /// <summary>
+    /// Formats a time string (HH:mm) to AM/PM format.
+    /// </summary>
+    private static string FormatTimeString(string timeStr)
+    {
+        if (TimeSpan.TryParse(timeStr.Trim(), out var time))
+        {
+            var hour = time.Hours;
+            var minute = time.Minutes;
+            var period = hour >= 12 ? "pm" : "am";
+            var displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+            return minute == 0 ? $"{displayHour}{period}" : $"{displayHour}:{minute:D2}{period}";
+        }
+        return timeStr;
     }
 
     /// <summary>
