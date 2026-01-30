@@ -20,6 +20,10 @@ html[lang] {
     --mud-palette-secondary: #6688ff;
     --mud-palette-secondary-text: #ffffffff;
 
+    /* === Status Colours (darker shades for dark mode with white text) === */
+    --mud-palette-success: #1b7d3e;
+    --mud-palette-success-text: #ffffffff;
+
     /* === Background & Surface === */
     --mud-palette-background: #121228;
     --mud-palette-surface: #1e1e38;
