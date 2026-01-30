@@ -71,12 +71,10 @@
             <MudTd DataLabel="Trigger">
                 @if (context.TriggerType == ScheduleTriggerType.Cron)
                 {
-                    <MudTooltip Text="@context.CronExpression" Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info"
-                                 Icon="@Icons.Material.Filled.Schedule">
-                            @GetCronDescription(context.CronExpression)
-                        </MudChip>
-                    </MudTooltip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info"
+                             Icon="@Icons.Material.Filled.Schedule">
+                        @GetCronDescription(context.CronExpression)
+                    </MudChip>
                 }
                 else
                 {
