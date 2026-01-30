@@ -404,6 +404,10 @@ html[lang] .mud-dialog .jim-step-item-in-block {
     background-color: var(--jim-dialog-inner-surface, transparent) !important;
 }
 
+html[lang] .mud-dialog .mud-paper-outlined {
+    background-color: var(--jim-dialog-inner-surface, transparent) !important;
+}
+
 /* Remove drop shadows from all MudBlazor buttons */
 .mud-button-root {
     box-shadow: none !important;

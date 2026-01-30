@@ -88,6 +88,10 @@ html[lang] {
     /* === JIM Custom: Paper border === */
     --jim-paper-border-color: #2e2f32;
 
+    /* === JIM Custom: Dialog surfaces (lighter than main surface for elevation) === */
+    --jim-dialog-surface: #1a1b1c;
+    --jim-dialog-inner-surface: #222325;
+
     /* === JIM Custom: Content Links === */
     --jim-link-color: #4488ff;
 
