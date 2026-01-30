@@ -60,6 +60,7 @@
                                         <MudSelectItem Value="@("weekly")">Specific Days of Week</MudSelectItem>
                                         <MudSelectItem Value="@("hourly")">Every Hour</MudSelectItem>
                                         <MudSelectItem Value="@("minutes")">Every N Minutes</MudSelectItem>
+                                        <MudSelectItem Value="@("custom")">Custom (Cron Expression)</MudSelectItem>
                                     </MudSelect>
 
                                     @if (_scheduleFrequency == "weekly")
@@ -94,18 +95,27 @@
                                                          Variant="Variant.Outlined" Min="1" Max="59"
                                                          HelperText="Run every N minutes" />
                                     }
+                                    else if (_scheduleFrequency == "custom")
+                                    {
+                                        <MudTextField @bind-Value="_customCronExpression" Label="Cron Expression"
+                                                      Variant="Variant.Outlined"
+                                                      HelperText="Format: minute hour day-of-month month day-of-week (e.g., 0 6 * * 1-5)" />
+                                    }
 
                                     <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
                                         <MudText Typo="Typo.body2">@GetSchedulePreview()</MudText>
                                     </MudAlert>
 
-                                    <MudExpansionPanels Elevation="0">
-                                        <MudExpansionPanel Text="Advanced: Cron Expression" Expanded="false">
-                                            <MudTextField @bind-Value="_schedule.CronExpression" Label="Cron Expression"
-                                                          Variant="Variant.Outlined" ReadOnly="true"
-                                                          HelperText="Generated from schedule configuration above" />
-                                        </MudExpansionPanel>
-                                    </MudExpansionPanels>
+                                    @if (_scheduleFrequency != "custom")
+                                    {
+                                        <MudExpansionPanels Elevation="0">
+                                            <MudExpansionPanel Text="Advanced: Cron Expression" Expanded="false">
+                                                <MudTextField @bind-Value="_schedule.CronExpression" Label="Cron Expression"
+                                                              Variant="Variant.Outlined" ReadOnly="true"
+                                                              HelperText="Generated from schedule configuration above" />
+                                            </MudExpansionPanel>
+                                        </MudExpansionPanels>
+                                    }
                                 </MudStack>
                             </MudPaper>
                         }
@@ -357,6 +367,7 @@
     private int _minuteOffset;
     private int _minuteInterval = 15;
     private HashSet<int> _selectedDays = new() { 1, 2, 3, 4, 5 }; // Mon-Fri default
+    private string _customCronExpression = "0 6 * * *"; // Default for custom mode
 
     // Days ordered according to the current culture's first day of week
     private (string Label, int Value)[] _daysOfWeek = null!;
@@ -447,7 +458,12 @@
 
         var parts = cron.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 5)
+        {
+            // Invalid format - treat as custom
+            _scheduleFrequency = "custom";
+            _customCronExpression = cron;
             return;
+        }
 
         var minute = parts[0];
         var hour = parts[1];
@@ -493,7 +509,8 @@
             }
             else
             {
-                _scheduleFrequency = "weekly";
+                // Check if it's a simple list of days
+                var allParsed = true;
                 _selectedDays.Clear();
                 foreach (var day in dayOfWeek.Split(','))
                 {
@@ -501,13 +518,34 @@
                     {
                         _selectedDays.Add(d);
                     }
+                    else
+                    {
+                        allParsed = false;
+                        break;
+                    }
+                }
+                _scheduleFrequency = allParsed ? "weekly" : "custom";
+                if (!allParsed)
+                {
+                    _customCronExpression = cron;
                 }
             }
+        }
+        else
+        {
+            // Complex expression - use custom mode
+            _scheduleFrequency = "custom";
+            _customCronExpression = cron;
         }
     }
 
     private string BuildCronExpression()
     {
+        if (_scheduleFrequency == "custom")
+        {
+            return _customCronExpression;
+        }
+
         var minute = _scheduleTime?.Minutes.ToString() ?? "0";
         var hour = _scheduleTime?.Hours.ToString() ?? "6";
 
@@ -525,6 +563,13 @@
 
     private string GetSchedulePreview()
     {
+        if (_scheduleFrequency == "custom")
+        {
+            return string.IsNullOrWhiteSpace(_customCronExpression)
+                ? "Enter a valid cron expression"
+                : $"Custom schedule: {_customCronExpression}";
+        }
+
         var timeStr = _scheduleTime.HasValue
             ? $"{(_scheduleTime.Value.Hours > 12 ? _scheduleTime.Value.Hours - 12 : (_scheduleTime.Value.Hours == 0 ? 12 : _scheduleTime.Value.Hours))}:{_scheduleTime.Value.Minutes:D2} {(_scheduleTime.Value.Hours >= 12 ? "PM" : "AM")}"
             : "6:00 AM";
