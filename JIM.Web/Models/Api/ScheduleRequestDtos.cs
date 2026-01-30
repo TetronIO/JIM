@@ -27,10 +27,53 @@ public class CreateScheduleRequest
     public ScheduleTriggerType TriggerType { get; set; } = ScheduleTriggerType.Manual;
 
     /// <summary>
-    /// The cron expression for scheduled triggers. Required when TriggerType is Cron.
+    /// The cron expression for scheduled triggers.
+    /// This is typically generated from the pattern configuration fields, but can be provided directly when PatternType is Custom.
     /// </summary>
     [StringLength(100)]
     public string? CronExpression { get; set; }
+
+    /// <summary>
+    /// The type of schedule pattern: SpecificTimes, Interval, or Custom.
+    /// </summary>
+    public SchedulePatternType PatternType { get; set; } = SchedulePatternType.SpecificTimes;
+
+    /// <summary>
+    /// Days of week to run (0=Sunday, 6=Saturday). Only used when PatternType != Custom.
+    /// Provide as comma-separated values: "1,2,3,4,5" for Mon-Fri.
+    /// </summary>
+    [StringLength(50)]
+    public string? DaysOfWeek { get; set; }
+
+    /// <summary>
+    /// Times to run when PatternType is SpecificTimes.
+    /// Provide as comma-separated 24h times: "09:00,12:00,15:00,18:00".
+    /// </summary>
+    [StringLength(200)]
+    public string? RunTimes { get; set; }
+
+    /// <summary>
+    /// Interval value when PatternType is Interval (e.g., 2 for "every 2 hours").
+    /// </summary>
+    [Range(1, 59)]
+    public int? IntervalValue { get; set; }
+
+    /// <summary>
+    /// Interval unit when PatternType is Interval.
+    /// </summary>
+    public ScheduleIntervalUnit? IntervalUnit { get; set; }
+
+    /// <summary>
+    /// Optional start time for interval window (e.g., "06:00"). Only used when PatternType is Interval.
+    /// </summary>
+    [StringLength(10)]
+    public string? IntervalWindowStart { get; set; }
+
+    /// <summary>
+    /// Optional end time for interval window (e.g., "18:00"). Only used when PatternType is Interval.
+    /// </summary>
+    [StringLength(10)]
+    public string? IntervalWindowEnd { get; set; }
 
     /// <summary>
     /// Whether the schedule should be enabled upon creation.
@@ -67,10 +110,53 @@ public class UpdateScheduleRequest
     public ScheduleTriggerType TriggerType { get; set; }
 
     /// <summary>
-    /// The cron expression for scheduled triggers. Required when TriggerType is Cron.
+    /// The cron expression for scheduled triggers.
+    /// This is typically generated from the pattern configuration fields, but can be provided directly when PatternType is Custom.
     /// </summary>
     [StringLength(100)]
     public string? CronExpression { get; set; }
+
+    /// <summary>
+    /// The type of schedule pattern: SpecificTimes, Interval, or Custom.
+    /// </summary>
+    public SchedulePatternType PatternType { get; set; }
+
+    /// <summary>
+    /// Days of week to run (0=Sunday, 6=Saturday). Only used when PatternType != Custom.
+    /// Provide as comma-separated values: "1,2,3,4,5" for Mon-Fri.
+    /// </summary>
+    [StringLength(50)]
+    public string? DaysOfWeek { get; set; }
+
+    /// <summary>
+    /// Times to run when PatternType is SpecificTimes.
+    /// Provide as comma-separated 24h times: "09:00,12:00,15:00,18:00".
+    /// </summary>
+    [StringLength(200)]
+    public string? RunTimes { get; set; }
+
+    /// <summary>
+    /// Interval value when PatternType is Interval (e.g., 2 for "every 2 hours").
+    /// </summary>
+    [Range(1, 59)]
+    public int? IntervalValue { get; set; }
+
+    /// <summary>
+    /// Interval unit when PatternType is Interval.
+    /// </summary>
+    public ScheduleIntervalUnit? IntervalUnit { get; set; }
+
+    /// <summary>
+    /// Optional start time for interval window (e.g., "06:00"). Only used when PatternType is Interval.
+    /// </summary>
+    [StringLength(10)]
+    public string? IntervalWindowStart { get; set; }
+
+    /// <summary>
+    /// Optional end time for interval window (e.g., "18:00"). Only used when PatternType is Interval.
+    /// </summary>
+    [StringLength(10)]
+    public string? IntervalWindowEnd { get; set; }
 
     /// <summary>
     /// Whether the schedule is enabled.

@@ -53,18 +53,26 @@
                                 <MudText Typo="Typo.subtitle2" Class="mb-3">Schedule Configuration</MudText>
 
                                 <MudStack Spacing="3">
-                                    <MudSelect T="string" Value="_scheduleFrequency" ValueChanged="HandleFrequencyChanged" Label="Frequency" Variant="Variant.Outlined">
-                                        <MudSelectItem Value="@("daily")">Every Day</MudSelectItem>
-                                        <MudSelectItem Value="@("weekdays")">Weekdays (Mon-Fri)</MudSelectItem>
-                                        <MudSelectItem Value="@("weekends")">Weekends (Sat-Sun)</MudSelectItem>
-                                        <MudSelectItem Value="@("weekly")">Specific Days of Week</MudSelectItem>
-                                        <MudSelectItem Value="@("hourly")">Every Hour</MudSelectItem>
-                                        <MudSelectItem Value="@("minutes")">Every N Minutes</MudSelectItem>
-                                        <MudSelectItem Value="@("custom")">Custom (Cron Expression)</MudSelectItem>
-                                    </MudSelect>
+                                    @* Pattern Type Selection *@
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Run Pattern</MudText>
+                                    <MudRadioGroup T="SchedulePatternType" Value="_patternType" ValueChanged="HandlePatternTypeChanged">
+                                        <MudRadio Value="SchedulePatternType.SpecificTimes" Color="Color.Primary" Dense="true">
+                                            At specific times
+                                        </MudRadio>
+                                        <MudRadio Value="SchedulePatternType.Interval" Color="Color.Primary" Dense="true">
+                                            At regular intervals
+                                        </MudRadio>
+                                        <MudRadio Value="SchedulePatternType.Custom" Color="Color.Primary" Dense="true">
+                                            Custom (Cron Expression)
+                                        </MudRadio>
+                                    </MudRadioGroup>
 
-                                    @if (_scheduleFrequency == "weekly")
+                                    @if (_patternType != SchedulePatternType.Custom)
                                     {
+                                        <MudDivider Class="my-1" />
+
+                                        @* Days Selection *@
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Days</MudText>
                                         <MudStack Row="true" Spacing="1" Justify="Justify.SpaceBetween">
                                             @foreach (var day in _daysOfWeek)
                                             {
@@ -76,37 +84,83 @@
                                                 </MudChip>
                                             }
                                         </MudStack>
-                                    }
+                                        <MudStack Row="true" Spacing="2">
+                                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="SelectAllDays">Every Day</MudButton>
+                                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="SelectWeekdays">Weekdays</MudButton>
+                                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="SelectWeekends">Weekends</MudButton>
+                                        </MudStack>
 
-                                    @if (_scheduleFrequency is "daily" or "weekdays" or "weekends" or "weekly")
-                                    {
-                                        <MudTimePicker Time="_scheduleTime" TimeChanged="HandleTimeChanged" Label="Run Time" Variant="Variant.Outlined"
-                                                       Editable="true" AmPm="true" />
+                                        <MudDivider Class="my-1" />
+
+                                        @if (_patternType == SchedulePatternType.SpecificTimes)
+                                        {
+                                            @* Multiple Times Selection *@
+                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Times</MudText>
+                                            <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+                                                @foreach (var time in _runTimes.ToList())
+                                                {
+                                                    <MudChip T="string" Color="Color.Primary" Variant="Variant.Filled"
+                                                             OnClose="@(() => RemoveRunTime(time))" Class="ma-1">
+                                                        @FormatTimeSpan(time)
+                                                    </MudChip>
+                                                }
+                                                <MudTimePicker @ref="_addTimePicker" Time="null" Label="Add time" Variant="Variant.Outlined"
+                                                               Editable="true" AmPm="true" Style="max-width: 140px;"
+                                                               TimeChanged="HandleAddRunTime" />
+                                            </MudStack>
+                                            @if (_runTimes.Count == 0)
+                                            {
+                                                <MudAlert Severity="Severity.Warning" Dense="true">
+                                                    Add at least one run time
+                                                </MudAlert>
+                                            }
+                                        }
+                                        else if (_patternType == SchedulePatternType.Interval)
+                                        {
+                                            @* Interval Configuration *@
+                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Interval</MudText>
+                                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                                <MudText>Every</MudText>
+                                                <MudNumericField T="int" @bind-Value="_intervalValue" Variant="Variant.Outlined"
+                                                                 Min="1" Max="@(_intervalUnit == ScheduleIntervalUnit.Hours ? 12 : 59)"
+                                                                 Style="max-width: 80px;" />
+                                                <MudSelect T="ScheduleIntervalUnit" @bind-Value="_intervalUnit" Variant="Variant.Outlined"
+                                                           Style="max-width: 120px;">
+                                                    <MudSelectItem Value="ScheduleIntervalUnit.Minutes">minutes</MudSelectItem>
+                                                    <MudSelectItem Value="ScheduleIntervalUnit.Hours">hours</MudSelectItem>
+                                                </MudSelect>
+                                            </MudStack>
+
+                                            <MudCheckBox T="bool" @bind-Value="_restrictToWindow" Color="Color.Primary" Dense="true">
+                                                Restrict to time window
+                                            </MudCheckBox>
+
+                                            @if (_restrictToWindow)
+                                            {
+                                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                                    <MudText>Between</MudText>
+                                                    <MudTimePicker @bind-Time="_intervalWindowStart" Variant="Variant.Outlined"
+                                                                   Editable="true" AmPm="true" Style="max-width: 140px;" />
+                                                    <MudText>and</MudText>
+                                                    <MudTimePicker @bind-Time="_intervalWindowEnd" Variant="Variant.Outlined"
+                                                                   Editable="true" AmPm="true" Style="max-width: 140px;" />
+                                                </MudStack>
+                                            }
+                                        }
                                     }
-                                    else if (_scheduleFrequency == "hourly")
+                                    else
                                     {
-                                        <MudNumericField T="int" Value="_minuteOffset" ValueChanged="HandleMinuteOffsetChanged" Label="Minute Offset"
-                                                         Variant="Variant.Outlined" Min="0" Max="59"
-                                                         HelperText="Run at this minute of every hour (0-59)" />
-                                    }
-                                    else if (_scheduleFrequency == "minutes")
-                                    {
-                                        <MudNumericField T="int" Value="_minuteInterval" ValueChanged="HandleMinuteIntervalChanged" Label="Interval (minutes)"
-                                                         Variant="Variant.Outlined" Min="1" Max="59"
-                                                         HelperText="Run every N minutes" />
-                                    }
-                                    else if (_scheduleFrequency == "custom")
-                                    {
+                                        @* Custom Cron Expression *@
                                         <MudTextField @bind-Value="_customCronExpression" Label="Cron Expression"
                                                       Variant="Variant.Outlined"
-                                                      HelperText="Format: minute hour day-of-month month day-of-week (e.g., 0 6 * * 1-5)" />
+                                                      HelperText="Format: minute hour day-of-month month day-of-week (e.g., 0 9,12,15,18 * * 1-5)" />
                                     }
 
                                     <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
                                         <MudText Typo="Typo.body2">@GetSchedulePreview()</MudText>
                                     </MudAlert>
 
-                                    @if (_scheduleFrequency != "custom")
+                                    @if (_patternType != SchedulePatternType.Custom)
                                     {
                                         <MudExpansionPanels Elevation="0">
                                             <MudExpansionPanel Text="Advanced: Cron Expression" Expanded="false">
@@ -361,13 +415,17 @@
     private bool _saving;
     private int _activeTab;
 
-    // Scheduling UI state
-    private string _scheduleFrequency = "daily";
-    private TimeSpan? _scheduleTime = new TimeSpan(6, 0, 0); // Default 6:00 AM
-    private int _minuteOffset;
-    private int _minuteInterval = 15;
-    private HashSet<int> _selectedDays = new() { 1, 2, 3, 4, 5 }; // Mon-Fri default
-    private string _customCronExpression = "0 6 * * *"; // Default for custom mode
+    // Scheduling UI state - new pattern-based configuration
+    private SchedulePatternType _patternType = SchedulePatternType.SpecificTimes;
+    private HashSet<int> _selectedDays = new() { 1, 2, 3, 4, 5 }; // Mon-Fri default (cron: 0=Sun, 6=Sat)
+    private List<TimeSpan> _runTimes = new() { new TimeSpan(6, 0, 0) }; // Default 6:00 AM
+    private int _intervalValue = 2;
+    private ScheduleIntervalUnit _intervalUnit = ScheduleIntervalUnit.Hours;
+    private bool _restrictToWindow = false;
+    private TimeSpan? _intervalWindowStart = new TimeSpan(6, 0, 0);
+    private TimeSpan? _intervalWindowEnd = new TimeSpan(18, 0, 0);
+    private string _customCronExpression = "0 6 * * 1-5"; // Default for custom mode
+    private MudTimePicker? _addTimePicker;
 
     // Days ordered according to the current culture's first day of week
     private (string Label, int Value)[] _daysOfWeek = null!;
@@ -421,8 +479,8 @@
             _schedule = await Jim.Scheduler.GetScheduleWithStepsAsNoTrackingAsync(ScheduleId.Value);
             if (_schedule != null)
             {
-                // Parse existing cron expression to populate UI
-                ParseCronExpression(_schedule.CronExpression);
+                // Load schedule configuration from model fields
+                LoadScheduleConfiguration();
 
                 // Preload run profiles for all RunProfile steps so we can display their names
                 var connectedSystemIds = _schedule.Steps
@@ -444,6 +502,7 @@
                 Id = Guid.NewGuid(),
                 Name = "",
                 TriggerType = ScheduleTriggerType.Manual,
+                PatternType = SchedulePatternType.SpecificTimes,
                 IsEnabled = false
             };
         }
@@ -451,146 +510,184 @@
         _loading = false;
     }
 
-    private void ParseCronExpression(string? cron)
+    /// <summary>
+    /// Loads schedule configuration from the model's structured fields into UI state.
+    /// Falls back to parsing CronExpression for legacy schedules without structured config.
+    /// </summary>
+    private void LoadScheduleConfiguration()
     {
-        if (string.IsNullOrWhiteSpace(cron))
-            return;
+        if (_schedule == null) return;
 
-        var parts = cron.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length < 5)
+        _patternType = _schedule.PatternType;
+
+        // Load days of week
+        _selectedDays.Clear();
+        if (!string.IsNullOrWhiteSpace(_schedule.DaysOfWeek))
         {
-            // Invalid format - treat as custom
-            _scheduleFrequency = "custom";
-            _customCronExpression = cron;
-            return;
-        }
-
-        var minute = parts[0];
-        var hour = parts[1];
-        var dayOfMonth = parts[2];
-        var month = parts[3];
-        var dayOfWeek = parts[4];
-
-        // Parse time
-        if (int.TryParse(hour, out var h) && int.TryParse(minute, out var m))
-        {
-            _scheduleTime = new TimeSpan(h, m, 0);
-        }
-
-        // Determine frequency
-        if (dayOfMonth == "*" && month == "*")
-        {
-            if (dayOfWeek == "*")
+            foreach (var day in _schedule.DaysOfWeek.Split(',', StringSplitOptions.RemoveEmptyEntries))
             {
-                if (hour == "*")
-                {
-                    _scheduleFrequency = minute.StartsWith("*/") ? "minutes" : "hourly";
-                    if (minute.StartsWith("*/"))
-                    {
-                        int.TryParse(minute[2..], out _minuteInterval);
-                    }
-                    else
-                    {
-                        int.TryParse(minute, out _minuteOffset);
-                    }
-                }
-                else
-                {
-                    _scheduleFrequency = "daily";
-                }
-            }
-            else if (dayOfWeek == "1-5" || dayOfWeek == "MON-FRI")
-            {
-                _scheduleFrequency = "weekdays";
-            }
-            else if (dayOfWeek is "0,6" or "SAT,SUN")
-            {
-                _scheduleFrequency = "weekends";
-            }
-            else
-            {
-                // Check if it's a simple list of days
-                var allParsed = true;
-                _selectedDays.Clear();
-                foreach (var day in dayOfWeek.Split(','))
-                {
-                    if (int.TryParse(day.Trim(), out var d))
-                    {
-                        _selectedDays.Add(d);
-                    }
-                    else
-                    {
-                        allParsed = false;
-                        break;
-                    }
-                }
-                _scheduleFrequency = allParsed ? "weekly" : "custom";
-                if (!allParsed)
-                {
-                    _customCronExpression = cron;
-                }
+                if (int.TryParse(day.Trim(), out var d))
+                    _selectedDays.Add(d);
             }
         }
         else
         {
-            // Complex expression - use custom mode
-            _scheduleFrequency = "custom";
-            _customCronExpression = cron;
+            // Default to weekdays if not set
+            _selectedDays = new HashSet<int> { 1, 2, 3, 4, 5 };
+        }
+
+        // Load run times for SpecificTimes pattern
+        _runTimes.Clear();
+        if (!string.IsNullOrWhiteSpace(_schedule.RunTimes))
+        {
+            foreach (var timeStr in _schedule.RunTimes.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (TimeSpan.TryParse(timeStr.Trim(), out var time))
+                    _runTimes.Add(time);
+            }
+        }
+        if (_runTimes.Count == 0)
+            _runTimes.Add(new TimeSpan(6, 0, 0)); // Default
+
+        // Load interval configuration
+        _intervalValue = _schedule.IntervalValue ?? 2;
+        _intervalUnit = _schedule.IntervalUnit ?? ScheduleIntervalUnit.Hours;
+
+        if (!string.IsNullOrWhiteSpace(_schedule.IntervalWindowStart))
+        {
+            _restrictToWindow = true;
+            if (TimeSpan.TryParse(_schedule.IntervalWindowStart, out var start))
+                _intervalWindowStart = start;
+            if (!string.IsNullOrWhiteSpace(_schedule.IntervalWindowEnd) && TimeSpan.TryParse(_schedule.IntervalWindowEnd, out var end))
+                _intervalWindowEnd = end;
+        }
+        else
+        {
+            _restrictToWindow = false;
+        }
+
+        // Load custom cron expression
+        if (_patternType == SchedulePatternType.Custom && !string.IsNullOrWhiteSpace(_schedule.CronExpression))
+        {
+            _customCronExpression = _schedule.CronExpression;
         }
     }
 
     private string BuildCronExpression()
     {
-        if (_scheduleFrequency == "custom")
+        if (_patternType == SchedulePatternType.Custom)
         {
             return _customCronExpression;
         }
 
-        var minute = _scheduleTime?.Minutes.ToString() ?? "0";
-        var hour = _scheduleTime?.Hours.ToString() ?? "6";
+        var days = _selectedDays.Count == 7 ? "*" : string.Join(",", _selectedDays.OrderBy(d => d));
 
-        return _scheduleFrequency switch
+        if (_patternType == SchedulePatternType.SpecificTimes)
         {
-            "daily" => $"{minute} {hour} * * *",
-            "weekdays" => $"{minute} {hour} * * 1-5",
-            "weekends" => $"{minute} {hour} * * 0,6",
-            "weekly" => $"{minute} {hour} * * {string.Join(",", _selectedDays.OrderBy(d => d))}",
-            "hourly" => $"{_minuteOffset} * * * *",
-            "minutes" => $"*/{_minuteInterval} * * * *",
-            _ => "0 6 * * *"
-        };
+            if (_runTimes.Count == 0)
+                return "0 6 * * *"; // Fallback
+
+            // Group times by minute to create efficient cron expressions
+            // For simplicity, use minute from first time and list all hours
+            var minute = _runTimes.First().Minutes;
+            var hours = string.Join(",", _runTimes.Select(t => t.Hours).Distinct().OrderBy(h => h));
+            return $"{minute} {hours} * * {days}";
+        }
+
+        if (_patternType == SchedulePatternType.Interval)
+        {
+            if (_intervalUnit == ScheduleIntervalUnit.Hours)
+            {
+                if (_restrictToWindow && _intervalWindowStart.HasValue && _intervalWindowEnd.HasValue)
+                {
+                    // Generate specific hours within the window
+                    var hours = GenerateIntervalHours(_intervalValue, _intervalWindowStart.Value.Hours, _intervalWindowEnd.Value.Hours);
+                    return $"0 {string.Join(",", hours)} * * {days}";
+                }
+                else
+                {
+                    // Every N hours all day - use step syntax
+                    return $"0 */{_intervalValue} * * {days}";
+                }
+            }
+            else
+            {
+                // Every N minutes
+                return $"*/{_intervalValue} * * * {days}";
+            }
+        }
+
+        return "0 6 * * *"; // Fallback
+    }
+
+    private List<int> GenerateIntervalHours(int interval, int startHour, int endHour)
+    {
+        var hours = new List<int>();
+        for (var h = startHour; h <= endHour; h += interval)
+            hours.Add(h);
+        return hours;
     }
 
     private string GetSchedulePreview()
     {
-        if (_scheduleFrequency == "custom")
+        if (_patternType == SchedulePatternType.Custom)
         {
             return string.IsNullOrWhiteSpace(_customCronExpression)
                 ? "Enter a valid cron expression"
                 : $"Custom schedule: {_customCronExpression}";
         }
 
-        var timeStr = _scheduleTime.HasValue
-            ? $"{(_scheduleTime.Value.Hours > 12 ? _scheduleTime.Value.Hours - 12 : (_scheduleTime.Value.Hours == 0 ? 12 : _scheduleTime.Value.Hours))}:{_scheduleTime.Value.Minutes:D2} {(_scheduleTime.Value.Hours >= 12 ? "PM" : "AM")}"
-            : "6:00 AM";
+        if (_selectedDays.Count == 0)
+            return "Select at least one day";
 
-        return _scheduleFrequency switch
+        var daysText = GetSelectedDaysText();
+
+        if (_patternType == SchedulePatternType.SpecificTimes)
         {
-            "daily" => $"Runs every day at {timeStr}",
-            "weekdays" => $"Runs Monday through Friday at {timeStr}",
-            "weekends" => $"Runs Saturday and Sunday at {timeStr}",
-            "weekly" when _selectedDays.Count > 0 => $"Runs on {GetSelectedDaysText()} at {timeStr}",
-            "weekly" => "Select at least one day",
-            "hourly" => $"Runs every hour at :{_minuteOffset:D2}",
-            "minutes" => $"Runs every {_minuteInterval} minutes",
-            _ => "Schedule not configured"
-        };
+            if (_runTimes.Count == 0)
+                return "Add at least one run time";
+
+            var timesText = string.Join(", ", _runTimes.OrderBy(t => t).Select(FormatTimeSpan));
+            return $"Runs {daysText} at {timesText}";
+        }
+
+        if (_patternType == SchedulePatternType.Interval)
+        {
+            var unitText = _intervalUnit == ScheduleIntervalUnit.Hours ? "hour" : "minute";
+            if (_intervalValue > 1) unitText += "s";
+
+            var intervalText = $"every {_intervalValue} {unitText}";
+
+            if (_restrictToWindow && _intervalWindowStart.HasValue && _intervalWindowEnd.HasValue)
+            {
+                return $"Runs {daysText}, {intervalText} between {FormatTimeSpan(_intervalWindowStart.Value)} and {FormatTimeSpan(_intervalWindowEnd.Value)}";
+            }
+            return $"Runs {daysText}, {intervalText}";
+        }
+
+        return "Schedule not configured";
     }
 
     private string GetSelectedDaysText()
     {
+        if (_selectedDays.Count == 7)
+            return "every day";
+        if (_selectedDays.SetEquals(new[] { 1, 2, 3, 4, 5 }))
+            return "weekdays";
+        if (_selectedDays.SetEquals(new[] { 0, 6 }))
+            return "weekends";
+
         var dayNames = _selectedDays.OrderBy(d => d).Select(d => _daysOfWeek.First(x => x.Value == d).Label);
         return string.Join(", ", dayNames);
+    }
+
+    private static string FormatTimeSpan(TimeSpan time)
+    {
+        var hour = time.Hours;
+        var minute = time.Minutes;
+        var period = hour >= 12 ? "PM" : "AM";
+        var displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+        return $"{displayHour}:{minute:D2} {period}";
     }
 
     private void ToggleDaySelection(int day)
@@ -599,31 +696,45 @@
             _selectedDays.Remove(day);
         else
             _selectedDays.Add(day);
-        // Cron expression updates automatically via BuildCronExpression() binding
     }
 
-    private void HandleFrequencyChanged(string value)
+    private void SelectAllDays()
     {
-        _scheduleFrequency = value;
-        // Cron expression updates automatically via BuildCronExpression() binding
+        _selectedDays = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6 };
     }
 
-    private void HandleTimeChanged(TimeSpan? value)
+    private void SelectWeekdays()
     {
-        _scheduleTime = value;
-        // Cron expression updates automatically via BuildCronExpression() binding
+        _selectedDays = new HashSet<int> { 1, 2, 3, 4, 5 };
     }
 
-    private void HandleMinuteOffsetChanged(int value)
+    private void SelectWeekends()
     {
-        _minuteOffset = value;
-        // Cron expression updates automatically via BuildCronExpression() binding
+        _selectedDays = new HashSet<int> { 0, 6 };
     }
 
-    private void HandleMinuteIntervalChanged(int value)
+    private void HandlePatternTypeChanged(SchedulePatternType value)
     {
-        _minuteInterval = value;
-        // Cron expression updates automatically via BuildCronExpression() binding
+        _patternType = value;
+    }
+
+    private async Task HandleAddRunTime(TimeSpan? time)
+    {
+        if (time.HasValue && !_runTimes.Contains(time.Value))
+        {
+            _runTimes.Add(time.Value);
+            _runTimes.Sort();
+        }
+        // Reset the time picker by clearing and refreshing
+        if (_addTimePicker != null)
+        {
+            await _addTimePicker.ClearAsync();
+        }
+    }
+
+    private void RemoveRunTime(TimeSpan time)
+    {
+        _runTimes.Remove(time);
     }
 
     private void Cancel() => MudDialog.Cancel();
@@ -638,16 +749,76 @@
 
         if (_schedule.TriggerType == ScheduleTriggerType.Cron)
         {
-            if (_scheduleFrequency == "weekly" && _selectedDays.Count == 0)
+            // Validate configuration
+            if (_patternType != SchedulePatternType.Custom && _selectedDays.Count == 0)
             {
-                Snackbar.Add("Please select at least one day for the weekly schedule.", Severity.Warning);
+                Snackbar.Add("Please select at least one day.", Severity.Warning);
                 return;
             }
+            if (_patternType == SchedulePatternType.SpecificTimes && _runTimes.Count == 0)
+            {
+                Snackbar.Add("Please add at least one run time.", Severity.Warning);
+                return;
+            }
+
+            // Save pattern configuration to model
+            _schedule.PatternType = _patternType;
+
+            if (_patternType != SchedulePatternType.Custom)
+            {
+                _schedule.DaysOfWeek = string.Join(",", _selectedDays.OrderBy(d => d));
+            }
+            else
+            {
+                _schedule.DaysOfWeek = null;
+            }
+
+            if (_patternType == SchedulePatternType.SpecificTimes)
+            {
+                _schedule.RunTimes = string.Join(",", _runTimes.OrderBy(t => t).Select(t => t.ToString(@"hh\:mm")));
+                _schedule.IntervalValue = null;
+                _schedule.IntervalUnit = null;
+                _schedule.IntervalWindowStart = null;
+                _schedule.IntervalWindowEnd = null;
+            }
+            else if (_patternType == SchedulePatternType.Interval)
+            {
+                _schedule.RunTimes = null;
+                _schedule.IntervalValue = _intervalValue;
+                _schedule.IntervalUnit = _intervalUnit;
+                if (_restrictToWindow && _intervalWindowStart.HasValue && _intervalWindowEnd.HasValue)
+                {
+                    _schedule.IntervalWindowStart = _intervalWindowStart.Value.ToString(@"hh\:mm");
+                    _schedule.IntervalWindowEnd = _intervalWindowEnd.Value.ToString(@"hh\:mm");
+                }
+                else
+                {
+                    _schedule.IntervalWindowStart = null;
+                    _schedule.IntervalWindowEnd = null;
+                }
+            }
+            else
+            {
+                // Custom - clear guided config fields
+                _schedule.RunTimes = null;
+                _schedule.IntervalValue = null;
+                _schedule.IntervalUnit = null;
+                _schedule.IntervalWindowStart = null;
+                _schedule.IntervalWindowEnd = null;
+            }
+
             _schedule.CronExpression = BuildCronExpression();
         }
         else
         {
             _schedule.CronExpression = null;
+            _schedule.PatternType = SchedulePatternType.SpecificTimes;
+            _schedule.DaysOfWeek = null;
+            _schedule.RunTimes = null;
+            _schedule.IntervalValue = null;
+            _schedule.IntervalUnit = null;
+            _schedule.IntervalWindowStart = null;
+            _schedule.IntervalWindowEnd = null;
         }
 
         _saving = true;
@@ -674,6 +845,13 @@
                 dbSchedule.IsEnabled = _schedule.IsEnabled;
                 dbSchedule.TriggerType = _schedule.TriggerType;
                 dbSchedule.CronExpression = _schedule.CronExpression;
+                dbSchedule.PatternType = _schedule.PatternType;
+                dbSchedule.DaysOfWeek = _schedule.DaysOfWeek;
+                dbSchedule.RunTimes = _schedule.RunTimes;
+                dbSchedule.IntervalValue = _schedule.IntervalValue;
+                dbSchedule.IntervalUnit = _schedule.IntervalUnit;
+                dbSchedule.IntervalWindowStart = _schedule.IntervalWindowStart;
+                dbSchedule.IntervalWindowEnd = _schedule.IntervalWindowEnd;
                 dbSchedule.NextRunTime = _schedule.NextRunTime;
                 dbSchedule.LastUpdated = DateTime.UtcNow;
                 dbSchedule.LastUpdatedByType = ActivityInitiatorType.User;

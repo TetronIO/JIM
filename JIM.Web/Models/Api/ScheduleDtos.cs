@@ -29,8 +29,46 @@ public class ScheduleDto
 
     /// <summary>
     /// The cron expression for scheduled triggers (null for manual schedules).
+    /// This is generated from the pattern configuration fields, or entered directly when PatternType is Custom.
     /// </summary>
     public string? CronExpression { get; set; }
+
+    /// <summary>
+    /// The type of schedule pattern: SpecificTimes, Interval, or Custom.
+    /// </summary>
+    public SchedulePatternType PatternType { get; set; }
+
+    /// <summary>
+    /// Days of week to run (0=Sunday, 6=Saturday). Only used when PatternType != Custom.
+    /// Stored as comma-separated values: "1,2,3,4,5" for Mon-Fri.
+    /// </summary>
+    public string? DaysOfWeek { get; set; }
+
+    /// <summary>
+    /// Times to run when PatternType is SpecificTimes.
+    /// Stored as comma-separated 24h times: "09:00,12:00,15:00,18:00".
+    /// </summary>
+    public string? RunTimes { get; set; }
+
+    /// <summary>
+    /// Interval value when PatternType is Interval (e.g., 2 for "every 2 hours").
+    /// </summary>
+    public int? IntervalValue { get; set; }
+
+    /// <summary>
+    /// Interval unit when PatternType is Interval.
+    /// </summary>
+    public ScheduleIntervalUnit? IntervalUnit { get; set; }
+
+    /// <summary>
+    /// Optional start time for interval window (e.g., "06:00"). Only used when PatternType is Interval.
+    /// </summary>
+    public string? IntervalWindowStart { get; set; }
+
+    /// <summary>
+    /// Optional end time for interval window (e.g., "18:00"). Only used when PatternType is Interval.
+    /// </summary>
+    public string? IntervalWindowEnd { get; set; }
 
     /// <summary>
     /// Whether the schedule is currently enabled.
@@ -74,6 +112,13 @@ public class ScheduleDto
             Description = schedule.Description,
             TriggerType = schedule.TriggerType,
             CronExpression = schedule.CronExpression,
+            PatternType = schedule.PatternType,
+            DaysOfWeek = schedule.DaysOfWeek,
+            RunTimes = schedule.RunTimes,
+            IntervalValue = schedule.IntervalValue,
+            IntervalUnit = schedule.IntervalUnit,
+            IntervalWindowStart = schedule.IntervalWindowStart,
+            IntervalWindowEnd = schedule.IntervalWindowEnd,
             IsEnabled = schedule.IsEnabled,
             LastRunTime = schedule.LastRunTime,
             NextRunTime = schedule.NextRunTime,
@@ -106,6 +151,13 @@ public class ScheduleDetailDto : ScheduleDto
             Description = schedule.Description,
             TriggerType = schedule.TriggerType,
             CronExpression = schedule.CronExpression,
+            PatternType = schedule.PatternType,
+            DaysOfWeek = schedule.DaysOfWeek,
+            RunTimes = schedule.RunTimes,
+            IntervalValue = schedule.IntervalValue,
+            IntervalUnit = schedule.IntervalUnit,
+            IntervalWindowStart = schedule.IntervalWindowStart,
+            IntervalWindowEnd = schedule.IntervalWindowEnd,
             IsEnabled = schedule.IsEnabled,
             LastRunTime = schedule.LastRunTime,
             NextRunTime = schedule.NextRunTime,

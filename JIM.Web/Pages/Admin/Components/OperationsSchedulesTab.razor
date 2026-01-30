@@ -358,7 +358,6 @@
 
     /// <summary>
     /// Converts a cron expression to a human-readable description.
-    /// This is a simplified version; in future, we'll use a proper cron description library.
     /// </summary>
     private static string GetCronDescription(string? cronExpression)
     {
@@ -376,63 +375,113 @@
         var month = parts[3];
         var dayOfWeek = parts[4];
 
+        // Get day description
+        var dayDesc = GetDayDescription(dayOfWeek);
+
+        // Handle multiple specific hours (e.g., "0 9,12,15,18 * * 1-5")
+        if (dayOfMonth == "*" && month == "*" && hour.Contains(',') && !hour.Contains('/'))
+        {
+            var hours = hour.Split(',')
+                .Where(h => int.TryParse(h.Trim(), out _))
+                .Select(h => int.Parse(h.Trim()))
+                .ToList();
+
+            if (hours.Count > 0)
+            {
+                var timeList = string.Join(", ", hours.Select(h => FormatHour(h, int.TryParse(minute, out var m) ? m : 0)));
+                return $"{dayDesc} at {timeList}";
+            }
+        }
+
         // Daily at specific time
         if (dayOfMonth == "*" && month == "*" && dayOfWeek == "*")
         {
+            if (hour.StartsWith("*/"))
+            {
+                var interval = hour[2..];
+                return $"Every {interval} hours";
+            }
             return $"Daily at {FormatTime(hour, minute)}";
         }
 
-        // Weekdays only
-        if (dayOfMonth == "*" && month == "*" && (dayOfWeek == "1-5" || dayOfWeek == "MON-FRI"))
+        // Single time schedules with day restrictions
+        if (dayOfMonth == "*" && month == "*" && int.TryParse(hour, out _))
         {
-            return $"Weekdays at {FormatTime(hour, minute)}";
-        }
-
-        // Weekends only
-        if (dayOfMonth == "*" && month == "*" && (dayOfWeek == "0,6" || dayOfWeek == "SAT,SUN"))
-        {
-            return $"Weekends at {FormatTime(hour, minute)}";
-        }
-
-        // Specific day of week
-        if (dayOfMonth == "*" && month == "*" && int.TryParse(dayOfWeek, out var dow))
-        {
-            var dayName = dow switch
-            {
-                0 => "Sunday",
-                1 => "Monday",
-                2 => "Tuesday",
-                3 => "Wednesday",
-                4 => "Thursday",
-                5 => "Friday",
-                6 => "Saturday",
-                _ => "Unknown"
-            };
-            return $"{dayName}s at {FormatTime(hour, minute)}";
+            return $"{dayDesc} at {FormatTime(hour, minute)}";
         }
 
         // Hourly
-        if (hour == "*" && dayOfMonth == "*" && month == "*" && dayOfWeek == "*")
+        if (hour == "*" && dayOfMonth == "*" && month == "*")
         {
-            return minute == "0" ? "Hourly" : $"Hourly at :{minute.PadLeft(2, '0')}";
+            var hourlyDesc = minute == "0" ? "Hourly" : $"Hourly at :{minute.PadLeft(2, '0')}";
+            if (dayOfWeek != "*")
+                return $"{dayDesc}, {hourlyDesc.ToLower()}";
+            return hourlyDesc;
         }
 
         // Every N minutes
         if (minute.StartsWith("*/") && hour == "*")
         {
             var interval = minute[2..];
-            return $"Every {interval} minutes";
+            var minDesc = $"Every {interval} minutes";
+            if (dayOfWeek != "*")
+                return $"{dayDesc}, every {interval} min";
+            return minDesc;
         }
 
         // Every N hours
         if (hour.StartsWith("*/") && minute == "0")
         {
             var interval = hour[2..];
-            return $"Every {interval} hours";
+            var hourDesc = $"Every {interval} hours";
+            if (dayOfWeek != "*")
+                return $"{dayDesc}, every {interval} hrs";
+            return hourDesc;
         }
 
         // Default: show abbreviated cron
         return cronExpression;
+    }
+
+    private static string GetDayDescription(string dayOfWeek)
+    {
+        if (dayOfWeek == "*")
+            return "Daily";
+        if (dayOfWeek == "1-5" || dayOfWeek == "MON-FRI")
+            return "Weekdays";
+        if (dayOfWeek == "0,6" || dayOfWeek == "SAT,SUN")
+            return "Weekends";
+
+        // Try to parse as comma-separated days
+        var dayNumbers = dayOfWeek.Split(',')
+            .Where(d => int.TryParse(d.Trim(), out _))
+            .Select(d => int.Parse(d.Trim()))
+            .ToList();
+
+        if (dayNumbers.Count > 0)
+        {
+            if (dayNumbers.Count == 7)
+                return "Daily";
+            if (dayNumbers.OrderBy(d => d).SequenceEqual(new[] { 1, 2, 3, 4, 5 }))
+                return "Weekdays";
+            if (dayNumbers.OrderBy(d => d).SequenceEqual(new[] { 0, 6 }))
+                return "Weekends";
+
+            var dayNames = dayNumbers.Select(d => d switch
+            {
+                0 => "Sun",
+                1 => "Mon",
+                2 => "Tue",
+                3 => "Wed",
+                4 => "Thu",
+                5 => "Fri",
+                6 => "Sat",
+                _ => "?"
+            });
+            return string.Join(", ", dayNames);
+        }
+
+        return dayOfWeek;
     }
 
     private static string FormatTime(string hour, string minute)
@@ -440,8 +489,13 @@
         if (!int.TryParse(hour, out var h) || !int.TryParse(minute, out var m))
             return $"{hour}:{minute}";
 
-        var period = h >= 12 ? "PM" : "AM";
-        var displayHour = h > 12 ? h - 12 : (h == 0 ? 12 : h);
-        return $"{displayHour}:{m:D2} {period}";
+        return FormatHour(h, m);
+    }
+
+    private static string FormatHour(int hour, int minute)
+    {
+        var period = hour >= 12 ? "PM" : "AM";
+        var displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+        return $"{displayHour}:{minute:D2} {period}";
     }
 }

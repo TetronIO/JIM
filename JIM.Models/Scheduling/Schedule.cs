@@ -33,9 +33,53 @@ public class Schedule : IAuditable
     /// <summary>
     /// Cron expression for scheduling (e.g., "0 6 * * 1-5" for 6am Mon-Fri).
     /// Only used when TriggerType is Cron.
-    /// Note: Users configure schedules via a friendly UI; cron syntax is generated automatically.
+    /// This is generated from the pattern configuration fields below, or entered directly when PatternType is Custom.
     /// </summary>
     public string? CronExpression { get; set; }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Schedule Pattern Configuration (used to build CronExpression)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The type of schedule pattern: SpecificTimes, Interval, or Custom.
+    /// Determines which other configuration fields are used.
+    /// </summary>
+    public SchedulePatternType PatternType { get; set; } = SchedulePatternType.SpecificTimes;
+
+    /// <summary>
+    /// Days of week to run (0=Sunday, 6=Saturday). Only used when PatternType != Custom.
+    /// Stored as comma-separated values: "1,2,3,4,5" for Mon-Fri.
+    /// </summary>
+    public string? DaysOfWeek { get; set; }
+
+    /// <summary>
+    /// Times to run when PatternType is SpecificTimes.
+    /// Stored as comma-separated 24h times: "09:00,12:00,15:00,18:00".
+    /// </summary>
+    public string? RunTimes { get; set; }
+
+    /// <summary>
+    /// Interval value when PatternType is Interval (e.g., 2 for "every 2 hours").
+    /// </summary>
+    public int? IntervalValue { get; set; }
+
+    /// <summary>
+    /// Interval unit when PatternType is Interval.
+    /// </summary>
+    public ScheduleIntervalUnit? IntervalUnit { get; set; }
+
+    /// <summary>
+    /// Optional start time for interval window (e.g., "06:00"). Only used when PatternType is Interval.
+    /// If null, interval runs all day.
+    /// </summary>
+    public string? IntervalWindowStart { get; set; }
+
+    /// <summary>
+    /// Optional end time for interval window (e.g., "18:00"). Only used when PatternType is Interval.
+    /// If null, interval runs all day.
+    /// </summary>
+    public string? IntervalWindowEnd { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
     // State

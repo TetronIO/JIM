@@ -60,6 +60,43 @@ public enum ScheduleStepType
 }
 
 /// <summary>
+/// Defines how a schedule's timing is configured.
+/// </summary>
+public enum SchedulePatternType
+{
+    /// <summary>
+    /// Run at specific times on selected days (e.g., 9am, 12pm, 3pm, 6pm on weekdays).
+    /// </summary>
+    SpecificTimes = 0,
+
+    /// <summary>
+    /// Run at regular intervals on selected days (e.g., every 2 hours between 6am-6pm).
+    /// </summary>
+    Interval = 1,
+
+    /// <summary>
+    /// Use a raw cron expression for full control over scheduling.
+    /// </summary>
+    Custom = 2
+}
+
+/// <summary>
+/// Defines the unit for interval-based schedules.
+/// </summary>
+public enum ScheduleIntervalUnit
+{
+    /// <summary>
+    /// Interval measured in minutes.
+    /// </summary>
+    Minutes = 0,
+
+    /// <summary>
+    /// Interval measured in hours.
+    /// </summary>
+    Hours = 1
+}
+
+/// <summary>
 /// The status of a schedule execution.
 /// </summary>
 public enum ScheduleExecutionStatus
