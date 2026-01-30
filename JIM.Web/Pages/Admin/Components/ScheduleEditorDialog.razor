@@ -1,4 +1,3 @@
-@using System.Text.Json
 @using JIM.Application
 @using JIM.Models.Activities
 @using JIM.Models.Core
@@ -157,6 +156,13 @@
                                             }
                                         }
                                     </MudSelect>
+                                }
+                                else
+                                {
+                                    @* Non-RunProfile steps require a user-specified name *@
+                                    <MudTextField @bind-Value="_editingStep.Name" Label="Step Name" Variant="Variant.Outlined"
+                                                  Required="true" RequiredError="Name is required for this step type"
+                                                  HelperText="A descriptive name for this step" />
                                 }
 
                                 <MudDivider Class="my-2" />
@@ -383,6 +389,9 @@
     private int _selectedConnectedSystemId;
     private int _selectedRunProfileId;
 
+    // Cache of run profiles by connected system ID for display lookups
+    private Dictionary<int, List<ConnectedSystemRunProfile>> _runProfilesCache = new();
+
     protected override async Task OnInitializedAsync()
     {
         _loading = true;
@@ -403,6 +412,17 @@
             {
                 // Parse existing cron expression to populate UI
                 ParseCronExpression(_schedule.CronExpression);
+
+                // Preload run profiles for all RunProfile steps so we can display their names
+                var connectedSystemIds = _schedule.Steps
+                    .Where(s => s.StepType == ScheduleStepType.RunProfile && s.ConnectedSystemId.HasValue)
+                    .Select(s => s.ConnectedSystemId!.Value)
+                    .Distinct();
+
+                foreach (var csId in connectedSystemIds)
+                {
+                    await GetRunProfilesForConnectedSystemAsync(csId);
+                }
             }
         }
 
@@ -628,7 +648,14 @@
                             dbStep.ExecutionMode = inMemoryStep.ExecutionMode;
                             dbStep.ContinueOnFailure = inMemoryStep.ContinueOnFailure;
                             dbStep.Timeout = inMemoryStep.Timeout;
-                            dbStep.Configuration = inMemoryStep.Configuration;
+                            dbStep.ConnectedSystemId = inMemoryStep.ConnectedSystemId;
+                            dbStep.RunProfileId = inMemoryStep.RunProfileId;
+                            dbStep.ScriptPath = inMemoryStep.ScriptPath;
+                            dbStep.Arguments = inMemoryStep.Arguments;
+                            dbStep.ExecutablePath = inMemoryStep.ExecutablePath;
+                            dbStep.WorkingDirectory = inMemoryStep.WorkingDirectory;
+                            dbStep.SqlConnectionString = inMemoryStep.SqlConnectionString;
+                            dbStep.SqlScriptPath = inMemoryStep.SqlScriptPath;
                             dbStep.LastUpdated = DateTime.UtcNow;
                             dbStep.LastUpdatedByType = ActivityInitiatorType.User;
                             dbStep.LastUpdatedById = user.Id;
@@ -774,38 +801,30 @@
             Name = step.Name,
             StepType = step.StepType,
             ExecutionMode = step.ExecutionMode,
-            Configuration = step.Configuration,
             ContinueOnFailure = step.ContinueOnFailure,
             Timeout = step.Timeout,
             StepIndex = step.StepIndex,
             Created = step.Created,
             CreatedByType = step.CreatedByType,
             CreatedById = step.CreatedById,
-            CreatedByName = step.CreatedByName
+            CreatedByName = step.CreatedByName,
+            // Copy typed configuration properties
+            ConnectedSystemId = step.ConnectedSystemId,
+            RunProfileId = step.RunProfileId,
+            ScriptPath = step.ScriptPath,
+            Arguments = step.Arguments,
+            ExecutablePath = step.ExecutablePath,
+            WorkingDirectory = step.WorkingDirectory,
+            SqlConnectionString = step.SqlConnectionString,
+            SqlScriptPath = step.SqlScriptPath
         };
 
-        // Parse configuration
-        if (step.StepType == ScheduleStepType.RunProfile && !string.IsNullOrEmpty(step.Configuration))
+        // Load run profiles if this is a RunProfile step
+        if (step.StepType == ScheduleStepType.RunProfile && step.ConnectedSystemId.HasValue)
         {
-            try
-            {
-                var config = JsonSerializer.Deserialize<RunProfileStepConfig>(step.Configuration);
-                if (config != null)
-                {
-                    _selectedConnectedSystemId = config.ConnectedSystemId;
-                    _selectedRunProfileId = config.RunProfileId;
-                    _runProfiles = await Jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(_selectedConnectedSystemId);
-                }
-            }
-            catch
-            {
-                // Invalid config, reset
-                _selectedConnectedSystemId = 0;
-                _selectedRunProfileId = 0;
-            }
-        }
-        else
-        {
+            _selectedConnectedSystemId = step.ConnectedSystemId.Value;
+            _selectedRunProfileId = step.RunProfileId ?? 0;
+            _runProfiles = await Jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(_selectedConnectedSystemId);
             _selectedConnectedSystemId = 0;
             _selectedRunProfileId = 0;
             _runProfiles = null;
@@ -920,12 +939,27 @@
 
         if (connectedSystemId > 0)
         {
-            _runProfiles = await Jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
+            _runProfiles = await GetRunProfilesForConnectedSystemAsync(connectedSystemId);
         }
         else
         {
             _runProfiles = null;
         }
+    }
+
+    /// <summary>
+    /// Gets run profiles for a connected system, using cache if available.
+    /// </summary>
+    private async Task<List<ConnectedSystemRunProfile>> GetRunProfilesForConnectedSystemAsync(int connectedSystemId)
+    {
+        if (_runProfilesCache.TryGetValue(connectedSystemId, out var cached))
+        {
+            return cached;
+        }
+
+        var profiles = await Jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
+        _runProfilesCache[connectedSystemId] = profiles;
+        return profiles;
     }
 
     private void CancelStepEditor()
@@ -946,21 +980,18 @@
                 return Task.CompletedTask;
             }
 
-            _editingStep.Configuration = JsonSerializer.Serialize(new RunProfileStepConfig
-            {
-                ConnectedSystemId = _selectedConnectedSystemId,
-                RunProfileId = _selectedRunProfileId
-            });
-
-            // Auto-generate name from run profile if not set
+            _editingStep.ConnectedSystemId = _selectedConnectedSystemId;
+            _editingStep.RunProfileId = _selectedRunProfileId;
+            // Don't store Name for RunProfile steps - it's derived from FKs at display time
+            _editingStep.Name = null;
+        }
+        else
+        {
+            // Non-RunProfile steps require a name
             if (string.IsNullOrWhiteSpace(_editingStep.Name))
             {
-                var runProfile = _runProfiles?.FirstOrDefault(rp => rp.Id == _selectedRunProfileId);
-                var connectedSystem = _connectedSystems.FirstOrDefault(cs => cs.Id == _selectedConnectedSystemId);
-                if (runProfile != null && connectedSystem != null)
-                {
-                    _editingStep.Name = $"{connectedSystem.Name}: {runProfile.Name}";
-                }
+                Snackbar.Add("Please enter a name for this step.", Severity.Warning);
+                return Task.CompletedTask;
             }
         }
 
@@ -981,42 +1012,32 @@
 
     /// <summary>
     /// Gets display texts for a step. Returns (primaryText, secondaryText) tuple.
-    /// For run profiles: primary = run profile name, secondary = connected system name.
+    /// For RunProfile steps: looks up CS and RP names from FKs (live).
+    /// For other step types: uses the stored Name field.
     /// </summary>
     private (string Primary, string Secondary) GetStepDisplayTexts(ScheduleStep step)
     {
-        if (step.StepType == ScheduleStepType.RunProfile && !string.IsNullOrEmpty(step.Configuration))
+        if (step.StepType == ScheduleStepType.RunProfile && step.ConnectedSystemId.HasValue && step.RunProfileId.HasValue)
         {
-            try
+            // Look up connected system name
+            var cs = _connectedSystems.FirstOrDefault(c => c.Id == step.ConnectedSystemId.Value);
+            var connectedSystemName = cs?.Name ?? "Unknown System";
+
+            // Look up run profile name from cache
+            var runProfileName = "Unknown Profile";
+            if (_runProfilesCache.TryGetValue(step.ConnectedSystemId.Value, out var profiles))
             {
-                var config = JsonSerializer.Deserialize<RunProfileStepConfig>(step.Configuration);
-                if (config != null)
+                var rp = profiles.FirstOrDefault(p => p.Id == step.RunProfileId.Value);
+                if (rp != null)
                 {
-                    var cs = _connectedSystems.FirstOrDefault(c => c.Id == config.ConnectedSystemId);
-
-                    // Try to parse run profile name from stored Name (format: "ConnectedSystem: RunProfile")
-                    if (!string.IsNullOrWhiteSpace(step.Name) && step.Name.Contains(':'))
-                    {
-                        var colonIndex = step.Name.IndexOf(':');
-                        var runProfileName = step.Name[(colonIndex + 1)..].Trim();
-                        var connectedSystemName = cs?.Name ?? step.Name[..colonIndex].Trim();
-                        return (runProfileName, connectedSystemName);
-                    }
-
-                    // Fallback if name doesn't have expected format
-                    if (cs != null)
-                    {
-                        return (!string.IsNullOrWhiteSpace(step.Name) ? step.Name : "Run Profile", cs.Name);
-                    }
+                    runProfileName = rp.Name;
                 }
             }
-            catch
-            {
-                // Ignore parse errors
-            }
+
+            return (runProfileName, connectedSystemName);
         }
 
-        // Fallback for non-run-profile types or if parsing fails
+        // Non-RunProfile types use the stored Name
         var primary = !string.IsNullOrWhiteSpace(step.Name) ? step.Name : GetStepTypeName(step.StepType);
         return (primary, GetStepTypeName(step.StepType));
     }
@@ -1031,33 +1052,5 @@
             ScheduleStepType.SqlScript => "SQL Script",
             _ => "Unknown"
         };
-    }
-
-    private string GetStepTypeDescription(ScheduleStep step)
-    {
-        if (step.StepType == ScheduleStepType.RunProfile && !string.IsNullOrEmpty(step.Configuration))
-        {
-            try
-            {
-                var config = JsonSerializer.Deserialize<RunProfileStepConfig>(step.Configuration);
-                if (config != null)
-                {
-                    var cs = _connectedSystems.FirstOrDefault(c => c.Id == config.ConnectedSystemId);
-                    return cs != null ? $"Run Profile on {cs.Name}" : "Run Profile";
-                }
-            }
-            catch
-            {
-                // Ignore parse errors
-            }
-        }
-
-        return GetStepTypeName(step.StepType);
-    }
-
-    private class RunProfileStepConfig
-    {
-        public int ConnectedSystemId { get; set; }
-        public int RunProfileId { get; set; }
     }
 }

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using JIM.Models.Activities;
 using JIM.Models.Scheduling;
 using JIM.Models.Tasking;
@@ -413,18 +412,17 @@ public class SchedulerServer
         Guid? initiatorId,
         string? initiatorName)
     {
-        // Parse configuration to get ConnectedSystemId and RunProfileId
-        var config = JsonSerializer.Deserialize<RunProfileStepConfiguration>(step.Configuration);
-        if (config == null || config.ConnectedSystemId == default || config.RunProfileId == 0)
+        // Validate RunProfile configuration
+        if (!step.ConnectedSystemId.HasValue || !step.RunProfileId.HasValue)
         {
-            throw new InvalidOperationException($"Invalid RunProfile configuration for step {step.Id}. Configuration: {step.Configuration}");
+            throw new InvalidOperationException($"Invalid RunProfile configuration for step {step.Id}. ConnectedSystemId and RunProfileId are required.");
         }
 
         // Create the worker task
         var workerTask = new SynchronisationWorkerTask
         {
-            ConnectedSystemId = config.ConnectedSystemId,
-            ConnectedSystemRunProfileId = config.RunProfileId,
+            ConnectedSystemId = step.ConnectedSystemId.Value,
+            ConnectedSystemRunProfileId = step.RunProfileId.Value,
             InitiatedByType = initiatorType,
             InitiatedById = initiatorId,
             InitiatedByName = initiatorName,
@@ -441,14 +439,5 @@ public class SchedulerServer
         }
 
         Log.Debug("QueueRunProfileStepAsync: Created worker task {TaskId} for step {StepId}", result.WorkerTaskId, step.Id);
-    }
-
-    /// <summary>
-    /// Configuration model for RunProfile step type.
-    /// </summary>
-    private class RunProfileStepConfiguration
-    {
-        public int ConnectedSystemId { get; set; }
-        public int RunProfileId { get; set; }
     }
 }

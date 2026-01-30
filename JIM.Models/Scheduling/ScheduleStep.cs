@@ -24,9 +24,11 @@ public class ScheduleStep : IAuditable
     public int StepIndex { get; set; }
 
     /// <summary>
-    /// Display name for the step (e.g., "HR Import", "Delta Sync", "AD Export").
+    /// Optional display name for the step. Used for non-RunProfile steps (PowerShell, Executable, SqlScript)
+    /// where users provide a descriptive name. For RunProfile steps, the name is derived from the
+    /// connected system and run profile FKs at display time.
     /// </summary>
-    public string Name { get; set; } = string.Empty;
+    public string? Name { get; set; }
 
     /// <summary>
     /// How this step executes relative to the previous step.
@@ -40,14 +42,54 @@ public class ScheduleStep : IAuditable
     /// </summary>
     public ScheduleStepType StepType { get; set; }
 
+    // -----------------------------------------------------------------------------------------------------------------
+    // Step Type Configuration (polymorphic - only properties relevant to StepType are used)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    // RunProfile step configuration
     /// <summary>
-    /// JSON configuration specific to the StepType.
-    /// For RunProfile: { "ConnectedSystemId": guid, "RunProfileId": int }
-    /// For PowerShell: { "ScriptPath": string, "Arguments": string }
-    /// For Executable: { "Path": string, "Arguments": string, "WorkingDirectory": string }
-    /// For SqlScript: { "ConnectionString": string, "ScriptPath": string }
+    /// The connected system ID for RunProfile steps.
     /// </summary>
-    public string Configuration { get; set; } = "{}";
+    public int? ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// The run profile ID for RunProfile steps.
+    /// </summary>
+    public int? RunProfileId { get; set; }
+
+    // PowerShell step configuration
+    /// <summary>
+    /// The path to the PowerShell script for PowerShell steps.
+    /// </summary>
+    public string? ScriptPath { get; set; }
+
+    /// <summary>
+    /// Arguments to pass to the script or executable.
+    /// Used by PowerShell and Executable step types.
+    /// </summary>
+    public string? Arguments { get; set; }
+
+    // Executable step configuration
+    /// <summary>
+    /// The path to the executable for Executable steps.
+    /// </summary>
+    public string? ExecutablePath { get; set; }
+
+    /// <summary>
+    /// The working directory for Executable steps.
+    /// </summary>
+    public string? WorkingDirectory { get; set; }
+
+    // SqlScript step configuration
+    /// <summary>
+    /// The connection string for SqlScript steps.
+    /// </summary>
+    public string? SqlConnectionString { get; set; }
+
+    /// <summary>
+    /// The path to the SQL script for SqlScript steps.
+    /// </summary>
+    public string? SqlScriptPath { get; set; }
 
     /// <summary>
     /// Whether to continue the schedule if this step fails.

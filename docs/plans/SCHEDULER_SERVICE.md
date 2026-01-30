@@ -468,34 +468,47 @@ Multi-step wizard or tabbed dialog:
 
 ---
 
-## Phase 5: API Endpoints
+## Phase 5: API Endpoints ✅ COMPLETE
+
+> **MVP COMPLETE**: Phases 1-5 constitute the MVP scope for the Scheduler Service. Phase 6 (PowerShell Module) is post-MVP work tracked in issue #176.
 
 ### Endpoints
 
 ```
-# Schedules
-GET    /api/schedules                       - List all schedules
-GET    /api/schedules/{id}                  - Get schedule with steps
-POST   /api/schedules                       - Create schedule
-PUT    /api/schedules/{id}                  - Update schedule
-DELETE /api/schedules/{id}                  - Delete schedule
-POST   /api/schedules/{id}/enable           - Enable schedule
-POST   /api/schedules/{id}/disable          - Disable schedule
-POST   /api/schedules/{id}/run              - Manually trigger execution
+# Schedules (v1)
+GET    /api/v1/schedules                       - List all schedules (paginated)
+GET    /api/v1/schedules/{id}                  - Get schedule with steps
+POST   /api/v1/schedules                       - Create schedule
+PUT    /api/v1/schedules/{id}                  - Update schedule (replaces steps)
+DELETE /api/v1/schedules/{id}                  - Delete schedule
+POST   /api/v1/schedules/{id}/enable           - Enable schedule
+POST   /api/v1/schedules/{id}/disable          - Disable schedule
+POST   /api/v1/schedules/{id}/run              - Manually trigger execution
 
-# Schedule Executions
-GET    /api/schedule-executions             - List executions (with filtering)
-GET    /api/schedule-executions/{id}        - Get execution with task statuses
-POST   /api/schedule-executions/{id}/cancel - Cancel running execution
-POST   /api/schedule-executions/{id}/pause  - Pause execution (post-MVP)
+# Schedule Executions (v1)
+GET    /api/v1/schedule-executions             - List executions (paginated, filterable by scheduleId)
+GET    /api/v1/schedule-executions/{id}        - Get execution with step statuses
+GET    /api/v1/schedule-executions/active      - Get currently running executions
+POST   /api/v1/schedule-executions/{id}/cancel - Cancel running execution
 ```
 
-### Files to Create
-- `JIM.Web/Controllers/Api/SchedulesController.cs`
-- `JIM.Web/Controllers/Api/ScheduleExecutionsController.cs`
-- `JIM.Web/Models/Api/ScheduleDto.cs`
-- `JIM.Web/Models/Api/ScheduleStepDto.cs`
-- `JIM.Web/Models/Api/ScheduleExecutionDto.cs`
+### Files Created
+- `JIM.Web/Controllers/Api/SchedulesController.cs` - Full CRUD + enable/disable/run
+- `JIM.Web/Controllers/Api/ScheduleExecutionsController.cs` - List, detail, cancel, active
+- `JIM.Web/Models/Api/ScheduleDtos.cs` - ScheduleDto, ScheduleDetailDto, ScheduleStepDto
+- `JIM.Web/Models/Api/ScheduleRequestDtos.cs` - CreateScheduleRequest, UpdateScheduleRequest, ScheduleStepRequest
+- `JIM.Web/Models/Api/ScheduleExecutionDtos.cs` - ScheduleExecutionDto, ScheduleExecutionDetailDto, ScheduleExecutionStepDto
+
+### Data Model Change
+- Migrated from JSON `Configuration` column to typed polymorphic properties on `ScheduleStep`
+- Properties: `ConnectedSystemId`, `RunProfileId`, `ScriptPath`, `Arguments`, `ExecutablePath`, `WorkingDirectory`, `SqlConnectionString`, `SqlScriptPath`
+- Migration: `ScheduleStepTypedConfiguration`
+
+### API Design Notes
+- Polymorphic step DTOs with `StepType` as discriminator
+- Step properties are flattened - only relevant properties used per type
+- PUT replaces entire step collection (simpler than partial updates)
+- Pagination uses `PaginatedResponse<T>` pattern
 
 ---
 
