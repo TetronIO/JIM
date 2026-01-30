@@ -1,6 +1,6 @@
 # Plan: Implement Scheduler Service (Issue #168)
 
-- **Status:** In Progress
+- **Status:** Complete
 - **Milestone:** MVP
 - **GitHub Issue:** [#168](https://github.com/TetronIO/JIM/issues/168)
 
@@ -470,8 +470,6 @@ Multi-step wizard or tabbed dialog:
 
 ## Phase 5: API Endpoints ✅ COMPLETE
 
-> **MVP COMPLETE**: Phases 1-5 constitute the MVP scope for the Scheduler Service. Phase 6 (PowerShell Module) is post-MVP work tracked in issue #176.
-
 ### Endpoints
 
 ```
@@ -512,7 +510,7 @@ POST   /api/v1/schedule-executions/{id}/cancel - Cancel running execution
 
 ---
 
-## Phase 6: PowerShell Module
+## Phase 6: PowerShell Module ✅ COMPLETE
 
 ### Cmdlets
 
@@ -563,8 +561,21 @@ Add-JimScheduleStep -ScheduleId $schedule.Id -StepType RunProfile -Configuration
 Enable-JimSchedule -Id $schedule.Id
 ```
 
-### Files to Create
-- `scripts/JIM.PowerShell/Schedules/*.ps1`
+### Files Created
+- `JIM.PowerShell/JIM/Public/Schedules/Get-JIMSchedule.ps1`
+- `JIM.PowerShell/JIM/Public/Schedules/New-JIMSchedule.ps1`
+- `JIM.PowerShell/JIM/Public/Schedules/Set-JIMSchedule.ps1`
+- `JIM.PowerShell/JIM/Public/Schedules/Remove-JIMSchedule.ps1`
+- `JIM.PowerShell/JIM/Public/Schedules/Enable-JIMSchedule.ps1`
+- `JIM.PowerShell/JIM/Public/Schedules/Disable-JIMSchedule.ps1`
+- `JIM.PowerShell/JIM/Public/Schedules/Start-JIMSchedule.ps1`
+- `JIM.PowerShell/JIM/Public/Schedules/Add-JIMScheduleStep.ps1`
+- `JIM.PowerShell/JIM/Public/Schedules/Remove-JIMScheduleStep.ps1`
+- `JIM.PowerShell/JIM/Public/Schedules/Get-JIMScheduleExecution.ps1`
+- `JIM.PowerShell/JIM/Public/Schedules/Stop-JIMScheduleExecution.ps1`
+
+### Files Modified
+- `JIM.PowerShell/JIM/JIM.psd1` - Added 11 new cmdlets to FunctionsToExport
 
 ---
 
