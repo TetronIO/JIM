@@ -77,9 +77,9 @@ html[lang] {
     /* === JIM Custom: Paper border (use subtle line colour so borders remain visible in dark mode) === */
     --jim-paper-border-color: var(--mud-palette-lines-default);
 
-    /* === JIM Custom: Dialog surfaces (lighter than main surface for elevation) === */
-    --jim-dialog-surface: #181e2e;
-    --jim-dialog-inner-surface: #1b1f2c;
+    /* === JIM Custom: Dialog surfaces (stepped elevation from surface) === */
+    --jim-dialog-surface: #161c2a;
+    --jim-dialog-inner-surface: #1c222e;
 
     /* === JIM Custom: Content Links === */
     --jim-link-color: #6e99cc;

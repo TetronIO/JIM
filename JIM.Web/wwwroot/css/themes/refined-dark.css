@@ -27,9 +27,9 @@ html[lang] {
     --mud-palette-surface: #121826;
     --mud-palette-background-grey: rgba(255, 255, 255, 0.032);
 
-    /* === Dialog/Modal Surface (10% lighter than surface for better elevation) === */
-    --jim-dialog-surface: #181e2e;
-    --jim-dialog-inner-surface: #1e2536;
+    /* === Dialog/Modal Surface (stepped elevation from surface) === */
+    --jim-dialog-surface: #161c2a;
+    --jim-dialog-inner-surface: #1b1f2c;
 
     /* === Inner Surface (nested containers — subtle step deeper than surface) === */
     --jim-inner-surface: #1a2030;
