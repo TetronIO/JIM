@@ -118,26 +118,20 @@
                                         {
                                             @* Interval Configuration *@
                                             <MudText Typo="Typo.body2" Class="mud-text-secondary">Interval</MudText>
-                                            <MudGrid Spacing="2">
-                                                <MudItem xs="12" sm="6">
-                                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                                        <MudText>Every</MudText>
-                                                        <MudNumericField T="int" @bind-Value="_intervalValue" Variant="Variant.Outlined"
-                                                                         Min="1" Max="@(_intervalUnit == ScheduleIntervalUnit.Hours ? 12 : 59)"
-                                                                         Style="width: 80px;" Margin="Margin.Dense" />
-                                                        <MudSelect T="ScheduleIntervalUnit" @bind-Value="_intervalUnit" Variant="Variant.Outlined"
-                                                                   Style="width: 120px;" Margin="Margin.Dense">
-                                                            <MudSelectItem Value="ScheduleIntervalUnit.Minutes">minutes</MudSelectItem>
-                                                            <MudSelectItem Value="ScheduleIntervalUnit.Hours">hours</MudSelectItem>
-                                                        </MudSelect>
-                                                    </MudStack>
-                                                </MudItem>
-                                                <MudItem xs="12" sm="6">
-                                                    <MudCheckBox T="bool" @bind-Value="_restrictToWindow" Color="Color.Primary" Dense="true">
-                                                        Restrict to time window
-                                                    </MudCheckBox>
-                                                </MudItem>
-                                            </MudGrid>
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                                                <MudText>Every</MudText>
+                                                <MudNumericField T="int" @bind-Value="_intervalValue" Variant="Variant.Outlined"
+                                                                 Min="1" Max="@(_intervalUnit == ScheduleIntervalUnit.Hours ? 12 : 59)"
+                                                                 Style="width: 80px;" Margin="Margin.Dense" />
+                                                <MudSelect T="ScheduleIntervalUnit" @bind-Value="_intervalUnit" Variant="Variant.Outlined"
+                                                           Style="width: 120px;" Margin="Margin.Dense">
+                                                    <MudSelectItem Value="ScheduleIntervalUnit.Minutes">minutes</MudSelectItem>
+                                                    <MudSelectItem Value="ScheduleIntervalUnit.Hours">hours</MudSelectItem>
+                                                </MudSelect>
+                                                <MudCheckBox T="bool" @bind-Value="_restrictToWindow" Color="Color.Primary" Dense="true">
+                                                    Restrict to time window
+                                                </MudCheckBox>
+                                            </MudStack>
 
                                             @if (_restrictToWindow)
                                             {
