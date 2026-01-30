@@ -79,6 +79,21 @@
         'Remove-JIMRunProfile',
         'Start-JIMRunProfile',
 
+        # Schedules
+        'Get-JIMSchedule',
+        'New-JIMSchedule',
+        'Set-JIMSchedule',
+        'Remove-JIMSchedule',
+        'Enable-JIMSchedule',
+        'Disable-JIMSchedule',
+        'Start-JIMSchedule',
+        'Add-JIMScheduleStep',
+        'Remove-JIMScheduleStep',
+
+        # Schedule Executions
+        'Get-JIMScheduleExecution',
+        'Stop-JIMScheduleExecution',
+
         # Activities
         'Get-JIMActivity',
         'Get-JIMActivityStats',
@@ -175,6 +190,12 @@ Major expansion from 3 to 64 cmdlets, providing complete administrative coverage
 
 #### Run Profiles (5 cmdlets)
 - Full CRUD plus execution with real-time progress tracking
+
+#### Schedules (11 cmdlets)
+- Full CRUD for schedule management
+- Enable/disable and manual trigger
+- Step management (add/remove)
+- Execution monitoring and cancellation
 
 #### Metaverse (7 cmdlets)
 - Object and object type queries
