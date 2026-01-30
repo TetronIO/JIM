@@ -895,20 +895,26 @@ html[lang] .mud-dialog .mud-paper-outlined {
 }
 
 /* Interval configuration controls - constrain widths */
-.jim-interval-number {
+/* Target both the outer container and inner MudBlazor elements */
+.jim-interval-number,
+.jim-interval-number.mud-input-control {
     width: 80px !important;
+    min-width: 80px !important;
     max-width: 80px !important;
     flex: 0 0 80px !important;
 }
 
-.jim-interval-unit {
+.jim-interval-unit,
+.jim-interval-unit.mud-select {
     width: 120px !important;
+    min-width: 120px !important;
     max-width: 120px !important;
     flex: 0 0 120px !important;
 }
 
-.jim-interval-checkbox {
-    flex: 0 0 auto !important;
-    margin-left: 8px !important;
+/* Also target the inner input container */
+.jim-interval-unit .mud-input-control {
+    width: 100% !important;
+    min-width: unset !important;
 }
 
