@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### Scheduler Service (#168)
+- Schedule data model with cron and interval-based trigger support
+- Background scheduler service with 30-second polling cycle
+- Multi-step schedule execution (sequential and parallel step modes)
+- Schedule management REST API (CRUD, enable/disable, manual trigger, execution monitoring)
+- Schedule management UI integrated into Operations page
+- PowerShell cmdlets: `New-JIMSchedule`, `Get-JIMSchedule`, `Set-JIMSchedule`, `Remove-JIMSchedule`, `Enable-JIMSchedule`, `Disable-JIMSchedule`, `Add-JIMScheduleStep`, `Remove-JIMScheduleStep`, `Start-JIMSchedule`, `Get-JIMScheduleExecution`, `Stop-JIMScheduleExecution`
+- Scheduler integration tests (Scenario 6)
+
+#### Change History (#14, #269)
+- Full change tracking for MVOs and CSOs with timeline UI
+- Initiator and mechanism tracking (User, API, Sync, System)
+- Deleted objects view with change audit trail
+- Configurable retention and cleanup
+
+#### Progress Indication (#246)
+- Real-time progress bars for running operations
+- Percentage tracking and contextual messages on Operations page
+
+### Changed
+- PowerShell module now includes 46 cmdlets (11 new scheduler cmdlets)
+
 ## [0.2.0-alpha] - 2026-01-27
 
 ### Added

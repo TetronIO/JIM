@@ -63,17 +63,21 @@ JIM runs in a Docker stack using containers and can be deployed to on-premises i
 Each release includes a downloadable bundle containing pre-built Docker images, compose files, the PowerShell module, and documentation. See [Release Process](docs/RELEASE_PROCESS.md) for details on air-gapped deployment.
 
 ## Connectors
-JIM is currently targeting the following means of connecting to systems via it's built-in Connectors. More are anticipated, though people will also be able to develop their own custom Connectors for use with JIM to support bespoke scenarios.
 
+**Available Now:**
 - LDAP (incl. Active Directory, AD-LDS & Samba AD)
+- CSV/Text files
+
+**Planned:**
 - Microsoft SQL Server Database
 - PostgreSQL Database
 - MySQL Database
 - Oracle Database
-- CSV/Text files
 - PowerShell (Core)
 - SCIM 2.0
 - Web Services (REST APIs with OAuth2/API key authentication)
+
+Custom connectors can be developed for bespoke scenarios.
 
 ## Authentication
 
@@ -91,9 +95,14 @@ If you don't have any connected systems available, you can use the Example Data 
 
 ## State of Development
 
-JIM is in active development, currently at approximately 94% of MVP completion. Core identity synchronisation functionality (import, sync, export) is complete and working.
+JIM has reached MVP completion (100%). The core identity lifecycle is fully functional:
 
-For detailed progress tracking, feature checklists, and remaining work, see the [MVP Definition](docs/MVP_DEFINITION.md).
+- **Import** identities from source systems (LDAP, CSV)
+- **Sync** to reconcile identities in the central metaverse
+- **Export** changes to target systems with pending export management
+- **Schedule** automated synchronisation using cron or interval-based triggers
+
+For detailed feature checklists and post-MVP roadmap, see the [MVP Definition](docs/MVP_DEFINITION.md).
 
 ## Licensing
 JIM uses a Source-Available model where it is free to use in non-production scenarios, but requires a commercial license for use in production scenarios. [﻿Full details can be found here](https://tetron.io/jim/#licensing).

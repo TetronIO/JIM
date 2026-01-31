@@ -4,7 +4,7 @@
 >
 > **Repository**: https://github.com/TetronIO/JIM
 >
-> **Last Updated**: 2026-01-23
+> **Last Updated**: 2026-01-31
 >
 > **Note**: This is a snapshot. For current implementation details, check the repository or ask the user to provide updated code/docs.
 
@@ -22,7 +22,7 @@
 | **Auth** | OpenID Connect (OIDC) with PKCE |
 | **Deployment** | Docker containers, air-gapped capable |
 | **License** | Source-available (free non-production, commercial for production) |
-| **Status** | MVP ~94% complete |
+| **Status** | MVP Complete (100%) |
 | **Language** | British English (en-GB) for all text |
 
 ---
@@ -337,19 +337,18 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ Integration testing framework (5 scenarios)
 - ✅ Credential encryption
 
-### In Progress
+### Recently Completed
 
-- 🔄 **Scheduler Service** - Automated run profile execution (critical path)
+- ✅ **Scheduler Service** (#168) - Full scheduling with cron/interval triggers, multi-step execution, REST API, Blazor UI, PowerShell cmdlets
+- ✅ **Change History/Audit** (#14, #269) - Full change tracking with timeline UI, initiator tracking, deleted objects view
+- ✅ **Progress Indication** (#246) - Real-time progress bars and contextual messages on Operations page
 
 ### Post-MVP (Nice to Have)
 
-- Dashboard home page
-- Progress indication during operations
-- Unique value generation (e.g., unique usernames)
-- Full RBAC
-- Change history/audit
-- Sync preview (what-if analysis)
-- Delta/incremental sync
+- Dashboard home page (#169)
+- Unique value generation (#242)
+- Full RBAC (#21)
+- Sync preview / what-if analysis (#288)
 
 ---
 

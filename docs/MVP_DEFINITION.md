@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Version** | 1.14 |
-| **Last Updated** | 2026-01-26 |
-| **Status** | In Progress (~94% Complete) |
+| **Version** | 1.15 |
+| **Last Updated** | 2026-01-31 |
+| **Status** | MVP Complete (100%) |
 
 ---
 
@@ -15,27 +15,25 @@
 | Connectors | `██████████` | 10 | 10 | 100% |
 | Inbound Sync | `██████████` | 18 | 18 | 100% |
 | Outbound Sync | `██████████` | 15 | 15 | 100% |
-| Scheduling | `██████░░░░` | 5 | 10 | 50% |
-| Admin UI | `█████████░` | 19 | 20 | 95% |
+| Scheduling | `██████████` | 10 | 10 | 100% |
+| Admin UI | `██████████` | 20 | 20 | 100% |
 | Security | `██████████` | 5 | 5 | 100% |
 | Operations | `██████████` | 6 | 6 | 100% |
 | API Coverage | `██████████` | 7 | 7 | 100% |
-| Tooling | `██████████` | 5 | 5 | 100% |
+| Tooling | `██████████` | 6 | 6 | 100% |
 | Release | `██████████` | 9 | 9 | 100% |
-| **Overall** | `█████████░` | **99** | **105** | **94%** |
+| **Overall** | `██████████` | **105** | **105** | **100%** |
 
 ### Priority Order for Remaining Work
 
-**Critical Path (Required for MVP):**
-1. **Scheduler Service** (#168) - Automate run profile execution (5 items remaining)
-
 **Nice to Have (Can follow MVP):**
+- Sync preview / what-if analysis (#288)
 - Dashboard admin home page (#169)
 - Unique value generation (#242)
 - Full RBAC (#21) and Synchronisation Readers role (#9)
-- Sync preview
 
 ### Recently Completed ✓
+- ~~Scheduler Service (#168)~~ - Full scheduling system with cron/interval triggers, multi-step execution, REST API, Blazor UI, PowerShell cmdlets, and integration tests
 - ~~CSO/MVO Change Tracking (#14, #269)~~ - Full change history with timeline UI, initiator/mechanism tracking, deleted objects view, retention cleanup
 - ~~Progress Indication (#246)~~ - Real-time progress bars, percentage tracking, and contextual messages on Operations page
 - ~~Sync Processor Refactoring (#252)~~ - Extracted shared logic into SyncTaskProcessorBase, eliminated ~2,100 lines of duplication
@@ -152,11 +150,14 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 ### 4. Scheduling & Automation
 
 #### 4.1 Scheduler Service (#168)
-- Scheduled task data model
-- Scheduler service implementation
-- Cron-style or interval-based scheduling
-- Run profile scheduling configuration
-- Scheduler configuration UI
+- Scheduled task data model (Schedule, ScheduleStep, ScheduleExecution entities) ✓
+- Scheduler service implementation (background polling service) ✓
+- Cron-style or interval-based scheduling (with user-friendly pattern configuration) ✓
+- Run profile scheduling configuration (multi-step sequential and parallel execution) ✓
+- Scheduler configuration UI (full Blazor management interface) ✓
+- Schedule REST API (CRUD, enable/disable, manual trigger, execution monitoring) ✓
+- Schedule PowerShell cmdlets (11 cmdlets with name-based parameters) ✓
+- Scheduler integration tests (Scenario 6 - auto-trigger, manual trigger, overlap prevention) ✓
 
 #### 4.2 Background Processing
 - Worker service for task execution ✓
@@ -189,7 +190,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - Pending Export review/management (#25) ✓
 - Server-side file browser for connector settings (#177) ✓
 - Progress indication for running operations (#246) ✓
-- Sync preview (what-if analysis)
+- Schedule management UI (integrated into Operations page) ✓
 
 ### 6. Security & Access Control
 
@@ -232,13 +233,13 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 ### 9. Tooling & Automation
 
 #### 9.1 PowerShell Module (#176)
-- Cmdlets for common administration tasks (35 cmdlets) ✓
+- Cmdlets for common administration tasks (46 cmdlets including 11 scheduler cmdlets) ✓
 - API key authentication support ✓
 - Script-based automation with name-based parameters ✓
 
 #### 9.2 Testing Framework (#173)
 - End-to-end integration tests with real connected systems ✓
-- Automated test scenarios (Scenarios 1, 2, 4, 5, 8 complete; 6-7 deferred pending Internal MVO design) ✓
+- Automated test scenarios (Scenarios 1, 2, 4, 5, 6, 8 complete; 7 deferred pending Internal MVO design) ✓
 
 ### 10. Release & Deployment (#188)
 
