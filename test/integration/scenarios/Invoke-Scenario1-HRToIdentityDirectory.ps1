@@ -314,6 +314,134 @@ try {
         $confirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $confirmSyncResult.activityId -Name "LDAP Delta Sync (Joiner confirm)"
 
+        # Training Import/Sync - join Training records to existing MVOs created by HR import
+        # The Training sync rule does NOT project - it only joins to existing MVOs via Employee ID
+        # This must happen AFTER HR import/sync creates the MVOs
+        if ($config.TrainingSystemId -and $config.TrainingImportProfileId -and $config.TrainingSyncProfileId) {
+            Write-Host ""
+            Write-Host "Establishing Training data baseline (joins to HR-created MVOs)..." -ForegroundColor Gray
+            Write-Host "  Running Training Full Import..." -ForegroundColor DarkGray
+            $trainingImportResult = Start-JIMRunProfile -ConnectedSystemId $config.TrainingSystemId -RunProfileId $config.TrainingImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $trainingImportResult.activityId -Name "Training Full Import (Joiner)"
+
+            Write-Host "  Running Training Full Sync..." -ForegroundColor DarkGray
+            $trainingSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.TrainingSystemId -RunProfileId $config.TrainingSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $trainingSyncResult.activityId -Name "Training Full Sync (Joiner)"
+
+            # Validate Training joined to MVOs and contributed attributes
+            Write-Host "  Validating Training data joined to MVOs..." -ForegroundColor DarkGray
+
+            # Get total MVO count and count with Training Status attribute
+            # Training data covers 85% of users, so we expect ~85% of MVOs to have Training Status
+            $scale = Get-TemplateScale -Template $Template
+            $expectedUsers = $scale.Users
+            $expectedTrainingCoverage = 0.85
+            $expectedWithTraining = [int]($expectedUsers * $expectedTrainingCoverage)
+
+            # Query all User MVOs with Training Status attribute
+            $allMVOs = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Attributes "Training Status" -PageSize 1000)
+            $totalMVOs = $allMVOs.Count
+
+            # Count MVOs that have Training Status attribute with a value
+            # Note: Attributes is a dictionary (key=name, value=string) from MetaverseObjectHeaderDto
+            # Handle both hashtable and PSCustomObject representations from JSON
+            $mvosWithTraining = @($allMVOs | Where-Object {
+                $attrs = $_.attributes
+                if ($null -eq $attrs) { return $false }
+
+                # Handle different types: PSCustomObject (from JSON) or Hashtable
+                $trainingValue = $null
+                if ($attrs -is [System.Collections.IDictionary]) {
+                    # Hashtable access
+                    if ($attrs.ContainsKey("Training Status")) {
+                        $trainingValue = $attrs["Training Status"]
+                    }
+                }
+                elseif ($null -ne $attrs.PSObject) {
+                    # PSCustomObject - use property-based access
+                    $prop = $attrs.PSObject.Properties["Training Status"]
+                    if ($null -ne $prop) {
+                        $trainingValue = $prop.Value
+                    }
+                }
+
+                $null -ne $trainingValue -and $trainingValue -ne ""
+            })
+            $trainingCount = $mvosWithTraining.Count
+
+            # Calculate actual coverage percentage
+            $actualCoverage = if ($totalMVOs -gt 0) { [math]::Round(($trainingCount / $totalMVOs) * 100, 1) } else { 0 }
+
+            Write-Host "    Total User MVOs: $totalMVOs" -ForegroundColor DarkGray
+            Write-Host "    MVOs with Training Status: $trainingCount ($actualCoverage%)" -ForegroundColor DarkGray
+            Write-Host "    Expected training records: $expectedWithTraining (85% of $expectedUsers HR users)" -ForegroundColor DarkGray
+
+            # Assert that Training data joined correctly
+            # Validate based on expected count, not percentage of all MVOs
+            # (Percentage can be skewed by baseline LDAP users imported from AD)
+            $minExpectedTraining = [int]($expectedWithTraining * 0.9)  # Allow 10% variance
+            $maxExpectedTraining = [int]($expectedWithTraining * 1.1)  # Allow 10% variance
+
+            if ($totalMVOs -eq 0) {
+                Write-Host "    ✗ No User MVOs found - HR import may have failed" -ForegroundColor Red
+                throw "Training validation failed: No User MVOs found in Metaverse"
+            }
+            elseif ($trainingCount -eq 0) {
+                Write-Host "    ✗ No MVOs have Training Status - Training sync may have failed to join" -ForegroundColor Red
+                throw "Training validation failed: No MVOs have Training Status attribute (expected ~$expectedWithTraining)"
+            }
+            elseif ($trainingCount -lt $minExpectedTraining) {
+                Write-Host "    ✗ Training coverage too low: $trainingCount users (expected $minExpectedTraining-$maxExpectedTraining)" -ForegroundColor Red
+                throw "Training validation failed: Only $trainingCount MVOs have Training Status (expected ~$expectedWithTraining)"
+            }
+            elseif ($trainingCount -gt $maxExpectedTraining) {
+                Write-Host "    ⚠ Training coverage higher than expected: $trainingCount users (expected $minExpectedTraining-$maxExpectedTraining)" -ForegroundColor Yellow
+            }
+            else {
+                Write-Host "    ✓ Training coverage validated: $trainingCount users with training data" -ForegroundColor Green
+            }
+
+            # Spot-check: Verify the test user has Training data (index 1 is within 85%)
+            # Note: We queried with "Training Status" attribute, not "Account Name", so filter by displayName instead
+            $testUserMVO = $allMVOs | Where-Object {
+                $_.displayName -eq $testUser.DisplayName
+            } | Select-Object -First 1
+
+            if (-not $testUserMVO) {
+                # Re-query with Account Name filter if not found in bulk results
+                $testUserMVO = Get-JIMMetaverseObject -AttributeName "Account Name" -AttributeValue $testUser.SamAccountName -Attributes "Training Status"
+            }
+
+            if ($testUserMVO) {
+                $attrs = $testUserMVO.attributes
+                $trainingStatus = $null
+                if ($null -ne $attrs) {
+                    if ($attrs -is [System.Collections.IDictionary]) {
+                        if ($attrs.ContainsKey("Training Status")) {
+                            $trainingStatus = $attrs["Training Status"]
+                        }
+                    }
+                    elseif ($null -ne $attrs.PSObject) {
+                        $prop = $attrs.PSObject.Properties["Training Status"]
+                        if ($null -ne $prop) {
+                            $trainingStatus = $prop.Value
+                        }
+                    }
+                }
+                if ($null -ne $trainingStatus -and $trainingStatus -ne "") {
+                    Write-Host "    ✓ Test user ($($testUser.SamAccountName)) Training Status: '$trainingStatus'" -ForegroundColor Green
+                }
+                else {
+                    Write-Host "    ⚠ Test user ($($testUser.SamAccountName)) has no Training Status (may be in 15% without training)" -ForegroundColor Yellow
+                }
+            }
+
+            Write-Host "✓ Training data joined to MVOs ($trainingCount/$totalMVOs = $actualCoverage%)" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  ⚠ Training system not configured, skipping Training import/sync" -ForegroundColor Yellow
+        }
+
         # Validate user exists in AD
         Write-Host "Validating user in Samba AD..." -ForegroundColor Gray
 

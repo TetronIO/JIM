@@ -141,6 +141,7 @@ function Show-ScenarioMenu {
                 "*Scenario3*" { "Global Address List (GAL) synchronisation" }
                 "*Scenario4*" { "Deletion rules and tombstone handling" }
                 "*Scenario5*" { "Matching rules and join logic" }
+                "*Scenario6*" { "Scheduler service end-to-end testing" }
                 "*Scenario8*" { "Cross-domain entitlement synchronisation" }
                 default { "Integration test scenario" }
             }
@@ -389,7 +390,8 @@ $TemplateWasExplicitlySet = $PSBoundParameters.ContainsKey('Template')
 $templateIrrelevantScenarios = @(
     "*Scenario2*",   # Cross-Domain Sync - uses fixed test users (crossdomain.test1, etc.)
     "*Scenario3*",   # GAL Sync - not yet implemented
-    "*Scenario4*"    # Deletion Rules - provisions individual test users, ignores template
+    "*Scenario4*",   # Deletion Rules - provisions individual test users, ignores template
+    "*Scenario6*"    # Scheduler Service - tests scheduler functionality, no data template needed
 )
 
 function Test-TemplateRelevant {
