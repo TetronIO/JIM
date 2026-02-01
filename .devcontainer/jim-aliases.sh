@@ -17,8 +17,9 @@ alias jim='echo "JIM Development Aliases:
   jim-test           - dotnet test JIM.sln
   jim-test-ps        - Run PowerShell Pester tests
   jim-clean          - dotnet clean && build
-  jim-web            - dotnet run --project JIM.Web
-  jim-worker         - dotnet run --project JIM.Worker
+  jim-web            - Run JIM.Web locally (sources .env)
+  jim-worker         - Run JIM.Worker locally (sources .env)
+  jim-scheduler      - Run JIM.Scheduler locally (sources .env)
 
 Database Management:
   jim-migrate        - dotnet ef database update
@@ -32,7 +33,7 @@ Docker Stack Management:
   jim-stack-dev      - Start Docker stack + Adminer
   jim-stack-logs     - View Docker stack logs
   jim-stack-down     - Stop Docker stack
-  jim-restart        - Restart stack (re-reads .env, no rebuild)
+  jim-restart        - Recreate stack (re-reads .env, no rebuild)
 
 Docker Builds (rebuild + start):
   jim-build          - Rebuild all services + start
@@ -54,8 +55,11 @@ alias jim-compile='dotnet build JIM.sln'
 alias jim-test='dotnet test JIM.sln'
 alias jim-test-ps='pwsh -NoProfile -Command "Import-Module Pester; \$config = New-PesterConfiguration; \$config.Run.Path = \"./JIM.PowerShell/JIM/Tests\"; \$config.Output.Verbosity = \"Detailed\"; Invoke-Pester -Configuration \$config"'
 alias jim-clean='dotnet clean JIM.sln && dotnet build JIM.sln'
-alias jim-web='dotnet run --project JIM.Web'
-alias jim-worker='dotnet run --project JIM.Worker'
+
+# Local run aliases - source .env and override DB hostname for local access
+alias jim-web='(set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project JIM.Web)'
+alias jim-worker='(set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project JIM.Worker)'
+alias jim-scheduler='(set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project JIM.Scheduler)'
 
 # Database management
 alias jim-migrate='dotnet ef database update --project JIM.PostgresData'
@@ -69,7 +73,7 @@ alias jim-stack='docker compose -f docker-compose.yml -f docker-compose.override
 alias jim-stack-dev='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml -f docker-compose.dev-tools.yml --profile with-db up -d'
 alias jim-stack-logs='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db logs -f'
 alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml -f docker-compose.dev-tools.yml --profile with-db down && docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --remove-orphans 2>/dev/null || true && docker rm -f samba-ad-primary samba-ad-source samba-ad-target 2>/dev/null || true'
-alias jim-restart='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml -f docker-compose.dev-tools.yml --profile with-db down && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d'
+alias jim-restart='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml -f docker-compose.dev-tools.yml --profile with-db down && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --force-recreate'
 
 # Docker builds (rebuild and start services)
 alias jim-build='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build'

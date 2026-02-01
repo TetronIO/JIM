@@ -114,11 +114,11 @@
     },
     "5200": {
       "label": "JIM Web + API (HTTP)",
-      "onAutoForward": "notify"
+      "onAutoForward": "silent"
     },
     "5201": {
       "label": "JIM Web + API (HTTPS)",
-      "onAutoForward": "openBrowser"
+      "onAutoForward": "silent"
     }
   },
   // Container user
