@@ -59,10 +59,20 @@ else if (_syncRule != null)
                     <MudDivider Vertical="true" FlexItem="true" />
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                         <MudText Typo="Typo.body2" Class="mud-text-secondary">Object Types:</MudText>
-                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text">MV: @_syncRule.MetaverseObjectType?.Name</MudChip>
+                        <MudChip T="string" Size="Size.Small">
+                            <AvatarContent>
+                                <MudAvatar Color="Color.Primary" Size="Size.Small">MV</MudAvatar>
+                            </AvatarContent>
+                            <ChildContent>@_syncRule.MetaverseObjectType?.Name</ChildContent>
+                        </MudChip>
                         <MudIcon Icon="@(_syncRule.Direction == SyncRuleDirection.Import ? Icons.Material.Filled.KeyboardDoubleArrowLeft : Icons.Material.Filled.KeyboardDoubleArrowRight)"
                                  Size="Size.Small" Class="mud-text-secondary" />
-                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text">CS: @_syncRule.ConnectedSystemObjectType?.Name</MudChip>
+                        <MudChip T="string" Size="Size.Small">
+                            <AvatarContent>
+                                <MudAvatar Color="Color.Tertiary" Size="Size.Small">CS</MudAvatar>
+                            </AvatarContent>
+                            <ChildContent>@_syncRule.ConnectedSystemObjectType?.Name</ChildContent>
+                        </MudChip>
                     </MudStack>
                 </MudStack>
             }
@@ -269,7 +279,7 @@ else if (_syncRule != null)
                                         <MudChip T="string">
                                             <AvatarContent>
                                                 <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
-                                                    <MudAvatar>CS</MudAvatar>
+                                                    <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
                                                 </MudTooltip>
                                             </AvatarContent>
                                             <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
@@ -280,7 +290,7 @@ else if (_syncRule != null)
                                         <MudChip T="string">
                                             <AvatarContent>
                                                 <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
-                                                    <MudAvatar>MV</MudAvatar>
+                                                    <MudAvatar Color="Color.Primary">MV</MudAvatar>
                                                 </MudTooltip>
                                             </AvatarContent>
                                             <ChildContent>@objectMatchingRule.TargetMetaverseAttribute.Name</ChildContent>
@@ -597,7 +607,7 @@ else if (_syncRule != null)
                     <MudChip T="string">
                         <AvatarContent>
                             <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
-                                <MudAvatar Color="Color.Dark">MV</MudAvatar>
+                                <MudAvatar Color="Color.Primary">MV</MudAvatar>
                             </MudTooltip>
                         </AvatarContent>
                         <ChildContent>@attributeFlowRule.TargetMetaverseAttribute?.Name</ChildContent>
@@ -614,7 +624,7 @@ else if (_syncRule != null)
                             <MudChip T="string">
                                 <AvatarContent>
                                     <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
-                                        <MudAvatar Color="Color.Dark">CS</MudAvatar>
+                                        <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
                                     </MudTooltip>
                                 </AvatarContent>
                                 <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
@@ -644,7 +654,7 @@ else if (_syncRule != null)
                             <MudChip T="string">
                                 <AvatarContent>
                                     <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
-                                        <MudAvatar Color="Color.Dark">MV</MudAvatar>
+                                        <MudAvatar Color="Color.Primary">MV</MudAvatar>
                                     </MudTooltip>
                                 </AvatarContent>
                                 <ChildContent>@source.MetaverseAttribute.Name</ChildContent>
@@ -672,7 +682,7 @@ else if (_syncRule != null)
                     <MudChip T="string">
                         <AvatarContent>
                             <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
-                                <MudAvatar Color="Color.Dark">CS</MudAvatar>
+                                <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
                             </MudTooltip>
                         </AvatarContent>
                         <ChildContent>@attributeFlowRule.TargetConnectedSystemAttribute?.Name</ChildContent>
