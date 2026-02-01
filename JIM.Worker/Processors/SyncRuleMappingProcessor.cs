@@ -161,30 +161,43 @@ public static class SyncRuleMappingProcessor
                         continue;
                     }
 
-                    // Convert the expression result to the appropriate MVO attribute value
-                    var existingMvoValue = mvo.AttributeValues.SingleOrDefault(
-                        mvoav => mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id);
-
-                    // Determine if the value has changed (result is non-null here due to check above)
-                    var resultString = result.ToString();
-                    var valueChanged = existingMvoValue == null ||
-                        !string.Equals(existingMvoValue.StringValue, resultString, StringComparison.Ordinal);
-
-                    if (valueChanged)
+                    // Check if result is an array/collection (e.g., from Split() function)
+                    // This enables multi-valued attribute flow from expressions
+                    if (result is string[] stringArrayResult)
                     {
-                        // Remove existing value if present
-                        if (existingMvoValue != null)
-                            mvo.PendingAttributeValueRemovals.Add(existingMvoValue);
+                        ProcessExpressionArrayResult(mvo, syncRuleMapping.TargetMetaverseAttribute, stringArrayResult);
+                    }
+                    else if (result is IEnumerable<string> stringEnumerableResult && result is not string)
+                    {
+                        ProcessExpressionArrayResult(mvo, syncRuleMapping.TargetMetaverseAttribute, stringEnumerableResult.ToArray());
+                    }
+                    else
+                    {
+                        // Single value result - existing logic
+                        var existingMvoValue = mvo.AttributeValues.SingleOrDefault(
+                            mvoav => mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute.Id);
 
-                        // Add the new value based on the target attribute type (result is non-null)
-                        var newMvoValue = CreateMvoAttributeValueFromExpressionResult(
-                            mvo, syncRuleMapping.TargetMetaverseAttribute, result!);
+                        // Determine if the value has changed (result is non-null here due to check above)
+                        var resultString = result.ToString();
+                        var valueChanged = existingMvoValue == null ||
+                            !string.Equals(existingMvoValue.StringValue, resultString, StringComparison.Ordinal);
 
-                        if (newMvoValue != null)
+                        if (valueChanged)
                         {
-                            mvo.PendingAttributeValueAdditions.Add(newMvoValue);
-                            Log.Debug("Process: Expression-based mapping set {AttributeName} to '{Value}' on MVO {MvoId}",
-                                syncRuleMapping.TargetMetaverseAttribute.Name, resultString, mvo.Id);
+                            // Remove existing value if present
+                            if (existingMvoValue != null)
+                                mvo.PendingAttributeValueRemovals.Add(existingMvoValue);
+
+                            // Add the new value based on the target attribute type (result is non-null)
+                            var newMvoValue = CreateMvoAttributeValueFromExpressionResult(
+                                mvo, syncRuleMapping.TargetMetaverseAttribute, result!);
+
+                            if (newMvoValue != null)
+                            {
+                                mvo.PendingAttributeValueAdditions.Add(newMvoValue);
+                                Log.Debug("Process: Expression-based mapping set {AttributeName} to '{Value}' on MVO {MvoId}",
+                                    syncRuleMapping.TargetMetaverseAttribute.Name, resultString, mvo.Id);
+                            }
                         }
                     }
                 }
@@ -573,6 +586,62 @@ public static class SyncRuleMappingProcessor
         }
 
         return attributes;
+    }
+
+    /// <summary>
+    /// Processes an array result from an expression (e.g., from Split() function) into
+    /// multiple MVO attribute values for multi-valued attributes.
+    /// This enables conversion of delimited strings like "A|B|C" into individual MVA values.
+    /// </summary>
+    private static void ProcessExpressionArrayResult(
+        MetaverseObject mvo,
+        MetaverseAttribute targetAttribute,
+        string[] values)
+    {
+        if (values.Length == 0)
+        {
+            // Empty array - remove all existing values for this attribute
+            var mvoAttributeValuesToDelete = mvo.AttributeValues
+                .Where(q => q.AttributeId == targetAttribute.Id);
+            mvo.PendingAttributeValueRemovals.AddRange(mvoAttributeValuesToDelete);
+            return;
+        }
+
+        // Get existing MVO values for this attribute
+        var existingMvoValues = mvo.AttributeValues
+            .Where(mvoav => mvoav.AttributeId == targetAttribute.Id)
+            .ToList();
+
+        // Find values to remove (exist on MVO but not in expression result)
+        var valuesToRemove = existingMvoValues
+            .Where(existing => !values.Contains(existing.StringValue, StringComparer.Ordinal));
+        mvo.PendingAttributeValueRemovals.AddRange(valuesToRemove);
+
+        // Find values to add (exist in expression result but not on MVO)
+        var existingStringValues = existingMvoValues
+            .Select(mvoav => mvoav.StringValue)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var valuesToAdd = values
+            .Where(v => !existingStringValues.Contains(v));
+
+        foreach (var value in valuesToAdd)
+        {
+            var newMvoValue = new MetaverseObjectAttributeValue
+            {
+                MetaverseObject = mvo,
+                Attribute = targetAttribute,
+                AttributeId = targetAttribute.Id,
+                StringValue = value
+            };
+            mvo.PendingAttributeValueAdditions.Add(newMvoValue);
+        }
+
+        if (valuesToRemove.Any() || valuesToAdd.Any())
+        {
+            Log.Debug("Process: Expression array result for {AttributeName} - removing {RemoveCount}, adding {AddCount} values on MVO {MvoId}",
+                targetAttribute.Name, valuesToRemove.Count(), valuesToAdd.Count(), mvo.Id);
+        }
     }
 
     /// <summary>

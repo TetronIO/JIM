@@ -466,6 +466,231 @@ public class DynamicExpressoEvaluatorTests
 
     #endregion
 
+    #region Split and Join Function Tests (Multi-Valued Attribute Support)
+
+    [Test]
+    public void Evaluate_Split_SplitsPipeDelimitedString()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "coursesCompleted", "SOFT101|SOFT201|SEC101" } });
+
+        var result = _evaluator.Evaluate("Split(cs[\"coursesCompleted\"], \"|\")", context);
+
+        Assert.That(result, Is.InstanceOf<string[]>());
+        var array = (string[])result!;
+        Assert.That(array, Has.Length.EqualTo(3));
+        Assert.That(array, Is.EqualTo(new[] { "SOFT101", "SOFT201", "SEC101" }));
+    }
+
+    [Test]
+    public void Evaluate_Split_SplitsCommaDelimitedString()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "tags", "admin,user,readonly" } });
+
+        var result = _evaluator.Evaluate("Split(cs[\"tags\"], \",\")", context);
+
+        Assert.That(result, Is.InstanceOf<string[]>());
+        var array = (string[])result!;
+        Assert.That(array, Has.Length.EqualTo(3));
+        Assert.That(array, Is.EqualTo(new[] { "admin", "user", "readonly" }));
+    }
+
+    [Test]
+    public void Evaluate_Split_TrimsWhitespace()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "values", "  A  |  B  |  C  " } });
+
+        var result = _evaluator.Evaluate("Split(cs[\"values\"], \"|\")", context);
+
+        Assert.That(result, Is.InstanceOf<string[]>());
+        var array = (string[])result!;
+        Assert.That(array, Is.EqualTo(new[] { "A", "B", "C" }));
+    }
+
+    [Test]
+    public void Evaluate_Split_RemovesEmptyEntries()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "values", "A||B|||C" } });
+
+        var result = _evaluator.Evaluate("Split(cs[\"values\"], \"|\")", context);
+
+        Assert.That(result, Is.InstanceOf<string[]>());
+        var array = (string[])result!;
+        Assert.That(array, Has.Length.EqualTo(3));
+        Assert.That(array, Is.EqualTo(new[] { "A", "B", "C" }));
+    }
+
+    [Test]
+    public void Evaluate_Split_ReturnsEmptyArrayForNullInput()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "values", null } });
+
+        var result = _evaluator.Evaluate("Split(cs[\"values\"], \"|\")", context);
+
+        Assert.That(result, Is.InstanceOf<string[]>());
+        var array = (string[])result!;
+        Assert.That(array, Is.Empty);
+    }
+
+    [Test]
+    public void Evaluate_Split_ReturnsEmptyArrayForEmptyString()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "values", "" } });
+
+        var result = _evaluator.Evaluate("Split(cs[\"values\"], \"|\")", context);
+
+        Assert.That(result, Is.InstanceOf<string[]>());
+        var array = (string[])result!;
+        Assert.That(array, Is.Empty);
+    }
+
+    [Test]
+    public void Evaluate_Split_ReturnsSingleItemArrayWhenNoDelimiter()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "values", "SingleValue" } });
+
+        var result = _evaluator.Evaluate("Split(cs[\"values\"], \"|\")", context);
+
+        Assert.That(result, Is.InstanceOf<string[]>());
+        var array = (string[])result!;
+        Assert.That(array, Has.Length.EqualTo(1));
+        Assert.That(array[0], Is.EqualTo("SingleValue"));
+    }
+
+    [Test]
+    public void Evaluate_Split_ReturnsOriginalValueWhenDelimiterIsNull()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "values", "A|B|C" } });
+
+        var result = _evaluator.Evaluate("Split(cs[\"values\"], null)", context);
+
+        Assert.That(result, Is.InstanceOf<string[]>());
+        var array = (string[])result!;
+        Assert.That(array, Has.Length.EqualTo(1));
+        Assert.That(array[0], Is.EqualTo("A|B|C"));
+    }
+
+    [Test]
+    public void Evaluate_Join_JoinsArrayWithDelimiter()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "values", new[] { "A", "B", "C" } } });
+
+        var result = _evaluator.Evaluate("Join(cs[\"values\"], \"|\")", context);
+
+        Assert.That(result, Is.EqualTo("A|B|C"));
+    }
+
+    [Test]
+    public void Evaluate_Join_JoinsListWithDelimiter()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "values", new List<string> { "X", "Y", "Z" } } });
+
+        var result = _evaluator.Evaluate("Join(cs[\"values\"], \"-\")", context);
+
+        Assert.That(result, Is.EqualTo("X-Y-Z"));
+    }
+
+    [Test]
+    public void Evaluate_Join_UsesCommaAsDefaultDelimiter()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "values", new[] { "A", "B", "C" } } });
+
+        var result = _evaluator.Evaluate("Join(cs[\"values\"], null)", context);
+
+        Assert.That(result, Is.EqualTo("A,B,C"));
+    }
+
+    [Test]
+    public void Evaluate_Join_FiltersOutEmptyStrings()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "values", new[] { "A", "", "B", null!, "C" } } });
+
+        var result = _evaluator.Evaluate("Join(cs[\"values\"], \"|\")", context);
+
+        Assert.That(result, Is.EqualTo("A|B|C"));
+    }
+
+    [Test]
+    public void Evaluate_Join_ReturnsNullForNullCollection()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "values", null } });
+
+        var result = _evaluator.Evaluate("Join(cs[\"values\"], \"|\")", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Evaluate_Join_ReturnsNullForEmptyCollection()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "values", Array.Empty<string>() } });
+
+        var result = _evaluator.Evaluate("Join(cs[\"values\"], \"|\")", context);
+
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void Evaluate_Join_ReturnsSingleValueAsIs()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "values", "SingleValue" } });
+
+        var result = _evaluator.Evaluate("Join(cs[\"values\"], \"|\")", context);
+
+        Assert.That(result, Is.EqualTo("SingleValue"));
+    }
+
+    [Test]
+    public void Evaluate_SplitThenJoin_RoundTrip()
+    {
+        // Test that Split and Join are inverse operations
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "original", "A|B|C" } });
+
+        var splitResult = _evaluator.Evaluate("Split(cs[\"original\"], \"|\")", context);
+        Assert.That(splitResult, Is.InstanceOf<string[]>());
+
+        var context2 = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "split", splitResult } });
+
+        var joinResult = _evaluator.Evaluate("Join(cs[\"split\"], \"|\")", context2);
+
+        Assert.That(joinResult, Is.EqualTo("A|B|C"));
+    }
+
+    #endregion
+
     #region DN Helper Tests
 
     [Test]

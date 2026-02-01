@@ -173,6 +173,10 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         target.SetFunction("Contains", (Func<object?, object?, bool>)((o, value) => AsString(o)?.Contains(AsString(value) ?? "") ?? false));
         target.SetFunction("CollectionContains", (Func<object?, object?, bool>)((collection, value) => CollectionContains(collection, AsString(value) ?? "")));
 
+        // Array/Collection functions - for converting delimited strings to multi-valued attributes
+        target.SetFunction("Split", (Func<object?, object?, string[]>)((o, delimiter) => Split(AsString(o), AsString(delimiter))));
+        target.SetFunction("Join", (Func<object?, object?, string?>)((collection, delimiter) => Join(collection, AsString(delimiter))));
+
         // Conditional functions
         target.SetFunction("Coalesce", (Func<object?, object?, object?>)((a, b) => a ?? b));
         target.SetFunction("IIF", (Func<bool, object?, object?, object?>)((condition, trueVal, falseVal) => condition ? trueVal : falseVal));
@@ -308,6 +312,66 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
 
         // If it's a single value, check if it matches
         return string.Equals(collection.ToString(), value, StringComparison.Ordinal);
+    }
+
+    #endregion
+
+    #region Array/Collection Functions
+
+    /// <summary>
+    /// Splits a string by a delimiter into an array of strings.
+    /// This is useful for converting delimited single-valued attributes (e.g., "A|B|C")
+    /// into multiple values for multi-valued metaverse attributes.
+    /// Empty entries are removed automatically.
+    /// </summary>
+    /// <param name="value">The string to split.</param>
+    /// <param name="delimiter">The delimiter to split on (e.g., "|", ",", ";").</param>
+    /// <returns>An array of non-empty strings, or an empty array if value is null/empty.</returns>
+    private static string[] Split(string? value, string? delimiter)
+    {
+        if (string.IsNullOrEmpty(value))
+            return Array.Empty<string>();
+
+        if (string.IsNullOrEmpty(delimiter))
+            return new[] { value };
+
+        return value.Split(delimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    /// <summary>
+    /// Joins a collection of values into a single string with a delimiter.
+    /// This is the reverse of Split - useful for converting multi-valued attributes
+    /// into a single delimited string for systems that don't support MVAs.
+    /// </summary>
+    /// <param name="collection">The collection to join.</param>
+    /// <param name="delimiter">The delimiter to use between values.</param>
+    /// <returns>A joined string, or null if collection is null/empty.</returns>
+    private static string? Join(object? collection, string? delimiter)
+    {
+        if (collection == null)
+            return null;
+
+        delimiter ??= ",";
+
+        if (collection is IEnumerable<string> stringEnumerable)
+        {
+            var items = stringEnumerable.Where(s => !string.IsNullOrEmpty(s)).ToArray();
+            return items.Length > 0 ? string.Join(delimiter, items) : null;
+        }
+
+        if (collection is IEnumerable<object> objectEnumerable)
+        {
+            var items = objectEnumerable
+                .Where(o => o != null)
+                .Select(o => o.ToString())
+                .Where(s => !string.IsNullOrEmpty(s))
+                .ToArray();
+            return items.Length > 0 ? string.Join(delimiter, items!) : null;
+        }
+
+        // Single value - just return it as-is
+        var singleValue = collection.ToString();
+        return string.IsNullOrEmpty(singleValue) ? null : singleValue;
     }
 
     #endregion

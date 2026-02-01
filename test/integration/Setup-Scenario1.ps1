@@ -1072,10 +1072,11 @@ try {
 
             # Training import mappings - contributes training-specific attributes to existing MVOs
             # These attributes are unique to Training and don't exist in HR data
+            # Note: coursesCompleted uses a Split() expression to convert pipe-separated string to MVA values
             $trainingMappings = @(
-                @{ CsAttr = "coursesCompleted";      MvAttr = "Courses Completed" }       # MVA: pipe-separated list of course codes
-                @{ CsAttr = "trainingStatus";        MvAttr = "Training Status" }          # SVA: Pass/Fail/InProgress
-                @{ CsAttr = "totalCoursesCompleted"; MvAttr = "Training Course Count" }    # SVA: number of completed courses
+                @{ CsAttr = "coursesCompleted";      MvAttr = "Courses Completed";      Expression = 'Split(cs["coursesCompleted"], "|")' }  # MVA: pipe-separated → individual values
+                @{ CsAttr = "trainingStatus";        MvAttr = "Training Status";        Expression = $null }  # SVA: direct mapping
+                @{ CsAttr = "totalCoursesCompleted"; MvAttr = "Training Course Count";  Expression = $null }  # SVA: direct mapping
             )
 
             $existingTrainingMappings = Get-JIMSyncRuleMapping -SyncRuleId $trainingImportRule.id
@@ -1100,9 +1101,18 @@ try {
 
                 if (-not $existsAlready) {
                     try {
-                        New-JIMSyncRuleMapping -SyncRuleId $trainingImportRule.id `
-                            -TargetMetaverseAttributeId $mvAttr.id `
-                            -SourceConnectedSystemAttributeId $csAttr.id | Out-Null
+                        if ($mapping.Expression) {
+                            # Expression-based mapping (e.g., Split for MVA conversion)
+                            New-JIMSyncRuleMapping -SyncRuleId $trainingImportRule.id `
+                                -TargetMetaverseAttributeId $mvAttr.id `
+                                -Expression $mapping.Expression | Out-Null
+                        }
+                        else {
+                            # Direct attribute mapping
+                            New-JIMSyncRuleMapping -SyncRuleId $trainingImportRule.id `
+                                -TargetMetaverseAttributeId $mvAttr.id `
+                                -SourceConnectedSystemAttributeId $csAttr.id | Out-Null
+                        }
                         $trainingMappingsCreated++
                     }
                     catch {
