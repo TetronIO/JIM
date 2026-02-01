@@ -21,20 +21,18 @@
 
 @if (_connectedSystemHeader != null && _preferencesLoaded)
 {
-    <MudGrid Class="mt-5">
-        <MudItem xs="6">
-            <MudSelect T="PendingExportStatus" Label="Filter by Status" MultiSelection="true"
-                       SelectedValues="_statusFilters" SelectedValuesChanged="OnStatusFiltersChanged"
-                       MultiSelectionTextFunc="@GetStatusFilterText"
-                       Variant="Variant.Outlined" Clearable="true" Dense="true" Style="max-width: 350px;">
-                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Pending">Pending</MudSelectItem>
-                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Executing">Executing</MudSelectItem>
-                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.ExportNotConfirmed">Export Not Confirmed</MudSelectItem>
-                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Failed">Failed</MudSelectItem>
-                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Exported">Exported</MudSelectItem>
-            </MudSelect>
-        </MudItem>
-    </MudGrid>
+    <MudPaper Elevation="0" Class="mt-3 pa-4" Outlined="true">
+        <MudSelect T="PendingExportStatus" Label="Filter by Status" MultiSelection="true"
+                   SelectedValues="_statusFilters" SelectedValuesChanged="OnStatusFiltersChanged"
+                   MultiSelectionTextFunc="@GetStatusFilterText"
+                   Variant="Variant.Outlined" Clearable="true" Dense="true" Style="max-width: 350px;">
+            <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Pending">Pending</MudSelectItem>
+            <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Executing">Executing</MudSelectItem>
+            <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.ExportNotConfirmed">Export Not Confirmed</MudSelectItem>
+            <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Failed">Failed</MudSelectItem>
+            <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Exported">Exported</MudSelectItem>
+        </MudSelect>
+    </MudPaper>
 
     <MudTable @ref="_table"
               T="PendingExportHeader"
