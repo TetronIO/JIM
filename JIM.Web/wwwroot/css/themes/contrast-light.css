@@ -37,10 +37,6 @@ html[lang] {
     --mud-palette-surface: #ffffffff;
     --mud-palette-background-grey: rgba(0, 0, 0, 0.024);
 
-    /* === Appbar (dark, brand purple-navy matching sidebar) === */
-    --mud-palette-appbar-background: #292350;
-    --mud-palette-appbar-text: #ffffffff;
-
     /* === Drawer (dark sidebar - purple-navy, lighter than full dark mode) === */
     --mud-palette-drawer-background: #1e1b3a;
     --mud-palette-drawer-text: #c0c4cc;

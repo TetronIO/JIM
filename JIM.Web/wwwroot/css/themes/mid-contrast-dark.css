@@ -37,10 +37,6 @@ html[lang] {
     --jim-inner-surface: #05090a;
     --jim-inner-border-color: #2a2b2f;
 
-    /* === Appbar === */
-    --mud-palette-appbar-background: #0a0b0c;
-    --mud-palette-appbar-text: #ffffffff;
-
     /* === Drawer (first-tier box colour, flush with content cards) === */
     --mud-palette-drawer-background: #121315;
     --mud-palette-drawer-text: #b0b2b8;

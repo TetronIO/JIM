@@ -30,15 +30,11 @@ html[lang] {
 
     /* === Background & Surface === */
     --mud-palette-background: #121228;
-    --mud-palette-surface: #1e1e38;
+    --mud-palette-surface: #1a1a31;
     --mud-palette-background-grey: rgba(255, 255, 255, 0.035);
 
-    /* === Appbar === */
-    --mud-palette-appbar-background: #1a1a32;
-    --mud-palette-appbar-text: #ffffffff;
-
     /* === Drawer (lighter surface - box/card colour from screenshot) === */
-    --mud-palette-drawer-background: #252545;
+    --mud-palette-drawer-background: #1a1a31;
     --mud-palette-drawer-text: #c0c4d8;
     --mud-palette-drawer-icon: #8088a8;
 

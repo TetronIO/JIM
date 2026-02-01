@@ -16,7 +16,13 @@
 
 <PageTitle>Synchronisation Rule: @_syncRuleNameOrCreate</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-secondary-text">Synchronisation Rule:</span> @_syncRuleNameOrCreate</MudText>
-<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<div class="d-flex justify-space-between align-center">
+    <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+    @if (_syncRule is { Id: > 0 })
+    {
+        <AuditInfo Entity="@_syncRule" />
+    }
+</div>
 
 @if (_isLoading)
 {
@@ -27,17 +33,10 @@
 }
 else if (_syncRule != null)
 {
-    <MudPaper Class="pa-4 mt-5" Outlined="true">
-
-        <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
-            <MudText Typo="Typo.h5">Details</MudText>
-            @if (_syncRule.Id > 0)
-            {
-                <AuditInfo Entity="@_syncRule" />
-            }
-        </MudStack>
-
-        <MudForm @bind-IsValid="@_isDetailsFormValid" @bind-Errors="@_detailsFormErrors">
+    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-5" Class="mt-2" Outlined="true">
+        <MudTabPanel Text="Details">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudForm @bind-IsValid="@_isDetailsFormValid" @bind-Errors="@_detailsFormErrors">
             <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="_syncRule.Name"
                 Variant="Variant.Outlined" />
 
@@ -184,7 +183,7 @@ else if (_syncRule != null)
     @* Advanced Options - Only show for Export rules *@
     @if (_syncRule.Direction == SyncRuleDirection.Export)
     {
-        <MudExpansionPanels Class="mt-5">
+        <MudExpansionPanels Elevation="0" Class="mt-5 jim-expansion-panel">
             <MudExpansionPanel Text="Advanced Options">
                 <TitleContent>
                     <div class="d-flex align-center">
@@ -706,22 +705,26 @@ else if (_syncRule != null)
         </MudAlert>
     }
 
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-5" OnClick="HandleCreateOrUpdateSyncRuleAsync"
-        Disabled="!_syncRule.IsValid()" DropShadow="false">@(_syncRule.Id == 0 ? "Create" : "Update") Sync Rule
-    </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-5" OnClick="HandleCreateOrUpdateSyncRuleAsync"
+                Disabled="!_syncRule.IsValid()" DropShadow="false">@(_syncRule.Id == 0 ? "Create" : "Update") Sync Rule
+            </MudButton>
+        </MudTabPanel>
 
-    @if (_syncRule.Id > 0)
-    {
-        <MudPaper Class="pa-4 mt-20 jim-paper-danger-zone" Outlined="false">
-            <MudText Typo="Typo.h5" Class="mb-3">Danger Zone</MudText>
-            <MudText Class="mud-text-secondary mb-4">
-                Deleting this synchronisation rule is permanent and cannot be undone. All configuration and attribute flow
-                mappings will be lost.
-            </MudText>
-            <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Delete" OnClick="HandleDeleteSyncRuleAsync"
-                DropShadow="false" Color="Color.Error">Delete Sync Rule</MudButton>
-        </MudPaper>
-    }
+        @if (_syncRule.Id > 0)
+        {
+            <MudTabPanel Text="Danger Zone" Icon="@Icons.Material.Filled.Warning" BadgeColor="Color.Error" ID="@("danger-zone")">
+                <MudPaper Class="pa-4 jim-paper-danger-zone" Outlined="false">
+                    <MudText Typo="Typo.h5" Class="mb-3">Danger Zone</MudText>
+                    <MudText Class="mud-text-secondary mb-4">
+                        Deleting this synchronisation rule is permanent and cannot be undone. All configuration and attribute flow
+                        mappings will be lost.
+                    </MudText>
+                    <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Delete" OnClick="HandleDeleteSyncRuleAsync"
+                        DropShadow="false" Color="Color.Error">Delete Sync Rule</MudButton>
+                </MudPaper>
+            </MudTabPanel>
+        }
+    </MudTabs>
 }
 
 @code {

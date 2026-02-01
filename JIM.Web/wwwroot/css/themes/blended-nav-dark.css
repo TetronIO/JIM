@@ -42,10 +42,6 @@ html[lang] {
     --jim-inner-surface: #222325;
     --jim-inner-border-color: #2e2f32;
 
-    /* === Appbar (matching page background for blended look) === */
-    --mud-palette-appbar-background: #121314;
-    --mud-palette-appbar-text: #ffffffff;
-
     /* === Drawer (same as page background — the blended effect) === */
     --mud-palette-drawer-background: #121314;
     --mud-palette-drawer-text: #b0b2b8;

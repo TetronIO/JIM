@@ -73,7 +73,7 @@ a.mud-link.mud-primary-text:hover {
     font-size: 1rem;
 }
 
-/* Consistent 8px border radius for container elements (papers, tables, alerts).
+/* Consistent 8px border radius for container elements (papers, tables, alerts, expansion panels).
    Applied directly rather than via --mud-default-borderradius to avoid affecting
    buttons, inputs, and other interactive controls that should keep their default radius. */
 .mud-paper,
@@ -94,6 +94,21 @@ html[lang] .mud-paper,
 html[lang] .mud-paper-outlined,
 html[lang] .mud-table-outlined {
     border: 1px solid var(--jim-paper-border-color, transparent) !important;
+}
+
+/* JIM styled expansion panels - use .jim-expansion-panel class on MudExpansionPanels */
+.jim-expansion-panel {
+    border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
+    border-radius: 8px !important;
+    overflow: hidden;
+}
+
+.jim-expansion-panel .mud-expand-panel {
+    box-shadow: none !important;
+}
+
+.jim-expansion-panel .mud-expand-panel::before {
+    box-shadow: none !important;
 }
 
 /* Nested containers: tables and tab panels inside papers use a deeper surface colour

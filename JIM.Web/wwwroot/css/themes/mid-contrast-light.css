@@ -42,10 +42,6 @@ html[lang] {
     --jim-inner-surface: #f0f0f2;
     --jim-inner-border-color: rgba(42, 42, 48, 0.22);
 
-    /* === Appbar (dark, matching sidebar) === */
-    --mud-palette-appbar-background: #0a0b0c;
-    --mud-palette-appbar-text: #ffffffff;
-
     /* === Drawer (dark sidebar - shared with dark variant) === */
     --mud-palette-drawer-background: #121315;
     --mud-palette-drawer-text: #b0b2b8;

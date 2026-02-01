@@ -36,10 +36,6 @@ html[lang] {
     --mud-palette-surface: #ffffffff;
     --mud-palette-background-grey: rgba(0, 0, 0, 0.024);
 
-    /* === Appbar === */
-    --mud-palette-appbar-background: rgb(60, 148, 255);
-    --mud-palette-appbar-text: #ffffffff;
-
     /* === Drawer === */
     --mud-palette-drawer-background: #eef2f6;
     --mud-palette-drawer-text: rgba(66, 66, 66, 1);
