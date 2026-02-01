@@ -35,7 +35,7 @@
                 var (label, color, icon) = GetDeletionRuleDisplay(context.DeletionRule);
             }
             <MudTooltip Text="@GetDeletionRuleTooltip(context)" Arrow="true" Placement="Placement.Top">
-                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@color" Icon="@icon">@label</MudChip>
+                <MudChip T="string" Variant="Variant.Text" Color="@color" Icon="@icon">@label</MudChip>
             </MudTooltip>
         </MudTd>
         <MudTd DataLabel="Predefined Searches?">@(context.HasPredefinedSearches ? "Yes" : "No")</MudTd>

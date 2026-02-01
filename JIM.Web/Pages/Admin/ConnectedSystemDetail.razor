@@ -199,7 +199,7 @@
                 <MudButton Variant="Variant.Filled" Color="@(IsSettingsFormValid || !_settingsBeingSaved ? Color.Primary : Color.Default)" Disabled="@(!IsSettingsFormValid || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync">
                     @if (_settingsBeingSaved)
                     {
-                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                        <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                         <MudText Class="ms-2">Processing</MudText>
                     }
                     else
@@ -230,7 +230,7 @@
                     Color="_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning"
                     Disabled="@(_schemaBeingRetrieved)"
                     Variant="Variant.Filled"
-                    Size="Size.Small"
+                   
                     OnClick="HandleImportSchemaAsync"
                     Class="mt-5"
                     DropShadow="false">
@@ -238,7 +238,7 @@
                     {
                         if (_schemaBeingRetrieved)
                         {
-                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                            <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                             <MudText Class="ms-2">Retrieving Schema</MudText>
                         }
                         else
@@ -250,7 +250,7 @@
                     {
                         if (_schemaBeingRetrieved)
                         {
-                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                            <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                             <MudText Class="ms-2">Refreshing Schema</MudText>
                         }
                         else
@@ -296,35 +296,35 @@
                                     @if (result.AddedObjectTypes.Count > 0)
                                     {
                                         <tr>
-                                            <td><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Size="Size.Small" Class="me-1" /> Object Types Added</td>
+                                            <td><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Class="me-1" /> Object Types Added</td>
                                             <td>@string.Join(", ", result.AddedObjectTypes)</td>
                                         </tr>
                                     }
                                     @if (result.RemovedObjectTypes.Count > 0)
                                     {
                                         <tr>
-                                            <td><MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Error" Size="Size.Small" Class="me-1" /> Object Types Removed</td>
+                                            <td><MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Error" Class="me-1" /> Object Types Removed</td>
                                             <td>@string.Join(", ", result.RemovedObjectTypes)</td>
                                         </tr>
                                     }
                                     @if (result.UpdatedObjectTypes.Count > 0)
                                     {
                                         <tr>
-                                            <td><MudIcon Icon="@Icons.Material.Filled.Update" Color="Color.Info" Size="Size.Small" Class="me-1" /> Object Types Updated</td>
+                                            <td><MudIcon Icon="@Icons.Material.Filled.Update" Color="Color.Info" Class="me-1" /> Object Types Updated</td>
                                             <td>@string.Join(", ", result.UpdatedObjectTypes)</td>
                                         </tr>
                                     }
                                     @foreach (var kvp in result.AddedAttributes)
                                     {
                                         <tr>
-                                            <td><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Size="Size.Small" Class="me-1" /> Attributes Added (@kvp.Key)</td>
+                                            <td><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Class="me-1" /> Attributes Added (@kvp.Key)</td>
                                             <td>@string.Join(", ", kvp.Value)</td>
                                         </tr>
                                     }
                                     @foreach (var kvp in result.RemovedAttributes)
                                     {
                                         <tr>
-                                            <td><MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Warning" Size="Size.Small" Class="me-1" /> Attributes Removed (@kvp.Key)</td>
+                                            <td><MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Warning" Class="me-1" /> Attributes Removed (@kvp.Key)</td>
                                             <td>@string.Join(", ", kvp.Value)</td>
                                         </tr>
                                     }
@@ -587,11 +587,11 @@
                             <MudTd DataLabel="External ID">
                                 @if (context.IsExternalId)
                                 {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
+                                    <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
                                 }
                                 else if (context.IsSecondaryExternalId)
                                 {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
+                                    <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
                                 }
                                 else
                                 {
@@ -622,7 +622,7 @@
                                 <MudTd>
                                     <MudButton
                                         DropShadow="false"
-                                        Size="Size.Small"
+                                       
                                         Variant="Variant.Filled"
                                         OnClick="() => HandleShowEditAttributeDialogAsync(context)"
                                         StartIcon="@Icons.Material.Filled.Edit">
@@ -672,7 +672,7 @@
                     <MudButton
                             Disabled="@_hierarchyBeingRetrieved"
                             Color="_connectedSystem.Partitions == null || _connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning"
-                            Size="Size.Small"
+                           
                             OnClick="HandleImportHierarchyAsync"
                             Variant="Variant.Filled"
                             Class="mt-5"
@@ -681,7 +681,7 @@
                         {
                             if (_hierarchyBeingRetrieved)
                             {
-                                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                                 <MudText Class="ms-2">Retrieving Hierarchy</MudText>
                             }
                             else
@@ -693,7 +693,7 @@
                         {
                             if (_hierarchyBeingRetrieved)
                             {
-                                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                                 <MudText Class="ms-2">Refreshing Hierarchy</MudText>
                             }
                             else
@@ -711,13 +711,13 @@
                         <MudExpansionPanel Expanded="false">
                             <TitleContent>
                                 <div class="d-flex align-center gap-3">
-                                    <MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Small" />
+                                    <MudIcon Icon="@Icons.Material.Filled.Sync" />
                                     <MudText Typo="Typo.body1">
                                         Hierarchy refreshed: @_hierarchyRefreshResult.GetSummary()
                                     </MudText>
                                     @if (_hierarchyRefreshResult.HasSelectedItemsRemoved)
                                     {
-                                        <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">
+                                        <MudChip T="string" Color="Color.Warning" Variant="Variant.Filled">
                                             Selected items removed
                                         </MudChip>
                                     }
@@ -728,7 +728,7 @@
                                     <div class="d-flex justify-end mb-3">
                                         <MudButton StartIcon="@Icons.Material.Filled.ContentCopy"
                                                    Variant="Variant.Outlined"
-                                                   Size="Size.Small"
+                                                  
                                                    OnClick="CopyHierarchyChangesToClipboardAsync">
                                             Copy Changes
                                         </MudButton>
@@ -738,7 +738,7 @@
                                     @if (_hierarchyRefreshResult.RemovedPartitions.Count > 0 || _hierarchyRefreshResult.RemovedContainers.Count > 0)
                                     {
                                         <MudText Typo="Typo.subtitle2" Class="mb-2">
-                                            <MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Class="mr-1" Color="Color.Error" />
+                                            <MudIcon Icon="@Icons.Material.Filled.Delete" Class="mr-1" Color="Color.Error" />
                                             Removed
                                         </MudText>
                                         <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
@@ -760,7 +760,7 @@
                                                         <td>
                                                             @if (item.WasSelected)
                                                             {
-                                                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" Class="mr-1" />
+                                                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-1" />
                                                                 <text>Yes</text>
                                                             }
                                                             else
@@ -779,7 +779,7 @@
                                                         <td>
                                                             @if (item.WasSelected)
                                                             {
-                                                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" Class="mr-1" />
+                                                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-1" />
                                                                 <text>Yes</text>
                                                             }
                                                             else
@@ -797,7 +797,7 @@
                                     @if (_hierarchyRefreshResult.AddedPartitions.Count > 0 || _hierarchyRefreshResult.AddedContainers.Count > 0)
                                     {
                                         <MudText Typo="Typo.subtitle2" Class="mb-2">
-                                            <MudIcon Icon="@Icons.Material.Filled.Add" Size="Size.Small" Class="mr-1" Color="Color.Success" />
+                                            <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-1" Color="Color.Success" />
                                             Added
                                         </MudText>
                                         <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
@@ -833,7 +833,7 @@
                                     @if (_hierarchyRefreshResult.RenamedPartitions.Count > 0 || _hierarchyRefreshResult.RenamedContainers.Count > 0)
                                     {
                                         <MudText Typo="Typo.subtitle2" Class="mb-2">
-                                            <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Class="mr-1" Color="Color.Info" />
+                                            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-1" Color="Color.Info" />
                                             Renamed
                                         </MudText>
                                         <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
@@ -872,7 +872,7 @@
                                     @if (_hierarchyRefreshResult.MovedContainers.Count > 0)
                                     {
                                         <MudText Typo="Typo.subtitle2" Class="mb-2">
-                                            <MudIcon Icon="@Icons.Material.Filled.DriveFileMove" Size="Size.Small" Class="mr-1" Color="Color.Info" />
+                                            <MudIcon Icon="@Icons.Material.Filled.DriveFileMove" Class="mr-1" Color="Color.Info" />
                                             Moved
                                         </MudText>
                                         <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
@@ -932,7 +932,7 @@
 
                                 @*
                                 TODO:
-                                <MudButtonGroup Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined" Class="mt-5 mb-5">
+                                <MudButtonGroup Color="Color.Default" Variant="Variant.Outlined" Class="mt-5 mb-5">
                                     <MudButton>Select All</MudButton>
                                     <MudButton>Clear All</MudButton>
                                 </MudButtonGroup>
@@ -1094,7 +1094,7 @@
                     <MudTd DataLabel="Actions" Style="text-align: center">
                         <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
                             <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                           Size="Size.Small"
+                                          
                                            Color="Color.Error"
                                            Variant="Variant.Outlined"
                                            OnClick="_ => HandleRunProfileDeleteAsync(context)" />
@@ -1135,7 +1135,7 @@
                     Disabled="@(_connectedSystem?.Status == ConnectedSystemStatus.Deleting)">
                     @if (_connectedSystem?.Status == ConnectedSystemStatus.Deleting)
                     {
-                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                        <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                         <MudText Class="ms-2">Deletion in Progress...</MudText>
                     }
                     else
@@ -1360,7 +1360,7 @@
                 Disabled="@(!IsDeleteConfirmationValid())">
                 @if (_deletionInProgress)
                 {
-                    <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                    <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                     <MudText Class="ms-2">Deleting...</MudText>
                 }
                 else
@@ -1415,7 +1415,7 @@
             Disabled="_modeSwitchInProgress">
             @if (_modeSwitchInProgress)
             {
-                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                 <MudText Class="ms-2">Switching...</MudText>
             }
             else
@@ -2679,13 +2679,13 @@
                             <MudSwitch T="bool" Value="@context.CaseSensitive"
                                        ValueChanged="@(value => HandleToggleMatchingRuleCaseSensitiveAsync(context, value))"
                                        Color="Color.Primary"
-                                       Size="Size.Small" />
+                                       />
                         </MudTd>
                         <MudTd>
                             <MudTooltip Text="Move up" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Outlined.ArrowUpward"
                                                Variant="Variant.Outlined"
-                                               Size="Size.Small"
+                                              
                                                Color="Color.Default"
                                                Disabled="@(context.Order == 0)"
                                                OnClick="() => HandleMoveMatchingRuleUpAsync(context, objectType)" />
@@ -2693,7 +2693,7 @@
                             <MudTooltip Text="Move down" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Outlined.ArrowDownward"
                                                Variant="Variant.Outlined"
-                                               Size="Size.Small"
+                                              
                                                Color="Color.Default"
                                                Disabled="@(context.Order == objectType.ObjectMatchingRules.Max(r => r.Order))"
                                                OnClick="() => HandleMoveMatchingRuleDownAsync(context, objectType)" />
@@ -2702,7 +2702,7 @@
                                 <MudIconButton
                                     Icon="@Icons.Material.Outlined.Delete"
                                     Variant="Variant.Outlined"
-                                    Size="Size.Small"
+                                   
                                     Color="Color.Error"
                                     OnClick="() => HandleDeleteMatchingRuleAsync(context, objectType)" />
                             </MudTooltip>

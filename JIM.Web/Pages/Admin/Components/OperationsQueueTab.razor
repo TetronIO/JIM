@@ -69,12 +69,12 @@
                 @if (context.ObjectsToProcess > 0)
                 {
                     var percentage = (double)context.ObjectsProcessed!.Value / context.ObjectsToProcess.Value * 100;
-                    <MudProgressLinear Value="@percentage" Color="Color.Primary" Rounded="true" Size="Size.Small" />
+                    <MudProgressLinear Value="@percentage" Color="Color.Primary" Rounded="true" />
                     <MudText Typo="Typo.caption" Class="mt-2">@context.ObjectsProcessed / @context.ObjectsToProcess@(!string.IsNullOrEmpty(context.ProgressMessage) ? $" - {context.ProgressMessage}" : "")</MudText>
                 }
                 else
                 {
-                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Rounded="true" Size="Size.Small" />
+                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Rounded="true" />
                     @if (!string.IsNullOrEmpty(context.ProgressMessage))
                     {
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.ProgressMessage</MudText>
@@ -94,17 +94,17 @@
         <MudTd DataLabel="Initiated By">
             @if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.User && context.InitiatedById != null)
             {
-                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" Style="vertical-align: middle;" />
                 <span>@context.InitiatedByName</span>
             }
             else if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.ApiKey)
             {
-                <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" Style="vertical-align: middle;" />
                 <span>@context.InitiatedByName</span>
             }
             else if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.System)
             {
-                <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" Style="vertical-align: middle;" />
                 <span>@(context.InitiatedByName ?? "Scheduler")</span>
             }
             else if (!string.IsNullOrEmpty(context.InitiatedByName))
@@ -114,7 +114,7 @@
         </MudTd>
         <MudTd DataLabel="Actions" Style="text-align: right;">
             <MudTooltip Text="Cancel" Arrow="true" Placement="Placement.Left">
-                <MudIconButton Icon="@Icons.Material.Outlined.Cancel" Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" OnClick="() => HandleCancelTaskAsync(context)" />
+                <MudIconButton Icon="@Icons.Material.Outlined.Cancel" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => HandleCancelTaskAsync(context)" />
             </MudTooltip>
         </MudTd>
     </RowTemplate>

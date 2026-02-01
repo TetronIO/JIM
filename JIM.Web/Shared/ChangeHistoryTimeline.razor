@@ -29,7 +29,7 @@ else
     <MudTimeline TimelinePosition="TimelinePosition.Start" TimelineOrientation="TimelineOrientation.Vertical">
         @foreach (var changeGroup in GetFilteredChangeGroups())
         {
-            <MudTimelineItem Color="@GetChangeTypeColor(changeGroup.ChangeType)" Size="Size.Small" Elevation="0">
+            <MudTimelineItem Color="@GetChangeTypeColor(changeGroup.ChangeType)" Elevation="0">
                 <ItemContent>
                     <MudCard Outlined="true" Class="cursor-pointer" @onclick="() => OpenChangeDetails(changeGroup)">
                         <MudCardContent>
@@ -38,7 +38,7 @@ else
                                 <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center"
                                     Style="flex-wrap: wrap; gap: 6px;">
                                     <MudIcon Icon="@GetChangeTypeIcon(changeGroup.ChangeType)"
-                                        Color="@GetChangeTypeColor(changeGroup.ChangeType)" Size="Size.Small" />
+                                        Color="@GetChangeTypeColor(changeGroup.ChangeType)" />
                                     <MudText Typo="Typo.body1" Style="margin-right: 12px;">
                                         <strong>@changeGroup.ChangeType</strong>
                                     </MudText>
@@ -61,7 +61,7 @@ else
                                                 <MudText Typo="Typo.body2" Class="jim-text-code" Style="min-width: 120px;">
                                                     @change.AttributeName
                                                 </MudText>
-                                                <MudChip T="string" Variant="Variant.Text" Size="Size.Small"
+                                                <MudChip T="string" Variant="Variant.Text"
                                                     Color="@GetDisplayChangeTypeColor(change)">
                                                     @change.DisplayChangeType
                                                 </MudChip>
@@ -109,7 +109,7 @@ else
                                         @if (ShouldShowMoreIndicatorForDisplay(changeGroup))
                                         {
                                             <div class="more-changes-indicator">
-                                                <MudChip T="string" Variant="Variant.Filled" Size="Size.Small" Color="Color.Primary">
+                                                <MudChip T="string" Variant="Variant.Filled" Color="Color.Primary">
                                                     +@GetRemainingDisplayChangesCount(changeGroup) more
                                                 </MudChip>
                                             </div>
@@ -176,7 +176,7 @@ else
                         <MudItem xs="12" sm="4">
                             <MudText Typo="Typo.overline" Class="mud-text-secondary">Activity</MudText>
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Small"
+                                <MudIcon Icon="@Icons.Material.Filled.PlayCircle"
                                     Class="mud-text-secondary" />
                                 <MudLink Href="@($"/activity/item/{_selectedChange.ActivityRunProfileExecutionItemId}")">View
                                     Activity</MudLink>
@@ -202,32 +202,32 @@ else
                                     @* SVA terminology: Set, Updated, Removed *@
                                     @if (summary.SetCount > 0)
                                     {
-                                        <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Success">
+                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Success">
                                             Set
                                         </MudChip>
                                     }
                                     @if (summary.UpdateCount > 0)
                                     {
-                                        <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Info">
+                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info">
                                             Updated
                                         </MudChip>
                                     }
                                     @if (summary.RemovedCount > 0)
                                     {
-                                        <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Error">
+                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Error">
                                             Removed
                                         </MudChip>
                                     }
                                     @* MVA terminology: Add (+count), Remove (-count) *@
                                     @if (summary.AddCount > 0)
                                     {
-                                        <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Success">
+                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Success">
                                             +@summary.AddCount
                                         </MudChip>
                                     }
                                     @if (summary.RemoveCount > 0)
                                     {
-                                        <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Error">
+                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Error">
                                             -@summary.RemoveCount
                                         </MudChip>
                                     }
@@ -334,7 +334,7 @@ else
                         {
                             @* MVA reference Add/Remove - bold for Add, de-emphasised for Remove *@
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudChip T="string" Color="Color.Default" Size="Size.Small">@context.ReferenceValue.TypeName
+                                <MudChip T="string" Color="Color.Default">@context.ReferenceValue.TypeName
                                 </MudChip>
                                 @if (context.DisplayChangeType == "Remove")
                                 {

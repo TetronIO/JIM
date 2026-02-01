@@ -55,7 +55,7 @@
                             <MudLink Href="/admin/schema/metaverse">@_activity.TargetName</MudLink>
                             break;
                         case ActivityTargetType.HistoryRetentionCleanup:
-                            <MudIcon Icon="@Icons.Material.Filled.CleaningServices" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                            <MudIcon Icon="@Icons.Material.Filled.CleaningServices" Class="mr-1" Style="vertical-align: middle;" />
                             @(_activity.TargetName ?? "History Retention Cleanup")
                             break;
                         case ActivityTargetType.ObjectMatchingRule:
@@ -77,7 +77,7 @@
                     if (_activity.InitiatedByType == ActivityInitiatorType.User)
                     {
                         <MudText>
-                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" Style="vertical-align: middle;" />
                             @if (_activity.InitiatedById.HasValue)
                             {
                                 <MudLink Href="@($"/identity/person/{_activity.InitiatedById.Value}")">@_activity.InitiatedByName</MudLink>
@@ -91,7 +91,7 @@
                     else if (_activity.InitiatedByType == ActivityInitiatorType.ApiKey)
                     {
                         <MudText>
-                            <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                            <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" Style="vertical-align: middle;" />
                             @if (_activity.InitiatedById.HasValue)
                             {
                                 <MudLink Href="@Utilities.GetApiKeyHref(_activity.InitiatedById.Value)">@_activity.InitiatedByName</MudLink>
@@ -105,7 +105,7 @@
                     else if (_activity.InitiatedByType == ActivityInitiatorType.System)
                     {
                         <MudText>
-                            <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                            <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" Style="vertical-align: middle;" />
                             <span>@(_activity.InitiatedByName ?? "System")</span>
                         </MudText>
                     }
@@ -477,7 +477,7 @@
             <RowTemplate>
                 <MudTd>
                     <MudButton Variant="Variant.Outlined"
-                               Size="Size.Small"
+                              
                                Color="Color.Primary"
                                Href="@($"/activity/item/{context.Id}")">
                         View

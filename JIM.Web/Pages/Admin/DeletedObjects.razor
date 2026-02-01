@@ -80,7 +80,7 @@
                 <RowTemplate>
                     <MudTd>
                         <MudButton Variant="Variant.Outlined"
-                                   Size="Size.Small"
+                                  
                                    Color="Color.Primary"
                                    OnClick="() => ViewCsoHistoryAsync(context)">
                             View
@@ -178,7 +178,7 @@
                 <RowTemplate>
                     <MudTd>
                         <MudButton Variant="Variant.Outlined"
-                                   Size="Size.Small"
+                                  
                                    Color="Color.Primary"
                                    OnClick="() => ViewMvoHistoryAsync(context)">
                             View
@@ -199,7 +199,7 @@
                         @if (!string.IsNullOrEmpty(context.InitiatedByName))
                         {
                             <div class="d-flex align-center gap-1">
-                                <MudIcon Icon="@Helpers.GetInitiatorIcon(context.InitiatedByType)" Size="Size.Small" Class="mud-text-secondary" />
+                                <MudIcon Icon="@Helpers.GetInitiatorIcon(context.InitiatedByType)" Class="mud-text-secondary" />
                                 @if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.ApiKey && context.InitiatedById.HasValue)
                                 {
                                     <MudLink Href="@($"/admin/apikeys/{context.InitiatedById}")">@context.InitiatedByName</MudLink>

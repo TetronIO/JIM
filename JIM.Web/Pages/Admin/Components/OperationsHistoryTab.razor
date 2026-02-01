@@ -86,7 +86,7 @@
                             @if (context.TotalObjectCreates > 0)
                             {
                                 <MudTooltip Text="@GetCreatesTooltip(context.ConnectedSystemRunType, context.TargetName)" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text"
+                                    <MudChip T="string" Color="Color.Success" Variant="Variant.Text"
                                              Icon="@Icons.Material.Filled.Add" Class="px-2">
                                         @context.TotalObjectCreates
                                     </MudChip>
@@ -95,7 +95,7 @@
                             @if (context.TotalObjectUpdates > 0)
                             {
                                 <MudTooltip Text="@GetUpdatesTooltip(context.ConnectedSystemRunType, context.TargetName)" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text"
+                                    <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
                                              Icon="@Icons.Material.Filled.Sync" Class="px-2">
                                         @context.TotalObjectUpdates
                                     </MudChip>
@@ -104,7 +104,7 @@
                             @if (context.TotalObjectFlows > 0)
                             {
                                 <MudTooltip Text="Attribute Flow" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text"
+                                    <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
                                              Icon="@Icons.Material.Filled.SwapHoriz" Class="px-2">
                                         @context.TotalObjectFlows
                                     </MudChip>
@@ -113,7 +113,7 @@
                             @if (context.TotalObjectDeletes > 0)
                             {
                                 <MudTooltip Text="@GetDeletesTooltip(context.ConnectedSystemRunType, context.TargetName)" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Text"
+                                    <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
                                              Icon="@Icons.Material.Filled.Delete" Class="px-2">
                                         @context.TotalObjectDeletes
                                     </MudChip>
@@ -122,7 +122,7 @@
                             @if (context.TotalObjectErrors > 0)
                             {
                                 <MudTooltip Text="Errors" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled"
+                                    <MudChip T="string" Color="Color.Error" Variant="Variant.Filled"
                                              Icon="@Icons.Material.Filled.Error" Class="px-2">
                                         @context.TotalObjectErrors
                                     </MudChip>
@@ -133,7 +133,7 @@
                     else
                     {
                         <MudTooltip Text="No changes" Arrow="true" Placement="Placement.Top">
-                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Text"
+                            <MudChip T="string" Color="Color.Default" Variant="Variant.Text"
                                      Icon="@Icons.Material.Outlined.CheckCircle" Class="px-2">
                                 0
                             </MudChip>
@@ -142,11 +142,11 @@
                 }
                 else
                 {
-                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Size="Size.Small" Style="width: 80px;" />
+                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Style="width: 80px;" />
                 }
             </MudTd>
             <MudTd DataLabel="Status">
-                <MudChip T="string" Variant="Variant.Text" Size="Size.Small"
+                <MudChip T="string" Variant="Variant.Text"
                          Color="Helpers.GetActivityMudBlazorColorForStatus(context.Status)">
                     @context.Status.ToString().SplitOnCapitalLetters()
                 </MudChip>
@@ -173,17 +173,17 @@
             <MudTd DataLabel="Initiated By">
                 @if (context.InitiatedByType == ActivityInitiatorType.User && context.InitiatedById != null)
                 {
-                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                    <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" Style="vertical-align: middle;" />
                     <span>@context.InitiatedByName</span>
                 }
                 else if (context.InitiatedByType == ActivityInitiatorType.ApiKey)
                 {
-                    <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                    <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" Style="vertical-align: middle;" />
                     <span>@context.InitiatedByName</span>
                 }
                 else if (context.InitiatedByType == ActivityInitiatorType.System)
                 {
-                    <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                    <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" Style="vertical-align: middle;" />
                     <span>@(context.InitiatedByName ?? "Scheduler")</span>
                 }
                 else if (!string.IsNullOrEmpty(context.InitiatedByName))
@@ -299,15 +299,15 @@
                 <div class="d-flex align-center gap-2">
                     @if (_selectedActivity.InitiatedByType == ActivityInitiatorType.User)
                     {
-                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                        <MudIcon Icon="@Icons.Material.Filled.Person" />
                     }
                     else if (_selectedActivity.InitiatedByType == ActivityInitiatorType.ApiKey)
                     {
-                        <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" />
+                        <MudIcon Icon="@Icons.Material.Filled.Key" />
                     }
                     else if (_selectedActivity.InitiatedByType == ActivityInitiatorType.System)
                     {
-                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" />
+                        <MudIcon Icon="@Icons.Material.Filled.Schedule" />
                     }
                     <MudText Typo="Typo.body1">@(_selectedActivity.InitiatedByName ?? "Unknown")</MudText>
                 </div>
@@ -320,7 +320,7 @@
                     <MudExpansionPanel Expanded="true">
                         <TitleContent>
                             <div class="d-flex align-center gap-2">
-                                <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" Size="Size.Small" />
+                                <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" />
                                 <MudText Color="Color.Error">Error Details</MudText>
                             </div>
                         </TitleContent>

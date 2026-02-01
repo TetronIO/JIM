@@ -105,12 +105,12 @@
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Change Type">
-                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(context.ChangeType)" Size="Size.Small" Style="font-size: 1rem;">
+                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(context.ChangeType)" Style="font-size: 1rem;">
                     @context.ChangeType
                 </MudChip>
             </MudTd>
             <MudTd DataLabel="Status">
-                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportStatusColor(context.Status)" Size="Size.Small" Style="font-size: 1rem;">
+                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportStatusColor(context.Status)" Style="font-size: 1rem;">
                     @context.Status.ToString().SplitOnCapitalLetters()
                 </MudChip>
             </MudTd>
@@ -147,7 +147,7 @@
             <MudTd DataLabel="Errors">
                 @if (context.ErrorCount > 0)
                 {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Size="Size.Small">
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Error">
                         @context.ErrorCount / @context.MaxRetries
                     </MudChip>
                 }

@@ -38,7 +38,7 @@
                             <tr>
                                 <td><strong>Status</strong></td>
                                 <td>
-                                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportStatusColor(_pendingExport.Status)" Size="Size.Small">
+                                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportStatusColor(_pendingExport.Status)">
                                         @_pendingExport.Status.ToString().SplitOnCapitalLetters()
                                     </MudChip>
                                 </td>
@@ -46,7 +46,7 @@
                             <tr>
                                 <td><strong>Change Type</strong></td>
                                 <td>
-                                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(_pendingExport.ChangeType)" Size="Size.Small">
+                                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(_pendingExport.ChangeType)">
                                         @_pendingExport.ChangeType
                                     </MudChip>
                                 </td>
@@ -72,7 +72,7 @@
                                 <td>
                                     @if (_pendingExport.HasUnresolvedReferences)
                                     {
-                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Size="Size.Small">Yes</MudChip>
+                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Yes</MudChip>
                                     }
                                     else
                                     {
@@ -102,7 +102,7 @@
                                     @if (_pendingExport.ConnectedSystemObject != null)
                                     {
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                            <MudChip T="string" Color="Color.Default" Size="Size.Small">@_pendingExport.ConnectedSystemObject.Type.Name</MudChip>
+                                            <MudChip T="string" Color="Color.Default">@_pendingExport.ConnectedSystemObject.Type.Name</MudChip>
                                             <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId}/objects/{_pendingExport.ConnectedSystemObject.Id}")">
                                                 @GetCsoDisplayName()
                                             </MudLink>
@@ -120,7 +120,7 @@
                                     @if (_pendingExport.SourceMetaverseObject != null)
                                     {
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                            <MudChip T="string" Color="Color.Default" Size="Size.Small">@_pendingExport.SourceMetaverseObject.Type.Name</MudChip>
+                                            <MudChip T="string" Color="Color.Default">@_pendingExport.SourceMetaverseObject.Type.Name</MudChip>
                                             <MudLink Href="@Utilities.GetMetaverseObjectHref(_pendingExport.SourceMetaverseObject)">
                                                 @GetMvoDisplayName()
                                             </MudLink>
@@ -152,7 +152,7 @@
                             <tr>
                                 <td style="width: 200px;"><strong>Error Count</strong></td>
                                 <td>
-                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Size="Size.Small">
+                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Error">
                                         @_pendingExport.ErrorCount / @_pendingExport.MaxRetries
                                     </MudChip>
                                 </td>
@@ -211,12 +211,12 @@
                             <RowTemplate>
                                 <MudTd DataLabel="Attribute">@(context.Attribute?.Name ?? $"Attribute {context.AttributeId}")</MudTd>
                                 <MudTd DataLabel="Change Type">
-                                    <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(context.ChangeType)" Size="Size.Small">
+                                    <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(context.ChangeType)">
                                         @context.ChangeType
                                     </MudChip>
                                 </MudTd>
                                 <MudTd DataLabel="Status">
-                                    <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeStatusColor(context.Status)" Size="Size.Small">
+                                    <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeStatusColor(context.Status)">
                                         @context.Status.ToString().SplitOnCapitalLetters()
                                     </MudChip>
                                 </MudTd>

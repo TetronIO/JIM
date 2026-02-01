@@ -69,7 +69,7 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd>
-            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
+            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Dense="true">
                 <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="_ => ShowDetailsDialog(context)">View
                     Details</MudMenuItem>
                 <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="_ => ShowEditDialog(context)">Edit
@@ -87,21 +87,21 @@
         <MudTd DataLabel="Source">
             @if (context.SourceType == CertificateSourceType.Uploaded)
             {
-                <MudChip T="string" Size="Size.Small" Color="Color.Info">Uploaded</MudChip>
+                <MudChip T="string" Color="Color.Info">Uploaded</MudChip>
             }
             else
             {
-                <MudChip T="string" Size="Size.Small" Color="Color.Default">File Path</MudChip>
+                <MudChip T="string" Color="Color.Default">File Path</MudChip>
             }
         </MudTd>
         <MudTd DataLabel="Expires">
             @if (context.IsExpired)
             {
-                <MudChip T="string" Size="Size.Small" Color="Color.Error">Expired</MudChip>
+                <MudChip T="string" Color="Color.Error">Expired</MudChip>
             }
             else if (context.IsExpiringSoon)
             {
-                <MudChip T="string" Size="Size.Small" Color="Color.Warning">@context.DaysUntilExpiry days</MudChip>
+                <MudChip T="string" Color="Color.Warning">@context.DaysUntilExpiry days</MudChip>
             }
             else
             {
@@ -111,11 +111,11 @@
         <MudTd DataLabel="Status">
             @if (context.IsEnabled)
             {
-                <MudChip T="string" Size="Size.Small" Color="Color.Success">Enabled</MudChip>
+                <MudChip T="string" Color="Color.Success">Enabled</MudChip>
             }
             else
             {
-                <MudChip T="string" Size="Size.Small" Color="Color.Default">Disabled</MudChip>
+                <MudChip T="string" Color="Color.Default">Disabled</MudChip>
             }
         </MudTd>
     </RowTemplate>
@@ -156,7 +156,7 @@
             OnClick="HandleUploadAsync">
             @if (_uploading)
             {
-                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                 <MudText Class="ms-2">Uploading</MudText>
             }
             else
@@ -191,7 +191,7 @@
             OnClick="HandleAddFromPathAsync">
             @if (_addingFromPath)
             {
-                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                 <MudText Class="ms-2">Adding</MudText>
             }
             else
@@ -282,7 +282,7 @@
             Disabled="@(string.IsNullOrWhiteSpace(_editName) || _saving)" OnClick="HandleSaveEditAsync">
             @if (_saving)
             {
-                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                 <MudText Class="ms-2">Saving</MudText>
             }
             else

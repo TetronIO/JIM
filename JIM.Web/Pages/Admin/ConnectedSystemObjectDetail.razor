@@ -155,14 +155,14 @@
                     <MudTd DataLabel="Attribute">@(context.Attribute?.Name ?? $"Attribute {context.AttributeId}")</MudTd>
                     <MudTd DataLabel="Change Type">
                         <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(context.ChangeType)"
-                            Size="Size.Small">
+                           >
                             @context.ChangeType
                         </MudChip>
                     </MudTd>
                     <MudTd DataLabel="Value">@GetAttributeValue(context)</MudTd>
                     <MudTd DataLabel="Status">
                         <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeStatusColor(context.Status)"
-                            Size="Size.Small">
+                           >
                             @context.Status.ToString().SplitOnCapitalLetters()
                         </MudChip>
                     </MudTd>
@@ -228,7 +228,7 @@
                                         {
                                             <div class="jim-attr-multivalue">
                                                 <CsoAttributeValue Value="@group.Values[0]" />
-                                                <MudButton Variant="Variant.Outlined" Size="Size.Small" Class="jim-attr-expand-btn"
+                                                <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"
                                                     OnClick="@(() => ToggleCollapse(group.AttributeName))">
                                                     +@(group.Values.Count - 1) more
                                                 </MudButton>
@@ -243,7 +243,7 @@
                                                         <CsoAttributeValue Value="@val" />
                                                     </div>
                                                 }
-                                                <MudButton Variant="Variant.Outlined" Size="Size.Small" Class="jim-attr-collapse-btn"
+                                                <MudButton Variant="Variant.Outlined" Class="jim-attr-collapse-btn"
                                                     OnClick="@(() => ToggleCollapse(group.AttributeName))">
                                                     Collapse
                                                 </MudButton>
@@ -261,7 +261,7 @@
             <MudPaper Class="pa-5" Outlined="true">
                 @if (CsoChanges == null)
                 {
-                    <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mr-2" />
+                    <MudProgressCircular Indeterminate="true" Class="mr-2" />
                     <MudText>Loading change history...</MudText>
                 }
                 else

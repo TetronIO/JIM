@@ -37,7 +37,7 @@
                 <MudItem xs="12" sm="6" md="4">
                     <MudText Typo="Typo.overline" Class="mud-text-secondary">Connected System</MudText>
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.Storage" Size="Size.Small" Class="mud-text-secondary" />
+                        <MudIcon Icon="@Icons.Material.Filled.Storage" Class="mud-text-secondary" />
                         <MudLink Href="@Utilities.GetConnectedSystemHref(_connectedSystemHeader)" Typo="Typo.body1">
                             @_connectedSystemHeader.Name
                         </MudLink>
@@ -51,7 +51,7 @@
                 <MudItem xs="12" sm="6" md="4">
                     <MudText Typo="Typo.overline" Class="mud-text-secondary">Run Profile</MudText>
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Small" Class="mud-text-secondary" />
+                        <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Class="mud-text-secondary" />
                         <MudText Typo="Typo.body1">@_activity.TargetName</MudText>
                     </MudStack>
                 </MudItem>
@@ -59,7 +59,7 @@
                 <MudItem xs="12" sm="6" md="4">
                     <MudText Typo="Typo.overline" Class="mud-text-secondary">Executed</MudText>
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="mud-text-secondary" />
+                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mud-text-secondary" />
                         <MudText Typo="Typo.body1" title="@_activity.Executed.ToLocalTime().ToString("F")">
                             @_activity.Executed.ToLocalTime().ToRelativeTime()
                         </MudText>
@@ -73,7 +73,7 @@
                 @if (_activity is { InitiatedByType: ActivityInitiatorType.User })
                 {
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mud-text-secondary" />
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Class="mud-text-secondary" />
                         @if (_activity.InitiatedById.HasValue)
                         {
                             <MudLink Href="@($"/identity/person/{_activity.InitiatedById.Value}")" Typo="Typo.body1">
@@ -89,7 +89,7 @@
                 else if (_activity is { InitiatedByType: ActivityInitiatorType.ApiKey })
                 {
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mud-text-secondary" />
+                        <MudIcon Icon="@Icons.Material.Filled.Key" Class="mud-text-secondary" />
                         @if (_activity.InitiatedById.HasValue)
                         {
                             <MudLink Href="@Utilities.GetApiKeyHref(_activity.InitiatedById.Value)" Typo="Typo.body1">
@@ -105,21 +105,21 @@
                 else if (_activity is { InitiatedByType: ActivityInitiatorType.System })
                 {
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="mud-text-secondary" />
+                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mud-text-secondary" />
                         <MudText Typo="Typo.body1">@(_activity.InitiatedByName ?? "System")</MudText>
                     </MudStack>
                 }
                 else if (_activity != null && !string.IsNullOrEmpty(_activity.InitiatedByName))
                 {
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.Settings" Size="Size.Small" Class="mud-text-secondary" />
+                        <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mud-text-secondary" />
                         <MudText Typo="Typo.body1">@_activity.InitiatedByName</MudText>
                     </MudStack>
                 }
                 else
                 {
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.SmartToy" Size="Size.Small" Class="mud-text-secondary" />
+                        <MudIcon Icon="@Icons.Material.Filled.SmartToy" Class="mud-text-secondary" />
                         <MudText Typo="Typo.body1">System (Automated)</MudText>
                     </MudStack>
                 }
@@ -173,7 +173,7 @@
                     {
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             <MudTooltip Text="This object was not created due to an import error. The external ID shown is from the source data." Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Color="Color.Error" Size="Size.Small" Icon="@Icons.Material.Filled.Block">
+                                <MudChip T="string" Color="Color.Error" Icon="@Icons.Material.Filled.Block">
                                     Rejected
                                 </MudChip>
                             </MudTooltip>
@@ -184,7 +184,7 @@
                     {
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             <MudTooltip Text="This object has been deleted. The external ID shown is preserved from when this operation was recorded." Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.History">
+                                <MudChip T="string" Color="Color.Warning" Icon="@Icons.Material.Filled.History">
                                     Deleted
                                 </MudChip>
                             </MudTooltip>
@@ -226,7 +226,7 @@
                             @* Object Type *@
                             <div>
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary">Type</MudText>
-                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-0">
+                                <MudChip T="string" Color="Color.Default" Class="ml-0">
                                     @cso.Type.Name
                                 </MudChip>
                             </div>
@@ -265,7 +265,7 @@
 
                             <MudButton Variant="Variant.Text"
                                        Color="Color.Primary"
-                                       Size="Size.Small"
+                                      
                                        StartIcon="@Icons.Material.Filled.OpenInNew"
                                        Href="@Utilities.GetConnectedSystemObjectHref(cso)">
                                 View Connected System Object
@@ -289,7 +289,7 @@
                                  Color="Color.Primary"
                                  Style="font-size: 3rem;" />
                         <MudChip T="string"
-                                 Size="Size.Small"
+                                
                                  Color="Color.Primary"
                                  Variant="Variant.Outlined">
                             Projected
@@ -302,7 +302,7 @@
                                  Color="Color.Primary"
                                  Style="font-size: 2.5rem;" />
                         <MudChip T="string"
-                                 Size="Size.Small"
+                                
                                  Color="Color.Primary"
                                  Variant="Variant.Outlined">
                             Projected
@@ -318,7 +318,7 @@
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             <MudIcon Icon="@Icons.Material.Filled.Hub" Color="Color.Primary" />
                             <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Metaverse Object</MudText>
-                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">New</MudChip>
+                            <MudChip T="string" Color="Color.Success" Variant="Variant.Filled">New</MudChip>
                         </MudStack>
 
                         @if (_metaverseObject != null)
@@ -326,7 +326,7 @@
                             @* Object Type *@
                             <div>
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary">Type</MudText>
-                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-0">
+                                <MudChip T="string" Color="Color.Default" Class="ml-0">
                                     @_metaverseObject.Type.Name
                                 </MudChip>
                             </div>
@@ -378,7 +378,7 @@
 
                             <MudButton Variant="Variant.Text"
                                        Color="Color.Primary"
-                                       Size="Size.Small"
+                                      
                                        StartIcon="@Icons.Material.Filled.OpenInNew"
                                        Href="@Utilities.GetMetaverseObjectHref(_metaverseObject)">
                                 View Metaverse Object
@@ -413,7 +413,7 @@
                     {
                         case MetaverseObjectDeletionRule.Manual:
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Warning" />
+                                <MudIcon Icon="@Icons.Material.Filled.Block" Color="Color.Warning" />
                                 <MudText Typo="Typo.body2">
                                     <strong>Manual deletion only.</strong> The metaverse object will not be automatically deleted
                                     even when all connectors are removed. An administrator must manually delete it.
@@ -423,7 +423,7 @@
 
                         case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudIcon Icon="@Icons.Material.Filled.LinkOff" Size="Size.Small" Color="Color.Info" />
+                                <MudIcon Icon="@Icons.Material.Filled.LinkOff" Color="Color.Info" />
                                 <MudText Typo="Typo.body2">
                                     <strong>Delete when last connector disconnects.</strong> The metaverse object will be
                                     @if (_metaverseObjectType.DeletionGracePeriod.HasValue && _metaverseObjectType.DeletionGracePeriod.Value > TimeSpan.Zero)
@@ -441,7 +441,7 @@
 
                         case MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected:
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" Color="Color.Info" />
+                                <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Info" />
                                 <MudText Typo="Typo.body2">
                                     <strong>Delete when authoritative source disconnects.</strong> The metaverse object will be
                                     @if (_metaverseObjectType.DeletionGracePeriod.HasValue && _metaverseObjectType.DeletionGracePeriod.Value > TimeSpan.Zero)
@@ -460,7 +460,7 @@
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="ml-6">
                                     @foreach (var cs in _deletionTriggerSystems)
                                     {
-                                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
+                                        <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">
                                             @cs.Name
                                         </MudChip>
                                     }
@@ -511,7 +511,7 @@
             <MudText Typo="Typo.h6">
                 Attribute Changes
             </MudText>
-            <MudChip T="string" Size="Size.Small" Color="Color.Primary">@changeCount</MudChip>
+            <MudChip T="string" Color="Color.Primary">@changeCount</MudChip>
         </MudStack>
 
         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
@@ -545,7 +545,7 @@
                     @if (context.ReferenceValue != null)
                     {
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            <MudChip T="string" Color="Color.Default" Size="Size.Small">@context.ReferenceValue.Type.Name</MudChip>
+                            <MudChip T="string" Color="Color.Default">@context.ReferenceValue.Type.Name</MudChip>
                             <MudLink Href="@Utilities.GetConnectedSystemObjectHref(context.ReferenceValue)">
                                 @context.ReferenceValue.DisplayNameOrId
                             </MudLink>
@@ -628,7 +628,7 @@
                 <MudGrid Spacing="3">
                     <MudItem xs="12" sm="6" md="3">
                         <MudText Typo="Typo.overline" Class="mud-text-secondary">Status</MudText>
-                        <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportStatusColor(_pendingExport.Status)" Size="Size.Small" Class="ml-0">
+                        <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportStatusColor(_pendingExport.Status)" Class="ml-0">
                             @_pendingExport.Status.ToString().SplitOnCapitalLetters()
                         </MudChip>
                     </MudItem>
@@ -638,7 +638,7 @@
                             @_pendingExport.ErrorCount / @_pendingExport.MaxRetries
                             @if (_pendingExport.ErrorCount >= _pendingExport.MaxRetries)
                             {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="ml-2">Max Reached</MudChip>
+                                <MudChip T="string" Color="Color.Error" Class="ml-2">Max Reached</MudChip>
                             }
                         </MudText>
                     </MudItem>
@@ -670,12 +670,12 @@
                             <MudText Class="jim-text-code">@(context.Attribute?.Name ?? $"Attribute {context.AttributeId}")</MudText>
                         </MudTd>
                         <MudTd DataLabel="Change Type">
-                            <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportChangeTypeColor(context.ChangeType)" Size="Size.Small" Class="ml-0">
+                            <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportChangeTypeColor(context.ChangeType)" Class="ml-0">
                                 @context.ChangeType
                             </MudChip>
                         </MudTd>
                         <MudTd DataLabel="Status">
-                            <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportAttributeStatusColor(context.Status)" Size="Size.Small" Class="ml-0">
+                            <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportAttributeStatusColor(context.Status)" Class="ml-0">
                                 @context.Status.ToString().SplitOnCapitalLetters()
                             </MudChip>
                         </MudTd>
@@ -692,7 +692,7 @@
             {
                 <MudButton Variant="Variant.Text"
                            Color="Color.Primary"
-                           Size="Size.Small"
+                          
                            StartIcon="@Icons.Material.Filled.OpenInNew"
                            Href="@($"/admin/connected-systems/{_connectedSystemHeader.Id}/pending-exports/{_pendingExport.Id}")">
                     View Full Pending Export Details

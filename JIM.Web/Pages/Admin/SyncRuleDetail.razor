@@ -45,31 +45,31 @@ else if (_syncRule != null)
             {
                 <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-4" Spacing="3">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.Power" Size="Size.Small" Class="mud-text-secondary" />
+                        <MudIcon Icon="@Icons.Material.Filled.Power" Class="mud-text-secondary" />
                         <MudText Typo="Typo.body2" Class="mud-text-secondary">Connected System:</MudText>
                         <MudLink Href="@($"/admin/connected-systems/{_syncRule.ConnectedSystemId}")" Typo="Typo.body2">
                             @_syncRule.ConnectedSystem.Name
                         </MudLink>
                     </MudStack>
                     <MudDivider Vertical="true" FlexItem="true" />
-                    <MudChip T="string" Variant="Variant.Text" Size="Size.Small"
+                    <MudChip T="string" Variant="Variant.Text"
                              Color="@(_syncRule.Direction == SyncRuleDirection.Import ? Color.Info : Color.Warning)">
                         @(_syncRule.Direction == SyncRuleDirection.Import ? "Inbound" : "Outbound")
                     </MudChip>
                     <MudDivider Vertical="true" FlexItem="true" />
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                         <MudText Typo="Typo.body2" Class="mud-text-secondary">Object Types:</MudText>
-                        <MudChip T="string" Size="Size.Small">
+                        <MudChip T="string">
                             <AvatarContent>
-                                <MudAvatar Color="Color.Primary" Size="Size.Small">MV</MudAvatar>
+                                <MudAvatar Color="Color.Primary">MV</MudAvatar>
                             </AvatarContent>
                             <ChildContent>@_syncRule.MetaverseObjectType?.Name</ChildContent>
                         </MudChip>
                         <MudIcon Icon="@(_syncRule.Direction == SyncRuleDirection.Import ? Icons.Material.Filled.KeyboardDoubleArrowLeft : Icons.Material.Filled.KeyboardDoubleArrowRight)"
-                                 Size="Size.Small" Class="mud-text-secondary" />
-                        <MudChip T="string" Size="Size.Small">
+                                 Class="mud-text-secondary" />
+                        <MudChip T="string">
                             <AvatarContent>
-                                <MudAvatar Color="Color.Tertiary" Size="Size.Small">CS</MudAvatar>
+                                <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
                             </AvatarContent>
                             <ChildContent>@_syncRule.ConnectedSystemObjectType?.Name</ChildContent>
                         </MudChip>
@@ -189,7 +189,7 @@ else if (_syncRule != null)
             <MudExpansionPanel Text="Advanced Options">
                 <TitleContent>
                     <div class="d-flex align-center">
-                        <MudIcon Icon="@Icons.Material.Filled.Settings" Class="me-2" Size="Size.Small" />
+                        <MudIcon Icon="@Icons.Material.Filled.Settings" Class="me-2" />
                         <MudText Typo="Typo.subtitle1">Advanced Options</MudText>
                     </div>
                 </TitleContent>
@@ -230,7 +230,7 @@ else if (_syncRule != null)
                 <MudAlert Severity="Severity.Info" Class="mt-3" Icon="@Icons.Material.Outlined.Info">
                     This Connected System uses <strong>Simple Mode</strong> for object matching.
                     <MudLink Href="@($"/admin/connected-systems/{_syncRule.ConnectedSystemId}")" Underline="Underline.Always" Class="ms-1">
-                        <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Class="me-1" Style="vertical-align: middle;" />Configure Matching Rules
+                        <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Class="me-1" Style="vertical-align: middle;" />Configure Matching Rules
                     </MudLink>
                 </MudAlert>
             }
@@ -285,7 +285,7 @@ else if (_syncRule != null)
                                             <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
                                         </MudChip>
                                         <MudChip T="string">
-                                            <MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.DragHandle"></MudIcon>
+                                            <MudIcon Icon="@Icons.Material.Filled.DragHandle"></MudIcon>
                                         </MudChip>
                                         <MudChip T="string">
                                             <AvatarContent>
@@ -297,15 +297,15 @@ else if (_syncRule != null)
                                         </MudChip>
                                         <MudSwitch T="bool" Value="@objectMatchingRule.CaseSensitive"
                                             ValueChanged="@(value => HandleToggleMatchingRuleCaseSensitive(objectMatchingRule, value))"
-                                            Label="Case Sensitive" Color="Color.Primary" Size="Size.Small" Class="ms-4" />
+                                            Label="Case Sensitive" Color="Color.Primary" Class="ms-4" />
                                         <MudSpacer />
-                                        <MudIconButton Icon="@Icons.Material.Outlined.ArrowUpward" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                                        <MudIconButton Icon="@Icons.Material.Outlined.ArrowUpward" Variant="Variant.Outlined" Color="Color.Default"
                                             Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "up"))"
                                             Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "up")" />
-                                        <MudIconButton Icon="@Icons.Material.Outlined.ArrowDownward" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                                        <MudIconButton Icon="@Icons.Material.Outlined.ArrowDownward" Variant="Variant.Outlined" Color="Color.Default"
                                             Class="me-3" OnClick="@(() => HandleObjectMatchingRuleChangeOrder(objectMatchingRule, "down"))"
                                             Disabled="@DisableObjectMatchingMappingRuleOrderButton(objectMatchingRule, "down")" />
-                                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Outlined" Color="Color.Error"
                                             aria-label="delete" OnClick="@(() => HandleObjectMatchingRuleDeleteClickAsync(objectMatchingRule))">
                                         </MudIconButton>
                                     </MudItem>
@@ -596,7 +596,7 @@ else if (_syncRule != null)
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
                     <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span>
                         @attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
-                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Outlined" Color="Color.Error"
                         Style="flex-shrink: 0;" aria-label="delete"
                         OnClick="@(() => HandleAttributeFlowRuleDeleteClick(attributeFlowRule))">
                     </MudIconButton>
@@ -614,7 +614,7 @@ else if (_syncRule != null)
                     </MudChip>
 
                     <MudChip T="string">
-                        <MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft"></MudIcon>
+                        <MudIcon Icon="@Icons.Material.Filled.KeyboardDoubleArrowLeft"></MudIcon>
                     </MudChip>
 
                     foreach (var source in attributeFlowRule.Sources.OrderBy(q => q.Order))
@@ -676,7 +676,7 @@ else if (_syncRule != null)
                     }
 
                     <MudChip T="string">
-                        <MudIcon Size="Size.Small" Icon="@Icons.Material.Filled.KeyboardDoubleArrowRight"></MudIcon>
+                        <MudIcon Icon="@Icons.Material.Filled.KeyboardDoubleArrowRight"></MudIcon>
                     </MudChip>
 
                     <MudChip T="string">

@@ -177,12 +177,12 @@
         <RowTemplate>
             <MudTd DataLabel="Name">@context.Name</MudTd>
             <MudTd DataLabel="Type">
-                <MudChip T="string" Size="Size.Small" Color="@GetTypeChipColour(context.Type)" Variant="Variant.Outlined">
+                <MudChip T="string" Color="@GetTypeChipColour(context.Type)" Variant="Variant.Outlined">
                     @context.Type.ToString().SplitOnCapitalLetters()
                 </MudChip>
             </MudTd>
             <MudTd DataLabel="Plurality">
-                <MudChip T="string" Size="Size.Small" Color="@GetPluralityChipColour(context.AttributePlurality)" Variant="Variant.Text">
+                <MudChip T="string" Color="@GetPluralityChipColour(context.AttributePlurality)" Variant="Variant.Text">
                     @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
                 </MudChip>
             </MudTd>
@@ -190,7 +190,7 @@
                 @if (context.BuiltIn)
                 {
                     <MudTooltip Text="Built-in attribute" Arrow="true" Placement="Placement.Top">
-                        <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Class="mud-text-secondary" />
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary" />
                     </MudTooltip>
                 }
                 else
