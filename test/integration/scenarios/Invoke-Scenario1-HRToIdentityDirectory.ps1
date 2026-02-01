@@ -69,12 +69,15 @@ $ConfirmPreference = 'None'  # Disable confirmation prompts for non-interactive 
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
 
 # Helper function to run the standard delta sync sequence with detailed output
-# This sequence is used after CSV changes to sync them through to LDAP:
+# This sequence is used after CSV changes to sync them through to both target systems:
 # 1. CSV Full Import - detect changes in CSV file
-# 2. CSV Delta Sync - process only changed CSOs, evaluate export rules
+# 2. CSV Delta Sync - process only changed CSOs, evaluate export rules for BOTH targets
 # 3. LDAP Export - apply pending exports to AD
 # 4. LDAP Delta Import - confirm the exports succeeded
 # 5. LDAP Delta Sync - process confirmed imports
+# 6. Cross-Domain Export - apply pending exports to cross-domain CSV
+# 7. Cross-Domain Full Import - confirm the exports succeeded (CSV uses Full Import, not Delta)
+# 8. Cross-Domain Delta Sync - process confirmed imports
 function Invoke-SyncSequence {
     param(
         [Parameter(Mandatory=$true)]
@@ -89,7 +92,7 @@ function Invoke-SyncSequence {
     }
 
     # Step 1: CSV Full Import
-    if ($ShowProgress) { Write-Host "  [1/5] CSV Full Import..." -ForegroundColor DarkGray }
+    if ($ShowProgress) { Write-Host "  [1/8] CSV Full Import..." -ForegroundColor DarkGray }
     $importResult = Start-JIMRunProfile -ConnectedSystemId $Config.CSVSystemId -RunProfileId $Config.CSVImportProfileId -Wait -PassThru
     $results.Steps += @{ Name = "CSV Full Import"; ActivityId = $importResult.activityId }
     if ($ValidateActivityStatus) {
@@ -97,7 +100,7 @@ function Invoke-SyncSequence {
     }
 
     # Step 2: CSV Delta Sync
-    if ($ShowProgress) { Write-Host "  [2/5] CSV Delta Sync..." -ForegroundColor DarkGray }
+    if ($ShowProgress) { Write-Host "  [2/8] CSV Delta Sync..." -ForegroundColor DarkGray }
     $syncResult = Start-JIMRunProfile -ConnectedSystemId $Config.CSVSystemId -RunProfileId $Config.CSVDeltaSyncProfileId -Wait -PassThru
     $results.Steps += @{ Name = "CSV Delta Sync"; ActivityId = $syncResult.activityId }
     if ($ValidateActivityStatus) {
@@ -105,7 +108,7 @@ function Invoke-SyncSequence {
     }
 
     # Step 3: LDAP Export
-    if ($ShowProgress) { Write-Host "  [3/5] LDAP Export..." -ForegroundColor DarkGray }
+    if ($ShowProgress) { Write-Host "  [3/8] LDAP Export..." -ForegroundColor DarkGray }
     $exportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
     $results.Steps += @{ Name = "LDAP Export"; ActivityId = $exportResult.activityId }
     if ($ValidateActivityStatus) {
@@ -117,7 +120,7 @@ function Invoke-SyncSequence {
     Start-Sleep -Seconds 5
 
     # Step 4: LDAP Delta Import (confirming export)
-    if ($ShowProgress) { Write-Host "  [4/5] LDAP Delta Import (confirming)..." -ForegroundColor DarkGray }
+    if ($ShowProgress) { Write-Host "  [4/8] LDAP Delta Import (confirming)..." -ForegroundColor DarkGray }
     $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPDeltaImportProfileId -Wait -PassThru
     $results.Steps += @{ Name = "LDAP Delta Import"; ActivityId = $confirmImportResult.activityId }
     if ($ValidateActivityStatus) {
@@ -125,11 +128,40 @@ function Invoke-SyncSequence {
     }
 
     # Step 5: LDAP Delta Sync
-    if ($ShowProgress) { Write-Host "  [5/5] LDAP Delta Sync..." -ForegroundColor DarkGray }
+    if ($ShowProgress) { Write-Host "  [5/8] LDAP Delta Sync..." -ForegroundColor DarkGray }
     $confirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPDeltaSyncProfileId -Wait -PassThru
     $results.Steps += @{ Name = "LDAP Delta Sync"; ActivityId = $confirmSyncResult.activityId }
     if ($ValidateActivityStatus) {
         Assert-ActivitySuccess -ActivityId $confirmSyncResult.activityId -Name "LDAP Delta Sync"
+    }
+
+    # Step 6: Cross-Domain Export
+    if ($Config.CrossDomainSystemId -and $Config.CrossDomainExportProfileId) {
+        if ($ShowProgress) { Write-Host "  [6/8] Cross-Domain Export..." -ForegroundColor DarkGray }
+        $crossDomainExportResult = Start-JIMRunProfile -ConnectedSystemId $Config.CrossDomainSystemId -RunProfileId $Config.CrossDomainExportProfileId -Wait -PassThru
+        $results.Steps += @{ Name = "Cross-Domain Export"; ActivityId = $crossDomainExportResult.activityId }
+        if ($ValidateActivityStatus) {
+            Assert-ActivitySuccess -ActivityId $crossDomainExportResult.activityId -Name "Cross-Domain Export"
+        }
+
+        # Step 7: Cross-Domain Full Import (confirming export - CSV uses Full Import, not Delta)
+        if ($ShowProgress) { Write-Host "  [7/8] Cross-Domain Full Import (confirming)..." -ForegroundColor DarkGray }
+        $crossDomainImportResult = Start-JIMRunProfile -ConnectedSystemId $Config.CrossDomainSystemId -RunProfileId $Config.CrossDomainImportProfileId -Wait -PassThru
+        $results.Steps += @{ Name = "Cross-Domain Import"; ActivityId = $crossDomainImportResult.activityId }
+        if ($ValidateActivityStatus) {
+            Assert-ActivitySuccess -ActivityId $crossDomainImportResult.activityId -Name "Cross-Domain Import"
+        }
+
+        # Step 8: Cross-Domain Delta Sync
+        if ($ShowProgress) { Write-Host "  [8/8] Cross-Domain Delta Sync..." -ForegroundColor DarkGray }
+        $crossDomainSyncResult = Start-JIMRunProfile -ConnectedSystemId $Config.CrossDomainSystemId -RunProfileId $Config.CrossDomainDeltaSyncProfileId -Wait -PassThru
+        $results.Steps += @{ Name = "Cross-Domain Delta Sync"; ActivityId = $crossDomainSyncResult.activityId }
+        if ($ValidateActivityStatus) {
+            Assert-ActivitySuccess -ActivityId $crossDomainSyncResult.activityId -Name "Cross-Domain Delta Sync"
+        }
+    }
+    else {
+        if ($ShowProgress) { Write-Host "  [6-8/8] Cross-Domain skipped (not configured)" -ForegroundColor DarkGray }
     }
 
     return $results
@@ -440,6 +472,29 @@ try {
         }
         else {
             Write-Host "  ⚠ Training system not configured, skipping Training import/sync" -ForegroundColor Yellow
+        }
+
+        # Cross-Domain Export/Import/Sync - export users to cross-domain CSV target
+        # This tests the multi-target export functionality (same MVO flows to multiple targets)
+        if ($config.CrossDomainSystemId -and $config.CrossDomainExportProfileId) {
+            Write-Host ""
+            Write-Host "Exporting to Cross-Domain target..." -ForegroundColor Gray
+            Write-Host "  Running Cross-Domain Export..." -ForegroundColor DarkGray
+            $crossDomainExportResult = Start-JIMRunProfile -ConnectedSystemId $config.CrossDomainSystemId -RunProfileId $config.CrossDomainExportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $crossDomainExportResult.activityId -Name "Cross-Domain Export (Joiner)"
+
+            Write-Host "  Running Cross-Domain Full Import (confirming)..." -ForegroundColor DarkGray
+            $crossDomainImportResult = Start-JIMRunProfile -ConnectedSystemId $config.CrossDomainSystemId -RunProfileId $config.CrossDomainImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $crossDomainImportResult.activityId -Name "Cross-Domain Import (Joiner)"
+
+            Write-Host "  Running Cross-Domain Delta Sync..." -ForegroundColor DarkGray
+            $crossDomainSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CrossDomainSystemId -RunProfileId $config.CrossDomainDeltaSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $crossDomainSyncResult.activityId -Name "Cross-Domain Delta Sync (Joiner)"
+
+            Write-Host "✓ Cross-Domain export completed" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  ⚠ Cross-Domain system not configured, skipping Cross-Domain export" -ForegroundColor Yellow
         }
 
         # Validate user exists in AD
