@@ -18,6 +18,10 @@ html[lang] {
     --mud-palette-secondary: #776be7;
     --mud-palette-secondary-text: #ffffffff;
 
+    /* === Tertiary Palette (teal for CS indicators — WCAG AA accessible) === */
+    --mud-palette-tertiary: #00796B;
+    --mud-palette-tertiary-text: #ffffffff;
+
     /* === Status Colours (darker shades for dark mode with white text) === */
     --mud-palette-success: #1b7d3e;
     --mud-palette-success-text: #ffffffff;
@@ -93,4 +97,11 @@ html[lang] {
 
     /* === JIM Custom: Logo text === */
     --jim-logo-text-color: #ffffff;
+
+    /* === JIM Custom: Secondary Panel (info panels with nested content) === */
+    --jim-secondary-panel-border: rgba(119, 107, 231, 0.4);
+    --jim-secondary-panel-background: rgba(119, 107, 231, 0.06);
+    --jim-secondary-panel-nested-background: rgba(119, 107, 231, 0.10);
+    --jim-secondary-panel-nested-border: rgba(119, 107, 231, 0.2);
+    --jim-secondary-panel-header-background: rgba(119, 107, 231, 0.15);
 }
