@@ -824,6 +824,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var matchingRule = new ObjectMatchingRule
         {
             Order = 1,
+            CaseSensitive = true, // Required for in-memory test database (EF.Functions.ILike not supported)
             ConnectedSystemObjectType = csoType,
             ConnectedSystemObjectTypeId = csoType.Id,
             TargetMetaverseAttribute = mvAttr,

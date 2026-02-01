@@ -69,9 +69,13 @@ function Start-JIMSchedule {
             Write-Verbose "Starting Schedule: $Id"
 
             try {
-                $execution = Invoke-JIMApi -Endpoint "/api/v1/schedules/$Id/run" -Method 'POST'
+                $response = Invoke-JIMApi -Endpoint "/api/v1/schedules/$Id/run" -Method 'POST'
+                $executionId = $response.executionId
 
-                Write-Verbose "Started Schedule Execution: $($execution.id)"
+                Write-Verbose "Started Schedule Execution: $executionId"
+
+                # Fetch the full execution object to return consistent data
+                $execution = Invoke-JIMApi -Endpoint "/api/v1/schedule-executions/$executionId"
 
                 if ($Wait) {
                     $startTime = [DateTime]::UtcNow
@@ -80,7 +84,7 @@ function Start-JIMSchedule {
                     Write-Verbose "Waiting for execution to complete (timeout: $Timeout)..."
 
                     while ($true) {
-                        $currentExecution = Invoke-JIMApi -Endpoint "/api/v1/schedule-executions/$($execution.id)"
+                        $currentExecution = Invoke-JIMApi -Endpoint "/api/v1/schedule-executions/$executionId"
 
                         # Check if completed (status 2=Completed, 3=Failed, 4=Cancelled)
                         if ($currentExecution.status -ge 2) {
@@ -92,7 +96,7 @@ function Start-JIMSchedule {
                         # Check timeout
                         $elapsed = [DateTime]::UtcNow - $startTime
                         if ($elapsed -ge $Timeout) {
-                            Write-Warning "Timeout waiting for schedule execution to complete. Execution ID: $($execution.id)"
+                            Write-Warning "Timeout waiting for schedule execution to complete. Execution ID: $executionId"
                             break
                         }
 

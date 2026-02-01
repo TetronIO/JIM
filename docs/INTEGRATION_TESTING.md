@@ -43,6 +43,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync"         # APAC AD -> EMEA AD sync
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario4-DeletionRules"           # Deletion rules testing
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario5-MatchingRules"           # Matching rules testing
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario6-SchedulerService"        # Scheduler service testing
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync"  # Group sync between domains
 
 # Run with a specific template size
@@ -74,10 +75,11 @@ This single script handles everything:
 
 | Scenario | Description | Containers Used |
 |----------|-------------|-----------------|
-| `Scenario1-HRToIdentityDirectory` | HR CSV -> Subatomic AD provisioning (Joiner/Mover/Leaver) | samba-ad-primary |
+| `Scenario1-HRToIdentityDirectory` | HR + Training CSV -> Subatomic AD + Cross-Domain provisioning (Joiner/Mover/Leaver) | samba-ad-primary |
 | `Scenario2-CrossDomainSync` | Quantum Dynamics APAC -> EMEA directory sync | samba-ad-source, samba-ad-target |
 | `Scenario4-DeletionRules` | Deletion rules and grace period testing | samba-ad-primary |
 | `Scenario5-MatchingRules` | Object matching rules testing | samba-ad-primary |
+| `Scenario6-SchedulerService` | Scheduler service end-to-end testing (parallel steps require 4 systems) | samba-ad-primary (requires Scenario1 setup) |
 | `Scenario8-CrossDomainEntitlementSync` | Group synchronisation between APAC and EMEA domains | samba-ad-source, samba-ad-target |
 
 **Available Templates (`-Template` parameter):**
@@ -642,11 +644,78 @@ When two CSV rows with identical external IDs are processed in the same import b
 
 ---
 
+#### Scenario 6: Scheduler Service End-to-End Testing
+
+**Purpose**: Validate the scheduler service functionality end-to-end, including schedule creation, automatic triggering, manual execution, step progression, parallel step execution, and overlap handling.
+
+**Concept**: This scenario tests the scheduler component of JIM that allows administrators to automate synchronisation tasks. It verifies that schedules are properly created, picked up by the scheduler service at the right times, executed through the worker, and that multi-step schedules (including parallel step execution) progress correctly.
+
+**Infrastructure**: The enhanced Scenario1 setup creates 4 connected systems required for comprehensive parallel testing:
+- **HR CSV Source** - Primary identity source
+- **Training Records Source** - Secondary source (contributes training attributes)
+- **Samba AD** - Primary identity target
+- **Cross-Domain Export** - Secondary target (CSV export)
+
+**Systems**:
+- Uses any existing connected systems (typically from Scenario1, Scenario2, or Scenario8 setup)
+- Requires at least one connected system with run profiles configured
+
+**Test Steps** (can be run individually or all together):
+
+| Step | Test Case | Description |
+|------|-----------|-------------|
+| 1 | **Create** | Create schedules with different patterns (Manual, Cron with specific times, Interval) |
+| 2 | **ManualTrigger** | Manually trigger a schedule and verify execution completes successfully |
+| 3 | **AutoTrigger** | Enable a schedule with immediate trigger (every minute) and verify scheduler picks it up |
+| 4 | **Overlap** | Verify that multiple manual executions can run concurrently for the same schedule |
+| 5 | **MultiStep** | Create a schedule with multiple sequential steps and verify they execute in order |
+| 6 | **Parallel** | Create a complex 10-step schedule with parallel imports, sequential syncs, parallel exports (requires 4 connected systems from Scenario1) |
+
+**Script**: `test/integration/scenarios/Invoke-Scenario6-SchedulerService.ps1`
+
+**Execution Model**:
+
+```powershell
+# Run all tests
+./Invoke-Scenario6-SchedulerService.ps1 -Step All
+
+# Individual steps
+./Invoke-Scenario6-SchedulerService.ps1 -Step Create
+./Invoke-Scenario6-SchedulerService.ps1 -Step ManualTrigger
+./Invoke-Scenario6-SchedulerService.ps1 -Step AutoTrigger
+./Invoke-Scenario6-SchedulerService.ps1 -Step Overlap
+./Invoke-Scenario6-SchedulerService.ps1 -Step MultiStep
+./Invoke-Scenario6-SchedulerService.ps1 -Step Parallel
+```
+
+**Prerequisites**:
+- **Requires 4 connected systems** - Run Scenario1 setup first to create the full test infrastructure
+- The extended Scenario1 setup creates: HR CSV, Training CSV, Samba AD, Cross-Domain CSV
+- Example: `./Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -Step Joiner` then run Scenario6
+
+**Parallel Step Schedule Structure** (10 steps):
+```
+Step 0-1 [PARALLEL]:  Full Import HR + Full Import Training
+Step 2   [SEQUENTIAL]: Full Sync HR
+Step 3   [SEQUENTIAL]: Full Sync Training
+Step 4-5 [PARALLEL]:  Export AD + Export Cross-Domain
+Step 6-7 [PARALLEL]:  Delta Import AD + Delta Import Cross-Domain
+Step 8   [SEQUENTIAL]: Delta Sync Cross-Domain
+Step 9   [SEQUENTIAL]: Delta Sync AD
+```
+
+**Notes**:
+- This scenario does not use the Template parameter (template-irrelevant)
+- The Parallel step test requires all 4 connected systems; skipped if missing
+- The AutoTrigger test is excluded from "All" runs due to timing dependencies; run explicitly with `-Step AutoTrigger`
+
+---
+
 ### Phase 1 (MVP) - Entitlement Management Scenarios
 
 These scenarios test group management capabilities - a core ILM function where the system manages group memberships based on identity attributes.
 
-#### Scenario 6: Entitlement Management - JIM to AD ⏸️ DEFERRED
+#### Scenario 6 (Legacy): Entitlement Management - JIM to AD ⏸️ DEFERRED
 
 > **Status**: ⏸️ **DEFERRED** - This scenario requires proper design and implementation of Internally-managed MVOs (Metaverse Objects created within JIM rather than imported from a Connected System). Deferred until Internal MVO support is designed and implemented.
 
@@ -1645,7 +1714,8 @@ JIM/
 | Scenario 3 | ⏳ Pending | Placeholder script exists |
 | Scenario 4 | ✅ Complete | Deletion rules - comprehensive coverage (SyncDelete, AsyncDelete, ManualRule, InternalProtection). WhenAuthoritativeSourceDisconnected deferred pending attribute precedence. |
 | Scenario 5 | ✅ Complete | Matching rules - 4/5 tests passing, 1 run separately (MultipleRules requires specific setup) |
-| Scenarios 6-7 | ⏸️ Deferred | Requires Internal MVO design (JIM-authoritative objects) |
+| Scenario 6 | ✅ Complete | Scheduler service end-to-end testing (Create, ManualTrigger, AutoTrigger, Overlap, MultiStep, Parallel) |
+| Scenarios 6-7 (Legacy) | ⏸️ Deferred | Entitlement management - Requires Internal MVO design (JIM-authoritative objects) |
 | Scenario 8 | ✅ Complete | All 6 tests implemented (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup) |
 | Scenarios 9-11 | ⏳ Post-MVP | Database scenarios |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
@@ -1780,7 +1850,7 @@ docker logs jim.web --tail 100
 5. ~~**Complete Scenario 8**~~ - ✅ Complete! All 6 tests passing (cross-domain entitlement sync)
 6. **Complete Scenario 3** - GALSYNC (AD to CSV export)
 7. **Create GitHub Actions workflow** - Automate integration tests in CI/CD
-8. **Post-MVP: Scenarios 6-7** - Internal MVO design required for entitlement management
+8. **Post-MVP: Scenarios 6-7 (Legacy)** - Internal MVO design required for entitlement management
 9. **Post-MVP: Scenarios 9-11** - Database connector testing (SQL Server, PostgreSQL, Oracle, MySQL)
 
 ### Scenario 2 Status: Ready for Testing

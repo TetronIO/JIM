@@ -94,8 +94,8 @@ html[lang] {
 
     /* === JIM Custom: Secondary Panel (info panels with nested content) === */
     --jim-secondary-panel-border: rgba(60, 148, 255, 0.4);
-    --jim-secondary-panel-background: rgba(60, 148, 255, 0.06);
-    --jim-secondary-panel-nested-background: rgba(60, 148, 255, 0.10);
+    --jim-secondary-panel-background: rgba(60, 148, 255, 0.05);
+    --jim-secondary-panel-nested-background: rgba(60, 148, 255, 0.08);
     --jim-secondary-panel-nested-border: rgba(60, 148, 255, 0.2);
     --jim-secondary-panel-header-background: rgba(60, 148, 255, 0.15);
 }

@@ -96,4 +96,11 @@ html[lang] {
 
     /* === JIM Custom: Logo text (dark for light sidebar) === */
     --jim-logo-text-color: #2a2a30;
+
+    /* === JIM Custom: Secondary Panel (info panels with nested content) === */
+    --jim-secondary-panel-border: rgba(89, 74, 226, 0.35);
+    --jim-secondary-panel-background: rgba(89, 74, 226, 0.03);
+    --jim-secondary-panel-nested-background: rgba(89, 74, 226, 0.05);
+    --jim-secondary-panel-nested-border: rgba(89, 74, 226, 0.25);
+    --jim-secondary-panel-header-background: rgba(89, 74, 226, 0.12);
 }

@@ -24,6 +24,11 @@ function New-JIMMatchingRule {
         The evaluation order for this rule (lower values are evaluated first).
         If not specified, the rule will be added at the end.
 
+    .PARAMETER CaseSensitive
+        Whether the matching should be case-sensitive.
+        When false (default), 'emp123' matches 'EMP123'.
+        When true, 'emp123' does NOT match 'EMP123'.
+
     .PARAMETER PassThru
         If specified, returns the created Matching Rule object.
 
@@ -63,6 +68,9 @@ function New-JIMMatchingRule {
         [Parameter()]
         [int]$Order,
 
+        [Parameter()]
+        [bool]$CaseSensitive,
+
         [switch]$PassThru
     )
 
@@ -86,6 +94,10 @@ function New-JIMMatchingRule {
 
         if ($PSBoundParameters.ContainsKey('Order')) {
             $body.order = $Order
+        }
+
+        if ($PSBoundParameters.ContainsKey('CaseSensitive')) {
+            $body.caseSensitive = $CaseSensitive
         }
 
         if ($PSCmdlet.ShouldProcess("Connected System $ConnectedSystemId, Object Type $ObjectTypeId", "Create Matching Rule")) {

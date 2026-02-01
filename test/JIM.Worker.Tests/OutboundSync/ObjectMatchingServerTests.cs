@@ -599,23 +599,23 @@ public class ObjectMatchingServerTests
     #region CaseSensitive Property Tests
 
     [Test]
-    public void ObjectMatchingRule_CaseSensitive_DefaultsToTrue()
+    public void ObjectMatchingRule_CaseSensitive_DefaultsToFalse()
     {
         // Arrange & Act
         var rule = new ObjectMatchingRule();
 
-        // Assert - verify default is case-sensitive
-        Assert.That(rule.CaseSensitive, Is.True, "ObjectMatchingRule.CaseSensitive should default to true");
+        // Assert - verify default is case-insensitive
+        Assert.That(rule.CaseSensitive, Is.False, "ObjectMatchingRule.CaseSensitive should default to false");
     }
 
     [Test]
-    public void ObjectMatchingRule_CaseSensitive_CanBeSetToFalse()
+    public void ObjectMatchingRule_CaseSensitive_CanBeSetToTrue()
     {
         // Arrange
-        var rule = new ObjectMatchingRule { CaseSensitive = false };
+        var rule = new ObjectMatchingRule { CaseSensitive = true };
 
         // Assert
-        Assert.That(rule.CaseSensitive, Is.False, "ObjectMatchingRule.CaseSensitive should be settable to false");
+        Assert.That(rule.CaseSensitive, Is.True, "ObjectMatchingRule.CaseSensitive should be settable to true");
     }
 
     [Test]

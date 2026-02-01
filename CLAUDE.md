@@ -278,6 +278,16 @@ When creating ASCII diagrams in documentation or code comments, use only reliabl
 - Classes: Full descriptive names (avoid abbreviations)
 - Properties: PascalCase with nullable reference types enabled
 
+**UI Element Sizing:**
+- ALWAYS use normal/default sizes for ALL UI elements when adding new components
+- Text: Use `Typo.body1` (default readable size)
+- Chips: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
+- Buttons: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
+- Icons: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
+- Other MudBlazor components: Omit Size parameter to use default sizing
+- Only use smaller sizes (`Typo.body2`, `Size.Small`, etc.) when explicitly requested by the user
+- Users prefer readable, appropriately-sized UI elements by default
+
 **Common Patterns:**
 ```csharp
 // Async all I/O

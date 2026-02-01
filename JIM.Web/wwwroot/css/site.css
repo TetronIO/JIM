@@ -340,17 +340,26 @@ html[lang] .jim-paper-danger-zone {
 }
 
 /* Info panel styling for pending exports and informational content */
+/* Info panel styling - uses theme variables for colours */
 .jim-paper-info {
-    border: 2px solid #2196f3;
-    /* MudBlazor Info blue */
-    background-color: rgba(21, 101, 192, 0.09);
-    /* Blue with low opacity for light mode */
+    border: 2px solid var(--jim-secondary-panel-border);
+    background-color: var(--jim-secondary-panel-background);
 }
 
-/* Dark mode adjustments for info panel */
-.mud-theme-dark .jim-paper-info {
-    background-color: rgba(33, 150, 243, 0.15);
-    /* Slightly brighter blue for dark mode visibility */
+/* Tables inside info panel - subtle contrast with panel background */
+.jim-paper-info .mud-table,
+.jim-paper-info .mud-table .mud-table-container {
+    background-color: var(--jim-secondary-panel-nested-background) !important;
+}
+
+/* Table border inside info panel */
+.jim-paper-info .mud-table {
+    border-color: var(--jim-secondary-panel-nested-border) !important;
+}
+
+/* Table header inside info panel - darker for distinction */
+.jim-paper-info .mud-table thead {
+    background-color: var(--jim-secondary-panel-header-background) !important;
 }
 
 

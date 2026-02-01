@@ -147,16 +147,35 @@ function Add-JIMScheduleStep {
 
                 # Build the new step
                 $newStep = @{
-                    stepIndex = $newStepIndex
+                    stepIndex = [int]$newStepIndex
                     stepType = 0  # RunProfile
                     executionMode = if ($Parallel) { 1 } else { 0 }  # 0=Sequential, 1=ParallelWithPrevious
                     continueOnFailure = [bool]$ContinueOnFailure
-                    connectedSystemId = $ConnectedSystemId
-                    runProfileId = $RunProfileId
+                    connectedSystemId = [int]$ConnectedSystemId
+                    runProfileId = [int]$RunProfileId
+                }
+
+                # Convert existing steps to proper format for API
+                $convertedSteps = @()
+                foreach ($step in $existingSteps) {
+                    $convertedSteps += @{
+                        id = $step.id
+                        stepIndex = [int]$step.stepIndex
+                        stepType = if ($step.stepType -is [int]) { $step.stepType } else { 0 }
+                        executionMode = if ($step.executionMode -is [int]) { $step.executionMode } else { 0 }
+                        continueOnFailure = [bool]$step.continueOnFailure
+                        connectedSystemId = if ($step.connectedSystemId) { [int]$step.connectedSystemId } else { $null }
+                        runProfileId = if ($step.runProfileId) { [int]$step.runProfileId } else { $null }
+                        name = $step.name
+                        scriptPath = $step.scriptPath
+                        arguments = $step.arguments
+                        executablePath = $step.executablePath
+                        workingDirectory = $step.workingDirectory
+                    }
                 }
 
                 # Build update body with existing steps plus new one
-                $allSteps = @($existingSteps) + @($newStep)
+                $allSteps = $convertedSteps + @($newStep)
 
                 $body = @{
                     name = $schedule.name

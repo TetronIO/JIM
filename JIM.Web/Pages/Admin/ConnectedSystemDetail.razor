@@ -1481,7 +1481,7 @@
     private int _selectedMatchingRuleTabIndex;
     private ConnectedSystemObjectTypeAttribute? _newMatchingRuleSourceAttribute;
     private MetaverseAttribute? _newMatchingRuleTargetAttribute;
-    private bool _newMatchingRuleCaseSensitive = true;
+    private bool _newMatchingRuleCaseSensitive = false;
     private IList<MetaverseAttribute>? _metaverseAttributes;
     // Track the currently active object type for the matching rules form state
     private ConnectedSystemObjectType? _currentMatchingRuleObjectType;
@@ -1922,7 +1922,7 @@
             // Reset the form
             _newMatchingRuleSourceAttribute = null;
             _newMatchingRuleTargetAttribute = null;
-            _newMatchingRuleCaseSensitive = true;
+            _newMatchingRuleCaseSensitive = false;
 
             Snackbar.Add("Matching rule has been created.", Severity.Success);
             StateHasChanged();
