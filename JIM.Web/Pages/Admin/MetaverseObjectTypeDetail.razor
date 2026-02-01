@@ -176,9 +176,28 @@
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Name">@context.Name</MudTd>
-            <MudTd DataLabel="Type">@context.Type.ToString().SplitOnCapitalLetters()</MudTd>
-            <MudTd DataLabel="Plurality">@(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")</MudTd>
-            <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
+            <MudTd DataLabel="Type">
+                <MudChip T="string" Size="Size.Small" Color="@GetTypeChipColour(context.Type)" Variant="Variant.Outlined">
+                    @context.Type.ToString().SplitOnCapitalLetters()
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Plurality">
+                <MudChip T="string" Size="Size.Small" Color="@GetPluralityChipColour(context.AttributePlurality)" Variant="Variant.Text">
+                    @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Built-in?">
+                @if (context.BuiltIn)
+                {
+                    <MudTooltip Text="Built-in attribute" Arrow="true" Placement="Placement.Top">
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Class="mud-text-secondary" />
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Custom</MudText>
+                }
+            </MudTd>
             <MudTd DataLabel="Created">
                 <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                     @context.Created.ToLocalTime().ToRelativeTime()
@@ -426,5 +445,37 @@
             .GroupBy(a => a.BuiltIn)
             .Select(g => new KeyValuePair<bool, int>(g.Key, g.Count()))
             .OrderByDescending(x => x.Key); // Yes first, then No
+    }
+
+    /// <summary>
+    /// Returns a MudBlazor colour for each attribute data type.
+    /// </summary>
+    private Color GetTypeChipColour(AttributeDataType type)
+    {
+        return type switch
+        {
+            AttributeDataType.Binary => Color.Default,      // Grey
+            AttributeDataType.Boolean => Color.Info,        // Blue
+            AttributeDataType.DateTime => Color.Secondary,  // Purple
+            AttributeDataType.Guid => Color.Warning,        // Orange
+            AttributeDataType.Number => Color.Success,      // Green
+            AttributeDataType.LongNumber => Color.Success,  // Green (same as Number)
+            AttributeDataType.Text => Color.Tertiary,       // Teal
+            AttributeDataType.Reference => Color.Primary,   // Pink/Primary
+            _ => Color.Default
+        };
+    }
+
+    /// <summary>
+    /// Returns a MudBlazor colour for plurality (single vs multi-valued).
+    /// </summary>
+    private Color GetPluralityChipColour(AttributePlurality plurality)
+    {
+        return plurality switch
+        {
+            AttributePlurality.SingleValued => Color.Default,  // Neutral/grey
+            AttributePlurality.MultiValued => Color.Info,      // Accent colour
+            _ => Color.Default
+        };
     }
 }
