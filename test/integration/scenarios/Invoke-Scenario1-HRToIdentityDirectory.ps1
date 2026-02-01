@@ -40,7 +40,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiner", "Leaver", "Mover", "Mover-Rename", "Mover-Move", "Disable", "Enable", "Reconnection", "ImportOnly", "All")]
+    [ValidateSet("Joiner", "Leaver", "Mover", "Mover-Rename", "Mover-Move", "Disable", "Enable", "Reconnection", "ImportOnly", "SyncOnly", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -303,6 +303,56 @@ try {
         Write-Host "✓ ImportOnly" -ForegroundColor Green
         Write-Host ""
         Write-Host "✓ ImportOnly test passed" -ForegroundColor Green
+        return
+    }
+
+    # SyncOnly: Run HR CSV Full Import + Full Sync, stop before exports
+    # This creates pending exports for inspection without actually exporting
+    if ($Step -eq "SyncOnly") {
+        $stepSyncStart = Get-Date
+        Write-TestSection "SyncOnly: HR CSV Import + Full Sync (no exports)"
+
+        # Step 1: CSV Full Import
+        Write-Host "Triggering CSV Full Import..." -ForegroundColor Gray
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "CSV Full Import (SyncOnly)"
+        Write-Host "  ✓ CSV Full Import completed" -ForegroundColor Green
+
+        # Step 2: CSV Full Sync (creates MVOs and pending exports)
+        Write-Host "Triggering CSV Full Sync..." -ForegroundColor Gray
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "CSV Full Sync (SyncOnly)"
+        Write-Host "  ✓ CSV Full Sync completed" -ForegroundColor Green
+
+        Write-Host ""
+        Write-Host "✓ SyncOnly completed - pending exports created but NOT exported" -ForegroundColor Green
+        Write-Host "  Import Activity ID: $($importResult.activityId)" -ForegroundColor Cyan
+        Write-Host "  Sync Activity ID:   $($syncResult.activityId)" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "Pending exports are now available for inspection:" -ForegroundColor Yellow
+        Write-Host "  - View in JIM UI: Connected Systems > [System] > Pending Exports" -ForegroundColor DarkGray
+        Write-Host "  - Query database:" -ForegroundColor DarkGray
+        Write-Host "    docker compose exec jim.database psql -U jim -d jim -c `"" -ForegroundColor DarkGray
+        Write-Host "      SELECT cs.\\`"Name\\`\", pe.\\`"OperationType\\`\", COUNT(*) " -ForegroundColor DarkGray
+        Write-Host "      FROM \\`"PendingExports\\`\" pe " -ForegroundColor DarkGray
+        Write-Host "      JOIN \\`"ConnectedSystems\\`\" cs ON pe.\\`"ConnectedSystemId\\`\" = cs.\\`"Id\\`\" " -ForegroundColor DarkGray
+        Write-Host "      GROUP BY cs.\\`"Name\\`\", pe.\\`"OperationType\\`\"`"" -ForegroundColor DarkGray
+        Write-Host ""
+
+        $stepTimings["SyncOnly"] = (Get-Date) - $stepSyncStart
+        $testResults.Steps += @{ Name = "SyncOnly"; Success = $true }
+
+        # Skip all other tests
+        Write-Host "SyncOnly step complete - skipping exports and remaining tests" -ForegroundColor Yellow
+
+        # Jump to results summary
+        $testResults.Success = $true
+        Write-TestSection "Test Results Summary"
+        Write-Host "Tests run:    1"
+        Write-Host "Tests passed: 1"
+        Write-Host "✓ SyncOnly" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "✓ SyncOnly test passed" -ForegroundColor Green
         return
     }
 
