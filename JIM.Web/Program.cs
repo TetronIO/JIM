@@ -467,6 +467,7 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
 
     loggerConfiguration.MinimumLevel.Override("Microsoft", LogEventLevel.Information);
     loggerConfiguration.MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning);
+    loggerConfiguration.MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning);
     loggerConfiguration.Enrich.FromLogContext();
     loggerConfiguration.WriteTo.File(
         formatter: new RenderedCompactJsonFormatter(),

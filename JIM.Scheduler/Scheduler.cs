@@ -205,6 +205,9 @@ public class Scheduler : BackgroundService
                 break;
         }
 
+        // Suppress verbose EF Core SQL query logging (only log warnings/errors)
+        loggerConfiguration.MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", Serilog.Events.LogEventLevel.Warning);
+
         loggerConfiguration.Enrich.FromLogContext();
         loggerConfiguration.WriteTo.File(
             formatter: new RenderedCompactJsonFormatter(),
