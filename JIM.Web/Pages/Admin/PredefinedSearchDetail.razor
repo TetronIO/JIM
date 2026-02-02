@@ -17,8 +17,8 @@
 
 @if (_predefinedSearch != null)
 {
-    <MudText Typo="Typo.h5" Class="mt-3">Details</MudText>
     <MudPaper Class="pa-5 mt-3" Outlined="true">
+        <MudText Typo="Typo.h5" Class="mb-3">Details</MudText>
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
                 <MudField Label="Name" Variant="Variant.Outlined">@_predefinedSearch.Name</MudField>
@@ -38,36 +38,38 @@
         </MudGrid>
     </MudPaper>
 
-    <MudText Typo="Typo.h5" Class="mt-5">Metaverse Attributes</MudText>
-    <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">These will be the attributes shown in the search results:</MudText>
-
-    <MudPaper Class="pa-5 mt-5" Outlined="true">
-        @foreach (var psa in _predefinedSearch.Attributes)
-        {
-            <MudChip T="string" Color="Color.Primary">@psa.MetaverseAttribute.Name</MudChip>
-        }
+    <MudPaper Class="pa-5 mt-3" Outlined="true">
+        <MudText Typo="Typo.h5">Metaverse Attributes</MudText>
+        <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-3">These will be the attributes shown in the search results:</MudText>
+        <div>
+            @foreach (var psa in _predefinedSearch.Attributes)
+            {
+                <MudChip T="string" Color="Color.Primary">@psa.MetaverseAttribute.Name</MudChip>
+            }
+        </div>
     </MudPaper>
 
     @if (_predefinedSearch.CriteriaGroups.Count > 0)
     {
-        <MudText Typo="Typo.h5" Class="mt-5">Criteria</MudText>
-        <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">This search has criteria to filter the results:</MudText>
-
-        <MudStack Class="mt-5">
-            @foreach (var criteriaGroup in _predefinedSearch.CriteriaGroups)
-            {
-                <MudPaper Class="pa-5" Outlined="true">
-                    <MudText Typo="Typo.subtitle1">Type: @criteriaGroup.Type</MudText>
-                    <br />
-                    @foreach (var criteria in criteriaGroup.Criteria)
-                    {
-                        <MudChip T="string" Color="Color.Default">@criteria.MetaverseAttribute.Name</MudChip>
-                        <MudChip T="string" Color="Color.Default">@criteria.ComparisonType</MudChip>
-                        <MudChip T="string" Color="Color.Default">@criteria.StringValue</MudChip>
-                    }
-                </MudPaper>
-            }
-        </MudStack>
+        <MudPaper Class="pa-5 mt-3" Outlined="true">
+            <MudText Typo="Typo.h5">Criteria</MudText>
+            <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-3">This search has criteria to filter the results:</MudText>
+            <MudStack>
+                @foreach (var criteriaGroup in _predefinedSearch.CriteriaGroups)
+                {
+                    <MudPaper Class="pa-5" Outlined="true">
+                        <MudText Typo="Typo.subtitle1">Type: @criteriaGroup.Type</MudText>
+                        <br />
+                        @foreach (var criteria in criteriaGroup.Criteria)
+                        {
+                            <MudChip T="string" Color="Color.Default">@criteria.MetaverseAttribute.Name</MudChip>
+                            <MudChip T="string" Color="Color.Default">@criteria.ComparisonType</MudChip>
+                            <MudChip T="string" Color="Color.Default">@criteria.StringValue</MudChip>
+                        }
+                    </MudPaper>
+                }
+            </MudStack>
+        </MudPaper>
     }
 }
 
