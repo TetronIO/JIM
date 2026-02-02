@@ -32,26 +32,25 @@
     <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-5" Class="mt-2" Outlined="true">
 
         <MudTabPanel Text="Details">
-            <MudStack Row Spacing="2" Class="mb-4">
-                <MudButton Variant="Variant.Filled"
-                           Color="Color.Default"
-                           Size="Size.Small"
-                           StartIcon="@Icons.Material.Filled.Storage"
-                           Href="@($"/admin/connected-systems/{Id}/objects")"
-                           DropShadow="false">
-                    View Objects
-                </MudButton>
-                <MudButton Variant="Variant.Filled"
-                           Color="@(_pendingExportCount > 0 ? Color.Warning : Color.Default)"
-                           Size="Size.Small"
-                           StartIcon="@Icons.Material.Filled.Outbox"
-                           Href="@($"/admin/connected-systems/{Id}/pending-exports")"
-                           DropShadow="false">
-                    View Pending Exports @(_pendingExportCount > 0 ? $"({_pendingExportCount})" : "")
-                </MudButton>
-            </MudStack>
-
             <MudPaper Class="pa-4" Outlined="true">
+                <MudStack Row Spacing="2" Class="mb-4">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Default"
+                               Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Storage"
+                               Href="@($"/admin/connected-systems/{Id}/objects")"
+                               DropShadow="false">
+                        View Objects
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled"
+                               Color="@(_pendingExportCount > 0 ? Color.Warning : Color.Default)"
+                               Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Outbox"
+                               Href="@($"/admin/connected-systems/{Id}/pending-exports")"
+                               DropShadow="false">
+                        View Pending Exports @(_pendingExportCount > 0 ? $"({_pendingExportCount})" : "")
+                    </MudButton>
+                </MudStack>
                 <MudForm @bind-IsValid="@IsDetailsFormValid" @bind-Errors="@DetailsFormErrors">
                     <MudTextField T="string" Label="Connector" @bind-Value="_connectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
                     <MudTextField T="string" Label="Name" @bind-Value="_connectedSystem.Name" Required="true" RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-5" />
