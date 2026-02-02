@@ -13,7 +13,7 @@
 @if (_pendingExport != null)
 {
     <MudText Typo="Typo.h4">
-        <span class="mud-secondary-text">Pending Export:</span>
+        <span class="mud-primary-text">Pending Export:</span>
         <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(_pendingExport.ChangeType)" Class="ml-2">
             @_pendingExport.ChangeType
         </MudChip>
