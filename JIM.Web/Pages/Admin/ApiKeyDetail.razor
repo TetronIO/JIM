@@ -173,7 +173,12 @@
         <RowTemplate Context="context">
             <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
             <MudTd DataLabel="Target">@(!string.IsNullOrEmpty(context.TargetName) ? context.TargetName : "(no name)")</MudTd>
-            <MudTd DataLabel="Operation">@context.TargetOperationType.ToString().SplitOnCapitalLetters()</MudTd>
+            <MudTd DataLabel="Operation">
+                <MudChip T="string" Variant="Variant.Text"
+                    Color="Helpers.GetActivityMudBlazorColorForOperation(context.TargetOperationType)">
+                    @context.TargetOperationType.ToString().SplitOnCapitalLetters()
+                </MudChip>
+            </MudTd>
             <MudTd DataLabel="Created">
                 <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                     @context.Created.ToLocalTime().ToRelativeTime()
