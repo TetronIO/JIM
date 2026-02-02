@@ -366,6 +366,18 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                 rowsInspected++;
             }
 
+            // Default any attributes that couldn't have their type inferred to Text.
+            // This happens when the file has no data rows or when columns have no values.
+            // Text is the safest default as any value can be stored as text.
+            foreach (var schemaObjectType in schema.ObjectTypes)
+            {
+                foreach (var schemaAttribute in schemaObjectType.Attributes.Where(a => a.Type == AttributeDataType.NotSet))
+                {
+                    schemaAttribute.Type = AttributeDataType.Text;
+                    logger.Warning("GetSchemaAsync: Attribute '{AttributeName}' has no values to infer type from, defaulting to Text", schemaAttribute.Name);
+                }
+            }
+
             return schema;
         }
         catch (CsvHelper.MissingFieldException ex)
