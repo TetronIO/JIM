@@ -477,8 +477,8 @@
                             Select which attributes you would like to manage for this object type. To maximise performance, only select those you need.
                         </MudText>
 
-                        <MudGrid Class="mt-3 mb-3">
-                            <MudItem xs="@(_selectedObjectTypeHasClasses ? 6 : 12)">
+                        <MudGrid Class="mt-3">
+                            <MudItem xs="@(_selectedObjectTypeHasClasses ? 4 : 6)">
                                 <MudTextField
                                     T="string"
                                     @bind-Value="_schemaSearchString"
@@ -487,13 +487,13 @@
                                     AdornmentIcon="@Icons.Material.Filled.Search"
                                     IconSize="Size.Small"
                                     Variant="Variant.Outlined"
-                                    HelperText="Show only attributes where the name containers a specific value"
+                                    HelperText="Show only attributes where the name contains a specific value"
                                     autocomplete="schema_search_string" />
                             </MudItem>
 
                             @if (_selectedObjectTypeHasClasses)
                             {
-                                <MudItem xs="6">
+                                <MudItem xs="4">
                                     <MudSelect
                                         T="string"
                                         Label="Filter by class"
@@ -512,31 +512,75 @@
                                 </MudItem>
                             }
 
-                            <MudItem xs="10">
+                            <MudItem xs="@(_selectedObjectTypeHasClasses ? 4 : 6)">
                                 <MudTextField
                                     T="string"
                                     Label="Select attributes via CSV"
                                     @bind-Value="_attributeSelectionCsv"
-                                    HelperText="You can also quick-select attributes by entering them in a comma-separated list, i.e. DisplayName,sAMAccountName"
+                                    HelperText="Quick-select by comma-separated list, e.g. DisplayName,sAMAccountName"
                                     InputType="InputType.Text"
-                                    Adornment="Adornment.Start"
-                                    AdornmentIcon="@Icons.Material.Filled.Input"
+                                    Adornment="Adornment.End"
+                                    AdornmentIcon="@Icons.Material.Filled.Check"
+                                    OnAdornmentClick="HandleAttributeCsvSubmit"
                                     IconSize="Size.Small"
                                     Variant="Variant.Outlined" />
                             </MudItem>
-                            <MudItem xs="2">
-                                <MudButton
-                                    Variant="Variant.Filled"
-                                    DropShadow="false"
-                                    Class="mt-4"
-                                    Color="Color.Default"
-                                    OnClick="HandleAttributeCsvSubmit">Select Attributes</MudButton>
-                            </MudItem>
-
-                            <MudItem xs="12" Class="pb-0">
-                                <MudCheckBox @bind-Value="_attributeSelectedFilter" Color="Color.Primary">Show only selected?</MudCheckBox>
-                            </MudItem>
                         </MudGrid>
+
+                        <MudStack Row="true" Spacing="6" Class="mt-4 flex-wrap" AlignItems="AlignItems.Start">
+                            <div>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Type:</MudText>
+                                <MudChipSet T="AttributeDataType"
+                                            SelectionMode="SelectionMode.MultiSelection"
+                                            SelectedValues="_selectedSchemaTypes"
+                                            SelectedValuesChanged="OnSchemaTypeFilterChanged">
+                                    @foreach (var type in GetAvailableSchemaTypes())
+                                    {
+                                        <MudChip Value="@type.Key"
+                                                 Color="Color.Primary"
+                                                 Variant="@(_selectedSchemaTypes.Contains(type.Key) ? Variant.Outlined : Variant.Text)">
+                                            @type.Key.ToString().SplitOnCapitalLetters() (@type.Value)
+                                        </MudChip>
+                                    }
+                                </MudChipSet>
+                            </div>
+
+                            <div>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Plurality:</MudText>
+                                <MudChipSet T="AttributePlurality"
+                                            SelectionMode="SelectionMode.MultiSelection"
+                                            SelectedValues="_selectedSchemaPluralites"
+                                            SelectedValuesChanged="OnSchemaPluralityFilterChanged">
+                                    @foreach (var plurality in GetAvailableSchemaPluralites())
+                                    {
+                                        <MudChip Value="@plurality.Key"
+                                                 Color="Color.Info"
+                                                 Variant="@(_selectedSchemaPluralites.Contains(plurality.Key) ? Variant.Outlined : Variant.Text)">
+                                            @(plurality.Key == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued") (@plurality.Value)
+                                        </MudChip>
+                                    }
+                                </MudChipSet>
+                            </div>
+
+                            <div>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Selection:</MudText>
+                                <MudChipSet T="bool"
+                                            SelectionMode="SelectionMode.SingleSelection"
+                                            SelectedValue="_attributeSelectedFilter"
+                                            SelectedValueChanged="@((bool val) => _attributeSelectedFilter = val)">
+                                    <MudChip Value="false"
+                                             Color="Color.Default"
+                                             Variant="@(!_attributeSelectedFilter ? Variant.Outlined : Variant.Text)">
+                                        All
+                                    </MudChip>
+                                    <MudChip Value="true"
+                                             Color="Color.Default"
+                                             Variant="@(_attributeSelectedFilter ? Variant.Outlined : Variant.Text)">
+                                        Selected Only
+                                    </MudChip>
+                                </MudChipSet>
+                            </div>
+                        </MudStack>
                     </MudPaper>
 
                     <MudTable
@@ -1463,6 +1507,8 @@
     private IEnumerable<string> AttributeClassFilterSelectedValues { get; set; } = new HashSet<string>();
     private bool _attributeSelectedFilter;
     private string? _attributeSelectionCsv;
+    private IReadOnlyCollection<AttributeDataType> _selectedSchemaTypes = new List<AttributeDataType>();
+    private IReadOnlyCollection<AttributePlurality> _selectedSchemaPluralites = new List<AttributePlurality>();
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private int _schemaRowsPerPage = 10;
     private bool _schemaPreferencesLoaded;
@@ -2130,9 +2176,16 @@
         }
     }
 
-    private bool SchemaFilterFuncHandler(ConnectedSystemObjectTypeAttribute element) => SchemaFilterFunc(element, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter);
+    private bool SchemaFilterFuncHandler(ConnectedSystemObjectTypeAttribute element) =>
+        SchemaFilterFunc(element, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter, _selectedSchemaTypes, _selectedSchemaPluralites);
 
-    private static bool SchemaFilterFunc(ConnectedSystemObjectTypeAttribute element, string searchString, IEnumerable<string> attributeClassFilterSelectedValues, bool attributeSelectedFilter)
+    private static bool SchemaFilterFunc(
+        ConnectedSystemObjectTypeAttribute element,
+        string searchString,
+        IEnumerable<string> attributeClassFilterSelectedValues,
+        bool attributeSelectedFilter,
+        IReadOnlyCollection<AttributeDataType> selectedTypes,
+        IReadOnlyCollection<AttributePlurality> selectedPluralites)
     {
         // All filters must pass (AND logic)
         var classHashset = (HashSet<string>)attributeClassFilterSelectedValues;
@@ -2149,7 +2202,47 @@
         if (classHashset.Count > 0 && !classHashset.Any(q => q == element.ClassName))
             return false;
 
+        // Filter by type selection
+        if (selectedTypes.Count > 0 && !selectedTypes.Contains(element.Type))
+            return false;
+
+        // Filter by plurality selection
+        if (selectedPluralites.Count > 0 && !selectedPluralites.Contains(element.AttributePlurality))
+            return false;
+
         return true;
+    }
+
+    private void OnSchemaTypeFilterChanged(IReadOnlyCollection<AttributeDataType> selectedTypes)
+    {
+        _selectedSchemaTypes = selectedTypes;
+    }
+
+    private void OnSchemaPluralityFilterChanged(IReadOnlyCollection<AttributePlurality> selectedPluralites)
+    {
+        _selectedSchemaPluralites = selectedPluralites;
+    }
+
+    private IEnumerable<KeyValuePair<AttributeDataType, int>> GetAvailableSchemaTypes()
+    {
+        if (_selectedObjectType == null)
+            return Enumerable.Empty<KeyValuePair<AttributeDataType, int>>();
+
+        return _selectedObjectType.Attributes
+            .GroupBy(a => a.Type)
+            .Select(g => new KeyValuePair<AttributeDataType, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key.ToString());
+    }
+
+    private IEnumerable<KeyValuePair<AttributePlurality, int>> GetAvailableSchemaPluralites()
+    {
+        if (_selectedObjectType == null)
+            return Enumerable.Empty<KeyValuePair<AttributePlurality, int>>();
+
+        return _selectedObjectType.Attributes
+            .GroupBy(a => a.AttributePlurality)
+            .Select(g => new KeyValuePair<AttributePlurality, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key);
     }
 
     private static List<TreeItemData<ConnectedSystemContainer>> GetTreeItemData(HashSet<ConnectedSystemContainer> containers)
