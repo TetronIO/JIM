@@ -605,10 +605,14 @@
                                 </MudTd>
                             }
                             <MudTd DataLabel="Type">
-                                @context.Type
+                                <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Type)" Variant="Variant.Outlined">
+                                    @context.Type.ToString().SplitOnCapitalLetters()
+                                </MudChip>
                             </MudTd>
-                            <MudTd DataLabel="Plurality" Class="jim-nowrap">
-                                @context.AttributePlurality.ToString().SplitOnCapitalLetters()
+                            <MudTd DataLabel="Plurality">
+                                <MudChip T="string" Color="@Helpers.GetAttributePluralityChipColour(context.AttributePlurality)" Variant="Variant.Text">
+                                    @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                                </MudChip>
                             </MudTd>
                             @if (_selectedObjectTypeHasDescriptions)
                             {

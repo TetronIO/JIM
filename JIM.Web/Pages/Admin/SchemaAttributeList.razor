@@ -36,12 +36,12 @@
     <RowTemplate>
         <MudTd DataLabel="Name">@context.Name</MudTd>
         <MudTd DataLabel="Type">
-            <MudChip T="string" Color="@GetTypeChipColour(context.Type)" Variant="Variant.Outlined">
+            <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Type)" Variant="Variant.Outlined">
                 @context.Type.ToString().SplitOnCapitalLetters()
             </MudChip>
         </MudTd>
         <MudTd DataLabel="Plurality">
-            <MudChip T="string" Color="@GetPluralityChipColour(context.AttributePlurality)" Variant="Variant.Text">
+            <MudChip T="string" Color="@Helpers.GetAttributePluralityChipColour(context.AttributePlurality)" Variant="Variant.Text">
                 @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
             </MudChip>
         </MudTd>
@@ -102,37 +102,5 @@
             return true;
 
         return false;
-    }
-
-    /// <summary>
-    /// Returns a MudBlazor colour for each attribute data type.
-    /// </summary>
-    private static Color GetTypeChipColour(AttributeDataType type)
-    {
-        return type switch
-        {
-            AttributeDataType.Binary => Color.Default,      // Grey
-            AttributeDataType.Boolean => Color.Info,        // Blue
-            AttributeDataType.DateTime => Color.Secondary,  // Purple
-            AttributeDataType.Guid => Color.Warning,        // Orange
-            AttributeDataType.Number => Color.Success,      // Green
-            AttributeDataType.LongNumber => Color.Success,  // Green (same as Number)
-            AttributeDataType.Text => Color.Tertiary,       // Teal
-            AttributeDataType.Reference => Color.Primary,   // Pink/Primary
-            _ => Color.Default
-        };
-    }
-
-    /// <summary>
-    /// Returns a MudBlazor colour for plurality (single vs multi-valued).
-    /// </summary>
-    private static Color GetPluralityChipColour(AttributePlurality plurality)
-    {
-        return plurality switch
-        {
-            AttributePlurality.SingleValued => Color.Default,  // Neutral/grey
-            AttributePlurality.MultiValued => Color.Info,      // Accent colour
-            _ => Color.Default
-        };
     }
 }

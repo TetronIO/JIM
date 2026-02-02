@@ -226,6 +226,38 @@ public static class Helpers
             _ => Color.Default,
         };
     }
+
+    /// <summary>
+    /// Returns a MudBlazor colour for the attribute data type chip.
+    /// </summary>
+    public static Color GetAttributeTypeChipColour(AttributeDataType type)
+    {
+        return type switch
+        {
+            AttributeDataType.Binary => Color.Default,
+            AttributeDataType.Boolean => Color.Info,
+            AttributeDataType.DateTime => Color.Secondary,
+            AttributeDataType.Guid => Color.Warning,
+            AttributeDataType.Number => Color.Success,
+            AttributeDataType.LongNumber => Color.Success,
+            AttributeDataType.Text => Color.Tertiary,
+            AttributeDataType.Reference => Color.Primary,
+            _ => Color.Default
+        };
+    }
+
+    /// <summary>
+    /// Returns a MudBlazor colour for attribute plurality (single vs multi-valued).
+    /// </summary>
+    public static Color GetAttributePluralityChipColour(AttributePlurality plurality)
+    {
+        return plurality switch
+        {
+            AttributePlurality.SingleValued => Color.Default,
+            AttributePlurality.MultiValued => Color.Info,
+            _ => Color.Default
+        };
+    }
     #endregion
 
     #region Initiator Icon Helpers
