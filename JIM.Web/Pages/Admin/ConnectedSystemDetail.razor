@@ -29,9 +29,26 @@
 
 @if (_connectedSystem != null)
 {
-    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-5" Class="mt-5" Outlined="true">
+    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-5" Class="mt-2" Outlined="true">
 
         <MudTabPanel Text="Details">
+            <MudStack Row Spacing="2" Class="mb-4">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Default"
+                           StartIcon="@Icons.Material.Filled.Storage"
+                           Href="@($"/admin/connected-systems/{Id}/objects")"
+                           DropShadow="false">
+                    Objects
+                </MudButton>
+                <MudButton Variant="Variant.Filled"
+                           Color="@(_pendingExportCount > 0 ? Color.Warning : Color.Default)"
+                           StartIcon="@Icons.Material.Filled.Outbox"
+                           Href="@($"/admin/connected-systems/{Id}/pending-exports")"
+                           DropShadow="false">
+                    Pending Exports @(_pendingExportCount > 0 ? $"({_pendingExportCount})" : "")
+                </MudButton>
+            </MudStack>
+
             <MudPaper Class="pa-4" Outlined="true">
                 <MudForm @bind-IsValid="@IsDetailsFormValid" @bind-Errors="@DetailsFormErrors">
                     <MudTextField T="string" Label="Connector" @bind-Value="_connectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
@@ -39,30 +56,6 @@
                     <MudTextField T="string" Label="Description" Required="false" @bind-Value="_connectedSystem.Description" Lines="5" Variant="Variant.Outlined" Class="mt-5" />
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync" DropShadow="false">Save Changes</MudButton>
                 </MudForm>
-            </MudPaper>
-
-            <MudPaper Class="pa-4 mt-5" Outlined="true">
-                <MudText Typo="Typo.h6">Quick Links</MudText>
-                <MudGrid Class="mt-3">
-                    <MudItem xs="12" sm="6" md="4">
-                        <MudButton Variant="Variant.Outlined"
-                                   Color="Color.Default"
-                                   FullWidth="true"
-                                   StartIcon="@Icons.Material.Filled.Storage"
-                                   Href="@($"/admin/connected-systems/{Id}/objects")">
-                            Objects
-                        </MudButton>
-                    </MudItem>
-                    <MudItem xs="12" sm="6" md="4">
-                        <MudButton Variant="Variant.Outlined"
-                                   Color="@(_pendingExportCount > 0 ? Color.Warning : Color.Default)"
-                                   FullWidth="true"
-                                   StartIcon="@Icons.Material.Filled.Outbox"
-                                   Href="@($"/admin/connected-systems/{Id}/pending-exports")">
-                            Pending Exports @(_pendingExportCount > 0 ? $"({_pendingExportCount})" : "")
-                        </MudButton>
-                    </MudItem>
-                </MudGrid>
             </MudPaper>
         </MudTabPanel>
 
