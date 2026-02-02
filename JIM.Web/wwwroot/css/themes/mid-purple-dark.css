@@ -12,26 +12,32 @@
  */
 
 html[lang] {
-    /* === Primary Palette === */
-    --mud-palette-primary: #6688ff;
-    --mud-palette-primary-darken: #5070ee;
-    --mud-palette-primary-lighten: #88a4ff;
-    --mud-palette-primary-text: #ffffffff;
-    --mud-palette-secondary: #6688ff;
-    --mud-palette-secondary-text: #ffffffff;
+    /* === Primary Palette (brighter for contrast on purple backgrounds) === */
+    --mud-palette-primary: #a0c4ff;
+    --mud-palette-primary-darken: #88aaff;
+    --mud-palette-primary-lighten: #c0d8ff;
+    --mud-palette-primary-text: #000000dd;
+    --mud-palette-secondary: #c9b0ff;
+    --mud-palette-secondary-text: #000000dd;
 
     /* === Tertiary Palette (teal for CS indicators — WCAG AA accessible) === */
     --mud-palette-tertiary: #00796B;
     --mud-palette-tertiary-text: #ffffffff;
 
-    /* === Status Colours (darker shades for dark mode with white text) === */
-    --mud-palette-success: #1b7d3e;
+    /* === Semantic Colours (brighter shades for dark purple backgrounds) === */
+    --mud-palette-success: #4caf50;
     --mud-palette-success-text: #ffffffff;
+    --mud-palette-warning: #ffb74d;
+    --mud-palette-warning-text: #000000dd;
+    --mud-palette-info: #64b5f6;
+    --mud-palette-info-text: #000000dd;
+    --mud-palette-error: #ff8a80;
+    --mud-palette-error-text: #000000dd;
 
     /* === Background & Surface === */
     --mud-palette-background: #121228;
     --mud-palette-surface: #1a1a31;
-    --mud-palette-background-grey: rgba(255, 255, 255, 0.035);
+    --mud-palette-background-grey: rgba(255, 255, 255, 0.08);
 
     /* === Inner Surface (nested containers — subtle step lighter than surface) === */
     --jim-inner-surface: #222240;

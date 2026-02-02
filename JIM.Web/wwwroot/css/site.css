@@ -34,6 +34,27 @@ a.mud-link.mud-primary-text:hover {
     transition: color 0.25s ease !important;
 }
 
+/* Text-variant chips: increase background opacity for better visibility on dark themes.
+   MudBlazor uses ~5% opacity by default which is too subtle on purple backgrounds. */
+.mud-chip.mud-chip-text.mud-chip-color-primary {
+    background-color: color-mix(in srgb, var(--mud-palette-primary) 15%, transparent) !important;
+}
+.mud-chip.mud-chip-text.mud-chip-color-secondary {
+    background-color: color-mix(in srgb, var(--mud-palette-secondary) 15%, transparent) !important;
+}
+.mud-chip.mud-chip-text.mud-chip-color-info {
+    background-color: color-mix(in srgb, var(--mud-palette-info) 15%, transparent) !important;
+}
+.mud-chip.mud-chip-text.mud-chip-color-success {
+    background-color: color-mix(in srgb, var(--mud-palette-success) 15%, transparent) !important;
+}
+.mud-chip.mud-chip-text.mud-chip-color-warning {
+    background-color: color-mix(in srgb, var(--mud-palette-warning) 15%, transparent) !important;
+}
+.mud-chip.mud-chip-text.mud-chip-color-error {
+    background-color: color-mix(in srgb, var(--mud-palette-error) 15%, transparent) !important;
+}
+
 .mud-main-content {
     padding-top: 0;
 }
