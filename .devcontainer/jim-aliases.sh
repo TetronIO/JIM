@@ -24,20 +24,18 @@ alias jim='echo "JIM Development Aliases:
 Database Management:
   jim-migrate        - dotnet ef database update
   jim-migration      - dotnet ef migrations add
-  jim-db             - Start PostgreSQL + Adminer
-  jim-db-stop        - Stop PostgreSQL + Adminer
+  jim-db             - Start PostgreSQL
+  jim-db-stop        - Stop PostgreSQL
   jim-db-logs        - View database logs
 
 Docker Stack Management:
-  jim-stack          - Start Docker stack (no dev tools)
-  jim-stack-dev      - Start Docker stack + Adminer
+  jim-stack          - Start Docker stack
   jim-stack-logs     - View Docker stack logs
   jim-stack-down     - Stop Docker stack
   jim-restart        - Recreate stack (re-reads .env, no rebuild)
 
 Docker Builds (rebuild + start):
   jim-build          - Rebuild all services + start
-  jim-build-dev      - Rebuild all services + start + Adminer
   jim-build-web      - Rebuild jim.web + start
   jim-build-worker   - Rebuild jim.worker + start
   jim-build-scheduler - Rebuild jim.scheduler + start
@@ -68,22 +66,20 @@ alias jim-db='docker compose -f db.yml up -d'
 alias jim-db-stop='docker compose -f db.yml down'
 alias jim-db-logs='docker compose -f db.yml logs -f'
 
-# Docker stack management (production-like, no dev tools)
+# Docker stack management
 alias jim-stack='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d'
-alias jim-stack-dev='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml -f docker-compose.dev-tools.yml --profile with-db up -d'
 alias jim-stack-logs='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db logs -f'
-alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml -f docker-compose.dev-tools.yml --profile with-db down && docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --remove-orphans 2>/dev/null || true && docker rm -f samba-ad-primary samba-ad-source samba-ad-target 2>/dev/null || true'
-alias jim-restart='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml -f docker-compose.dev-tools.yml --profile with-db down && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --force-recreate'
+alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down && docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --remove-orphans 2>/dev/null || true && docker rm -f samba-ad-primary samba-ad-source samba-ad-target 2>/dev/null || true'
+alias jim-restart='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --force-recreate'
 
 # Docker builds (rebuild and start services)
 alias jim-build='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build'
-alias jim-build-dev='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml -f docker-compose.dev-tools.yml --profile with-db up -d --build'
 alias jim-build-web='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db build jim.web && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d jim.web'
 alias jim-build-worker='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db build jim.worker && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d jim.worker'
 alias jim-build-scheduler='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db build jim.scheduler && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d jim.scheduler'
 
-# Reset (includes dev-tools compose to clean up adminer if it was used)
-alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml -f docker-compose.dev-tools.yml --profile with-db down --rmi local --volumes && docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --rmi local --volumes --remove-orphans 2>/dev/null || true && docker rm -f samba-ad-primary samba-ad-source samba-ad-target sqlserver-hris-a oracle-hris-b postgres-target openldap-test mysql-test 2>/dev/null || true && docker volume ls --format "{{.Name}}" | grep jim-integration | xargs -r docker volume rm 2>/dev/null || true && docker volume rm -f jim-db-volume jim-logs-volume 2>/dev/null || true && echo "JIM reset complete. All containers, images, and volumes removed. Run jim-build to rebuild."'
+# Reset
+alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down --rmi local --volumes && docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --rmi local --volumes --remove-orphans 2>/dev/null || true && docker rm -f samba-ad-primary samba-ad-source samba-ad-target sqlserver-hris-a oracle-hris-b postgres-target openldap-test mysql-test 2>/dev/null || true && docker volume ls --format "{{.Name}}" | grep jim-integration | xargs -r docker volume rm 2>/dev/null || true && docker volume rm -f jim-db-volume jim-logs-volume 2>/dev/null || true && echo "JIM reset complete. All containers, images, and volumes removed. Run jim-build to rebuild."'
 
 # Wipe JIM data (reset to initial state without destroying database)
 # Note: Preserves MetaverseObjects with Administrator role assignments

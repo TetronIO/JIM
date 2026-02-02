@@ -180,7 +180,6 @@ $imagePatterns = @(
     "jim-samba-ad",
     "ghcr.io/tetronio/jim-samba-ad",
     "postgres",
-    "adminer",
     "diegogslomp/samba-ad-dc"
 )
 

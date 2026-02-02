@@ -138,20 +138,18 @@ Synchronisation operations are the core of JIM. Data integrity and reliability a
 - `jim` - List all available jim aliases
 - `jim-compile` - Build entire solution (dotnet build)
 - `jim-test` - Run all tests
-- `jim-db` - Start PostgreSQL + Adminer (for local debugging)
-- `jim-db-stop` - Stop PostgreSQL + Adminer
+- `jim-db` - Start PostgreSQL (for local debugging)
+- `jim-db-stop` - Stop PostgreSQL
 - `jim-migrate` - Apply migrations
 
 **Docker Stack Management:**
-- `jim-stack` - Start Docker stack (no dev tools, production-like)
-- `jim-stack-dev` - Start Docker stack + Adminer
+- `jim-stack` - Start Docker stack
 - `jim-stack-logs` - View Docker stack logs
 - `jim-stack-down` - Stop Docker stack
 - `jim-restart` - Restart stack (re-reads .env, no rebuild)
 
 **Docker Builds (rebuild and start services):**
-- `jim-build` - Build all services + start (no dev tools)
-- `jim-build-dev` - Build all services + start + Adminer
+- `jim-build` - Build all services + start
 - `jim-build-web` - Build jim.web + start
 - `jim-build-worker` - Build jim.worker + start
 - `jim-build-scheduler` - Build jim.scheduler + start
@@ -160,8 +158,8 @@ Synchronisation operations are the core of JIM. Data integrity and reliability a
 - `jim-reset` - Reset JIM (delete database & logs volumes)
 
 **Docker (Manual Commands):**
-- `docker compose -f db.yml up -d` - Start database + Adminer (same as jim-db)
-- `docker compose -f db.yml down` - Stop database + Adminer
+- `docker compose -f db.yml up -d` - Start database (same as jim-db)
+- `docker compose -f db.yml down` - Stop database
 - `docker compose logs [service]` - View service logs
 
 **IMPORTANT - Rebuilding Containers After Code Changes:**
@@ -169,7 +167,7 @@ When running the Docker stack and you make code changes to JIM.Web, JIM.Worker, 
 - `jim-build-web` - Rebuild and restart jim.web service
 - `jim-build-worker` - Rebuild and restart jim.worker service
 - `jim-build-scheduler` - Rebuild and restart jim.scheduler service
-- `jim-build-dev` - Rebuild and restart all services + Adminer
+- `jim-build` - Rebuild and restart all services
 
 Blazor pages, API controllers, and other compiled code require container rebuilds. Simply refreshing the browser will not show changes.
 
