@@ -7,14 +7,17 @@
 
 <PageTitle>Predefined Search: @_predefinedSearch?.Name</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-primary-text">Predefined Search:</span> @_predefinedSearch?.Name</MudText>
-<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<div class="d-flex justify-space-between align-center">
+    <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+    @if (_predefinedSearch != null)
+    {
+        <AuditInfo Entity="@_predefinedSearch" />
+    }
+</div>
 
 @if (_predefinedSearch != null)
 {
-    <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mt-3">
-        <MudText Typo="Typo.h5">Details</MudText>
-        <AuditInfo Entity="@_predefinedSearch" />
-    </MudStack>
+    <MudText Typo="Typo.h5" Class="mt-3">Details</MudText>
     <MudPaper Class="pa-5 mt-3" Outlined="true">
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
