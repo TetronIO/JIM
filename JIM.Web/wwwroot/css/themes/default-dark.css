@@ -30,6 +30,10 @@ html[lang] {
     --mud-palette-surface: #121826;
     --mud-palette-background-grey: rgba(255, 255, 255, 0.032);
 
+    /* === Inner Surface (nested containers — subtle step lighter than surface) === */
+    --jim-inner-surface: #1a2030;
+    --jim-inner-border-color: #2a303c;
+
     /* === Drawer === */
     --mud-palette-drawer-background: #111926;
     --mud-palette-drawer-text: #acb0b3;
@@ -87,11 +91,4 @@ html[lang] {
 
     /* === JIM Custom: Logo text === */
     --jim-logo-text-color: #ffffff;
-
-    /* === JIM Custom: Secondary Panel (info panels with nested content) === */
-    --jim-secondary-panel-border: rgba(60, 148, 255, 0.4);
-    --jim-secondary-panel-background: rgba(60, 148, 255, 0.05);
-    --jim-secondary-panel-nested-background: rgba(60, 148, 255, 0.08);
-    --jim-secondary-panel-nested-border: rgba(60, 148, 255, 0.2);
-    --jim-secondary-panel-header-background: rgba(60, 148, 255, 0.15);
 }

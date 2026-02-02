@@ -33,6 +33,10 @@ html[lang] {
     --mud-palette-surface: #1a1a31;
     --mud-palette-background-grey: rgba(255, 255, 255, 0.035);
 
+    /* === Inner Surface (nested containers — subtle step lighter than surface) === */
+    --jim-inner-surface: #222240;
+    --jim-inner-border-color: #2e2e50;
+
     /* === Drawer (lighter surface - box/card colour from screenshot) === */
     --mud-palette-drawer-background: #1a1a31;
     --mud-palette-drawer-text: #c0c4d8;
@@ -61,11 +65,16 @@ html[lang] {
     --mud-palette-table-hover: #1a1a35;
 
     /* === JIM Custom: JSON Syntax Highlighting === */
-    --jim-json-key: #b8a0e8;        /* Soft purple */
-    --jim-json-string: #a5d6a7;     /* Soft green */
-    --jim-json-number: #ffb74d;     /* Warm amber */
-    --jim-json-boolean: #64b5f6;    /* Light blue */
-    --jim-json-null: #ff8a80;       /* Soft coral */
+    --jim-json-key: #b8a0e8;
+    /* Soft purple */
+    --jim-json-string: #a5d6a7;
+    /* Soft green */
+    --jim-json-number: #ffb74d;
+    /* Warm amber */
+    --jim-json-boolean: #64b5f6;
+    /* Light blue */
+    --jim-json-null: #ff8a80;
+    /* Soft coral */
 
     /* === JIM Custom: Navigation === */
     --jim-nav-top-level-color: #c0c4d8;
@@ -83,18 +92,11 @@ html[lang] {
     --jim-dialog-inner-surface: #222240;
 
     /* === JIM Custom: Content Links === */
-    --jim-link-color: #88a4ff;
+    --jim-link-color: #69a5ff;
 
     /* === JIM Custom: Link Hover === */
-    --jim-link-hover-color: #ff6090;
+    --jim-link-hover-color: #ff0090;
 
     /* === JIM Custom: Logo text === */
     --jim-logo-text-color: #ffffff;
-
-    /* === JIM Custom: Info Panel (Pending Exports, etc.) === */
-    --jim-secondary-panel-border: rgba(102, 136, 255, 0.4);
-    --jim-secondary-panel-background: rgba(102, 136, 255, 0.05);
-    --jim-secondary-panel-nested-background: rgba(102, 136, 255, 0.08);
-    --jim-secondary-panel-nested-border: rgba(102, 136, 255, 0.2);
-    --jim-secondary-panel-header-background: rgba(102, 136, 255, 0.15);
 }

@@ -100,11 +100,4 @@ html[lang] {
 
     /* === JIM Custom: Logo text === */
     --jim-logo-text-color: #ffffff;
-
-    /* === JIM Custom: Info Panel (Pending Exports, etc.) === */
-    --jim-secondary-panel-border: rgba(68, 136, 255, 0.4);
-    --jim-secondary-panel-background: rgba(68, 136, 255, 0.05);
-    --jim-secondary-panel-nested-background: rgba(68, 136, 255, 0.08);
-    --jim-secondary-panel-nested-border: rgba(68, 136, 255, 0.2);
-    --jim-secondary-panel-header-background: rgba(68, 136, 255, 0.15);
 }

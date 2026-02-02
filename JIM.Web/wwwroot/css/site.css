@@ -354,30 +354,6 @@ html[lang] .jim-paper-danger-zone {
     /* Very subtle red tint in dark mode */
 }
 
-/* Info panel styling for pending exports and informational content */
-/* Info panel styling - uses theme variables for colours */
-.jim-paper-info {
-    border: 2px solid var(--jim-secondary-panel-border);
-    background-color: var(--jim-secondary-panel-background);
-}
-
-/* Tables inside info panel - subtle contrast with panel background */
-.jim-paper-info .mud-table,
-.jim-paper-info .mud-table .mud-table-container {
-    background-color: var(--jim-secondary-panel-nested-background) !important;
-}
-
-/* Table border inside info panel */
-.jim-paper-info .mud-table {
-    border-color: var(--jim-secondary-panel-nested-border) !important;
-}
-
-/* Table header inside info panel - darker for distinction */
-.jim-paper-info .mud-table thead {
-    background-color: var(--jim-secondary-panel-header-background) !important;
-}
-
-
 /* Improve contrast for form labels and helper text (WCAG AA compliance) */
 
 /* Input labels - ensure high contrast for readability */

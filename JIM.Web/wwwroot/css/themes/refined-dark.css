@@ -67,11 +67,16 @@ html[lang] {
     --mud-palette-table-hover: #151b2b;
 
     /* === JIM Custom: JSON Syntax Highlighting (logo-inspired) === */
-    --jim-json-key: #c792ea;        /* Purple/violet from logo */
-    --jim-json-string: #a5d6a7;     /* Soft green */
-    --jim-json-number: #f9a825;     /* Orange/yellow from logo */
-    --jim-json-boolean: #4dd0e1;    /* Teal/cyan from logo */
-    --jim-json-null: #ff8a80;       /* Soft coral/pink from logo */
+    --jim-json-key: #c792ea;
+    /* Purple/violet from logo */
+    --jim-json-string: #a5d6a7;
+    /* Soft green */
+    --jim-json-number: #f9a825;
+    /* Orange/yellow from logo */
+    --jim-json-boolean: #4dd0e1;
+    /* Teal/cyan from logo */
+    --jim-json-null: #ff8a80;
+    /* Soft coral/pink from logo */
 
     /* === JIM Custom: Navigation === */
     --jim-nav-top-level-color: #acb0b3;
@@ -93,11 +98,4 @@ html[lang] {
 
     /* === JIM Custom: Logo text === */
     --jim-logo-text-color: #ffffff;
-
-    /* === JIM Custom: Secondary Panel (info panels with nested content) === */
-    --jim-secondary-panel-border: rgba(119, 107, 231, 0.4);
-    --jim-secondary-panel-background: rgba(119, 107, 231, 0.05);
-    --jim-secondary-panel-nested-background: rgba(119, 107, 231, 0.08);
-    --jim-secondary-panel-nested-border: rgba(119, 107, 231, 0.2);
-    --jim-secondary-panel-header-background: rgba(119, 107, 231, 0.15);
 }

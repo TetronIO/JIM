@@ -14,7 +14,8 @@
 
 **EXCEPTIONS:**
 - Scripts (.ps1, .sh, etc.) do not require dotnet build/test
-- **UI-only changes** (Blazor pages, Razor components, CSS) require `dotnet build` but do NOT require `dotnet test` - there are no UI tests, so running tests just wastes time
+- **Static assets** (CSS, JS, images) do not require dotnet build/test - these are served directly without compilation
+- **UI-only changes** (Blazor pages, Razor components) require `dotnet build` but do NOT require `dotnet test` - there are no UI tests, so running tests just wastes time
 
 **YOU MUST WRITE UNIT TESTS FOR NEW FUNCTIONALITY:**
 
