@@ -166,6 +166,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         // supporting 11 levels deep. arbitrary, unless performance profiling identifies issues, or admins need to go deeper
         var partitions = await Repository.Database.ConnectedSystemPartitions
+            .AsSplitQuery() // Use split query to avoid cartesian explosion from nested collection includes
             .Include(p => p.Containers)!
             .ThenInclude(c => c.ChildContainers)
             .ThenInclude(c => c.ChildContainers)
