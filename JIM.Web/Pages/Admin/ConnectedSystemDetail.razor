@@ -11,7 +11,9 @@
 @using Serilog
 @using System.Text
 @using Microsoft.JSInterop
+@using JIM.Web.Services
 @inject JimApplication Jim
+@inject IUserPreferenceService PreferenceService
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -59,16 +61,19 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Settings">
-            <MudText>Configure the connector for your environment by supplying values for the settings below.</MudText>
+            <MudText Class="mud-text-secondary">
+                Each connector requires specific settings to connect to your environment.
+                Complete the required fields below, then save your changes before importing the schema.
+            </MudText>
 
-            <MudForm @ref="_settingsForm" @bind-IsValid="@IsSettingsFormValid" @bind-Errors="@SettingsFormErrors" Class="mt-5">
+            <MudForm @ref="_settingsForm" @bind-IsValid="@IsSettingsFormValid" @bind-Errors="@SettingsFormErrors">
                 @if (_settingCategories != null)
                 {
                     @for (var i = 0; i < _settingCategories.Count; i++)
                     {
                         var settingCategory = _settingCategories[i];
-                        <MudText Typo="Typo.h5" Class="mt-5">@settingCategory.ToString()</MudText>
-                        <MudPaper Class="pa-4 mt-5" Outlined="true">
+                        <MudPaper Class="pa-5 mt-5" Outlined="true">
+                            <MudText Typo="Typo.h5" Class="mb-5">@settingCategory.ToString()</MudText>
                             @foreach (var settingValue in _connectedSystem.SettingValues
                                 .Where(sv => sv.Setting.Category == settingCategory)
                                 .OrderBy(sv => sv.Setting.Id))
@@ -431,7 +436,7 @@
 
                 @if (_selectedObjectType != null)
                 {
-                    <MudText Typo="Typo.h6" Class="mt-5">@_selectedObjectType.Name</MudText>
+                    <MudText Typo="Typo.h6" Class="mt-5"><span class="mud-primary-text">Object Type:</span> @_selectedObjectType.Name</MudText>
                     @if (_connectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
                     {
                         <MudPaper Outlined="true" Class="pa-4 mt-5">
@@ -536,7 +541,6 @@
 
                     <MudTable
                         Items="@_selectedObjectType.Attributes"
-                        Virtualize="true"
                         Hover="true"
                         Dense="true"
                         Breakpoint="Breakpoint.Sm"
@@ -544,7 +548,9 @@
                         Filter="new Func<ConnectedSystemObjectTypeAttribute,bool>(SchemaFilterFuncHandler)"
                         Class="mt-5"
                         Outlined="true"
-                        Elevation="0">
+                        Elevation="0"
+                        RowsPerPage="@_schemaRowsPerPage"
+                        RowsPerPageChanged="OnSchemaRowsPerPageChanged">
                         <HeaderContent>
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Selected)"><MudText Typo="Typo.button">Selected</MudText></MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.IsExternalId)"><MudText Typo="Typo.button">External ID</MudText></MudTableSortLabel></MudTh>
@@ -561,7 +567,7 @@
                             }
                             @if (_connectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes)
                             {
-                                <MudTh></MudTh>
+                                <MudTh><MudText Typo="Typo.button">Action</MudText></MudTh>
                             }
                         </HeaderContent>
                         <RowTemplate>
@@ -615,8 +621,9 @@
                                 <MudTd>
                                     <MudButton
                                         DropShadow="false"
-                                       
-                                        Variant="Variant.Filled"
+                                        Color="Color.Primary"
+                                        Variant="Variant.Outlined"
+                                        Size="Size.Small"
                                         OnClick="() => HandleShowEditAttributeDialogAsync(context)"
                                         StartIcon="@Icons.Material.Filled.Edit">
                                         Edit
@@ -631,6 +638,9 @@
                                 <MudText>There are no attributes to show.</MudText>
                             }
                         </NoRecordsContent>
+                        <PagerContent>
+                            <MudTablePager PageSizeOptions="new[] { 10, 25, 50, 100 }" />
+                        </PagerContent>
                     </MudTable>
                 }
 
@@ -1450,6 +1460,8 @@
     private bool _attributeSelectedFilter;
     private string? _attributeSelectionCsv;
     private List<BreadcrumbItem> _breadcrumbs = null!;
+    private int _schemaRowsPerPage = 10;
+    private bool _schemaPreferencesLoaded;
 
     private readonly DialogOptions _dialogOptions = new() { FullWidth = true };
     private bool _editSchemaAttributeDialogVisible;
@@ -1535,6 +1547,30 @@
 
         // load metaverse attributes for object matching rules
         _metaverseAttributes = await Jim.Metaverse.GetMetaverseAttributesAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_schemaPreferencesLoaded)
+        {
+            try
+            {
+                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
+                _schemaRowsPerPage = preferredSize;
+                _schemaPreferencesLoaded = true;
+                StateHasChanged();
+            }
+            catch
+            {
+                // JS interop not yet available, will retry on next render
+            }
+        }
+    }
+
+    private async Task OnSchemaRowsPerPageChanged(int newSize)
+    {
+        _schemaRowsPerPage = newSize;
+        await PreferenceService.SetRowsPerPageAsync(newSize);
     }
 
     private bool AreSettingDependentTabsDisabled()
