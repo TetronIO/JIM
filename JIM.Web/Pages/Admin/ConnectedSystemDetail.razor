@@ -228,7 +228,7 @@
                     Color="_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning"
                     Disabled="@(_schemaBeingRetrieved)"
                     Variant="Variant.Filled"
-                   
+
                     OnClick="HandleImportSchemaAsync"
                     Class="mt-5"
                     DropShadow="false">
@@ -436,7 +436,7 @@
 
                 @if (_selectedObjectType != null)
                 {
-                    <MudText Typo="Typo.h6" Class="mt-5"><span class="mud-primary-text">Object Type:</span> @_selectedObjectType.Name</MudText>
+                    <MudText Typo="Typo.h5" Class="mt-5"><span class="mud-primary-text">Object Type:</span> @_selectedObjectType.Name</MudText>
                     @if (_connectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
                     {
                         <MudPaper Outlined="true" Class="pa-4 mt-5">
@@ -461,7 +461,7 @@
                     @if (_connectedSystem.SupportsImportMode())
                     {
                         <MudPaper Outlined="true" Class="pa-4 mt-5">
-                            <MudText Typo="Typo.subtitle1" Class="mb-3">Object Type Settings</MudText>
+                            <MudText Typo="Typo.h6" Class="mb-3">Settings</MudText>
                             <MudSwitch
                                 @bind-Value="@_selectedObjectType.RemoveContributedAttributesOnObsoletion"
                                 Color="@Color.Primary"
@@ -473,8 +473,9 @@
                     }
 
                     <MudPaper Outlined="true" Class="pa-4 mt-5">
+                        <MudText Typo="Typo.h6" Class="mb-3">Attribute Selection</MudText>
                         <MudText>
-                            Select which attributes you would like to manage for this object type. To maximise performance, only select those you need.
+                            Select which attributes you would like JIM to import, or export for this object type. To maximise system performance, only select those you actually need.
                         </MudText>
 
                         <MudGrid Class="mt-3">
@@ -726,7 +727,7 @@
                     <MudButton
                             Disabled="@_hierarchyBeingRetrieved"
                             Color="_connectedSystem.Partitions == null || _connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning"
-                           
+
                             OnClick="HandleImportHierarchyAsync"
                             Variant="Variant.Filled"
                             Class="mt-5"
@@ -782,7 +783,7 @@
                                     <div class="d-flex justify-end mb-3">
                                         <MudButton StartIcon="@Icons.Material.Filled.ContentCopy"
                                                    Variant="Variant.Outlined"
-                                                  
+
                                                    OnClick="CopyHierarchyChangesToClipboardAsync">
                                             Copy Changes
                                         </MudButton>
@@ -1148,7 +1149,7 @@
                     <MudTd DataLabel="Actions" Style="text-align: center">
                         <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
                             <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                          
+
                                            Color="Color.Error"
                                            Variant="Variant.Outlined"
                                            OnClick="_ => HandleRunProfileDeleteAsync(context)" />
@@ -2844,7 +2845,7 @@
                             <MudTooltip Text="Move up" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Outlined.ArrowUpward"
                                                Variant="Variant.Outlined"
-                                              
+
                                                Color="Color.Default"
                                                Disabled="@(context.Order == 0)"
                                                OnClick="() => HandleMoveMatchingRuleUpAsync(context, objectType)" />
@@ -2852,7 +2853,7 @@
                             <MudTooltip Text="Move down" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Outlined.ArrowDownward"
                                                Variant="Variant.Outlined"
-                                              
+
                                                Color="Color.Default"
                                                Disabled="@(context.Order == objectType.ObjectMatchingRules.Max(r => r.Order))"
                                                OnClick="() => HandleMoveMatchingRuleDownAsync(context, objectType)" />
@@ -2861,7 +2862,7 @@
                                 <MudIconButton
                                     Icon="@Icons.Material.Outlined.Delete"
                                     Variant="Variant.Outlined"
-                                   
+
                                     Color="Color.Error"
                                     OnClick="() => HandleDeleteMatchingRuleAsync(context, objectType)" />
                             </MudTooltip>
