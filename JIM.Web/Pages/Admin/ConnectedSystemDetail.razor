@@ -405,10 +405,10 @@
                 if (_connectedSystem.ObjectTypes.Count > 1 || (_connectedSystem.ObjectTypes.Count == 1 && !_connectedSystem.ObjectTypes[0].Selected))
                 {
                     <MudPaper Outlined="true" Class="pa-4 mt-5">
-                        <MudText Class="d-flex flex-grow-1 flex-wrap justify-center align-center">
-                            Select which object types you would like to manage with JIM.
+                        <MudText>
+                            Select which object types from this system you would like to use in JIM.
                         </MudText>
-                        <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
+                        <div class="d-flex flex-grow-1 flex-wrap">
                             @foreach (var objectType in _connectedSystem.ObjectTypes)
                             {
                                 <MudCheckBox T="bool" Value="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" ValueChanged="((e) => HandleSelectedObjectTypeClick(objectType, e))" />
@@ -419,22 +419,20 @@
 
                 @if (_connectedSystem.ObjectTypes.Count(q => q.Selected) > 1)
                 {
-                    <div class="d-flex justify-center mt-5">
-                        <MudButtonGroup OverrideStyles="false">
-                            @foreach (var objectType in _connectedSystem.ObjectTypes.Where(q => q.Selected))
-                            {
-                                <MudButton
-                                    OnClick="@((_) => HandleActiveObjectTypeClick(objectType))"
-                                    Variant="@(_selectedObjectType == objectType ? Variant.Filled : Variant.Outlined)"
-                                    Color="Color.Primary">@objectType.Name</MudButton>
-                            }
-                        </MudButtonGroup>
-                    </div>
+                    <MudButtonGroup Class="mt-5" OverrideStyles="false">
+                        @foreach (var objectType in _connectedSystem.ObjectTypes.Where(q => q.Selected))
+                        {
+                            <MudButton
+                                OnClick="@((_) => HandleActiveObjectTypeClick(objectType))"
+                                Variant="@(_selectedObjectType == objectType ? Variant.Filled : Variant.Outlined)"
+                                Color="Color.Primary">@objectType.Name</MudButton>
+                        }
+                    </MudButtonGroup>
                 }
 
                 @if (_selectedObjectType != null)
                 {
-                    <MudText Typo="Typo.h5" Class="mt-5" Align="Align.Center"><span class="mud-primary-text">Object Type:</span> @_selectedObjectType.Name</MudText>
+                    <MudText Typo="Typo.h5" Class="mt-5"><span class="mud-primary-text">Object Type:</span> @_selectedObjectType.Name</MudText>
                     @if (_connectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
                     {
                         <MudPaper Outlined="true" Class="pa-4 mt-5">
