@@ -477,11 +477,9 @@
             <RowTemplate>
                 <MudTd>
                     <MudButton Variant="Variant.Outlined"
-                              
+                               Size="Size.Small"
                                Color="Color.Primary"
-                               Href="@($"/activity/item/{context.Id}")">
-                        View
-                    </MudButton>
+                               Href="@($"/activity/item/{context.Id}")">View</MudButton>
                 </MudTd>
                 <MudTd DataLabel="External Id" Class="jim-text-code">@(!string.IsNullOrEmpty(context.ExternalIdValue) ? context.ExternalIdValue : "-")</MudTd>
                 <MudTd DataLabel="Display Name">@(!string.IsNullOrEmpty(context.DisplayName) ? context.DisplayName : "-")</MudTd>
