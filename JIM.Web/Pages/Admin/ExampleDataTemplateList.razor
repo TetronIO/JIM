@@ -7,20 +7,19 @@
 <PageTitle>Example Data Templates</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-primary-text">Example Data:</span> Templates</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
+
+<MudButtonGroup Class="mt-3" OverrideStyles="false">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary">Templates</MudButton>
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="/admin/example-data/datasets">Data Sets</MudButton>
+</MudButtonGroup>
+
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-5">
     You can quickly populate JIM with example data, as a way to demo, or prototype new features without needing to fuly
-    configure JIM with Connected Systems, Sync Rules and wait for data to be imported and synchronised etc.   
+    configure JIM with Connected Systems, Sync Rules and wait for data to be imported and synchronised etc.
 </MudText>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">
     Templates define example data to be created in JIM. They consist of one or more object types, with data sets being used to generate values for the object attributes.
 </MudText>
-
-<MudPaper Elevation="0" Class="mt-5" Outlined="true">
-    <MudToolBar>
-        <MudButton Href="/admin/example-data" Color="Color.Primary" DropShadow="false" Disabled="true">Templates</MudButton>
-        <MudButton Href="/admin/example-data/datasets" Color="Color.Primary" DropShadow="false">Data Sets</MudButton>
-    </MudToolBar>
-</MudPaper>
 
 <MudTable Items="@_templates" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" SortLabel="Sort By" Outlined="true" Elevation="0">
     <HeaderContent>
