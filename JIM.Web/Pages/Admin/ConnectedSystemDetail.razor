@@ -34,20 +34,18 @@
         <MudTabPanel Text="Details">
             <MudPaper Class="pa-4" Outlined="true">
                 <MudStack Row Spacing="2" Class="mb-4">
-                    <MudButton Variant="Variant.Filled"
+                    <MudButton Variant="Variant.Outlined"
                                Color="Color.Default"
                                Size="Size.Small"
                                StartIcon="@Icons.Material.Filled.Storage"
-                               Href="@($"/admin/connected-systems/{Id}/objects")"
-                               DropShadow="false">
+                               Href="@($"/admin/connected-systems/{Id}/objects")">
                         View Objects
                     </MudButton>
-                    <MudButton Variant="Variant.Filled"
+                    <MudButton Variant="Variant.Outlined"
                                Color="@(_pendingExportCount > 0 ? Color.Warning : Color.Default)"
                                Size="Size.Small"
                                StartIcon="@Icons.Material.Filled.Outbox"
-                               Href="@($"/admin/connected-systems/{Id}/pending-exports")"
-                               DropShadow="false">
+                               Href="@($"/admin/connected-systems/{Id}/pending-exports")">
                         View Pending Exports @(_pendingExportCount > 0 ? $"({_pendingExportCount})" : "")
                     </MudButton>
                 </MudStack>
