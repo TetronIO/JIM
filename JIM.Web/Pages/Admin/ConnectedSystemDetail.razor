@@ -562,6 +562,9 @@
                                 </MudChipSet>
                             </div>
 
+                            @{
+                                var selectionCounts = GetSchemaSelectionCounts();
+                            }
                             <div>
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Selection:</MudText>
                                 <MudChipSet T="bool"
@@ -571,12 +574,12 @@
                                     <MudChip Value="false"
                                              Color="Color.Default"
                                              Variant="@(!_attributeSelectedFilter ? Variant.Outlined : Variant.Text)">
-                                        All
+                                        All (@selectionCounts.allCount)
                                     </MudChip>
                                     <MudChip Value="true"
                                              Color="Color.Default"
                                              Variant="@(_attributeSelectedFilter ? Variant.Outlined : Variant.Text)">
-                                        Selected Only
+                                        Selected Only (@selectionCounts.selectedCount)
                                     </MudChip>
                                 </MudChipSet>
                             </div>
@@ -2228,7 +2231,12 @@
         if (_selectedObjectType == null)
             return Enumerable.Empty<KeyValuePair<AttributeDataType, int>>();
 
-        return _selectedObjectType.Attributes
+        // Apply all filters EXCEPT type filter to get contextual counts
+        var filteredAttributes = _selectedObjectType.Attributes
+            .Where(a => SchemaFilterFunc(a, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter,
+                new List<AttributeDataType>(), _selectedSchemaPluralites));
+
+        return filteredAttributes
             .GroupBy(a => a.Type)
             .Select(g => new KeyValuePair<AttributeDataType, int>(g.Key, g.Count()))
             .OrderBy(x => x.Key.ToString());
@@ -2239,10 +2247,29 @@
         if (_selectedObjectType == null)
             return Enumerable.Empty<KeyValuePair<AttributePlurality, int>>();
 
-        return _selectedObjectType.Attributes
+        // Apply all filters EXCEPT plurality filter to get contextual counts
+        var filteredAttributes = _selectedObjectType.Attributes
+            .Where(a => SchemaFilterFunc(a, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter,
+                _selectedSchemaTypes, new List<AttributePlurality>()));
+
+        return filteredAttributes
             .GroupBy(a => a.AttributePlurality)
             .Select(g => new KeyValuePair<AttributePlurality, int>(g.Key, g.Count()))
             .OrderBy(x => x.Key);
+    }
+
+    private (int allCount, int selectedCount) GetSchemaSelectionCounts()
+    {
+        if (_selectedObjectType == null)
+            return (0, 0);
+
+        // Apply all filters EXCEPT selection filter to get contextual counts
+        var filteredAttributes = _selectedObjectType.Attributes
+            .Where(a => SchemaFilterFunc(a, _schemaSearchString, AttributeClassFilterSelectedValues, false,
+                _selectedSchemaTypes, _selectedSchemaPluralites))
+            .ToList();
+
+        return (filteredAttributes.Count, filteredAttributes.Count(a => a.Selected));
     }
 
     private static List<TreeItemData<ConnectedSystemContainer>> GetTreeItemData(HashSet<ConnectedSystemContainer> containers)
