@@ -2130,16 +2130,22 @@
 
     private static bool SchemaFilterFunc(ConnectedSystemObjectTypeAttribute element, string searchString, IEnumerable<string> attributeClassFilterSelectedValues, bool attributeSelectedFilter)
     {
-        // what type of search is this? name, class or csv?
+        // All filters must pass (AND logic)
         var classHashset = (HashSet<string>)attributeClassFilterSelectedValues;
 
-        if (!string.IsNullOrEmpty(searchString))
-            return element.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase);
+        // Filter by "show only selected" checkbox
+        if (attributeSelectedFilter && !element.Selected)
+            return false;
 
-        if (classHashset.Count > 0)
-            return classHashset.Any(q => q == element.ClassName);
+        // Filter by name search string
+        if (!string.IsNullOrEmpty(searchString) && !element.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return false;
 
-        return !attributeSelectedFilter || element.Selected;
+        // Filter by class selection
+        if (classHashset.Count > 0 && !classHashset.Any(q => q == element.ClassName))
+            return false;
+
+        return true;
     }
 
     private static List<TreeItemData<ConnectedSystemContainer>> GetTreeItemData(HashSet<ConnectedSystemContainer> containers)
