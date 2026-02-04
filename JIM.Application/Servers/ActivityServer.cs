@@ -230,17 +230,32 @@ public class ActivityServer
     /// </summary>
     /// <param name="page">The page number (1-based).</param>
     /// <param name="pageSize">The number of items per page.</param>
-    /// <param name="searchQuery">Optional search query to filter by TargetName or TargetContext.</param>
+    /// <param name="connectedSystemFilter">Optional filter for connected system names (additive/OR within filter).</param>
+    /// <param name="runProfileFilter">Optional filter for run profile names (additive/OR within filter).</param>
+    /// <param name="statusFilter">Optional filter for activity statuses (additive/OR within filter).</param>
+    /// <param name="initiatedByFilter">Optional text search on initiator name.</param>
     /// <param name="sortBy">Optional column to sort by.</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
     public async Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
         int page = 1,
         int pageSize = 20,
-        string? searchQuery = null,
+        IEnumerable<string>? connectedSystemFilter = null,
+        IEnumerable<string>? runProfileFilter = null,
+        IEnumerable<ActivityStatus>? statusFilter = null,
+        string? initiatedByFilter = null,
         string? sortBy = null,
         bool sortDescending = true)
     {
-        return await Application.Repository.Activity.GetWorkerTaskActivitiesAsync(page, pageSize, searchQuery, sortBy, sortDescending);
+        return await Application.Repository.Activity.GetWorkerTaskActivitiesAsync(
+            page, pageSize, connectedSystemFilter, runProfileFilter, statusFilter, initiatedByFilter, sortBy, sortDescending);
+    }
+
+    /// <summary>
+    /// Retrieves the distinct filter options available for worker task activities.
+    /// </summary>
+    public async Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync()
+    {
+        return await Application.Repository.Activity.GetWorkerTaskActivityFilterOptionsAsync();
     }
 
     #region synchronisation related

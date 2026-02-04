@@ -11,18 +11,68 @@
 
 @if (_preferencesLoaded)
 {
+    <MudText Typo="Typo.h6" Class="mb-3">Execution History</MudText>
+
+    @* Filter Controls *@
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="string" Label="Connected System" Variant="Variant.Outlined"
+                       Dense="true" Clearable="true" MultiSelection="true"
+                       SelectedValues="_filterConnectedSystems"
+                       SelectedValuesChanged="OnConnectedSystemFilterChanged"
+                       MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+                @if (_filterOptions != null)
+                {
+                    @foreach (var cs in _filterOptions.ConnectedSystems)
+                    {
+                        <MudSelectItem T="string" Value="@cs">@cs</MudSelectItem>
+                    }
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="string" Label="Run Profile" Variant="Variant.Outlined"
+                       Dense="true" Clearable="true" MultiSelection="true"
+                       SelectedValues="_filterRunProfiles"
+                       SelectedValuesChanged="OnRunProfileFilterChanged"
+                       MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+                @if (_filterOptions != null)
+                {
+                    @foreach (var rp in _filterOptions.RunProfiles)
+                    {
+                        <MudSelectItem T="string" Value="@rp">@rp</MudSelectItem>
+                    }
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="ActivityStatus" Label="Status" Variant="Variant.Outlined"
+                       Dense="true" Clearable="true" MultiSelection="true"
+                       SelectedValues="_filterStatuses"
+                       SelectedValuesChanged="OnStatusFilterChanged"
+                       MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+                <MudSelectItem T="ActivityStatus" Value="ActivityStatus.InProgress">In Progress</MudSelectItem>
+                <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Complete">Complete</MudSelectItem>
+                <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithWarning">Complete With Warning</MudSelectItem>
+                <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithError">Complete With Error</MudSelectItem>
+                <MudSelectItem T="ActivityStatus" Value="ActivityStatus.FailedWithError">Failed With Error</MudSelectItem>
+                <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Cancelled">Cancelled</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudTextField T="string" @bind-Value="_filterInitiatedBy" Label="Initiated By"
+                          Variant="Variant.Outlined" Clearable="true" Placeholder="Search by name..."
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true" DebounceInterval="500"
+                          OnDebounceIntervalElapsed="OnInitiatedByFilterChanged" />
+        </MudItem>
+    </MudGrid>
+
     <MudTable @ref="_table" T="Activity" ServerData="ServerReload" @bind-CurrentPage="_currentPage"
               RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged"
               Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
               Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer"
               Loading="@_loading" LoadingProgressColor="Color.Primary">
-        <ToolBarContent>
-            <MudText Typo="Typo.h6">Execution History</MudText>
-            <MudSpacer />
-            <MudTextField T="string" ValueChanged="@(s => OnSearch(s))" Placeholder="Search..."
-                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                          IconSize="Size.Medium" Class="mt-0" Style="max-width: 300px;" />
-        </ToolBarContent>
         <HeaderContent>
             <MudTh>
                 <MudText Typo="Typo.button">Connected System</MudText>
@@ -350,7 +400,6 @@
 
 @code {
     private MudTable<Activity>? _table;
-    private string _searchString = "";
     private bool _loading;
     private int _currentPage;
     private int _rowsPerPage = 10;
@@ -359,23 +408,18 @@
     private Activity? _selectedActivity;
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
 
-    // Filter for worker task activities only
-    private static readonly ActivityTargetType[] WorkerTaskTargetTypes =
-    [
-        ActivityTargetType.ConnectedSystemRunProfile,
-        ActivityTargetType.DataGenerationTemplate,
-        ActivityTargetType.ConnectedSystem
-    ];
+    // Filter state
+    private ActivityFilterOptions? _filterOptions;
+    private IEnumerable<string> _filterConnectedSystems = [];
+    private IEnumerable<string> _filterRunProfiles = [];
+    private IEnumerable<ActivityStatus> _filterStatuses = [];
+    private string? _filterInitiatedBy;
 
-    private static readonly ActivityTargetOperationType[] WorkerTaskOperationTypes =
-    [
-        ActivityTargetOperationType.Execute,
-        ActivityTargetOperationType.Clear,
-        ActivityTargetOperationType.Delete
-    ];
-
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        // Load filter options (distinct connected systems and run profiles)
+        _filterOptions = await Jim.Activities.GetWorkerTaskActivityFilterOptionsAsync();
+
         // Setup polling for auto-refresh
         var token = _pollingCancellationTokenSource.Token;
         _ = Task.Run(async () =>
@@ -446,10 +490,18 @@
             var sortDescending = state.SortDirection == SortDirection.Descending;
 
             // Get activities filtered for worker tasks
+            var connectedSystems = _filterConnectedSystems.Any() ? _filterConnectedSystems : null;
+            var runProfiles = _filterRunProfiles.Any() ? _filterRunProfiles : null;
+            var statuses = _filterStatuses.Any() ? _filterStatuses : null;
+            var initiatedBy = string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy;
+
             var result = await Jim.Activities.GetWorkerTaskActivitiesAsync(
                 page,
                 state.PageSize,
-                string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
+                connectedSystems,
+                runProfiles,
+                statuses,
+                initiatedBy,
                 state.SortLabel,
                 sortDescending);
 
@@ -466,10 +518,38 @@
         }
     }
 
-    private void OnSearch(string text)
+    private void OnConnectedSystemFilterChanged(IEnumerable<string> values)
     {
-        _searchString = text;
+        _filterConnectedSystems = values;
         _table?.ReloadServerData();
+    }
+
+    private void OnRunProfileFilterChanged(IEnumerable<string> values)
+    {
+        _filterRunProfiles = values;
+        _table?.ReloadServerData();
+    }
+
+    private void OnStatusFilterChanged(IEnumerable<ActivityStatus> values)
+    {
+        _filterStatuses = values;
+        _table?.ReloadServerData();
+    }
+
+    private void OnInitiatedByFilterChanged(string text)
+    {
+        _filterInitiatedBy = text;
+        _table?.ReloadServerData();
+    }
+
+    private static string GetMultiSelectText(List<string> selectedValues)
+    {
+        return selectedValues.Count switch
+        {
+            0 => string.Empty,
+            1 => selectedValues[0],
+            _ => $"{selectedValues.Count} selected"
+        };
     }
 
     private void HandleRowClick(TableRowClickEventArgs<Activity> args)

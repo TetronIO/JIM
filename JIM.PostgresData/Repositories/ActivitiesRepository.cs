@@ -137,7 +137,10 @@ public class ActivityRepository : IActivityRepository
     public async Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
         int page,
         int pageSize,
-        string? searchQuery = null,
+        IEnumerable<string>? connectedSystemFilter = null,
+        IEnumerable<string>? runProfileFilter = null,
+        IEnumerable<ActivityStatus>? statusFilter = null,
+        string? initiatedByFilter = null,
         string? sortBy = null,
         bool sortDescending = true)
     {
@@ -151,35 +154,25 @@ public class ActivityRepository : IActivityRepository
         if (pageSize > 100)
             pageSize = 100;
 
-        // Worker task activity types - operations executed by the worker service
-        // Note: HistoryRetentionCleanup is intentionally excluded as it's a background maintenance task
-        var workerTaskTargetTypes = new[]
-        {
-            ActivityTargetType.ConnectedSystemRunProfile,
-            ActivityTargetType.DataGenerationTemplate,
-            ActivityTargetType.ConnectedSystem
-        };
+        var query = BuildWorkerTaskQuery();
 
-        // Worker task operations
-        var workerTaskOperations = new[]
-        {
-            ActivityTargetOperationType.Execute,
-            ActivityTargetOperationType.Clear,
-            ActivityTargetOperationType.Delete
-        };
+        // Apply filters
+        var connectedSystems = connectedSystemFilter?.ToList();
+        if (connectedSystems is { Count: > 0 })
+            query = query.Where(a => a.TargetContext != null && connectedSystems.Contains(a.TargetContext));
 
-        var query = Repository.Database.Activities
-            .Where(a => a.ParentActivityId == null)
-            .Where(a => workerTaskTargetTypes.Contains(a.TargetType) && workerTaskOperations.Contains(a.TargetOperationType))
-            .AsQueryable();
+        var runProfiles = runProfileFilter?.ToList();
+        if (runProfiles is { Count: > 0 })
+            query = query.Where(a => a.TargetName != null && runProfiles.Contains(a.TargetName));
 
-        // Apply search filter
-        if (!string.IsNullOrWhiteSpace(searchQuery))
+        var statuses = statusFilter?.ToList();
+        if (statuses is { Count: > 0 })
+            query = query.Where(a => statuses.Contains(a.Status));
+
+        if (!string.IsNullOrWhiteSpace(initiatedByFilter))
         {
-            var searchLower = searchQuery.ToLower();
-            query = query.Where(a =>
-                (a.TargetName != null && a.TargetName.ToLower().Contains(searchLower)) ||
-                EF.Functions.ILike(a.TargetType.ToString(), $"%{searchQuery}%"));
+            var filterLower = initiatedByFilter.ToLower();
+            query = query.Where(a => a.InitiatedByName != null && a.InitiatedByName.ToLower().Contains(filterLower));
         }
 
         // Apply sorting
@@ -231,6 +224,60 @@ public class ActivityRepository : IActivityRepository
         pagedResultSet.TotalResults = 0;
         pagedResultSet.Results.Clear();
         return pagedResultSet;
+    }
+
+    public async Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync()
+    {
+        var query = BuildWorkerTaskQuery();
+
+        var connectedSystems = await query
+            .Where(a => a.TargetContext != null)
+            .Select(a => a.TargetContext!)
+            .Distinct()
+            .OrderBy(name => name)
+            .ToListAsync();
+
+        var runProfiles = await query
+            .Where(a => a.TargetName != null)
+            .Select(a => a.TargetName!)
+            .Distinct()
+            .OrderBy(name => name)
+            .ToListAsync();
+
+        return new ActivityFilterOptions
+        {
+            ConnectedSystems = connectedSystems,
+            RunProfiles = runProfiles
+        };
+    }
+
+    /// <summary>
+    /// Builds the base query for worker task activities, filtering to parent activities
+    /// with worker task target types and operation types.
+    /// </summary>
+    private IQueryable<Activity> BuildWorkerTaskQuery()
+    {
+        // Worker task activity types - operations executed by the worker service
+        // Note: HistoryRetentionCleanup is intentionally excluded as it's a background maintenance task
+        var workerTaskTargetTypes = new[]
+        {
+            ActivityTargetType.ConnectedSystemRunProfile,
+            ActivityTargetType.DataGenerationTemplate,
+            ActivityTargetType.ConnectedSystem
+        };
+
+        // Worker task operations
+        var workerTaskOperations = new[]
+        {
+            ActivityTargetOperationType.Execute,
+            ActivityTargetOperationType.Clear,
+            ActivityTargetOperationType.Delete
+        };
+
+        return Repository.Database.Activities
+            .Where(a => a.ParentActivityId == null)
+            .Where(a => workerTaskTargetTypes.Contains(a.TargetType) && workerTaskOperations.Contains(a.TargetOperationType))
+            .AsQueryable();
     }
 
     #region synchronisation related

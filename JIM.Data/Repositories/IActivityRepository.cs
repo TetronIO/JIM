@@ -27,9 +27,14 @@ public interface IActivityRepository
     public Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
         int page,
         int pageSize,
-        string? searchQuery = null,
+        IEnumerable<string>? connectedSystemFilter = null,
+        IEnumerable<string>? runProfileFilter = null,
+        IEnumerable<ActivityStatus>? statusFilter = null,
+        string? initiatedByFilter = null,
         string? sortBy = null,
         bool sortDescending = true);
+
+    public Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync();
 
     public Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(
         Guid activityId,
