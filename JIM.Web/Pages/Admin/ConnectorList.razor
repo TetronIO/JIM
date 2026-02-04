@@ -12,12 +12,10 @@
     From here you can see which are installed and if any have updates that can be applied.
 </MudText>
 
-<MudPaper Elevation="0" Class="mt-2" Outlined="true">
-    <MudToolBar>
-        <MudButton Href="/admin/connected-systems" Color="Color.Primary" DropShadow="false">Connected Systems</MudButton>
-        <MudButton Href="/admin/connected-systems/connectors" Color="Color.Primary" DropShadow="false" Disabled="true">Connectors</MudButton>
-    </MudToolBar>
-</MudPaper>
+<MudButtonGroup Class="mt-3" OverrideStyles="false">
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="/admin/connected-systems">Connected Systems</MudButton>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary">Connectors</MudButton>
+</MudButtonGroup>
 
 <MudTable Items="@_headers" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ConnectorDefinitionHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
     <ToolBarContent>

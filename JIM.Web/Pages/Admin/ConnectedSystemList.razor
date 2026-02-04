@@ -17,14 +17,14 @@
     }
 </MudText>
 
-<MudPaper Elevation="0" Class="mt-2" Outlined="true">
-    <MudToolBar>
-        <MudButton Href="/admin/connected-systems" Color="Color.Primary" DropShadow="false" Disabled="true">Connected Systems</MudButton>
-        <MudButton Href="/admin/connected-systems/connectors" Color="Color.Primary" DropShadow="false">Connectors</MudButton>
-        <MudSpacer />
-        <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Href="/admin/connected-systems/new" Color="Color.Primary" DropShadow="false">Create Connected System</MudButton>
-    </MudToolBar>
-</MudPaper>
+<div class="d-flex align-center mt-3">
+    <MudButtonGroup OverrideStyles="false">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary">Connected Systems</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="/admin/connected-systems/connectors">Connectors</MudButton>
+    </MudButtonGroup>
+    <MudSpacer />
+    <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Href="/admin/connected-systems/new" Color="Color.Primary" DropShadow="false">Create Connected System</MudButton>
+</div>
 
 <MudTable Items="@_connectedSystemHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ConnectedSystemHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
     <ToolBarContent>
