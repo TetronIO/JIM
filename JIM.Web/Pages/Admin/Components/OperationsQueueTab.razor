@@ -17,7 +17,7 @@
     @if (_connectedSystemHeaders is { Count: > 0 })
     {
         <MudForm>
-            <MudGrid Class="mt-3">
+            <MudGrid>
                 <MudItem xs="12" sm="5">
                     <MudSelect T="ConnectedSystemHeader" ValueChanged="HandleConnectedSystemHeaderChangedAsync" Label="Connected System" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true" RequiredError="Please select a Connected System">
                         @foreach (var connectedSystem in _connectedSystemHeaders)
@@ -119,7 +119,7 @@
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>
-        There are no service tasks queued.
+        There are no tasks queued.
     </NoRecordsContent>
 </MudTable>
 
