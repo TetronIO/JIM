@@ -61,8 +61,8 @@ Automatically configured ports:
 | Port | Service | Auto-Open |
 |------|---------|-----------|
 | 5432 | PostgreSQL | Silent |
-| 5200 | JIM Web + API (HTTP) | Notify |
-| 5201 | JIM Web + API (HTTPS) | Open Browser |
+| 5200 | JIM Web + API (HTTP) | Silent |
+| 5201 | JIM Web + API (HTTPS) | Silent |
 
 ## 🔧 Configuration Files
 
