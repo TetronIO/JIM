@@ -1187,25 +1187,6 @@ try {
                 }
             }
 
-            # Add expression mapping for exportTimestamp
-            $exportTimestampAttr = $crossDomainUserType.attributes | Where-Object { $_.name -eq 'exportTimestamp' }
-            if ($exportTimestampAttr) {
-                $existsAlready = $existingCrossDomainMappings | Where-Object {
-                    $_.targetConnectedSystemAttributeId -eq $exportTimestampAttr.id
-                }
-                if (-not $existsAlready) {
-                    try {
-                        New-JIMSyncRuleMapping -SyncRuleId $crossDomainExportRule.id `
-                            -TargetConnectedSystemAttributeId $exportTimestampAttr.id `
-                            -Expression 'Now()' | Out-Null
-                        $crossDomainMappingsCreated++
-                    }
-                    catch {
-                        Write-Host "    ⚠ Could not create exportTimestamp expression mapping: $_" -ForegroundColor Yellow
-                    }
-                }
-            }
-
             Write-Host "  ✓ Cross-Domain export attribute mappings configured ($crossDomainMappingsCreated new)" -ForegroundColor Green
         }
 

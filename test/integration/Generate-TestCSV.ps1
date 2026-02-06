@@ -185,8 +185,7 @@ $crossDomainHeaders = @(
     "email",
     "department",
     "employeeId",
-    "company",
-    "exportTimestamp"
+    "company"
 )
 
 # Write header row only (file connector will append exports)
