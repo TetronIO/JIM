@@ -2,7 +2,7 @@
 # This compose file is reserved for optional development tools.
 # These tools are NOT included in production/release bundles.
 #
-# Currently empty - Adminer removed in favour of VS Code database extensions.
+# Currently empty.
 # This file is kept for future development tools if needed.
 #
 # Usage:

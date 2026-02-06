@@ -43,7 +43,6 @@ JIM is a container-based distributed application implementing the metaverse patt
 - **JIM.Worker** - A console app, built using .NET
 - **JIM.PowerShell** - A PowerShell module for scripting and automation
 - A database - PostgreSQL
-- A database admin website - Adminer
 
 ![JIM Containers](docs/diagrams/images/jim-structurizr-1-Containers.svg)
 

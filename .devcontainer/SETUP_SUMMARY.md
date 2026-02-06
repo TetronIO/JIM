@@ -14,7 +14,7 @@ Your JIM development environment is now fully configured for GitHub Codespaces!
   - PowerShell extension
   - JSON Crack extension
   - 20+ useful VS Code extensions
-  - Port forwarding (PostgreSQL, Adminer, Web, API)
+  - Port forwarding (PostgreSQL, Web, API)
 
 - **[.devcontainer/setup.sh](.devcontainer/setup.sh)** - Automated setup script
   - Installs dotnet-ef tools
@@ -143,7 +143,6 @@ These ports are automatically forwarded:
 | Port | Service | Access |
 |------|---------|--------|
 | 5432 | PostgreSQL | `localhost:5432` |
-| 8080 | Adminer (DB UI) | `http://localhost:8080` |
 | 5000 | JIM Web (HTTP) | `http://localhost:5000` |
 | 7000 | JIM Web (HTTPS) | `https://localhost:7000` |
 | 5203 | JIM API (HTTP) | `http://localhost:5203` |

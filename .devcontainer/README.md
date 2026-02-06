@@ -61,7 +61,6 @@ Automatically configured ports:
 | Port | Service | Auto-Open |
 |------|---------|-----------|
 | 5432 | PostgreSQL | Silent |
-| 8080 | Adminer (DB UI) | Notify |
 | 5000 | JIM Web (HTTP) | Notify |
 | 7000 | JIM Web (HTTPS) | Open Browser |
 | 5203 | JIM API (HTTP) | Notify |
@@ -152,8 +151,8 @@ jim-worker         # Run background worker
 
 ### Database (Local Development)
 ```bash
-jim-db             # Start PostgreSQL + Adminer (for local debugging)
-jim-db-stop        # Stop PostgreSQL + Adminer
+jim-db             # Start PostgreSQL (for local debugging)
+jim-db-stop        # Stop PostgreSQL
 jim-db-logs        # View database logs
 jim-migrate        # Apply migrations
 jim-migration [N]  # Create new migration
@@ -161,8 +160,7 @@ jim-migration [N]  # Create new migration
 
 ### Docker Stack Management
 ```bash
-jim-stack          # Start Docker stack (production-like, no dev tools)
-jim-stack-dev      # Start Docker stack + Adminer
+jim-stack          # Start Docker stack (production-like)
 jim-stack-logs     # View all Docker service logs
 jim-stack-down     # Stop all Docker services
 ```
@@ -209,7 +207,6 @@ JIM supports two different development workflows. Choose the one that fits your 
 
 **Services run at:**
 - Database: `localhost:5432`
-- Adminer: `http://localhost:8080`
 - JIM Web: `https://localhost:7000`
 - JIM API: `https://localhost:7203`
 
@@ -228,7 +225,6 @@ JIM supports two different development workflows. Choose the one that fits your 
 
 **Services run at:**
 - Database: Internal (container network)
-- Adminer: `http://localhost:8080`
 - JIM Web: `http://localhost:5200`
 - JIM API: `http://localhost:5202`
 
@@ -383,7 +379,7 @@ bash .devcontainer/setup.sh
 2. **Use compound debug configs** - Debug multiple services simultaneously
 3. **Use Tasks** - `Ctrl+Shift+B` for quick builds
 4. **Use GitHub Codespaces secrets** - Keep sensitive data secure
-5. **Use Adminer** - Visual database management at localhost:8080
+5. **Use VS Code PostgreSQL extension** - Visual database management built-in
 6. **Check setup logs** - If something fails, setup.sh shows helpful output
 
 ---

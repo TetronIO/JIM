@@ -619,9 +619,9 @@ var systems = await jim.ConnectedSystems.GetAllAsync();
 4. Services: Web + API (https://localhost:7000), Swagger at `/api/swagger`
 
 **Workflow 2 - Full Docker Stack:**
-1. Start all services: `jim-stack` (or `jim-stack-dev` for Adminer)
+1. Start all services: `jim-stack`
 2. Access containerized services
-3. Services: Web + API (http://localhost:5200), Swagger at `/api/swagger`, Adminer at http://localhost:8080 (if using jim-stack-dev)
+3. Services: Web + API (http://localhost:5200), Swagger at `/api/swagger`
 
 **Use Workflow 1** for active development and debugging.
 **Use Workflow 2** for integration testing or production-like environment.
