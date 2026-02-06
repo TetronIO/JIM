@@ -208,6 +208,11 @@ public class SyncExportTaskProcessor
             if (exportItem.ConnectedSystemObject != null)
             {
                 executionItem.ConnectedSystemObject = exportItem.ConnectedSystemObject;
+
+                // Snapshot the external ID for durability - ensures the RPEI retains the
+                // external ID even if the CSO is later deleted via FK cascade
+                executionItem.ExternalIdSnapshot = exportItem.ConnectedSystemObject
+                    .ExternalIdAttributeValue?.ToStringNoName();
             }
 
             // Set error information if the export failed

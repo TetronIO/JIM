@@ -41,8 +41,6 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     private const string SettingDelimiter = "Delimiter";
     private const string SettingStopOnFirstError = "Stop On First Error";
     private const string SettingMultiValueDelimiter = "Multi-Value Delimiter";
-    private const string SettingIncludeFullState = "Include Full State";
-
     // Mode values
     private const string ModeImportOnly = "Import Only";
     private const string ModeExportOnly = "Export Only";
@@ -71,9 +69,6 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
             // Import-specific settings
             new() { Name = SettingStopOnFirstError, Required = false, Description = "Stop processing the file when the first error is encountered. Useful for debugging data quality issues without generating large numbers of errors.", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.CheckBox },
-
-            // Export-specific settings
-            new() { Name = SettingIncludeFullState, Required = false, Description = "Include all attribute values in exports, not just changed attributes.", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.CheckBox },
 
             // Format settings
             new() { Name = SettingDelimiter, Required = false, Description = "What character to use as the delimiter?", DefaultStringValue = ",", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.String },
