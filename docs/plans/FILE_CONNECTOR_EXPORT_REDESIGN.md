@@ -1,6 +1,6 @@
 # Plan: FileConnector Export Redesign + Related Fixes
 
-- **Status:** In Progress
+- **Status:** Complete
 - **Milestone:** MVP
 - **Branch:** `feature/scheduler-service-168`
 
@@ -107,8 +107,7 @@ Full test suite covering:
 
 ## Remaining Steps
 
-1. **Build and test**: `dotnet build JIM.sln && dotnet test JIM.sln`
-2. **Commit** all changes
+All steps complete. Verified with Scenario 1 integration test (Small template).
 
 ## Files Modified
 

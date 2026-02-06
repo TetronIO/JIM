@@ -55,6 +55,7 @@ public class ActivityRepository : IActivityRepository
             pageSize = 100;
 
         var query = Repository.Database.Activities
+            .AsNoTracking()
             .Where(a => a.ParentActivityId == null)
             .AsQueryable();
 
@@ -275,6 +276,7 @@ public class ActivityRepository : IActivityRepository
         };
 
         return Repository.Database.Activities
+            .AsNoTracking()
             .Where(a => a.ParentActivityId == null)
             .Where(a => workerTaskTargetTypes.Contains(a.TargetType) && workerTaskOperations.Contains(a.TargetOperationType))
             .AsQueryable();
