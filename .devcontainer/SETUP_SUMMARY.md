@@ -29,8 +29,7 @@ Your JIM development environment is now fully configured for GitHub Codespaces!
 
 ### VS Code Configuration
 - **[.vscode/launch.json](.vscode/launch.json)** - Debugging configurations
-  - Debug JIM Web (Blazor)
-  - Debug JIM API
+  - Debug JIM Web (Blazor UI + REST API at `/api/`)
   - Debug JIM Worker
   - Debug JIM Scheduler
   - **Compound configs** for debugging multiple services
@@ -130,9 +129,8 @@ jim-migration [N]  # Create migration
 ### Running in Debug Mode
 1. Open Debug panel (`Ctrl+Shift+D`)
 2. Select configuration:
-   - "JIM Web (Blazor)" - Debug web app
-   - "JIM API" - Debug API
-   - "JIM Full Stack" - Debug Web + API + Worker simultaneously
+   - "JIM Web" - Debug web app and API (API served at `/api/`)
+   - "JIM Full Stack" - Debug Web + Worker simultaneously
 3. Press `F5`
 4. Set breakpoints and debug!
 
@@ -143,10 +141,8 @@ These ports are automatically forwarded:
 | Port | Service | Access |
 |------|---------|--------|
 | 5432 | PostgreSQL | `localhost:5432` |
-| 5000 | JIM Web (HTTP) | `http://localhost:5000` |
-| 7000 | JIM Web (HTTPS) | `https://localhost:7000` |
-| 5203 | JIM API (HTTP) | `http://localhost:5203` |
-| 7203 | JIM API (HTTPS) | `https://localhost:7203/swagger` |
+| 5200 | JIM Web + API (HTTP) | `http://localhost:5200` (API at `/api/`) |
+| 5201 | JIM Web + API (HTTPS) | `https://localhost:5201` (API at `/api/`) |
 
 Codespaces will automatically forward these and provide public URLs.
 

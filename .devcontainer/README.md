@@ -61,10 +61,8 @@ Automatically configured ports:
 | Port | Service | Auto-Open |
 |------|---------|-----------|
 | 5432 | PostgreSQL | Silent |
-| 5000 | JIM Web (HTTP) | Notify |
-| 7000 | JIM Web (HTTPS) | Open Browser |
-| 5203 | JIM API (HTTP) | Notify |
-| 7203 | JIM API (HTTPS) | Open Preview |
+| 5200 | JIM Web + API (HTTP) | Notify |
+| 5201 | JIM Web + API (HTTPS) | Open Browser |
 
 ## 🔧 Configuration Files
 
@@ -89,8 +87,7 @@ Post-creation script that:
 ### `../.vscode/launch.json`
 
 Debugging configurations for:
-- JIM Web (Blazor) - F5 to debug
-- JIM API - Debug the REST API
+- JIM Web - F5 to debug Blazor UI and REST API (served at `/api/`)
 - JIM Worker - Debug background worker
 - JIM Scheduler - Debug the scheduler
 - **Compound configs** - Debug multiple services at once
@@ -207,8 +204,7 @@ JIM supports two different development workflows. Choose the one that fits your 
 
 **Services run at:**
 - Database: `localhost:5432`
-- JIM Web: `https://localhost:7000`
-- JIM API: `https://localhost:7203`
+- JIM Web + API: `https://localhost:7000` (API at `/api/`, Swagger at `/api/swagger`)
 
 ### Workflow 2: Full Docker Stack
 
@@ -225,8 +221,7 @@ JIM supports two different development workflows. Choose the one that fits your 
 
 **Services run at:**
 - Database: Internal (container network)
-- JIM Web: `http://localhost:5200`
-- JIM API: `http://localhost:5202`
+- JIM Web + API: `http://localhost:5200` (API at `/api/`, Swagger at `/api/swagger`)
 
 **Note:** In GitHub Codespaces, the docker stack uses optimized PostgreSQL memory settings automatically via `docker-compose.override.codespaces.yml`.
 
