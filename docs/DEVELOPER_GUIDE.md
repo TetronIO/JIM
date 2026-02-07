@@ -655,6 +655,28 @@ docker compose build
 docker compose up -d
 ```
 
+### Dependency Pinning
+
+All production Dockerfiles pin their dependencies for reproducible, auditable builds:
+
+- **Base image digests**: Each `FROM` line includes a `@sha256:` digest, locking the exact OS + runtime layer. This prevents builds on different dates producing different images.
+- **Functional apt packages**: Libraries that JIM calls at runtime (libldap, cifs-utils) are pinned to exact versions (e.g., `libldap-2.5-0=2.5.13+dfsg-5`).
+- **Diagnostic utilities**: Tools like `curl` and `iputils-ping` are not pinned, as they are only used for health checks and debugging, not functional code paths.
+
+**Why this matters**: `System.DirectoryServices.Protocols` (the .NET LDAP client) P/Invokes into the native `libldap` shared library at runtime. An incompatible libldap version could cause silent behavioural differences or crashes during LDAP/AD operations.
+
+**Dependabot** monitors for base image digest updates weekly and opens PRs. These PRs are excluded from auto-merge because they require manual verification:
+
+1. Check if apt package versions need updating against the new base image
+2. Run integration tests (especially LDAP connector tests) against the updated image
+3. Update pinned versions in the Dockerfile if they have changed
+
+To check available package versions in a new base image:
+```bash
+docker run --rm <image>@<new-digest> bash -c \
+  "apt-get update -qq && apt-cache policy libldap-common libldap-2.5-0 cifs-utils"
+```
+
 ### Migrations
 Apply migrations on first run:
 ```bash

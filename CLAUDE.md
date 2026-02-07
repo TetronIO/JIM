@@ -172,6 +172,14 @@ When running the Docker stack and you make code changes to JIM.Web, JIM.Worker, 
 
 Blazor pages, API controllers, and other compiled code require container rebuilds. Simply refreshing the browser will not show changes.
 
+**IMPORTANT - Docker Dependency Pinning:**
+Production Dockerfiles pin base image digests (`@sha256:...`) and functional apt package versions for reproducible builds. When modifying Dockerfiles:
+- **NEVER** remove the `@sha256:` digest from `FROM` lines
+- **NEVER** remove version pins from functional apt packages (libldap, cifs-utils)
+- Diagnostic utilities (curl, iputils-ping) are intentionally unpinned
+- If updating a base image digest, check and update pinned apt versions to match (see `docs/DEVELOPER_GUIDE.md` "Dependency Pinning" section)
+- Dependabot manages digest updates via weekly PRs - these require manual review, not auto-merge
+
 ## Key Project Locations
 
 **Where to add:**

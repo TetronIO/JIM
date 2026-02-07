@@ -67,26 +67,33 @@ git push origin main --tags
 
 ### Steps
 
-1. **Update the changelog**: Move items from `[Unreleased]` to a new version section in `CHANGELOG.md`
+1. **Review pinned Docker dependencies**: Check that base image digests and apt package versions are up to date. If Dependabot PRs for Docker digests have been merged since the last release, verify the pinned apt versions still match. If not, update them:
+   ```bash
+   # Check available versions in the current base image
+   docker run --rm mcr.microsoft.com/dotnet/aspnet:9.0@sha256:<current-digest> bash -c \
+     "apt-get update -qq && apt-cache policy libldap-common libldap-2.5-0 cifs-utils"
+   ```
 
-2. **Update the version**: Edit the `VERSION` file
+2. **Update the changelog**: Move items from `[Unreleased]` to a new version section in `CHANGELOG.md`
 
-3. **Commit changes**:
+3. **Update the version**: Edit the `VERSION` file
+
+4. **Commit changes**:
    ```bash
    git add VERSION CHANGELOG.md
    git commit -m "Release v0.3.0"
    git push origin main
    ```
 
-4. **Create the release tag**:
+5. **Create the release tag**:
    ```bash
    git tag v0.3.0
    git push origin v0.3.0
    ```
 
-5. **Monitor the workflow**: The release workflow will run automatically. Check the Actions tab for progress.
+6. **Monitor the workflow**: The release workflow will run automatically. Check the Actions tab for progress.
 
-6. **Verify the release**: Once complete, verify:
+7. **Verify the release**: Once complete, verify:
    - GitHub Release page has the bundle and checksums
    - Docker images are available at `ghcr.io/tetronio/jim-web:0.3.0` (etc.)
    - PowerShell module is available on PSGallery
