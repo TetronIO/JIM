@@ -617,7 +617,7 @@ html[lang] .mud-dialog .mud-paper-outlined {
 }
 
 .jim-attribute-table thead tr th {
-    background-color: var(--mud-palette-background-grey);
+    background-color: var(--jim-inner-surface, var(--mud-palette-background-grey));
     font-weight: 500;
     font-size: 0.875rem;
     padding: 12px 16px !important;
@@ -648,7 +648,7 @@ html[lang] .mud-dialog .mud-paper-outlined {
 }
 
 .jim-attr-name {
-    background-color: var(--mud-palette-background);
+    background-color: var(--jim-attr-name-bg, var(--mud-palette-background-grey));
     white-space: nowrap;
 }
 

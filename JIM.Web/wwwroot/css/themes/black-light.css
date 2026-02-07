@@ -69,6 +69,9 @@ html[lang] {
     --mud-palette-table-striped: rgba(0, 0, 0, 0.02);
     --mud-palette-table-hover: rgba(42, 109, 217, 0.04);
 
+    /* === JIM Custom: Attribute table name column === */
+    --jim-attr-name-bg: #eaeaec;
+
     /* === JIM Custom: JSON Syntax Highlighting === */
     --jim-json-key: #1a5ea0;
     --jim-json-string: #a31515;
