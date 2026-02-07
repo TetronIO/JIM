@@ -88,6 +88,11 @@
                 <MudText Typo="Typo.button">Stats</MudText>
             </MudTh>
             <MudTh>
+                <MudTableSortLabel SortLabel="initiatedby" T="Activity">
+                    <MudText Typo="Typo.button">Initiated By</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
                 <MudTableSortLabel SortLabel="status" T="Activity">
                     <MudText Typo="Typo.button">Status</MudText>
                 </MudTableSortLabel>
@@ -100,11 +105,6 @@
             <MudTh>
                 <MudTableSortLabel SortLabel="executiontime" T="Activity">
                     <MudText Typo="Typo.button">Duration</MudText>
-                </MudTableSortLabel>
-            </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortLabel="initiatedby" T="Activity">
-                    <MudText Typo="Typo.button">Initiated By</MudText>
                 </MudTableSortLabel>
             </MudTh>
         </HeaderContent>
@@ -197,6 +197,27 @@
                     <MudProgressLinear Indeterminate="true" Color="Color.Primary" Style="width: 80px;" />
                 }
             </MudTd>
+            <MudTd DataLabel="Initiated By">
+                @if (context.InitiatedByType == ActivityInitiatorType.User && context.InitiatedById != null)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" Style="vertical-align: middle;" />
+                    <span>@context.InitiatedByName</span>
+                }
+                else if (context.InitiatedByType == ActivityInitiatorType.ApiKey)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" Style="vertical-align: middle;" />
+                    <span>@context.InitiatedByName</span>
+                }
+                else if (context.InitiatedByType == ActivityInitiatorType.System)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" Style="vertical-align: middle;" />
+                    <span>@(context.InitiatedByName ?? "Scheduler")</span>
+                }
+                else if (!string.IsNullOrEmpty(context.InitiatedByName))
+                {
+                    <span>@context.InitiatedByName</span>
+                }
+            </MudTd>
             <MudTd DataLabel="Status">
                 <MudChip T="string" Variant="Variant.Text"
                          Color="Helpers.GetActivityMudBlazorColorForStatus(context.Status)">
@@ -220,27 +241,6 @@
                 else
                 {
                     <MudText Typo="Typo.body2" Class="mud-text-disabled">-</MudText>
-                }
-            </MudTd>
-            <MudTd DataLabel="Initiated By">
-                @if (context.InitiatedByType == ActivityInitiatorType.User && context.InitiatedById != null)
-                {
-                    <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" Style="vertical-align: middle;" />
-                    <span>@context.InitiatedByName</span>
-                }
-                else if (context.InitiatedByType == ActivityInitiatorType.ApiKey)
-                {
-                    <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" Style="vertical-align: middle;" />
-                    <span>@context.InitiatedByName</span>
-                }
-                else if (context.InitiatedByType == ActivityInitiatorType.System)
-                {
-                    <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" Style="vertical-align: middle;" />
-                    <span>@(context.InitiatedByName ?? "Scheduler")</span>
-                }
-                else if (!string.IsNullOrEmpty(context.InitiatedByName))
-                {
-                    <span>@context.InitiatedByName</span>
                 }
             </MudTd>
         </RowTemplate>
