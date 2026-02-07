@@ -3,7 +3,7 @@
  *
  * A neutral dark theme using exact colours from a modern SaaS dashboard.
  * Cool greys without purple tint — clean, industrial, and high-contrast.
- * The sidebar uses the first-tier box colour (#121315) to sit flush
+ * The sidebar uses the first-tier box colour (#17181a) to sit flush
  * with content-area cards, creating a cohesive panel layout.
  *
  * We use html[lang] instead of :root so that these declarations have
@@ -30,7 +30,7 @@ html[lang] {
 
     /* === Background & Surface (exact screenshot colours) === */
     --mud-palette-background: #1e1f23;
-    --mud-palette-surface: #121315;
+    --mud-palette-surface: #17181a;
     --mud-palette-background-grey: rgba(255, 255, 255, 0.03);
 
     /* === Inner Surface (second-tier box from screenshot: #05090a) === */
@@ -38,7 +38,7 @@ html[lang] {
     --jim-inner-border-color: #2a2b2f;
 
     /* === Drawer (first-tier box colour, flush with content cards) === */
-    --mud-palette-drawer-background: #121315;
+    --mud-palette-drawer-background: #17181a;
     --mud-palette-drawer-text: #b0b2b8;
     --mud-palette-drawer-icon: #6a6c74;
 

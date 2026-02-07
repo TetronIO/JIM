@@ -43,7 +43,7 @@ html[lang] {
     --jim-inner-border-color: rgba(42, 42, 48, 0.22);
 
     /* === Drawer (dark sidebar - shared with dark variant) === */
-    --mud-palette-drawer-background: #121315;
+    --mud-palette-drawer-background: #17181a;
     --mud-palette-drawer-text: #b0b2b8;
     --mud-palette-drawer-icon: #6a6c74;
 
