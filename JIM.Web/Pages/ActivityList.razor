@@ -53,11 +53,6 @@
             </MudTableSortLabel>
         </MudTh>
         <MudTh>
-            <MudTableSortLabel SortLabel="created" T="Activity" InitialDirection="SortDirection.Descending">
-                <MudText Typo="Typo.button">Created</MudText>
-            </MudTableSortLabel>
-        </MudTh>
-        <MudTh>
             <MudTableSortLabel SortLabel="initiatedby" T="Activity">
                 <MudText Typo="Typo.button">Initiated By</MudText>
             </MudTableSortLabel>
@@ -65,6 +60,11 @@
         <MudTh>
             <MudTableSortLabel SortLabel="status" T="Activity">
                 <MudText Typo="Typo.button">Status</MudText>
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>
+            <MudTableSortLabel SortLabel="created" T="Activity" InitialDirection="SortDirection.Descending">
+                <MudText Typo="Typo.button">Created</MudText>
             </MudTableSortLabel>
         </MudTh>
         <MudTh>
@@ -231,11 +231,6 @@
             }
         </MudTd>
         <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
-        <MudTd DataLabel="Created">
-            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                @context.Created.ToLocalTime().ToRelativeTime()
-            </MudTooltip>
-        </MudTd>
         <MudTd DataLabel="Initiated By">
             @{
                 if (context.InitiatedByType == ActivityInitiatorType.User)
@@ -264,6 +259,11 @@
                 Color="Helpers.GetActivityMudBlazorColorForStatus(context.Status)">
                 @context.Status.ToString().SplitOnCapitalLetters()
             </MudChip>
+        </MudTd>
+        <MudTd DataLabel="Created">
+            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                @context.Created.ToLocalTime().ToRelativeTime()
+            </MudTooltip>
         </MudTd>
         <MudTd DataLabel="Execution Time">
             @if (context.ExecutionTime.HasValue)

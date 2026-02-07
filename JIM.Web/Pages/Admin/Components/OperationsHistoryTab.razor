@@ -11,62 +11,64 @@
 
 @if (_preferencesLoaded)
 {
-    <MudText Typo="Typo.h6" Class="mb-3">Execution History</MudText>
+    <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6" Class="mb-3">Execution History</MudText>
 
-    @* Filter Controls *@
-    <MudGrid Class="mb-4">
-        <MudItem xs="12" sm="6" md="3">
-            <MudSelect T="string" Label="Connected System" Variant="Variant.Outlined"
-                       Dense="true" Clearable="true" MultiSelection="true"
-                       SelectedValues="_filterConnectedSystems"
-                       SelectedValuesChanged="OnConnectedSystemFilterChanged"
-                       MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
-                @if (_filterOptions != null)
-                {
-                    @foreach (var cs in _filterOptions.ConnectedSystems)
+        @* Filter Controls *@
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="string" Label="Connected System" Variant="Variant.Outlined"
+                           Dense="true" Clearable="true" MultiSelection="true"
+                           SelectedValues="_filterConnectedSystems"
+                           SelectedValuesChanged="OnConnectedSystemFilterChanged"
+                           MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+                    @if (_filterOptions != null)
                     {
-                        <MudSelectItem T="string" Value="@cs">@cs</MudSelectItem>
+                        @foreach (var cs in _filterOptions.ConnectedSystems)
+                        {
+                            <MudSelectItem T="string" Value="@cs">@cs</MudSelectItem>
+                        }
                     }
-                }
-            </MudSelect>
-        </MudItem>
-        <MudItem xs="12" sm="6" md="3">
-            <MudSelect T="string" Label="Run Profile" Variant="Variant.Outlined"
-                       Dense="true" Clearable="true" MultiSelection="true"
-                       SelectedValues="_filterRunProfiles"
-                       SelectedValuesChanged="OnRunProfileFilterChanged"
-                       MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
-                @if (_filterOptions != null)
-                {
-                    @foreach (var rp in _filterOptions.RunProfiles)
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="string" Label="Run Profile" Variant="Variant.Outlined"
+                           Dense="true" Clearable="true" MultiSelection="true"
+                           SelectedValues="_filterRunProfiles"
+                           SelectedValuesChanged="OnRunProfileFilterChanged"
+                           MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+                    @if (_filterOptions != null)
                     {
-                        <MudSelectItem T="string" Value="@rp">@rp</MudSelectItem>
+                        @foreach (var rp in _filterOptions.RunProfiles)
+                        {
+                            <MudSelectItem T="string" Value="@rp">@rp</MudSelectItem>
+                        }
                     }
-                }
-            </MudSelect>
-        </MudItem>
-        <MudItem xs="12" sm="6" md="3">
-            <MudSelect T="ActivityStatus" Label="Status" Variant="Variant.Outlined"
-                       Dense="true" Clearable="true" MultiSelection="true"
-                       SelectedValues="_filterStatuses"
-                       SelectedValuesChanged="OnStatusFilterChanged"
-                       MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
-                <MudSelectItem T="ActivityStatus" Value="ActivityStatus.InProgress">In Progress</MudSelectItem>
-                <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Complete">Complete</MudSelectItem>
-                <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithWarning">Complete With Warning</MudSelectItem>
-                <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithError">Complete With Error</MudSelectItem>
-                <MudSelectItem T="ActivityStatus" Value="ActivityStatus.FailedWithError">Failed With Error</MudSelectItem>
-                <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Cancelled">Cancelled</MudSelectItem>
-            </MudSelect>
-        </MudItem>
-        <MudItem xs="12" sm="6" md="3">
-            <MudTextField T="string" @bind-Value="_filterInitiatedBy" Label="Initiated By"
-                          Variant="Variant.Outlined" Clearable="true" Placeholder="Search by name..."
-                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                          Immediate="true" DebounceInterval="500"
-                          OnDebounceIntervalElapsed="OnInitiatedByFilterChanged" />
-        </MudItem>
-    </MudGrid>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="ActivityStatus" Label="Status" Variant="Variant.Outlined"
+                           Dense="true" Clearable="true" MultiSelection="true"
+                           SelectedValues="_filterStatuses"
+                           SelectedValuesChanged="OnStatusFilterChanged"
+                           MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.InProgress">In Progress</MudSelectItem>
+                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Complete">Complete</MudSelectItem>
+                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithWarning">Complete With Warning</MudSelectItem>
+                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithError">Complete With Error</MudSelectItem>
+                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.FailedWithError">Failed With Error</MudSelectItem>
+                    <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Cancelled">Cancelled</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudTextField T="string" @bind-Value="_filterInitiatedBy" Label="Initiated By"
+                              Variant="Variant.Outlined" Clearable="true" Placeholder="Search by name..."
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              Immediate="true" DebounceInterval="500"
+                              OnDebounceIntervalElapsed="OnInitiatedByFilterChanged" />
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
 
     <MudTable @ref="_table" T="Activity" ServerData="ServerReload" @bind-CurrentPage="_currentPage"
               RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged"
