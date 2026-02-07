@@ -3,7 +3,7 @@
 
 ARG VERSION=dev
 
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
+FROM mcr.microsoft.com/dotnet/aspnet:9.0@sha256:cd8732b16dbb84d3eae80753a892f9f7cf4aafe922bf466d2f62f036be558699 AS base
 
 LABEL org.opencontainers.image.title="JIM Web"
 LABEL org.opencontainers.image.description="JIM (Junctional Identity Manager) - Web and API service"
@@ -15,15 +15,19 @@ WORKDIR /app
 EXPOSE 80
 EXPOSE 443
 
+# Pin functional dependency versions for reproducible builds
+# Update these versions when bumping base image digests
 RUN apt-get update \
-    && apt-get install -y libldap-common \
-    && apt-get install -y libldap-2.5-0 \
-    && apt-get install -y cifs-utils \
-    && apt-get install -y --no-install-recommends iputils-ping \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends \
+        libldap-common=2.5.13+dfsg-5 \
+        libldap-2.5-0=2.5.13+dfsg-5 \
+        cifs-utils=2:7.0-2 \
+    && apt-get install -y --no-install-recommends \
+        iputils-ping \
+        curl \
     && rm -rf /var/lib/apt/lists/*
 
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:9.0@sha256:a574e6212c98ccf9cf2c6588201b1c71d93094f6f26c21375f75aa909a9e88f0 AS build
 WORKDIR /src
 COPY ["JIM.Web/JIM.Web.csproj", "JIM.Web/"]
 COPY ["JIM.Models/JIM.Models.csproj", "JIM.Models/"]
