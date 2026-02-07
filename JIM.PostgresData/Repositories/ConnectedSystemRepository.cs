@@ -875,7 +875,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         // Use case-insensitive comparison for string attributes (e.g., DNs which are case-insensitive in LDAP)
         var lowerAttributeValue = attributeValue.ToLowerInvariant();
-        return await Repository.Database.ConnectedSystemObjects
+        var allMatches = await Repository.Database.ConnectedSystemObjects
             .AsSplitQuery()
             .Include(cso => cso.Type)
             .ThenInclude(t => t.Attributes)
@@ -887,50 +887,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(refCso => refCso!.AttributeValues)
             .ThenInclude(refAv => refAv.Attribute)
             // Use case-insensitive comparison for string lookups (DNs, etc.)
-            .SingleOrDefaultAsync(x =>
+            .Where(x =>
                 x.ConnectedSystem.Id == connectedSystemId &&
-                x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue.ToLower() == lowerAttributeValue));
+                x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue.ToLower() == lowerAttributeValue))
+            .ToListAsync();
+
+        if (allMatches.Count > 1)
+        {
+            var csoIds = string.Join(", ", allMatches.Select(x => x.Id));
+            Log.Warning("GetConnectedSystemObjectByAttributeAsync: Found {Count} Connected System Objects with same external ID '{ExternalId}' in connected system {ConnectedSystemId}. CSO IDs: {CsoIds}. Returning first match. This indicates duplicate CSOs that should be investigated.",
+                allMatches.Count, attributeValue, connectedSystemId, csoIds);
+        }
+
+        return allMatches.FirstOrDefault();
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
     {
-        return await Repository.Database.ConnectedSystemObjects
-            .AsSplitQuery()
-            .Include(cso => cso.Type)
-            .ThenInclude(t => t.Attributes)
-            .Include(cso => cso.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            // Include resolved reference values and their attributes for delta import comparison
-            .Include(cso => cso.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(refCso => refCso!.AttributeValues)
-            .ThenInclude(refAv => refAv.Attribute)
-            .SingleOrDefaultAsync(cso =>
-                cso.ConnectedSystem.Id == connectedSystemId &&
-                cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.IntValue == attributeValue));
-    }
-
-    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, long attributeValue)
-    {
-        return await Repository.Database.ConnectedSystemObjects
-            .AsSplitQuery()
-            .Include(cso => cso.Type)
-            .ThenInclude(t => t.Attributes)
-            .Include(cso => cso.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            // Include resolved reference values and their attributes for delta import comparison
-            .Include(cso => cso.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(refCso => refCso!.AttributeValues)
-            .ThenInclude(refAv => refAv.Attribute)
-            .SingleOrDefaultAsync(cso =>
-                cso.ConnectedSystem.Id == connectedSystemId &&
-                cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.LongValue == attributeValue));
-    }
-
-    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
-    {
-        // DEBUG: Check for multiple matches (which would indicate duplicate CSOs with same external ID)
         var allMatches = await Repository.Database.ConnectedSystemObjects
             .AsSplitQuery()
             .Include(cso => cso.Type)
@@ -938,7 +911,62 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
             // Include resolved reference values and their attributes for delta import comparison
-            // This enables comparing imported reference strings against existing resolved references
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.ReferenceValue)
+            .ThenInclude(refCso => refCso!.AttributeValues)
+            .ThenInclude(refAv => refAv.Attribute)
+            .Where(cso =>
+                cso.ConnectedSystem.Id == connectedSystemId &&
+                cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.IntValue == attributeValue))
+            .ToListAsync();
+
+        if (allMatches.Count > 1)
+        {
+            var csoIds = string.Join(", ", allMatches.Select(x => x.Id));
+            Log.Warning("GetConnectedSystemObjectByAttributeAsync: Found {Count} Connected System Objects with same external ID {ExternalId} in connected system {ConnectedSystemId}. CSO IDs: {CsoIds}. Returning first match. This indicates duplicate CSOs that should be investigated.",
+                allMatches.Count, attributeValue, connectedSystemId, csoIds);
+        }
+
+        return allMatches.FirstOrDefault();
+    }
+
+    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, long attributeValue)
+    {
+        var allMatches = await Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
+            .Include(cso => cso.Type)
+            .ThenInclude(t => t.Attributes)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            // Include resolved reference values and their attributes for delta import comparison
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.ReferenceValue)
+            .ThenInclude(refCso => refCso!.AttributeValues)
+            .ThenInclude(refAv => refAv.Attribute)
+            .Where(cso =>
+                cso.ConnectedSystem.Id == connectedSystemId &&
+                cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.LongValue == attributeValue))
+            .ToListAsync();
+
+        if (allMatches.Count > 1)
+        {
+            var csoIds = string.Join(", ", allMatches.Select(x => x.Id));
+            Log.Warning("GetConnectedSystemObjectByAttributeAsync: Found {Count} Connected System Objects with same external ID {ExternalId} in connected system {ConnectedSystemId}. CSO IDs: {CsoIds}. Returning first match. This indicates duplicate CSOs that should be investigated.",
+                allMatches.Count, attributeValue, connectedSystemId, csoIds);
+        }
+
+        return allMatches.FirstOrDefault();
+    }
+
+    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
+    {
+        var allMatches = await Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
+            .Include(cso => cso.Type)
+            .ThenInclude(t => t.Attributes)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            // Include resolved reference values and their attributes for delta import comparison
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.ReferenceValue)
             .ThenInclude(refCso => refCso!.AttributeValues)
@@ -950,28 +978,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         if (allMatches.Count > 1)
         {
-            // Multiple CSOs with same external ID found - this indicates duplicate CSOs from previous imports
-            // Log warning and return the first one (this is a workaround until duplicates are cleaned)
             var csoIds = string.Join(", ", allMatches.Select(x => x.Id));
-            Log.Warning("GetConnectedSystemObjectByAttributeAsync: Found {Count} Connected System Objects with same external ID {ExternalId} in connected system {ConnectedSystemId}. CSO IDs: {CsoIds}. Returning first match. This indicates duplicate CSOs that should be cleaned.",
+            Log.Warning("GetConnectedSystemObjectByAttributeAsync: Found {Count} Connected System Objects with same external ID {ExternalId} in connected system {ConnectedSystemId}. CSO IDs: {CsoIds}. Returning first match. This indicates duplicate CSOs that should be investigated.",
                 allMatches.Count, attributeValue, connectedSystemId, csoIds);
         }
 
-        var result = allMatches.FirstOrDefault();
-
-        if (result == null)
-        {
-            // Log details to help debug CSO lookup failures
-            Log.Verbose("GetConnectedSystemObjectByAttributeAsync: No CSO found for ConnectedSystemId={ConnectedSystemId}, AttributeId={AttributeId}, GuidValue={GuidValue}",
-                connectedSystemId, connectedSystemAttributeId, attributeValue);
-        }
-        else
-        {
-            Log.Verbose("GetConnectedSystemObjectByAttributeAsync: Found CSO {CsoId} for ConnectedSystemId={ConnectedSystemId}, AttributeId={AttributeId}, GuidValue={GuidValue}",
-                result.Id, connectedSystemId, connectedSystemAttributeId, attributeValue);
-        }
-
-        return result;
+        return allMatches.FirstOrDefault();
     }
 
     /// <summary>
