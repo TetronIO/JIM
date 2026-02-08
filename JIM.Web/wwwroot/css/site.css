@@ -174,15 +174,10 @@ html[lang] .mud-paper .mud-card::after {
     border-radius: 8px !important;
 }
 
-/* The tabbar inside rounded outlined tabs (mud-tabs-tabbar.mud-tabs-rounded.mud-paper-outlined)
-   needs top radii to match the container and zero bottom radii where it meets the panels.
-   Clip overflow so the first/last tab's active highlight respects the rounded corners.
-   Inner elements also need clipping since they sit between the border and the tabs. */
+/* Ensure the rounded outlined tabbar uses our 8px radius on all corners and clips
+   child content so tab highlights respect the rounded shape. */
 html[lang] .mud-tabs-tabbar.mud-tabs-rounded.mud-paper-outlined {
-    border-top-left-radius: 8px !important;
-    border-top-right-radius: 8px !important;
-    border-bottom-left-radius: 0 !important;
-    border-bottom-right-radius: 0 !important;
+    border-radius: 8px !important;
     overflow: hidden;
 }
 
