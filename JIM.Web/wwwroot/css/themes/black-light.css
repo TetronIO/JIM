@@ -43,7 +43,7 @@ html[lang] {
     --mud-palette-background-grey: rgba(0, 0, 0, 0.024);
 
     /* === Inner Surface (slightly recessed for nested containers) === */
-    --jim-inner-surface: #f0f0f2;
+    --jim-inner-surface: #f7f7f9;
     --jim-inner-border-color: rgba(42, 42, 48, 0.22);
 
     /* === Drawer (dark sidebar - shared with dark variant) === */
