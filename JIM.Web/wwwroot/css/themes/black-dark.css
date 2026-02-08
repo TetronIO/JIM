@@ -66,7 +66,7 @@ html[lang] {
     /* === Table === */
     --mud-palette-table-lines: #3a3b40;
     --mud-palette-table-striped: rgba(255, 255, 255, 0.02);
-    --mud-palette-table-hover: #111213;
+    --mud-palette-table-hover: #0a0a0b;
 
     /* === JIM Custom: Attribute table name column === */
     --jim-attr-name-bg: #232425;
