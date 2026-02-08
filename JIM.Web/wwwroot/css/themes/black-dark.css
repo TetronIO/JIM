@@ -37,8 +37,8 @@ html[lang] {
     --mud-palette-surface: #17181a;
     --mud-palette-background-grey: rgba(255, 255, 255, 0.03);
 
-    /* === Inner Surface (matches surface for uniform panel look) === */
-    --jim-inner-surface: #17181a;
+    /* === Inner Surface (stepped lighter than surface for nested containers) === */
+    --jim-inner-surface: #222326;
     --jim-inner-border-color: #2a2b2f;
 
     /* === Drawer (first-tier box colour, flush with content cards) === */

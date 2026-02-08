@@ -421,6 +421,26 @@
             </MudCardContent>
         </MudCard>
     </MudItem>
+    <MudItem xs="12">
+        <MudText Typo="Typo.h6" Class="mb-3">Nested Table</MudText>
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudText Class="mb-3">Table inside a paper uses jim-inner-surface background automatically.</MudText>
+            <MudSimpleTable Outlined="true" Hover="true">
+                <thead>
+                    <tr>
+                        <th>Attribute</th>
+                        <th>Type</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>displayName</td><td>String</td><td>Alice Johnson</td></tr>
+                    <tr><td>department</td><td>String</td><td>Engineering</td></tr>
+                    <tr><td>isActive</td><td>Boolean</td><td>True</td></tr>
+                </tbody>
+            </MudSimpleTable>
+        </MudPaper>
+    </MudItem>
 </MudGrid>
 
 @* amamamamamamamamamamamamamamamamam *@
