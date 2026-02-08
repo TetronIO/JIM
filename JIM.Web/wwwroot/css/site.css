@@ -471,6 +471,12 @@ html[lang] .mud-dialog .mud-paper-outlined {
     box-shadow: none !important;
 }
 
+/* Stronger hover effect for outlined and text buttons in dark mode */
+.mud-theme-dark .mud-button-outlined:hover,
+.mud-theme-dark .mud-button-text:hover {
+    background-color: rgba(255, 255, 255, 0.12) !important;
+}
+
 /* Schema refresh results alert - position close icon in top right */
 .jim-alert-schema-refresh {
     position: relative;
