@@ -381,72 +381,70 @@
 @* amamamamamamamamamamamamamamamamam *@
 @* Section 7: Papers and Cards *@
 @* amamamamamamamamamamamamamamamamam *@
-<MudPaper Class="pa-5 mt-5" Outlined="true" Elevation="0">
-    <MudText Typo="Typo.h5" Class="mb-4">Papers and Cards</MudText>
+<MudText Typo="Typo.h5" Class="mt-8 mb-4">Papers and Cards</MudText>
 
-    <MudGrid>
-        <MudItem xs="12" md="6">
-            <MudText Typo="Typo.h6" Class="mb-3">Outlined Paper</MudText>
-            <MudPaper Class="pa-4" Outlined="true" Elevation="0">
-                <MudText>Standard outlined paper used throughout JIM for content sections.</MudText>
+<MudGrid Class="mb-5">
+    <MudItem xs="12" md="6">
+        <MudText Typo="Typo.h6" Class="mb-3">Outlined Paper</MudText>
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudText>Standard outlined paper used throughout JIM for content sections.</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" md="6">
+        <MudText Typo="Typo.h6" Class="mb-3">Nested Inner Surface</MudText>
+        <MudPaper Class="pa-4" Outlined="true" Elevation="0">
+            <MudText Class="mb-3">Outer paper with nested container</MudText>
+            <MudPaper Class="pa-4" Outlined="true" Elevation="0" Style="background-color: var(--jim-inner-surface);">
+                Inner surface paper (jim-inner-surface)
             </MudPaper>
-        </MudItem>
-        <MudItem xs="12" md="6">
-            <MudText Typo="Typo.h6" Class="mb-3">Nested Inner Surface</MudText>
-            <MudPaper Class="pa-4" Outlined="true" Elevation="0">
-                <MudText Class="mb-3">Outer paper with nested container</MudText>
-                <MudPaper Class="pa-4" Outlined="true" Elevation="0" Style="background-color: var(--jim-inner-surface);">
-                    Inner surface paper (jim-inner-surface)
-                </MudPaper>
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" md="6">
-            <MudText Typo="Typo.h6" Class="mb-3">Danger Zone Paper</MudText>
-            <MudPaper Class="pa-4 jim-paper-danger-zone">
-                <MudText Typo="Typo.h6" Class="mb-3">Danger Zone</MudText>
-                <MudText Class="mb-3">Irreversible actions with a red border for visual emphasis.</MudText>
-                <MudButton Variant="Variant.Filled" Color="Color.Error" DropShadow="false">Delete</MudButton>
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" md="6">
-            <MudText Typo="Typo.h6" Class="mb-3">Card</MudText>
-            <MudCard Outlined="true">
-                <MudCardHeader>
-                    <CardHeaderContent>
-                        <MudText Typo="Typo.h6">Card Header</MudText>
-                    </CardHeaderContent>
-                </MudCardHeader>
-                <MudCardContent>
-                    <MudText>Card content used for grouped information display.</MudText>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">Secondary detail text within the card.</MudText>
-                </MudCardContent>
-            </MudCard>
-        </MudItem>
-    </MudGrid>
-</MudPaper>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" md="6">
+        <MudText Typo="Typo.h6" Class="mb-3">Danger Zone Paper</MudText>
+        <MudPaper Class="pa-4 jim-paper-danger-zone">
+            <MudText Typo="Typo.h6" Class="mb-3">Danger Zone</MudText>
+            <MudText Class="mb-3">Irreversible actions with a red border for visual emphasis.</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Error" DropShadow="false">Delete</MudButton>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" md="6">
+        <MudText Typo="Typo.h6" Class="mb-3">Card</MudText>
+        <MudCard Outlined="true">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Card Header</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudText>Card content used for grouped information display.</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">Secondary detail text within the card.</MudText>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
 
 @* amamamamamamamamamamamamamamamamam *@
 @* Section 8: Navigation Components *@
 @* amamamamamamamamamamamamamamamamam *@
+<MudText Typo="Typo.h5" Class="mt-8 mb-4">Navigation Components</MudText>
+
+<MudText Typo="Typo.h6" Class="mb-3">Tabs</MudText>
+<MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" PanelClass="pt-5" Class="mb-5">
+    <MudTabPanel Text="Details">
+        <MudText>Details tab panel content.</MudText>
+    </MudTabPanel>
+    <MudTabPanel Text="Settings">
+        <MudText>Settings tab panel content.</MudText>
+    </MudTabPanel>
+    <MudTabPanel Text="Schema" Icon="@Icons.Material.Filled.Schema">
+        <MudText>Tab with icon — schema panel content.</MudText>
+    </MudTabPanel>
+    <MudTabPanel Text="Danger Zone" Icon="@Icons.Material.Filled.Warning" ID="@("danger-zone")">
+        <MudText>Danger zone tab — turns red when active.</MudText>
+    </MudTabPanel>
+</MudTabs>
+
 <MudPaper Class="pa-5 mt-5" Outlined="true" Elevation="0">
-    <MudText Typo="Typo.h5" Class="mb-4">Navigation Components</MudText>
-
-    <MudText Typo="Typo.h6" Class="mb-3">Tabs</MudText>
-    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" PanelClass="pt-5" Class="mb-5">
-        <MudTabPanel Text="Details">
-            <MudText>Details tab panel content.</MudText>
-        </MudTabPanel>
-        <MudTabPanel Text="Settings">
-            <MudText>Settings tab panel content.</MudText>
-        </MudTabPanel>
-        <MudTabPanel Text="Schema" Icon="@Icons.Material.Filled.Schema">
-            <MudText>Tab with icon — schema panel content.</MudText>
-        </MudTabPanel>
-        <MudTabPanel Text="Danger Zone" Icon="@Icons.Material.Filled.Warning" ID="@("danger-zone")">
-            <MudText>Danger zone tab — turns red when active.</MudText>
-        </MudTabPanel>
-    </MudTabs>
-
     <MudText Typo="Typo.h6" Class="mb-3">Links</MudText>
     <MudStack Row="true" Spacing="4" Class="mb-5" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
         <MudLink Href="#">Standard link</MudLink>
