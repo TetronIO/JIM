@@ -168,6 +168,12 @@ html[lang] .mud-paper .mud-card::after {
     border-right-color: var(--jim-inner-surface, var(--mud-palette-surface)) !important;
 }
 
+/* Match the tabs container radius to our 8px standard and clip child content so
+   the first/last tab's active highlight doesn't overflow the rounded corners. */
+.mud-tabs-rounded {
+    border-radius: 8px !important;
+}
+
 /* Strengthen tab bar separator line to match container borders */
 html[lang] .mud-tabs-tabbar.mud-tabs-border-bottom {
     border-top-color: var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
