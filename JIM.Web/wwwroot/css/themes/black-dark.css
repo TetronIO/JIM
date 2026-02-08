@@ -17,15 +17,15 @@ html[lang] {
     --mud-palette-primary-darken: #3070ee;
     --mud-palette-primary-lighten: #66a0ff;
     --mud-palette-primary-text: #ffffffff;
-    --mud-palette-secondary: #4488ff;
-    --mud-palette-secondary-text: #ffffffff;
+    --mud-palette-secondary: #b0bec5;
+    --mud-palette-secondary-text: #000000dd;
 
-    /* === Tertiary Palette (teal for CS indicators — WCAG AA accessible) === */
-    --mud-palette-tertiary: #00796B;
-    --mud-palette-tertiary-text: #ffffffff;
+    /* === Tertiary Palette (brighter teal for visibility on dark backgrounds) === */
+    --mud-palette-tertiary: #26a69a;
+    --mud-palette-tertiary-text: #000000dd;
 
-    /* === Status Colours (darker shades for dark mode with white text) === */
-    --mud-palette-success: #1b7d3e;
+    /* === Status Colours === */
+    --mud-palette-success: #4caf50;
     --mud-palette-success-text: #ffffffff;
 
     /* === Background & Surface (exact screenshot colours) === */
