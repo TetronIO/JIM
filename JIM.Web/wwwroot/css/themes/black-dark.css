@@ -18,10 +18,14 @@ html[lang] {
     --mud-palette-primary-lighten: #66a0ff;
     --mud-palette-primary-text: #ffffffff;
     --mud-palette-secondary: #b0bec5;
+    --mud-palette-secondary-darken: #90a4ae;
+    --mud-palette-secondary-lighten: #cfd8dc;
     --mud-palette-secondary-text: #000000dd;
 
     /* === Tertiary Palette (brighter teal for visibility on dark backgrounds) === */
     --mud-palette-tertiary: #26a69a;
+    --mud-palette-tertiary-darken: #00897b;
+    --mud-palette-tertiary-lighten: #4db6ac;
     --mud-palette-tertiary-text: #000000dd;
 
     /* === Status Colours === */
