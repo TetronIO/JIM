@@ -61,6 +61,7 @@ public class TaskingRepository : ITaskingRepository
     {
         var workerTaskHeaders = new List<WorkerTaskHeader>();
         var workerTasks = await Repository.Database.WorkerTasks
+            .AsNoTracking()
             .Include(st => st.Activity)
             .OrderByDescending(q => q.Timestamp)
             .ToListAsync();
