@@ -590,6 +590,29 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 1. **Local Debugging** (Recommended): Use `jim-db` to start database, then F5 to debug services locally
 2. **Full Stack**: Use `jim-stack` to run all services in containers
 
+**Git Configuration**:
+
+VS Code automatically copies your host machine's `~/.gitconfig` into devcontainers (controlled by the `dev.containers.copyGitConfig` setting, enabled by default). This means you should configure Git on your **host machine** and it will be available in all devcontainers automatically.
+
+Required setup on your **host machine** (one-time):
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "your@email.com"
+```
+
+Optional - SSH commit signing (recommended):
+```bash
+git config --global gpg.format ssh
+git config --global commit.gpgsign true
+git config --global user.signingkey "key::ssh-ed25519 AAAA... your-comment"
+```
+
+Notes:
+- Use the `key::` prefix for `user.signingkey` so the key is stored as a literal string rather than a file path (file paths from the host won't exist inside the container)
+- VS Code automatically forwards the SSH agent into the container, so SSH authentication for `git push`/`pull` works without copying keys
+- VS Code also injects a credential helper that forwards HTTPS credential requests back to the host
+- If `user.name` or `user.email` are missing in the container, it means they are not set on your host - configure them there, then rebuild the container
+
 **Technical Details**:
 - PostgreSQL memory settings automatically optimised for Codespaces constraints
 - Port forwarding configured for Web + API (5200)
@@ -1064,6 +1087,6 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 
 ---
 
-**Last Updated**: 2025-12-23
-**Version**: 1.3
+**Last Updated**: 2026-02-09
+**Version**: 1.4
 **Applies to**: JIM v1.x (NET 9.0)
