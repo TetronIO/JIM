@@ -57,8 +57,8 @@ html[lang] {
     --mud-palette-background-grey: rgba(255, 255, 255, 0.03);
 
     /* === Inner Surface (nested containers) === */
-    --jim-inner-surface: #1c2a3c;
-    --jim-inner-border-color: #243348;
+    --jim-inner-surface: #192636;
+    --jim-inner-border-color: #1f2e42;
 
     /* === Drawer (blended — same as page background) === */
     --mud-palette-drawer-background: #121b29;
