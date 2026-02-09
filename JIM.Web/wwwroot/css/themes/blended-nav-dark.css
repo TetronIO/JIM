@@ -4,9 +4,9 @@
  * The dark counterpart to blended-nav-light. The navigation sidebar
  * shares the same background as the page, creating a seamless layout
  * with no visual border between nav and content. Very dark palette
- * with purple primary accent.
+ * with blue primary accent.
  *
- * Depth model (from reference):
+ * Depth model:
  *   Page background:    #121314
  *   Container surface:  #151617
  *   Nested containers:  #222325
@@ -17,27 +17,42 @@
  */
 
 html[lang] {
-    /* === Primary Palette (JIM purple — vivid for dark backgrounds) === */
+    /* === Primary Palette === */
     --mud-palette-primary: #4488ff;
     --mud-palette-primary-rgb: 68,136,255;
     --mud-palette-primary-darken: #3070ee;
     --mud-palette-primary-lighten: #66a0ff;
     --mud-palette-primary-text: #ffffffff;
+
+    /* === Secondary Palette === */
     --mud-palette-secondary: #4488ff;
     --mud-palette-secondary-rgb: 68,136,255;
+    --mud-palette-secondary-darken: #3070ee;
+    --mud-palette-secondary-lighten: #66a0ff;
     --mud-palette-secondary-text: #ffffffff;
 
-    /* === Tertiary Palette (teal for CS indicators — WCAG AA accessible) === */
+    /* === Tertiary Palette === */
     --mud-palette-tertiary: #00796B;
     --mud-palette-tertiary-rgb: 0,121,107;
+    --mud-palette-tertiary-darken: #00695c;
+    --mud-palette-tertiary-lighten: #26a69a;
     --mud-palette-tertiary-text: #ffffffff;
 
-    /* === Status Colours (darker shades for dark mode with white text) === */
+    /* === Semantic Colours (brighter shades for dark backgrounds) === */
     --mud-palette-success: #1b7d3e;
     --mud-palette-success-rgb: 27,125,62;
     --mud-palette-success-text: #ffffffff;
+    --mud-palette-warning: #ffb74d;
+    --mud-palette-warning-rgb: 255,183,77;
+    --mud-palette-warning-text: #000000dd;
+    --mud-palette-info: #64b5f6;
+    --mud-palette-info-rgb: 100,181,246;
+    --mud-palette-info-text: #000000dd;
+    --mud-palette-error: #ff8a80;
+    --mud-palette-error-rgb: 255,138,128;
+    --mud-palette-error-text: #000000dd;
 
-    /* === Background & Surface (from reference screenshot) === */
+    /* === Background & Surface === */
     --mud-palette-background: #121314;
     --mud-palette-surface: #151617;
     --mud-palette-background-grey: rgba(255, 255, 255, 0.03);
@@ -73,12 +88,15 @@ html[lang] {
     --mud-palette-table-striped: rgba(255, 255, 255, 0.02);
     --mud-palette-table-hover: #222325;
 
+    /* === JIM Custom: Attribute table name column === */
+    --jim-attr-name-bg: #1a1b1d;
+
     /* === JIM Custom: JSON Syntax Highlighting === */
-    --jim-json-key: #b8a0e8;        /* Soft purple */
-    --jim-json-string: #a5d6a7;     /* Soft green */
-    --jim-json-number: #ffb74d;     /* Warm amber */
-    --jim-json-boolean: #64b5f6;    /* Light blue */
-    --jim-json-null: #ff8a80;       /* Soft coral */
+    --jim-json-key: #b8a0e8;
+    --jim-json-string: #a5d6a7;
+    --jim-json-number: #ffb74d;
+    --jim-json-boolean: #64b5f6;
+    --jim-json-null: #ff8a80;
 
     /* === JIM Custom: Navigation === */
     --jim-nav-top-level-color: #b0b2b8;
@@ -98,8 +116,6 @@ html[lang] {
 
     /* === JIM Custom: Content Links === */
     --jim-link-color: #4488ff;
-
-    /* === JIM Custom: Link Hover (matches nav active text) === */
     --jim-link-hover-color: #f0f0f4;
 
     /* === JIM Custom: Logo text === */

@@ -18,25 +18,36 @@ html[lang] {
     --mud-palette-primary-darken: #3070ee;
     --mud-palette-primary-lighten: #66a0ff;
     --mud-palette-primary-text: #ffffffff;
+
+    /* === Secondary Palette === */
     --mud-palette-secondary: #b0bec5;
     --mud-palette-secondary-rgb: 176,190,197;
     --mud-palette-secondary-darken: #90a4ae;
     --mud-palette-secondary-lighten: #cfd8dc;
     --mud-palette-secondary-text: #000000dd;
 
-    /* === Tertiary Palette (brighter teal for visibility on dark backgrounds) === */
+    /* === Tertiary Palette === */
     --mud-palette-tertiary: #26a69a;
     --mud-palette-tertiary-rgb: 38,166,154;
     --mud-palette-tertiary-darken: #00897b;
     --mud-palette-tertiary-lighten: #4db6ac;
     --mud-palette-tertiary-text: #000000dd;
 
-    /* === Status Colours === */
+    /* === Semantic Colours (brighter shades for dark backgrounds) === */
     --mud-palette-success: #4caf50;
     --mud-palette-success-rgb: 76,175,80;
     --mud-palette-success-text: #ffffffff;
+    --mud-palette-warning: #ffb74d;
+    --mud-palette-warning-rgb: 255,183,77;
+    --mud-palette-warning-text: #000000dd;
+    --mud-palette-info: #64b5f6;
+    --mud-palette-info-rgb: 100,181,246;
+    --mud-palette-info-text: #000000dd;
+    --mud-palette-error: #ff8a80;
+    --mud-palette-error-rgb: 255,138,128;
+    --mud-palette-error-text: #000000dd;
 
-    /* === Background & Surface (exact screenshot colours) === */
+    /* === Background & Surface === */
     --mud-palette-background: #1e1f23;
     --mud-palette-surface: #17181a;
     --mud-palette-background-grey: rgba(255, 255, 255, 0.03);
@@ -50,7 +61,7 @@ html[lang] {
     --mud-palette-drawer-text: #b0b2b8;
     --mud-palette-drawer-icon: #6a6c74;
 
-    /* === Text (neutral grey, no purple tint) === */
+    /* === Text === */
     --mud-palette-text-primary: #e4e4e8;
     --mud-palette-text-secondary: #9a9aa4;
     --mud-palette-text-disabled: #55555e;
@@ -61,7 +72,7 @@ html[lang] {
     --mud-palette-action-disabled: rgba(255, 255, 255, 0.38);
     --mud-palette-action-disabled-background: rgba(255, 255, 255, 0.10);
 
-    /* === Lines & Dividers (brightened from screenshot's #2a2b2f for visibility) === */
+    /* === Lines & Dividers === */
     --mud-palette-lines-default: #3a3b40;
     --mud-palette-lines-inputs: #4a4b52;
     --mud-palette-divider: #3a3b40;
@@ -76,15 +87,16 @@ html[lang] {
     --jim-attr-name-bg: #232425;
 
     /* === JIM Custom: JSON Syntax Highlighting === */
-    --jim-json-key: #82aaff;        /* Soft blue */
-    --jim-json-string: #a5d6a7;     /* Soft green */
-    --jim-json-number: #ffb74d;     /* Warm amber */
-    --jim-json-boolean: #4dd0e1;    /* Teal/cyan */
-    --jim-json-null: #ff8a80;       /* Soft coral */
+    --jim-json-key: #82aaff;
+    --jim-json-string: #a5d6a7;
+    --jim-json-number: #ffb74d;
+    --jim-json-boolean: #4dd0e1;
+    --jim-json-null: #ff8a80;
 
     /* === JIM Custom: Navigation === */
     --jim-nav-top-level-color: #b0b2b8;
     --jim-nav-child-color: #808490;
+    --jim-nav-hover-color: #f0f0f4;
     --jim-nav-active-color: #f0f0f4;
 
     /* === JIM Custom: Drawer border === */
@@ -97,10 +109,8 @@ html[lang] {
     --jim-dialog-surface: #181920;
     --jim-dialog-inner-surface: #1e1f24;
 
-    /* === JIM Custom: Content Links (saturated blue matching Inbound chip) === */
+    /* === JIM Custom: Content Links === */
     --jim-link-color: #42a5f5;
-
-    /* === JIM Custom: Link Hover === */
     --jim-link-hover-color: #ff4081ff;
 
     /* === JIM Custom: Logo text === */

@@ -104,6 +104,23 @@ a.mud-link.mud-primary-text:hover {
     border-radius: 8px !important;
 }
 
+/* Links inside alerts: inherit the alert's text colour with bold + underline for emphasis.
+   Overrides the global --jim-link-color so links don't appear as clashing blue/purple
+   inside coloured alert boxes (e.g., yellow warning, green success). */
+.mud-alert .mud-alert-message a.mud-link {
+    color: inherit !important;
+    font-weight: 600 !important;
+    text-decoration: underline !important;
+    transition: opacity 0.2s ease !important;
+}
+
+/* Hover: reduce opacity to provide visual feedback while keeping the inherited colour */
+.mud-alert .mud-alert-message a.mud-link:hover {
+    color: inherit !important;
+    opacity: 0.7 !important;
+    text-decoration: underline !important;
+}
+
 /* Clip table content to respect rounded corners (prevents hover highlight overflow) */
 .mud-table {
     overflow: hidden;

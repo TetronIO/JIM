@@ -17,15 +17,22 @@ html[lang] {
     --mud-palette-primary-darken: #1e5abf;
     --mud-palette-primary-lighten: #4a88e8;
     --mud-palette-primary-text: #ffffffff;
+
+    /* === Secondary Palette === */
     --mud-palette-secondary: #546e7a;
     --mud-palette-secondary-rgb: 84,110,122;
     --mud-palette-secondary-darken: #37474f;
     --mud-palette-secondary-lighten: #78909c;
     --mud-palette-secondary-text: #ffffffff;
 
-    /* === Semantic Colours (WCAG AA Accessible) === */
-    /* MudBlazor defaults fail WCAG AA contrast on white backgrounds.
-       These darker variants achieve 4.5:1+ contrast ratio for text chips. */
+    /* === Tertiary Palette === */
+    --mud-palette-tertiary: #00897b;
+    --mud-palette-tertiary-rgb: 0,137,123;
+    --mud-palette-tertiary-darken: #00695c;
+    --mud-palette-tertiary-lighten: #26a69a;
+    --mud-palette-tertiary-text: #ffffffff;
+
+    /* === Semantic Colours (WCAG AA accessible — darker for 4.5:1+ on white) === */
     --mud-palette-success: #2e7d32;
     --mud-palette-success-rgb: 46,125,50;
     --mud-palette-success-text: #ffffffff;
@@ -38,13 +45,8 @@ html[lang] {
     --mud-palette-error: #c62828;
     --mud-palette-error-rgb: 198,40,40;
     --mud-palette-error-text: #ffffffff;
-    --mud-palette-tertiary: #00897b;
-    --mud-palette-tertiary-rgb: 0,137,123;
-    --mud-palette-tertiary-darken: #00695c;
-    --mud-palette-tertiary-lighten: #26a69a;
-    --mud-palette-tertiary-text: #ffffffff;
 
-    /* === Background & Surface (clean neutral light) === */
+    /* === Background & Surface === */
     --mud-palette-background: #f2f2f4;
     --mud-palette-surface: #ffffffff;
     --mud-palette-background-grey: rgba(0, 0, 0, 0.024);
@@ -53,12 +55,12 @@ html[lang] {
     --jim-inner-surface: #f7f7f9;
     --jim-inner-border-color: rgba(42, 42, 48, 0.22);
 
-    /* === Drawer (dark sidebar - shared with dark variant) === */
+    /* === Drawer (dark sidebar — shared with dark variant) === */
     --mud-palette-drawer-background: #17181a;
     --mud-palette-drawer-text: #b0b2b8;
     --mud-palette-drawer-icon: #6a6c74;
 
-    /* === Text (light content area) === */
+    /* === Text === */
     --mud-palette-text-primary: #2a2a30;
     --mud-palette-text-secondary: #5c5c66;
     --mud-palette-text-disabled: rgba(0, 0, 0, 0.36);
@@ -69,7 +71,7 @@ html[lang] {
     --mud-palette-action-disabled: rgba(0, 0, 0, 0.38);
     --mud-palette-action-disabled-background: rgba(0, 0, 0, 0.10);
 
-    /* === Lines & Dividers (strengthened for visibility) === */
+    /* === Lines & Dividers === */
     --mud-palette-lines-default: rgba(42, 42, 48, 0.20);
     --mud-palette-lines-inputs: rgba(120, 120, 140, 0.45);
     --mud-palette-divider: rgba(42, 42, 48, 0.20);
@@ -90,15 +92,16 @@ html[lang] {
     --jim-json-boolean: #0000dd;
     --jim-json-null: #0000dd;
 
-    /* === JIM Custom: Navigation (light-on-dark sidebar) === */
+    /* === JIM Custom: Navigation === */
     --jim-nav-top-level-color: #b0b2b8;
     --jim-nav-child-color: #808490;
+    --jim-nav-hover-color: #f0f0f4;
     --jim-nav-active-color: #f0f0f4;
 
     /* === JIM Custom: Drawer border === */
     --jim-drawer-border-color: #2a2b2f;
 
-    /* === JIM Custom: Paper border (strengthened for visibility) === */
+    /* === JIM Custom: Paper border === */
     --jim-paper-border-color: rgba(0, 0, 0, 0.18);
 
     /* === JIM Custom: Dialog surfaces (stepped elevation from surface) === */
@@ -107,8 +110,6 @@ html[lang] {
 
     /* === JIM Custom: Content Links === */
     --jim-link-color: #2a6dd9;
-
-    /* === JIM Custom: Link Hover === */
     --jim-link-hover-color: #e0406a;
 
     /* === JIM Custom: Logo text === */
