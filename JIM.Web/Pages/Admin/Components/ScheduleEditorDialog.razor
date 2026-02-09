@@ -22,7 +22,7 @@
         }
         else if (_schedule != null)
         {
-            <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-4" @bind-ActivePanelIndex="_activeTab">
+            <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" PanelClass="pt-4" @bind-ActivePanelIndex="_activeTab">
                 <MudTabPanel Text="General" Icon="@Icons.Material.Filled.Settings">
                     <MudStack Spacing="3">
                         <MudTextField @bind-Value="_schedule.Name" Label="Name" Variant="Variant.Outlined"
