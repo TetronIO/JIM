@@ -50,7 +50,11 @@ updates:
           - "Microsoft.Azure.Functions*"
           - "Microsoft.Azure.WebJobs*"
 
-  # Docker base images
+  # Docker base images (digest-pinned for reproducible builds)
+  # Dependabot will propose PRs to update digests when new images are published.
+  # IMPORTANT: When a digest update is merged, you must also update the pinned
+  # apt package versions in the corresponding Dockerfile to match the new base image.
+  # Run: docker run --rm <image>@<new-digest> bash -c "apt-get update -qq && apt-cache policy <pkg>"
   - package-ecosystem: "docker"
     directory: "/JIM.Web"
     schedule:
@@ -62,10 +66,14 @@ updates:
       - "TetronIO/jim-maintainers"
     commit-message:
       prefix: "chore"
+      include: "scope"
     ignore:
-      # Ignore all major version updates
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+    groups:
+      dotnet-base-images:
+        patterns:
+          - "mcr.microsoft.com/dotnet/*"
 
   - package-ecosystem: "docker"
     directory: "/JIM.Worker"
@@ -78,10 +86,14 @@ updates:
       - "TetronIO/jim-maintainers"
     commit-message:
       prefix: "chore"
+      include: "scope"
     ignore:
-      # Ignore all major version updates
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+    groups:
+      dotnet-base-images:
+        patterns:
+          - "mcr.microsoft.com/dotnet/*"
 
   - package-ecosystem: "docker"
     directory: "/JIM.Scheduler"
@@ -94,10 +106,14 @@ updates:
       - "TetronIO/jim-maintainers"
     commit-message:
       prefix: "chore"
+      include: "scope"
     ignore:
-      # Ignore all major version updates
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+    groups:
+      dotnet-base-images:
+        patterns:
+          - "mcr.microsoft.com/dotnet/*"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"

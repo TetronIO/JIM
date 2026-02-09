@@ -12,7 +12,7 @@
 @inject IUserPreferenceService PreferenceService
 
 <PageTitle>Pending Exports: @_connectedSystemHeader?.Name</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Pending Exports:</span> @_connectedSystemHeader?.Name</MudText>
+<MudText Typo="Typo.h4"><span class="mud-primary-text">Pending Exports:</span> @_connectedSystemHeader?.Name</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     Pending exports are changes that need to be applied to the connected system. These are created when metaverse objects
@@ -21,20 +21,18 @@
 
 @if (_connectedSystemHeader != null && _preferencesLoaded)
 {
-    <MudGrid Class="mt-5">
-        <MudItem xs="6">
-            <MudSelect T="PendingExportStatus" Label="Filter by Status" MultiSelection="true"
-                       SelectedValues="_statusFilters" SelectedValuesChanged="OnStatusFiltersChanged"
-                       MultiSelectionTextFunc="@GetStatusFilterText"
-                       Variant="Variant.Outlined" Clearable="true" Dense="true" Style="max-width: 350px;">
-                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Pending">Pending</MudSelectItem>
-                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Executing">Executing</MudSelectItem>
-                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.ExportNotConfirmed">Export Not Confirmed</MudSelectItem>
-                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Failed">Failed</MudSelectItem>
-                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Exported">Exported</MudSelectItem>
-            </MudSelect>
-        </MudItem>
-    </MudGrid>
+    <MudPaper Elevation="0" Class="mt-3 pa-4" Outlined="true">
+        <MudSelect T="PendingExportStatus" Label="Filter by Status" MultiSelection="true"
+                   SelectedValues="_statusFilters" SelectedValuesChanged="OnStatusFiltersChanged"
+                   MultiSelectionTextFunc="@GetStatusFilterText"
+                   Variant="Variant.Outlined" Clearable="true" Dense="true" Style="max-width: 350px;">
+            <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Pending">Pending</MudSelectItem>
+            <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Executing">Executing</MudSelectItem>
+            <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.ExportNotConfirmed">Export Not Confirmed</MudSelectItem>
+            <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Failed">Failed</MudSelectItem>
+            <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Exported">Exported</MudSelectItem>
+        </MudSelect>
+    </MudPaper>
 
     <MudTable @ref="_table"
               T="PendingExportHeader"
@@ -105,12 +103,12 @@
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Change Type">
-                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(context.ChangeType)" Size="Size.Small" Style="font-size: 1rem;">
+                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(context.ChangeType)" Style="font-size: 1rem;">
                     @context.ChangeType
                 </MudChip>
             </MudTd>
             <MudTd DataLabel="Status">
-                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportStatusColor(context.Status)" Size="Size.Small" Style="font-size: 1rem;">
+                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportStatusColor(context.Status)" Style="font-size: 1rem;">
                     @context.Status.ToString().SplitOnCapitalLetters()
                 </MudChip>
             </MudTd>
@@ -147,7 +145,7 @@
             <MudTd DataLabel="Errors">
                 @if (context.ErrorCount > 0)
                 {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Size="Size.Small">
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Error">
                         @context.ErrorCount / @context.MaxRetries
                     </MudChip>
                 }

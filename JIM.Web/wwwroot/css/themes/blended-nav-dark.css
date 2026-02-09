@@ -25,6 +25,14 @@ html[lang] {
     --mud-palette-secondary: #4488ff;
     --mud-palette-secondary-text: #ffffffff;
 
+    /* === Tertiary Palette (teal for CS indicators — WCAG AA accessible) === */
+    --mud-palette-tertiary: #00796B;
+    --mud-palette-tertiary-text: #ffffffff;
+
+    /* === Status Colours (darker shades for dark mode with white text) === */
+    --mud-palette-success: #1b7d3e;
+    --mud-palette-success-text: #ffffffff;
+
     /* === Background & Surface (from reference screenshot) === */
     --mud-palette-background: #121314;
     --mud-palette-surface: #151617;
@@ -33,10 +41,6 @@ html[lang] {
     /* === Inner Surface (nested containers) === */
     --jim-inner-surface: #222325;
     --jim-inner-border-color: #2e2f32;
-
-    /* === Appbar (matching page background for blended look) === */
-    --mud-palette-appbar-background: #121314;
-    --mud-palette-appbar-text: #ffffffff;
 
     /* === Drawer (same as page background — the blended effect) === */
     --mud-palette-drawer-background: #121314;
@@ -50,7 +54,7 @@ html[lang] {
 
     /* === Action === */
     --mud-palette-action-default: #b0b2b8;
-    --mud-palette-action-default-hover: rgba(102, 136, 255, 0.15);
+    --mud-palette-action-default-hover: rgba(102, 136, 255, 0.25);
     --mud-palette-action-disabled: rgba(255, 255, 255, 0.38);
     --mud-palette-action-disabled-background: rgba(255, 255, 255, 0.10);
 
@@ -83,6 +87,10 @@ html[lang] {
 
     /* === JIM Custom: Paper border === */
     --jim-paper-border-color: #2e2f32;
+
+    /* === JIM Custom: Dialog surfaces (stepped elevation from surface) === */
+    --jim-dialog-surface: #181919;
+    --jim-dialog-inner-surface: #1e1f20;
 
     /* === JIM Custom: Content Links === */
     --jim-link-color: #4488ff;

@@ -201,7 +201,7 @@ public class Worker : BackgroundService
                                 }
                                 case SynchronisationWorkerTask syncWorkerTask:
                                 {
-                                    var initiatedByDisplay = newWorkerTask.InitiatedByMetaverseObject?.DisplayName ?? newWorkerTask.InitiatedByName ?? "Unknown";
+                                    var initiatedByDisplay = newWorkerTask.InitiatedByName ?? "Unknown";
                                     Log.Information("ExecuteAsync: SynchronisationWorkerTask received for run profile id: {RunProfileId}, initiated by: {InitiatedBy}",
                                         syncWorkerTask.ConnectedSystemRunProfileId, initiatedByDisplay);
                                     {
@@ -684,6 +684,9 @@ public class Worker : BackgroundService
                 loggerConfiguration.MinimumLevel.Fatal();
                 break;
         }
+
+        // Suppress verbose EF Core SQL query logging (only log warnings/errors)
+        loggerConfiguration.MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", Serilog.Events.LogEventLevel.Warning);
 
         loggerConfiguration.Enrich.FromLogContext();
         loggerConfiguration.WriteTo.File(

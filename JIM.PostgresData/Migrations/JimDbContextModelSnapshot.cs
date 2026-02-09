@@ -101,9 +101,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<TimeSpan?>("ExecutionTime")
                         .HasColumnType("interval");
 
-                    b.Property<Guid?>("InitiatedByApiKeyId")
-                        .HasColumnType("uuid");
-
                     b.Property<Guid?>("InitiatedById")
                         .HasColumnType("uuid");
 
@@ -176,10 +173,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("Created")
                         .IsDescending()
                         .HasDatabaseName("IX_Activities_Created");
-
-                    b.HasIndex("InitiatedByApiKeyId");
-
-                    b.HasIndex("MetaverseObjectId");
 
                     b.HasIndex("SyncRuleId");
 
@@ -1459,6 +1452,230 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("SyncRuleScopingCriteriaGroups");
                 });
 
+            modelBuilder.Entity("JIM.Models.Scheduling.Schedule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreatedByType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CronExpression")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DaysOfWeek")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("IntervalUnit")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IntervalValue")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("IntervalWindowEnd")
+                        .HasColumnType("text");
+
+                    b.Property<string>("IntervalWindowStart")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastRunTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastUpdatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastUpdatedByType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("NextRunTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("PatternType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RunTimes")
+                        .HasColumnType("text");
+
+                    b.Property<int>("TriggerType")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Schedules_Name");
+
+                    b.HasIndex("IsEnabled", "NextRunTime")
+                        .HasDatabaseName("IX_Schedules_IsEnabled_NextRunTime");
+
+                    b.ToTable("Schedules");
+                });
+
+            modelBuilder.Entity("JIM.Models.Scheduling.ScheduleExecution", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CurrentStepIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ErrorStackTrace")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("InitiatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("InitiatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("InitiatedByType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("QueuedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ScheduleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ScheduleName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TotalSteps")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ScheduleId");
+
+                    b.HasIndex("Status", "QueuedAt")
+                        .HasDatabaseName("IX_ScheduleExecutions_Status_QueuedAt");
+
+                    b.ToTable("ScheduleExecutions");
+                });
+
+            modelBuilder.Entity("JIM.Models.Scheduling.ScheduleStep", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Arguments")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("ContinueOnFailure")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreatedByType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ExecutablePath")
+                        .HasColumnType("text");
+
+                    b.Property<int>("ExecutionMode")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastUpdatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastUpdatedByType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("RunProfileId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ScheduleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ScriptPath")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SqlConnectionString")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SqlScriptPath")
+                        .HasColumnType("text");
+
+                    b.Property<int>("StepIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StepType")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeSpan?>("Timeout")
+                        .HasColumnType("interval");
+
+                    b.Property<string>("WorkingDirectory")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ScheduleId", "StepIndex")
+                        .HasDatabaseName("IX_ScheduleSteps_ScheduleId_StepIndex");
+
+                    b.ToTable("ScheduleSteps");
+                });
+
             modelBuilder.Entity("JIM.Models.Search.PredefinedSearch", b =>
                 {
                     b.Property<int>("Id")
@@ -2503,19 +2720,19 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ExecutionMode")
                         .HasColumnType("integer");
 
-                    b.Property<Guid?>("InitiatedByApiKeyId")
-                        .HasColumnType("uuid");
-
                     b.Property<Guid?>("InitiatedById")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("InitiatedByMetaverseObjectId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("InitiatedByName")
                         .HasColumnType("text");
 
                     b.Property<int>("InitiatedByType")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ScheduleExecutionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("ScheduleStepIndex")
                         .HasColumnType("integer");
 
                     b.Property<int>("Status")
@@ -2528,9 +2745,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ActivityId");
 
-                    b.HasIndex("InitiatedByApiKeyId");
-
-                    b.HasIndex("InitiatedByMetaverseObjectId");
+                    b.HasIndex("ScheduleExecutionId")
+                        .HasDatabaseName("IX_WorkerTasks_ScheduleExecutionId");
 
                     b.HasIndex("Status", "Timestamp")
                         .HasDatabaseName("IX_WorkerTasks_Status_Timestamp");
@@ -2835,21 +3051,9 @@ namespace JIM.PostgresData.Migrations
                         .WithMany("Activities")
                         .HasForeignKey("ConnectedSystemRunProfileId");
 
-                    b.HasOne("JIM.Models.Security.ApiKey", "InitiatedByApiKey")
-                        .WithMany()
-                        .HasForeignKey("InitiatedByApiKeyId");
-
-                    b.HasOne("JIM.Models.Core.MetaverseObject", "InitiatedByMetaverseObject")
-                        .WithMany()
-                        .HasForeignKey("MetaverseObjectId");
-
                     b.HasOne("JIM.Models.Logic.SyncRule", null)
                         .WithMany("Activities")
                         .HasForeignKey("SyncRuleId");
-
-                    b.Navigation("InitiatedByApiKey");
-
-                    b.Navigation("InitiatedByMetaverseObject");
                 });
 
             modelBuilder.Entity("JIM.Models.Activities.ActivityRunProfileExecutionItem", b =>
@@ -3255,6 +3459,28 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ParentGroup");
                 });
 
+            modelBuilder.Entity("JIM.Models.Scheduling.ScheduleExecution", b =>
+                {
+                    b.HasOne("JIM.Models.Scheduling.Schedule", "Schedule")
+                        .WithMany("Executions")
+                        .HasForeignKey("ScheduleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Schedule");
+                });
+
+            modelBuilder.Entity("JIM.Models.Scheduling.ScheduleStep", b =>
+                {
+                    b.HasOne("JIM.Models.Scheduling.Schedule", "Schedule")
+                        .WithMany("Steps")
+                        .HasForeignKey("ScheduleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Schedule");
+                });
+
             modelBuilder.Entity("JIM.Models.Search.PredefinedSearch", b =>
                 {
                     b.HasOne("JIM.Models.Core.MetaverseObjectType", "MetaverseObjectType")
@@ -3568,19 +3794,14 @@ namespace JIM.PostgresData.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("JIM.Models.Security.ApiKey", "InitiatedByApiKey")
+                    b.HasOne("JIM.Models.Scheduling.ScheduleExecution", "ScheduleExecution")
                         .WithMany()
-                        .HasForeignKey("InitiatedByApiKeyId");
-
-                    b.HasOne("JIM.Models.Core.MetaverseObject", "InitiatedByMetaverseObject")
-                        .WithMany()
-                        .HasForeignKey("InitiatedByMetaverseObjectId");
+                        .HasForeignKey("ScheduleExecutionId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Activity");
 
-                    b.Navigation("InitiatedByApiKey");
-
-                    b.Navigation("InitiatedByMetaverseObject");
+                    b.Navigation("ScheduleExecution");
                 });
 
             modelBuilder.Entity("JIM.Models.Transactional.DeferredReference", b =>
@@ -3776,6 +3997,13 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ChildGroups");
 
                     b.Navigation("Criteria");
+                });
+
+            modelBuilder.Entity("JIM.Models.Scheduling.Schedule", b =>
+                {
+                    b.Navigation("Executions");
+
+                    b.Navigation("Steps");
                 });
 
             modelBuilder.Entity("JIM.Models.Search.PredefinedSearch", b =>

@@ -16,13 +16,15 @@ html[lang] {
     --mud-palette-primary-darken: #1e5abf;
     --mud-palette-primary-lighten: #4a88e8;
     --mud-palette-primary-text: #ffffffff;
-    --mud-palette-secondary: #2a6dd9;
+    --mud-palette-secondary: #546e7a;
+    --mud-palette-secondary-darken: #37474f;
+    --mud-palette-secondary-lighten: #78909c;
     --mud-palette-secondary-text: #ffffffff;
 
     /* === Semantic Colours (WCAG AA Accessible) === */
     /* MudBlazor defaults fail WCAG AA contrast on white backgrounds.
        These darker variants achieve 4.5:1+ contrast ratio for text chips. */
-    --mud-palette-success: #1b7d3e;
+    --mud-palette-success: #2e7d32;
     --mud-palette-success-text: #ffffffff;
     --mud-palette-warning: #c65102;
     --mud-palette-warning-text: #ffffffff;
@@ -30,7 +32,9 @@ html[lang] {
     --mud-palette-info-text: #ffffffff;
     --mud-palette-error: #c62828;
     --mud-palette-error-text: #ffffffff;
-    --mud-palette-tertiary: #0d7d5f;
+    --mud-palette-tertiary: #00897b;
+    --mud-palette-tertiary-darken: #00695c;
+    --mud-palette-tertiary-lighten: #26a69a;
     --mud-palette-tertiary-text: #ffffffff;
 
     /* === Background & Surface (clean neutral light) === */
@@ -39,15 +43,11 @@ html[lang] {
     --mud-palette-background-grey: rgba(0, 0, 0, 0.024);
 
     /* === Inner Surface (slightly recessed for nested containers) === */
-    --jim-inner-surface: #f0f0f2;
+    --jim-inner-surface: #f7f7f9;
     --jim-inner-border-color: rgba(42, 42, 48, 0.22);
 
-    /* === Appbar (dark, matching sidebar) === */
-    --mud-palette-appbar-background: #0a0b0c;
-    --mud-palette-appbar-text: #ffffffff;
-
     /* === Drawer (dark sidebar - shared with dark variant) === */
-    --mud-palette-drawer-background: #121315;
+    --mud-palette-drawer-background: #17181a;
     --mud-palette-drawer-text: #b0b2b8;
     --mud-palette-drawer-icon: #6a6c74;
 
@@ -72,6 +72,9 @@ html[lang] {
     --mud-palette-table-lines: rgba(42, 42, 48, 0.20);
     --mud-palette-table-striped: rgba(0, 0, 0, 0.02);
     --mud-palette-table-hover: rgba(42, 109, 217, 0.04);
+
+    /* === JIM Custom: Attribute table name column === */
+    --jim-attr-name-bg: #eaeaec;
 
     /* === JIM Custom: JSON Syntax Highlighting === */
     --jim-json-key: #1a5ea0;

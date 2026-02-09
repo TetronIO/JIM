@@ -61,11 +61,8 @@ Automatically configured ports:
 | Port | Service | Auto-Open |
 |------|---------|-----------|
 | 5432 | PostgreSQL | Silent |
-| 8080 | Adminer (DB UI) | Notify |
-| 5000 | JIM Web (HTTP) | Notify |
-| 7000 | JIM Web (HTTPS) | Open Browser |
-| 5203 | JIM API (HTTP) | Notify |
-| 7203 | JIM API (HTTPS) | Open Preview |
+| 5200 | JIM Web + API (HTTP) | Silent |
+| 5201 | JIM Web + API (HTTPS) | Silent |
 
 ## 🔧 Configuration Files
 
@@ -90,8 +87,7 @@ Post-creation script that:
 ### `../.vscode/launch.json`
 
 Debugging configurations for:
-- JIM Web (Blazor) - F5 to debug
-- JIM API - Debug the REST API
+- JIM Web - F5 to debug Blazor UI and REST API (served at `/api/`)
 - JIM Worker - Debug background worker
 - JIM Scheduler - Debug the scheduler
 - **Compound configs** - Debug multiple services at once
@@ -152,8 +148,8 @@ jim-worker         # Run background worker
 
 ### Database (Local Development)
 ```bash
-jim-db             # Start PostgreSQL + Adminer (for local debugging)
-jim-db-stop        # Stop PostgreSQL + Adminer
+jim-db             # Start PostgreSQL (for local debugging)
+jim-db-stop        # Stop PostgreSQL
 jim-db-logs        # View database logs
 jim-migrate        # Apply migrations
 jim-migration [N]  # Create new migration
@@ -161,8 +157,7 @@ jim-migration [N]  # Create new migration
 
 ### Docker Stack Management
 ```bash
-jim-stack          # Start Docker stack (production-like, no dev tools)
-jim-stack-dev      # Start Docker stack + Adminer
+jim-stack          # Start Docker stack (production-like)
 jim-stack-logs     # View all Docker service logs
 jim-stack-down     # Stop all Docker services
 ```
@@ -209,9 +204,7 @@ JIM supports two different development workflows. Choose the one that fits your 
 
 **Services run at:**
 - Database: `localhost:5432`
-- Adminer: `http://localhost:8080`
-- JIM Web: `https://localhost:7000`
-- JIM API: `https://localhost:7203`
+- JIM Web + API: `https://localhost:7000` (API at `/api/`, Swagger at `/api/swagger`)
 
 ### Workflow 2: Full Docker Stack
 
@@ -228,9 +221,7 @@ JIM supports two different development workflows. Choose the one that fits your 
 
 **Services run at:**
 - Database: Internal (container network)
-- Adminer: `http://localhost:8080`
-- JIM Web: `http://localhost:5200`
-- JIM API: `http://localhost:5202`
+- JIM Web + API: `http://localhost:5200` (API at `/api/`, Swagger at `/api/swagger`)
 
 **Note:** In GitHub Codespaces, the docker stack uses optimized PostgreSQL memory settings automatically via `docker-compose.override.codespaces.yml`.
 
@@ -383,7 +374,7 @@ bash .devcontainer/setup.sh
 2. **Use compound debug configs** - Debug multiple services simultaneously
 3. **Use Tasks** - `Ctrl+Shift+B` for quick builds
 4. **Use GitHub Codespaces secrets** - Keep sensitive data secure
-5. **Use Adminer** - Visual database management at localhost:8080
+5. **Use VS Code PostgreSQL extension** - Visual database management built-in
 6. **Check setup logs** - If something fails, setup.sh shows helpful output
 
 ---

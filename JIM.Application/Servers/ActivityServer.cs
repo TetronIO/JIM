@@ -20,7 +20,7 @@ public class ActivityServer
     /// All activities MUST be attributed to a security principal for audit compliance.
     /// </summary>
     /// <param name="activity">The Activity to create.</param>
-    /// <param name="initiatedBy">The MetaverseObject representing the user who initiated the action.</param>
+    /// <param name="initiatedBy">The MetaverseObject representing the user who initiated the action. Can be null for system actions.</param>
     public async Task CreateActivityAsync(Activity activity, MetaverseObject? initiatedBy)
     {
         activity.Status = ActivityStatus.InProgress;
@@ -30,9 +30,28 @@ public class ActivityServer
         {
             activity.InitiatedByType = ActivityInitiatorType.User;
             activity.InitiatedById = initiatedBy.Id;
-            activity.InitiatedByMetaverseObject = initiatedBy;
             activity.InitiatedByName = initiatedBy.DisplayName;
         }
+
+        ValidateActivity(activity);
+        await Application.Repository.Activity.CreateActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Creates and persists an Activity, attributing it to an API key.
+    /// All activities MUST be attributed to a security principal for audit compliance.
+    /// </summary>
+    /// <param name="activity">The Activity to create.</param>
+    /// <param name="initiatedByApiKey">The ApiKey that initiated the action.</param>
+    public async Task CreateActivityAsync(Activity activity, ApiKey initiatedByApiKey)
+    {
+        ArgumentNullException.ThrowIfNull(initiatedByApiKey);
+
+        activity.Status = ActivityStatus.InProgress;
+        activity.Executed = DateTime.UtcNow;
+        activity.InitiatedByType = ActivityInitiatorType.ApiKey;
+        activity.InitiatedById = initiatedByApiKey.Id;
+        activity.InitiatedByName = initiatedByApiKey.Name;
 
         ValidateActivity(activity);
         await Application.Repository.Activity.CreateActivityAsync(activity);
@@ -55,21 +74,16 @@ public class ActivityServer
     }
 
     /// <summary>
-    /// Creates and persists an Activity, attributing it to an API key.
-    /// All activities MUST be attributed to a security principal for audit compliance.
+    /// Creates and persists an Activity using an initiator triad (Type, Id, Name).
+    /// Used when the full principal object is not available (e.g., from WorkerTask).
     /// </summary>
-    /// <param name="activity">The Activity to create.</param>
-    /// <param name="initiatedByApiKey">The ApiKey that initiated the action.</param>
-    public async Task CreateActivityAsync(Activity activity, ApiKey initiatedByApiKey)
+    public async Task CreateActivityWithTriadAsync(Activity activity, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName)
     {
-        ArgumentNullException.ThrowIfNull(initiatedByApiKey);
-
         activity.Status = ActivityStatus.InProgress;
         activity.Executed = DateTime.UtcNow;
-        activity.InitiatedByType = ActivityInitiatorType.ApiKey;
-        activity.InitiatedById = initiatedByApiKey.Id;
-        activity.InitiatedByApiKey = initiatedByApiKey;
-        activity.InitiatedByName = initiatedByApiKey.Name;
+        activity.InitiatedByType = initiatorType;
+        activity.InitiatedById = initiatorId;
+        activity.InitiatedByName = initiatorName ?? (initiatorType == ActivityInitiatorType.System ? "System" : "Unknown");
 
         ValidateActivity(activity);
         await Application.Repository.Activity.CreateActivityAsync(activity);
@@ -89,13 +103,6 @@ public class ActivityServer
 
         if (string.IsNullOrWhiteSpace(activity.InitiatedByName))
             throw new InvalidOperationException("Activity must be attributed to a security principal. InitiatedByName has not been set.");
-
-        // Validate that the correct reference is set based on the initiator type
-        if (activity.InitiatedByType == ActivityInitiatorType.User && activity.InitiatedByMetaverseObject == null)
-            throw new InvalidOperationException("Activity initiated by a user must have InitiatedByMetaverseObject set.");
-
-        if (activity.InitiatedByType == ActivityInitiatorType.ApiKey && activity.InitiatedByApiKey == null)
-            throw new InvalidOperationException("Activity initiated by an API key must have InitiatedByApiKey set.");
 
         if (activity.TargetType == ActivityTargetType.ConnectedSystem)
         {
@@ -215,6 +222,40 @@ public class ActivityServer
         Guid? initiatedById = null)
     {
         return await Application.Repository.Activity.GetActivitiesAsync(page, pageSize, searchQuery, sortBy, sortDescending, initiatedById);
+    }
+
+    /// <summary>
+    /// Retrieves a page's worth of worker task activities (run profile executions, data generation, system operations).
+    /// Filtered to show only activities related to worker tasks for the Operations page History tab.
+    /// </summary>
+    /// <param name="page">The page number (1-based).</param>
+    /// <param name="pageSize">The number of items per page.</param>
+    /// <param name="connectedSystemFilter">Optional filter for connected system names (additive/OR within filter).</param>
+    /// <param name="runProfileFilter">Optional filter for run profile names (additive/OR within filter).</param>
+    /// <param name="statusFilter">Optional filter for activity statuses (additive/OR within filter).</param>
+    /// <param name="initiatedByFilter">Optional text search on initiator name.</param>
+    /// <param name="sortBy">Optional column to sort by.</param>
+    /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
+    public async Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
+        int page = 1,
+        int pageSize = 20,
+        IEnumerable<string>? connectedSystemFilter = null,
+        IEnumerable<string>? runProfileFilter = null,
+        IEnumerable<ActivityStatus>? statusFilter = null,
+        string? initiatedByFilter = null,
+        string? sortBy = null,
+        bool sortDescending = true)
+    {
+        return await Application.Repository.Activity.GetWorkerTaskActivitiesAsync(
+            page, pageSize, connectedSystemFilter, runProfileFilter, statusFilter, initiatedByFilter, sortBy, sortDescending);
+    }
+
+    /// <summary>
+    /// Retrieves the distinct filter options available for worker task activities.
+    /// </summary>
+    public async Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync()
+    {
+        return await Application.Repository.Activity.GetWorkerTaskActivityFilterOptionsAsync();
     }
 
     #region synchronisation related

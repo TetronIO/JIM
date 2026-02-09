@@ -34,6 +34,7 @@ public class SearchRepository : ISearchRepository
     public async Task<PredefinedSearch?> GetPredefinedSearchAsync(string uri)
     {
         return await Repository.Database.PredefinedSearches.
+            AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
             Include(q => q.Attributes).
             ThenInclude(q => q.MetaverseAttribute).
             Include(q => q.MetaverseObjectType).
@@ -46,6 +47,7 @@ public class SearchRepository : ISearchRepository
     public async Task<PredefinedSearch?> GetPredefinedSearchAsync(MetaverseObjectType metaverseObjectType)
     {
         return await Repository.Database.PredefinedSearches.
+            AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
             Include(q => q.Attributes).
             ThenInclude(a => a.MetaverseAttribute).
             Include(q => q.MetaverseObjectType).

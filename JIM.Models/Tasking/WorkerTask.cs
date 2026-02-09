@@ -1,6 +1,5 @@
-﻿using JIM.Models.Activities;
-using JIM.Models.Core;
-using JIM.Models.Security;
+using JIM.Models.Activities;
+using JIM.Models.Scheduling;
 namespace JIM.Models.Tasking;
 
 public abstract class WorkerTask
@@ -19,6 +18,7 @@ public abstract class WorkerTask
 
 	// -----------------------------------------------------------------------------------------------------------------
 	// Initiator tracking - all tasks MUST be attributed to a security principal for audit compliance
+	// Uses the standard triad pattern (Type + Id + Name) to survive principal deletion.
 	// -----------------------------------------------------------------------------------------------------------------
 
 	/// <summary>
@@ -37,18 +37,24 @@ public abstract class WorkerTask
 	public string? InitiatedByName { get; set; }
 
 	/// <summary>
-	/// If this task was initiated by a user, reference them here.
-	/// </summary>
-	public MetaverseObject? InitiatedByMetaverseObject { get; set; }
-
-	/// <summary>
-	/// If this task was initiated via API key, reference it here.
-	/// </summary>
-	public ApiKey? InitiatedByApiKey { get; set; }
-
-	/// <summary>
 	/// If this worker task has already resulted in an activity being created, then it can be found here, and when the worker task
 	/// is initiated then the execution time must be set, and when complete, the activity must also be completed.
 	/// </summary>
 	public Activity Activity { get; set; } = null!;
+
+	// -----------------------------------------------------------------------------------------------------------------
+	// Schedule execution link - when this task is part of a scheduled execution
+	// -----------------------------------------------------------------------------------------------------------------
+
+	/// <summary>
+	/// If this task is part of a schedule execution, link to it here.
+	/// </summary>
+	public Guid? ScheduleExecutionId { get; set; }
+	public ScheduleExecution? ScheduleExecution { get; set; }
+
+	/// <summary>
+	/// The step index within the schedule this task corresponds to.
+	/// Used to track which step this task is executing.
+	/// </summary>
+	public int? ScheduleStepIndex { get; set; }
 }

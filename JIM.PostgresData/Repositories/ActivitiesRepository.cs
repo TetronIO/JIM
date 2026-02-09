@@ -1,7 +1,6 @@
 ﻿using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
-using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
@@ -56,13 +55,7 @@ public class ActivityRepository : IActivityRepository
             pageSize = 100;
 
         var query = Repository.Database.Activities
-            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
-            .Include(a => a.InitiatedByMetaverseObject)
-            .ThenInclude(ib => ib!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
-            .ThenInclude(av => av.Attribute)
-            .Include(st => st.InitiatedByMetaverseObject)
-            .ThenInclude(ib => ib!.Type)
-            .Include(a => a.InitiatedByApiKey)
+            .AsNoTracking()
             .Where(a => a.ParentActivityId == null)
             .AsQueryable();
 
@@ -135,14 +128,158 @@ public class ActivityRepository : IActivityRepository
     public async Task<Activity?> GetActivityAsync(Guid id)
     {
         return await Repository.Database.Activities
-            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
-            .Include(a => a.InitiatedByMetaverseObject)
-            .ThenInclude(ib => ib!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
-            .ThenInclude(av => av.Attribute)
-            .Include(st => st.InitiatedByMetaverseObject)
-            .ThenInclude(ib => ib!.Type)
-            .Include(a => a.InitiatedByApiKey)
             .SingleOrDefaultAsync(a => a.Id == id);
+    }
+
+    /// <summary>
+    /// Retrieves a page's worth of worker task activities - operations executed by the worker service
+    /// such as run profile executions, data generation, and connected system operations.
+    /// </summary>
+    public async Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
+        int page,
+        int pageSize,
+        IEnumerable<string>? connectedSystemFilter = null,
+        IEnumerable<string>? runProfileFilter = null,
+        IEnumerable<ActivityStatus>? statusFilter = null,
+        string? initiatedByFilter = null,
+        string? sortBy = null,
+        bool sortDescending = true)
+    {
+        if (pageSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
+
+        if (page < 1)
+            page = 1;
+
+        // limit page size to avoid increasing latency unnecessarily
+        if (pageSize > 100)
+            pageSize = 100;
+
+        var query = BuildWorkerTaskQuery();
+
+        // Apply filters
+        var connectedSystems = connectedSystemFilter?.ToList();
+        if (connectedSystems is { Count: > 0 })
+            query = query.Where(a => a.TargetContext != null && connectedSystems.Contains(a.TargetContext));
+
+        var runProfiles = runProfileFilter?.ToList();
+        if (runProfiles is { Count: > 0 })
+            query = query.Where(a => a.TargetName != null && runProfiles.Contains(a.TargetName));
+
+        var statuses = statusFilter?.ToList();
+        if (statuses is { Count: > 0 })
+            query = query.Where(a => statuses.Contains(a.Status));
+
+        if (!string.IsNullOrWhiteSpace(initiatedByFilter))
+        {
+            var filterLower = initiatedByFilter.ToLower();
+            query = query.Where(a => a.InitiatedByName != null && a.InitiatedByName.ToLower().Contains(filterLower));
+        }
+
+        // Apply sorting
+        query = sortBy?.ToLower() switch
+        {
+            "targettype" or "type" => sortDescending
+                ? query.OrderByDescending(a => a.TargetType)
+                : query.OrderBy(a => a.TargetType),
+            "targetname" or "target" => sortDescending
+                ? query.OrderByDescending(a => a.TargetName)
+                : query.OrderBy(a => a.TargetName),
+            "targetoperationtype" or "operation" => sortDescending
+                ? query.OrderByDescending(a => a.TargetOperationType)
+                : query.OrderBy(a => a.TargetOperationType),
+            "initiatedbyname" or "initiatedby" => sortDescending
+                ? query.OrderByDescending(a => a.InitiatedByName)
+                : query.OrderBy(a => a.InitiatedByName),
+            "status" => sortDescending
+                ? query.OrderByDescending(a => a.Status)
+                : query.OrderBy(a => a.Status),
+            "executiontime" => sortDescending
+                ? query.OrderByDescending(a => a.ExecutionTime)
+                : query.OrderBy(a => a.ExecutionTime),
+            _ => sortDescending
+                ? query.OrderByDescending(a => a.Created)
+                : query.OrderBy(a => a.Created)
+        };
+
+        // Get total count for pagination
+        var grossCount = await query.CountAsync();
+        var offset = (page - 1) * pageSize;
+        var results = await query.Skip(offset).Take(pageSize).ToListAsync();
+
+        var pagedResultSet = new PagedResultSet<Activity>
+        {
+            PageSize = pageSize,
+            TotalResults = grossCount,
+            CurrentPage = page,
+            Results = results
+        };
+
+        if (page == 1 && pagedResultSet.TotalPages == 0)
+            return pagedResultSet;
+
+        // don't let users try and request a page that doesn't exist
+        if (page <= pagedResultSet.TotalPages)
+            return pagedResultSet;
+
+        pagedResultSet.TotalResults = 0;
+        pagedResultSet.Results.Clear();
+        return pagedResultSet;
+    }
+
+    public async Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync()
+    {
+        var query = BuildWorkerTaskQuery();
+
+        var connectedSystems = await query
+            .Where(a => a.TargetContext != null)
+            .Select(a => a.TargetContext!)
+            .Distinct()
+            .OrderBy(name => name)
+            .ToListAsync();
+
+        var runProfiles = await query
+            .Where(a => a.TargetName != null)
+            .Select(a => a.TargetName!)
+            .Distinct()
+            .OrderBy(name => name)
+            .ToListAsync();
+
+        return new ActivityFilterOptions
+        {
+            ConnectedSystems = connectedSystems,
+            RunProfiles = runProfiles
+        };
+    }
+
+    /// <summary>
+    /// Builds the base query for worker task activities, filtering to parent activities
+    /// with worker task target types and operation types.
+    /// </summary>
+    private IQueryable<Activity> BuildWorkerTaskQuery()
+    {
+        // Worker task activity types - operations executed by the worker service
+        // Note: HistoryRetentionCleanup is intentionally excluded as it's a background maintenance task
+        var workerTaskTargetTypes = new[]
+        {
+            ActivityTargetType.ConnectedSystemRunProfile,
+            ActivityTargetType.DataGenerationTemplate,
+            ActivityTargetType.ConnectedSystem
+        };
+
+        // Worker task operations
+        var workerTaskOperations = new[]
+        {
+            ActivityTargetOperationType.Execute,
+            ActivityTargetOperationType.Clear,
+            ActivityTargetOperationType.Delete
+        };
+
+        return Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ParentActivityId == null)
+            .Where(a => workerTaskTargetTypes.Contains(a.TargetType) && workerTaskOperations.Contains(a.TargetOperationType))
+            .AsQueryable();
     }
 
     #region synchronisation related

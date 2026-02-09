@@ -3,7 +3,7 @@
 
 ARG VERSION=dev
 
-FROM mcr.microsoft.com/dotnet/runtime:9.0 AS base
+FROM mcr.microsoft.com/dotnet/runtime:9.0@sha256:9916fb650c83b13231e4ec91d10e76a520209a0caeeeb46c507a9d98db8612a2 AS base
 
 LABEL org.opencontainers.image.title="JIM Scheduler"
 LABEL org.opencontainers.image.description="JIM (Junctional Identity Manager) - Job scheduler service"
@@ -13,7 +13,7 @@ LABEL org.opencontainers.image.source="https://github.com/TetronIO/JIM"
 LABEL org.opencontainers.image.licenses="See https://tetron.io/jim/#licensing"
 WORKDIR /app
 
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:9.0@sha256:a574e6212c98ccf9cf2c6588201b1c71d93094f6f26c21375f75aa909a9e88f0 AS build
 WORKDIR /src
 COPY ["JIM.Scheduler/JIM.Scheduler.csproj", "JIM.Scheduler/"]
 

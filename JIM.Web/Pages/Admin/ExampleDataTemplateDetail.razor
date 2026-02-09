@@ -9,15 +9,17 @@
 @inject NavigationManager NavManager
 
 <PageTitle>Data Generation Template: @_template?.Name</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Data Generation Template:</span> @_template?.Name</MudText>
-<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.h4"><span class="mud-primary-text">Data Generation Template:</span> @_template?.Name</MudText>
+<div class="d-flex justify-space-between align-center">
+    <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+    @if (_template != null)
+    {
+        <AuditInfo Entity="@_template" />
+    }
+</div>
 
 @if (_template != null)
 {
-    <MudStack Row Justify="Justify.FlexEnd">
-        <AuditInfo Entity="@_template" />
-    </MudStack>
-
     foreach (var objectType in _template.ObjectTypes)
     {
         <MudTable Items="@objectType.TemplateAttributes" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Outlined="true" Elevation="0">
@@ -245,7 +247,7 @@
 
         // attribute the execution to the user
         var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-        _task = new DataGenerationTemplateWorkerTask(_template.Id, user);
+        _task = DataGenerationTemplateWorkerTask.ForUser(_template.Id, user.Id, user.DisplayName ?? "Unknown User");
         var result = await Jim.Tasking.CreateWorkerTaskAsync(_task);
 
         if (!result.Success)

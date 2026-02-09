@@ -40,7 +40,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiner", "Leaver", "Mover", "Mover-Rename", "Mover-Move", "Disable", "Enable", "Reconnection", "ImportOnly", "All")]
+    [ValidateSet("Joiner", "Leaver", "Mover", "Mover-Rename", "Mover-Move", "Disable", "Enable", "Reconnection", "ImportOnly", "SyncOnly", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -69,12 +69,15 @@ $ConfirmPreference = 'None'  # Disable confirmation prompts for non-interactive 
 . "$PSScriptRoot/../utils/LDAP-Helpers.ps1"
 
 # Helper function to run the standard delta sync sequence with detailed output
-# This sequence is used after CSV changes to sync them through to LDAP:
+# This sequence is used after CSV changes to sync them through to both target systems:
 # 1. CSV Full Import - detect changes in CSV file
-# 2. CSV Delta Sync - process only changed CSOs, evaluate export rules
+# 2. CSV Delta Sync - process only changed CSOs, evaluate export rules for BOTH targets
 # 3. LDAP Export - apply pending exports to AD
 # 4. LDAP Delta Import - confirm the exports succeeded
 # 5. LDAP Delta Sync - process confirmed imports
+# 6. Cross-Domain Export - apply pending exports to cross-domain CSV
+# 7. Cross-Domain Full Import - confirm the exports succeeded (CSV uses Full Import, not Delta)
+# 8. Cross-Domain Delta Sync - process confirmed imports
 function Invoke-SyncSequence {
     param(
         [Parameter(Mandatory=$true)]
@@ -89,7 +92,7 @@ function Invoke-SyncSequence {
     }
 
     # Step 1: CSV Full Import
-    if ($ShowProgress) { Write-Host "  [1/5] CSV Full Import..." -ForegroundColor DarkGray }
+    if ($ShowProgress) { Write-Host "  [1/8] CSV Full Import..." -ForegroundColor DarkGray }
     $importResult = Start-JIMRunProfile -ConnectedSystemId $Config.CSVSystemId -RunProfileId $Config.CSVImportProfileId -Wait -PassThru
     $results.Steps += @{ Name = "CSV Full Import"; ActivityId = $importResult.activityId }
     if ($ValidateActivityStatus) {
@@ -97,7 +100,7 @@ function Invoke-SyncSequence {
     }
 
     # Step 2: CSV Delta Sync
-    if ($ShowProgress) { Write-Host "  [2/5] CSV Delta Sync..." -ForegroundColor DarkGray }
+    if ($ShowProgress) { Write-Host "  [2/8] CSV Delta Sync..." -ForegroundColor DarkGray }
     $syncResult = Start-JIMRunProfile -ConnectedSystemId $Config.CSVSystemId -RunProfileId $Config.CSVDeltaSyncProfileId -Wait -PassThru
     $results.Steps += @{ Name = "CSV Delta Sync"; ActivityId = $syncResult.activityId }
     if ($ValidateActivityStatus) {
@@ -105,7 +108,7 @@ function Invoke-SyncSequence {
     }
 
     # Step 3: LDAP Export
-    if ($ShowProgress) { Write-Host "  [3/5] LDAP Export..." -ForegroundColor DarkGray }
+    if ($ShowProgress) { Write-Host "  [3/8] LDAP Export..." -ForegroundColor DarkGray }
     $exportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
     $results.Steps += @{ Name = "LDAP Export"; ActivityId = $exportResult.activityId }
     if ($ValidateActivityStatus) {
@@ -117,7 +120,7 @@ function Invoke-SyncSequence {
     Start-Sleep -Seconds 5
 
     # Step 4: LDAP Delta Import (confirming export)
-    if ($ShowProgress) { Write-Host "  [4/5] LDAP Delta Import (confirming)..." -ForegroundColor DarkGray }
+    if ($ShowProgress) { Write-Host "  [4/8] LDAP Delta Import (confirming)..." -ForegroundColor DarkGray }
     $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPDeltaImportProfileId -Wait -PassThru
     $results.Steps += @{ Name = "LDAP Delta Import"; ActivityId = $confirmImportResult.activityId }
     if ($ValidateActivityStatus) {
@@ -125,11 +128,40 @@ function Invoke-SyncSequence {
     }
 
     # Step 5: LDAP Delta Sync
-    if ($ShowProgress) { Write-Host "  [5/5] LDAP Delta Sync..." -ForegroundColor DarkGray }
+    if ($ShowProgress) { Write-Host "  [5/8] LDAP Delta Sync..." -ForegroundColor DarkGray }
     $confirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPDeltaSyncProfileId -Wait -PassThru
     $results.Steps += @{ Name = "LDAP Delta Sync"; ActivityId = $confirmSyncResult.activityId }
     if ($ValidateActivityStatus) {
         Assert-ActivitySuccess -ActivityId $confirmSyncResult.activityId -Name "LDAP Delta Sync"
+    }
+
+    # Step 6: Cross-Domain Export
+    if ($Config.CrossDomainSystemId -and $Config.CrossDomainExportProfileId) {
+        if ($ShowProgress) { Write-Host "  [6/8] Cross-Domain Export..." -ForegroundColor DarkGray }
+        $crossDomainExportResult = Start-JIMRunProfile -ConnectedSystemId $Config.CrossDomainSystemId -RunProfileId $Config.CrossDomainExportProfileId -Wait -PassThru
+        $results.Steps += @{ Name = "Cross-Domain Export"; ActivityId = $crossDomainExportResult.activityId }
+        if ($ValidateActivityStatus) {
+            Assert-ActivitySuccess -ActivityId $crossDomainExportResult.activityId -Name "Cross-Domain Export"
+        }
+
+        # Step 7: Cross-Domain Full Import (confirming export - CSV uses Full Import, not Delta)
+        if ($ShowProgress) { Write-Host "  [7/8] Cross-Domain Full Import (confirming)..." -ForegroundColor DarkGray }
+        $crossDomainImportResult = Start-JIMRunProfile -ConnectedSystemId $Config.CrossDomainSystemId -RunProfileId $Config.CrossDomainImportProfileId -Wait -PassThru
+        $results.Steps += @{ Name = "Cross-Domain Import"; ActivityId = $crossDomainImportResult.activityId }
+        if ($ValidateActivityStatus) {
+            Assert-ActivitySuccess -ActivityId $crossDomainImportResult.activityId -Name "Cross-Domain Import"
+        }
+
+        # Step 8: Cross-Domain Delta Sync
+        if ($ShowProgress) { Write-Host "  [8/8] Cross-Domain Delta Sync..." -ForegroundColor DarkGray }
+        $crossDomainSyncResult = Start-JIMRunProfile -ConnectedSystemId $Config.CrossDomainSystemId -RunProfileId $Config.CrossDomainDeltaSyncProfileId -Wait -PassThru
+        $results.Steps += @{ Name = "Cross-Domain Delta Sync"; ActivityId = $crossDomainSyncResult.activityId }
+        if ($ValidateActivityStatus) {
+            Assert-ActivitySuccess -ActivityId $crossDomainSyncResult.activityId -Name "Cross-Domain Delta Sync"
+        }
+    }
+    else {
+        if ($ShowProgress) { Write-Host "  [6-8/8] Cross-Domain skipped (not configured)" -ForegroundColor DarkGray }
     }
 
     return $results
@@ -274,6 +306,56 @@ try {
         return
     }
 
+    # SyncOnly: Run HR CSV Full Import + Full Sync, stop before exports
+    # This creates pending exports for inspection without actually exporting
+    if ($Step -eq "SyncOnly") {
+        $stepSyncStart = Get-Date
+        Write-TestSection "SyncOnly: HR CSV Import + Full Sync (no exports)"
+
+        # Step 1: CSV Full Import
+        Write-Host "Triggering CSV Full Import..." -ForegroundColor Gray
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "CSV Full Import (SyncOnly)"
+        Write-Host "  ✓ CSV Full Import completed" -ForegroundColor Green
+
+        # Step 2: CSV Full Sync (creates MVOs and pending exports)
+        Write-Host "Triggering CSV Full Sync..." -ForegroundColor Gray
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "CSV Full Sync (SyncOnly)"
+        Write-Host "  ✓ CSV Full Sync completed" -ForegroundColor Green
+
+        Write-Host ""
+        Write-Host "✓ SyncOnly completed - pending exports created but NOT exported" -ForegroundColor Green
+        Write-Host "  Import Activity ID: $($importResult.activityId)" -ForegroundColor Cyan
+        Write-Host "  Sync Activity ID:   $($syncResult.activityId)" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "Pending exports are now available for inspection:" -ForegroundColor Yellow
+        Write-Host "  - View in JIM UI: Connected Systems > [System] > Pending Exports" -ForegroundColor DarkGray
+        Write-Host "  - Query database:" -ForegroundColor DarkGray
+        Write-Host "    docker compose exec jim.database psql -U jim -d jim -c `"" -ForegroundColor DarkGray
+        Write-Host "      SELECT cs.\\`"Name\\`\", pe.\\`"OperationType\\`\", COUNT(*) " -ForegroundColor DarkGray
+        Write-Host "      FROM \\`"PendingExports\\`\" pe " -ForegroundColor DarkGray
+        Write-Host "      JOIN \\`"ConnectedSystems\\`\" cs ON pe.\\`"ConnectedSystemId\\`\" = cs.\\`"Id\\`\" " -ForegroundColor DarkGray
+        Write-Host "      GROUP BY cs.\\`"Name\\`\", pe.\\`"OperationType\\`\"`"" -ForegroundColor DarkGray
+        Write-Host ""
+
+        $stepTimings["SyncOnly"] = (Get-Date) - $stepSyncStart
+        $testResults.Steps += @{ Name = "SyncOnly"; Success = $true }
+
+        # Skip all other tests
+        Write-Host "SyncOnly step complete - skipping exports and remaining tests" -ForegroundColor Yellow
+
+        # Jump to results summary
+        $testResults.Success = $true
+        Write-TestSection "Test Results Summary"
+        Write-Host "Tests run:    1"
+        Write-Host "Tests passed: 1"
+        Write-Host "✓ SyncOnly" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "✓ SyncOnly test passed" -ForegroundColor Green
+        return
+    }
+
     # Test 1: Joiner (New Hire)
     if ($Step -eq "Joiner" -or $Step -eq "All") {
         $step1Start = Get-Date
@@ -313,6 +395,157 @@ try {
         Write-Host "Triggering LDAP delta sync..." -ForegroundColor Gray
         $confirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $confirmSyncResult.activityId -Name "LDAP Delta Sync (Joiner confirm)"
+
+        # Training Import/Sync - join Training records to existing MVOs created by HR import
+        # The Training sync rule does NOT project - it only joins to existing MVOs via Employee ID
+        # This must happen AFTER HR import/sync creates the MVOs
+        if ($config.TrainingSystemId -and $config.TrainingImportProfileId -and $config.TrainingSyncProfileId) {
+            Write-Host ""
+            Write-Host "Establishing Training data baseline (joins to HR-created MVOs)..." -ForegroundColor Gray
+            Write-Host "  Running Training Full Import..." -ForegroundColor DarkGray
+            $trainingImportResult = Start-JIMRunProfile -ConnectedSystemId $config.TrainingSystemId -RunProfileId $config.TrainingImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $trainingImportResult.activityId -Name "Training Full Import (Joiner)"
+
+            Write-Host "  Running Training Full Sync..." -ForegroundColor DarkGray
+            $trainingSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.TrainingSystemId -RunProfileId $config.TrainingSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $trainingSyncResult.activityId -Name "Training Full Sync (Joiner)"
+
+            # Validate Training joined to MVOs and contributed attributes
+            Write-Host "  Validating Training data joined to MVOs..." -ForegroundColor DarkGray
+
+            # Get total MVO count and count with Training Status attribute
+            # Training data covers 85% of users, so we expect ~85% of MVOs to have Training Status
+            $scale = Get-TemplateScale -Template $Template
+            $expectedUsers = $scale.Users
+            $expectedTrainingCoverage = 0.85
+            $expectedWithTraining = [int]($expectedUsers * $expectedTrainingCoverage)
+
+            # Query all User MVOs with Training Status attribute
+            $allMVOs = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Attributes "Training Status" -PageSize 1000)
+            $totalMVOs = $allMVOs.Count
+
+            # Count MVOs that have Training Status attribute with a value
+            # Note: Attributes is a dictionary (key=name, value=string) from MetaverseObjectHeaderDto
+            # Handle both hashtable and PSCustomObject representations from JSON
+            $mvosWithTraining = @($allMVOs | Where-Object {
+                $attrs = $_.attributes
+                if ($null -eq $attrs) { return $false }
+
+                # Handle different types: PSCustomObject (from JSON) or Hashtable
+                $trainingValue = $null
+                if ($attrs -is [System.Collections.IDictionary]) {
+                    # Hashtable access
+                    if ($attrs.ContainsKey("Training Status")) {
+                        $trainingValue = $attrs["Training Status"]
+                    }
+                }
+                elseif ($null -ne $attrs.PSObject) {
+                    # PSCustomObject - use property-based access
+                    $prop = $attrs.PSObject.Properties["Training Status"]
+                    if ($null -ne $prop) {
+                        $trainingValue = $prop.Value
+                    }
+                }
+
+                $null -ne $trainingValue -and $trainingValue -ne ""
+            })
+            $trainingCount = $mvosWithTraining.Count
+
+            # Calculate actual coverage percentage
+            $actualCoverage = if ($totalMVOs -gt 0) { [math]::Round(($trainingCount / $totalMVOs) * 100, 1) } else { 0 }
+
+            Write-Host "    Total User MVOs: $totalMVOs" -ForegroundColor DarkGray
+            Write-Host "    MVOs with Training Status: $trainingCount ($actualCoverage%)" -ForegroundColor DarkGray
+            Write-Host "    Expected training records: $expectedWithTraining (85% of $expectedUsers HR users)" -ForegroundColor DarkGray
+
+            # Assert that Training data joined correctly
+            # Validate based on expected count, not percentage of all MVOs
+            # (Percentage can be skewed by baseline LDAP users imported from AD)
+            $minExpectedTraining = [int]($expectedWithTraining * 0.9)  # Allow 10% variance
+            $maxExpectedTraining = [int]($expectedWithTraining * 1.1)  # Allow 10% variance
+
+            if ($totalMVOs -eq 0) {
+                Write-Host "    ✗ No User MVOs found - HR import may have failed" -ForegroundColor Red
+                throw "Training validation failed: No User MVOs found in Metaverse"
+            }
+            elseif ($trainingCount -eq 0) {
+                Write-Host "    ✗ No MVOs have Training Status - Training sync may have failed to join" -ForegroundColor Red
+                throw "Training validation failed: No MVOs have Training Status attribute (expected ~$expectedWithTraining)"
+            }
+            elseif ($trainingCount -lt $minExpectedTraining) {
+                Write-Host "    ✗ Training coverage too low: $trainingCount users (expected $minExpectedTraining-$maxExpectedTraining)" -ForegroundColor Red
+                throw "Training validation failed: Only $trainingCount MVOs have Training Status (expected ~$expectedWithTraining)"
+            }
+            elseif ($trainingCount -gt $maxExpectedTraining) {
+                Write-Host "    ⚠ Training coverage higher than expected: $trainingCount users (expected $minExpectedTraining-$maxExpectedTraining)" -ForegroundColor Yellow
+            }
+            else {
+                Write-Host "    ✓ Training coverage validated: $trainingCount users with training data" -ForegroundColor Green
+            }
+
+            # Spot-check: Verify the test user has Training data (index 1 is within 85%)
+            # Note: We queried with "Training Status" attribute, not "Account Name", so filter by displayName instead
+            $testUserMVO = $allMVOs | Where-Object {
+                $_.displayName -eq $testUser.DisplayName
+            } | Select-Object -First 1
+
+            if (-not $testUserMVO) {
+                # Re-query with Account Name filter if not found in bulk results
+                $testUserMVO = Get-JIMMetaverseObject -AttributeName "Account Name" -AttributeValue $testUser.SamAccountName -Attributes "Training Status"
+            }
+
+            if ($testUserMVO) {
+                $attrs = $testUserMVO.attributes
+                $trainingStatus = $null
+                if ($null -ne $attrs) {
+                    if ($attrs -is [System.Collections.IDictionary]) {
+                        if ($attrs.ContainsKey("Training Status")) {
+                            $trainingStatus = $attrs["Training Status"]
+                        }
+                    }
+                    elseif ($null -ne $attrs.PSObject) {
+                        $prop = $attrs.PSObject.Properties["Training Status"]
+                        if ($null -ne $prop) {
+                            $trainingStatus = $prop.Value
+                        }
+                    }
+                }
+                if ($null -ne $trainingStatus -and $trainingStatus -ne "") {
+                    Write-Host "    ✓ Test user ($($testUser.SamAccountName)) Training Status: '$trainingStatus'" -ForegroundColor Green
+                }
+                else {
+                    Write-Host "    ⚠ Test user ($($testUser.SamAccountName)) has no Training Status (may be in 15% without training)" -ForegroundColor Yellow
+                }
+            }
+
+            Write-Host "✓ Training data joined to MVOs ($trainingCount/$totalMVOs = $actualCoverage%)" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  ⚠ Training system not configured, skipping Training import/sync" -ForegroundColor Yellow
+        }
+
+        # Cross-Domain Export/Import/Sync - export users to cross-domain CSV target
+        # This tests the multi-target export functionality (same MVO flows to multiple targets)
+        if ($config.CrossDomainSystemId -and $config.CrossDomainExportProfileId) {
+            Write-Host ""
+            Write-Host "Exporting to Cross-Domain target..." -ForegroundColor Gray
+            Write-Host "  Running Cross-Domain Export..." -ForegroundColor DarkGray
+            $crossDomainExportResult = Start-JIMRunProfile -ConnectedSystemId $config.CrossDomainSystemId -RunProfileId $config.CrossDomainExportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $crossDomainExportResult.activityId -Name "Cross-Domain Export (Joiner)"
+
+            Write-Host "  Running Cross-Domain Full Import (confirming)..." -ForegroundColor DarkGray
+            $crossDomainImportResult = Start-JIMRunProfile -ConnectedSystemId $config.CrossDomainSystemId -RunProfileId $config.CrossDomainImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $crossDomainImportResult.activityId -Name "Cross-Domain Import (Joiner)"
+
+            Write-Host "  Running Cross-Domain Delta Sync..." -ForegroundColor DarkGray
+            $crossDomainSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CrossDomainSystemId -RunProfileId $config.CrossDomainDeltaSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $crossDomainSyncResult.activityId -Name "Cross-Domain Delta Sync (Joiner)"
+
+            Write-Host "✓ Cross-Domain export completed" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  ⚠ Cross-Domain system not configured, skipping Cross-Domain export" -ForegroundColor Yellow
+        }
 
         # Validate user exists in AD
         Write-Host "Validating user in Samba AD..." -ForegroundColor Gray

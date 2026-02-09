@@ -1,55 +1,115 @@
-﻿@page "/admin/schema"
+@page "/admin/schema"
+@page "/admin/schema/attributes"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
+@using JIM.Utilities
 @inject JimApplication Jim
+@inject NavigationManager NavigationManager
 
-<PageTitle>Schema: Object Types</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Schema:</span> Object Types</MudText>
+<PageTitle>Schema</PageTitle>
+<MudText Typo="Typo.h4"><span class="mud-primary-text">Schema:</span> @(_activeTabIndex == 0 ? "Object Types" : "Attributes")</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Manage metaverse object types and their attributes.</MudText>
 
-<MudPaper Elevation="0" Class="mt-5" Outlined="true">
-    <MudToolBar>
-        <MudButton Href="/admin/schema" Color="Color.Primary" DropShadow="false" Disabled="true">Object Types</MudButton>
-        <MudButton Href="/admin/schema/attributes" Color="Color.Primary" DropShadow="false">Attributes</MudButton>
-        <MudSpacer />
-    </MudToolBar>
-</MudPaper>
-
-<MudTable Items="@_metaverseObjectTypeHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Loading="false" Class="mt-5" SortLabel="Sort By" Outlined="true" Elevation="0">
-    <HeaderContent>
-        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.AttributesCount)"><MudText Typo="Typo.button">Attributes</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.DeletionRule)"><MudText Typo="Typo.button">Deletion Rule</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.HasPredefinedSearches)"><MudText Typo="Typo.button">Predefined Searches?</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd DataLabel="Name"><MudLink Href="@("/admin/schema/object-types/"+context.Id)">@context.Name</MudLink></MudTd>
-        <MudTd DataLabel="Attributes">@context.AttributesCount</MudTd>
-        <MudTd DataLabel="Deletion Rule">
-            @{
-                var (label, color, icon) = GetDeletionRuleDisplay(context.DeletionRule);
-            }
-            <MudTooltip Text="@GetDeletionRuleTooltip(context)" Arrow="true" Placement="Placement.Top">
-                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@color" Icon="@icon">@label</MudChip>
-            </MudTooltip>
-        </MudTd>
-        <MudTd DataLabel="Predefined Searches?">@(context.HasPredefinedSearches ? "Yes" : "No")</MudTd>
-        <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
-        <MudTd DataLabel="Created">
-            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                @context.Created.ToLocalTime().ToRelativeTime()
-            </MudTooltip>
-        </MudTd>
-    </RowTemplate>
-</MudTable>
+<MudTabs @bind-ActivePanelIndex="_activeTabIndex" Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" PanelClass="pt-5" Class="mt-5">
+    <MudTabPanel Text="Object Types" Icon="@Icons.Material.Filled.Category">
+        <MudTable Items="@_metaverseObjectTypeHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Loading="false" SortLabel="Sort By" Outlined="true" Elevation="0">
+            <HeaderContent>
+                <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.AttributesCount)"><MudText Typo="Typo.button">Attributes</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.DeletionRule)"><MudText Typo="Typo.button">Deletion Rule</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.HasPredefinedSearches)"><MudText Typo="Typo.button">Predefined Searches?</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name"><MudLink Href="@("/admin/schema/object-types/"+context.Id)">@context.Name</MudLink></MudTd>
+                <MudTd DataLabel="Attributes">@context.AttributesCount</MudTd>
+                <MudTd DataLabel="Deletion Rule">
+                    @{
+                        var (label, color, icon) = GetDeletionRuleDisplay(context.DeletionRule);
+                    }
+                    <MudTooltip Text="@GetDeletionRuleTooltip(context)" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Variant="Variant.Text" Color="@color" Icon="@icon">@label</MudChip>
+                    </MudTooltip>
+                </MudTd>
+                <MudTd DataLabel="Predefined Searches?">@(context.HasPredefinedSearches ? "Yes" : "No")</MudTd>
+                <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
+                <MudTd DataLabel="Created">
+                    <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                        @context.Created.ToLocalTime().ToRelativeTime()
+                    </MudTooltip>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudTabPanel>
+    <MudTabPanel Text="Attributes" Icon="@Icons.Material.Filled.ListAlt">
+        <MudTable Items="@_attributeHeaders" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mb-5" SortLabel="Sort By" Filter="new Func<MetaverseAttributeHeader,bool>(FilterFunc1)" Elevation="0" Outlined="true">
+            <ToolBarContent>
+                <MudText Typo="Typo.h6">Attributes</MudText>
+                <MudSpacer />
+                <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.Type)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.AttributePlurality)"><MudText Typo="Typo.button">Plurality</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttributeHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudText Typo="Typo.button">Object Types</MudText></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">@context.Name</MudTd>
+                <MudTd DataLabel="Type">
+                    <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Type)" Variant="Variant.Outlined">
+                        @context.Type.ToString().SplitOnCapitalLetters()
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Plurality">
+                    <MudChip T="string" Color="@Helpers.GetAttributePluralityChipColour(context.AttributePlurality)" Variant="Variant.Text">
+                        @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Built-in?">
+                    @if (context.BuiltIn)
+                    {
+                        <MudTooltip Text="Built-in attribute" Arrow="true" Placement="Placement.Top">
+                            <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary" />
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Custom</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Created">
+                    <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                        @context.Created.ToLocalTime().ToRelativeTime()
+                    </MudTooltip>
+                </MudTd>
+                <MudTd DataLabel="Object Types">
+                    @if (context.MetaverseObjectTypes != null)
+                    {
+                        foreach (var stub in context.MetaverseObjectTypes)
+                        {
+                            var attributeUrl = $"/admin/schema/object-types/{stub.Key}";
+                            <MudChip T="string" Color="Color.Primary" Href="@attributeUrl">@stub.Value</MudChip>
+                        }
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudTabPanel>
+</MudTabs>
 
 @code {
+    private int _activeTabIndex;
     private IList<MetaverseObjectTypeHeader>? _metaverseObjectTypeHeaders;
+    private IList<MetaverseAttributeHeader>? _attributeHeaders;
+    private string _searchString = "";
+
     private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
     {
         new("Home", href: "/", icon: Icons.Material.Filled.Home),
@@ -58,7 +118,15 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Set active tab based on the current URL
+        var uri = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        if (uri.StartsWith("admin/schema/attributes", StringComparison.OrdinalIgnoreCase))
+        {
+            _activeTabIndex = 1;
+        }
+
         _metaverseObjectTypeHeaders = await Jim.Metaverse.GetMetaverseObjectTypeHeadersAsync();
+        _attributeHeaders = await Jim.Metaverse.GetMetaverseAttributeHeadersAsync();
     }
 
     private (string Label, Color Color, string Icon) GetDeletionRuleDisplay(MetaverseObjectDeletionRule rule)
@@ -94,5 +162,18 @@
             MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected => $"Delete when authoritative source disconnects{gracePeriod}",
             _ => "Unknown deletion rule"
         };
+    }
+
+    private bool FilterFunc1(MetaverseAttributeHeader element) => FilterFunc(element, _searchString);
+
+    private static bool FilterFunc(MetaverseAttributeHeader element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+
+        if (element.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
     }
 }

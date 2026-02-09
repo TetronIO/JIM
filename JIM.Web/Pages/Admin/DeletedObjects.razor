@@ -6,8 +6,10 @@
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Enums
 @using Humanizer
+@using JIM.Web.Services
 @inject JimApplication Jim
 @inject NavigationManager NavManager
+@inject IUserPreferenceService PreferenceService
 
 <PageTitle>Deleted Objects</PageTitle>
 <MudText Typo="Typo.h4">Deleted Objects</MudText>
@@ -68,7 +70,7 @@
 
             <!-- Results Table -->
             <MudTable Items="@_deletedCsoChanges" Hover="true" Breakpoint="Breakpoint.Sm" Outlined="true" Elevation="0"
-                      Loading="@_csoLoading" Dense="true" CurrentPage="@(_csoPage - 1)" RowsPerPage="@_pageSize">
+                      Loading="@_csoLoading" Dense="true" CurrentPage="@(_csoPage - 1)" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged">
                 <HeaderContent>
                     <MudTh Style="width: 1px;"></MudTh>
                     <MudTh><MudText Typo="Typo.button">External ID</MudText></MudTh>
@@ -80,7 +82,7 @@
                 <RowTemplate>
                     <MudTd>
                         <MudButton Variant="Variant.Outlined"
-                                   Size="Size.Small"
+                                  
                                    Color="Color.Primary"
                                    OnClick="() => ViewCsoHistoryAsync(context)">
                             View
@@ -111,7 +113,7 @@
                     <MudText>No deleted CSOs found matching your criteria.</MudText>
                 </NoRecordsContent>
                 <PagerContent>
-                    <MudTablePager PageSizeOptions="new int[] { 25, 50, 100 }" />
+                    <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
                 </PagerContent>
             </MudTable>
         </MudPaper>
@@ -167,7 +169,7 @@
 
             <!-- Results Table -->
             <MudTable Items="@_deletedMvoChanges" Hover="true" Breakpoint="Breakpoint.Sm" Outlined="true" Elevation="0"
-                      Loading="@_mvoLoading" Dense="true" CurrentPage="@(_mvoPage - 1)" RowsPerPage="@_pageSize">
+                      Loading="@_mvoLoading" Dense="true" CurrentPage="@(_mvoPage - 1)" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged">
                 <HeaderContent>
                     <MudTh Style="width: 1px;"></MudTh>
                     <MudTh><MudText Typo="Typo.button">Display Name</MudText></MudTh>
@@ -178,7 +180,7 @@
                 <RowTemplate>
                     <MudTd>
                         <MudButton Variant="Variant.Outlined"
-                                   Size="Size.Small"
+                                  
                                    Color="Color.Primary"
                                    OnClick="() => ViewMvoHistoryAsync(context)">
                             View
@@ -199,7 +201,7 @@
                         @if (!string.IsNullOrEmpty(context.InitiatedByName))
                         {
                             <div class="d-flex align-center gap-1">
-                                <MudIcon Icon="@Helpers.GetInitiatorIcon(context.InitiatedByType)" Size="Size.Small" Class="mud-text-secondary" />
+                                <MudIcon Icon="@Helpers.GetInitiatorIcon(context.InitiatedByType)" Class="mud-text-secondary" />
                                 @if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.ApiKey && context.InitiatedById.HasValue)
                                 {
                                     <MudLink Href="@($"/admin/apikeys/{context.InitiatedById}")">@context.InitiatedByName</MudLink>
@@ -224,7 +226,7 @@
                     <MudText>No deleted MVOs found matching your criteria.</MudText>
                 </NoRecordsContent>
                 <PagerContent>
-                    <MudTablePager PageSizeOptions="new int[] { 25, 50, 100 }" />
+                    <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
                 </PagerContent>
             </MudTable>
         </MudPaper>
@@ -289,7 +291,8 @@
 
 @code {
     private int _activeTabIndex;
-    private const int _pageSize = 50;
+    private int _rowsPerPage = 10;
+    private bool _preferencesLoaded;
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new()
     {
@@ -346,6 +349,30 @@
         // Load initial data for both tabs (showing latest deleted objects by default)
         await SearchCsosAsync();
         await SearchMvosAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_preferencesLoaded)
+        {
+            try
+            {
+                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
+                _rowsPerPage = preferredSize;
+                _preferencesLoaded = true;
+                StateHasChanged();
+            }
+            catch
+            {
+                // JS interop not yet available, will retry on next render
+            }
+        }
+    }
+
+    private async Task OnRowsPerPageChanged(int newSize)
+    {
+        _rowsPerPage = newSize;
+        await PreferenceService.SetRowsPerPageAsync(newSize);
     }
 
     private async Task SearchCsosAsync()

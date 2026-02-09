@@ -33,4 +33,20 @@ public interface ITaskingRepository
     public Task UpdateWorkerTaskAsync(WorkerTask serviceTask);
 
     public Task DeleteWorkerTaskAsync(WorkerTask serviceTask);
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Scheduler Service Queries
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Gets all worker tasks associated with a schedule execution.
+    /// Used by the scheduler to monitor step completion.
+    /// </summary>
+    public Task<List<WorkerTask>> GetWorkerTasksByScheduleExecutionAsync(Guid scheduleExecutionId);
+
+    /// <summary>
+    /// Gets all worker tasks for a specific step within a schedule execution.
+    /// A step may have multiple tasks if it runs multiple run profiles in parallel.
+    /// </summary>
+    public Task<List<WorkerTask>> GetWorkerTasksByScheduleExecutionStepAsync(Guid scheduleExecutionId, int stepIndex);
 }

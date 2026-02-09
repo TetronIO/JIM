@@ -1073,7 +1073,6 @@ public static class TestUtilities
                 ConnectedSystemRunType = connectedSystemRunType,
                 InitiatedByType = ActivityInitiatorType.User,
                 InitiatedById = testUser.Id,
-                InitiatedByMetaverseObject = testUser,
                 InitiatedByName = "Joe Bloggs"
             }
         };
@@ -1108,7 +1107,6 @@ public static class TestUtilities
             Id = Guid.NewGuid(),
             Activity = activity,
             InitiatedByType = initiatedBy != null ? ActivityInitiatorType.User : ActivityInitiatorType.NotSet,
-            InitiatedByMetaverseObject = initiatedBy,
             InitiatedById = initiatedBy?.Id,
             InitiatedByName = initiatedBy?.DisplayName
         };

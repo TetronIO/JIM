@@ -1,5 +1,6 @@
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Tasking.DTOs;
@@ -36,18 +37,15 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
-        /// Creates an activity from a worker task, using the correct initiator type.
+        /// Creates an activity from a worker task, using the initiator triad from the task.
         /// </summary>
         private async Task CreateActivityFromWorkerTaskAsync(Activity activity, WorkerTask workerTask)
         {
-            if (workerTask.InitiatedByType == ActivityInitiatorType.ApiKey && workerTask.InitiatedByApiKey != null)
-            {
-                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedByApiKey);
-            }
-            else
-            {
-                await Application.Activities.CreateActivityAsync(activity, workerTask.InitiatedByMetaverseObject);
-            }
+            await Application.Activities.CreateActivityWithTriadAsync(
+                activity,
+                workerTask.InitiatedByType,
+                workerTask.InitiatedById,
+                workerTask.InitiatedByName);
         }
 
         public async Task<WorkerTaskCreationResult> CreateWorkerTaskAsync(WorkerTask workerTask)

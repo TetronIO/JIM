@@ -1,283 +1,32 @@
-﻿@page "/admin/operations"
+@page "/admin/operations"
 @using JIM.Application;
-@using JIM.Models.Core;
-@using JIM.Models.Staging;
-@using JIM.Models.Staging.DTOs;
-@using JIM.Models.Tasking;
-@using JIM.Models.Tasking.DTOs;
-@using JIM.PostgresData
-@using JIM.Utilities;
+@using JIM.Web.Pages.Admin.Components
 @attribute [Authorize(Roles = "Administrator")]
 @inject JimApplication Jim
-@inject ISnackbar Snackbar
-@inject IDialogService DialogService
-@implements IDisposable
 
 <PageTitle>Operations</PageTitle>
 <MudText Typo="Typo.h4">Operations</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
-    JIM executes tasks on a queue. You can see what tasks are queued here. Tasks are made up of different types of operations within JIM, i.e. Synchronisation Tasks and Data Generation Tasks.
+    Manage tasks, view execution history, and configure schedules.
 </MudText>
 
-<MudPaper Outlined="true" Class="pa-4 mt-5">
-    <MudText Typo="Typo.h6">Execute a Run Profile</MudText>
-    <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Add a Synchronisation Run to the queue. If it's empty, it'll run immediately, if not, it'll run when all other queued tasks are complete.</MudText>
-
-    @if (_connectedSystemHeaders is { Count: > 0 })
-    {
-        <MudForm>
-            <MudGrid Class="mt-3">
-                <MudItem xs="12" sm="5">
-                    <MudSelect T="ConnectedSystemHeader" ValueChanged="HandleConnectedSystemHeaderChangedAsync" Label="Connected System" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true" RequiredError="Please select a Connected System">
-                        @foreach (var connectedSystem in _connectedSystemHeaders)
-                        {
-                            <MudSelectItem Value="@connectedSystem" />
-                        }
-                    </MudSelect>
-                </MudItem>
-                <MudItem xs="12" sm="5">
-                    <MudSelect T="ConnectedSystemRunProfile" @bind-Value="_selectedConnectedSystemRunProfile" Label="Run Profile" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true" RequiredError="A run profile is required" Disabled="@(_connectedSystemRunProfiles == null)">
-                        @if (_connectedSystemRunProfiles != null)
-                        {
-                            @foreach (var runProfile in _connectedSystemRunProfiles)
-                            {
-                                <MudSelectItem Value="@runProfile" />
-                            }
-                        }
-                    </MudSelect>
-                </MudItem>
-                <MudItem xs="12" sm="2" Class="d-flex align-end pb-2">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleExecuteRunProfileSubmitAsync" DropShadow="false" FullWidth="true" Style="height: 50px;">Execute</MudButton>
-                </MudItem>
-            </MudGrid>
-        </MudForm>
-    }
-    else
-    {
-        <MudAlert Class="mt-5" Severity="Severity.Warning">Please create a <MudLink Href="/admin/connected-systems/">Connected System</MudLink> first.</MudAlert>
-    }
-</MudPaper>
-
-<MudTable T="WorkerTaskHeader" Items="@_workerTaskHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
-    <HeaderContent>
-        <MudTh><MudText Typo="Typo.button">Type</MudText></MudTh>
-        <MudTh><MudText Typo="Typo.button">Name</MudText></MudTh>
-        <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
-        <MudTh Style="min-width: 200px;"><MudText Typo="Typo.button">Progress</MudText></MudTh>
-        <MudTh><MudText Typo="Typo.button">Created</MudText></MudTh>
-        <MudTh><MudText Typo="Typo.button">Initiated By</MudText></MudTh>
-        <MudTh Style="text-align: right;"><MudText Typo="Typo.button">Actions</MudText></MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd DataLabel="Type">@context.Type</MudTd>
-        <MudTd DataLabel="Name">@context.Name</MudTd>
-        <MudTd DataLabel="Status">@context.Status.ToString().SplitOnCapitalLetters()</MudTd>
-        <MudTd DataLabel="Progress">
-            @if (context.Status == WorkerTaskStatus.Processing)
-            {
-                @if (context.ObjectsToProcess > 0)
-                {
-                    var percentage = (double)context.ObjectsProcessed!.Value / context.ObjectsToProcess.Value * 100;
-                    <MudProgressLinear Value="@percentage" Color="Color.Primary" Rounded="true" Size="Size.Small" />
-                    <MudText Typo="Typo.caption" Class="mt-2">@context.ObjectsProcessed / @context.ObjectsToProcess@(!string.IsNullOrEmpty(context.ProgressMessage) ? $" - {context.ProgressMessage}" : "")</MudText>
-                }
-                else
-                {
-                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Rounded="true" Size="Size.Small" />
-                    @if (!string.IsNullOrEmpty(context.ProgressMessage))
-                    {
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.ProgressMessage</MudText>
-                    }
-                }
-            }
-            else if (context.Status == WorkerTaskStatus.Queued)
-            {
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">Waiting...</MudText>
-            }
-        </MudTd>
-        <MudTd DataLabel="Created">
-            <MudTooltip Text="@context.Timestamp.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                @context.Timestamp.ToLocalTime().ToRelativeTime()
-            </MudTooltip>
-        </MudTd>
-        <MudTd DataLabel="Initiated By">
-            @if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.User && context.InitiatedById != null)
-            {
-                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                <span>@context.InitiatedByName</span>
-            }
-            else if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.ApiKey)
-            {
-                <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                <span>@context.InitiatedByName</span>
-            }
-            else if (!string.IsNullOrEmpty(context.InitiatedByName))
-            {
-                <span>@context.InitiatedByName</span>
-            }
-        </MudTd>
-        <MudTd DataLabel="Actions" Style="text-align: right;">
-            <MudTooltip Text="Cancel" Arrow="true" Placement="Placement.Left">
-                    <MudIconButton Icon="@Icons.Material.Outlined.Cancel" Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" OnClick="() => HandleCancelTaskAsync(context)" />
-                </MudTooltip>
-        </MudTd>
-    </RowTemplate>
-    <NoRecordsContent>
-        There are no service tasks queued.
-    </NoRecordsContent>
-</MudTable>
+<MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" PanelClass="pt-5" Class="mt-5">
+    <MudTabPanel Text="Queue" Icon="@Icons.Material.Filled.Queue">
+        <OperationsQueueTab />
+    </MudTabPanel>
+    <MudTabPanel Text="History" Icon="@Icons.Material.Filled.History">
+        <OperationsHistoryTab />
+    </MudTabPanel>
+    <MudTabPanel Text="Schedules" Icon="@Icons.Material.Filled.Schedule">
+        <OperationsSchedulesTab />
+    </MudTabPanel>
+</MudTabs>
 
 @code {
-    [CascadingParameter]
-    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
-    private List<ConnectedSystemHeader>? _connectedSystemHeaders;
-    private List<ConnectedSystemRunProfile>? _connectedSystemRunProfiles;
-    private ConnectedSystemHeader? _selectedConnectedSystemHeader;
-    private ConnectedSystemRunProfile? _selectedConnectedSystemRunProfile;
-    private List<WorkerTaskHeader> _workerTaskHeaders = new();
-    private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
-
     private readonly List<BreadcrumbItem> _breadcrumbs =
     [
         new("Home", href: "/", icon: Icons.Material.Filled.Home),
         new("Operations", href: null, disabled: true)
     ];
-
-    protected override async Task OnInitializedAsync()
-    {
-        _connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
-
-        // get initial data for worker task table rendering
-        _workerTaskHeaders = await Jim.Tasking.GetWorkerTaskHeadersAsync();
-
-        // setup polling for worker task header updates
-        var token = _pollingCancellationTokenSource.Token;
-        var task = Task.Factory.StartNew(async () =>
-        {
-            while (true)
-            {
-                // get a new JIM instance so we disable Entity Framework caching and are able to see changes made to the data by other JIM instances, i.e. JIM.Worker
-                var iterationJim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
-
-                var stateHasChanged = false;
-                Console.WriteLine("JIM.Web: Operations.razor: Polling for worker task headers...");
-                var newWorkerTaskHeaders = await iterationJim.Tasking.GetWorkerTaskHeadersAsync();
-
-                // look for additions or updates...
-                foreach (var newWorkerTaskHeader in newWorkerTaskHeaders)
-                {
-                    var workerTaskHeader = _workerTaskHeaders.SingleOrDefault(q => q.Id == newWorkerTaskHeader.Id);
-                    if (workerTaskHeader == null)
-                    {
-                        // newWorkerTask is new, add it
-                        Console.WriteLine("JIM.Web: Operations.razor: ST-POLLING: Adding worker task header: " + newWorkerTaskHeader.Id);
-                        _workerTaskHeaders.Add(newWorkerTaskHeader);
-                        stateHasChanged = true;
-                    }
-                    else if (HasWorkerTaskHeaderChanged(workerTaskHeader, newWorkerTaskHeader))
-                    {
-                        // existing worker task, so it's either unchanged, or an update
-                        Console.WriteLine($"JIM.Web: Operations.razor: ST-POLLING: Updating worker task header: {newWorkerTaskHeader.Id} - Progress: {newWorkerTaskHeader.ObjectsProcessed}/{newWorkerTaskHeader.ObjectsToProcess}");
-                        var position = _workerTaskHeaders.IndexOf(workerTaskHeader);
-                        _workerTaskHeaders.Remove(workerTaskHeader);
-                        _workerTaskHeaders.Insert(position, newWorkerTaskHeader);
-                        stateHasChanged = true;
-                    }
-                    else if (newWorkerTaskHeader.Status == WorkerTaskStatus.Processing)
-                    {
-                        // Log even when no change detected for processing tasks (debugging)
-                        Console.WriteLine($"JIM.Web: Operations.razor: ST-POLLING: No change for processing task: {newWorkerTaskHeader.Id} - Progress: {newWorkerTaskHeader.ObjectsProcessed}/{newWorkerTaskHeader.ObjectsToProcess}");
-                    }
-                }
-
-                // look for removals, i.e. workerTasks items not in newWorkerTasks
-                var workerTaskHeadersToRemove = _workerTaskHeaders.Where(sth => newWorkerTaskHeaders.All(sth2 => sth2.Id != sth.Id)).ToList();
-                foreach (var workerTaskHeaderToRemove in workerTaskHeadersToRemove)
-                {
-                    Console.WriteLine("JIM.Web: Operations.razor: ST-POLLING: Removing worker task header: " + workerTaskHeaderToRemove.Id);
-                    _workerTaskHeaders.Remove(workerTaskHeaderToRemove);
-                    stateHasChanged = true;
-                }
-
-                // we have to manually cause the UI to update as Blazor has no way of knowing about the data changing on this thread.
-                if (stateHasChanged)
-                    await InvokeAsync(StateHasChanged);
-
-                // Use the configurable polling interval from settings
-                var pollingInterval = await iterationJim.ServiceSettings.GetSettingValueAsync(
-                    Constants.SettingKeys.ProgressUpdateInterval,
-                    TimeSpan.FromSeconds(1));
-                await Task.Delay(pollingInterval, token);
-                if (token.IsCancellationRequested)
-                    break;
-            }
-        }, token);
-    }
-
-    void IDisposable.Dispose()
-    {
-        // make sure we cancel the polling task
-        _pollingCancellationTokenSource.Cancel();
-    }
-
-    private async Task HandleConnectedSystemHeaderChangedAsync(ConnectedSystemHeader connectedSystemHeader)
-    {
-        _selectedConnectedSystemHeader = connectedSystemHeader;
-        _connectedSystemRunProfiles = await Jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemHeader.Id);
-    }
-
-    private async Task HandleExecuteRunProfileSubmitAsync()
-    {
-        if (_selectedConnectedSystemHeader == null || _selectedConnectedSystemRunProfile == null)
-            return;
-
-        // attribute the execution to the user
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-        var task = new SynchronisationWorkerTask(_selectedConnectedSystemHeader.Id, _selectedConnectedSystemRunProfile.Id, user);
-        var result = await Jim.Tasking.CreateWorkerTaskAsync(task);
-
-        if (!result.Success)
-        {
-            Snackbar.Add(result.ErrorMessage ?? "Failed to create task.", Severity.Error);
-            return;
-        }
-
-        // Show any warnings
-        foreach (var warning in result.Warnings)
-        {
-            Snackbar.Add(warning, Severity.Warning);
-        }
-
-        Snackbar.Add("Synchronisation task added.", Severity.Success);
-    }
-
-    private async Task HandleCancelTaskAsync(WorkerTaskHeader workerTaskHeader)
-    {
-        if (workerTaskHeader == null)
-            return;
-
-        var result = await DialogService.ShowMessageBox(
-            "Cancel Task",
-            $"Are you sure you want to cancel the task '{workerTaskHeader.Name}'?",
-            yesText: "Cancel Task",
-            cancelText: "Keep Running");
-
-        if (result != true)
-            return;
-
-        await Jim.Tasking.CancelWorkerTaskAsync(workerTaskHeader.Id);
-        Snackbar.Add("Worker task cancellation requested.", Severity.Success);
-    }
-
-    /// <summary>
-    /// Checks if any relevant fields have changed between two worker task headers.
-    /// </summary>
-    private static bool HasWorkerTaskHeaderChanged(WorkerTaskHeader existing, WorkerTaskHeader updated)
-    {
-        return existing.Status != updated.Status ||
-               existing.ObjectsProcessed != updated.ObjectsProcessed ||
-               existing.ObjectsToProcess != updated.ObjectsToProcess ||
-               existing.ProgressMessage != updated.ProgressMessage;
-    }
 }

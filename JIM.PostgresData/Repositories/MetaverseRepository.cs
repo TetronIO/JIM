@@ -198,6 +198,7 @@ public class MetaverseRepository : IMetaverseRepository
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)
     {
         return await Repository.Database.MetaverseObjects
+            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
             .Include(mo => mo.Type)
             .Include(mo => mo.AttributeValues)
                 .ThenInclude(av => av.Attribute)
@@ -301,6 +302,7 @@ public class MetaverseRepository : IMetaverseRepository
             pageSize = 100;
 
         var objects = from o in Repository.Database.MetaverseObjects.
+                AsSplitQuery(). // Use split query to avoid cartesian explosion from collection includes
                 Include(mo => mo.AttributeValues).
                 ThenInclude(av => av.Attribute).
                 Where(q => q.Type.Id == metaverseObjectTypeId)
@@ -381,6 +383,7 @@ public class MetaverseRepository : IMetaverseRepository
 
         // construct the base query. This much is true, regardless of the search properties.
         var objects = from o in Repository.Database.MetaverseObjects.
+                AsSplitQuery(). // Use split query to avoid cartesian explosion from collection includes
                 Include(mo => mo.AttributeValues).
                 ThenInclude(av => av.Attribute).
                 Where(q => q.Type.Id == predefinedSearch.MetaverseObjectType.Id)
@@ -683,6 +686,7 @@ public class MetaverseRepository : IMetaverseRepository
 
             // construct the base query. This much is true, regardless of the matching rule properties.
             var metaVerseObjects = from o in Repository.Database.MetaverseObjects.
+                    AsSplitQuery(). // Use split query to avoid cartesian explosion from collection includes
                     Include(mvo => mvo.AttributeValues).
                     ThenInclude(av => av.Attribute).
                     Where(mvo => mvo.Type.Id == metaverseObjectType.Id)

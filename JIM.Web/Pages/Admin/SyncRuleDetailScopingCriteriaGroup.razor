@@ -39,13 +39,13 @@
                     @if (criteria.MetaverseAttribute != null)
                     {
                         <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
-                            <MudAvatar>MV</MudAvatar>
+                            <MudAvatar Color="Color.Primary">MV</MudAvatar>
                         </MudTooltip>
                     }
                     else
                     {
                         <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
-                            <MudAvatar>CS</MudAvatar>
+                            <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
                         </MudTooltip>
                     }
                 </AvatarContent>
@@ -57,7 +57,7 @@
                 Icon="@Icons.Material.Outlined.Delete"
                 Variant="Variant.Outlined"
                 DropShadow="false"
-                Size="Size.Small"
+               
                 aria-label="delete"
                 OnClick="@(() => HandleDeleteCriteria(criteria))"></MudIconButton>
         </div>

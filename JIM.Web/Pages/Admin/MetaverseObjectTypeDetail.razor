@@ -10,16 +10,19 @@
 @inject ISnackbar Snackbar
 
 <PageTitle>Metaverse Object Type: @_metaverseObjectType?.Name</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Metaverse Object Type:</span> @_metaverseObjectType?.Name</MudText>
-<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.h4"><span class="mud-primary-text">Metaverse Object Type:</span> @_metaverseObjectType?.Name</MudText>
+<div class="d-flex justify-space-between align-center">
+    <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+    @if (_metaverseObjectType != null)
+    {
+        <AuditInfo Entity="@_metaverseObjectType" />
+    }
+</div>
 
 @if (_metaverseObjectType != null)
 {
-    <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mt-3">
-        <MudText Typo="Typo.h5">Details</MudText>
-        <AuditInfo Entity="@_metaverseObjectType" />
-    </MudStack>
     <MudPaper Class="pa-5 mt-3" Outlined="true">
+        <MudText Typo="Typo.h5" Class="mb-4">Details</MudText>
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
                 <MudField Label="Name" Variant="Variant.Outlined">@_metaverseObjectType.Name</MudField>
@@ -33,10 +36,9 @@
         </MudGrid>
     </MudPaper>
 
-    <MudText Typo="Typo.h5" Class="mt-5">Deletion Rules</MudText>
-    <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2">Configure when metaverse objects of this type should be automatically deleted.</MudText>
-
     <MudPaper Class="pa-5 mt-5" Outlined="true">
+        <MudText Typo="Typo.h5" Class="mb-2">Deletion Rules</MudText>
+        <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">Configure when metaverse objects of this type should be automatically deleted.</MudText>
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
                 <MudSelect T="MetaverseObjectDeletionRule" Label="Deletion Rule" @bind-Value="_deletionRule"
@@ -176,9 +178,28 @@
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Name">@context.Name</MudTd>
-            <MudTd DataLabel="Type">@context.Type.ToString().SplitOnCapitalLetters()</MudTd>
-            <MudTd DataLabel="Plurality">@(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")</MudTd>
-            <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
+            <MudTd DataLabel="Type">
+                <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Type)" Variant="Variant.Outlined">
+                    @context.Type.ToString().SplitOnCapitalLetters()
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Plurality">
+                <MudChip T="string" Color="@Helpers.GetAttributePluralityChipColour(context.AttributePlurality)" Variant="Variant.Text">
+                    @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Built-in?">
+                @if (context.BuiltIn)
+                {
+                    <MudTooltip Text="Built-in attribute" Arrow="true" Placement="Placement.Top">
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary" />
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Custom</MudText>
+                }
+            </MudTd>
             <MudTd DataLabel="Created">
                 <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                     @context.Created.ToLocalTime().ToRelativeTime()

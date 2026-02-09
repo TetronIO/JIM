@@ -7,7 +7,7 @@
 <div class="d-flex flex-wrap gap-2 align-center">
     <MudTooltip Text="@Entity.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
         <div class="jim-audit-chip">
-            <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Small" />
+            <MudIcon Icon="@Icons.Material.Outlined.Schedule" />
             <span class="jim-audit-chip-label">Created</span>
             <span class="jim-audit-chip-detail">@Entity.Created.ToLocalTime().ToRelativeTime()@if (Entity.CreatedByType != ActivityInitiatorType.NotSet)
                 {<text> by&nbsp;</text><AuditPrincipalLink PrincipalType="@Entity.CreatedByType"
@@ -20,7 +20,7 @@
     {
         <MudTooltip Text="@Entity.LastUpdated.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
             <div class="jim-audit-chip">
-                <MudIcon Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" />
+                <MudIcon Icon="@Icons.Material.Outlined.Edit" />
                 <span class="jim-audit-chip-label">Updated</span>
                 <span class="jim-audit-chip-detail">@Entity.LastUpdated.Value.ToLocalTime().ToRelativeTime()@if (Entity.LastUpdatedByType != ActivityInitiatorType.NotSet)
                     {<text> by&nbsp;</text><AuditPrincipalLink PrincipalType="@Entity.LastUpdatedByType"

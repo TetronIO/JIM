@@ -28,6 +28,7 @@ public class JimApplication : IDisposable
     public FileSystemServer FileSystem { get; }
     public MetaverseServer Metaverse { get; }
     public ObjectMatchingServer ObjectMatching { get; }
+    public SchedulerServer Scheduler { get; }
     public SearchServer Search { get; }
     public SecurityServer Security { get; }
     public ServiceSettingsServer ServiceSettings { get; }
@@ -48,6 +49,7 @@ public class JimApplication : IDisposable
         Metaverse = new MetaverseServer(this);
         ObjectMatching = new ObjectMatchingServer(this);
         Repository = dataRepository;
+        Scheduler = new SchedulerServer(this);
         Search = new SearchServer(this);
         Security = new SecurityServer(this);
         Seeding = new SeedingServer(this);

@@ -1,6 +1,4 @@
 ﻿using JIM.Data.Repositories;
-using JIM.Models.Activities;
-using JIM.Models.Core;
 using JIM.Models.Tasking;
 using JIM.Models.Tasking.DTOs;
 using JIM.Utilities;
@@ -47,43 +45,25 @@ public class TaskingRepository : ITaskingRepository
 
     public async Task<WorkerTask?> GetWorkerTaskAsync(Guid id)
     {
-        return await Repository.Database.WorkerTasks.
-            AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
-            Include(st => st.Activity).
-            Include(st => st.InitiatedByMetaverseObject).
-            ThenInclude(ib => ib!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
-            ThenInclude(av => av.Attribute).
-            Include(st => st.InitiatedByMetaverseObject).
-            ThenInclude(ib => ib!.Type).
-            Include(st => st.InitiatedByApiKey).
-            SingleOrDefaultAsync(st => st.Id == id);
+        return await Repository.Database.WorkerTasks
+            .Include(st => st.Activity)
+            .SingleOrDefaultAsync(st => st.Id == id);
     }
 
     public async Task<List<WorkerTask>> GetWorkerTasksAsync()
     {
         return await Repository.Database.WorkerTasks
-            .AsSplitQuery()
             .Include(st => st.Activity)
-            .Include(st => st.InitiatedByMetaverseObject)
-            .ThenInclude(ib => ib!.Type)
-            .Include(st => st.InitiatedByApiKey)
             .ToListAsync();
     }
 
     public async Task<List<WorkerTaskHeader>> GetWorkerTaskHeadersAsync()
     {
-        // todo: find a way to retrieve a stub user, i.e. just MVO with id and displayname
         var workerTaskHeaders = new List<WorkerTaskHeader>();
-        var workerTasks = await Repository.Database.WorkerTasks.
-            AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
-            Include(st => st.Activity).
-            Include(st => st.InitiatedByMetaverseObject).
-            ThenInclude(ib => ib!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
-            ThenInclude(av => av.Attribute).
-            Include(st => st.InitiatedByMetaverseObject).
-            ThenInclude(ib => ib!.Type).
-            Include(st => st.InitiatedByApiKey).
-            OrderByDescending(q => q.Timestamp).ToListAsync();
+        var workerTasks = await Repository.Database.WorkerTasks
+            .Include(st => st.Activity)
+            .OrderByDescending(q => q.Timestamp)
+            .ToListAsync();
 
         foreach (var workerTask in workerTasks)
         {
@@ -118,14 +98,10 @@ public class TaskingRepository : ITaskingRepository
     {
         var tasks = new List<WorkerTask>();
         foreach (var task in await Repository.Database.WorkerTasks
-                     .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
                      .Include(st => st.Activity)
-                     .Include(st => st.InitiatedByMetaverseObject)
-                     .ThenInclude(ib => ib!.AttributeValues.Where(av => av.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
-                     .ThenInclude(av => av.Attribute)
-                     .Include(st => st.InitiatedByApiKey)
                      .Where(st => st.Status == WorkerTaskStatus.Queued)
-                     .OrderBy(st => st.Timestamp).ToListAsync())
+                     .OrderBy(st => st.Timestamp)
+                     .ToListAsync())
         {
             if (task.ExecutionMode == WorkerTaskExecutionMode.Sequential)
             {
@@ -216,6 +192,29 @@ public class TaskingRepository : ITaskingRepository
         {
             Log.Debug($"DeleteWorkerTaskAsync: Did not delete worker task {workerTask.Id} as it doesn't exist (already deleted?)");
         }
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Scheduler Service Queries
+    // -----------------------------------------------------------------------------------------------------------------
+
+    public async Task<List<WorkerTask>> GetWorkerTasksByScheduleExecutionAsync(Guid scheduleExecutionId)
+    {
+        return await Repository.Database.WorkerTasks
+            .Include(st => st.Activity)
+            .Where(st => st.ScheduleExecutionId == scheduleExecutionId)
+            .OrderBy(st => st.ScheduleStepIndex)
+            .ThenBy(st => st.Timestamp)
+            .ToListAsync();
+    }
+
+    public async Task<List<WorkerTask>> GetWorkerTasksByScheduleExecutionStepAsync(Guid scheduleExecutionId, int stepIndex)
+    {
+        return await Repository.Database.WorkerTasks
+            .Include(st => st.Activity)
+            .Where(st => st.ScheduleExecutionId == scheduleExecutionId && st.ScheduleStepIndex == stepIndex)
+            .OrderBy(st => st.Timestamp)
+            .ToListAsync();
     }
 
     #region private methods

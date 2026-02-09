@@ -13,7 +13,7 @@
 @inject IUserPreferenceService PreferenceService
 
 <PageTitle>Connected System Objects: @_connectedSystemHeader?.Name</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System Objects:</span> @_connectedSystemHeader?.Name</MudText>
+<MudText Typo="Typo.h4"><span class="mud-primary-text">Connected System Objects:</span> @_connectedSystemHeader?.Name</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     A view of the objects that are staged within JIM for this connected system. This is where changes either, to the connected system are staged ahead of synchronisation,
@@ -129,7 +129,7 @@
                 @if (!string.IsNullOrEmpty(context.PendingExternalId))
                 {
                     <MudTooltip Text="Pending export - not yet confirmed" Arrow="true" Placement="Placement.Top">
-                        <MudText Typo="Typo.body2" Color="Color.Info">@context.PendingExternalId</MudText>
+                        <MudText Color="Color.Info">@context.PendingExternalId</MudText>
                     </MudTooltip>
                 }
                 else
@@ -147,7 +147,7 @@
                     else if (!string.IsNullOrEmpty(context.PendingSecondaryExternalId))
                     {
                         <MudTooltip Text="Pending export - not yet confirmed" Arrow="true" Placement="Placement.Top">
-                            <MudText Typo="Typo.body2" Color="Color.Info">@context.PendingSecondaryExternalId</MudText>
+                            <MudText Color="Color.Info">@context.PendingSecondaryExternalId</MudText>
                         </MudTooltip>
                     }
                 </MudTd>
@@ -160,26 +160,26 @@
                 else if (!string.IsNullOrEmpty(context.PendingDisplayName))
                 {
                     <MudTooltip Text="Pending export - not yet confirmed" Arrow="true" Placement="Placement.Top">
-                        <MudText Typo="Typo.body2" Color="Color.Info">@context.PendingDisplayName</MudText>
+                        <MudText Color="Color.Info">@context.PendingDisplayName</MudText>
                     </MudTooltip>
                 }
             </MudTd>
             <MudTd DataLabel="Type">@context.TypeName</MudTd>
             <MudTd DataLabel="Created">
                 <MudTooltip Text="@context.Created.ToString("O")" Arrow="true" Placement="Placement.Top">
-                    <MudText Typo="Typo.body2">@context.Created.ToLocalTime().ToRelativeTime()</MudText>
+                    <MudText>@context.Created.ToLocalTime().ToRelativeTime()</MudText>
                 </MudTooltip>
             </MudTd>
             <MudTd DataLabel="Date Joined">
                 @if (context.DateJoined != null)
                 {
                     <MudTooltip Text="@context.DateJoined.Value.ToString("O")" Arrow="true" Placement="Placement.Top">
-                        <MudText Typo="Typo.body2">@context.DateJoined.Value.ToLocalTime().ToRelativeTime()</MudText>
+                        <MudText>@context.DateJoined.Value.ToLocalTime().ToRelativeTime()</MudText>
                     </MudTooltip>
                 }
                 else
                 {
-                    <MudText Typo="Typo.body2">-</MudText>
+                    <MudText>-</MudText>
                 }
             </MudTd>
             <MudTd DataLabel="Status">
@@ -406,7 +406,7 @@ else
 
         // attribute the execution to the user
         var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-        var task = new ClearConnectedSystemObjectsWorkerTask(Id, user, _clearDeleteChangeHistory);
+        var task = ClearConnectedSystemObjectsWorkerTask.ForUser(Id, user.Id, user.DisplayName ?? "Unknown User", _clearDeleteChangeHistory);
         var result = await Jim.Tasking.CreateWorkerTaskAsync(task);
 
         if (!result.Success)

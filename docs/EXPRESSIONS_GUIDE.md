@@ -109,6 +109,8 @@ Eq(Lower(mv["Status"]), "active")
 | Function | Description | Example |
 |----------|-------------|---------|
 | `CollectionContains(collection, value)` | Check if collection contains value | `CollectionContains(cs["memberOf"], "CN=Admins")` |
+| `Split(value, delimiter)` | Split delimited string into array | `Split(cs["coursesCompleted"], "\|")` |
+| `Join(collection, delimiter)` | Join collection into delimited string | `Join(mv["Groups"], ",")` |
 
 ### Bitwise Functions (Active Directory userAccountControl)
 
@@ -219,6 +221,54 @@ IIF(Eq(mv["Department"], "IT"),
 ```csharp
 IIF(Eq(mv["Department"], "IT"), "tech-" + mv["Account Name"], mv["Account Name"])
 ```
+
+### Converting Delimited Strings to Multi-Valued Attributes
+
+When a source system stores multiple values in a single delimited field (e.g., `"COURSE1|COURSE2|COURSE3"`), use `Split()` to convert it to individual values in a multi-valued metaverse attribute.
+
+**Example: Training courses from CSV to MVO**
+
+The source CSV has a single column with pipe-separated courses:
+```
+employeeId,coursesCompleted
+E001,"SOFT101|SOFT201|SEC101"
+```
+
+Use this expression to flow to a multi-valued "Courses Completed" MVO attribute:
+```csharp
+Split(cs["coursesCompleted"], "|")
+```
+
+This creates three separate values on the MVO:
+- `SOFT101`
+- `SOFT201`
+- `SEC101`
+
+**Notes on Split:**
+- Empty entries are automatically removed
+- Whitespace is trimmed from each value
+- Returns an empty array for null or empty input
+- The delimiter can be any string (e.g., `","`, `"|"`, `";"`)
+
+### Converting Multi-Valued Attributes to Delimited Strings
+
+When exporting to a system that doesn't support multi-valued attributes, use `Join()` to combine values.
+
+**Example: MVO groups to CSV column**
+
+```csharp
+Join(mv["Group Memberships"], "|")
+```
+
+If the MVO has groups `["Admin", "Users", "Developers"]`, this produces:
+```
+Admin|Users|Developers
+```
+
+**Notes on Join:**
+- Returns `null` for null or empty collections
+- Filters out null and empty string values
+- Uses comma as default delimiter if not specified
 
 ## Expression Validation
 

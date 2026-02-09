@@ -272,6 +272,47 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Updates an existing Connected System using initiator triad (for use from worker processors).
+    /// </summary>
+    public async Task UpdateConnectedSystemWithTriadAsync(
+        ConnectedSystem connectedSystem,
+        ActivityInitiatorType initiatorType,
+        Guid? initiatorId,
+        string? initiatorName,
+        Activity? parentActivity = null)
+    {
+        if (connectedSystem == null)
+            throw new ArgumentNullException(nameof(connectedSystem));
+
+        if (!AreRunProfilesValid(connectedSystem))
+            throw new ArgumentException("connectedSystem.RunProfiles has some of a run type that is not supported by the Connector.");
+
+        Log.Verbose($"UpdateConnectedSystemWithTriadAsync() called for {connectedSystem}");
+
+        // are the settings valid?
+        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
+        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+
+        AuditHelper.SetUpdated(connectedSystem, initiatorType, initiatorId, initiatorName);
+
+        // every CRUD operation requires tracking with an activity...
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ParentActivityId = parentActivity?.Id,
+            ConnectedSystemId = connectedSystem.Id
+        };
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
+
+        SanitiseConnectedSystemUserInput(connectedSystem);
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
     /// Try and prevent the user from supplying unusable input.
     /// </summary>
     private static void SanitiseConnectedSystemUserInput(ConnectedSystem connectedSystem)
@@ -636,7 +677,7 @@ public class ConnectedSystemServer
                 runningSyncTask.Id, connectedSystemId);
 
             var deleteTask = initiatedBy != null
-                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: true, deleteChangeHistory)
+                ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.DisplayName ?? "Unknown", evaluateMvoDeletionRules: true, deleteChangeHistory)
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory);
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
@@ -653,7 +694,7 @@ public class ConnectedSystemServer
                 connectedSystemId, csoCount, BackgroundDeletionThreshold);
 
             var deleteTask = initiatedBy != null
-                ? new DeleteConnectedSystemWorkerTask(connectedSystemId, initiatedBy, evaluateMvoDeletionRules: true, deleteChangeHistory)
+                ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.DisplayName ?? "Unknown", evaluateMvoDeletionRules: true, deleteChangeHistory)
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory);
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
@@ -1399,6 +1440,124 @@ public class ConnectedSystemServer
             else
                 await UpdateConnectedSystemAsync(connectedSystem, initiatedByUser, activity);
 
+            activity.Message = $"Auto-selected {containersAdded} container(s) created during export";
+        }
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Adds newly created containers to the hierarchy using initiator triad.
+    /// </summary>
+    public async Task RefreshAndAutoSelectContainersWithTriadAsync(
+        ConnectedSystem connectedSystem,
+        IConnector connector,
+        IReadOnlyList<string> createdContainerExternalIds,
+        ActivityInitiatorType initiatorType,
+        Guid? initiatorId,
+        string? initiatorName,
+        Activity? parentActivity = null)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        if (createdContainerExternalIds.Count == 0)
+            return;
+
+        if (connector is not IConnectorContainerCreation containerCreator)
+        {
+            Log.Warning("RefreshAndAutoSelectContainersWithTriadAsync: Connector does not implement IConnectorContainerCreation, skipping auto-selection");
+            return;
+        }
+
+        Log.Information("RefreshAndAutoSelectContainersWithTriadAsync: Processing {Count} created container(s) for system {SystemName}",
+            createdContainerExternalIds.Count, connectedSystem.Name);
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConnectedSystemId = connectedSystem.Id,
+            ParentActivityId = parentActivity?.Id,
+            Message = $"Auto-selecting {createdContainerExternalIds.Count} container(s) created during export"
+        };
+
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
+
+        var containersAdded = 0;
+
+        foreach (var containerExternalId in createdContainerExternalIds)
+        {
+            try
+            {
+                var partition = FindPartitionForContainer(connectedSystem, containerExternalId);
+                if (partition == null)
+                {
+                    Log.Warning("RefreshAndAutoSelectContainersWithTriadAsync: Could not find partition for container {ContainerExternalId}", containerExternalId);
+                    continue;
+                }
+
+                if (partition.Containers != null && FindContainerByExternalId(partition.Containers, containerExternalId) != null)
+                {
+                    Log.Debug("RefreshAndAutoSelectContainersWithTriadAsync: Container {ContainerExternalId} already exists in hierarchy", containerExternalId);
+                    continue;
+                }
+
+                // Find the parent container using connector's method
+                var parentExternalId = containerCreator.GetParentContainerExternalId(containerExternalId);
+                var parentContainer = parentExternalId != null && partition.Containers != null
+                    ? FindContainerByExternalId(partition.Containers, parentExternalId)
+                    : null;
+
+                // Determine if any ancestor container is already selected.
+                // If so, this new container is already implicitly included via the ancestor's subtree search.
+                var hasSelectedAncestor = IsAnyAncestorSelected(parentContainer);
+
+                // Only auto-select if no ancestor is selected and it's a top-level container in a selected partition
+                var shouldSelect = !hasSelectedAncestor && (parentContainer == null && partition.Selected);
+
+                // Create the new container using connector's method to extract display name
+                var containerName = containerCreator.GetContainerDisplayName(containerExternalId);
+                var newContainer = new ConnectedSystemContainer
+                {
+                    ExternalId = containerExternalId,
+                    Name = containerName,
+                    Selected = shouldSelect,
+                    Partition = partition
+                };
+
+                if (parentContainer != null)
+                {
+                    parentContainer.AddChildContainer(newContainer);
+                }
+                else
+                {
+                    // Top-level container in partition
+                    partition.Containers ??= new HashSet<ConnectedSystemContainer>();
+                    partition.Containers.Add(newContainer);
+                }
+
+                containersAdded++;
+                if (hasSelectedAncestor)
+                {
+                    Log.Information("RefreshAndAutoSelectContainersWithTriadAsync: Added container {ContainerExternalId}, Selected: False (ancestor already selected)",
+                        containerExternalId);
+                }
+                else
+                {
+                    Log.Information("RefreshAndAutoSelectContainersWithTriadAsync: Added container {ContainerExternalId}, Selected: {Selected}",
+                        containerExternalId, shouldSelect);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "RefreshAndAutoSelectContainersWithTriadAsync: Error processing container {ContainerExternalId}", containerExternalId);
+            }
+        }
+
+        if (containersAdded > 0)
+        {
+            await UpdateConnectedSystemWithTriadAsync(connectedSystem, initiatorType, initiatorId, initiatorName, activity);
             activity.Message = $"Auto-selected {containersAdded} container(s) created during export";
         }
 

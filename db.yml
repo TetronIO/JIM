@@ -1,14 +1,4 @@
 services:
-
-  adminer:
-    container_name: JIM.Adminer
-    image: adminer
-    restart: always
-    ports:
-      - "8080:8080"
-    depends_on:
-      - jim.database
-
   jim.database:
     container_name: JIM.Database
     image: postgres:18

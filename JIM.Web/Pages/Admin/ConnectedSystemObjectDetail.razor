@@ -12,7 +12,7 @@
 @inject NavigationManager NavManager
 
 <PageTitle>Connected System Object: @GetDisplayIdentifier()</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System Object:</span> @GetDisplayIdentifier()
+<MudText Typo="Typo.h4"><span class="mud-primary-text">Connected System Object:</span> @GetDisplayIdentifier()
 </MudText>
 <MudBreadcrumbs Items="Breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
@@ -25,41 +25,42 @@
 {
     <MudPaper Class="pa-4 mt-4 mb-4" Outlined="true">
         @* First row: Type, Status, Created, Updated, MVO Link *@
-        <MudStack Row="true" AlignItems="AlignItems.Center" Class="flex-wrap" Spacing="3">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="flex-wrap" Spacing="3">
             @* Object Type *@
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">Type:</MudText>
-                <MudChip T="string" Variant="Variant.Text" Color="Color.Primary" Size="Size.Small">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudText Typo="Typo.body1" Class="mud-text-secondary">Type:</MudText>
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Primary">
                     @ConnectedSystemObject.Type.Name
                 </MudChip>
             </MudStack>
             <MudDivider Vertical="true" FlexItem="true" Class="my-1" />
 
             @* Status *@
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">Status:</MudText>
-                <MudChip T="string" Variant="Variant.Text" Color="GetStatusColor(ConnectedSystemObject.Status)" Size="Size.Small">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudText Typo="Typo.body1" Class="mud-text-secondary">Status:</MudText>
+                <MudChip T="string" Variant="Variant.Text" Color="GetStatusColor(ConnectedSystemObject.Status)">
                     @ConnectedSystemObject.Status.ToString().SplitOnCapitalLetters()
                 </MudChip>
             </MudStack>
             <MudDivider Vertical="true" FlexItem="true" Class="my-1" />
 
             @* Created *@
-            <MudTooltip Text="@ConnectedSystemObject.Created.ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                <MudTooltip Text="@ConnectedSystemObject.Created.ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Created:</MudText>
-                    <MudText Typo="Typo.body2">@ConnectedSystemObject.Created.ToRelativeTime()</MudText>
+                    <MudText Typo="Typo.body1" Class="mud-text-secondary">Created:</MudText>
+                    <MudText Typo="Typo.body1">@ConnectedSystemObject.Created.ToRelativeTime()</MudText>
                 </MudStack>
             </MudTooltip>
 
             @* Last Updated *@
-            @if (ConnectedSystemObject.LastUpdated.HasValue)
+                @if (ConnectedSystemObject.LastUpdated.HasValue)
             {
                 <MudDivider Vertical="true" FlexItem="true" Class="my-1" />
-                <MudTooltip Text="@ConnectedSystemObject.LastUpdated.Value.ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                <MudTooltip Text="@ConnectedSystemObject.LastUpdated.Value.ToFriendlyDate()" Arrow="true"
+                    Placement="Placement.Top">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Updated:</MudText>
-                        <MudText Typo="Typo.body2">@ConnectedSystemObject.LastUpdated.Value.ToRelativeTime()</MudText>
+                        <MudText Typo="Typo.body1" Class="mud-text-secondary">Updated:</MudText>
+                        <MudText Typo="Typo.body1">@ConnectedSystemObject.LastUpdated.Value.ToRelativeTime()</MudText>
                     </MudStack>
                 </MudTooltip>
             }
@@ -69,13 +70,14 @@
             {
                 <MudDivider Vertical="true" FlexItem="true" Class="my-1" />
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Metaverse Object:</MudText>
-                    <MudLink Typo="Typo.body2" Href="@Utilities.GetMetaverseObjectHref(ConnectedSystemObject.MetaverseObject)">
-                        @(Utilities.GetMetaverseObjectHrefText(ConnectedSystemObject.MetaverseObject) ?? ConnectedSystemObject.MetaverseObjectId.ToString())
+                    <MudText Typo="Typo.body1" Class="mud-text-secondary">Metaverse Object:</MudText>
+                    <MudLink Typo="Typo.body1" Href="@Utilities.GetMetaverseObjectHref(ConnectedSystemObject.MetaverseObject)">
+                        @(Utilities.GetMetaverseObjectHrefText(ConnectedSystemObject.MetaverseObject) ??
+                                        ConnectedSystemObject.MetaverseObjectId.ToString())
                     </MudLink>
                     <MudDivider Vertical="true" FlexItem="true" Class="my-1" />
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Join Type:</MudText>
-                    <MudChip T="string" Variant="Variant.Text" Color="GetJoinTypeColor(ConnectedSystemObject.JoinType)" Size="Size.Small">
+                    <MudText Typo="Typo.body1" Class="mud-text-secondary">Join Type:</MudText>
+                    <MudChip T="string" Variant="Variant.Text" Color="GetJoinTypeColor(ConnectedSystemObject.JoinType)">
                         @ConnectedSystemObject.JoinType
                     </MudChip>
                 </MudStack>
@@ -83,22 +85,34 @@
         </MudStack>
 
         @* External IDs table *@
-        @if (ExternalIdAttributeValue != null || SecondaryExternalIdAttributeValue != null)
+            @if (ExternalIdAttributeValue != null || SecondaryExternalIdAttributeValue != null)
         {
             <MudSimpleTable Dense="true" Hover="true" Class="mt-3" Style="background: transparent;" Elevation="0">
                 <tbody>
                     @if (ExternalIdAttributeValue != null)
                     {
                         <tr>
-                            <td style="width: 200px;"><MudText Typo="Typo.body2" Class="mud-text-secondary">@ExternalIdAttributeValue.Attribute.Name</MudText></td>
-                            <td><MudText Typo="Typo.body2" Class="jim-text-code">@ExternalIdAttributeValue.ToStringNoName()</MudText></td>
+                            <td style="width: 200px;">
+                                <MudText Typo="Typo.body1" Class="mud-text-secondary">@ExternalIdAttributeValue.Attribute.Name
+                                </MudText>
+                            </td>
+                            <td>
+                                <MudText Typo="Typo.body1" Class="jim-text-code">@ExternalIdAttributeValue.ToStringNoName()
+                                </MudText>
+                            </td>
                         </tr>
                     }
                     @if (SecondaryExternalIdAttributeValue != null)
                     {
                         <tr>
-                            <td><MudText Typo="Typo.body2" Class="mud-text-secondary">@SecondaryExternalIdAttributeValue.Attribute.Name</MudText></td>
-                            <td><MudText Typo="Typo.body2" Class="jim-text-code">@SecondaryExternalIdAttributeValue.ToStringNoName()</MudText></td>
+                            <td>
+                                <MudText Typo="Typo.body1" Class="mud-text-secondary">
+                                    @SecondaryExternalIdAttributeValue.Attribute.Name</MudText>
+                            </td>
+                            <td>
+                                <MudText Typo="Typo.body1" Class="jim-text-code">@SecondaryExternalIdAttributeValue.ToStringNoName()
+                                </MudText>
+                            </td>
                         </tr>
                     }
                 </tbody>
@@ -108,7 +122,7 @@
 
     @if (PendingExport != null && PendingExport.AttributeValueChanges.Count > 0)
     {
-        <MudPaper Class="pa-5 mt-5 mb-5 jim-paper-info" Outlined="true">
+        <MudPaper Class="pa-5 mt-5 mb-5" Outlined="true">
             <MudText Typo="Typo.h6">Pending Exports</MudText>
             <MudText Typo="Typo.subtitle1" Class="my-3">
                 The following attribute changes are pending for this connected system. These may be awaiting export, or have
@@ -118,25 +132,37 @@
             </MudText>
             <MudTable Items="@PendingExport.AttributeValueChanges" Hover="true" Dense="true" Outlined="true" Elevation="0">
                 <HeaderContent>
-                    <MudTh><MudText Typo="Typo.button">Attribute</MudText></MudTh>
-                    <MudTh><MudText Typo="Typo.button">Change Type</MudText></MudTh>
-                    <MudTh><MudText Typo="Typo.button">Value</MudText></MudTh>
-                    <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
-                    <MudTh><MudText Typo="Typo.button">Export Attempts</MudText></MudTh>
-                    <MudTh><MudText Typo="Typo.button">Last Exported</MudText></MudTh>
+                    <MudTh>
+                        <MudText Typo="Typo.button">Attribute</MudText>
+                    </MudTh>
+                    <MudTh>
+                        <MudText Typo="Typo.button">Change Type</MudText>
+                    </MudTh>
+                    <MudTh>
+                        <MudText Typo="Typo.button">Value</MudText>
+                    </MudTh>
+                    <MudTh>
+                        <MudText Typo="Typo.button">Status</MudText>
+                    </MudTh>
+                    <MudTh>
+                        <MudText Typo="Typo.button">Export Attempts</MudText>
+                    </MudTh>
+                    <MudTh>
+                        <MudText Typo="Typo.button">Last Exported</MudText>
+                    </MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Attribute">@(context.Attribute?.Name ?? $"Attribute {context.AttributeId}")</MudTd>
                     <MudTd DataLabel="Change Type">
                         <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(context.ChangeType)"
-                            Size="Size.Small">
+                           >
                             @context.ChangeType
                         </MudChip>
                     </MudTd>
                     <MudTd DataLabel="Value">@GetAttributeValue(context)</MudTd>
                     <MudTd DataLabel="Status">
                         <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeStatusColor(context.Status)"
-                            Size="Size.Small">
+                           >
                             @context.Status.ToString().SplitOnCapitalLetters()
                         </MudChip>
                     </MudTd>
@@ -160,57 +186,72 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var group in GetGroupedAttributes())
+                        @{
+                            var groupedAttributes = GetGroupedAttributes();
+                        }
+                        @if (!groupedAttributes.Any())
                         {
-                            <tr class="@(group.Values.Count > 1 ? "jim-attr-row-mva" : "")">
-                                <td class="jim-attr-name">
-                                    <MudText Typo="Typo.body2" Class="jim-text-code">@group.AttributeName</MudText>
-                                </td>
-                                <td class="jim-attr-type">
-                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@group.Values[0].Attribute.Type</MudText>
-                                </td>
-                                <td class="jim-attr-plurality">
-                                    @if (group.IsMultiValued)
-                                    {
-                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Multi</MudText>
-                                    }
-                                    else
-                                    {
-                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Single</MudText>
-                                    }
-                                </td>
-                                <td class="jim-attr-value">
-                                    @if (group.Values.Count == 1)
-                                    {
-                                        <CsoAttributeValue Value="@group.Values[0]" />
-                                    }
-                                    else if (group.IsCollapsed)
-                                    {
-                                        <div class="jim-attr-multivalue">
-                                            <CsoAttributeValue Value="@group.Values[0]" />
-                                            <MudButton Variant="Variant.Outlined" Size="Size.Small" Class="jim-attr-expand-btn"
-                                                       OnClick="@(() => ToggleCollapse(group.AttributeName))">
-                                                +@(group.Values.Count - 1) more
-                                            </MudButton>
-                                        </div>
-                                    }
-                                    else
-                                    {
-                                        <div class="jim-attr-expanded">
-                                            @foreach (var val in group.Values)
-                                            {
-                                                <div class="jim-attr-expanded-item">
-                                                    <CsoAttributeValue Value="@val" />
-                                                </div>
-                                            }
-                                            <MudButton Variant="Variant.Outlined" Size="Size.Small" Class="jim-attr-collapse-btn"
-                                                       OnClick="@(() => ToggleCollapse(group.AttributeName))">
-                                                Collapse
-                                            </MudButton>
-                                        </div>
-                                    }
+                            <tr>
+                                <td colspan="4" class="text-center pa-4">
+                                    <MudText Typo="Typo.body1" Class="mud-text-secondary">No attributes to display</MudText>
                                 </td>
                             </tr>
+                        }
+                        else
+                        {
+                            @foreach (var group in groupedAttributes)
+                            {
+                                <tr class="@(group.Values.Count > 1 ? "jim-attr-row-mva" : "")">
+                                    <td class="jim-attr-name">
+                                        <MudText Typo="Typo.body2" Class="jim-text-code">@group.AttributeName</MudText>
+                                    </td>
+                                    <td class="jim-attr-type">
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@group.Values[0].Attribute.Type
+                                        </MudText>
+                                    </td>
+                                    <td class="jim-attr-plurality">
+                                        @if (group.IsMultiValued)
+                                        {
+                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Multi</MudText>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Single</MudText>
+                                        }
+                                    </td>
+                                    <td class="jim-attr-value">
+                                        @if (group.Values.Count == 1)
+                                        {
+                                            <CsoAttributeValue Value="@group.Values[0]" />
+                                        }
+                                        else if (group.IsCollapsed)
+                                        {
+                                            <div class="jim-attr-multivalue">
+                                                <CsoAttributeValue Value="@group.Values[0]" />
+                                                <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"
+                                                    OnClick="@(() => ToggleCollapse(group.AttributeName))">
+                                                    +@(group.Values.Count - 1) more
+                                                </MudButton>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="jim-attr-expanded">
+                                                @foreach (var val in group.Values)
+                                                {
+                                                    <div class="jim-attr-expanded-item">
+                                                        <CsoAttributeValue Value="@val" />
+                                                    </div>
+                                                }
+                                                <MudButton Variant="Variant.Outlined" Class="jim-attr-collapse-btn"
+                                                    OnClick="@(() => ToggleCollapse(group.AttributeName))">
+                                                    Collapse
+                                                </MudButton>
+                                            </div>
+                                        }
+                                    </td>
+                                </tr>
+                            }
                         }
                     </tbody>
                 </MudSimpleTable>
@@ -220,7 +261,7 @@
             <MudPaper Class="pa-5" Outlined="true">
                 @if (CsoChanges == null)
                 {
-                    <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mr-2" />
+                    <MudProgressCircular Indeterminate="true" Class="mr-2" />
                     <MudText>Loading change history...</MudText>
                 }
                 else
@@ -285,13 +326,13 @@
         }
 
         Breadcrumbs = new List<BreadcrumbItem>
-        {
-            new("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new("Connected Systems", href: "/admin/connected-systems/"),
-            new(ConnectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(ConnectedSystemHeader)),
-            new("Objects", href: Utilities.GetConnectedSystemObjectsHref(ConnectedSystemHeader)),
-            new(GetDisplayIdentifier(), href: null, disabled: true)
-        };
+{
+new("Home", href: "/", icon: Icons.Material.Filled.Home),
+new("Connected Systems", href: "/admin/connected-systems/"),
+new(ConnectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(ConnectedSystemHeader)),
+new("Objects", href: Utilities.GetConnectedSystemObjectsHref(ConnectedSystemHeader)),
+new(GetDisplayIdentifier(), href: null, disabled: true)
+};
 
         ExternalIdAttributeValue = ConnectedSystemObject.ExternalIdAttributeValue;
         SecondaryExternalIdAttributeValue = ConnectedSystemObject.SecondaryExternalIdAttributeValue;
@@ -307,10 +348,10 @@
     private readonly HashSet<string> _collapsedAttributes = new();
 
     private record AttributeGroup(
-        string AttributeName,
-        List<ConnectedSystemObjectAttributeValue> Values,
-        bool IsMultiValued,
-        bool IsCollapsed);
+    string AttributeName,
+    List<ConnectedSystemObjectAttributeValue> Values,
+    bool IsMultiValued,
+    bool IsCollapsed);
 
     private List<AttributeGroup> GetGroupedAttributes()
     {
@@ -318,14 +359,14 @@
             return new List<AttributeGroup>();
 
         return ConnectedSystemObject.AttributeValues
-            .GroupBy(v => v.Attribute.Name)
-            .OrderBy(g => g.Key)
-            .Select(g => new AttributeGroup(
-                g.Key,
-                g.ToList(),
-                g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued,
-                _collapsedAttributes.Contains(g.Key)))
-            .ToList();
+        .GroupBy(v => v.Attribute.Name)
+        .OrderBy(g => g.Key)
+        .Select(g => new AttributeGroup(
+        g.Key,
+        g.ToList(),
+        g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued,
+        _collapsedAttributes.Contains(g.Key)))
+        .ToList();
     }
 
     private void ToggleCollapse(string attributeName)
@@ -409,42 +450,42 @@
             return new List<ChangeHistoryTimeline.ChangeGroup>();
 
         return CsoChanges
-            .OrderByDescending(c => c.ChangeTime)
-            .Select(change => new ChangeHistoryTimeline.ChangeGroup
+        .OrderByDescending(c => c.ChangeTime)
+        .Select(change => new ChangeHistoryTimeline.ChangeGroup
+        {
+            ChangeType = change.ChangeType,
+            ChangeTime = change.ChangeTime,
+            // CSO changes: Map the principal that initiated the import (User or ApiKey)
+            ChangeInitiatorType = MapInitiatorType(change.InitiatedByType),
+            ChangeInitiatorName = change.InitiatedByName,
+            ChangeInitiatorId = change.InitiatedById,
+            // Mechanism is Import, with link to connected system and run profile name
+            ChangeMechanismType = "Import",
+            ConnectedSystemId = ConnectedSystemHeader?.Id,
+            ConnectedSystemName = ConnectedSystemHeader?.Name,
+            RunProfileName = change.ActivityRunProfileExecutionItem?.Activity?.TargetName,
+            SyncRuleId = null,
+            SyncRuleName = null,
+            ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
+            AttributeChanges = change.AttributeChanges
+        .OrderBy(ac => ac.Attribute.Name)
+        .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
+        {
+            AttributeName = ac.Attribute.Name,
+            ChangeType = vc.ValueChangeType,
+            Value = vc.ReferenceValue == null ? vc.ToString() : null,
+            ReferenceValue = vc.ReferenceValue != null ? new ChangeHistoryTimeline.ReferenceValueInfo
             {
-                ChangeType = change.ChangeType,
-                ChangeTime = change.ChangeTime,
-                // CSO changes: Map the principal that initiated the import (User or ApiKey)
-                ChangeInitiatorType = MapInitiatorType(change.InitiatedByType),
-                ChangeInitiatorName = change.InitiatedByName,
-                ChangeInitiatorId = change.InitiatedById,
-                // Mechanism is Import, with link to connected system and run profile name
-                ChangeMechanismType = "Import",
-                ConnectedSystemId = ConnectedSystemHeader?.Id,
-                ConnectedSystemName = ConnectedSystemHeader?.Name,
-                RunProfileName = change.ActivityRunProfileExecutionItem?.Activity?.TargetName,
-                SyncRuleId = null,
-                SyncRuleName = null,
-                ActivityRunProfileExecutionItemId = change.ActivityRunProfileExecutionItemId,
-                AttributeChanges = change.AttributeChanges
-                    .OrderBy(ac => ac.Attribute.Name)
-                    .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
-                    {
-                        AttributeName = ac.Attribute.Name,
-                        ChangeType = vc.ValueChangeType,
-                        Value = vc.ReferenceValue == null ? vc.ToString() : null,
-                        ReferenceValue = vc.ReferenceValue != null ? new ChangeHistoryTimeline.ReferenceValueInfo
-                        {
-                            TypeName = vc.ReferenceValue.Type.Name,
-                            DisplayName = vc.ReferenceValue.DisplayNameOrId ?? vc.ReferenceValue.Id.ToString(),
-                            SecondaryId = vc.ReferenceValue.SecondaryExternalIdAttributeValue?.ToStringNoName(),
-                            Href = Utilities.GetConnectedSystemObjectHref(vc.ReferenceValue)
-                        } : null,
-                        IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued
-                    }))
-                    .ToList()
-            })
-            .ToList();
+                TypeName = vc.ReferenceValue.Type.Name,
+                DisplayName = vc.ReferenceValue.DisplayNameOrId ?? vc.ReferenceValue.Id.ToString(),
+                SecondaryId = vc.ReferenceValue.SecondaryExternalIdAttributeValue?.ToStringNoName(),
+                Href = Utilities.GetConnectedSystemObjectHref(vc.ReferenceValue)
+            } : null,
+            IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued
+        }))
+        .ToList()
+        })
+        .ToList();
     }
 
     private static string MapInitiatorType(ActivityInitiatorType initiatorType)
@@ -464,7 +505,7 @@
     private string GetDisplayIdentifier()
     {
         return ExternalIdAttributeValue?.ToStringNoName()
-            ?? ConnectedSystemObject?.Id.ToString()
-            ?? CsoId;
+        ?? ConnectedSystemObject?.Id.ToString()
+        ?? CsoId;
     }
 }

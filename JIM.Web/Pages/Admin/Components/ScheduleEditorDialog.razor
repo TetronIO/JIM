@@ -1,0 +1,1306 @@
+@using JIM.Application
+@using JIM.Models.Activities
+@using JIM.Models.Core
+@using JIM.Models.Scheduling
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+@using JIM.Utilities
+@inject JimApplication Jim
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-2" Style="vertical-align: middle;" />
+            @(ScheduleId.HasValue ? "Edit Schedule" : "New Schedule")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_schedule != null)
+        {
+            <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-4" @bind-ActivePanelIndex="_activeTab">
+                <MudTabPanel Text="General" Icon="@Icons.Material.Filled.Settings">
+                    <MudStack Spacing="3">
+                        <MudTextField @bind-Value="_schedule.Name" Label="Name" Variant="Variant.Outlined"
+                                      Required="true" RequiredError="Name is required"
+                                      HelperText="A descriptive name for this schedule" />
+
+                        <MudTextField @bind-Value="_schedule.Description" Label="Description" Variant="Variant.Outlined"
+                                      Lines="2" HelperText="Optional description of what this schedule does" />
+
+                        <MudDivider Class="my-2" />
+
+                        <MudText Typo="Typo.subtitle2">Trigger</MudText>
+
+                        <MudRadioGroup @bind-Value="_schedule.TriggerType">
+                            <MudRadio Value="ScheduleTriggerType.Cron" Color="Color.Primary">
+                                <MudText>Scheduled</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Run automatically on a schedule</MudText>
+                            </MudRadio>
+                            <MudRadio Value="ScheduleTriggerType.Manual" Color="Color.Primary">
+                                <MudText>Manual Only</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Only run when triggered manually</MudText>
+                            </MudRadio>
+                        </MudRadioGroup>
+
+                        @if (_schedule.TriggerType == ScheduleTriggerType.Cron)
+                        {
+                            <MudPaper Outlined="true" Class="pa-4 mt-2" Style="overflow: visible;">
+                                <MudText Typo="Typo.subtitle2" Class="mb-3">Schedule Configuration</MudText>
+
+                                <MudStack Spacing="3">
+                                    @* Pattern Type Selection *@
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Run Pattern</MudText>
+                                    <MudRadioGroup T="SchedulePatternType" Value="_patternType" ValueChanged="HandlePatternTypeChanged">
+                                        <MudRadio Value="SchedulePatternType.SpecificTimes" Color="Color.Primary" Dense="true">
+                                            At specific times
+                                        </MudRadio>
+                                        <MudRadio Value="SchedulePatternType.Interval" Color="Color.Primary" Dense="true">
+                                            At regular intervals
+                                        </MudRadio>
+                                        <MudRadio Value="SchedulePatternType.Custom" Color="Color.Primary" Dense="true">
+                                            Custom (Cron Expression)
+                                        </MudRadio>
+                                    </MudRadioGroup>
+
+                                    @if (_patternType != SchedulePatternType.Custom)
+                                    {
+                                        <MudDivider Class="my-1" />
+
+                                        @* Days Selection *@
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Days</MudText>
+                                        <MudStack Row="true" Spacing="1" Justify="Justify.SpaceBetween">
+                                            @foreach (var day in _daysOfWeek)
+                                            {
+                                                <MudChip T="string" Color="@(_selectedDays.Contains(day.Value) ? Color.Primary : Color.Default)"
+                                                         Variant="@(_selectedDays.Contains(day.Value) ? Variant.Filled : Variant.Outlined)"
+                                                         OnClick="@(() => ToggleDaySelection(day.Value))"
+                                                         Class="cursor-pointer">
+                                                    @day.Label
+                                                </MudChip>
+                                            }
+                                        </MudStack>
+                                        <MudStack Row="true" Spacing="2">
+                                            <MudButton Variant="Variant.Text" OnClick="SelectAllDays">Every Day</MudButton>
+                                            <MudButton Variant="Variant.Text" OnClick="SelectWeekdays">Weekdays</MudButton>
+                                            <MudButton Variant="Variant.Text" OnClick="SelectWeekends">Weekends</MudButton>
+                                        </MudStack>
+
+                                        <MudDivider Class="my-1" />
+
+                                        @if (_patternType == SchedulePatternType.SpecificTimes)
+                                        {
+                                            @* Multiple Times Selection *@
+                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Times</MudText>
+                                            <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+                                                @foreach (var time in _runTimes.ToList())
+                                                {
+                                                    <MudChip T="string" Color="Color.Primary" Variant="Variant.Filled"
+                                                             OnClose="@(() => RemoveRunTime(time))" Class="ma-1">
+                                                        @FormatTimeSpan(time)
+                                                    </MudChip>
+                                                }
+                                                <MudTimePicker @ref="_addTimePicker" Time="_newRunTime" Label="Add time"
+                                                               AmPm="true" TimeChanged="HandleAddRunTime" />
+                                            </MudStack>
+                                            @if (_runTimes.Count == 0)
+                                            {
+                                                <MudAlert Severity="Severity.Warning" Dense="true">
+                                                    Add at least one run time
+                                                </MudAlert>
+                                            }
+                                        }
+                                        else if (_patternType == SchedulePatternType.Interval)
+                                        {
+                                            @* Interval Configuration *@
+                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Interval</MudText>
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap" Justify="Justify.FlexStart">
+                                                <MudText>Every</MudText>
+                                                <MudNumericField T="int" @bind-Value="_intervalValue" Variant="Variant.Outlined"
+                                                                 Min="1" Max="@(_intervalUnit == ScheduleIntervalUnit.Hours ? 12 : 59)"
+                                                                 Class="jim-interval-number" Margin="Margin.Dense" />
+                                                <MudSelect T="ScheduleIntervalUnit" @bind-Value="_intervalUnit" Variant="Variant.Outlined"
+                                                           Class="jim-interval-unit" Margin="Margin.Dense">
+                                                    <MudSelectItem Value="ScheduleIntervalUnit.Minutes">minutes</MudSelectItem>
+                                                    <MudSelectItem Value="ScheduleIntervalUnit.Hours">hours</MudSelectItem>
+                                                </MudSelect>
+                                                <MudCheckBox T="bool" @bind-Value="_restrictToWindow" Color="Color.Primary" Dense="true"
+                                                             Class="jim-interval-checkbox">
+                                                    Restrict to time window
+                                                </MudCheckBox>
+                                            </MudStack>
+
+                                            @if (_restrictToWindow)
+                                            {
+                                                <MudGrid Class="mt-2">
+                                                    <MudItem xs="12" sm="6">
+                                                        <MudTimePicker @bind-Time="_intervalWindowStart" Label="Start time" AmPm="true" />
+                                                    </MudItem>
+                                                    <MudItem xs="12" sm="6">
+                                                        <MudTimePicker @bind-Time="_intervalWindowEnd" Label="End time" AmPm="true" />
+                                                    </MudItem>
+                                                </MudGrid>
+                                            }
+                                        }
+                                    }
+                                    else
+                                    {
+                                        @* Custom Cron Expression *@
+                                        <MudTextField @bind-Value="_customCronExpression" Label="Cron Expression"
+                                                      Variant="Variant.Outlined"
+                                                      HelperText="Format: minute hour day-of-month month day-of-week (e.g., 0 9,12,15,18 * * 1-5)" />
+                                    }
+
+                                    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
+                                        <MudText Typo="Typo.body2">@GetSchedulePreview()</MudText>
+                                    </MudAlert>
+
+                                    @if (_patternType != SchedulePatternType.Custom)
+                                    {
+                                        <MudExpansionPanels Elevation="0">
+                                            <MudExpansionPanel Text="Advanced: Cron Expression" Expanded="false">
+                                                <MudTextField Value="@BuildCronExpression()" Label="Cron Expression"
+                                                              Variant="Variant.Outlined" ReadOnly="true"
+                                                              HelperText="Generated from schedule configuration above" />
+                                            </MudExpansionPanel>
+                                        </MudExpansionPanels>
+                                    }
+                                </MudStack>
+                            </MudPaper>
+                        }
+
+                        <MudDivider Class="my-2" />
+
+                        <MudSwitch @bind-Value="_schedule.IsEnabled" Color="Color.Primary" Label="@(_schedule.IsEnabled ? "Schedule is Enabled" : "Schedule is Disabled")" />
+                    </MudStack>
+                </MudTabPanel>
+
+                <MudTabPanel Text="Steps" Icon="@Icons.Material.Filled.List" BadgeData="@_schedule.Steps.Count" BadgeColor="Color.Primary">
+                    @if (_editingStep != null)
+                    {
+                        @* Step Editor (inline) *@
+                        <MudPaper Outlined="true" Class="pa-4">
+                            <MudStack Spacing="3">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                    <MudText Typo="Typo.h6">@(_isNewStep ? "Add Step" : "Edit Step")</MudText>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="CancelStepEditor" />
+                                </MudStack>
+
+                                <MudSelect T="ScheduleStepType" @bind-Value="_editingStep.StepType" Label="Step Type" Variant="Variant.Outlined">
+                                    <MudSelectItem Value="ScheduleStepType.RunProfile">Run Profile</MudSelectItem>
+                                    <MudSelectItem Value="ScheduleStepType.PowerShell" Disabled="true">PowerShell Script (Post-MVP)</MudSelectItem>
+                                    <MudSelectItem Value="ScheduleStepType.Executable" Disabled="true">Executable (Post-MVP)</MudSelectItem>
+                                    <MudSelectItem Value="ScheduleStepType.SqlScript" Disabled="true">SQL Script (Post-MVP)</MudSelectItem>
+                                </MudSelect>
+
+                                @if (_editingStep.StepType == ScheduleStepType.RunProfile)
+                                {
+                                    <MudSelect T="int" Value="_selectedConnectedSystemId" Label="Connected System" Variant="Variant.Outlined"
+                                               ValueChanged="HandleConnectedSystemChangedAsync">
+                                        <MudSelectItem Value="0">-- Select Connected System --</MudSelectItem>
+                                        @foreach (var cs in _connectedSystems)
+                                        {
+                                            <MudSelectItem Value="@cs.Id">@cs.Name</MudSelectItem>
+                                        }
+                                    </MudSelect>
+
+                                    <MudSelect T="int" @bind-Value="_selectedRunProfileId" Label="Run Profile" Variant="Variant.Outlined"
+                                               Disabled="@(_runProfiles == null || _runProfiles.Count == 0)">
+                                        <MudSelectItem Value="0">-- Select Run Profile --</MudSelectItem>
+                                        @if (_runProfiles != null)
+                                        {
+                                            @foreach (var rp in _runProfiles)
+                                            {
+                                                <MudSelectItem Value="@rp.Id">@rp.Name</MudSelectItem>
+                                            }
+                                        }
+                                    </MudSelect>
+                                }
+                                else
+                                {
+                                    @* Non-RunProfile steps require a user-specified name *@
+                                    <MudTextField @bind-Value="_editingStep.Name" Label="Step Name" Variant="Variant.Outlined"
+                                                  Required="true" RequiredError="Name is required for this step type"
+                                                  HelperText="A descriptive name for this step" />
+                                }
+
+                                <MudDivider Class="my-2" />
+
+                                <MudSwitch @bind-Value="_editingStep.ContinueOnFailure" Color="Color.Warning"
+                                           Label="@(_editingStep.ContinueOnFailure ? "Continue schedule if this step fails" : "Stop schedule if this step fails")" />
+
+                                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                                    <MudButton OnClick="CancelStepEditor">Cancel</MudButton>
+                                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveStepAsync">Save Step</MudButton>
+                                </MudStack>
+                            </MudStack>
+                        </MudPaper>
+                    }
+                    else
+                    {
+                        @* Step List *@
+                        <MudStack Spacing="4">
+                            <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                                           StartIcon="@Icons.Material.Filled.Add" OnClick="HandleAddStepAsync">
+                                    Add Step
+                                </MudButton>
+                            </MudStack>
+
+                            @if (_schedule.Steps.Count == 0)
+                            {
+                                <MudAlert Severity="Severity.Info">
+                                    No steps have been added yet. Click "Add Step" to create the first step.
+                                </MudAlert>
+                            }
+                            else
+                            {
+                                @* Render steps grouped by StepIndex (parallel groups) *@
+                                @foreach (var block in GetStepBlocks())
+                                {
+                                    @if (block.Steps.Count == 1)
+                                    {
+                                        @* Single step - show simplified view *@
+                                        var step = block.Steps[0];
+                                        <MudPaper Outlined="true" Class="jim-step-block">
+                                            <div class="jim-step-block-header">
+                                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                                        <MudText Typo="Typo.subtitle2">Step @(block.BlockIndex + 1)</MudText>
+                                                    </MudStack>
+                                                    <MudStack Row="true" Spacing="0">
+                                                        <MudTooltip Text="Run in parallel with this step" Arrow="true" Placement="Placement.Top">
+                                                            <MudIconButton Icon="@Icons.Material.Filled.CallSplit"
+                                                                           Style="transform: rotate(180deg);"
+                                                                           OnClick="@(() => HandleAddParallelStepAsync(block.BlockIndex))" />
+                                                        </MudTooltip>
+                                                        <MudTooltip Text="Move up" Arrow="true" Placement="Placement.Top">
+                                                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp"
+                                                                           Disabled="@(block.BlockIndex == 0)"
+                                                                           OnClick="@(() => MoveBlockUp(block.BlockIndex))" />
+                                                        </MudTooltip>
+                                                        <MudTooltip Text="Move down" Arrow="true" Placement="Placement.Top">
+                                                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown"
+                                                                           Disabled="@(block.BlockIndex == GetMaxBlockIndex())"
+                                                                           OnClick="@(() => MoveBlockDown(block.BlockIndex))" />
+                                                        </MudTooltip>
+                                                        <MudTooltip Text="Edit step" Arrow="true" Placement="Placement.Top">
+                                                            <MudIconButton Icon="@Icons.Material.Outlined.Edit"
+                                                                           OnClick="@(() => HandleEditStepAsync(step))" />
+                                                        </MudTooltip>
+                                                        <MudTooltip Text="Delete step" Arrow="true" Placement="Placement.Top">
+                                                            <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error"
+                                                                           OnClick="@(() => HandleRemoveStep(step))" />
+                                                        </MudTooltip>
+                                                    </MudStack>
+                                                </MudStack>
+                                            </div>
+                                            <div class="jim-step-block-content">
+                                                <div class="jim-step-item-in-block">
+                                                    @{ var (runProfileName, connectedSystemName) = GetStepDisplayTexts(step); }
+                                                    <MudText Typo="Typo.body2">
+                                                        <span class="jim-text-emphasis">@connectedSystemName</span> <span class="mud-text-secondary">/</span> <span class="jim-step-run-profile">@runProfileName</span>
+                                                    </MudText>
+                                                </div>
+                                            </div>
+                                        </MudPaper>
+                                    }
+                                    else
+                                    {
+                                        @* Multiple steps in parallel - show as parallel group *@
+                                        <MudPaper Outlined="true" Class="jim-step-block">
+                                            <MudStack Spacing="0">
+                                                @* Block Header *@
+                                                <div class="jim-step-block-header">
+                                                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                                            <MudText Typo="Typo.subtitle2">
+                                                                <MudIcon Icon="@Icons.Material.Filled.CallSplit" Class="mr-1" Style="vertical-align: middle; transform: rotate(180deg);" />
+                                                                Step @(block.BlockIndex + 1): Parallel
+                                                            </MudText>
+                                                            <MudChip T="string" Variant="Variant.Text" Color="Color.Info">
+                                                                @block.Steps.Count steps run together
+                                                            </MudChip>
+                                                        </MudStack>
+                                                        <MudStack Row="true" Spacing="0">
+                                                            <MudTooltip Text="Add parallel step" Arrow="true" Placement="Placement.Top">
+                                                                <MudIconButton Icon="@Icons.Material.Filled.Add"
+                                                                               OnClick="@(() => HandleAddParallelStepAsync(block.BlockIndex))" />
+                                                            </MudTooltip>
+                                                            <MudTooltip Text="Move up" Arrow="true" Placement="Placement.Top">
+                                                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp"
+                                                                               Disabled="@(block.BlockIndex == 0)"
+                                                                               OnClick="@(() => MoveBlockUp(block.BlockIndex))" />
+                                                            </MudTooltip>
+                                                            <MudTooltip Text="Move down" Arrow="true" Placement="Placement.Top">
+                                                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown"
+                                                                               Disabled="@(block.BlockIndex == GetMaxBlockIndex())"
+                                                                               OnClick="@(() => MoveBlockDown(block.BlockIndex))" />
+                                                            </MudTooltip>
+                                                            <MudTooltip Text="Delete entire group" Arrow="true" Placement="Placement.Top">
+                                                                <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error"
+                                                                               OnClick="@(() => HandleRemoveBlock(block.BlockIndex))" />
+                                                            </MudTooltip>
+                                                        </MudStack>
+                                                    </MudStack>
+                                                </div>
+                                                @* Steps in Block *@
+                                                @* Steps in Block *@
+                                                <div class="jim-step-block-content">
+                                                    @foreach (var step in block.Steps)
+                                                    {
+                                                        var (runProfile, connectedSystem) = GetStepDisplayTexts(step);
+                                                        <div class="jim-step-item-in-block">
+                                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                                                <MudText Typo="Typo.body2" Style="flex: 1;">
+                                                                    <span class="jim-text-emphasis">@connectedSystem</span> <span class="mud-text-secondary">/</span> <span class="jim-step-run-profile">@runProfile</span>
+                                                                </MudText>
+                                                                <MudStack Row="true" Spacing="0">
+                                                                    <MudTooltip Text="Edit step" Arrow="true" Placement="Placement.Top">
+                                                                        <MudIconButton Icon="@Icons.Material.Outlined.Edit"
+                                                                                       OnClick="@(() => HandleEditStepAsync(step))" />
+                                                                    </MudTooltip>
+                                                                    <MudTooltip Text="Remove from group" Arrow="true" Placement="Placement.Top">
+                                                                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error"
+                                                                                       OnClick="@(() => HandleRemoveStep(step))" />
+                                                                    </MudTooltip>
+                                                                </MudStack>
+                                                            </MudStack>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            </MudStack>
+                                        </MudPaper>
+                                    }
+                                }
+                            }
+                        </MudStack>
+                    }
+                </MudTabPanel>
+            </MudTabs>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (_editingStep == null)
+        {
+            <MudButton OnClick="Cancel">Cancel</MudButton>
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync" Disabled="@_saving">
+                @if (_saving)
+                {
+                    <MudProgressCircular Indeterminate="true" Class="mr-2" />
+                }
+                Save
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    [Parameter]
+    public Guid? ScheduleId { get; set; }
+
+    private Schedule? _schedule;
+    private bool _loading = true;
+    private bool _saving;
+    private int _activeTab;
+
+    // Scheduling UI state - new pattern-based configuration
+    private SchedulePatternType _patternType = SchedulePatternType.SpecificTimes;
+    private HashSet<int> _selectedDays = new() { 1, 2, 3, 4, 5 }; // Mon-Fri default (cron: 0=Sun, 6=Sat)
+    private List<TimeSpan> _runTimes = new() { new TimeSpan(6, 0, 0) }; // Default 6:00 AM
+    private int _intervalValue = 2;
+    private ScheduleIntervalUnit _intervalUnit = ScheduleIntervalUnit.Hours;
+    private bool _restrictToWindow = false;
+    private TimeSpan? _intervalWindowStart = new TimeSpan(6, 0, 0);
+    private TimeSpan? _intervalWindowEnd = new TimeSpan(18, 0, 0);
+    private string _customCronExpression = "0 6 * * 1-5"; // Default for custom mode
+    private MudTimePicker? _addTimePicker;
+    private TimeSpan? _newRunTime;
+
+    // Days ordered according to the current culture's first day of week
+    private (string Label, int Value)[] _daysOfWeek = null!;
+
+    private static (string Label, int Value)[] GetDaysOfWeekForCulture()
+    {
+        // Cron day values: 0=Sunday, 1=Monday, ..., 6=Saturday
+        var allDays = new (string Label, int Value)[]
+        {
+            ("Sun", 0),
+            ("Mon", 1),
+            ("Tue", 2),
+            ("Wed", 3),
+            ("Thu", 4),
+            ("Fri", 5),
+            ("Sat", 6)
+        };
+
+        // Get the first day of week for the current culture (e.g., Monday for en-GB, Sunday for en-US)
+        var firstDay = (int)System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.FirstDayOfWeek;
+
+        // Reorder the array to start from the culture's first day
+        return allDays.Skip(firstDay).Concat(allDays.Take(firstDay)).ToArray();
+    }
+
+    // Step editor state
+    private ScheduleStep? _editingStep;
+    private List<ConnectedSystemHeader> _connectedSystems = new();
+    private List<ConnectedSystemRunProfile>? _runProfiles;
+    private int _selectedConnectedSystemId;
+    private int _selectedRunProfileId;
+
+    // Cache of run profiles by connected system ID for display lookups
+    private Dictionary<int, List<ConnectedSystemRunProfile>> _runProfilesCache = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+
+        // Initialise days of week ordered by current culture (e.g., Mon-Sun for en-GB, Sun-Sat for en-US)
+        _daysOfWeek = GetDaysOfWeekForCulture();
+
+        // Load connected systems for step configuration
+        _connectedSystems = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+
+        if (ScheduleId.HasValue)
+        {
+            // Use AsNoTracking to prevent EF Core from tracking changes to _schedule and its steps.
+            // This avoids issues where adding/removing steps in the UI causes EF Core to cascade
+            // UPDATE/DELETE operations when we later save the schedule.
+            _schedule = await Jim.Scheduler.GetScheduleWithStepsAsNoTrackingAsync(ScheduleId.Value);
+            if (_schedule != null)
+            {
+                // Load schedule configuration from model fields
+                LoadScheduleConfiguration();
+
+                // Preload run profiles for all RunProfile steps so we can display their names
+                var connectedSystemIds = _schedule.Steps
+                    .Where(s => s.StepType == ScheduleStepType.RunProfile && s.ConnectedSystemId.HasValue)
+                    .Select(s => s.ConnectedSystemId!.Value)
+                    .Distinct();
+
+                foreach (var csId in connectedSystemIds)
+                {
+                    await GetRunProfilesForConnectedSystemAsync(csId);
+                }
+            }
+        }
+
+        if (_schedule == null)
+        {
+            _schedule = new Schedule
+            {
+                Id = Guid.NewGuid(),
+                Name = "",
+                TriggerType = ScheduleTriggerType.Manual,
+                PatternType = SchedulePatternType.SpecificTimes,
+                IsEnabled = false
+            };
+        }
+
+        _loading = false;
+    }
+
+    /// <summary>
+    /// Loads schedule configuration from the model's structured fields into UI state.
+    /// Falls back to parsing CronExpression for legacy schedules without structured config.
+    /// </summary>
+    private void LoadScheduleConfiguration()
+    {
+        if (_schedule == null) return;
+
+        _patternType = _schedule.PatternType;
+
+        // Load days of week
+        _selectedDays.Clear();
+        if (!string.IsNullOrWhiteSpace(_schedule.DaysOfWeek))
+        {
+            foreach (var day in _schedule.DaysOfWeek.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (int.TryParse(day.Trim(), out var d))
+                    _selectedDays.Add(d);
+            }
+        }
+        else
+        {
+            // Default to weekdays if not set
+            _selectedDays = new HashSet<int> { 1, 2, 3, 4, 5 };
+        }
+
+        // Load run times for SpecificTimes pattern
+        _runTimes.Clear();
+        if (!string.IsNullOrWhiteSpace(_schedule.RunTimes))
+        {
+            foreach (var timeStr in _schedule.RunTimes.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (TimeSpan.TryParse(timeStr.Trim(), out var time))
+                    _runTimes.Add(time);
+            }
+        }
+        if (_runTimes.Count == 0)
+            _runTimes.Add(new TimeSpan(6, 0, 0)); // Default
+
+        // Load interval configuration
+        _intervalValue = _schedule.IntervalValue ?? 2;
+        _intervalUnit = _schedule.IntervalUnit ?? ScheduleIntervalUnit.Hours;
+
+        if (!string.IsNullOrWhiteSpace(_schedule.IntervalWindowStart))
+        {
+            _restrictToWindow = true;
+            if (TimeSpan.TryParse(_schedule.IntervalWindowStart, out var start))
+                _intervalWindowStart = start;
+            if (!string.IsNullOrWhiteSpace(_schedule.IntervalWindowEnd) && TimeSpan.TryParse(_schedule.IntervalWindowEnd, out var end))
+                _intervalWindowEnd = end;
+        }
+        else
+        {
+            _restrictToWindow = false;
+        }
+
+        // Load custom cron expression
+        if (_patternType == SchedulePatternType.Custom && !string.IsNullOrWhiteSpace(_schedule.CronExpression))
+        {
+            _customCronExpression = _schedule.CronExpression;
+        }
+    }
+
+    private string BuildCronExpression()
+    {
+        if (_patternType == SchedulePatternType.Custom)
+        {
+            return _customCronExpression;
+        }
+
+        var days = _selectedDays.Count == 7 ? "*" : string.Join(",", _selectedDays.OrderBy(d => d));
+
+        if (_patternType == SchedulePatternType.SpecificTimes)
+        {
+            if (_runTimes.Count == 0)
+                return "0 6 * * *"; // Fallback
+
+            // Group times by minute to create efficient cron expressions
+            // For simplicity, use minute from first time and list all hours
+            var minute = _runTimes.First().Minutes;
+            var hours = string.Join(",", _runTimes.Select(t => t.Hours).Distinct().OrderBy(h => h));
+            return $"{minute} {hours} * * {days}";
+        }
+
+        if (_patternType == SchedulePatternType.Interval)
+        {
+            if (_intervalUnit == ScheduleIntervalUnit.Hours)
+            {
+                if (_restrictToWindow && _intervalWindowStart.HasValue && _intervalWindowEnd.HasValue)
+                {
+                    // Generate specific hours within the window
+                    var hours = GenerateIntervalHours(_intervalValue, _intervalWindowStart.Value.Hours, _intervalWindowEnd.Value.Hours);
+                    return $"0 {string.Join(",", hours)} * * {days}";
+                }
+                else
+                {
+                    // Every N hours all day - use step syntax
+                    return $"0 */{_intervalValue} * * {days}";
+                }
+            }
+            else
+            {
+                // Every N minutes
+                return $"*/{_intervalValue} * * * {days}";
+            }
+        }
+
+        return "0 6 * * *"; // Fallback
+    }
+
+    private List<int> GenerateIntervalHours(int interval, int startHour, int endHour)
+    {
+        var hours = new List<int>();
+        for (var h = startHour; h <= endHour; h += interval)
+            hours.Add(h);
+        return hours;
+    }
+
+    private string GetSchedulePreview()
+    {
+        if (_patternType == SchedulePatternType.Custom)
+        {
+            return string.IsNullOrWhiteSpace(_customCronExpression)
+                ? "Enter a valid cron expression"
+                : $"Custom schedule: {_customCronExpression}";
+        }
+
+        if (_selectedDays.Count == 0)
+            return "Select at least one day";
+
+        var daysText = GetSelectedDaysText();
+
+        if (_patternType == SchedulePatternType.SpecificTimes)
+        {
+            if (_runTimes.Count == 0)
+                return "Add at least one run time";
+
+            var timesText = string.Join(", ", _runTimes.OrderBy(t => t).Select(FormatTimeSpan));
+            return $"Runs {daysText} at {timesText}";
+        }
+
+        if (_patternType == SchedulePatternType.Interval)
+        {
+            var unitText = _intervalUnit == ScheduleIntervalUnit.Hours ? "hour" : "minute";
+            if (_intervalValue > 1) unitText += "s";
+
+            var intervalText = $"every {_intervalValue} {unitText}";
+
+            if (_restrictToWindow && _intervalWindowStart.HasValue && _intervalWindowEnd.HasValue)
+            {
+                return $"Runs {daysText}, {intervalText} between {FormatTimeSpan(_intervalWindowStart.Value)} and {FormatTimeSpan(_intervalWindowEnd.Value)}";
+            }
+            return $"Runs {daysText}, {intervalText}";
+        }
+
+        return "Schedule not configured";
+    }
+
+    private string GetSelectedDaysText()
+    {
+        if (_selectedDays.Count == 7)
+            return "every day";
+        if (_selectedDays.SetEquals(new[] { 1, 2, 3, 4, 5 }))
+            return "weekdays";
+        if (_selectedDays.SetEquals(new[] { 0, 6 }))
+            return "weekends";
+
+        var dayNames = _selectedDays.OrderBy(d => d).Select(d => _daysOfWeek.First(x => x.Value == d).Label);
+        return string.Join(", ", dayNames);
+    }
+
+    private static string FormatTimeSpan(TimeSpan time)
+    {
+        var hour = time.Hours;
+        var minute = time.Minutes;
+        var period = hour >= 12 ? "PM" : "AM";
+        var displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+        return $"{displayHour}:{minute:D2} {period}";
+    }
+
+    private void ToggleDaySelection(int day)
+    {
+        if (_selectedDays.Contains(day))
+            _selectedDays.Remove(day);
+        else
+            _selectedDays.Add(day);
+    }
+
+    private void SelectAllDays()
+    {
+        _selectedDays = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6 };
+    }
+
+    private void SelectWeekdays()
+    {
+        _selectedDays = new HashSet<int> { 1, 2, 3, 4, 5 };
+    }
+
+    private void SelectWeekends()
+    {
+        _selectedDays = new HashSet<int> { 0, 6 };
+    }
+
+    private void HandlePatternTypeChanged(SchedulePatternType value)
+    {
+        _patternType = value;
+    }
+
+    private async Task HandleAddRunTime(TimeSpan? time)
+    {
+        _newRunTime = time;
+        if (time.HasValue && !_runTimes.Contains(time.Value))
+        {
+            _runTimes.Add(time.Value);
+            _runTimes.Sort();
+        }
+        // Reset the time picker by clearing and refreshing
+        _newRunTime = null;
+        if (_addTimePicker != null)
+        {
+            await _addTimePicker.ClearAsync();
+        }
+    }
+
+    private void RemoveRunTime(TimeSpan time)
+    {
+        _runTimes.Remove(time);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SaveAsync()
+    {
+        if (_schedule == null || string.IsNullOrWhiteSpace(_schedule.Name))
+        {
+            Snackbar.Add("Please enter a name for the schedule.", Severity.Warning);
+            return;
+        }
+
+        if (_schedule.TriggerType == ScheduleTriggerType.Cron)
+        {
+            // Validate configuration
+            if (_patternType != SchedulePatternType.Custom && _selectedDays.Count == 0)
+            {
+                Snackbar.Add("Please select at least one day.", Severity.Warning);
+                return;
+            }
+            if (_patternType == SchedulePatternType.SpecificTimes && _runTimes.Count == 0)
+            {
+                Snackbar.Add("Please add at least one run time.", Severity.Warning);
+                return;
+            }
+
+            // Save pattern configuration to model
+            _schedule.PatternType = _patternType;
+
+            if (_patternType != SchedulePatternType.Custom)
+            {
+                _schedule.DaysOfWeek = string.Join(",", _selectedDays.OrderBy(d => d));
+            }
+            else
+            {
+                _schedule.DaysOfWeek = null;
+            }
+
+            if (_patternType == SchedulePatternType.SpecificTimes)
+            {
+                _schedule.RunTimes = string.Join(",", _runTimes.OrderBy(t => t).Select(t => t.ToString(@"hh\:mm")));
+                _schedule.IntervalValue = null;
+                _schedule.IntervalUnit = null;
+                _schedule.IntervalWindowStart = null;
+                _schedule.IntervalWindowEnd = null;
+            }
+            else if (_patternType == SchedulePatternType.Interval)
+            {
+                _schedule.RunTimes = null;
+                _schedule.IntervalValue = _intervalValue;
+                _schedule.IntervalUnit = _intervalUnit;
+                if (_restrictToWindow && _intervalWindowStart.HasValue && _intervalWindowEnd.HasValue)
+                {
+                    _schedule.IntervalWindowStart = _intervalWindowStart.Value.ToString(@"hh\:mm");
+                    _schedule.IntervalWindowEnd = _intervalWindowEnd.Value.ToString(@"hh\:mm");
+                }
+                else
+                {
+                    _schedule.IntervalWindowStart = null;
+                    _schedule.IntervalWindowEnd = null;
+                }
+            }
+            else
+            {
+                // Custom - clear guided config fields
+                _schedule.RunTimes = null;
+                _schedule.IntervalValue = null;
+                _schedule.IntervalUnit = null;
+                _schedule.IntervalWindowStart = null;
+                _schedule.IntervalWindowEnd = null;
+            }
+
+            _schedule.CronExpression = BuildCronExpression();
+        }
+        else
+        {
+            _schedule.CronExpression = null;
+            _schedule.PatternType = SchedulePatternType.SpecificTimes;
+            _schedule.DaysOfWeek = null;
+            _schedule.RunTimes = null;
+            _schedule.IntervalValue = null;
+            _schedule.IntervalUnit = null;
+            _schedule.IntervalWindowStart = null;
+            _schedule.IntervalWindowEnd = null;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+
+            if (ScheduleId.HasValue)
+            {
+                // Update existing schedule
+                // IMPORTANT: Fetch a fresh schedule from DB to avoid EF Core cascade deleting steps
+                // when we modify the in-memory schedule's Steps collection
+                var dbSchedule = await Jim.Scheduler.GetScheduleAsync(_schedule.Id);
+                if (dbSchedule == null)
+                {
+                    Snackbar.Add("Schedule not found.", Severity.Error);
+                    return;
+                }
+
+                // Copy changed values to the fresh DB entity (NOT touching Steps collection)
+                dbSchedule.Name = _schedule.Name;
+                dbSchedule.Description = _schedule.Description;
+                dbSchedule.IsEnabled = _schedule.IsEnabled;
+                dbSchedule.TriggerType = _schedule.TriggerType;
+                dbSchedule.CronExpression = _schedule.CronExpression;
+                dbSchedule.PatternType = _schedule.PatternType;
+                dbSchedule.DaysOfWeek = _schedule.DaysOfWeek;
+                dbSchedule.RunTimes = _schedule.RunTimes;
+                dbSchedule.IntervalValue = _schedule.IntervalValue;
+                dbSchedule.IntervalUnit = _schedule.IntervalUnit;
+                dbSchedule.IntervalWindowStart = _schedule.IntervalWindowStart;
+                dbSchedule.IntervalWindowEnd = _schedule.IntervalWindowEnd;
+                dbSchedule.NextRunTime = _schedule.NextRunTime;
+                dbSchedule.LastUpdated = DateTime.UtcNow;
+                dbSchedule.LastUpdatedByType = ActivityInitiatorType.User;
+                dbSchedule.LastUpdatedById = user.Id;
+                dbSchedule.LastUpdatedByName = user.DisplayName;
+
+                await Jim.Scheduler.UpdateScheduleAsync(dbSchedule);
+
+                // Now handle steps separately
+                var existingSteps = await Jim.Scheduler.GetScheduleStepsAsync(_schedule.Id);
+                var existingStepIds = existingSteps.Select(s => s.Id).ToHashSet();
+
+                // Determine which steps to delete (in DB but not in our list)
+                var currentStepIds = _schedule.Steps.Select(s => s.Id).ToHashSet();
+                var stepIdsToDelete = existingStepIds.Where(id => !currentStepIds.Contains(id)).ToList();
+
+                // Delete removed steps
+                foreach (var stepId in stepIdsToDelete)
+                {
+                    var stepToDelete = existingSteps.FirstOrDefault(s => s.Id == stepId);
+                    if (stepToDelete != null)
+                    {
+                        await Jim.Scheduler.DeleteScheduleStepAsync(stepToDelete);
+                    }
+                }
+
+                // Process each step in our in-memory list
+                // StepIndex is managed by the UI (parallel steps share the same StepIndex)
+                foreach (var inMemoryStep in _schedule.Steps)
+                {
+                    if (existingStepIds.Contains(inMemoryStep.Id))
+                    {
+                        // Update existing step - fetch fresh from DB to avoid tracking issues
+                        var dbStep = await Jim.Scheduler.GetScheduleStepAsync(inMemoryStep.Id);
+                        if (dbStep != null)
+                        {
+                            // Copy changed values to the tracked entity
+                            // Preserve StepIndex from in-memory step (it defines parallel grouping)
+                            dbStep.Name = inMemoryStep.Name;
+                            dbStep.StepIndex = inMemoryStep.StepIndex;
+                            dbStep.StepType = inMemoryStep.StepType;
+                            dbStep.ExecutionMode = inMemoryStep.ExecutionMode;
+                            dbStep.ContinueOnFailure = inMemoryStep.ContinueOnFailure;
+                            dbStep.Timeout = inMemoryStep.Timeout;
+                            dbStep.ConnectedSystemId = inMemoryStep.ConnectedSystemId;
+                            dbStep.RunProfileId = inMemoryStep.RunProfileId;
+                            dbStep.ScriptPath = inMemoryStep.ScriptPath;
+                            dbStep.Arguments = inMemoryStep.Arguments;
+                            dbStep.ExecutablePath = inMemoryStep.ExecutablePath;
+                            dbStep.WorkingDirectory = inMemoryStep.WorkingDirectory;
+                            dbStep.SqlConnectionString = inMemoryStep.SqlConnectionString;
+                            dbStep.SqlScriptPath = inMemoryStep.SqlScriptPath;
+                            dbStep.LastUpdated = DateTime.UtcNow;
+                            dbStep.LastUpdatedByType = ActivityInitiatorType.User;
+                            dbStep.LastUpdatedById = user.Id;
+                            dbStep.LastUpdatedByName = user.DisplayName;
+                            await Jim.Scheduler.UpdateScheduleStepAsync(dbStep);
+                        }
+                    }
+                    else
+                    {
+                        // Create new step - StepIndex is already set by the UI
+                        inMemoryStep.ScheduleId = _schedule.Id;
+                        inMemoryStep.Created = DateTime.UtcNow;
+                        inMemoryStep.CreatedByType = ActivityInitiatorType.User;
+                        inMemoryStep.CreatedById = user.Id;
+                        inMemoryStep.CreatedByName = user.DisplayName;
+                        await Jim.Scheduler.CreateScheduleStepAsync(inMemoryStep);
+                    }
+                }
+
+                Snackbar.Add("Schedule updated successfully.", Severity.Success);
+            }
+            else
+            {
+                // Create new
+                _schedule.Created = DateTime.UtcNow;
+                _schedule.CreatedByType = ActivityInitiatorType.User;
+                _schedule.CreatedById = user.Id;
+                _schedule.CreatedByName = user.DisplayName;
+
+                // Set up steps before saving - EF Core will cascade save them with the schedule
+                // StepIndex is already set by the UI (parallel steps share the same StepIndex)
+                foreach (var step in _schedule.Steps)
+                {
+                    step.ScheduleId = _schedule.Id;
+                    step.Created = DateTime.UtcNow;
+                    step.CreatedByType = ActivityInitiatorType.User;
+                    step.CreatedById = user.Id;
+                    step.CreatedByName = user.DisplayName;
+                }
+
+                // This will save the schedule and all its steps in one transaction
+                await Jim.Scheduler.CreateScheduleAsync(_schedule);
+
+                Snackbar.Add("Schedule created successfully.", Severity.Success);
+            }
+
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save schedule: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    // Block management - blocks are groups of steps that run in parallel (same StepIndex)
+    private bool _isNewStep;
+    private int _editingBlockIndex;
+
+    private record StepBlock(int BlockIndex, List<ScheduleStep> Steps);
+
+    private List<StepBlock> GetStepBlocks()
+    {
+        if (_schedule == null)
+            return new List<StepBlock>();
+
+        return _schedule.Steps
+            .GroupBy(s => s.StepIndex)
+            .OrderBy(g => g.Key)
+            .Select((g, idx) => new StepBlock(idx, g.ToList()))
+            .ToList();
+    }
+
+    private int GetMaxBlockIndex()
+    {
+        if (_schedule == null || _schedule.Steps.Count == 0)
+            return -1;
+
+        return _schedule.Steps.Max(s => s.StepIndex);
+    }
+
+    private Task HandleAddStepAsync()
+    {
+        // Add a new sequential step (new StepIndex)
+        var newStepIndex = _schedule?.Steps.Count > 0
+            ? _schedule.Steps.Max(s => s.StepIndex) + 1
+            : 0;
+
+        _isNewStep = true;
+        _editingBlockIndex = newStepIndex;
+        _editingStep = new ScheduleStep
+        {
+            Id = Guid.NewGuid(),
+            Name = "",
+            StepType = ScheduleStepType.RunProfile,
+            ExecutionMode = StepExecutionMode.Sequential,
+            StepIndex = newStepIndex
+        };
+        _selectedConnectedSystemId = 0;
+        _selectedRunProfileId = 0;
+        _runProfiles = null;
+        return Task.CompletedTask;
+    }
+
+    private Task HandleAddParallelStepAsync(int blockIndex)
+    {
+        // Add a step to run in parallel with an existing step (same StepIndex)
+        _isNewStep = true;
+        _editingBlockIndex = blockIndex;
+
+        // Get the actual StepIndex from existing steps in this block
+        var actualStepIndex = _schedule?.Steps
+            .GroupBy(s => s.StepIndex)
+            .OrderBy(g => g.Key)
+            .Skip(blockIndex)
+            .FirstOrDefault()?.Key ?? blockIndex;
+
+        _editingStep = new ScheduleStep
+        {
+            Id = Guid.NewGuid(),
+            Name = "",
+            StepType = ScheduleStepType.RunProfile,
+            ExecutionMode = StepExecutionMode.ParallelWithPrevious,
+            StepIndex = actualStepIndex
+        };
+        _selectedConnectedSystemId = 0;
+        _selectedRunProfileId = 0;
+        _runProfiles = null;
+        return Task.CompletedTask;
+    }
+
+    private async Task HandleEditStepAsync(ScheduleStep step)
+    {
+        _isNewStep = false;
+        _editingBlockIndex = step.StepIndex;
+        _editingStep = new ScheduleStep
+        {
+            Id = step.Id,
+            ScheduleId = step.ScheduleId,
+            Name = step.Name,
+            StepType = step.StepType,
+            ExecutionMode = step.ExecutionMode,
+            ContinueOnFailure = step.ContinueOnFailure,
+            Timeout = step.Timeout,
+            StepIndex = step.StepIndex,
+            Created = step.Created,
+            CreatedByType = step.CreatedByType,
+            CreatedById = step.CreatedById,
+            CreatedByName = step.CreatedByName,
+            // Copy typed configuration properties
+            ConnectedSystemId = step.ConnectedSystemId,
+            RunProfileId = step.RunProfileId,
+            ScriptPath = step.ScriptPath,
+            Arguments = step.Arguments,
+            ExecutablePath = step.ExecutablePath,
+            WorkingDirectory = step.WorkingDirectory,
+            SqlConnectionString = step.SqlConnectionString,
+            SqlScriptPath = step.SqlScriptPath
+        };
+
+        // Load run profiles if this is a RunProfile step
+        if (step.StepType == ScheduleStepType.RunProfile && step.ConnectedSystemId.HasValue)
+        {
+            _selectedConnectedSystemId = step.ConnectedSystemId.Value;
+            _selectedRunProfileId = step.RunProfileId ?? 0;
+            _runProfiles = await Jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(_selectedConnectedSystemId);
+            _selectedConnectedSystemId = 0;
+            _selectedRunProfileId = 0;
+            _runProfiles = null;
+        }
+    }
+
+    private void HandleRemoveStep(ScheduleStep step)
+    {
+        if (_schedule == null) return;
+
+        var stepIndex = step.StepIndex;
+        _schedule.Steps.Remove(step);
+
+        // If this was the last step in the block, renumber subsequent blocks
+        var stepsInBlock = _schedule.Steps.Count(s => s.StepIndex == stepIndex);
+        if (stepsInBlock == 0)
+        {
+            // Renumber all steps with higher indices
+            foreach (var s in _schedule.Steps.Where(s => s.StepIndex > stepIndex))
+            {
+                s.StepIndex--;
+            }
+        }
+    }
+
+    private void HandleRemoveBlock(int blockIndex)
+    {
+        if (_schedule == null) return;
+
+        // Get the actual StepIndex for this display block
+        var blocks = GetStepBlocks();
+        if (blockIndex >= blocks.Count) return;
+
+        var actualStepIndex = blocks[blockIndex].Steps.First().StepIndex;
+
+        // Remove all steps in this block
+        _schedule.Steps.RemoveAll(s => s.StepIndex == actualStepIndex);
+
+        // Renumber subsequent blocks
+        foreach (var s in _schedule.Steps.Where(s => s.StepIndex > actualStepIndex))
+        {
+            s.StepIndex--;
+        }
+    }
+
+    private void MoveBlockUp(int blockIndex)
+    {
+        if (_schedule == null || blockIndex <= 0) return;
+
+        var blocks = GetStepBlocks();
+        if (blockIndex >= blocks.Count) return;
+
+        var currentBlockStepIndex = blocks[blockIndex].Steps.First().StepIndex;
+        var previousBlockStepIndex = blocks[blockIndex - 1].Steps.First().StepIndex;
+
+        // Swap StepIndex values between blocks
+        foreach (var step in _schedule.Steps.Where(s => s.StepIndex == currentBlockStepIndex))
+        {
+            step.StepIndex = previousBlockStepIndex;
+        }
+        foreach (var step in _schedule.Steps.Where(s => s.StepIndex == previousBlockStepIndex && !blocks[blockIndex].Steps.Contains(s)))
+        {
+            step.StepIndex = currentBlockStepIndex;
+        }
+
+        // Renormalize indices to be sequential
+        NormalizeStepIndices();
+    }
+
+    private void MoveBlockDown(int blockIndex)
+    {
+        if (_schedule == null) return;
+
+        var blocks = GetStepBlocks();
+        if (blockIndex >= blocks.Count - 1) return;
+
+        var currentBlockStepIndex = blocks[blockIndex].Steps.First().StepIndex;
+        var nextBlockStepIndex = blocks[blockIndex + 1].Steps.First().StepIndex;
+
+        // Swap StepIndex values between blocks
+        foreach (var step in _schedule.Steps.Where(s => s.StepIndex == currentBlockStepIndex))
+        {
+            step.StepIndex = nextBlockStepIndex;
+        }
+        foreach (var step in _schedule.Steps.Where(s => s.StepIndex == nextBlockStepIndex && !blocks[blockIndex].Steps.Contains(s)))
+        {
+            step.StepIndex = currentBlockStepIndex;
+        }
+
+        // Renormalize indices to be sequential
+        NormalizeStepIndices();
+    }
+
+    private void NormalizeStepIndices()
+    {
+        if (_schedule == null) return;
+
+        // Get unique step indices in order and renumber to be sequential starting from 0
+        var uniqueIndices = _schedule.Steps.Select(s => s.StepIndex).Distinct().OrderBy(i => i).ToList();
+        var indexMap = uniqueIndices.Select((oldIdx, newIdx) => (oldIdx, newIdx)).ToDictionary(x => x.oldIdx, x => x.newIdx);
+
+        foreach (var step in _schedule.Steps)
+        {
+            step.StepIndex = indexMap[step.StepIndex];
+        }
+    }
+
+    private async Task HandleConnectedSystemChangedAsync(int connectedSystemId)
+    {
+        _selectedConnectedSystemId = connectedSystemId;
+        _selectedRunProfileId = 0;
+
+        if (connectedSystemId > 0)
+        {
+            _runProfiles = await GetRunProfilesForConnectedSystemAsync(connectedSystemId);
+        }
+        else
+        {
+            _runProfiles = null;
+        }
+    }
+
+    /// <summary>
+    /// Gets run profiles for a connected system, using cache if available.
+    /// </summary>
+    private async Task<List<ConnectedSystemRunProfile>> GetRunProfilesForConnectedSystemAsync(int connectedSystemId)
+    {
+        if (_runProfilesCache.TryGetValue(connectedSystemId, out var cached))
+        {
+            return cached;
+        }
+
+        var profiles = await Jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystemId);
+        _runProfilesCache[connectedSystemId] = profiles;
+        return profiles;
+    }
+
+    private void CancelStepEditor()
+    {
+        _editingStep = null;
+    }
+
+    private Task SaveStepAsync()
+    {
+        if (_editingStep == null)
+            return Task.CompletedTask;
+
+        if (_editingStep.StepType == ScheduleStepType.RunProfile)
+        {
+            if (_selectedConnectedSystemId == 0 || _selectedRunProfileId == 0)
+            {
+                Snackbar.Add("Please select a connected system and run profile.", Severity.Warning);
+                return Task.CompletedTask;
+            }
+
+            _editingStep.ConnectedSystemId = _selectedConnectedSystemId;
+            _editingStep.RunProfileId = _selectedRunProfileId;
+            // Don't store Name for RunProfile steps - it's derived from FKs at display time
+            _editingStep.Name = null;
+        }
+        else
+        {
+            // Non-RunProfile steps require a name
+            if (string.IsNullOrWhiteSpace(_editingStep.Name))
+            {
+                Snackbar.Add("Please enter a name for this step.", Severity.Warning);
+                return Task.CompletedTask;
+            }
+        }
+
+        // Find if this is an edit or new
+        var existingIndex = _schedule?.Steps.FindIndex(s => s.Id == _editingStep.Id) ?? -1;
+        if (existingIndex >= 0)
+        {
+            _schedule!.Steps[existingIndex] = _editingStep;
+        }
+        else
+        {
+            _schedule?.Steps.Add(_editingStep);
+        }
+
+        _editingStep = null;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Gets display texts for a step. Returns (primaryText, secondaryText) tuple.
+    /// For RunProfile steps: looks up CS and RP names from FKs (live).
+    /// For other step types: uses the stored Name field.
+    /// </summary>
+    private (string Primary, string Secondary) GetStepDisplayTexts(ScheduleStep step)
+    {
+        if (step.StepType == ScheduleStepType.RunProfile && step.ConnectedSystemId.HasValue && step.RunProfileId.HasValue)
+        {
+            // Look up connected system name
+            var cs = _connectedSystems.FirstOrDefault(c => c.Id == step.ConnectedSystemId.Value);
+            var connectedSystemName = cs?.Name ?? "Unknown System";
+
+            // Look up run profile name from cache
+            var runProfileName = "Unknown Profile";
+            if (_runProfilesCache.TryGetValue(step.ConnectedSystemId.Value, out var profiles))
+            {
+                var rp = profiles.FirstOrDefault(p => p.Id == step.RunProfileId.Value);
+                if (rp != null)
+                {
+                    runProfileName = rp.Name;
+                }
+            }
+
+            return (runProfileName, connectedSystemName);
+        }
+
+        // Non-RunProfile types use the stored Name
+        var primary = !string.IsNullOrWhiteSpace(step.Name) ? step.Name : GetStepTypeName(step.StepType);
+        return (primary, GetStepTypeName(step.StepType));
+    }
+
+    private static string GetStepTypeName(ScheduleStepType stepType)
+    {
+        return stepType switch
+        {
+            ScheduleStepType.RunProfile => "Run Profile",
+            ScheduleStepType.PowerShell => "PowerShell Script",
+            ScheduleStepType.Executable => "Executable",
+            ScheduleStepType.SqlScript => "SQL Script",
+            _ => "Unknown"
+        };
+    }
+}

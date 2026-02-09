@@ -76,6 +76,7 @@ public class DataGenerationRepository : IDataGenerationRepository
     public async Task<List<DataGenerationTemplate>> GetTemplatesAsync()
     {
         var templates = await Repository.Database.DataGenerationTemplates.
+            AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
             Include(t => t.ObjectTypes).
             ThenInclude(ot => ot.MetaverseObjectType).
             Include(t => t.ObjectTypes).
@@ -117,6 +118,7 @@ public class DataGenerationRepository : IDataGenerationRepository
     public async Task<DataGenerationTemplate?> GetTemplateAsync(string name)
     {
         var q = Repository.Database.DataGenerationTemplates.
+            AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
             Include(t => t.ObjectTypes).
             ThenInclude(ot => ot.MetaverseObjectType).
             Include(t => t.ObjectTypes).
@@ -148,6 +150,7 @@ public class DataGenerationRepository : IDataGenerationRepository
     public async Task<DataGenerationTemplate?> GetTemplateAsync(int id)
     {
         var q = Repository.Database.DataGenerationTemplates.
+            AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
             Include(t => t.ObjectTypes).
             ThenInclude(ot => ot.MetaverseObjectType).
             Include(t => t.ObjectTypes).

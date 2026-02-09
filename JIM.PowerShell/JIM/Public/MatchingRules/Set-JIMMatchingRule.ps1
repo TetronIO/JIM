@@ -23,6 +23,11 @@ function Set-JIMMatchingRule {
         The new Connected System attribute ID to use as the source.
         Note: This replaces all existing sources with a single new source.
 
+    .PARAMETER CaseSensitive
+        Whether the matching should be case-sensitive.
+        When false (default), 'emp123' matches 'EMP123'.
+        When true, 'emp123' does NOT match 'EMP123'.
+
     .PARAMETER PassThru
         If specified, returns the updated Matching Rule object.
 
@@ -67,6 +72,9 @@ function Set-JIMMatchingRule {
         [Parameter()]
         [int]$SourceAttributeId,
 
+        [Parameter()]
+        [bool]$CaseSensitive,
+
         [switch]$PassThru
     )
 
@@ -94,6 +102,10 @@ function Set-JIMMatchingRule {
                     connectedSystemAttributeId = $SourceAttributeId
                 }
             )
+        }
+
+        if ($PSBoundParameters.ContainsKey('CaseSensitive')) {
+            $body.caseSensitive = $CaseSensitive
         }
 
         if ($body.Count -eq 0) {

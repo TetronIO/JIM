@@ -1068,7 +1068,7 @@ public class SynchronisationController(
         SynchronisationWorkerTask workerTask;
         if (initiatedBy != null)
         {
-            workerTask = new SynchronisationWorkerTask(connectedSystemId, runProfileId, initiatedBy);
+            workerTask = SynchronisationWorkerTask.ForUser(connectedSystemId, runProfileId, initiatedBy.Id, initiatedBy.DisplayName ?? "Unknown User");
         }
         else
         {
@@ -1078,7 +1078,7 @@ public class SynchronisationController(
                 _logger.LogError("Failed to resolve API key for run profile execution");
                 return BadRequest(new { error = "Failed to identify initiating API key" });
             }
-            workerTask = new SynchronisationWorkerTask(connectedSystemId, runProfileId, apiKey);
+            workerTask = SynchronisationWorkerTask.ForApiKey(connectedSystemId, runProfileId, apiKey.Id, apiKey.Name);
         }
 
         var result = await _application.Tasking.CreateWorkerTaskAsync(workerTask);

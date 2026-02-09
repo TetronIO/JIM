@@ -1,0 +1,612 @@
+@using JIM.Application
+@using JIM.Models.Activities
+@using JIM.Models.Scheduling
+@using JIM.Models.Utility
+@using JIM.Utilities
+@using JIM.Web.Services
+@inject JimApplication Jim
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IUserPreferenceService PreferenceService
+
+@if (_preferencesLoaded)
+{
+    <MudTable @ref="_table" T="Schedule" ServerData="ServerReload"
+              RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged"
+              Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
+              Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer"
+              Loading="@_loading" LoadingProgressColor="Color.Primary">
+        <ToolBarContent>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                       StartIcon="@Icons.Material.Filled.Add" OnClick="HandleCreateScheduleAsync">
+                New Schedule
+            </MudButton>
+            <MudSpacer />
+            <MudTextField T="string" ValueChanged="@(s => OnSearch(s))" Placeholder="Search..."
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          IconSize="Size.Medium" Class="mt-0" Style="max-width: 300px;" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>
+                <MudTableSortLabel SortLabel="name" T="Schedule">
+                    <MudText Typo="Typo.button">Name</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudText Typo="Typo.button">Steps</MudText>
+            </MudTh>
+            <MudTh>
+                <MudText Typo="Typo.button">Trigger</MudText>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="nextruntime" T="Schedule">
+                    <MudText Typo="Typo.button">Next Run</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortLabel="lastruntime" T="Schedule">
+                    <MudText Typo="Typo.button">Last Run</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudText Typo="Typo.button">Status</MudText>
+            </MudTh>
+            <MudTh Style="text-align: right;">
+                <MudText Typo="Typo.button">Actions</MudText>
+            </MudTh>
+        </HeaderContent>
+        <RowTemplate Context="context">
+            <MudTd DataLabel="Name">
+                <MudText Typo="Typo.body1">@context.Name</MudText>
+                @if (!string.IsNullOrEmpty(context.Description))
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.Description</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Steps">
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Default">
+                    @context.Steps.Count step@(context.Steps.Count != 1 ? "s" : "")
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Trigger">
+                @if (context.TriggerType == ScheduleTriggerType.Cron)
+                {
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info"
+                             Icon="@Icons.Material.Filled.Schedule">
+                        @GetScheduleDescription(context)
+                    </MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default"
+                             Icon="@Icons.Material.Filled.TouchApp">
+                        Manual
+                    </MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Next Run">
+                @if (context.NextRunTime.HasValue && context.IsEnabled && context.TriggerType == ScheduleTriggerType.Cron)
+                {
+                    <MudTooltip Text="@context.NextRunTime.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                        <MudText Typo="Typo.body1">@context.NextRunTime.Value.ToLocalTime().ToRelativeTime()</MudText>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body1" Class="mud-text-disabled">-</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Last Run">
+                @if (context.LastRunTime.HasValue)
+                {
+                    <MudTooltip Text="@context.LastRunTime.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                        <MudText Typo="Typo.body1">@context.LastRunTime.Value.ToLocalTime().ToRelativeTime()</MudText>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body1" Class="mud-text-disabled">Never</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Status">
+                @if (context.IsEnabled)
+                {
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Success">
+                        Enabled
+                    </MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default">
+                        Disabled
+                    </MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Actions" Style="text-align: right;" @onclick:stopPropagation="true">
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+                    @if (context.IsEnabled)
+                    {
+                        <MudTooltip Text="Disable" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Pause"
+                                           OnClick="@(() => HandleToggleEnabledAsync(context))" />
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <MudTooltip Text="Enable" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Outlined.PlayArrow"
+                                           OnClick="@(() => HandleToggleEnabledAsync(context))" />
+                        </MudTooltip>
+                    }
+                    <MudTooltip Text="Run Now" Arrow="true" Placement="Placement.Top">
+                        <MudIconButton Icon="@Icons.Material.Outlined.PlayCircle" Color="Color.Primary"
+                                       OnClick="@(() => HandleRunNowAsync(context))"
+                                       Disabled="@(context.Steps.Count == 0)" />
+                    </MudTooltip>
+                    <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error"
+                                       OnClick="@(() => HandleDeleteAsync(context))" />
+                    </MudTooltip>
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudStack AlignItems="AlignItems.Center" Class="pa-8">
+                <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Large" Class="mud-text-disabled" />
+                <MudText Typo="Typo.body1" Class="mud-text-secondary">No schedules have been created yet.</MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                           StartIcon="@Icons.Material.Filled.Add" OnClick="HandleCreateScheduleAsync" Class="mt-2">
+                    Create Your First Schedule
+                </MudButton>
+            </MudStack>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private MudTable<Schedule>? _table;
+    private string _searchString = "";
+    private bool _loading;
+    private int _rowsPerPage = 10;
+    private bool _preferencesLoaded;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_preferencesLoaded)
+        {
+            try
+            {
+                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
+                _rowsPerPage = preferredSize;
+                _preferencesLoaded = true;
+                StateHasChanged();
+            }
+            catch
+            {
+                // JS interop not yet available, will retry on next render
+            }
+        }
+    }
+
+    private async Task OnRowsPerPageChanged(int newSize)
+    {
+        _rowsPerPage = newSize;
+        await PreferenceService.SetRowsPerPageAsync(newSize);
+    }
+
+    private async Task<TableData<Schedule>> ServerReload(TableState state, CancellationToken token)
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var page = state.Page + 1;
+            var sortDescending = state.SortDirection == SortDirection.Descending;
+
+            var result = await Jim.Scheduler.GetSchedulesAsync(
+                page,
+                state.PageSize,
+                string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
+                state.SortLabel,
+                sortDescending);
+
+            return new TableData<Schedule>
+            {
+                TotalItems = result.TotalResults,
+                Items = result.Results
+            };
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OnSearch(string text)
+    {
+        _searchString = text;
+        _table?.ReloadServerData();
+    }
+
+    private async Task HandleRowClick(TableRowClickEventArgs<Schedule> args)
+    {
+        if (_loading || args.Item == null)
+            return;
+
+        await OpenScheduleEditorAsync(args.Item.Id);
+    }
+
+    private async Task HandleCreateScheduleAsync()
+    {
+        await OpenScheduleEditorAsync(null);
+    }
+
+    private async Task OpenScheduleEditorAsync(Guid? scheduleId)
+    {
+        var parameters = new DialogParameters<ScheduleEditorDialog>
+        {
+            { x => x.ScheduleId, scheduleId }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseOnEscapeKey = true,
+            NoHeader = false
+        };
+
+        var dialog = await DialogService.ShowAsync<ScheduleEditorDialog>(
+            scheduleId.HasValue ? "Edit Schedule" : "New Schedule",
+            parameters,
+            options);
+
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+        {
+            _table?.ReloadServerData();
+        }
+    }
+
+    private async Task HandleToggleEnabledAsync(Schedule schedule)
+    {
+        schedule.IsEnabled = !schedule.IsEnabled;
+
+        // Update audit info
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        schedule.LastUpdated = DateTime.UtcNow;
+        schedule.LastUpdatedByType = ActivityInitiatorType.User;
+        schedule.LastUpdatedById = user.Id;
+        schedule.LastUpdatedByName = user.DisplayName;
+
+        await Jim.Scheduler.UpdateScheduleAsync(schedule);
+
+        var action = schedule.IsEnabled ? "enabled" : "disabled";
+        Snackbar.Add($"Schedule '{schedule.Name}' has been {action}.", Severity.Success);
+
+        _table?.ReloadServerData();
+    }
+
+    private async Task HandleRunNowAsync(Schedule schedule)
+    {
+        if (schedule.Steps.Count == 0)
+        {
+            Snackbar.Add("Cannot run a schedule with no steps.", Severity.Warning);
+            return;
+        }
+
+        var confirmed = await DialogService.ShowMessageBox(
+            "Run Schedule Now",
+            $"Are you sure you want to run '{schedule.Name}' now? This will queue all steps for execution.",
+            yesText: "Run Now",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+            return;
+
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+
+        // Load schedule with steps for execution
+        var scheduleWithSteps = await Jim.Scheduler.GetScheduleWithStepsAsync(schedule.Id);
+        if (scheduleWithSteps == null)
+        {
+            Snackbar.Add("Schedule not found.", Severity.Error);
+            return;
+        }
+
+        var execution = await Jim.Scheduler.StartScheduleExecutionAsync(
+            scheduleWithSteps,
+            ActivityInitiatorType.User,
+            user.Id,
+            user.DisplayName);
+
+        if (execution != null)
+        {
+            Snackbar.Add($"Schedule '{schedule.Name}' has been queued for execution.", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add($"Failed to start schedule '{schedule.Name}'. It may have no steps.", Severity.Warning);
+        }
+
+        _table?.ReloadServerData();
+    }
+
+    private async Task HandleDeleteAsync(Schedule schedule)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete Schedule",
+            $"Are you sure you want to delete '{schedule.Name}'? This action cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+            return;
+
+        await Jim.Scheduler.DeleteScheduleAsync(schedule);
+        Snackbar.Add($"Schedule '{schedule.Name}' has been deleted.", Severity.Success);
+        _table?.ReloadServerData();
+    }
+
+    /// <summary>
+    /// Gets a concise human-readable description of a schedule using its pattern metadata.
+    /// </summary>
+    private static string GetScheduleDescription(Schedule schedule)
+    {
+        if (schedule.TriggerType != ScheduleTriggerType.Cron)
+            return "Manual";
+
+        // Use pattern metadata for concise descriptions
+        var dayDesc = GetDayDescriptionFromSchedule(schedule.DaysOfWeek);
+
+        switch (schedule.PatternType)
+        {
+            case SchedulePatternType.Interval:
+                var unit = schedule.IntervalUnit == ScheduleIntervalUnit.Hours ? "hr" : "min";
+                var intervalDesc = $"Every {schedule.IntervalValue ?? 1} {unit}";
+
+                if (!string.IsNullOrEmpty(schedule.IntervalWindowStart) &&
+                    !string.IsNullOrEmpty(schedule.IntervalWindowEnd))
+                {
+                    var start = FormatTimeString(schedule.IntervalWindowStart);
+                    var end = FormatTimeString(schedule.IntervalWindowEnd);
+                    return $"{dayDesc}, {intervalDesc} ({start}-{end})";
+                }
+                return $"{dayDesc}, {intervalDesc}";
+
+            case SchedulePatternType.SpecificTimes:
+                if (!string.IsNullOrEmpty(schedule.RunTimes))
+                {
+                    var times = schedule.RunTimes.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                    if (times.Length == 1)
+                    {
+                        return $"{dayDesc} at {FormatTimeString(times[0].Trim())}";
+                    }
+                    if (times.Length <= 3)
+                    {
+                        var timeList = string.Join(", ", times.Select(t => FormatTimeString(t.Trim())));
+                        return $"{dayDesc} at {timeList}";
+                    }
+                    // Many times - summarise
+                    return $"{dayDesc}, {times.Length} times/day";
+                }
+                break;
+
+            case SchedulePatternType.Custom:
+                // Fall back to cron parsing for custom expressions
+                return GetCronDescription(schedule.CronExpression);
+        }
+
+        // Fallback to cron parsing if pattern metadata isn't available
+        return GetCronDescription(schedule.CronExpression);
+    }
+
+    /// <summary>
+    /// Gets day description from DaysOfWeek string (e.g., "1,2,3,4,5").
+    /// </summary>
+    private static string GetDayDescriptionFromSchedule(string? daysOfWeek)
+    {
+        if (string.IsNullOrEmpty(daysOfWeek))
+            return "Daily";
+
+        var days = daysOfWeek.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Where(d => int.TryParse(d.Trim(), out _))
+            .Select(d => int.Parse(d.Trim()))
+            .OrderBy(d => d)
+            .ToList();
+
+        if (days.Count == 0 || days.Count == 7)
+            return "Daily";
+        if (days.SequenceEqual(new[] { 1, 2, 3, 4, 5 }))
+            return "Weekdays";
+        if (days.SequenceEqual(new[] { 0, 6 }))
+            return "Weekends";
+
+        // For 6 days, show which day is excluded
+        if (days.Count == 6)
+        {
+            var missing = Enumerable.Range(0, 7).Except(days).First();
+            var missingName = missing switch
+            {
+                0 => "Sun", 1 => "Mon", 2 => "Tue", 3 => "Wed",
+                4 => "Thu", 5 => "Fri", 6 => "Sat", _ => "?"
+            };
+            return $"Daily exc. {missingName}";
+        }
+
+        // Short list of days
+        var dayNames = days.Select(d => d switch
+        {
+            0 => "Sun", 1 => "Mon", 2 => "Tue", 3 => "Wed",
+            4 => "Thu", 5 => "Fri", 6 => "Sat", _ => "?"
+        });
+        return string.Join(", ", dayNames);
+    }
+
+    /// <summary>
+    /// Formats a time string (HH:mm) to AM/PM format.
+    /// </summary>
+    private static string FormatTimeString(string timeStr)
+    {
+        if (TimeSpan.TryParse(timeStr.Trim(), out var time))
+        {
+            var hour = time.Hours;
+            var minute = time.Minutes;
+            var period = hour >= 12 ? "pm" : "am";
+            var displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+            return minute == 0 ? $"{displayHour}{period}" : $"{displayHour}:{minute:D2}{period}";
+        }
+        return timeStr;
+    }
+
+    /// <summary>
+    /// Converts a cron expression to a human-readable description.
+    /// </summary>
+    private static string GetCronDescription(string? cronExpression)
+    {
+        if (string.IsNullOrWhiteSpace(cronExpression))
+            return "Not configured";
+
+        // Parse common patterns for display
+        var parts = cronExpression.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 5)
+            return cronExpression;
+
+        var minute = parts[0];
+        var hour = parts[1];
+        var dayOfMonth = parts[2];
+        var month = parts[3];
+        var dayOfWeek = parts[4];
+
+        // Get day description
+        var dayDesc = GetDayDescription(dayOfWeek);
+
+        // Handle multiple specific hours (e.g., "0 9,12,15,18 * * 1-5")
+        if (dayOfMonth == "*" && month == "*" && hour.Contains(',') && !hour.Contains('/'))
+        {
+            var hours = hour.Split(',')
+                .Where(h => int.TryParse(h.Trim(), out _))
+                .Select(h => int.Parse(h.Trim()))
+                .ToList();
+
+            if (hours.Count > 0)
+            {
+                var timeList = string.Join(", ", hours.Select(h => FormatHour(h, int.TryParse(minute, out var m) ? m : 0)));
+                return $"{dayDesc} at {timeList}";
+            }
+        }
+
+        // Daily at specific time
+        if (dayOfMonth == "*" && month == "*" && dayOfWeek == "*")
+        {
+            if (hour.StartsWith("*/"))
+            {
+                var interval = hour[2..];
+                return $"Every {interval} hours";
+            }
+            return $"Daily at {FormatTime(hour, minute)}";
+        }
+
+        // Single time schedules with day restrictions
+        if (dayOfMonth == "*" && month == "*" && int.TryParse(hour, out _))
+        {
+            return $"{dayDesc} at {FormatTime(hour, minute)}";
+        }
+
+        // Hourly
+        if (hour == "*" && dayOfMonth == "*" && month == "*")
+        {
+            var hourlyDesc = minute == "0" ? "Hourly" : $"Hourly at :{minute.PadLeft(2, '0')}";
+            if (dayOfWeek != "*")
+                return $"{dayDesc}, {hourlyDesc.ToLower()}";
+            return hourlyDesc;
+        }
+
+        // Every N minutes
+        if (minute.StartsWith("*/") && hour == "*")
+        {
+            var interval = minute[2..];
+            var minDesc = $"Every {interval} minutes";
+            if (dayOfWeek != "*")
+                return $"{dayDesc}, every {interval} min";
+            return minDesc;
+        }
+
+        // Every N hours
+        if (hour.StartsWith("*/") && minute == "0")
+        {
+            var interval = hour[2..];
+            var hourDesc = $"Every {interval} hours";
+            if (dayOfWeek != "*")
+                return $"{dayDesc}, every {interval} hrs";
+            return hourDesc;
+        }
+
+        // Default: show abbreviated cron
+        return cronExpression;
+    }
+
+    private static string GetDayDescription(string dayOfWeek)
+    {
+        if (dayOfWeek == "*")
+            return "Daily";
+        if (dayOfWeek == "1-5" || dayOfWeek == "MON-FRI")
+            return "Weekdays";
+        if (dayOfWeek == "0,6" || dayOfWeek == "SAT,SUN")
+            return "Weekends";
+
+        // Try to parse as comma-separated days
+        var dayNumbers = dayOfWeek.Split(',')
+            .Where(d => int.TryParse(d.Trim(), out _))
+            .Select(d => int.Parse(d.Trim()))
+            .ToList();
+
+        if (dayNumbers.Count > 0)
+        {
+            if (dayNumbers.Count == 7)
+                return "Daily";
+            if (dayNumbers.OrderBy(d => d).SequenceEqual(new[] { 1, 2, 3, 4, 5 }))
+                return "Weekdays";
+            if (dayNumbers.OrderBy(d => d).SequenceEqual(new[] { 0, 6 }))
+                return "Weekends";
+
+            var dayNames = dayNumbers.Select(d => d switch
+            {
+                0 => "Sun",
+                1 => "Mon",
+                2 => "Tue",
+                3 => "Wed",
+                4 => "Thu",
+                5 => "Fri",
+                6 => "Sat",
+                _ => "?"
+            });
+            return string.Join(", ", dayNames);
+        }
+
+        return dayOfWeek;
+    }
+
+    private static string FormatTime(string hour, string minute)
+    {
+        if (!int.TryParse(hour, out var h) || !int.TryParse(minute, out var m))
+            return $"{hour}:{minute}";
+
+        return FormatHour(h, m);
+    }
+
+    private static string FormatHour(int hour, int minute)
+    {
+        var period = hour >= 12 ? "PM" : "AM";
+        var displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+        return $"{displayHour}:{minute:D2} {period}";
+    }
+}

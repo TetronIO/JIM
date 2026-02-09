@@ -19,11 +19,13 @@ jobs:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
       - name: Enable auto-merge for patch and minor updates
-        # Only auto-merge patch and minor version updates
-        # Major updates require manual review due to potential breaking changes
+        # Auto-merge patch and minor version updates for NuGet and GitHub Actions.
+        # Docker digest updates are excluded - they require manual review to verify
+        # apt package version compatibility and update pinned versions in Dockerfiles.
         if: |
-          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
-          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+          steps.metadata.outputs.package-ecosystem != 'docker' &&
+          (steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor')
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}

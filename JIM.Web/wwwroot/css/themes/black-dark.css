@@ -3,7 +3,7 @@
  *
  * A neutral dark theme using exact colours from a modern SaaS dashboard.
  * Cool greys without purple tint — clean, industrial, and high-contrast.
- * The sidebar uses the first-tier box colour (#121315) to sit flush
+ * The sidebar uses the first-tier box colour (#17181a) to sit flush
  * with content-area cards, creating a cohesive panel layout.
  *
  * We use html[lang] instead of :root so that these declarations have
@@ -17,24 +17,32 @@ html[lang] {
     --mud-palette-primary-darken: #3070ee;
     --mud-palette-primary-lighten: #66a0ff;
     --mud-palette-primary-text: #ffffffff;
-    --mud-palette-secondary: #4488ff;
-    --mud-palette-secondary-text: #ffffffff;
+    --mud-palette-secondary: #b0bec5;
+    --mud-palette-secondary-darken: #90a4ae;
+    --mud-palette-secondary-lighten: #cfd8dc;
+    --mud-palette-secondary-text: #000000dd;
+
+    /* === Tertiary Palette (brighter teal for visibility on dark backgrounds) === */
+    --mud-palette-tertiary: #26a69a;
+    --mud-palette-tertiary-darken: #00897b;
+    --mud-palette-tertiary-lighten: #4db6ac;
+    --mud-palette-tertiary-text: #000000dd;
+
+    /* === Status Colours === */
+    --mud-palette-success: #4caf50;
+    --mud-palette-success-text: #ffffffff;
 
     /* === Background & Surface (exact screenshot colours) === */
     --mud-palette-background: #1e1f23;
-    --mud-palette-surface: #121315;
+    --mud-palette-surface: #17181a;
     --mud-palette-background-grey: rgba(255, 255, 255, 0.03);
 
-    /* === Inner Surface (second-tier box from screenshot: #05090a) === */
-    --jim-inner-surface: #05090a;
+    /* === Inner Surface (stepped darker than surface for nested containers) === */
+    --jim-inner-surface: #111213;
     --jim-inner-border-color: #2a2b2f;
 
-    /* === Appbar === */
-    --mud-palette-appbar-background: #0a0b0c;
-    --mud-palette-appbar-text: #ffffffff;
-
     /* === Drawer (first-tier box colour, flush with content cards) === */
-    --mud-palette-drawer-background: #121315;
+    --mud-palette-drawer-background: #17181a;
     --mud-palette-drawer-text: #b0b2b8;
     --mud-palette-drawer-icon: #6a6c74;
 
@@ -45,7 +53,7 @@ html[lang] {
 
     /* === Action === */
     --mud-palette-action-default: #b0b2b8;
-    --mud-palette-action-default-hover: rgba(68, 136, 255, 0.15);
+    --mud-palette-action-default-hover: rgba(68, 136, 255, 0.25);
     --mud-palette-action-disabled: rgba(255, 255, 255, 0.38);
     --mud-palette-action-disabled-background: rgba(255, 255, 255, 0.10);
 
@@ -58,7 +66,10 @@ html[lang] {
     /* === Table === */
     --mud-palette-table-lines: #3a3b40;
     --mud-palette-table-striped: rgba(255, 255, 255, 0.02);
-    --mud-palette-table-hover: #05090a;
+    --mud-palette-table-hover: #0a0a0b;
+
+    /* === JIM Custom: Attribute table name column === */
+    --jim-attr-name-bg: #232425;
 
     /* === JIM Custom: JSON Syntax Highlighting === */
     --jim-json-key: #82aaff;        /* Soft blue */
@@ -77,6 +88,10 @@ html[lang] {
 
     /* === JIM Custom: Paper border === */
     --jim-paper-border-color: #404248;
+
+    /* === JIM Custom: Dialog surfaces (stepped elevation from surface) === */
+    --jim-dialog-surface: #181920;
+    --jim-dialog-inner-surface: #1e1f24;
 
     /* === JIM Custom: Content Links (saturated blue matching Inbound chip) === */
     --jim-link-color: #42a5f5;

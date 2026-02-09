@@ -287,6 +287,88 @@ catch {
     throw
 }
 
+# Step 5b: Create Training CSV Connected System (second source system)
+Write-TestStep "Step 5b" "Creating Training CSV Connected System"
+
+try {
+    $trainingSystem = $existingSystems | Where-Object { $_.name -eq "Training Records Source" }
+
+    if ($trainingSystem) {
+        Write-Host "  Connected System 'Training Records Source' already exists (ID: $($trainingSystem.id))" -ForegroundColor Yellow
+    }
+    else {
+        $trainingSystem = New-JIMConnectedSystem `
+            -Name "Training Records Source" `
+            -Description "Training LMS CSV export - contributes training attributes to users" `
+            -ConnectorDefinitionId $csvConnector.id `
+            -PassThru
+
+        Write-Host "  ✓ Created Training CSV Connected System (ID: $($trainingSystem.id))" -ForegroundColor Green
+    }
+
+    # Configure Training CSV settings
+    $trainingSettingValues = @{}
+    if ($filePathSetting) {
+        $trainingSettingValues[$filePathSetting.id] = @{ stringValue = "/var/connector-files/test-data/training-records.csv" }
+    }
+    if ($delimiterSetting) {
+        $trainingSettingValues[$delimiterSetting.id] = @{ stringValue = "," }
+    }
+    if ($objectTypeSetting) {
+        $trainingSettingValues[$objectTypeSetting.id] = @{ stringValue = "trainingRecord" }
+    }
+
+    if ($trainingSettingValues.Count -gt 0) {
+        Set-JIMConnectedSystem -Id $trainingSystem.id -SettingValues $trainingSettingValues | Out-Null
+        Write-Host "  ✓ Configured Training CSV settings" -ForegroundColor Green
+    }
+}
+catch {
+    Write-Host "  ✗ Failed to create/configure Training Connected System: $_" -ForegroundColor Red
+    throw
+}
+
+# Step 5c: Create Cross-Domain CSV Connected System (second target system)
+Write-TestStep "Step 5c" "Creating Cross-Domain CSV Connected System"
+
+try {
+    $crossDomainSystem = $existingSystems | Where-Object { $_.name -eq "Cross-Domain Export" }
+
+    if ($crossDomainSystem) {
+        Write-Host "  Connected System 'Cross-Domain Export' already exists (ID: $($crossDomainSystem.id))" -ForegroundColor Yellow
+    }
+    else {
+        $crossDomainSystem = New-JIMConnectedSystem `
+            -Name "Cross-Domain Export" `
+            -Description "Cross-domain user export target CSV" `
+            -ConnectorDefinitionId $csvConnector.id `
+            -PassThru
+
+        Write-Host "  ✓ Created Cross-Domain CSV Connected System (ID: $($crossDomainSystem.id))" -ForegroundColor Green
+    }
+
+    # Configure Cross-Domain CSV settings
+    $crossDomainSettingValues = @{}
+    if ($filePathSetting) {
+        $crossDomainSettingValues[$filePathSetting.id] = @{ stringValue = "/var/connector-files/test-data/cross-domain-users.csv" }
+    }
+    if ($delimiterSetting) {
+        $crossDomainSettingValues[$delimiterSetting.id] = @{ stringValue = "," }
+    }
+    if ($objectTypeSetting) {
+        $crossDomainSettingValues[$objectTypeSetting.id] = @{ stringValue = "user" }
+    }
+
+    if ($crossDomainSettingValues.Count -gt 0) {
+        Set-JIMConnectedSystem -Id $crossDomainSystem.id -SettingValues $crossDomainSettingValues | Out-Null
+        Write-Host "  ✓ Configured Cross-Domain CSV settings" -ForegroundColor Green
+    }
+}
+catch {
+    Write-Host "  ✗ Failed to create/configure Cross-Domain Connected System: $_" -ForegroundColor Red
+    throw
+}
+
 # Step 6: Import Schemas
 Write-TestStep "Step 6" "Importing Connected System Schemas"
 
@@ -299,7 +381,7 @@ else {
     try {
         # Import CSV schema
         Write-Host "  Importing CSV schema..." -ForegroundColor Gray
-        $csvSystemUpdated = Import-JIMConnectedSystemSchema -Id $csvSystem.id -PassThru
+        Import-JIMConnectedSystemSchema -Id $csvSystem.id | Out-Null
         $csvObjectTypes = Get-JIMConnectedSystem -Id $csvSystem.id -ObjectTypes
         Write-Host "  ✓ CSV schema imported ($($csvObjectTypes.Count) object types)" -ForegroundColor Green
     }
@@ -318,7 +400,7 @@ else {
     try {
         # Import LDAP schema
         Write-Host "  Importing LDAP schema..." -ForegroundColor Gray
-        $ldapSystemUpdated = Import-JIMConnectedSystemSchema -Id $ldapSystem.id -PassThru
+        Import-JIMConnectedSystemSchema -Id $ldapSystem.id | Out-Null
         $ldapObjectTypes = Get-JIMConnectedSystem -Id $ldapSystem.id -ObjectTypes
         Write-Host "  ✓ LDAP schema imported ($($ldapObjectTypes.Count) object types)" -ForegroundColor Green
     }
@@ -329,6 +411,42 @@ else {
     }
 }
 
+# Import Training CSV schema
+$trainingObjectTypes = Get-JIMConnectedSystem -Id $trainingSystem.id -ObjectTypes
+if ($trainingObjectTypes -and $trainingObjectTypes.Count -gt 0) {
+    Write-Host "  Training CSV schema already imported ($($trainingObjectTypes.Count) object types)" -ForegroundColor Gray
+}
+else {
+    try {
+        Write-Host "  Importing Training CSV schema..." -ForegroundColor Gray
+        Import-JIMConnectedSystemSchema -Id $trainingSystem.id | Out-Null
+        $trainingObjectTypes = Get-JIMConnectedSystem -Id $trainingSystem.id -ObjectTypes
+        Write-Host "  ✓ Training CSV schema imported ($($trainingObjectTypes.Count) object types)" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "  ⚠ Training CSV schema import failed: $_" -ForegroundColor Yellow
+        $trainingObjectTypes = @()
+    }
+}
+
+# Import Cross-Domain CSV schema
+$crossDomainObjectTypes = Get-JIMConnectedSystem -Id $crossDomainSystem.id -ObjectTypes
+if ($crossDomainObjectTypes -and $crossDomainObjectTypes.Count -gt 0) {
+    Write-Host "  Cross-Domain CSV schema already imported ($($crossDomainObjectTypes.Count) object types)" -ForegroundColor Gray
+}
+else {
+    try {
+        Write-Host "  Importing Cross-Domain CSV schema..." -ForegroundColor Gray
+        Import-JIMConnectedSystemSchema -Id $crossDomainSystem.id | Out-Null
+        $crossDomainObjectTypes = Get-JIMConnectedSystem -Id $crossDomainSystem.id -ObjectTypes
+        Write-Host "  ✓ Cross-Domain CSV schema imported ($($crossDomainObjectTypes.Count) object types)" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "  ⚠ Cross-Domain CSV schema import failed: $_" -ForegroundColor Yellow
+        $crossDomainObjectTypes = @()
+    }
+}
+
 # Step 6a: Import LDAP Hierarchy and Select Containers
 Write-TestStep "Step 6a" "Importing LDAP hierarchy and selecting Corp container"
 
@@ -336,7 +454,7 @@ try {
     # Import the partition/container hierarchy from LDAP
     # This retrieves naming contexts (partitions) and OUs (containers) from Samba AD
     Write-Host "  Importing LDAP hierarchy..." -ForegroundColor Gray
-    $ldapSystemWithHierarchy = Import-JIMConnectedSystemHierarchy -Id $ldapSystem.id -PassThru
+    Import-JIMConnectedSystemHierarchy -Id $ldapSystem.id | Out-Null
 
     # Get the partitions (wrap in @() to ensure array even if single result)
     $partitions = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $ldapSystem.id)
@@ -562,6 +680,91 @@ try {
         }
         else {
             Write-Host "  Export sync rule '$exportRuleName' already exists" -ForegroundColor Gray
+        }
+
+        # Create Training Import sync rule (Training CSV -> Metaverse)
+        # This rule joins to existing MVOs (created by HR import) and contributes training attributes
+        $trainingRecordType = $trainingObjectTypes | Where-Object { $_.name -match "^(trainingRecord|record)$" } | Select-Object -First 1
+        if ($trainingRecordType) {
+            # Configure Training object type
+            Set-JIMConnectedSystemObjectType -ConnectedSystemId $trainingSystem.id -ObjectTypeId $trainingRecordType.id -Selected $true | Out-Null
+
+            # Mark employeeId as External ID for Training
+            $trainingEmployeeIdAttr = $trainingRecordType.attributes | Where-Object { $_.name -eq 'employeeId' }
+            if ($trainingEmployeeIdAttr) {
+                Set-JIMConnectedSystemAttribute -ConnectedSystemId $trainingSystem.id -ObjectTypeId $trainingRecordType.id -AttributeId $trainingEmployeeIdAttr.id -IsExternalId $true | Out-Null
+            }
+
+            # Select all Training attributes
+            $trainingAttrUpdates = @{}
+            foreach ($attr in $trainingRecordType.attributes) {
+                $trainingAttrUpdates[$attr.id] = @{ selected = $true }
+            }
+            Set-JIMConnectedSystemAttribute -ConnectedSystemId $trainingSystem.id -ObjectTypeId $trainingRecordType.id -AttributeUpdates $trainingAttrUpdates -PassThru -ErrorAction Stop | Out-Null
+
+            $trainingImportRuleName = "Training Records Import"
+            $trainingImportRule = $existingRules | Where-Object { $_.name -eq $trainingImportRuleName }
+
+            if (-not $trainingImportRule) {
+                # Training import does NOT project - it joins to existing MVOs
+                $trainingImportRule = New-JIMSyncRule `
+                    -Name $trainingImportRuleName `
+                    -ConnectedSystemId $trainingSystem.id `
+                    -ConnectedSystemObjectTypeId $trainingRecordType.id `
+                    -MetaverseObjectTypeId $mvUserType.id `
+                    -Direction Import `
+                    -PassThru
+                Write-Host "  ✓ Created Training import sync rule: $trainingImportRuleName" -ForegroundColor Green
+            }
+            else {
+                Write-Host "  Training import sync rule '$trainingImportRuleName' already exists" -ForegroundColor Gray
+            }
+        }
+        else {
+            Write-Host "  ⚠ Training record object type not found in schema" -ForegroundColor Yellow
+            $trainingImportRule = $null
+        }
+
+        # Create Cross-Domain Export sync rule (Metaverse -> Cross-Domain CSV)
+        $crossDomainUserType = $crossDomainObjectTypes | Where-Object { $_.name -match "^(user|record)$" } | Select-Object -First 1
+        if ($crossDomainUserType) {
+            # Configure Cross-Domain object type
+            Set-JIMConnectedSystemObjectType -ConnectedSystemId $crossDomainSystem.id -ObjectTypeId $crossDomainUserType.id -Selected $true | Out-Null
+
+            # Mark samAccountName as External ID for Cross-Domain
+            $crossDomainSamAttr = $crossDomainUserType.attributes | Where-Object { $_.name -eq 'samAccountName' }
+            if ($crossDomainSamAttr) {
+                Set-JIMConnectedSystemAttribute -ConnectedSystemId $crossDomainSystem.id -ObjectTypeId $crossDomainUserType.id -AttributeId $crossDomainSamAttr.id -IsExternalId $true | Out-Null
+            }
+
+            # Select all Cross-Domain attributes
+            $crossDomainAttrUpdates = @{}
+            foreach ($attr in $crossDomainUserType.attributes) {
+                $crossDomainAttrUpdates[$attr.id] = @{ selected = $true }
+            }
+            Set-JIMConnectedSystemAttribute -ConnectedSystemId $crossDomainSystem.id -ObjectTypeId $crossDomainUserType.id -AttributeUpdates $crossDomainAttrUpdates -PassThru -ErrorAction Stop | Out-Null
+
+            $crossDomainExportRuleName = "Cross-Domain Export Users"
+            $crossDomainExportRule = $existingRules | Where-Object { $_.name -eq $crossDomainExportRuleName }
+
+            if (-not $crossDomainExportRule) {
+                $crossDomainExportRule = New-JIMSyncRule `
+                    -Name $crossDomainExportRuleName `
+                    -ConnectedSystemId $crossDomainSystem.id `
+                    -ConnectedSystemObjectTypeId $crossDomainUserType.id `
+                    -MetaverseObjectTypeId $mvUserType.id `
+                    -Direction Export `
+                    -ProvisionToConnectedSystem `
+                    -PassThru
+                Write-Host "  ✓ Created Cross-Domain export sync rule: $crossDomainExportRuleName" -ForegroundColor Green
+            }
+            else {
+                Write-Host "  Cross-Domain export sync rule '$crossDomainExportRuleName' already exists" -ForegroundColor Gray
+            }
+        }
+        else {
+            Write-Host "  ⚠ Cross-Domain user object type not found in schema" -ForegroundColor Yellow
+            $crossDomainExportRule = $null
         }
     }
 }
@@ -830,6 +1033,163 @@ try {
             Write-Host "  LDAP object matching rule already exists" -ForegroundColor Gray
         }
 
+        # Configure Training attribute mappings and matching rule
+        if ($trainingImportRule -and $trainingRecordType) {
+            Write-Host "  Configuring Training attribute mappings..." -ForegroundColor Gray
+
+            # First, create Training-specific MV attributes if they don't exist
+            # These attributes are unique to Training data and need to be added to the User object type
+            Write-Host "    Creating Training-specific Metaverse attributes..." -ForegroundColor DarkGray
+
+            $trainingMvAttributes = @(
+                @{ Name = "Training Status";        Type = "Text";    Plurality = "SingleValued" }  # Pass/Fail/InProgress
+                @{ Name = "Courses Completed";      Type = "Text";    Plurality = "MultiValued" }   # List of course codes
+                @{ Name = "Training Course Count";  Type = "Integer"; Plurality = "SingleValued" }  # Number of completed courses
+            )
+
+            foreach ($attrDef in $trainingMvAttributes) {
+                $existingAttr = $mvAttributes | Where-Object { $_.name -eq $attrDef.Name }
+                if (-not $existingAttr) {
+                    try {
+                        $newAttr = New-JIMMetaverseAttribute `
+                            -Name $attrDef.Name `
+                            -Type $attrDef.Type `
+                            -AttributePlurality $attrDef.Plurality `
+                            -ObjectTypeIds @($mvUserType.id)
+                        Write-Host "      ✓ Created MV attribute: $($attrDef.Name)" -ForegroundColor Green
+                        # Add to our local cache for mapping creation
+                        $mvAttributes = @($mvAttributes) + $newAttr
+                    }
+                    catch {
+                        Write-Host "      ✗ Failed to create MV attribute '$($attrDef.Name)': $_" -ForegroundColor Red
+                        throw "Setup failed: Could not create required Training MV attribute '$($attrDef.Name)'"
+                    }
+                }
+                else {
+                    Write-Host "      MV attribute '$($attrDef.Name)' already exists" -ForegroundColor DarkGray
+                }
+            }
+
+            # Training import mappings - contributes training-specific attributes to existing MVOs
+            # These attributes are unique to Training and don't exist in HR data
+            # Note: coursesCompleted uses a Split() expression to convert pipe-separated string to MVA values
+            $trainingMappings = @(
+                @{ CsAttr = "coursesCompleted";      MvAttr = "Courses Completed";      Expression = 'Split(cs["coursesCompleted"], "|")' }  # MVA: pipe-separated → individual values
+                @{ CsAttr = "trainingStatus";        MvAttr = "Training Status";        Expression = $null }  # SVA: direct mapping
+                @{ CsAttr = "totalCoursesCompleted"; MvAttr = "Training Course Count";  Expression = $null }  # SVA: direct mapping
+            )
+
+            $existingTrainingMappings = Get-JIMSyncRuleMapping -SyncRuleId $trainingImportRule.id
+            $trainingMappingsCreated = 0
+
+            foreach ($mapping in $trainingMappings) {
+                $csAttr = $trainingRecordType.attributes | Where-Object { $_.name -eq $mapping.CsAttr }
+                $mvAttr = $mvAttributes | Where-Object { $_.name -eq $mapping.MvAttr }
+
+                if (-not $csAttr) {
+                    Write-Host "    ✗ Connected System attribute '$($mapping.CsAttr)' not found in Training schema" -ForegroundColor Red
+                    throw "Setup failed: Training CS attribute '$($mapping.CsAttr)' not found"
+                }
+                if (-not $mvAttr) {
+                    Write-Host "    ✗ Metaverse attribute '$($mapping.MvAttr)' not found" -ForegroundColor Red
+                    throw "Setup failed: Metaverse attribute '$($mapping.MvAttr)' not found - Training MV attributes must be created first"
+                }
+
+                $existsAlready = $existingTrainingMappings | Where-Object {
+                    $_.targetMetaverseAttributeId -eq $mvAttr.id
+                }
+
+                if (-not $existsAlready) {
+                    try {
+                        if ($mapping.Expression) {
+                            # Expression-based mapping (e.g., Split for MVA conversion)
+                            New-JIMSyncRuleMapping -SyncRuleId $trainingImportRule.id `
+                                -TargetMetaverseAttributeId $mvAttr.id `
+                                -Expression $mapping.Expression | Out-Null
+                        }
+                        else {
+                            # Direct attribute mapping
+                            New-JIMSyncRuleMapping -SyncRuleId $trainingImportRule.id `
+                                -TargetMetaverseAttributeId $mvAttr.id `
+                                -SourceConnectedSystemAttributeId $csAttr.id | Out-Null
+                        }
+                        $trainingMappingsCreated++
+                    }
+                    catch {
+                        Write-Host "    ✗ Failed to create Training mapping $($mapping.CsAttr) → $($mapping.MvAttr): $_" -ForegroundColor Red
+                        throw "Setup failed: Could not create Training attribute mapping '$($mapping.CsAttr)' → '$($mapping.MvAttr)'"
+                    }
+                }
+            }
+            Write-Host "  ✓ Training attribute mappings configured ($trainingMappingsCreated new)" -ForegroundColor Green
+
+            # Training matching rule - joins Training CSOs to existing MVOs via Employee ID
+            Write-Host "  Configuring Training object matching rule..." -ForegroundColor Gray
+
+            $trainingEmployeeIdAttr = $trainingRecordType.attributes | Where-Object { $_.name -eq 'employeeId' }
+            if ($trainingEmployeeIdAttr -and $mvEmployeeIdAttr) {
+                $existingTrainingMatchingRules = Get-JIMMatchingRule -ConnectedSystemId $trainingSystem.id -ObjectTypeId $trainingRecordType.id
+
+                $trainingMatchingRuleExists = $existingTrainingMatchingRules | Where-Object {
+                    $_.targetMetaverseAttributeId -eq $mvEmployeeIdAttr.id
+                }
+
+                if (-not $trainingMatchingRuleExists) {
+                    New-JIMMatchingRule -ConnectedSystemId $trainingSystem.id `
+                        -ObjectTypeId $trainingRecordType.id `
+                        -SourceAttributeId $trainingEmployeeIdAttr.id `
+                        -TargetMetaverseAttributeId $mvEmployeeIdAttr.id | Out-Null
+                    Write-Host "  ✓ Training object matching rule configured (employeeId → Employee ID)" -ForegroundColor Green
+                }
+                else {
+                    Write-Host "  Training object matching rule already exists" -ForegroundColor Gray
+                }
+            }
+        }
+
+        # Configure Cross-Domain export attribute mappings
+        if ($crossDomainExportRule -and $crossDomainUserType) {
+            Write-Host "  Configuring Cross-Domain export attribute mappings..." -ForegroundColor Gray
+
+            # Cross-Domain export mappings - export subset of user attributes to cross-domain CSV
+            $crossDomainMappings = @(
+                @{ MvAttr = "Account Name";   CsAttr = "samAccountName" }
+                @{ MvAttr = "Display Name";   CsAttr = "displayName" }
+                @{ MvAttr = "Email";          CsAttr = "email" }
+                @{ MvAttr = "Department";     CsAttr = "department" }
+                @{ MvAttr = "Employee ID";    CsAttr = "employeeId" }
+                @{ MvAttr = "Company";        CsAttr = "company" }
+            )
+
+            $existingCrossDomainMappings = Get-JIMSyncRuleMapping -SyncRuleId $crossDomainExportRule.id
+            $crossDomainMappingsCreated = 0
+
+            foreach ($mapping in $crossDomainMappings) {
+                $csAttr = $crossDomainUserType.attributes | Where-Object { $_.name -eq $mapping.CsAttr }
+                $mvAttr = $mvAttributes | Where-Object { $_.name -eq $mapping.MvAttr }
+
+                if ($csAttr -and $mvAttr) {
+                    $existsAlready = $existingCrossDomainMappings | Where-Object {
+                        $_.targetConnectedSystemAttributeId -eq $csAttr.id
+                    }
+
+                    if (-not $existsAlready) {
+                        try {
+                            New-JIMSyncRuleMapping -SyncRuleId $crossDomainExportRule.id `
+                                -TargetConnectedSystemAttributeId $csAttr.id `
+                                -SourceMetaverseAttributeId $mvAttr.id | Out-Null
+                            $crossDomainMappingsCreated++
+                        }
+                        catch {
+                            Write-Host "    ⚠ Could not create Cross-Domain mapping $($mapping.MvAttr) → $($mapping.CsAttr): $_" -ForegroundColor Yellow
+                        }
+                    }
+                }
+            }
+
+            Write-Host "  ✓ Cross-Domain export attribute mappings configured ($crossDomainMappingsCreated new)" -ForegroundColor Green
+        }
+
         # Restart jim.worker to pick up schema changes (API modifications may require reload)
         Write-Host "  Restarting JIM.Worker to reload schema..." -ForegroundColor Gray
         docker restart jim.worker > $null
@@ -1004,6 +1364,106 @@ try {
     else {
         Write-Host "  Run profile 'Export' already exists (LDAP)" -ForegroundColor Gray
     }
+
+    # Training Run Profiles
+    $trainingProfiles = Get-JIMRunProfile -ConnectedSystemId $trainingSystem.id
+    $trainingFilePath = "/var/connector-files/test-data/training-records.csv"
+
+    # Full Import (Training)
+    $trainingImportProfile = $trainingProfiles | Where-Object { $_.name -eq "Full Import" }
+    if (-not $trainingImportProfile) {
+        $trainingImportProfile = New-JIMRunProfile `
+            -Name "Full Import" `
+            -ConnectedSystemId $trainingSystem.id `
+            -RunType "FullImport" `
+            -FilePath $trainingFilePath `
+            -PassThru
+        Write-Host "  ✓ Created 'Full Import' run profile (Training)" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Full Import' already exists (Training)" -ForegroundColor Gray
+    }
+
+    # Full Synchronisation (Training)
+    $trainingSyncProfile = $trainingProfiles | Where-Object { $_.name -eq "Full Synchronisation" }
+    if (-not $trainingSyncProfile) {
+        $trainingSyncProfile = New-JIMRunProfile `
+            -Name "Full Synchronisation" `
+            -ConnectedSystemId $trainingSystem.id `
+            -RunType "FullSynchronisation" `
+            -PassThru
+        Write-Host "  ✓ Created 'Full Synchronisation' run profile (Training)" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Full Synchronisation' already exists (Training)" -ForegroundColor Gray
+    }
+
+    # Delta Synchronisation (Training)
+    $trainingDeltaSyncProfile = $trainingProfiles | Where-Object { $_.name -eq "Delta Synchronisation" }
+    if (-not $trainingDeltaSyncProfile) {
+        $trainingDeltaSyncProfile = New-JIMRunProfile `
+            -Name "Delta Synchronisation" `
+            -ConnectedSystemId $trainingSystem.id `
+            -RunType "DeltaSynchronisation" `
+            -PassThru
+        Write-Host "  ✓ Created 'Delta Synchronisation' run profile (Training)" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Delta Synchronisation' already exists (Training)" -ForegroundColor Gray
+    }
+
+    # Cross-Domain Run Profiles
+    $crossDomainProfiles = Get-JIMRunProfile -ConnectedSystemId $crossDomainSystem.id
+    $crossDomainFilePath = "/var/connector-files/test-data/cross-domain-users.csv"
+
+    # Full Import (Cross-Domain) - for confirming exports
+    $crossDomainImportProfile = $crossDomainProfiles | Where-Object { $_.name -eq "Full Import" }
+    if (-not $crossDomainImportProfile) {
+        $crossDomainImportProfile = New-JIMRunProfile `
+            -Name "Full Import" `
+            -ConnectedSystemId $crossDomainSystem.id `
+            -RunType "FullImport" `
+            -FilePath $crossDomainFilePath `
+            -PassThru
+        Write-Host "  ✓ Created 'Full Import' run profile (Cross-Domain)" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Full Import' already exists (Cross-Domain)" -ForegroundColor Gray
+    }
+
+    # Note: CSV/File connectors do NOT support Delta Import (no change tracking like LDAP USN)
+    # For confirming exports to CSV, use Full Import instead
+    # Set the variable to point to Full Import for compatibility with schedule steps
+    $crossDomainDeltaImportProfile = $crossDomainImportProfile
+    Write-Host "  (Cross-Domain uses Full Import for confirming exports - no Delta Import for CSV)" -ForegroundColor DarkGray
+
+    # Delta Synchronisation (Cross-Domain)
+    $crossDomainDeltaSyncProfile = $crossDomainProfiles | Where-Object { $_.name -eq "Delta Synchronisation" }
+    if (-not $crossDomainDeltaSyncProfile) {
+        $crossDomainDeltaSyncProfile = New-JIMRunProfile `
+            -Name "Delta Synchronisation" `
+            -ConnectedSystemId $crossDomainSystem.id `
+            -RunType "DeltaSynchronisation" `
+            -PassThru
+        Write-Host "  ✓ Created 'Delta Synchronisation' run profile (Cross-Domain)" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Delta Synchronisation' already exists (Cross-Domain)" -ForegroundColor Gray
+    }
+
+    # Export (Cross-Domain)
+    $crossDomainExportProfile = $crossDomainProfiles | Where-Object { $_.name -eq "Export" }
+    if (-not $crossDomainExportProfile) {
+        $crossDomainExportProfile = New-JIMRunProfile `
+            -Name "Export" `
+            -ConnectedSystemId $crossDomainSystem.id `
+            -RunType "Export" `
+            -PassThru
+        Write-Host "  ✓ Created 'Export' run profile (Cross-Domain)" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Export' already exists (Cross-Domain)" -ForegroundColor Gray
+    }
 }
 catch {
     Write-Host "  ✗ Failed to create run profiles: $_" -ForegroundColor Red
@@ -1013,11 +1473,15 @@ catch {
 
 # Summary
 Write-TestSection "Setup Complete"
-Write-Host "Template:        $Template" -ForegroundColor Cyan
-Write-Host "CSV System ID:   $($csvSystem.id)" -ForegroundColor Cyan
-Write-Host "LDAP System ID:  $($ldapSystem.id)" -ForegroundColor Cyan
+Write-Host "Template:              $Template" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "✓ Scenario 1 setup complete" -ForegroundColor Green
+Write-Host "Connected Systems:" -ForegroundColor Cyan
+Write-Host "  HR CSV (Source):       $($csvSystem.id)" -ForegroundColor Gray
+Write-Host "  Training CSV (Source): $($trainingSystem.id)" -ForegroundColor Gray
+Write-Host "  Samba AD (Target):     $($ldapSystem.id)" -ForegroundColor Gray
+Write-Host "  Cross-Domain (Target): $($crossDomainSystem.id)" -ForegroundColor Gray
+Write-Host ""
+Write-Host "✓ Scenario 1 setup complete (4 connected systems)" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "  1. Run: ./scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1 -Template $Template" -ForegroundColor Gray
@@ -1026,14 +1490,30 @@ Write-Host ""
 
 # Return configuration for use by scenario scripts
 return @{
+    # HR CSV (primary source)
     CSVSystemId = $csvSystem.id
-    LDAPSystemId = $ldapSystem.id
     CSVImportProfileId = $csvImportProfile.id
     CSVSyncProfileId = $csvSyncProfile.id
     CSVDeltaSyncProfileId = $csvDeltaSyncProfile.id
+
+    # Training CSV (secondary source)
+    TrainingSystemId = $trainingSystem.id
+    TrainingImportProfileId = $trainingImportProfile.id
+    TrainingSyncProfileId = $trainingSyncProfile.id
+    TrainingDeltaSyncProfileId = $trainingDeltaSyncProfile.id
+
+    # Samba AD (primary target)
+    LDAPSystemId = $ldapSystem.id
     LDAPFullImportProfileId = $ldapFullImportProfile.id
     LDAPDeltaImportProfileId = $ldapDeltaImportProfile.id
     LDAPFullSyncProfileId = $ldapFullSyncProfile.id
     LDAPDeltaSyncProfileId = $ldapDeltaSyncProfile.id
     LDAPExportProfileId = $ldapExportProfile.id
+
+    # Cross-Domain CSV (secondary target)
+    CrossDomainSystemId = $crossDomainSystem.id
+    CrossDomainImportProfileId = $crossDomainImportProfile.id
+    CrossDomainDeltaImportProfileId = $crossDomainDeltaImportProfile.id
+    CrossDomainDeltaSyncProfileId = $crossDomainDeltaSyncProfile.id
+    CrossDomainExportProfileId = $crossDomainExportProfile.id
 }

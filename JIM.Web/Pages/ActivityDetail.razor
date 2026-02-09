@@ -15,7 +15,7 @@
 @inject IUserPreferenceService PreferenceService
 
 <PageTitle>Activity: @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters()@(ShowTargetInTitle() ? $": {GetTargetDisplayText()}" : "")</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Activity:</span> @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters()@if (ShowTargetInTitle()) {<span>: </span><span class="jim-title-accent">@GetTargetDisplayText()</span>}</MudText>
+<MudText Typo="Typo.h4"><span class="mud-primary-text">Activity:</span> @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters()@if (ShowTargetInTitle()) {<span>: </span><span class="jim-title-accent">@GetTargetDisplayText()</span>}</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @if (_activity != null)
@@ -55,7 +55,7 @@
                             <MudLink Href="/admin/schema/metaverse">@_activity.TargetName</MudLink>
                             break;
                         case ActivityTargetType.HistoryRetentionCleanup:
-                            <MudIcon Icon="@Icons.Material.Filled.CleaningServices" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                            <MudIcon Icon="@Icons.Material.Filled.CleaningServices" Class="mr-1" Style="vertical-align: middle;" />
                             @(_activity.TargetName ?? "History Retention Cleanup")
                             break;
                         case ActivityTargetType.ObjectMatchingRule:
@@ -74,17 +74,24 @@
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button">Initiated By:</MudText>
                 @{
-                    if (_activity.InitiatedByType == ActivityInitiatorType.User && _activity.InitiatedByMetaverseObject != null)
+                    if (_activity.InitiatedByType == ActivityInitiatorType.User)
                     {
                         <MudText>
-                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
-                            <MudLink Href="@Utilities.GetMetaverseObjectHref(_activity.InitiatedByMetaverseObject)">@Utilities.GetMetaverseObjectHrefText(_activity.InitiatedByMetaverseObject)</MudLink>
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" Style="vertical-align: middle;" />
+                            @if (_activity.InitiatedById.HasValue)
+                            {
+                                <MudLink Href="@($"/identity/person/{_activity.InitiatedById.Value}")">@_activity.InitiatedByName</MudLink>
+                            }
+                            else
+                            {
+                                <span>@_activity.InitiatedByName</span>
+                            }
                         </MudText>
                     }
                     else if (_activity.InitiatedByType == ActivityInitiatorType.ApiKey)
                     {
                         <MudText>
-                            <MudIcon Icon="@Icons.Material.Filled.Key" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                            <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" Style="vertical-align: middle;" />
                             @if (_activity.InitiatedById.HasValue)
                             {
                                 <MudLink Href="@Utilities.GetApiKeyHref(_activity.InitiatedById.Value)">@_activity.InitiatedByName</MudLink>
@@ -93,6 +100,13 @@
                             {
                                 <span>@_activity.InitiatedByName</span>
                             }
+                        </MudText>
+                    }
+                    else if (_activity.InitiatedByType == ActivityInitiatorType.System)
+                    {
+                        <MudText>
+                            <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" Style="vertical-align: middle;" />
+                            <span>@(_activity.InitiatedByName ?? "System")</span>
                         </MudText>
                     }
                     else if (!string.IsNullOrEmpty(_activity.InitiatedByName))
@@ -465,9 +479,7 @@
                     <MudButton Variant="Variant.Outlined"
                                Size="Size.Small"
                                Color="Color.Primary"
-                               Href="@($"/activity/item/{context.Id}")">
-                        View
-                    </MudButton>
+                               Href="@($"/activity/item/{context.Id}")">View</MudButton>
                 </MudTd>
                 <MudTd DataLabel="External Id" Class="jim-text-code">@(!string.IsNullOrEmpty(context.ExternalIdValue) ? context.ExternalIdValue : "-")</MudTd>
                 <MudTd DataLabel="Display Name">@(!string.IsNullOrEmpty(context.DisplayName) ? context.DisplayName : "-")</MudTd>

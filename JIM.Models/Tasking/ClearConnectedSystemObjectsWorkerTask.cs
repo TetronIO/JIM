@@ -1,6 +1,4 @@
 ﻿using JIM.Models.Activities;
-using JIM.Models.Core;
-using JIM.Models.Security;
 namespace JIM.Models.Tasking;
 
 public class ClearConnectedSystemObjectsWorkerTask : WorkerTask
@@ -28,28 +26,28 @@ public class ClearConnectedSystemObjectsWorkerTask : WorkerTask
     }
 
     /// <summary>
-    /// When a clear connected system objects task is triggered by a user, this overload should be used to attribute the action to the user.
+    /// Factory method for creating a task triggered by a user.
     /// </summary>
-    public ClearConnectedSystemObjectsWorkerTask(int connectedSystemId, MetaverseObject initiatedBy, bool deleteChangeHistory = true)
+    public static ClearConnectedSystemObjectsWorkerTask ForUser(int connectedSystemId, Guid userId, string userName, bool deleteChangeHistory = true)
     {
-        ConnectedSystemId = connectedSystemId;
-        DeleteChangeHistory = deleteChangeHistory;
-        InitiatedByType = ActivityInitiatorType.User;
-        InitiatedById = initiatedBy.Id;
-        InitiatedByMetaverseObject = initiatedBy;
-        InitiatedByName = initiatedBy.DisplayName;
+        return new ClearConnectedSystemObjectsWorkerTask(connectedSystemId, deleteChangeHistory)
+        {
+            InitiatedByType = ActivityInitiatorType.User,
+            InitiatedById = userId,
+            InitiatedByName = userName
+        };
     }
 
     /// <summary>
-    /// When a clear connected system objects task is triggered by an API key, this overload should be used to attribute the action to the API key.
+    /// Factory method for creating a task triggered by an API key.
     /// </summary>
-    public ClearConnectedSystemObjectsWorkerTask(int connectedSystemId, ApiKey apiKey, bool deleteChangeHistory = true)
+    public static ClearConnectedSystemObjectsWorkerTask ForApiKey(int connectedSystemId, Guid apiKeyId, string apiKeyName, bool deleteChangeHistory = true)
     {
-        ConnectedSystemId = connectedSystemId;
-        DeleteChangeHistory = deleteChangeHistory;
-        InitiatedByType = ActivityInitiatorType.ApiKey;
-        InitiatedById = apiKey.Id;
-        InitiatedByApiKey = apiKey;
-        InitiatedByName = apiKey.Name;
+        return new ClearConnectedSystemObjectsWorkerTask(connectedSystemId, deleteChangeHistory)
+        {
+            InitiatedByType = ActivityInitiatorType.ApiKey,
+            InitiatedById = apiKeyId,
+            InitiatedByName = apiKeyName
+        };
     }
 }

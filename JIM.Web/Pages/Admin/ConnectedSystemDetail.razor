@@ -11,27 +11,46 @@
 @using Serilog
 @using System.Text
 @using Microsoft.JSInterop
+@using JIM.Web.Services
 @inject JimApplication Jim
+@inject IUserPreferenceService PreferenceService
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IJSRuntime JSRuntime
 
 <PageTitle>Connected System: @_connectedSystem?.Name</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-secondary-text">Connected System:</span> @_connectedSystem?.Name</MudText>
-<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Some aspects of a Connected System can only be configured once basic details and setting values have been provided.</MudText>
+<MudText Typo="Typo.h4"><span class="mud-primary-text">Connected System:</span> @_connectedSystem?.Name</MudText>
+<div class="d-flex justify-space-between align-center">
+    <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+    @if (_connectedSystem != null)
+    {
+        <AuditInfo Entity="@_connectedSystem" />
+    }
+</div>
 
 @if (_connectedSystem != null)
 {
-    <div class="d-flex justify-end mt-3">
-        <AuditInfo Entity="@_connectedSystem" />
-    </div>
-
-    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-5" Class="mt-5" Outlined="true">
+    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-5" Class="mt-2" Outlined="true">
 
         <MudTabPanel Text="Details">
             <MudPaper Class="pa-4" Outlined="true">
+                <MudStack Row Spacing="2" Class="mb-4">
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Default"
+                               Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Storage"
+                               Href="@($"/admin/connected-systems/{Id}/objects")">
+                        View Objects
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="@(_pendingExportCount > 0 ? Color.Warning : Color.Default)"
+                               Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Outbox"
+                               Href="@($"/admin/connected-systems/{Id}/pending-exports")">
+                        View Pending Exports @(_pendingExportCount > 0 ? $"({_pendingExportCount})" : "")
+                    </MudButton>
+                </MudStack>
                 <MudForm @bind-IsValid="@IsDetailsFormValid" @bind-Errors="@DetailsFormErrors">
                     <MudTextField T="string" Label="Connector" @bind-Value="_connectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
                     <MudTextField T="string" Label="Name" @bind-Value="_connectedSystem.Name" Required="true" RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-5" />
@@ -39,43 +58,22 @@
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync" DropShadow="false">Save Changes</MudButton>
                 </MudForm>
             </MudPaper>
-
-            <MudPaper Class="pa-4 mt-5" Outlined="true">
-                <MudText Typo="Typo.h6">Quick Links</MudText>
-                <MudGrid Class="mt-3">
-                    <MudItem xs="12" sm="6" md="4">
-                        <MudButton Variant="Variant.Outlined"
-                                   Color="Color.Default"
-                                   FullWidth="true"
-                                   StartIcon="@Icons.Material.Filled.Storage"
-                                   Href="@($"/admin/connected-systems/{Id}/objects")">
-                            Objects
-                        </MudButton>
-                    </MudItem>
-                    <MudItem xs="12" sm="6" md="4">
-                        <MudButton Variant="Variant.Outlined"
-                                   Color="@(_pendingExportCount > 0 ? Color.Warning : Color.Default)"
-                                   FullWidth="true"
-                                   StartIcon="@Icons.Material.Filled.Outbox"
-                                   Href="@($"/admin/connected-systems/{Id}/pending-exports")">
-                            Pending Exports @(_pendingExportCount > 0 ? $"({_pendingExportCount})" : "")
-                        </MudButton>
-                    </MudItem>
-                </MudGrid>
-            </MudPaper>
         </MudTabPanel>
 
         <MudTabPanel Text="Settings">
-            <MudText>Configure the connector for your environment by supplying values for the settings below.</MudText>
+            <MudText Class="mud-text-secondary">
+                Each connector requires specific settings to connect to your environment.
+                Complete the required fields below, then save your changes before importing the schema.
+            </MudText>
 
-            <MudForm @ref="_settingsForm" @bind-IsValid="@IsSettingsFormValid" @bind-Errors="@SettingsFormErrors" Class="mt-5">
+            <MudForm @ref="_settingsForm" @bind-IsValid="@IsSettingsFormValid" @bind-Errors="@SettingsFormErrors">
                 @if (_settingCategories != null)
                 {
                     @for (var i = 0; i < _settingCategories.Count; i++)
                     {
                         var settingCategory = _settingCategories[i];
-                        <MudText Typo="Typo.h5" Class="mt-5">@settingCategory.ToString()</MudText>
-                        <MudPaper Class="pa-4 mt-5" Outlined="true">
+                        <MudPaper Class="pa-5 mt-5" Outlined="true">
+                            <MudText Typo="Typo.h5" Class="mb-5">@settingCategory.ToString()</MudText>
                             @foreach (var settingValue in _connectedSystem.SettingValues
                                 .Where(sv => sv.Setting.Category == settingCategory)
                                 .OrderBy(sv => sv.Setting.Id))
@@ -199,7 +197,7 @@
                 <MudButton Variant="Variant.Filled" Color="@(IsSettingsFormValid || !_settingsBeingSaved ? Color.Primary : Color.Default)" Disabled="@(!IsSettingsFormValid || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync">
                     @if (_settingsBeingSaved)
                     {
-                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                        <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                         <MudText Class="ms-2">Processing</MudText>
                     }
                     else
@@ -230,7 +228,7 @@
                     Color="_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning"
                     Disabled="@(_schemaBeingRetrieved)"
                     Variant="Variant.Filled"
-                    Size="Size.Small"
+
                     OnClick="HandleImportSchemaAsync"
                     Class="mt-5"
                     DropShadow="false">
@@ -238,7 +236,7 @@
                     {
                         if (_schemaBeingRetrieved)
                         {
-                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                            <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                             <MudText Class="ms-2">Retrieving Schema</MudText>
                         }
                         else
@@ -250,7 +248,7 @@
                     {
                         if (_schemaBeingRetrieved)
                         {
-                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                            <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                             <MudText Class="ms-2">Refreshing Schema</MudText>
                         }
                         else
@@ -296,35 +294,35 @@
                                     @if (result.AddedObjectTypes.Count > 0)
                                     {
                                         <tr>
-                                            <td><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Size="Size.Small" Class="me-1" /> Object Types Added</td>
+                                            <td><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Class="me-1" /> Object Types Added</td>
                                             <td>@string.Join(", ", result.AddedObjectTypes)</td>
                                         </tr>
                                     }
                                     @if (result.RemovedObjectTypes.Count > 0)
                                     {
                                         <tr>
-                                            <td><MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Error" Size="Size.Small" Class="me-1" /> Object Types Removed</td>
+                                            <td><MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Error" Class="me-1" /> Object Types Removed</td>
                                             <td>@string.Join(", ", result.RemovedObjectTypes)</td>
                                         </tr>
                                     }
                                     @if (result.UpdatedObjectTypes.Count > 0)
                                     {
                                         <tr>
-                                            <td><MudIcon Icon="@Icons.Material.Filled.Update" Color="Color.Info" Size="Size.Small" Class="me-1" /> Object Types Updated</td>
+                                            <td><MudIcon Icon="@Icons.Material.Filled.Update" Color="Color.Info" Class="me-1" /> Object Types Updated</td>
                                             <td>@string.Join(", ", result.UpdatedObjectTypes)</td>
                                         </tr>
                                     }
                                     @foreach (var kvp in result.AddedAttributes)
                                     {
                                         <tr>
-                                            <td><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Size="Size.Small" Class="me-1" /> Attributes Added (@kvp.Key)</td>
+                                            <td><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Class="me-1" /> Attributes Added (@kvp.Key)</td>
                                             <td>@string.Join(", ", kvp.Value)</td>
                                         </tr>
                                     }
                                     @foreach (var kvp in result.RemovedAttributes)
                                     {
                                         <tr>
-                                            <td><MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Warning" Size="Size.Small" Class="me-1" /> Attributes Removed (@kvp.Key)</td>
+                                            <td><MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Warning" Class="me-1" /> Attributes Removed (@kvp.Key)</td>
                                             <td>@string.Join(", ", kvp.Value)</td>
                                         </tr>
                                     }
@@ -407,10 +405,10 @@
                 if (_connectedSystem.ObjectTypes.Count > 1 || (_connectedSystem.ObjectTypes.Count == 1 && !_connectedSystem.ObjectTypes[0].Selected))
                 {
                     <MudPaper Outlined="true" Class="pa-4 mt-5">
-                        <MudText Class="d-flex flex-grow-1 flex-wrap justify-center align-center">
-                            Select which object types you would like to manage with JIM.
+                        <MudText>
+                            Select which object types from this system you would like to use in JIM.
                         </MudText>
-                        <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
+                        <div class="d-flex flex-grow-1 flex-wrap">
                             @foreach (var objectType in _connectedSystem.ObjectTypes)
                             {
                                 <MudCheckBox T="bool" Value="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" ValueChanged="((e) => HandleSelectedObjectTypeClick(objectType, e))" />
@@ -421,24 +419,20 @@
 
                 @if (_connectedSystem.ObjectTypes.Count(q => q.Selected) > 1)
                 {
-                    <MudPaper Outlined="true" Class="pa-4 mt-5">
-                        <div class="d-flex flex-grow-1 flex-wrap justify-center align-center">
-                            <MudButtonGroup Color="Color.Default" Class="mb-5" DropShadow="false" Variant="Variant.Outlined">
-                                @foreach (var objectType in _connectedSystem.ObjectTypes.Where(q => q.Selected))
-                                {
-                                    <MudButton
-                                        OnClick="@((_) => HandleActiveObjectTypeClick(objectType))"
-                                        Disabled="DisableSelectedSchemaObjectType(objectType)"
-                                        DropShadow="false">@objectType.Name</MudButton>
-                                }
-                            </MudButtonGroup>
-                        </div>
-                    </MudPaper>
+                    <MudButtonGroup Class="mt-5" OverrideStyles="false">
+                        @foreach (var objectType in _connectedSystem.ObjectTypes.Where(q => q.Selected))
+                        {
+                            <MudButton
+                                OnClick="@((_) => HandleActiveObjectTypeClick(objectType))"
+                                Variant="@(_selectedObjectType == objectType ? Variant.Filled : Variant.Outlined)"
+                                Color="Color.Primary">@objectType.Name</MudButton>
+                        }
+                    </MudButtonGroup>
                 }
 
                 @if (_selectedObjectType != null)
                 {
-                    <MudText Typo="Typo.h6" Class="mt-5">@_selectedObjectType.Name</MudText>
+                    <MudText Typo="Typo.h5" Class="mt-5"><span class="mud-primary-text">Object Type:</span> @_selectedObjectType.Name</MudText>
                     @if (_connectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
                     {
                         <MudPaper Outlined="true" Class="pa-4 mt-5">
@@ -463,7 +457,7 @@
                     @if (_connectedSystem.SupportsImportMode())
                     {
                         <MudPaper Outlined="true" Class="pa-4 mt-5">
-                            <MudText Typo="Typo.subtitle1" Class="mb-3">Object Type Settings</MudText>
+                            <MudText Typo="Typo.h6" Class="mb-3">Settings</MudText>
                             <MudSwitch
                                 @bind-Value="@_selectedObjectType.RemoveContributedAttributesOnObsoletion"
                                 Color="@Color.Primary"
@@ -475,12 +469,13 @@
                     }
 
                     <MudPaper Outlined="true" Class="pa-4 mt-5">
+                        <MudText Typo="Typo.h6" Class="mb-3">Attribute Selection</MudText>
                         <MudText>
-                            Select which attributes you would like to manage for this object type. To maximise performance, only select those you need.
+                            Select which attributes you would like JIM to import, or export for this object type. To maximise system performance, only select those you actually need.
                         </MudText>
 
-                        <MudGrid Class="mt-3 mb-3">
-                            <MudItem xs="@(_selectedObjectTypeHasClasses ? 6 : 12)">
+                        <MudGrid Class="mt-3">
+                            <MudItem xs="@(_selectedObjectTypeHasClasses ? 4 : 6)">
                                 <MudTextField
                                     T="string"
                                     @bind-Value="_schemaSearchString"
@@ -489,13 +484,13 @@
                                     AdornmentIcon="@Icons.Material.Filled.Search"
                                     IconSize="Size.Small"
                                     Variant="Variant.Outlined"
-                                    HelperText="Show only attributes where the name containers a specific value"
+                                    HelperText="Show only attributes where the name contains a specific value"
                                     autocomplete="schema_search_string" />
                             </MudItem>
 
                             @if (_selectedObjectTypeHasClasses)
                             {
-                                <MudItem xs="6">
+                                <MudItem xs="4">
                                     <MudSelect
                                         T="string"
                                         Label="Filter by class"
@@ -514,36 +509,82 @@
                                 </MudItem>
                             }
 
-                            <MudItem xs="10">
+                            <MudItem xs="@(_selectedObjectTypeHasClasses ? 4 : 6)">
                                 <MudTextField
                                     T="string"
                                     Label="Select attributes via CSV"
                                     @bind-Value="_attributeSelectionCsv"
-                                    HelperText="You can also quick-select attributes by entering them in a comma-separated list, i.e. DisplayName,sAMAccountName"
+                                    HelperText="Quick-select by comma-separated list, e.g. DisplayName,sAMAccountName"
                                     InputType="InputType.Text"
-                                    Adornment="Adornment.Start"
-                                    AdornmentIcon="@Icons.Material.Filled.Input"
+                                    Adornment="Adornment.End"
+                                    AdornmentIcon="@Icons.Material.Filled.Check"
+                                    OnAdornmentClick="HandleAttributeCsvSubmit"
                                     IconSize="Size.Small"
                                     Variant="Variant.Outlined" />
                             </MudItem>
-                            <MudItem xs="2">
-                                <MudButton
-                                    Variant="Variant.Filled"
-                                    DropShadow="false"
-                                    Class="mt-4"
-                                    Color="Color.Default"
-                                    OnClick="HandleAttributeCsvSubmit">Select Attributes</MudButton>
-                            </MudItem>
-
-                            <MudItem xs="12" Class="pb-0">
-                                <MudCheckBox @bind-Value="_attributeSelectedFilter" Color="Color.Primary">Show only selected?</MudCheckBox>
-                            </MudItem>
                         </MudGrid>
+
+                        <MudStack Row="true" Spacing="6" Class="mt-4 flex-wrap" AlignItems="AlignItems.Start">
+                            <div>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Type:</MudText>
+                                <MudChipSet T="AttributeDataType"
+                                            SelectionMode="SelectionMode.MultiSelection"
+                                            SelectedValues="_selectedSchemaTypes"
+                                            SelectedValuesChanged="OnSchemaTypeFilterChanged">
+                                    @foreach (var type in GetAvailableSchemaTypes())
+                                    {
+                                        <MudChip Value="@type.Key"
+                                                 Color="Color.Primary"
+                                                 Variant="@(_selectedSchemaTypes.Contains(type.Key) ? Variant.Outlined : Variant.Text)">
+                                            @type.Key.ToString().SplitOnCapitalLetters() (@type.Value)
+                                        </MudChip>
+                                    }
+                                </MudChipSet>
+                            </div>
+
+                            <div>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Plurality:</MudText>
+                                <MudChipSet T="AttributePlurality"
+                                            SelectionMode="SelectionMode.MultiSelection"
+                                            SelectedValues="_selectedSchemaPluralites"
+                                            SelectedValuesChanged="OnSchemaPluralityFilterChanged">
+                                    @foreach (var plurality in GetAvailableSchemaPluralites())
+                                    {
+                                        <MudChip Value="@plurality.Key"
+                                                 Color="Color.Info"
+                                                 Variant="@(_selectedSchemaPluralites.Contains(plurality.Key) ? Variant.Outlined : Variant.Text)">
+                                            @(plurality.Key == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued") (@plurality.Value)
+                                        </MudChip>
+                                    }
+                                </MudChipSet>
+                            </div>
+
+                            @{
+                                var selectionCounts = GetSchemaSelectionCounts();
+                            }
+                            <div>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Selection:</MudText>
+                                <MudChipSet T="bool"
+                                            SelectionMode="SelectionMode.SingleSelection"
+                                            SelectedValue="_attributeSelectedFilter"
+                                            SelectedValueChanged="@((bool val) => _attributeSelectedFilter = val)">
+                                    <MudChip Value="false"
+                                             Color="Color.Default"
+                                             Variant="@(!_attributeSelectedFilter ? Variant.Outlined : Variant.Text)">
+                                        All (@selectionCounts.allCount)
+                                    </MudChip>
+                                    <MudChip Value="true"
+                                             Color="Color.Default"
+                                             Variant="@(_attributeSelectedFilter ? Variant.Outlined : Variant.Text)">
+                                        Selected Only (@selectionCounts.selectedCount)
+                                    </MudChip>
+                                </MudChipSet>
+                            </div>
+                        </MudStack>
                     </MudPaper>
 
                     <MudTable
                         Items="@_selectedObjectType.Attributes"
-                        Virtualize="true"
                         Hover="true"
                         Dense="true"
                         Breakpoint="Breakpoint.Sm"
@@ -551,7 +592,9 @@
                         Filter="new Func<ConnectedSystemObjectTypeAttribute,bool>(SchemaFilterFuncHandler)"
                         Class="mt-5"
                         Outlined="true"
-                        Elevation="0">
+                        Elevation="0"
+                        RowsPerPage="@_schemaRowsPerPage"
+                        RowsPerPageChanged="OnSchemaRowsPerPageChanged">
                         <HeaderContent>
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Selected)"><MudText Typo="Typo.button">Selected</MudText></MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.IsExternalId)"><MudText Typo="Typo.button">External ID</MudText></MudTableSortLabel></MudTh>
@@ -568,7 +611,7 @@
                             }
                             @if (_connectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes)
                             {
-                                <MudTh></MudTh>
+                                <MudTh><MudText Typo="Typo.button">Action</MudText></MudTh>
                             }
                         </HeaderContent>
                         <RowTemplate>
@@ -587,11 +630,11 @@
                             <MudTd DataLabel="External ID">
                                 @if (context.IsExternalId)
                                 {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
+                                    <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
                                 }
                                 else if (context.IsSecondaryExternalId)
                                 {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
+                                    <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
                                 }
                                 else
                                 {
@@ -606,10 +649,14 @@
                                 </MudTd>
                             }
                             <MudTd DataLabel="Type">
-                                @context.Type
+                                <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Type)" Variant="Variant.Outlined">
+                                    @context.Type.ToString().SplitOnCapitalLetters()
+                                </MudChip>
                             </MudTd>
-                            <MudTd DataLabel="Plurality" Class="jim-nowrap">
-                                @context.AttributePlurality.ToString().SplitOnCapitalLetters()
+                            <MudTd DataLabel="Plurality">
+                                <MudChip T="string" Color="@Helpers.GetAttributePluralityChipColour(context.AttributePlurality)" Variant="Variant.Text">
+                                    @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                                </MudChip>
                             </MudTd>
                             @if (_selectedObjectTypeHasDescriptions)
                             {
@@ -622,8 +669,9 @@
                                 <MudTd>
                                     <MudButton
                                         DropShadow="false"
+                                        Color="Color.Primary"
+                                        Variant="Variant.Outlined"
                                         Size="Size.Small"
-                                        Variant="Variant.Filled"
                                         OnClick="() => HandleShowEditAttributeDialogAsync(context)"
                                         StartIcon="@Icons.Material.Filled.Edit">
                                         Edit
@@ -638,6 +686,9 @@
                                 <MudText>There are no attributes to show.</MudText>
                             }
                         </NoRecordsContent>
+                        <PagerContent>
+                            <MudTablePager PageSizeOptions="new[] { 10, 25, 50, 100 }" />
+                        </PagerContent>
                     </MudTable>
                 }
 
@@ -672,7 +723,7 @@
                     <MudButton
                             Disabled="@_hierarchyBeingRetrieved"
                             Color="_connectedSystem.Partitions == null || _connectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning"
-                            Size="Size.Small"
+
                             OnClick="HandleImportHierarchyAsync"
                             Variant="Variant.Filled"
                             Class="mt-5"
@@ -681,7 +732,7 @@
                         {
                             if (_hierarchyBeingRetrieved)
                             {
-                                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                                 <MudText Class="ms-2">Retrieving Hierarchy</MudText>
                             }
                             else
@@ -693,7 +744,7 @@
                         {
                             if (_hierarchyBeingRetrieved)
                             {
-                                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                                 <MudText Class="ms-2">Refreshing Hierarchy</MudText>
                             }
                             else
@@ -711,13 +762,13 @@
                         <MudExpansionPanel Expanded="false">
                             <TitleContent>
                                 <div class="d-flex align-center gap-3">
-                                    <MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Small" />
+                                    <MudIcon Icon="@Icons.Material.Filled.Sync" />
                                     <MudText Typo="Typo.body1">
                                         Hierarchy refreshed: @_hierarchyRefreshResult.GetSummary()
                                     </MudText>
                                     @if (_hierarchyRefreshResult.HasSelectedItemsRemoved)
                                     {
-                                        <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">
+                                        <MudChip T="string" Color="Color.Warning" Variant="Variant.Filled">
                                             Selected items removed
                                         </MudChip>
                                     }
@@ -728,7 +779,7 @@
                                     <div class="d-flex justify-end mb-3">
                                         <MudButton StartIcon="@Icons.Material.Filled.ContentCopy"
                                                    Variant="Variant.Outlined"
-                                                   Size="Size.Small"
+
                                                    OnClick="CopyHierarchyChangesToClipboardAsync">
                                             Copy Changes
                                         </MudButton>
@@ -738,7 +789,7 @@
                                     @if (_hierarchyRefreshResult.RemovedPartitions.Count > 0 || _hierarchyRefreshResult.RemovedContainers.Count > 0)
                                     {
                                         <MudText Typo="Typo.subtitle2" Class="mb-2">
-                                            <MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Class="mr-1" Color="Color.Error" />
+                                            <MudIcon Icon="@Icons.Material.Filled.Delete" Class="mr-1" Color="Color.Error" />
                                             Removed
                                         </MudText>
                                         <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
@@ -760,7 +811,7 @@
                                                         <td>
                                                             @if (item.WasSelected)
                                                             {
-                                                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" Class="mr-1" />
+                                                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-1" />
                                                                 <text>Yes</text>
                                                             }
                                                             else
@@ -779,7 +830,7 @@
                                                         <td>
                                                             @if (item.WasSelected)
                                                             {
-                                                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" Class="mr-1" />
+                                                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-1" />
                                                                 <text>Yes</text>
                                                             }
                                                             else
@@ -797,7 +848,7 @@
                                     @if (_hierarchyRefreshResult.AddedPartitions.Count > 0 || _hierarchyRefreshResult.AddedContainers.Count > 0)
                                     {
                                         <MudText Typo="Typo.subtitle2" Class="mb-2">
-                                            <MudIcon Icon="@Icons.Material.Filled.Add" Size="Size.Small" Class="mr-1" Color="Color.Success" />
+                                            <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-1" Color="Color.Success" />
                                             Added
                                         </MudText>
                                         <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
@@ -833,7 +884,7 @@
                                     @if (_hierarchyRefreshResult.RenamedPartitions.Count > 0 || _hierarchyRefreshResult.RenamedContainers.Count > 0)
                                     {
                                         <MudText Typo="Typo.subtitle2" Class="mb-2">
-                                            <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Class="mr-1" Color="Color.Info" />
+                                            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-1" Color="Color.Info" />
                                             Renamed
                                         </MudText>
                                         <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
@@ -872,7 +923,7 @@
                                     @if (_hierarchyRefreshResult.MovedContainers.Count > 0)
                                     {
                                         <MudText Typo="Typo.subtitle2" Class="mb-2">
-                                            <MudIcon Icon="@Icons.Material.Filled.DriveFileMove" Size="Size.Small" Class="mr-1" Color="Color.Info" />
+                                            <MudIcon Icon="@Icons.Material.Filled.DriveFileMove" Class="mr-1" Color="Color.Info" />
                                             Moved
                                         </MudText>
                                         <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
@@ -932,7 +983,7 @@
 
                                 @*
                                 TODO:
-                                <MudButtonGroup Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined" Class="mt-5 mb-5">
+                                <MudButtonGroup Color="Color.Default" Variant="Variant.Outlined" Class="mt-5 mb-5">
                                     <MudButton>Select All</MudButton>
                                     <MudButton>Clear All</MudButton>
                                 </MudButtonGroup>
@@ -1094,7 +1145,7 @@
                     <MudTd DataLabel="Actions" Style="text-align: center">
                         <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
                             <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                           Size="Size.Small"
+
                                            Color="Color.Error"
                                            Variant="Variant.Outlined"
                                            OnClick="_ => HandleRunProfileDeleteAsync(context)" />
@@ -1135,7 +1186,7 @@
                     Disabled="@(_connectedSystem?.Status == ConnectedSystemStatus.Deleting)">
                     @if (_connectedSystem?.Status == ConnectedSystemStatus.Deleting)
                     {
-                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                        <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                         <MudText Class="ms-2">Deletion in Progress...</MudText>
                     }
                     else
@@ -1360,7 +1411,7 @@
                 Disabled="@(!IsDeleteConfirmationValid())">
                 @if (_deletionInProgress)
                 {
-                    <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                    <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                     <MudText Class="ms-2">Deleting...</MudText>
                 }
                 else
@@ -1415,7 +1466,7 @@
             Disabled="_modeSwitchInProgress">
             @if (_modeSwitchInProgress)
             {
-                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
                 <MudText Class="ms-2">Switching...</MudText>
             }
             else
@@ -1456,7 +1507,11 @@
     private IEnumerable<string> AttributeClassFilterSelectedValues { get; set; } = new HashSet<string>();
     private bool _attributeSelectedFilter;
     private string? _attributeSelectionCsv;
+    private IReadOnlyCollection<AttributeDataType> _selectedSchemaTypes = new List<AttributeDataType>();
+    private IReadOnlyCollection<AttributePlurality> _selectedSchemaPluralites = new List<AttributePlurality>();
     private List<BreadcrumbItem> _breadcrumbs = null!;
+    private int _schemaRowsPerPage = 10;
+    private bool _schemaPreferencesLoaded;
 
     private readonly DialogOptions _dialogOptions = new() { FullWidth = true };
     private bool _editSchemaAttributeDialogVisible;
@@ -1481,7 +1536,7 @@
     private int _selectedMatchingRuleTabIndex;
     private ConnectedSystemObjectTypeAttribute? _newMatchingRuleSourceAttribute;
     private MetaverseAttribute? _newMatchingRuleTargetAttribute;
-    private bool _newMatchingRuleCaseSensitive = true;
+    private bool _newMatchingRuleCaseSensitive = false;
     private IList<MetaverseAttribute>? _metaverseAttributes;
     // Track the currently active object type for the matching rules form state
     private ConnectedSystemObjectType? _currentMatchingRuleObjectType;
@@ -1542,6 +1597,30 @@
 
         // load metaverse attributes for object matching rules
         _metaverseAttributes = await Jim.Metaverse.GetMetaverseAttributesAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_schemaPreferencesLoaded)
+        {
+            try
+            {
+                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
+                _schemaRowsPerPage = preferredSize;
+                _schemaPreferencesLoaded = true;
+                StateHasChanged();
+            }
+            catch
+            {
+                // JS interop not yet available, will retry on next render
+            }
+        }
+    }
+
+    private async Task OnSchemaRowsPerPageChanged(int newSize)
+    {
+        _schemaRowsPerPage = newSize;
+        await PreferenceService.SetRowsPerPageAsync(newSize);
     }
 
     private bool AreSettingDependentTabsDisabled()
@@ -1922,7 +2001,7 @@
             // Reset the form
             _newMatchingRuleSourceAttribute = null;
             _newMatchingRuleTargetAttribute = null;
-            _newMatchingRuleCaseSensitive = true;
+            _newMatchingRuleCaseSensitive = false;
 
             Snackbar.Add("Matching rule has been created.", Severity.Success);
             StateHasChanged();
@@ -2097,20 +2176,97 @@
         }
     }
 
-    private bool SchemaFilterFuncHandler(ConnectedSystemObjectTypeAttribute element) => SchemaFilterFunc(element, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter);
+    private bool SchemaFilterFuncHandler(ConnectedSystemObjectTypeAttribute element) =>
+        SchemaFilterFunc(element, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter, _selectedSchemaTypes, _selectedSchemaPluralites);
 
-    private static bool SchemaFilterFunc(ConnectedSystemObjectTypeAttribute element, string searchString, IEnumerable<string> attributeClassFilterSelectedValues, bool attributeSelectedFilter)
+    private static bool SchemaFilterFunc(
+        ConnectedSystemObjectTypeAttribute element,
+        string searchString,
+        IEnumerable<string> attributeClassFilterSelectedValues,
+        bool attributeSelectedFilter,
+        IReadOnlyCollection<AttributeDataType> selectedTypes,
+        IReadOnlyCollection<AttributePlurality> selectedPluralites)
     {
-        // what type of search is this? name, class or csv?
+        // All filters must pass (AND logic)
         var classHashset = (HashSet<string>)attributeClassFilterSelectedValues;
 
-        if (!string.IsNullOrEmpty(searchString))
-            return element.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase);
+        // Filter by "show only selected" checkbox
+        if (attributeSelectedFilter && !element.Selected)
+            return false;
 
-        if (classHashset.Count > 0)
-            return classHashset.Any(q => q == element.ClassName);
+        // Filter by name search string
+        if (!string.IsNullOrEmpty(searchString) && !element.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return false;
 
-        return !attributeSelectedFilter || element.Selected;
+        // Filter by class selection
+        if (classHashset.Count > 0 && !classHashset.Any(q => q == element.ClassName))
+            return false;
+
+        // Filter by type selection
+        if (selectedTypes.Count > 0 && !selectedTypes.Contains(element.Type))
+            return false;
+
+        // Filter by plurality selection
+        if (selectedPluralites.Count > 0 && !selectedPluralites.Contains(element.AttributePlurality))
+            return false;
+
+        return true;
+    }
+
+    private void OnSchemaTypeFilterChanged(IReadOnlyCollection<AttributeDataType> selectedTypes)
+    {
+        _selectedSchemaTypes = selectedTypes;
+    }
+
+    private void OnSchemaPluralityFilterChanged(IReadOnlyCollection<AttributePlurality> selectedPluralites)
+    {
+        _selectedSchemaPluralites = selectedPluralites;
+    }
+
+    private IEnumerable<KeyValuePair<AttributeDataType, int>> GetAvailableSchemaTypes()
+    {
+        if (_selectedObjectType == null)
+            return Enumerable.Empty<KeyValuePair<AttributeDataType, int>>();
+
+        // Apply all filters EXCEPT type filter to get contextual counts
+        var filteredAttributes = _selectedObjectType.Attributes
+            .Where(a => SchemaFilterFunc(a, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter,
+                new List<AttributeDataType>(), _selectedSchemaPluralites));
+
+        return filteredAttributes
+            .GroupBy(a => a.Type)
+            .Select(g => new KeyValuePair<AttributeDataType, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key.ToString());
+    }
+
+    private IEnumerable<KeyValuePair<AttributePlurality, int>> GetAvailableSchemaPluralites()
+    {
+        if (_selectedObjectType == null)
+            return Enumerable.Empty<KeyValuePair<AttributePlurality, int>>();
+
+        // Apply all filters EXCEPT plurality filter to get contextual counts
+        var filteredAttributes = _selectedObjectType.Attributes
+            .Where(a => SchemaFilterFunc(a, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter,
+                _selectedSchemaTypes, new List<AttributePlurality>()));
+
+        return filteredAttributes
+            .GroupBy(a => a.AttributePlurality)
+            .Select(g => new KeyValuePair<AttributePlurality, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key);
+    }
+
+    private (int allCount, int selectedCount) GetSchemaSelectionCounts()
+    {
+        if (_selectedObjectType == null)
+            return (0, 0);
+
+        // Apply all filters EXCEPT selection filter to get contextual counts
+        var filteredAttributes = _selectedObjectType.Attributes
+            .Where(a => SchemaFilterFunc(a, _schemaSearchString, AttributeClassFilterSelectedValues, false,
+                _selectedSchemaTypes, _selectedSchemaPluralites))
+            .ToList();
+
+        return (filteredAttributes.Count, filteredAttributes.Count(a => a.Selected));
     }
 
     private static List<TreeItemData<ConnectedSystemContainer>> GetTreeItemData(HashSet<ConnectedSystemContainer> containers)
@@ -2679,13 +2835,13 @@
                             <MudSwitch T="bool" Value="@context.CaseSensitive"
                                        ValueChanged="@(value => HandleToggleMatchingRuleCaseSensitiveAsync(context, value))"
                                        Color="Color.Primary"
-                                       Size="Size.Small" />
+                                       />
                         </MudTd>
                         <MudTd>
                             <MudTooltip Text="Move up" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Outlined.ArrowUpward"
                                                Variant="Variant.Outlined"
-                                               Size="Size.Small"
+
                                                Color="Color.Default"
                                                Disabled="@(context.Order == 0)"
                                                OnClick="() => HandleMoveMatchingRuleUpAsync(context, objectType)" />
@@ -2693,7 +2849,7 @@
                             <MudTooltip Text="Move down" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Outlined.ArrowDownward"
                                                Variant="Variant.Outlined"
-                                               Size="Size.Small"
+
                                                Color="Color.Default"
                                                Disabled="@(context.Order == objectType.ObjectMatchingRules.Max(r => r.Order))"
                                                OnClick="() => HandleMoveMatchingRuleDownAsync(context, objectType)" />
@@ -2702,7 +2858,7 @@
                                 <MudIconButton
                                     Icon="@Icons.Material.Outlined.Delete"
                                     Variant="Variant.Outlined"
-                                    Size="Size.Small"
+
                                     Color="Color.Error"
                                     OnClick="() => HandleDeleteMatchingRuleAsync(context, objectType)" />
                             </MudTooltip>

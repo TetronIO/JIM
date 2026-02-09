@@ -1033,9 +1033,10 @@ public class ExportEvaluationServer
         }
 
         // Fallback: check if a pending export exists in the database from a previous activity
-        // (e.g., drift detection ran in a previous sync step and its PE hasn't been exported yet).
+        // (e.g., drift detection ran in a previous sync step and its PE hasn't been exported yet,
+        // or a previous sync created a pending Create export that hasn't been exported yet).
         // If found, delete the old PE and return a new merged PE for batch creation.
-        if (csoId.HasValue && changeType == PendingExportChangeType.Update)
+        if (csoId.HasValue && (changeType == PendingExportChangeType.Update || changeType == PendingExportChangeType.Create))
         {
             var dbPendingExport = await Application.Repository.ConnectedSystems
                 .GetPendingExportByConnectedSystemObjectIdAsync(csoId.Value);

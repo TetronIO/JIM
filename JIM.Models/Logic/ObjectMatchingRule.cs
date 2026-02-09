@@ -92,10 +92,10 @@ public class ObjectMatchingRule : IAuditable
     public MetaverseAttribute? TargetMetaverseAttribute { get; set; }
 
     /// <summary>
-    /// When true (default), attribute value comparisons are case-sensitive.
-    /// When false, comparisons ignore case differences.
+    /// When true, attribute value comparisons are case-sensitive.
+    /// When false (default), comparisons ignore case differences.
     /// </summary>
-    public bool CaseSensitive { get; set; } = true;
+    public bool CaseSensitive { get; set; } = false;
 
     /// <summary>
     /// Validates that the rule is correctly configured.

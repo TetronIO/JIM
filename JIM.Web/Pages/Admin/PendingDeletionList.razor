@@ -126,19 +126,19 @@
         <MudTd DataLabel="Status">
             @if (context.ConnectorCount > 0)
             {
-                <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Size="Size.Small">
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">
                     Deprovisioning
                 </MudChip>
             }
             else if (context.DaysUntilDeletion.HasValue && context.DaysUntilDeletion.Value > 0)
             {
-                <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Size="Size.Small">
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Info">
                     Grace Period
                 </MudChip>
             }
             else
             {
-                <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Size="Size.Small">
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Error">
                     Ready
                 </MudChip>
             }
@@ -173,13 +173,13 @@
             {
                 <MudTooltip Text="@($"{context.ConnectorCount} connector(s) remaining - awaiting cascade deletion")" Arrow="true" Placement="Placement.Top">
                     <MudBadge Content="@context.ConnectorCount.ToString()" Color="Color.Warning" Overlap="false">
-                        <MudIcon Icon="@Icons.Material.Filled.Link" Size="Size.Small" />
+                        <MudIcon Icon="@Icons.Material.Filled.Link" />
                     </MudBadge>
                 </MudTooltip>
             }
             else
             {
-                <MudIcon Icon="@Icons.Material.Filled.LinkOff" Size="Size.Small" Class="mud-text-secondary" />
+                <MudIcon Icon="@Icons.Material.Filled.LinkOff" Class="mud-text-secondary" />
             }
         </MudTd>
     </RowTemplate>

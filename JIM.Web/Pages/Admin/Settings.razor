@@ -52,7 +52,7 @@
     <GroupHeaderTemplate>
         <MudTh Class="mud-table-cell-custom-group" colspan="4">
             <MudIconButton Icon="@(IsGroupExpanded(context.Key) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
-                Size="Size.Small" OnClick="@((e) => ToggleGroupExpanded(context.Key))" Class="ms-n2" />
+                OnClick="@((e) => ToggleGroupExpanded(context.Key))" Class="ms-n2" />
             <MudText Typo="Typo.button">@GetCategoryDisplayName(context.Key)</MudText>
         </MudTh>
     </GroupHeaderTemplate>
@@ -72,12 +72,12 @@
                     @if (_revealedSecrets.Contains(settingContext.Key))
                     {
                         <span class="jim-text-code">@(GetDecryptedValue(settingContext) ?? "(not set)")</span>
-                        <MudIconButton Icon="@Icons.Material.Outlined.VisibilityOff" Variant="Variant.Outlined" Size="Size.Small" OnClick="() => HideSecret(settingContext.Key)" />
+                        <MudIconButton Icon="@Icons.Material.Outlined.VisibilityOff" Variant="Variant.Outlined" OnClick="() => HideSecret(settingContext.Key)" />
                     }
                     else
                     {
                         <span class="jim-text-code">********</span>
-                        <MudIconButton Icon="@Icons.Material.Outlined.Visibility" Variant="Variant.Outlined" Size="Size.Small" OnClick="() => RevealSecret(settingContext.Key)" />
+                        <MudIconButton Icon="@Icons.Material.Outlined.Visibility" Variant="Variant.Outlined" OnClick="() => RevealSecret(settingContext.Key)" />
                     }
                 }
                 else
@@ -88,7 +88,7 @@
             <MudTd DataLabel="Status" Class="@GetRowClass(settingContext)">
                 @if (settingContext.IsReadOnly)
                 {
-                    <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Lock">Read-only</MudChip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.Lock">Read-only</MudChip>
                 }
                 else if (settingContext.IsOverridden)
                 {
@@ -104,13 +104,13 @@
                             }
                         </TooltipContent>
                         <ChildContent>
-                            <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit">Modified</MudChip>
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit">Modified</MudChip>
                         </ChildContent>
                     </MudTooltip>
                 }
                 else
                 {
-                    <MudChip T="string" Variant="Variant.Text" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.Check">Default</MudChip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.Check">Default</MudChip>
                 }
             </MudTd>
             <MudTd DataLabel="Actions" Class="@GetRowClass(settingContext)">
@@ -118,12 +118,12 @@
                     @if (!settingContext.IsReadOnly)
                     {
                         <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary" OnClick="_ => ShowEditDialog(settingContext)" />
+                            <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Outlined" Color="Color.Primary" OnClick="_ => ShowEditDialog(settingContext)" />
                         </MudTooltip>
                         @if (settingContext.IsOverridden)
                         {
                             <MudTooltip Text="Revert to Default" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton Icon="@Icons.Material.Outlined.RestartAlt" Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary" OnClick="_ => HandleRevertAsync(settingContext)" />
+                                <MudIconButton Icon="@Icons.Material.Outlined.RestartAlt" Variant="Variant.Outlined" Color="Color.Primary" OnClick="_ => HandleRevertAsync(settingContext)" />
                             </MudTooltip>
                         }
                     }

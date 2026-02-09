@@ -2,9 +2,9 @@
  * JIM Colour Theme: Mid-Purple Light
  *
  * A cool lavender-white light theme paired with the same dark sidebar
- * as the mid-purple dark variant. The deep blue primary harmonises
- * with both the dark sidebar and the light content area, creating a
- * modern split-panel look.
+ * as the mid-purple dark variant. Primary, secondary, and tertiary
+ * colours are drawn from the JIM logo palette: vibrant purple, warm
+ * orange, and teal.
  *
  * We use html[lang] instead of :root so that these declarations have
  * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
@@ -12,12 +12,14 @@
  */
 
 html[lang] {
-    /* === Primary Palette === */
-    --mud-palette-primary: #3858e0;
-    --mud-palette-primary-darken: #2c48c8;
-    --mud-palette-primary-lighten: #5a75ea;
+    /* === Primary Palette (vibrant purple from logo) === */
+    --mud-palette-primary: #7B2FBE;
+    --mud-palette-primary-darken: #6A28A6;
+    --mud-palette-primary-lighten: #9B5BD4;
     --mud-palette-primary-text: #ffffffff;
-    --mud-palette-secondary: #3858e0;
+    --mud-palette-secondary: #E8750A;
+    --mud-palette-secondary-darken: #C96208;
+    --mud-palette-secondary-lighten: #F09030;
     --mud-palette-secondary-text: #ffffffff;
 
     /* === Semantic Colours (WCAG AA Accessible) === */
@@ -31,7 +33,9 @@ html[lang] {
     --mud-palette-info-text: #ffffffff;
     --mud-palette-error: #c62828;
     --mud-palette-error-text: #ffffffff;
-    --mud-palette-tertiary: #0d7d5f;
+    --mud-palette-tertiary: #00897B;
+    --mud-palette-tertiary-darken: #00766A;
+    --mud-palette-tertiary-lighten: #26A69A;
     --mud-palette-tertiary-text: #ffffffff;
 
     /* === Background & Surface (cool lavender-white content area) === */
@@ -39,9 +43,9 @@ html[lang] {
     --mud-palette-surface: #ffffffff;
     --mud-palette-background-grey: rgba(0, 0, 0, 0.024);
 
-    /* === Appbar (dark, matching sidebar) === */
-    --mud-palette-appbar-background: #1a1a32;
-    --mud-palette-appbar-text: #ffffffff;
+    /* === Inner Surface (nested containers — slightly recessed from surface) === */
+    --jim-inner-surface: #f0f0f8;
+    --jim-inner-border-color: rgba(42, 42, 64, 0.14);
 
     /* === Drawer (dark sidebar - shared with dark variant) === */
     --mud-palette-drawer-background: #252545;
@@ -55,7 +59,7 @@ html[lang] {
 
     /* === Action === */
     --mud-palette-action-default: rgba(0, 0, 0, 0.54);
-    --mud-palette-action-default-hover: rgba(56, 88, 224, 0.12);
+    --mud-palette-action-default-hover: rgba(123, 47, 190, 0.12);
     --mud-palette-action-disabled: rgba(0, 0, 0, 0.38);
     --mud-palette-action-disabled-background: rgba(0, 0, 0, 0.10);
 
@@ -68,10 +72,10 @@ html[lang] {
     /* === Table === */
     --mud-palette-table-lines: rgba(42, 42, 64, 0.14);
     --mud-palette-table-striped: rgba(0, 0, 0, 0.02);
-    --mud-palette-table-hover: rgba(56, 88, 224, 0.04);
+    --mud-palette-table-hover: rgba(123, 47, 190, 0.04);
 
     /* === JIM Custom: JSON Syntax Highlighting === */
-    --jim-json-key: #2a4dc0;
+    --jim-json-key: #7B2FBE;
     --jim-json-string: #a31515;
     --jim-json-number: #098658;
     --jim-json-boolean: #0000dd;
@@ -89,10 +93,10 @@ html[lang] {
     --jim-paper-border-color: rgba(0, 0, 0, 0.18);
 
     /* === JIM Custom: Content Links === */
-    --jim-link-color: #3858e0;
+    --jim-link-color: #7B2FBE;
 
     /* === JIM Custom: Link Hover === */
-    --jim-link-hover-color: #e0406a;
+    --jim-link-hover-color: #7B2FBE;
 
     /* === JIM Custom: Logo text === */
     --jim-logo-text-color: #ffffff;

@@ -14,7 +14,8 @@
 
 **EXCEPTIONS:**
 - Scripts (.ps1, .sh, etc.) do not require dotnet build/test
-- **UI-only changes** (Blazor pages, Razor components, CSS) require `dotnet build` but do NOT require `dotnet test` - there are no UI tests, so running tests just wastes time
+- **Static assets** (CSS, JS, images) do not require dotnet build/test - these are served directly without compilation
+- **UI-only changes** (Blazor pages, Razor components) require `dotnet build` but do NOT require `dotnet test` - there are no UI tests, so running tests just wastes time
 
 **YOU MUST WRITE UNIT TESTS FOR NEW FUNCTIONALITY:**
 
@@ -138,20 +139,18 @@ Synchronisation operations are the core of JIM. Data integrity and reliability a
 - `jim` - List all available jim aliases
 - `jim-compile` - Build entire solution (dotnet build)
 - `jim-test` - Run all tests
-- `jim-db` - Start PostgreSQL + Adminer (for local debugging)
-- `jim-db-stop` - Stop PostgreSQL + Adminer
+- `jim-db` - Start PostgreSQL (for local debugging)
+- `jim-db-stop` - Stop PostgreSQL
 - `jim-migrate` - Apply migrations
 
 **Docker Stack Management:**
-- `jim-stack` - Start Docker stack (no dev tools, production-like)
-- `jim-stack-dev` - Start Docker stack + Adminer
+- `jim-stack` - Start Docker stack
 - `jim-stack-logs` - View Docker stack logs
 - `jim-stack-down` - Stop Docker stack
 - `jim-restart` - Restart stack (re-reads .env, no rebuild)
 
 **Docker Builds (rebuild and start services):**
-- `jim-build` - Build all services + start (no dev tools)
-- `jim-build-dev` - Build all services + start + Adminer
+- `jim-build` - Build all services + start
 - `jim-build-web` - Build jim.web + start
 - `jim-build-worker` - Build jim.worker + start
 - `jim-build-scheduler` - Build jim.scheduler + start
@@ -160,8 +159,8 @@ Synchronisation operations are the core of JIM. Data integrity and reliability a
 - `jim-reset` - Reset JIM (delete database & logs volumes)
 
 **Docker (Manual Commands):**
-- `docker compose -f db.yml up -d` - Start database + Adminer (same as jim-db)
-- `docker compose -f db.yml down` - Stop database + Adminer
+- `docker compose -f db.yml up -d` - Start database (same as jim-db)
+- `docker compose -f db.yml down` - Stop database
 - `docker compose logs [service]` - View service logs
 
 **IMPORTANT - Rebuilding Containers After Code Changes:**
@@ -169,9 +168,17 @@ When running the Docker stack and you make code changes to JIM.Web, JIM.Worker, 
 - `jim-build-web` - Rebuild and restart jim.web service
 - `jim-build-worker` - Rebuild and restart jim.worker service
 - `jim-build-scheduler` - Rebuild and restart jim.scheduler service
-- `jim-build-dev` - Rebuild and restart all services + Adminer
+- `jim-build` - Rebuild and restart all services
 
 Blazor pages, API controllers, and other compiled code require container rebuilds. Simply refreshing the browser will not show changes.
+
+**IMPORTANT - Docker Dependency Pinning:**
+Production Dockerfiles pin base image digests (`@sha256:...`) and functional apt package versions for reproducible builds. When modifying Dockerfiles:
+- **NEVER** remove the `@sha256:` digest from `FROM` lines
+- **NEVER** remove version pins from functional apt packages (libldap, cifs-utils)
+- Diagnostic utilities (curl, iputils-ping) are intentionally unpinned
+- If updating a base image digest, check and update pinned apt versions to match (see `docs/DEVELOPER_GUIDE.md` "Dependency Pinning" section)
+- Dependabot manages digest updates via weekly PRs - these require manual review, not auto-merge
 
 ## Key Project Locations
 
@@ -277,6 +284,16 @@ When creating ASCII diagrams in documentation or code comments, use only reliabl
 - Methods: `GetObjectAsync`, `CreateMetaverseObjectAsync`
 - Classes: Full descriptive names (avoid abbreviations)
 - Properties: PascalCase with nullable reference types enabled
+
+**UI Element Sizing:**
+- ALWAYS use normal/default sizes for ALL UI elements when adding new components
+- Text: Use `Typo.body1` (default readable size)
+- Chips: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
+- Buttons: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
+- Icons: Use `Size.Medium` or omit Size parameter entirely (defaults to Medium)
+- Other MudBlazor components: Omit Size parameter to use default sizing
+- Only use smaller sizes (`Typo.body2`, `Size.Small`, etc.) when explicitly requested by the user
+- Users prefer readable, appropriately-sized UI elements by default
 
 **Common Patterns:**
 ```csharp
@@ -425,6 +442,46 @@ The SQL script at `test/data/seed-change-history.sql` generates realistic change
   - "enterprise identity platforms" for general comparisons
 - Exception: Generic industry terms and standards (SCIM, LDAP, OIDC, etc.) are acceptable
 
+## Third-Party Dependency Governance
+
+**IMPORTANT: JIM maintains strict supply chain security standards for SBOM compliance and customer assurance.**
+
+**Before Adding ANY New NuGet Package or Third-Party Dependency:**
+
+1. **Notify the user first** - State the need for the dependency and that you will conduct a suitability analysis
+2. **Research and document** the following for each candidate package:
+   - **License**: Must be permissive (MIT, Apache 2.0, BSD) and compatible with commercial use
+   - **Author/Maintainer**: Identifiable individuals or organisations with verifiable professional presence
+   - **Provenance**: Organisation location, business registration (if applicable), corporate affiliation
+   - **Maintenance Status**: Recent commits, responsiveness to issues, release frequency
+   - **Community Trust**: Download counts, GitHub stars, usage by other reputable projects
+   - **Security**: Known vulnerabilities, security advisory history
+
+3. **Present findings to the user** with:
+   - A comparison table if multiple alternatives exist
+   - Clear recommendation with rationale
+   - Any concerns or trade-offs
+
+4. **Await user approval** before adding the dependency
+
+**Preferred Package Sources:**
+- Microsoft-maintained packages (highest preference)
+- Packages from established Western technology companies with clear corporate backing
+- Well-maintained open-source projects with identifiable maintainers in NATO-aligned countries
+- .NET Foundation projects
+
+**Package Selection Criteria:**
+- Prefer packages with corporate backing or foundation governance
+- Prefer packages with multiple maintainers (bus factor > 1)
+- Prefer packages with clear security policies and vulnerability disclosure processes
+- Avoid packages with unclear ownership or governance
+- Avoid packages that haven't been updated in >12 months (unless stable/complete)
+
+**Documentation Requirements:**
+- All third-party dependencies must be justifiable for SBOM audits
+- Keep a mental note of why each dependency was chosen over alternatives
+- If a dependency is replaced, document the reason in the commit message
+
 ## Feature Planning
 
 **IMPORTANT: When creating plans for new features or significant changes:**
@@ -487,6 +544,49 @@ JIM has context documents for use with AI assistant platforms (Claude Desktop, C
 3. JIM.Models (Domain)
 4. JIM.Data, JIM.PostgresData (Data Access)
 
+**⚠️ CRITICAL: Respect N-Tier Architecture - NEVER Bypass Layers:**
+
+JIM follows strict n-tier architecture. Each layer may ONLY call the layer directly below it:
+
+```
++------------------+
+|     JIM.Web      |  Blazor pages, API controllers
++--------+---------+
+         | ONLY calls JimApplication (never Repository directly)
+         v
++------------------+
+| JIM.Application  |  Business logic, orchestration (Servers/)
++--------+---------+
+         | ONLY calls Repository interfaces
+         v
++------------------+
+|    JIM.Data      |  Repository interfaces
++------------------+
+         |
+         v
++------------------+
+| JIM.PostgresData |  EF Core implementations
++------------------+
+```
+
+**Rules:**
+- **JIM.Web** (UI/API) must ONLY access data through `JimApplication` facade (e.g., `Jim.Metaverse`, `Jim.Scheduler`, `Jim.ConnectedSystems`)
+- **NEVER** call `Jim.Repository.*` directly from Blazor pages or API controllers
+- If a method doesn't exist on the Application layer, ADD IT there - don't bypass to the repository
+- This separation ensures business logic stays in one place and can be tested independently
+
+**Bad - Bypassing layers:**
+```csharp
+// In a Blazor page - WRONG!
+var schedule = await Jim.Repository.Scheduling.GetScheduleAsync(id);
+```
+
+**Good - Respecting layers:**
+```csharp
+// In a Blazor page - CORRECT!
+var schedule = await Jim.Scheduler.GetScheduleAsync(id);
+```
+
 **Access Pattern:**
 ```csharp
 // Access via JimApplication facade
@@ -527,9 +627,9 @@ var systems = await jim.ConnectedSystems.GetAllAsync();
 4. Services: Web + API (https://localhost:7000), Swagger at `/api/swagger`
 
 **Workflow 2 - Full Docker Stack:**
-1. Start all services: `jim-stack` (or `jim-stack-dev` for Adminer)
+1. Start all services: `jim-stack`
 2. Access containerized services
-3. Services: Web + API (http://localhost:5200), Swagger at `/api/swagger`, Adminer at http://localhost:8080 (if using jim-stack-dev)
+3. Services: Web + API (http://localhost:5200), Swagger at `/api/swagger`
 
 **Use Workflow 1** for active development and debugging.
 **Use Workflow 2** for integration testing or production-like environment.

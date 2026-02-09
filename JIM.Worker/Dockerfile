@@ -3,7 +3,7 @@
 
 ARG VERSION=dev
 
-FROM mcr.microsoft.com/dotnet/runtime:9.0 AS base
+FROM mcr.microsoft.com/dotnet/runtime:9.0@sha256:9916fb650c83b13231e4ec91d10e76a520209a0caeeeb46c507a9d98db8612a2 AS base
 
 LABEL org.opencontainers.image.title="JIM Worker"
 LABEL org.opencontainers.image.description="JIM (Junctional Identity Manager) - Background worker service"
@@ -13,12 +13,15 @@ LABEL org.opencontainers.image.source="https://github.com/TetronIO/JIM"
 LABEL org.opencontainers.image.licenses="See https://tetron.io/jim/#licensing"
 WORKDIR /app
 
+# Pin apt package versions for reproducible builds
+# Update these versions when bumping base image digests
 RUN apt-get update \
-    && apt-get install -y libldap-common \
-    && apt-get install -y libldap-2.5-0 \
+    && apt-get install -y --no-install-recommends \
+        libldap-common=2.5.13+dfsg-5 \
+        libldap-2.5-0=2.5.13+dfsg-5 \
     && rm -rf /var/lib/apt/lists/*
 
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:9.0@sha256:a574e6212c98ccf9cf2c6588201b1c71d93094f6f26c21375f75aa909a9e88f0 AS build
 WORKDIR /src
 COPY ["JIM.Worker/JIM.Worker.csproj", "JIM.Worker/"]
 COPY ["JIM.Models/JIM.Models.csproj", "JIM.Models/"]

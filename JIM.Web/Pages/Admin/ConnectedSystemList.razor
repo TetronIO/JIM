@@ -17,14 +17,14 @@
     }
 </MudText>
 
-<MudPaper Elevation="0" Class="mt-2" Outlined="true">
-    <MudToolBar>
-        <MudButton Href="/admin/connected-systems" Color="Color.Primary" DropShadow="false" Disabled="true">Connected Systems</MudButton>
-        <MudButton Href="/admin/connected-systems/connectors" Color="Color.Primary" DropShadow="false">Connectors</MudButton>
-        <MudSpacer />
-        <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Href="/admin/connected-systems/new" Color="Color.Primary" DropShadow="false">Create Connected System</MudButton>
-    </MudToolBar>
-</MudPaper>
+<div class="d-flex align-center mt-3">
+    <MudButtonGroup OverrideStyles="false">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary">Connected Systems</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Href="/admin/connected-systems/connectors">Connectors</MudButton>
+    </MudButtonGroup>
+    <MudSpacer />
+    <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Href="/admin/connected-systems/new" Color="Color.Primary" DropShadow="false">Create Connected System</MudButton>
+</div>
 
 <MudTable Items="@_connectedSystemHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<ConnectedSystemHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
     <ToolBarContent>
@@ -34,9 +34,7 @@
     <HeaderContent>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.Description ?? string.Empty)"><MudText Typo="Typo.button">Description</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.ObjectCount)"><MudText Typo="Typo.button">Objects</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.ConnectorsCount)"><MudText Typo="Typo.button">Connected Objects (%)</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.PendingExportObjectsCount)"><MudText Typo="Typo.button">Pending Exports (%)</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudText Typo="Typo.button">Stats</MudText></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.ConnectorName)"><MudText Typo="Typo.button">Connector</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
         <MudTh Style="text-align: center"><MudText Typo="Typo.button">Action</MudText></MudTh>
@@ -44,9 +42,34 @@
     <RowTemplate>
         <MudTd DataLabel="Name"><MudLink Href="@(Utilities.GetConnectedSystemHref(context))">@context.Name</MudLink></MudTd>
         <MudTd DataLabel="Description">@context.Description</MudTd>
-        <MudTd DataLabel="Objects">@context.ObjectCount.ToString("N0")</MudTd>
-        <MudTd DataLabel="Connected Objects (%)">@context.ConnectorsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.ConnectorsCount))</MudTd>
-        <MudTd DataLabel="Pending Exports (%)">@context.PendingExportObjectsCount.ToString("N0") @((MarkupString)GetPercentageStatement(context.ObjectCount, context.PendingExportObjectsCount))</MudTd>
+        <MudTd DataLabel="Stats">
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <MudTooltip Text="Objects" Arrow="true" Placement="Placement.Top">
+                    <MudChip T="string" Color="Color.Default" Variant="Variant.Text"
+                             Icon="@Icons.Material.Filled.Storage" Class="px-2">
+                        @context.ObjectCount.ToString("N0")
+                    </MudChip>
+                </MudTooltip>
+                @if (context.ConnectorsCount > 0)
+                {
+                    <MudTooltip Text="@($"Connected Objects ({GetPercentage(context.ObjectCount, context.ConnectorsCount)}%)")" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Color="Color.Success" Variant="Variant.Text"
+                                 Icon="@Icons.Material.Filled.Link" Class="px-2">
+                            @context.ConnectorsCount.ToString("N0")
+                        </MudChip>
+                    </MudTooltip>
+                }
+                @if (context.PendingExportObjectsCount > 0)
+                {
+                    <MudTooltip Text="@($"Pending Exports ({GetPercentage(context.ObjectCount, context.PendingExportObjectsCount)}%)")" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
+                                 Icon="@Icons.Material.Filled.Upload" Class="px-2">
+                            @context.PendingExportObjectsCount.ToString("N0")
+                        </MudChip>
+                    </MudTooltip>
+                }
+            </MudStack>
+        </MudTd>
         <MudTd DataLabel="Connector">@context.ConnectorName</MudTd>
         <MudTd DataLabel="Created">
             <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -58,7 +81,8 @@
                     <MudIconButton Href="@Utilities.GetConnectedSystemObjectsHref(context)"
                                    Icon="@Icons.Material.Outlined.List"
                                    Variant="Variant.Outlined"
-                                   Size="Size.Small" />
+                                   Color="Color.Primary"
+                                   />
                 </MudTooltip>
             </MudTd>
     </RowTemplate>
@@ -82,14 +106,12 @@
         _connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
     }
 
-    private string GetPercentageStatement(int bigNumber, int smallNumber)
+    private static int GetPercentage(int total, int part)
     {
-        if (bigNumber == 0 || smallNumber == 0)
-            return string.Empty;
+        if (total == 0 || part == 0)
+            return 0;
 
-        // avoid integer division truncation by using floating point arithmetic
-        var percentage = (int)Math.Round((double)smallNumber / bigNumber * 100);
-        return $"({percentage}%)";
+        return (int)Math.Round((double)part / total * 100);
     }
 
     private bool FilterFunc1(ConnectedSystemHeader element) => FilterFunc(element, _searchString);

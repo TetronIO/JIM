@@ -3,6 +3,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.DataGeneration;
 using JIM.Models.Logic;
+using JIM.Models.Scheduling;
 using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
@@ -58,6 +59,9 @@ public class JimDbContext : DbContext
     public virtual DbSet<PredefinedSearchCriteria> PredefinedSearchCriteria { get; set; } = null!;
     public virtual DbSet<PredefinedSearchCriteriaGroup> PredefinedSearchCriteriaGroups { get; set; } = null!;
     public virtual DbSet<Role> Roles { get; set; } = null!;
+    public virtual DbSet<Schedule> Schedules { get; set; } = null!;
+    public virtual DbSet<ScheduleStep> ScheduleSteps { get; set; } = null!;
+    public virtual DbSet<ScheduleExecution> ScheduleExecutions { get; set; } = null!;
     public virtual DbSet<ApiKey> ApiKeys { get; set; } = null!;
     public virtual DbSet<ServiceSettings> ServiceSettings { get; set; } = null!;
     public virtual DbSet<ServiceSetting> ServiceSettingItems { get; set; } = null!;
@@ -330,5 +334,56 @@ public class JimDbContext : DbContext
 
         // Note: Indexes on foreign key columns (ConnectedSystemId, SourceCsoId) are automatically created by Npgsql,
         // so we don't need explicit HasIndex() definitions for those.
+
+        // ---------------------------------------------------------------------------------------------------------
+        // Scheduling entities
+        // ---------------------------------------------------------------------------------------------------------
+
+        // Schedule -> ScheduleStep relationship (cascade delete steps when schedule is deleted)
+        modelBuilder.Entity<Schedule>()
+            .HasMany(s => s.Steps)
+            .WithOne(st => st.Schedule)
+            .HasForeignKey(st => st.ScheduleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Schedule -> ScheduleExecution relationship (cascade delete executions when schedule is deleted)
+        modelBuilder.Entity<Schedule>()
+            .HasMany(s => s.Executions)
+            .WithOne(e => e.Schedule)
+            .HasForeignKey(e => e.ScheduleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // WorkerTask -> ScheduleExecution relationship (set null when execution is deleted)
+        modelBuilder.Entity<WorkerTask>()
+            .HasOne(wt => wt.ScheduleExecution)
+            .WithMany()
+            .HasForeignKey(wt => wt.ScheduleExecutionId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Index for schedule name uniqueness (optional but useful)
+        modelBuilder.Entity<Schedule>()
+            .HasIndex(s => s.Name)
+            .IsUnique()
+            .HasDatabaseName("IX_Schedules_Name");
+
+        // Index for finding due schedules efficiently
+        modelBuilder.Entity<Schedule>()
+            .HasIndex(s => new { s.IsEnabled, s.NextRunTime })
+            .HasDatabaseName("IX_Schedules_IsEnabled_NextRunTime");
+
+        // Index for schedule step ordering
+        modelBuilder.Entity<ScheduleStep>()
+            .HasIndex(st => new { st.ScheduleId, st.StepIndex })
+            .HasDatabaseName("IX_ScheduleSteps_ScheduleId_StepIndex");
+
+        // Index for active executions lookup
+        modelBuilder.Entity<ScheduleExecution>()
+            .HasIndex(se => new { se.Status, se.QueuedAt })
+            .HasDatabaseName("IX_ScheduleExecutions_Status_QueuedAt");
+
+        // Index for worker tasks by schedule execution
+        modelBuilder.Entity<WorkerTask>()
+            .HasIndex(wt => wt.ScheduleExecutionId)
+            .HasDatabaseName("IX_WorkerTasks_ScheduleExecutionId");
     }
 }

@@ -34,6 +34,27 @@ a.mud-link.mud-primary-text:hover {
     transition: color 0.25s ease !important;
 }
 
+/* Text-variant chips: increase background opacity for better visibility on dark themes.
+   MudBlazor uses ~5% opacity by default which is too subtle on purple backgrounds. */
+.mud-chip.mud-chip-text.mud-chip-color-primary {
+    background-color: color-mix(in srgb, var(--mud-palette-primary) 15%, transparent) !important;
+}
+.mud-chip.mud-chip-text.mud-chip-color-secondary {
+    background-color: color-mix(in srgb, var(--mud-palette-secondary) 15%, transparent) !important;
+}
+.mud-chip.mud-chip-text.mud-chip-color-info {
+    background-color: color-mix(in srgb, var(--mud-palette-info) 15%, transparent) !important;
+}
+.mud-chip.mud-chip-text.mud-chip-color-success {
+    background-color: color-mix(in srgb, var(--mud-palette-success) 15%, transparent) !important;
+}
+.mud-chip.mud-chip-text.mud-chip-color-warning {
+    background-color: color-mix(in srgb, var(--mud-palette-warning) 15%, transparent) !important;
+}
+.mud-chip.mud-chip-text.mud-chip-color-error {
+    background-color: color-mix(in srgb, var(--mud-palette-error) 15%, transparent) !important;
+}
+
 .mud-main-content {
     padding-top: 0;
 }
@@ -73,7 +94,7 @@ a.mud-link.mud-primary-text:hover {
     font-size: 1rem;
 }
 
-/* Consistent 8px border radius for container elements (papers, tables, alerts).
+/* Consistent 8px border radius for container elements (papers, tables, alerts, expansion panels).
    Applied directly rather than via --mud-default-borderradius to avoid affecting
    buttons, inputs, and other interactive controls that should keep their default radius. */
 .mud-paper,
@@ -94,6 +115,21 @@ html[lang] .mud-paper,
 html[lang] .mud-paper-outlined,
 html[lang] .mud-table-outlined {
     border: 1px solid var(--jim-paper-border-color, transparent) !important;
+}
+
+/* JIM styled expansion panels - use .jim-expansion-panel class on MudExpansionPanels */
+.jim-expansion-panel {
+    border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
+    border-radius: 8px !important;
+    overflow: hidden;
+}
+
+.jim-expansion-panel .mud-expand-panel {
+    box-shadow: none !important;
+}
+
+.jim-expansion-panel .mud-expand-panel::before {
+    box-shadow: none !important;
 }
 
 /* Nested containers: tables and tab panels inside papers use a deeper surface colour
@@ -130,6 +166,25 @@ html[lang] .mud-paper .mud-card-outlined {
 /* Timeline arrow triangle: fill with inner surface colour so it matches the card background */
 html[lang] .mud-paper .mud-card::after {
     border-right-color: var(--jim-inner-surface, var(--mud-palette-surface)) !important;
+}
+
+/* Match the tabs container radius to our 8px standard and clip child content so
+   the first/last tab's active highlight doesn't overflow the rounded corners. */
+.mud-tabs-rounded {
+    border-radius: 8px !important;
+}
+
+/* Ensure the rounded outlined tabbar uses our 8px radius on all corners and clips
+   child content so tab highlights respect the rounded shape. */
+html[lang] .mud-tabs-tabbar.mud-tabs-rounded.mud-paper-outlined {
+    border-radius: 8px !important;
+    overflow: hidden;
+}
+
+html[lang] .mud-tabs-tabbar.mud-tabs-rounded .mud-tabs-tabbar-inner,
+html[lang] .mud-tabs-tabbar.mud-tabs-rounded .mud-tabs-tabbar-content,
+html[lang] .mud-tabs-tabbar.mud-tabs-rounded .mud-tabs-tabbar-wrapper {
+    border-radius: inherit;
 }
 
 /* Strengthen tab bar separator line to match container borders */
@@ -339,21 +394,6 @@ html[lang] .jim-paper-danger-zone {
     /* Very subtle red tint in dark mode */
 }
 
-/* Info panel styling for pending exports and informational content */
-.jim-paper-info {
-    border: 2px solid #2196f3;
-    /* MudBlazor Info blue */
-    background-color: rgba(21, 101, 192, 0.09);
-    /* Blue with low opacity for light mode */
-}
-
-/* Dark mode adjustments for info panel */
-.mud-theme-dark .jim-paper-info {
-    background-color: rgba(33, 150, 243, 0.15);
-    /* Slightly brighter blue for dark mode visibility */
-}
-
-
 /* Improve contrast for form labels and helper text (WCAG AA compliance) */
 
 /* Input labels - ensure high contrast for readability */
@@ -387,6 +427,26 @@ html[lang] .jim-paper-danger-zone {
 /* Dialog actions padding - ensure consistent padding with dialog content */
 .mud-dialog-actions {
     padding: 24px !important;
+}
+
+/* Dialog/Modal background - use lighter surface colour where defined for better elevation */
+html[lang] .mud-dialog {
+    background-color: var(--jim-dialog-surface, var(--mud-palette-surface)) !important;
+    border-radius: 8px !important;
+}
+
+/* Dialog inner elements - slightly lighter backgrounds for nested content */
+html[lang] .mud-dialog .mud-tabs-tabbar {
+    background-color: var(--jim-dialog-inner-surface, transparent) !important;
+}
+
+html[lang] .mud-dialog .jim-step-item-in-block {
+    background-color: var(--jim-dialog-inner-surface, transparent) !important;
+}
+
+/* Outlined papers inside dialogs use lighter inner surface */
+html[lang] .mud-dialog .mud-paper-outlined {
+    background-color: var(--jim-dialog-inner-surface, transparent) !important;
 }
 
 /* Remove drop shadows from all MudBlazor buttons */
@@ -482,6 +542,54 @@ html[lang] .jim-paper-danger-zone {
     box-shadow: none !important;
 }
 
+/* Activity detail slide-out panel (Operations History) */
+.jim-activity-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 500px;
+    max-width: 90vw;
+    height: 100vh;
+    background: var(--mud-palette-surface);
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.2);
+    transform: translateX(100%);
+    transition: transform 0.25s ease-in-out;
+    z-index: 1300;
+    overflow: hidden;
+}
+
+.jim-activity-panel-open {
+    transform: translateX(0);
+}
+
+/* Activity panel expansion panels - remove extra margins and shadows */
+.jim-activity-panel .mud-expand-panels {
+    margin: 0 !important;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 8px;
+}
+
+.jim-activity-panel .mud-expand-panel {
+    margin: 0 !important;
+    box-shadow: none !important;
+}
+
+.jim-activity-panel .mud-expand-panel::before {
+    box-shadow: none !important;
+}
+
+/* Remove default gutters from expansion panel content */
+.jim-activity-panel .mud-expand-panel-content.mud-expand-panel-gutters {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+}
+
+/* Remove shadow from tables inside the activity panel */
+.jim-activity-panel .mud-table,
+.jim-activity-panel .mud-simple-table {
+    box-shadow: none !important;
+}
+
 /* JSON syntax highlighting colours are defined in css/themes/ files */
 
 .jim-json-syntax {
@@ -528,7 +636,7 @@ html[lang] .jim-paper-danger-zone {
 }
 
 .jim-attribute-table thead tr th {
-    background-color: var(--mud-palette-background-grey);
+    background-color: var(--jim-inner-surface, var(--mud-palette-background-grey));
     font-weight: 500;
     font-size: 0.875rem;
     padding: 12px 16px !important;
@@ -559,7 +667,7 @@ html[lang] .jim-paper-danger-zone {
 }
 
 .jim-attr-name {
-    background-color: var(--mud-palette-background);
+    background-color: var(--jim-attr-name-bg, var(--mud-palette-background-grey));
     white-space: nowrap;
 }
 
@@ -732,3 +840,121 @@ html[lang] .jim-paper-danger-zone {
 .jim-audit-chip-label {
     flex-shrink: 0;
 }
+
+/* Schedule Step Drag and Drop Styles */
+.jim-step-drop-zone {
+    min-height: 50px;
+    transition: background-color 0.2s ease;
+}
+
+.jim-step-drop-zone.mud-drop-zone-drag {
+    background-color: var(--mud-palette-action-default-hover);
+    border-radius: 4px;
+}
+
+/* Drop indicator line - shows where item will be placed */
+.jim-step-drop-zone .mud-drop-item-preview {
+    position: relative;
+    height: 4px;
+    background-color: var(--mud-palette-primary);
+    border-radius: 2px;
+    margin: 4px 0;
+    opacity: 0.8;
+}
+
+/* Step item being dragged */
+.jim-step-item {
+    transition: transform 0.1s ease, box-shadow 0.2s ease;
+    cursor: grab;
+}
+
+.jim-step-item:active {
+    cursor: grabbing;
+}
+
+.jim-step-item.mud-drop-item-dragging {
+    opacity: 0.6;
+    transform: scale(0.98);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Drag handle visual feedback */
+.jim-drag-handle {
+    cursor: grab;
+    opacity: 0.5;
+    transition: opacity 0.2s ease;
+}
+
+.jim-drag-handle:hover {
+    opacity: 1;
+}
+
+.jim-step-item:active .jim-drag-handle {
+    cursor: grabbing;
+}
+
+/* Schedule Step Block Styles */
+.jim-step-block {
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.jim-step-block-header {
+    background-color: var(--mud-palette-background-grey);
+    padding: 4px 12px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.jim-step-block-content {
+    padding: 0;
+}
+
+.jim-step-item-in-block {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+    transition: background-color 0.15s ease;
+}
+
+.jim-step-item-in-block:last-child {
+    border-bottom: none;
+}
+
+.jim-step-item-in-block:hover {
+    background-color: var(--mud-palette-action-default-hover);
+}
+
+/* Subtle text emphasis - semi-bold for visual hierarchy without colour change */
+.jim-text-emphasis {
+    font-weight: 500;
+}
+
+/* Run profile name in schedule step display - uses teal/cyan for contrast */
+.jim-step-run-profile {
+    color: var(--jim-json-boolean);
+}
+
+/* Interval configuration controls - constrain widths */
+/* Target both the outer container and inner MudBlazor elements */
+.jim-interval-number,
+.jim-interval-number.mud-input-control {
+    width: 80px !important;
+    min-width: 80px !important;
+    max-width: 80px !important;
+    flex: 0 0 80px !important;
+}
+
+.jim-interval-unit,
+.jim-interval-unit.mud-select {
+    width: 120px !important;
+    min-width: 120px !important;
+    max-width: 120px !important;
+    flex: 0 0 120px !important;
+}
+
+/* Also target the inner input container */
+.jim-interval-unit .mud-input-control {
+    width: 100% !important;
+    min-width: unset !important;
+}
+

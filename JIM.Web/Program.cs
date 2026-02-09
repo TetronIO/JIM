@@ -99,7 +99,7 @@ try
     builder.Services.AddExpressionEvaluation();
 
     // Register UI theme settings from environment variable
-    var themeName = Environment.GetEnvironmentVariable(Constants.Config.Theme) ?? "refined";
+    var themeName = Environment.GetEnvironmentVariable(Constants.Config.Theme) ?? "purple";
     builder.Services.AddSingleton(new ThemeSettings
     {
         LightThemePath = $"css/themes/{themeName}-light.css",
@@ -467,6 +467,7 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
 
     loggerConfiguration.MinimumLevel.Override("Microsoft", LogEventLevel.Information);
     loggerConfiguration.MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning);
+    loggerConfiguration.MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning);
     loggerConfiguration.Enrich.FromLogContext();
     loggerConfiguration.WriteTo.File(
         formatter: new RenderedCompactJsonFormatter(),

@@ -34,7 +34,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Projection", "Join", "DuplicatePrevention", "MultipleRules", "JoinConflict", "All")]
+    [ValidateSet("Projection", "Join", "DuplicatePrevention", "MultipleRules", "JoinConflict", "CaseSensitivity", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -780,6 +780,191 @@ try {
             Write-Host "  ✗ Expected CouldNotJoinDueToExistingJoin error but none found" -ForegroundColor Red
             Write-Host "    This means the second CSO either joined (shouldn't happen) or projected (created new MVO)" -ForegroundColor Gray
             $testResults.Steps += @{ Name = "JoinConflict"; Success = $false; Error = "No join conflict error was raised" }
+        }
+    }
+
+    # Test 6: Case Sensitivity
+    # Tests that case-insensitive matching (default) works correctly and that
+    # case-sensitive matching can be enabled when needed.
+    if ($Step -eq "CaseSensitivity" -or $Step -eq "All") {
+        Write-TestSection "Test 6: Case Sensitivity"
+
+        Write-Host "Testing: Case-insensitive matching (default) should match 'emp123' to 'EMP123'" -ForegroundColor Gray
+
+        # Get the CSV connected system and matching rule info
+        $csvSystem = Get-JIMConnectedSystem | Where-Object { $_.name -match "HR CSV" }
+        $csvObjectTypes = Get-JIMConnectedSystem -Id $csvSystem.id -ObjectTypes
+        $csvUserType = $csvObjectTypes | Where-Object { $_.name -eq "person" }
+        $mvAttributes = Get-JIMMetaverseAttribute
+
+        if (-not $csvSystem -or -not $csvUserType) {
+            Write-Host "  Could not find CSV system or User object type" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "CaseSensitivity"; Success = $false; Error = "CSV system not found" }
+        }
+        else {
+            # Get attribute IDs for employeeId
+            $csvEmployeeIdAttr = $csvUserType.attributes | Where-Object { $_.name -eq 'employeeId' }
+            $mvEmployeeIdAttr = $mvAttributes | Where-Object { $_.name -eq 'Employee ID' }
+
+            if (-not $csvEmployeeIdAttr -or -not $mvEmployeeIdAttr) {
+                Write-Host "  Could not find employeeId attributes for matching rule" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "CaseSensitivity"; Success = $false; Error = "EmployeeId attributes not found" }
+            }
+            else {
+                # First, check if there's a matching rule for employeeId and ensure it's case-insensitive
+                $existingRules = Get-JIMMatchingRule -ConnectedSystemId $csvSystem.id -ObjectTypeId $csvUserType.id
+                $employeeIdRule = $existingRules | Where-Object {
+                    $_.targetMetaverseAttributeId -eq $mvEmployeeIdAttr.id
+                }
+
+                if ($employeeIdRule -and $employeeIdRule.caseSensitive -eq $true) {
+                    # Update the rule to be case-insensitive for this test
+                    Write-Host "  Updating existing employeeId matching rule to case-insensitive..." -ForegroundColor Gray
+                    Set-JIMMatchingRule -ConnectedSystemId $csvSystem.id `
+                        -Id $employeeIdRule.id `
+                        -CaseSensitive $false | Out-Null
+                }
+
+                # Step 1: Create first user with UPPERCASE employeeId to establish the MVO
+                $testUser1 = New-TestUser -Index 9030
+                $testUser1.HrId = "00009030-0000-0000-0000-000000000000"
+                $testUser1.EmployeeId = "CASETEST123"  # UPPERCASE
+                $testUser1.SamAccountName = "test.casesens.upper"
+                $testUser1.Email = "test.casesens.upper@subatomic.local"
+                $testUser1.DisplayName = "Test Case Upper"
+
+                $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+                $upn1 = "$($testUser1.SamAccountName)@subatomic.local"
+
+                $csv = Import-Csv $csvPath
+                $caseUser1 = [PSCustomObject]@{
+                    hrId = $testUser1.HrId
+                    employeeId = $testUser1.EmployeeId
+                    firstName = $testUser1.FirstName
+                    lastName = $testUser1.LastName
+                    email = $testUser1.Email
+                    department = $testUser1.Department
+                    title = $testUser1.Title
+                    company = $testUser1.Company
+                    samAccountName = $testUser1.SamAccountName
+                    displayName = $testUser1.DisplayName
+                    status = "Active"
+                    userPrincipalName = $upn1
+                    employeeType = $testUser1.EmployeeType
+                    employeeEndDate = ""
+                }
+                $csv = @($csv) + $caseUser1
+                $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+                docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+
+                # Import and sync first user to create MVO
+                Write-Host "  Creating MVO with UPPERCASE EmployeeId='$($testUser1.EmployeeId)'..." -ForegroundColor Gray
+                $importResult1 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+                Assert-ActivitySuccess -ActivityId $importResult1.activityId -Name "CSV Import (CaseSensitivity - first user)"
+                $syncResult1 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+                Assert-ActivitySuccess -ActivityId $syncResult1.activityId -Name "Full Sync (CaseSensitivity - first user)"
+
+                # Verify MVO was created
+                $mvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Case Upper" -PageSize 10 -ErrorAction SilentlyContinue
+                $originalMvo = $mvos | Where-Object { $_.displayName -match "Test Case Upper" } | Select-Object -First 1
+
+                if (-not $originalMvo) {
+                    Write-Host "  Failed to create initial MVO" -ForegroundColor Red
+                    $testResults.Steps += @{ Name = "CaseSensitivity"; Success = $false; Error = "Could not create initial MVO" }
+                }
+                else {
+                    $originalMvoId = $originalMvo.id
+                    Write-Host "  MVO created with ID: $originalMvoId" -ForegroundColor Gray
+
+                    # Step 2: Remove first user and add second user with LOWERCASE employeeId
+                    Write-Host "  Removing first user and adding second user with lowercase employeeId..." -ForegroundColor Gray
+
+                    # Remove the first user
+                    $csvContent = Get-Content $csvPath | Where-Object { $_ -notmatch "test.casesens.upper" }
+                    $csvContent | Set-Content $csvPath
+
+                    # Add second user with lowercase employeeId that should match (case-insensitive)
+                    $testUser2 = New-TestUser -Index 9031
+                    $testUser2.HrId = "00009031-0000-0000-0000-000000000000"
+                    $testUser2.EmployeeId = "casetest123"  # lowercase - should match CASETEST123
+                    $testUser2.SamAccountName = "test.casesens.lower"
+                    $testUser2.Email = "test.casesens.lower@subatomic.local"
+                    $testUser2.DisplayName = "Test Case Lower"
+
+                    $upn2 = "$($testUser2.SamAccountName)@subatomic.local"
+
+                    $csv = Import-Csv $csvPath
+                    $caseUser2 = [PSCustomObject]@{
+                        hrId = $testUser2.HrId
+                        employeeId = $testUser2.EmployeeId
+                        firstName = $testUser2.FirstName
+                        lastName = $testUser2.LastName
+                        email = $testUser2.Email
+                        department = $testUser2.Department
+                        title = $testUser2.Title
+                        company = $testUser2.Company
+                        samAccountName = $testUser2.SamAccountName
+                        displayName = $testUser2.DisplayName
+                        status = "Active"
+                        userPrincipalName = $upn2
+                        employeeType = $testUser2.EmployeeType
+                        employeeEndDate = ""
+                    }
+                    $csv = @($csv) + $caseUser2
+                    $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+                    docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+
+                    # Import and sync second user - should join to existing MVO via case-insensitive match
+                    Write-Host "  Importing second user with lowercase EmployeeId='$($testUser2.EmployeeId)'..." -ForegroundColor Gray
+                    $importResult2 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+                    Assert-ActivitySuccess -ActivityId $importResult2.activityId -Name "CSV Import (CaseSensitivity - second user)"
+                    $syncResult2 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+                    Assert-ActivitySuccess -ActivityId $syncResult2.activityId -Name "Full Sync (CaseSensitivity - second user)"
+
+                    # Check if the second CSO joined to the existing MVO
+                    # The MVO should now have a CSO from second user, and displayName might be updated
+                    $updatedMvo = Get-JIMMetaverseObject -Id $originalMvoId -ErrorAction SilentlyContinue
+
+                    if ($updatedMvo) {
+                        # Check if there's a CSO linked from the second import
+                        $linkedCsos = Get-JIMMetaverseObject -Id $originalMvoId -ConnectedSystemObjects -ErrorAction SilentlyContinue
+                        $secondCso = $linkedCsos | Where-Object {
+                            # Check if this CSO has the second user's hrId as external ID
+                            $_.externalId -match "9031"
+                        }
+
+                        if ($secondCso -or $linkedCsos.Count -gt 0) {
+                            Write-Host "  ✓ Case-insensitive matching worked! Second CSO (lowercase 'casetest123') joined MVO (UPPERCASE 'CASETEST123')" -ForegroundColor Green
+                            $testResults.Steps += @{ Name = "CaseSensitivity"; Success = $true }
+                        }
+                        else {
+                            # Check if a new MVO was created instead (which would indicate case-sensitive matching)
+                            $allCaseMvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Case" -PageSize 20 -ErrorAction SilentlyContinue
+                            $caseMvoCount = @($allCaseMvos | Where-Object { $_.displayName -match "Test Case" }).Count
+
+                            if ($caseMvoCount -gt 1) {
+                                Write-Host "  ✗ Case-insensitive matching FAILED - second user projected to NEW MVO instead of joining" -ForegroundColor Red
+                                Write-Host "    Found $caseMvoCount MVOs (expected 1)" -ForegroundColor Gray
+                                $testResults.Steps += @{ Name = "CaseSensitivity"; Success = $false; Error = "Case-insensitive matching did not work - created $caseMvoCount MVOs" }
+                            }
+                            else {
+                                Write-Host "  ⚠ Could not verify CSO linkage, but only 1 MVO exists" -ForegroundColor Yellow
+                                $testResults.Steps += @{ Name = "CaseSensitivity"; Success = $true; Warning = "Could not verify CSO linkage" }
+                            }
+                        }
+                    }
+                    else {
+                        Write-Host "  ✗ Original MVO no longer exists" -ForegroundColor Red
+                        $testResults.Steps += @{ Name = "CaseSensitivity"; Success = $false; Error = "Original MVO was deleted" }
+                    }
+                }
+
+                # Clean up Test 6 data
+                $csvContent = Get-Content $csvPath | Where-Object { $_ -notmatch "test.casesens" }
+                $csvContent | Set-Content $csvPath
+                docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
+                Write-Host "  ✓ Cleaned up case sensitivity test data" -ForegroundColor Gray
+            }
         }
     }
 

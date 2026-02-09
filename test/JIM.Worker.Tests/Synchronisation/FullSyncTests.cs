@@ -477,6 +477,7 @@ public class FullSyncTests
         {
             Id = 1,
             SyncRule = importSyncRule,
+            CaseSensitive = true, // Required for in-memory test database (EF.Functions.ILike not supported)
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q=>q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
@@ -489,7 +490,7 @@ public class FullSyncTests
                 Attributes.Single(q=>q.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID)
         });
         importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
-     
+
         // start the test
         var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
         Assert.That(connectedSystem, Is.Not.Null, "Expected to retrieve a Connected System.");
@@ -524,6 +525,7 @@ public class FullSyncTests
         {
             Id = 1,
             SyncRule = importSyncRule,
+            CaseSensitive = true, // Required for in-memory test database (EF.Functions.ILike not supported)
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q=>q.Id == (int)MockMetaverseAttributeName.EmployeeNumber)
         };
@@ -571,6 +573,7 @@ public class FullSyncTests
         {
             Id = 1,
             SyncRule = importSyncRule,
+            CaseSensitive = true, // Required for in-memory test database (EF.Functions.ILike not supported)
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q=>q.Id == (int)MockMetaverseAttributeName.HrId)
         };
@@ -814,6 +817,7 @@ public class FullSyncTests
         {
             Id = 1,
             SyncRule = importSyncRule,
+            CaseSensitive = true, // Required for in-memory test database (EF.Functions.ILike not supported)
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q=>q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
@@ -970,6 +974,7 @@ public class FullSyncTests
         {
             Id = 1,
             SyncRule = importSyncRule,
+            CaseSensitive = true, // Required for in-memory test database (EF.Functions.ILike not supported)
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q=>q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
@@ -1019,6 +1024,7 @@ public class FullSyncTests
         {
             Id = 1,
             SyncRule = importSyncRule,
+            CaseSensitive = true, // Required for in-memory test database (EF.Functions.ILike not supported)
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q=>q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
@@ -1250,6 +1256,7 @@ public class FullSyncTests
         {
             Id = 1,
             SyncRule = importSyncRule,
+            CaseSensitive = true, // Required for in-memory test database (EF.Functions.ILike not supported)
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
@@ -1419,6 +1426,7 @@ public class FullSyncTests
         {
             Id = 1,
             SyncRule = importSyncRule,
+            CaseSensitive = true, // Required for in-memory test database (EF.Functions.ILike not supported)
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
@@ -1505,6 +1513,7 @@ public class FullSyncTests
         {
             Id = 1,
             SyncRule = importSyncRule,
+            CaseSensitive = true, // Required for in-memory test database (EF.Functions.ILike not supported)
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
@@ -1589,6 +1598,7 @@ public class FullSyncTests
         {
             Id = 1,
             SyncRule = importSyncRule,
+            CaseSensitive = true, // Required for in-memory test database (EF.Functions.ILike not supported)
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
@@ -1668,6 +1678,7 @@ public class FullSyncTests
         {
             Id = 1,
             SyncRule = importSyncRule,
+            CaseSensitive = true, // Required for in-memory test database (EF.Functions.ILike not supported)
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
@@ -1748,6 +1759,7 @@ public class FullSyncTests
         {
             Id = 1,
             SyncRule = importSyncRule,
+            CaseSensitive = true, // Required for in-memory test database (EF.Functions.ILike not supported)
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
@@ -1828,6 +1840,7 @@ public class FullSyncTests
         {
             Id = 1,
             SyncRule = importSyncRule,
+            CaseSensitive = true, // Required for in-memory test database (EF.Functions.ILike not supported)
             TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
                 .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
         };
@@ -2183,6 +2196,7 @@ public class FullSyncTests
         {
             Id = 100,
             SyncRule = importSyncRule,
+            CaseSensitive = true, // Required for in-memory test database (EF.Functions.ILike not supported)
             TargetMetaverseAttribute = mvoHrIdAttr,
             TargetMetaverseAttributeId = mvoHrIdAttr.Id
         };
