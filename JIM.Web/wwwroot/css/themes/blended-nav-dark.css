@@ -8,8 +8,8 @@
  *
  * Depth model:
  *   Page background:    #121314
- *   Container surface:  #151617
- *   Nested containers:  #222325
+ *   Container surface:  #171819
+ *   Nested containers:  #2a2b2e
  *
  * We use html[lang] instead of :root so that these declarations have
  * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
@@ -54,11 +54,11 @@ html[lang] {
 
     /* === Background & Surface === */
     --mud-palette-background: #121314;
-    --mud-palette-surface: #151617;
+    --mud-palette-surface: #171819;
     --mud-palette-background-grey: rgba(255, 255, 255, 0.03);
 
     /* === Inner Surface (nested containers) === */
-    --jim-inner-surface: #222325;
+    --jim-inner-surface: #2a2b2e;
     --jim-inner-border-color: #2e2f32;
 
     /* === Drawer (same as page background — the blended effect) === */
