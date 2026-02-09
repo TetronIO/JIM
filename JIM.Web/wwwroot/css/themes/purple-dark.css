@@ -3,8 +3,9 @@
  *
  * A deep navy-purple dark theme inspired by modern SaaS dashboards.
  * The sidebar uses a lighter surface tone than the page background,
- * creating a layered depth effect. Blue accent with purple undertones
- * complements the JIM logo palette.
+ * creating a layered depth effect. Primary, secondary, and tertiary
+ * colours are drawn from the JIM logo palette: bright purple, warm
+ * orange, and teal — lightened for readability on dark backgrounds.
  *
  * We use html[lang] instead of :root so that these declarations have
  * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
@@ -12,17 +13,21 @@
  */
 
 html[lang] {
-    /* === Primary Palette (brighter for contrast on purple backgrounds) === */
-    --mud-palette-primary: #a0c4ff;
-    --mud-palette-primary-darken: #88aaff;
-    --mud-palette-primary-lighten: #c0d8ff;
+    /* === Primary Palette (bright purple from logo, lightened for dark bg) === */
+    --mud-palette-primary: #00b4ff;
+    --mud-palette-primary-darken: #009ce0;
+    --mud-palette-primary-lighten: #40c6ff;
     --mud-palette-primary-text: #000000dd;
-    --mud-palette-secondary: #c9b0ff;
+    --mud-palette-secondary: #FFB347;
+    --mud-palette-secondary-darken: #E89A2D;
+    --mud-palette-secondary-lighten: #FFCC80;
     --mud-palette-secondary-text: #000000dd;
 
-    /* === Tertiary Palette (teal for CS indicators — WCAG AA accessible) === */
-    --mud-palette-tertiary: #00796B;
-    --mud-palette-tertiary-text: #ffffffff;
+    /* === Tertiary Palette (teal from logo — WCAG AA accessible) === */
+    --mud-palette-tertiary: #4DB6AC;
+    --mud-palette-tertiary-darken: #399E94;
+    --mud-palette-tertiary-lighten: #80CBC4;
+    --mud-palette-tertiary-text: #000000dd;
 
     /* === Semantic Colours (brighter shades for dark purple backgrounds) === */
     --mud-palette-success: #4caf50;
@@ -55,7 +60,7 @@ html[lang] {
 
     /* === Action === */
     --mud-palette-action-default: #c0c4d8;
-    --mud-palette-action-default-hover: rgba(102, 136, 255, 0.25);
+    --mud-palette-action-default-hover: rgba(0, 180, 255, 0.25);
     --mud-palette-action-disabled: rgba(255, 255, 255, 0.38);
     --mud-palette-action-disabled-background: rgba(255, 255, 255, 0.10);
 
@@ -101,7 +106,7 @@ html[lang] {
     --jim-link-color: #69a5ff;
 
     /* === JIM Custom: Link Hover === */
-    --jim-link-hover-color: #ff0090;
+    --jim-link-hover-color: #f41b9f;
 
     /* === JIM Custom: Logo text === */
     --jim-logo-text-color: #ffffff;
