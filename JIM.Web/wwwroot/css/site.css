@@ -200,7 +200,7 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
 
 /* Title accent colour for entity/target names in page headings */
 .jim-title-accent {
-    color: var(--jim-link-color);
+    color: var(--mud-palette-tertiary);
 }
 
 .jim-header-title {

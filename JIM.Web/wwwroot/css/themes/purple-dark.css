@@ -17,7 +17,7 @@ html[lang] {
     --mud-palette-primary: #00b4ff;
     --mud-palette-primary-darken: #009ce0;
     --mud-palette-primary-lighten: #40c6ff;
-    --mud-palette-primary-text: #000000dd;
+    --mud-palette-primary-text: #ffffffff;
     --mud-palette-secondary: #FFB347;
     --mud-palette-secondary-darken: #E89A2D;
     --mud-palette-secondary-lighten: #FFCC80;
@@ -103,7 +103,7 @@ html[lang] {
     --jim-dialog-inner-surface: #222240;
 
     /* === JIM Custom: Content Links === */
-    --jim-link-color: #69a5ff;
+    --jim-link-color: #00b4ff;
 
     /* === JIM Custom: Link Hover === */
     --jim-link-hover-color: #f41b9f;
