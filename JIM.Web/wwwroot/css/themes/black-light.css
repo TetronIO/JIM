@@ -100,9 +100,6 @@ html[lang] {
     /* === JIM Custom: Link Hover === */
     --jim-link-hover-color: #e0406a;
 
-    /* === JIM Custom: Dialog inner surface (nested elements inside dialogs) === */
-    --jim-dialog-inner-surface: #f7f7f9;
-
     /* === JIM Custom: Logo text === */
     --jim-logo-text-color: #ffffff;
 }
