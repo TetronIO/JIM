@@ -1,6 +1,8 @@
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.DataGeneration;
 using JIM.Models.DataGeneration.DTOs;
+using JIM.Models.Enums;
 using JIM.Models.Utility;
 using Serilog;
 using System.Diagnostics;
@@ -115,7 +117,10 @@ public class DataGenerationServer
         CancellationToken cancellationToken,
         Func<int, int, string?, Task>? progressCallback = null,
         TimeSpan? progressUpdateInterval = null,
-        int batchSize = 500)
+        int batchSize = 500,
+        ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,
+        Guid? initiatedById = null,
+        string? initiatedByName = null)
     {
         // get the entire template
         // enumerate the object types
@@ -313,6 +318,29 @@ public class DataGenerationServer
         {
             Log.Debug("ExecuteTemplateAsync: Cancellation requested. Returning after removing unecessary attributes prematurely.");
             return 0;
+        }
+
+        // Create change history records for each generated object (if change tracking is enabled)
+        var changeTrackingEnabled = await Application.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
+        if (changeTrackingEnabled)
+        {
+            var changeTrackingStopwatch = Stopwatch.StartNew();
+            Log.Information("ExecuteTemplateAsync: Creating change history records for {Count:N0} objects...", metaverseObjectsToCreate.Count);
+            var emptyRemovals = new List<MetaverseObjectAttributeValue>();
+            foreach (var mvo in metaverseObjectsToCreate)
+            {
+                await Application.Metaverse.CreateMetaverseObjectChangeAsync(
+                    mvo,
+                    mvo.AttributeValues,
+                    emptyRemovals,
+                    initiatedByType,
+                    initiatedById,
+                    initiatedByName,
+                    ObjectChangeType.Created,
+                    MetaverseObjectChangeInitiatorType.DataGeneration);
+            }
+            changeTrackingStopwatch.Stop();
+            Log.Information("ExecuteTemplateAsync: Change history records created in {Elapsed}", changeTrackingStopwatch.Elapsed);
         }
 
         // Report that generation is complete, now starting persistence

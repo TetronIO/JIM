@@ -103,5 +103,11 @@ public enum ObjectChangeType
     /// A pending export was confirmed during the confirming import.
     /// The exported attribute values matched the imported values.
     /// </summary>
-    PendingExportConfirmed
+    PendingExportConfirmed,
+
+    // Direct creation
+    /// <summary>
+    /// MVO created directly (e.g. via data generation or admin UI) rather than via projection/sync.
+    /// </summary>
+    Created
 }

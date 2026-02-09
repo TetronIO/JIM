@@ -284,7 +284,9 @@ public class MetaverseServer
         List<MetaverseObjectAttributeValue> removals,
         ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,
         Guid? initiatedById = null,
-        string? initiatedByName = null)
+        string? initiatedByName = null,
+        ObjectChangeType changeType = ObjectChangeType.Updated,
+        MetaverseObjectChangeInitiatorType? changeInitiatorType = null)
     {
         // Check if MVO change tracking is enabled
         var changeTrackingEnabled = await Application.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
@@ -294,18 +296,22 @@ public class MetaverseServer
         if (additions.Count == 0 && removals.Count == 0)
             return;
 
+        // Derive change initiator type if not explicitly specified
+        var effectiveChangeInitiatorType = changeInitiatorType
+            ?? (initiatedByType == ActivityInitiatorType.User
+                ? MetaverseObjectChangeInitiatorType.User
+                : MetaverseObjectChangeInitiatorType.NotSet);
+
         // Create MVO change object
         var change = new MetaverseObjectChange
         {
             MetaverseObject = metaverseObject,
-            ChangeType = ObjectChangeType.Updated,
+            ChangeType = changeType,
             ChangeTime = DateTime.UtcNow,
             InitiatedByType = initiatedByType,
             InitiatedById = initiatedById,
             InitiatedByName = initiatedByName,
-            ChangeInitiatorType = initiatedByType == ActivityInitiatorType.User
-                ? MetaverseObjectChangeInitiatorType.User
-                : MetaverseObjectChangeInitiatorType.NotSet
+            ChangeInitiatorType = effectiveChangeInitiatorType
         };
 
         // Create attribute change records (reuse helper from sync processor pattern)

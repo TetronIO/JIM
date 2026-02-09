@@ -516,7 +516,7 @@
                 ChangeInitiatorType = MapInitiatorType(change.InitiatedByType),
                 ChangeInitiatorName = change.InitiatedByName,
                 ChangeInitiatorId = change.InitiatedById,
-                ChangeMechanismType = MapRunTypeToMechanismType(change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemRunType),
+                ChangeMechanismType = MapMvoChangeToMechanismType(change),
                 RunProfileName = change.ActivityRunProfileExecutionItem?.Activity?.TargetName,
                 ConnectedSystemId = change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemId,
                 ConnectedSystemName = change.ActivityRunProfileExecutionItem?.Activity?.TargetContext,
@@ -556,6 +556,25 @@
     private static string MapRunTypeToMechanismType(ConnectedSystemRunType? runType)
     {
         return runType switch
+        {
+            ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport => "Import",
+            ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation => "SynchronisationRule",
+            ConnectedSystemRunType.Export => "Export",
+            _ => "Import"
+        };
+    }
+
+    private static string MapMvoChangeToMechanismType(MetaverseObjectChange change)
+    {
+        if (change.ChangeInitiatorType is MetaverseObjectChangeInitiatorType.DataGeneration
+            or MetaverseObjectChangeInitiatorType.User
+            or MetaverseObjectChangeInitiatorType.WorkflowInstance
+            or MetaverseObjectChangeInitiatorType.GroupMembershipRuleEvaluation)
+        {
+            return change.ChangeInitiatorType.ToString();
+        }
+
+        return change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemRunType switch
         {
             ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport => "Import",
             ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation => "SynchronisationRule",

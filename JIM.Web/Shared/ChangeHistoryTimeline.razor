@@ -1112,6 +1112,7 @@ else
                 "GroupMembershipRuleEvaluation" => Icons.Material.Filled.Group,
                 "Export" => Icons.Material.Filled.Output,
                 "Import" => Icons.Material.Filled.Input,
+                "DataGeneration" => Icons.Material.Filled.AutoAwesome,
                 _ => Icons.Material.Filled.HelpOutline
             };
 
@@ -1131,7 +1132,7 @@ else
     {
         // If we already have a specific mechanism type (not generic "Import"), use it
         if (changeGroup.ChangeMechanismType is "SynchronisationRule" or "Export" or "User" or "WorkflowInstance" or
-        "GroupMembershipRuleEvaluation")
+        "GroupMembershipRuleEvaluation" or "DataGeneration")
             return changeGroup.ChangeMechanismType;
 
         // For "Import" or unknown, check if RunProfileName suggests a different type
@@ -1242,6 +1243,7 @@ else
                     "GroupMembershipRuleEvaluation" => "Group Rule",
                     "Import" => !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName : "Import",
                     "Export" => !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName : "Export",
+                    "DataGeneration" => "Data Generation",
                     _ => changeGroup.ChangeMechanismType
                 };
 
@@ -1280,6 +1282,9 @@ else
             ObjectChangeType.Joined => Icons.Material.Filled.Link, // CSO joined to existing MVO
             ObjectChangeType.AttributeFlow => Icons.Material.Filled.SyncAlt, // Attributes flowed to MVO
 
+            // Direct creation
+            ObjectChangeType.Created => Icons.Material.Filled.AddCircleOutline,
+
             _ => Icons.Material.Filled.Info
         };
     }
@@ -1297,6 +1302,9 @@ else
             ObjectChangeType.Projected => Color.Success, // New MVO = green (creation)
             ObjectChangeType.Joined => Color.Tertiary, // Join = purple/tertiary (linking)
             ObjectChangeType.AttributeFlow => Color.Info, // Attribute flow = blue (update)
+
+            // Direct creation
+            ObjectChangeType.Created => Color.Success,
 
             _ => Color.Default
         };

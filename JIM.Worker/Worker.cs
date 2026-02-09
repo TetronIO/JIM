@@ -182,7 +182,10 @@ public class Worker : BackgroundService
                                                 cancellationTokenSource.Token,
                                                 ProgressCallback,
                                                 progressUpdateInterval,
-                                                batchSize);
+                                                batchSize,
+                                                dataGenTemplateServiceTask.InitiatedByType,
+                                                dataGenTemplateServiceTask.InitiatedById,
+                                                dataGenTemplateServiceTask.InitiatedByName);
                                             newWorkerTask.Activity.TotalObjectCreates = objectsCreated;
                                             await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
                                         }

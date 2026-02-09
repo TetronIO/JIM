@@ -56,7 +56,6 @@ public class MetaverseObjectChange
 
     /// <summary>
     /// What was the change type?
-    /// Acceptable values: UPDATE and DELETE. There would be no change object for a create scenario.
     /// </summary>
     public ObjectChangeType ChangeType { get; set; }
 

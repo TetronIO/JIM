@@ -138,7 +138,7 @@
                 ChangeInitiatorType = change.InitiatedByType.ToString(),
                 ChangeInitiatorName = change.InitiatedByName,
                 ChangeInitiatorId = change.InitiatedById,
-                ChangeMechanismType = MapRunTypeToMechanismType(change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemRunType),
+                ChangeMechanismType = MapChangeToMechanismType(change),
                 // Run profile and connected system context
                 RunProfileName = change.ActivityRunProfileExecutionItem?.Activity?.TargetName,
                 ConnectedSystemId = change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemId,
@@ -169,9 +169,23 @@
             .ToList();
     }
 
-    private static string MapRunTypeToMechanismType(ConnectedSystemRunType? runType)
+    /// <summary>
+    /// Maps a MetaverseObjectChange to a mechanism type string for the change history timeline.
+    /// Uses the ChangeInitiatorType when available, falling back to run type for sync-initiated changes.
+    /// </summary>
+    private static string MapChangeToMechanismType(MetaverseObjectChange change)
     {
-        return runType switch
+        // Use the change initiator type when it's explicitly set to a non-sync/non-default value
+        if (change.ChangeInitiatorType is MetaverseObjectChangeInitiatorType.DataGeneration
+            or MetaverseObjectChangeInitiatorType.User
+            or MetaverseObjectChangeInitiatorType.WorkflowInstance
+            or MetaverseObjectChangeInitiatorType.GroupMembershipRuleEvaluation)
+        {
+            return change.ChangeInitiatorType.ToString();
+        }
+
+        // For sync-initiated changes, derive from the run type
+        return change.ActivityRunProfileExecutionItem?.Activity?.ConnectedSystemRunType switch
         {
             ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport => "Import",
             ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation => "SynchronisationRule",
