@@ -55,11 +55,11 @@
             @if (_loading)
             {
                 <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                <MudText Class="ms-2">Loading</MudText>
+                <span class="ms-2">Loading</span>
             }
             else
             {
-                <MudText>Refresh</MudText>
+                <text>Refresh</text>
             }
         </MudButton>
         <MudSwitch T="bool" Value="_autoRefresh" ValueChanged="OnAutoRefreshChanged" Color="Color.Primary" Label="Auto-refresh (5s)" />

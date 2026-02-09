@@ -19,18 +19,22 @@
 html[lang] {
     /* === Primary Palette (JIM purple — vivid for dark backgrounds) === */
     --mud-palette-primary: #4488ff;
+    --mud-palette-primary-rgb: 68,136,255;
     --mud-palette-primary-darken: #3070ee;
     --mud-palette-primary-lighten: #66a0ff;
     --mud-palette-primary-text: #ffffffff;
     --mud-palette-secondary: #4488ff;
+    --mud-palette-secondary-rgb: 68,136,255;
     --mud-palette-secondary-text: #ffffffff;
 
     /* === Tertiary Palette (teal for CS indicators — WCAG AA accessible) === */
     --mud-palette-tertiary: #00796B;
+    --mud-palette-tertiary-rgb: 0,121,107;
     --mud-palette-tertiary-text: #ffffffff;
 
     /* === Status Colours (darker shades for dark mode with white text) === */
     --mud-palette-success: #1b7d3e;
+    --mud-palette-success-rgb: 27,125,62;
     --mud-palette-success-text: #ffffffff;
 
     /* === Background & Surface (from reference screenshot) === */

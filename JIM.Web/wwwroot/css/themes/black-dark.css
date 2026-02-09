@@ -14,22 +14,26 @@
 html[lang] {
     /* === Primary Palette === */
     --mud-palette-primary: #4488ff;
+    --mud-palette-primary-rgb: 68,136,255;
     --mud-palette-primary-darken: #3070ee;
     --mud-palette-primary-lighten: #66a0ff;
     --mud-palette-primary-text: #ffffffff;
     --mud-palette-secondary: #b0bec5;
+    --mud-palette-secondary-rgb: 176,190,197;
     --mud-palette-secondary-darken: #90a4ae;
     --mud-palette-secondary-lighten: #cfd8dc;
     --mud-palette-secondary-text: #000000dd;
 
     /* === Tertiary Palette (brighter teal for visibility on dark backgrounds) === */
     --mud-palette-tertiary: #26a69a;
+    --mud-palette-tertiary-rgb: 38,166,154;
     --mud-palette-tertiary-darken: #00897b;
     --mud-palette-tertiary-lighten: #4db6ac;
     --mud-palette-tertiary-text: #000000dd;
 
     /* === Status Colours === */
     --mud-palette-success: #4caf50;
+    --mud-palette-success-rgb: 76,175,80;
     --mud-palette-success-text: #ffffffff;
 
     /* === Background & Surface (exact screenshot colours) === */

@@ -198,11 +198,11 @@
                     @if (_settingsBeingSaved)
                     {
                         <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                        <MudText Class="ms-2">Processing</MudText>
+                        <span class="ms-2">Processing</span>
                     }
                     else
                     {
-                        <MudText>Save Settings</MudText>
+                        <text>Save Settings</text>
                     }
                 </MudButton>
             </MudForm>
@@ -237,7 +237,7 @@
                         if (_schemaBeingRetrieved)
                         {
                             <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                            <MudText Class="ms-2">Retrieving Schema</MudText>
+                            <span class="ms-2">Retrieving Schema</span>
                         }
                         else
                         {
@@ -249,7 +249,7 @@
                         if (_schemaBeingRetrieved)
                         {
                             <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                            <MudText Class="ms-2">Refreshing Schema</MudText>
+                            <span class="ms-2">Refreshing Schema</span>
                         }
                         else
                         {
@@ -733,7 +733,7 @@
                             if (_hierarchyBeingRetrieved)
                             {
                                 <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                                <MudText Class="ms-2">Retrieving Hierarchy</MudText>
+                                <span class="ms-2">Retrieving Hierarchy</span>
                             }
                             else
                             {
@@ -745,7 +745,7 @@
                             if (_hierarchyBeingRetrieved)
                             {
                                 <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                                <MudText Class="ms-2">Refreshing Hierarchy</MudText>
+                                <span class="ms-2">Refreshing Hierarchy</span>
                             }
                             else
                             {
@@ -1187,7 +1187,7 @@
                     @if (_connectedSystem?.Status == ConnectedSystemStatus.Deleting)
                     {
                         <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                        <MudText Class="ms-2">Deletion in Progress...</MudText>
+                        <span class="ms-2">Deletion in Progress...</span>
                     }
                     else
                     {
@@ -1412,7 +1412,7 @@
                 @if (_deletionInProgress)
                 {
                     <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                    <MudText Class="ms-2">Deleting...</MudText>
+                    <span class="ms-2">Deleting...</span>
                 }
                 else
                 {
@@ -1467,7 +1467,7 @@
             @if (_modeSwitchInProgress)
             {
                 <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                <MudText Class="ms-2">Switching...</MudText>
+                <span class="ms-2">Switching...</span>
             }
             else
             {

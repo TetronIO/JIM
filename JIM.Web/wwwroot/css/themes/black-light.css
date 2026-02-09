@@ -13,10 +13,12 @@
 html[lang] {
     /* === Primary Palette === */
     --mud-palette-primary: #2a6dd9;
+    --mud-palette-primary-rgb: 42,109,217;
     --mud-palette-primary-darken: #1e5abf;
     --mud-palette-primary-lighten: #4a88e8;
     --mud-palette-primary-text: #ffffffff;
     --mud-palette-secondary: #546e7a;
+    --mud-palette-secondary-rgb: 84,110,122;
     --mud-palette-secondary-darken: #37474f;
     --mud-palette-secondary-lighten: #78909c;
     --mud-palette-secondary-text: #ffffffff;
@@ -25,14 +27,19 @@ html[lang] {
     /* MudBlazor defaults fail WCAG AA contrast on white backgrounds.
        These darker variants achieve 4.5:1+ contrast ratio for text chips. */
     --mud-palette-success: #2e7d32;
+    --mud-palette-success-rgb: 46,125,50;
     --mud-palette-success-text: #ffffffff;
     --mud-palette-warning: #c65102;
+    --mud-palette-warning-rgb: 198,81,2;
     --mud-palette-warning-text: #ffffffff;
     --mud-palette-info: #0066cc;
+    --mud-palette-info-rgb: 0,102,204;
     --mud-palette-info-text: #ffffffff;
     --mud-palette-error: #c62828;
+    --mud-palette-error-rgb: 198,40,40;
     --mud-palette-error-text: #ffffffff;
     --mud-palette-tertiary: #00897b;
+    --mud-palette-tertiary-rgb: 0,137,123;
     --mud-palette-tertiary-darken: #00695c;
     --mud-palette-tertiary-lighten: #26a69a;
     --mud-palette-tertiary-text: #ffffffff;

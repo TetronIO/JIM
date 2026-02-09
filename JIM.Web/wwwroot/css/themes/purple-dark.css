@@ -15,28 +15,35 @@
 html[lang] {
     /* === Primary Palette (bright purple from logo, lightened for dark bg) === */
     --mud-palette-primary: #00b4ff;
+    --mud-palette-primary-rgb: 0,180,255;
     --mud-palette-primary-darken: #009ce0;
     --mud-palette-primary-lighten: #40c6ff;
     --mud-palette-primary-text: #ffffffff;
     --mud-palette-secondary: #FFB347;
+    --mud-palette-secondary-rgb: 255,179,71;
     --mud-palette-secondary-darken: #E89A2D;
     --mud-palette-secondary-lighten: #FFCC80;
     --mud-palette-secondary-text: #000000dd;
 
     /* === Tertiary Palette (teal from logo — WCAG AA accessible) === */
     --mud-palette-tertiary: #4DB6AC;
+    --mud-palette-tertiary-rgb: 77,182,172;
     --mud-palette-tertiary-darken: #399E94;
     --mud-palette-tertiary-lighten: #80CBC4;
     --mud-palette-tertiary-text: #000000dd;
 
     /* === Semantic Colours (brighter shades for dark purple backgrounds) === */
     --mud-palette-success: #4caf50;
+    --mud-palette-success-rgb: 76,175,80;
     --mud-palette-success-text: #ffffffff;
     --mud-palette-warning: #ffb74d;
+    --mud-palette-warning-rgb: 255,183,77;
     --mud-palette-warning-text: #000000dd;
     --mud-palette-info: #64b5f6;
+    --mud-palette-info-rgb: 100,181,246;
     --mud-palette-info-text: #000000dd;
     --mud-palette-error: #ff8a80;
+    --mud-palette-error-rgb: 255,138,128;
     --mud-palette-error-text: #000000dd;
 
     /* === Background & Surface === */
