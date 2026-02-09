@@ -150,6 +150,10 @@ html[lang] .mud-paper .mud-table .mud-table-pagination-toolbar {
     background-color: var(--jim-inner-surface, transparent);
 }
 
+html[lang] .mud-paper .mud-tabs-tabbar {
+    background-color: var(--jim-inner-surface, transparent);
+}
+
 html[lang] .mud-paper .mud-tabs-panels {
     background-color: var(--jim-inner-surface, transparent);
     border-radius: 0 0 8px 8px;
