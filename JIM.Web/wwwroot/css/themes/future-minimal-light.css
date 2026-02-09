@@ -1,0 +1,123 @@
+/*
+ * JIM Colour Theme: Future Minimal Light
+ *
+ * A restrained, futuristic light theme inspired by industrial design.
+ * Warm grey surfaces with near-black text and a bold red-orange accent
+ * derived from interface lighting on matte dark hardware. The palette
+ * favours low-noise, high-contrast readability with minimal colour.
+ *
+ * Depth model:
+ *   Page background:    #c5c8c6  (warm stone grey)
+ *   Container surface:  #d4d7d5  (slightly lighter)
+ *   Nested containers:  #babdbb  (slightly deeper)
+ *
+ * We use html[lang] instead of :root so that these declarations have
+ * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
+ * styles, ensuring our theme values always win.
+ */
+
+html[lang] {
+    /* === Primary Palette (red-orange accent — the glowing strip) === */
+    --mud-palette-primary: #d63a28;
+    --mud-palette-primary-rgb: 214,58,40;
+    --mud-palette-primary-darken: #b8301f;
+    --mud-palette-primary-lighten: #e85a4a;
+    --mud-palette-primary-text: #ffffffff;
+
+    /* === Secondary Palette (charcoal — the dark hardware body) === */
+    --mud-palette-secondary: #2a2d2b;
+    --mud-palette-secondary-rgb: 42,45,43;
+    --mud-palette-secondary-darken: #1a1c1b;
+    --mud-palette-secondary-lighten: #3e4240;
+    --mud-palette-secondary-text: #ffffffff;
+
+    /* === Tertiary Palette (muted teal — subtle technological cool) === */
+    --mud-palette-tertiary: #4a7c72;
+    --mud-palette-tertiary-rgb: 74,124,114;
+    --mud-palette-tertiary-darken: #3a6358;
+    --mud-palette-tertiary-lighten: #5e9488;
+    --mud-palette-tertiary-text: #ffffffff;
+
+    /* === Semantic Colours (WCAG AA accessible on #d4d7d5 surface) === */
+    --mud-palette-success: #2d7a3e;
+    --mud-palette-success-rgb: 45,122,62;
+    --mud-palette-success-text: #ffffffff;
+    --mud-palette-warning: #b85a00;
+    --mud-palette-warning-rgb: 184,90,0;
+    --mud-palette-warning-text: #ffffffff;
+    --mud-palette-info: #1a6baa;
+    --mud-palette-info-rgb: 26,107,170;
+    --mud-palette-info-text: #ffffffff;
+    --mud-palette-error: #c62828;
+    --mud-palette-error-rgb: 198,40,40;
+    --mud-palette-error-text: #ffffffff;
+
+    /* === Background & Surface === */
+    --mud-palette-background: #c5c8c6;
+    --mud-palette-surface: #d4d7d5;
+    --mud-palette-background-grey: rgba(0, 0, 0, 0.04);
+
+    /* === Inner Surface (recessed for nested containers) === */
+    --jim-inner-surface: #babdbb;
+    --jim-inner-border-color: rgba(8, 11, 10, 0.18);
+
+    /* === Drawer (blended — same as page background) === */
+    --mud-palette-drawer-background: #c5c8c6;
+    --mud-palette-drawer-text: #2a2d2b;
+    --mud-palette-drawer-icon: rgba(42, 45, 43, 0.65);
+
+    /* === Text === */
+    --mud-palette-text-primary: #080b0a;
+    --mud-palette-text-secondary: #3e4240;
+    --mud-palette-text-disabled: rgba(8, 11, 10, 0.34);
+
+    /* === Action === */
+    --mud-palette-action-default: rgba(8, 11, 10, 0.58);
+    --mud-palette-action-default-hover: rgba(214, 58, 40, 0.12);
+    --mud-palette-action-disabled: rgba(8, 11, 10, 0.34);
+    --mud-palette-action-disabled-background: rgba(8, 11, 10, 0.08);
+
+    /* === Lines & Dividers === */
+    --mud-palette-lines-default: rgba(8, 11, 10, 0.18);
+    --mud-palette-lines-inputs: rgba(42, 45, 43, 0.40);
+    --mud-palette-divider: rgba(8, 11, 10, 0.18);
+    --mud-palette-divider-light: rgba(0, 0, 0, 0.08);
+
+    /* === Table === */
+    --mud-palette-table-lines: rgba(8, 11, 10, 0.18);
+    --mud-palette-table-striped: rgba(0, 0, 0, 0.03);
+    --mud-palette-table-hover: rgba(214, 58, 40, 0.06);
+
+    /* === JIM Custom: Attribute table name column === */
+    --jim-attr-name-bg: #bec1bf;
+
+    /* === JIM Custom: JSON Syntax Highlighting === */
+    --jim-json-key: #8a3000;
+    --jim-json-string: #a31515;
+    --jim-json-number: #1a6baa;
+    --jim-json-boolean: #6a329f;
+    --jim-json-null: #6a329f;
+
+    /* === JIM Custom: Navigation === */
+    --jim-nav-top-level-color: #d63a28;
+    --jim-nav-child-color: #3e4240;
+    --jim-nav-hover-color: #b8301f;
+    --jim-nav-active-color: #d63a28;
+
+    /* === JIM Custom: Drawer border (transparent — blended) === */
+    --jim-drawer-border-color: transparent;
+
+    /* === JIM Custom: Paper border === */
+    --jim-paper-border-color: rgba(8, 11, 10, 0.16);
+
+    /* === JIM Custom: Dialog surfaces (stepped elevation) === */
+    --jim-dialog-surface: #cdcfcd;
+    --jim-dialog-inner-surface: #c0c3c1;
+
+    /* === JIM Custom: Content Links === */
+    --jim-link-color: #d63a28;
+    --jim-link-hover-color: #b8301f;
+
+    /* === JIM Custom: Logo text === */
+    --jim-logo-text-color: #080b0a;
+}
