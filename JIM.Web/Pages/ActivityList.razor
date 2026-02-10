@@ -67,11 +67,6 @@
                 <MudText Typo="Typo.button">Created</MudText>
             </MudTableSortLabel>
         </MudTh>
-        <MudTh>
-            <MudTableSortLabel SortLabel="executiontime" T="Activity">
-                <MudText Typo="Typo.button">Execution Time</MudText>
-            </MudTableSortLabel>
-        </MudTh>
     </HeaderContent>
     <RowTemplate Context="context">
         <MudTd DataLabel="Operation">
@@ -264,16 +259,6 @@
             <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                 @context.Created.ToLocalTime().ToRelativeTime()
             </MudTooltip>
-        </MudTd>
-        <MudTd DataLabel="Execution Time">
-            @if (context.ExecutionTime.HasValue)
-            {
-                @context.ExecutionTime.Value.ToCasualString()
-            }
-            else
-            {
-                <MudText Typo="Typo.body2" Class="mud-text-disabled">-</MudText>
-            }
         </MudTd>
     </RowTemplate>
     <NoRecordsContent>
