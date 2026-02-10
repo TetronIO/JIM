@@ -28,6 +28,11 @@
     </AuthorizeView>
     *@
 
+    <MudNavGroup Title="Activity" Expanded="_activityExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "activity"))" Icon="@Icons.Material.Filled.DynamicFeed" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
+        <MudNavLink Href="/activity" Match="NavLinkMatch.Prefix" Class="jim-nav-child">Activity</MudNavLink>
+        <MudNavLink Href="/activity/mine" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">My Activity</MudNavLink>
+    </MudNavGroup>
+
     <AuthorizeView Roles="Administrator">
         <MudNavGroup Title="Admin" Expanded="_adminExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "admin"))" Icon="@Icons.Material.Filled.Settings" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
             <MudNavLink Href="/admin/operations" Match="NavLinkMatch.Prefix" Class="jim-nav-child">Operations</MudNavLink>
@@ -43,11 +48,6 @@
             <MudNavLink Href="/admin/settings" Match="NavLinkMatch.Prefix" Class="jim-nav-child">Settings</MudNavLink>
         </MudNavGroup>
     </AuthorizeView>
-
-    <MudNavGroup Title="Activity" Expanded="_activityExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "activity"))" Icon="@Icons.Material.Filled.DynamicFeed" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
-        <MudNavLink Href="/activity" Match="NavLinkMatch.Prefix" Class="jim-nav-child">Activity</MudNavLink>
-        <MudNavLink Href="/activity/mine" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">My Activity</MudNavLink>
-    </MudNavGroup>
 </MudNavMenu>
 
 @code {
