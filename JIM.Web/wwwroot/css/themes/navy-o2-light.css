@@ -57,8 +57,8 @@ html[lang] {
     --mud-palette-background-grey: rgba(0, 0, 0, 0.024);
 
     /* === Inner Surface (blue-grey tint for nested containers) === */
-    --jim-inner-surface: #e8ecf2;
-    --jim-inner-border-color: rgba(30, 58, 95, 0.18);
+    --jim-inner-surface: #f7f7f7;
+    --jim-inner-border-color: rgba(30, 58, 95, 0.28);
 
     /* === Drawer (blended — same as page background) === */
     --mud-palette-drawer-background: #f3f3f3;
@@ -77,13 +77,13 @@ html[lang] {
     --mud-palette-action-disabled-background: rgba(18, 27, 41, 0.08);
 
     /* === Lines & Dividers === */
-    --mud-palette-lines-default: rgba(30, 58, 95, 0.18);
+    --mud-palette-lines-default: rgba(30, 58, 95, 0.28);
     --mud-palette-lines-inputs: rgba(30, 58, 95, 0.35);
-    --mud-palette-divider: rgba(30, 58, 95, 0.18);
+    --mud-palette-divider: rgba(30, 58, 95, 0.28);
     --mud-palette-divider-light: rgba(0, 0, 0, 0.08);
 
     /* === Table === */
-    --mud-palette-table-lines: rgba(30, 58, 95, 0.18);
+    --mud-palette-table-lines: rgba(30, 58, 95, 0.28);
     --mud-palette-table-striped: rgba(0, 0, 0, 0.02);
     --mud-palette-table-hover: rgba(122, 75, 178, 0.06);
 
@@ -107,7 +107,7 @@ html[lang] {
     --jim-drawer-border-color: transparent;
 
     /* === JIM Custom: Paper border === */
-    --jim-paper-border-color: rgba(30, 58, 95, 0.16);
+    --jim-paper-border-color: rgba(30, 58, 95, 0.26);
 
     /* === JIM Custom: Dialog surfaces (stepped elevation) === */
     --jim-dialog-surface: #f4f6f8;
