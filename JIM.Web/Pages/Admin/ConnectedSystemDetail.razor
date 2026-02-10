@@ -36,14 +36,14 @@
         <MudTabPanel Text="Details">
             <MudPaper Class="pa-4" Outlined="true">
                 <MudStack Row Spacing="2" Class="mb-4">
-                    <MudButton Variant="Variant.Outlined"
+                    <MudButton Variant="Variant.Filled"
                                Color="Color.Default"
                                Size="Size.Small"
                                StartIcon="@Icons.Material.Filled.Storage"
                                Href="@($"/admin/connected-systems/{Id}/objects")">
                         View Objects
                     </MudButton>
-                    <MudButton Variant="Variant.Outlined"
+                    <MudButton Variant="Variant.Filled"
                                Color="@(_pendingExportCount > 0 ? Color.Warning : Color.Default)"
                                Size="Size.Small"
                                StartIcon="@Icons.Material.Filled.Outbox"
@@ -74,13 +74,21 @@
                         var settingCategory = _settingCategories[i];
                         <MudPaper Class="pa-5 mt-5" Outlined="true">
                             <MudText Typo="Typo.h5" Class="mb-5">@settingCategory.ToString()</MudText>
-                            @foreach (var settingValue in _connectedSystem.SettingValues
-                                .Where(sv => sv.Setting.Category == settingCategory)
-                                .OrderBy(sv => sv.Setting.Id))
+                            @{
+                                var categorySettings = _connectedSystem.SettingValues
+                                    .Where(sv => sv.Setting.Category == settingCategory)
+                                    .OrderBy(sv => sv.Setting.Id)
+                                    .ToList();
+                            }
+                            @for (var j = 0; j < categorySettings.Count; j++)
                             {
+                                var settingValue = categorySettings[j];
+                                var isLast = j == categorySettings.Count - 1;
+                                var spacingClass = isLast ? "" : "mb-5";
+
                                 if (settingValue.Setting.Type == ConnectedSystemSettingType.Heading)
                                 {
-                                    <MudText Typo="Typo.h6" Class="mb-5">@settingValue.Setting.Name</MudText>
+                                    <MudText Typo="Typo.h6" Class="@spacingClass">@settingValue.Setting.Name</MudText>
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.Divider)
                                 {
@@ -95,7 +103,7 @@
                                                   RequiredError="@($"A {settingValue.Setting.Name} is required")"
                                                   HelperText="@settingValue.Setting.Description"
                                                   Variant="Variant.Outlined"
-                                                  Class="mb-5" />
+                                                  Class="@spacingClass" />
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted)
                                 {
@@ -112,7 +120,7 @@
                                                   AdornmentAriaLabel="Toggle password visibility"
                                                   OnAdornmentClick="@(() => _passwordVisibility[settingId] = !_passwordVisibility.GetValueOrDefault(settingId))"
                                                   Variant="Variant.Outlined"
-                                                  Class="mb-5" />
+                                                  Class="@spacingClass" />
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.Integer)
                                 {
@@ -124,11 +132,11 @@
                                                   HelperText="@settingValue.Setting.Description"
                                                   InputType="InputType.Number"
                                                   Variant="Variant.Outlined"
-                                                  Class="mb-5" />
+                                                  Class="@spacingClass" />
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
                                 {
-                                    <div class="mb-5">
+                                    <div class="@spacingClass">
                                         <MudSwitch @bind-Value="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" />
                                         @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
                                         {
@@ -142,7 +150,7 @@
                                                HelperText="@settingValue.Setting.Description"
                                                Label="@settingValue.Setting.Name"
                                                Variant="Variant.Outlined"
-                                               Class="mb-5"
+                                               Class="@spacingClass"
                                                Required="@settingValue.Setting.Required"
                                                RequiredError="@($"A {settingValue.Setting.Name} is required")">
                                         @foreach (var dropDownValue in settingValue.Setting.DropDownValues)
@@ -153,7 +161,7 @@
                                 }
                                 else if (settingValue.Setting.Type == ConnectedSystemSettingType.Label)
                                 {
-                                    <MudText Class="mb-5">
+                                    <MudText Class="@spacingClass">
                                         @settingValue.Setting.Description
                                     </MudText>
                                 }
@@ -170,7 +178,7 @@
                                                   Adornment="Adornment.End"
                                                   AdornmentIcon="@Icons.Material.Filled.FolderOpen"
                                                   OnAdornmentClick="@(() => OpenFileBrowserAsync(settingValue))"
-                                                  Class="mb-5" />
+                                                  Class="@spacingClass" />
                                 }
                                 else
                                 {
