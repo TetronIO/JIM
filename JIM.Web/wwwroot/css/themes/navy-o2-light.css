@@ -52,7 +52,7 @@ html[lang] {
     --mud-palette-error-text: #ffffffff;
 
     /* === Background & Surface === */
-    --mud-palette-background: #f0f2f5;
+    --mud-palette-background: #f3f3f3;
     --mud-palette-surface: #ffffffff;
     --mud-palette-background-grey: rgba(0, 0, 0, 0.024);
 
@@ -61,7 +61,7 @@ html[lang] {
     --jim-inner-border-color: rgba(30, 58, 95, 0.18);
 
     /* === Drawer (blended — same as page background) === */
-    --mud-palette-drawer-background: #f0f2f5;
+    --mud-palette-drawer-background: #f3f3f3;
     --mud-palette-drawer-text: #1e3a5f;
     --mud-palette-drawer-icon: rgba(30, 58, 95, 0.60);
 
