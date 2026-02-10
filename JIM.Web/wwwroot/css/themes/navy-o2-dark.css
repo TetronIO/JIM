@@ -128,6 +128,11 @@ html[lang] .mud-button-text.mud-button-text-primary:not(:disabled) {
     color: #a67ed0;
 }
 
+/* Match outlined primary button border to the lightened text colour */
+html[lang] .mud-button-outlined.mud-button-outlined-primary:not(:disabled) {
+    border-color: #a67ed0;
+}
+
 /* Visited link colour (hardcoded — browsers block var() in :visited for privacy) */
 html[lang] a.mud-link.mud-primary-text:visited {
     color: #b792e3 !important;
