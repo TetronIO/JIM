@@ -138,6 +138,16 @@ html[lang] .mud-button-group-root .mud-button-outlined.mud-button-outlined-prima
     border-color: var(--mud-palette-primary);
 }
 
+/* Lighten outlined/text primary chip colours to match button overrides */
+html[lang] .mud-chip.mud-chip-outlined.mud-chip-color-primary {
+    border-color: #a67ed0;
+    color: #a67ed0;
+}
+
+html[lang] .mud-chip.mud-chip-text.mud-chip-color-primary {
+    color: #a67ed0;
+}
+
 /* Improve Dark button visibility on dark navy backgrounds */
 html[lang] .mud-button-filled.mud-button-filled-dark:not(:disabled) {
     background-color: #000000;
