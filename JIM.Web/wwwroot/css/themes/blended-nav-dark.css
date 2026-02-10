@@ -145,6 +145,15 @@ html[lang] .mud-button-group-root .mud-button-outlined.mud-button-outlined-prima
 }
 */
 
+/* Default filled button — slightly lighter grey for contrast on dark backgrounds */
+html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled) {
+    background-color: #2a2c2e;
+}
+
+html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled):hover {
+    background-color: #383a3e;
+}
+
 /* Improve Dark button visibility on dark backgrounds */
 html[lang] .mud-button-filled.mud-button-filled-dark:not(:disabled) {
     background-color: #000000;
