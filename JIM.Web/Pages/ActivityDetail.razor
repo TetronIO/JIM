@@ -15,7 +15,7 @@
 @inject IUserPreferenceService PreferenceService
 
 <PageTitle>Activity: @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters()@(ShowTargetInTitle() ? $": {GetTargetDisplayText()}" : "")</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-primary-text">Activity:</span> @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters()@if (ShowTargetInTitle()) {<span>: </span><span class="jim-title-accent">@GetTargetDisplayText()</span>}</MudText>
+<MudText Typo="Typo.h4"><span class="jim-title-segment mud-primary-text">Activity:</span> <span class="jim-title-segment">@_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters()</span>@if (ShowTargetInTitle()) {<span class="jim-title-segment">: <span class="jim-title-accent">@GetTargetDisplayText()</span></span>}</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @if (_activity != null)

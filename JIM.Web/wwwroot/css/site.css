@@ -24,6 +24,11 @@ a.mud-link.mud-primary-text {
     transition: color 0.25s ease !important;
 }
 
+/* Browsers block var() in :visited for privacy (anti-history-sniffing).
+   Each theme file provides its own a:visited rule with a hardcoded colour
+   value. The --jim-link-visited-color variable in each theme documents
+   the intended visited colour for reference. */
+
 a.mud-link.mud-primary-text:hover {
     color: var(--jim-link-hover-color) !important;
 }
@@ -226,6 +231,11 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
 }
 
 /* JIM CUSTOM */
+
+/* Title segments wrap as complete units instead of breaking mid-phrase */
+.jim-title-segment {
+    white-space: nowrap;
+}
 
 /* Title accent colour for entity/target names in page headings */
 .jim-title-accent {
