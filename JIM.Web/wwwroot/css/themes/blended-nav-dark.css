@@ -145,6 +145,20 @@ html[lang] .mud-button-group-root .mud-button-outlined.mud-button-outlined-prima
 }
 */
 
+/* Improve Dark button visibility on dark backgrounds */
+html[lang] .mud-button-filled.mud-button-filled-dark:not(:disabled) {
+    background-color: #000000;
+}
+
+html[lang] .mud-button-outlined.mud-button-outlined-dark:not(:disabled) {
+    border-color: #505458;
+    color: #505458;
+}
+
+html[lang] .mud-button-text.mud-button-text-dark:not(:disabled) {
+    color: #505458;
+}
+
 /* Visited link colour (hardcoded — browsers block var() in :visited for privacy) */
 html[lang] a.mud-link.mud-primary-text:visited {
     color: #4488ff !important;
