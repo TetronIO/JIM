@@ -88,7 +88,7 @@ html[lang] {
     --mud-palette-table-hover: rgba(122, 75, 178, 0.06);
 
     /* === JIM Custom: Attribute table name column === */
-    --jim-attr-name-bg: #e4e8ee;
+    --jim-attr-name-bg: #f2f0f0;
 
     /* === JIM Custom: JSON Syntax Highlighting === */
     --jim-json-key: #63399a;
@@ -110,7 +110,7 @@ html[lang] {
     --jim-paper-border-color: rgba(30, 58, 95, 0.26);
 
     /* === JIM Custom: Dialog surfaces (stepped elevation) === */
-    --jim-dialog-surface: #f4f6f8;
+    --jim-dialog-surface: #f3f3f3;
     --jim-dialog-inner-surface: #eaecf0;
 
     /* === JIM Custom: Content Links === */
