@@ -1188,6 +1188,32 @@ try {
             }
 
             Write-Host "  ✓ Cross-Domain export attribute mappings configured ($crossDomainMappingsCreated new)" -ForegroundColor Green
+
+            # Cross-Domain matching rule - matches exported CSOs to existing MVOs via Employee ID
+            Write-Host "  Configuring Cross-Domain object matching rule..." -ForegroundColor Gray
+
+            $crossDomainEmployeeIdAttr = $crossDomainUserType.attributes | Where-Object { $_.name -eq 'employeeId' }
+            if ($crossDomainEmployeeIdAttr -and $mvEmployeeIdAttr) {
+                $existingCrossDomainMatchingRules = Get-JIMMatchingRule -ConnectedSystemId $crossDomainSystem.id -ObjectTypeId $crossDomainUserType.id
+
+                $crossDomainMatchingRuleExists = $existingCrossDomainMatchingRules | Where-Object {
+                    $_.targetMetaverseAttributeId -eq $mvEmployeeIdAttr.id
+                }
+
+                if (-not $crossDomainMatchingRuleExists) {
+                    New-JIMMatchingRule -ConnectedSystemId $crossDomainSystem.id `
+                        -ObjectTypeId $crossDomainUserType.id `
+                        -SourceAttributeId $crossDomainEmployeeIdAttr.id `
+                        -TargetMetaverseAttributeId $mvEmployeeIdAttr.id | Out-Null
+                    Write-Host "  ✓ Cross-Domain object matching rule configured (employeeId → Employee ID)" -ForegroundColor Green
+                }
+                else {
+                    Write-Host "  Cross-Domain object matching rule already exists" -ForegroundColor Gray
+                }
+            }
+            else {
+                Write-Host "  ⚠ Could not configure Cross-Domain matching rule - missing required attributes" -ForegroundColor Yellow
+            }
         }
 
         # Restart jim.worker to pick up schema changes (API modifications may require reload)
