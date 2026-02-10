@@ -115,8 +115,14 @@ html[lang] {
 
     /* === JIM Custom: Content Links === */
     --jim-link-color: #e85a4a;
+    --jim-link-visited-color: #e85a4a;
     --jim-link-hover-color: #f0f2f0;
 
     /* === JIM Custom: Logo text === */
     --jim-logo-text-color: #ffffff;
+}
+
+/* Visited link colour (hardcoded — browsers block var() in :visited for privacy) */
+html[lang] a.mud-link.mud-primary-text:visited {
+    color: #e85a4a !important;
 }

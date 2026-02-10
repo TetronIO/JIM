@@ -24,10 +24,11 @@ a.mud-link.mud-primary-text {
     transition: color 0.25s ease !important;
 }
 
-/* Browsers block var() in :visited for privacy (anti-history-sniffing).
-   Each theme file provides its own a:visited rule with a hardcoded colour
-   value. The --jim-link-visited-color variable in each theme documents
-   the intended visited colour for reference. */
+/* Visited link styling is handled per-theme via a hardcoded a:visited rule
+   (browsers block var() in :visited for privacy). Each theme defines
+   --jim-link-visited-color as documentation and a matching literal rule.
+   IMPORTANT: avoid wrapping MudLink inside mud-text-secondary containers,
+   as the inherited secondary colour can bleed into the visited state. */
 
 a.mud-link.mud-primary-text:hover {
     color: var(--jim-link-hover-color) !important;

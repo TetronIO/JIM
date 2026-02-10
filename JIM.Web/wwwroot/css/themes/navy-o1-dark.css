@@ -58,7 +58,7 @@ html[lang] {
 
     /* === Inner Surface (nested containers) === */
     --jim-inner-surface: #192636;
-    --jim-inner-border-color: #1f2e42;
+    --jim-inner-border-color: #2c3c54;
 
     /* === Drawer (blended — same as page background) === */
     --mud-palette-drawer-background: #121b29;
@@ -115,8 +115,14 @@ html[lang] {
 
     /* === JIM Custom: Content Links === */
     --jim-link-color: #ecaa55;
+    --jim-link-visited-color: #ecaa55;
     --jim-link-hover-color: #f2c07a;
 
     /* === JIM Custom: Logo text === */
     --jim-logo-text-color: #ffffff;
+}
+
+/* Visited link colour (hardcoded — browsers block var() in :visited for privacy) */
+html[lang] a.mud-link.mud-primary-text:visited {
+    color: #ecaa55 !important;
 }
