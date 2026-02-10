@@ -2,8 +2,8 @@
  * JIM Colour Theme: Navy O2 Dark
  *
  * A bold dark theme pairing deep navy with vibrant magenta-pink accent.
- * Cloned from navy-o1 with the primary swapped to #f53fad —
- * a bright, vivid pink that pops against the dark navy background.
+ * Cloned from navy-o1 with the primary swapped to #7a4bb2 —
+ * a rich purple that sits elegantly against the dark navy background.
  *
  * Depth model:
  *   Page background:    #121b29  (deep navy)
@@ -16,12 +16,12 @@
  */
 
 html[lang] {
-    /* === Primary Palette (bright magenta-pink accent) === */
-    --mud-palette-primary: #f53fad;
-    --mud-palette-primary-rgb: 245,63,173;
-    --mud-palette-primary-darken: #d82e96;
-    --mud-palette-primary-lighten: #f872c4;
-    --mud-palette-primary-text: #0a1018;
+    /* === Primary Palette (rich purple accent) === */
+    --mud-palette-primary: #7a4bb2;
+    --mud-palette-primary-rgb: 122,75,178;
+    --mud-palette-primary-darken: #63399a;
+    --mud-palette-primary-lighten: #9468c8;
+    --mud-palette-primary-text: #ffffff;
 
     /* === Secondary Palette (cool slate-blue) === */
     --mud-palette-secondary: #6b8aad;
@@ -72,7 +72,7 @@ html[lang] {
 
     /* === Action === */
     --mud-palette-action-default: #b0b8c4;
-    --mud-palette-action-default-hover: rgba(245, 63, 173, 0.16);
+    --mud-palette-action-default-hover: rgba(122, 75, 178, 0.16);
     --mud-palette-action-disabled: rgba(255, 255, 255, 0.34);
     --mud-palette-action-disabled-background: rgba(255, 255, 255, 0.08);
 
@@ -85,13 +85,13 @@ html[lang] {
     /* === Table === */
     --mud-palette-table-lines: #2c3c54;
     --mud-palette-table-striped: rgba(255, 255, 255, 0.02);
-    --mud-palette-table-hover: rgba(245, 63, 173, 0.06);
+    --mud-palette-table-hover: rgba(122, 75, 178, 0.06);
 
     /* === JIM Custom: Attribute table name column === */
     --jim-attr-name-bg: #15202f;
 
     /* === JIM Custom: JSON Syntax Highlighting === */
-    --jim-json-key: #f53fad;
+    --jim-json-key: #9468c8;
     --jim-json-string: #a5d6a7;
     --jim-json-number: #64b5f6;
     --jim-json-boolean: #b0b8c4;
@@ -100,8 +100,8 @@ html[lang] {
     /* === JIM Custom: Navigation === */
     --jim-nav-top-level-color: #b0b8c4;
     --jim-nav-child-color: #6e7e94;
-    --jim-nav-hover-color: #f53fad;
-    --jim-nav-active-color: #f53fad;
+    --jim-nav-hover-color: #b792e3;
+    --jim-nav-active-color: #b792e3;
 
     /* === JIM Custom: Drawer border (transparent — blended) === */
     --jim-drawer-border-color: transparent;
@@ -114,15 +114,21 @@ html[lang] {
     --jim-dialog-inner-surface: #202d42;
 
     /* === JIM Custom: Content Links === */
-    --jim-link-color: #f53fad;
-    --jim-link-visited-color: #f53fad;
-    --jim-link-hover-color: #f872c4;
+    --jim-link-color: #b792e3;
+    --jim-link-visited-color: #b792e3;
+    --jim-link-hover-color: #ccb0ee;
 
     /* === JIM Custom: Logo text === */
     --jim-logo-text-color: #ffffff;
 }
 
+/* Lighten outlined/text primary button text for readability on dark navy */
+html[lang] .mud-button-outlined.mud-button-outlined-primary:not(:disabled),
+html[lang] .mud-button-text.mud-button-text-primary:not(:disabled) {
+    color: #a67ed0;
+}
+
 /* Visited link colour (hardcoded — browsers block var() in :visited for privacy) */
 html[lang] a.mud-link.mud-primary-text:visited {
-    color: #f53fad !important;
+    color: #b792e3 !important;
 }

@@ -114,9 +114,13 @@
             <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false">Active</MudButton>
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false">Inactive</MudButton>
         </MudButtonGroup>
-        <MudButtonGroup Variant="Variant.Outlined" Color="Color.Primary">
+        <MudButtonGroup Variant="Variant.Outlined" Color="Color.Primary" OverrideStyles="false">
             <MudButton StartIcon="@Icons.Material.Filled.Upload" DropShadow="false">Upload</MudButton>
             <MudButton StartIcon="@Icons.Material.Filled.Folder" DropShadow="false">Browse</MudButton>
+        </MudButtonGroup>
+        <MudButtonGroup OverrideStyles="false">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false" Disabled="true">Disabled</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false" Disabled="true">Disabled</MudButton>
         </MudButtonGroup>
     </MudStack>
 
