@@ -119,7 +119,7 @@ html[lang] {
     --jim-link-hover-color: #63399a;
 
     /* === JIM Custom: Logo text === */
-    --jim-logo-text-color: #121b29;
+    --jim-logo-text-color: #2c144f;
 }
 
 /* Visited link colour (hardcoded — browsers block var() in :visited for privacy) */
