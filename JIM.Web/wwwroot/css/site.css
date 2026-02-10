@@ -284,9 +284,7 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
 .jim-drawer-logo p,
 .jim-drawer-logo span {
     margin: 4px 0 0 10px;
-    font-weight: 700;
-    font-size: 1.3rem;
-    letter-spacing: 0.1em;
+    font-size: 1.5rem;
     vertical-align: middle;
     color: var(--jim-logo-text-color, #ffffff) !important;
     opacity: 0.6;
