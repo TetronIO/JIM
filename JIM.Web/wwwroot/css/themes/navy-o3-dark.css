@@ -122,6 +122,28 @@ html[lang] {
     --jim-logo-text-color: #ffffff;
 }
 
+/* Uncomment to lighten outlined/text primary button text for readability */
+/*
+html[lang] .mud-button-outlined.mud-button-outlined-primary:not(:disabled),
+html[lang] .mud-button-text.mud-button-text-primary:not(:disabled) {
+    color: <lightened-primary>;
+}
+*/
+
+/* Uncomment to match outlined primary button border to the lightened text colour (solo buttons only) */
+/*
+html[lang] .mud-button-outlined.mud-button-outlined-primary:not(:disabled) {
+    border-color: <lightened-primary>;
+}
+*/
+
+/* Uncomment to revert outlined border to primary within button groups */
+/*
+html[lang] .mud-button-group-root .mud-button-outlined.mud-button-outlined-primary:not(:disabled) {
+    border-color: var(--mud-palette-primary);
+}
+*/
+
 /* Visited link colour (hardcoded — browsers block var() in :visited for privacy) */
 html[lang] a.mud-link.mud-primary-text:visited {
     color: #67b9ff !important;
