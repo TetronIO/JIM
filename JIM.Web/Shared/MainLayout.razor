@@ -3,7 +3,7 @@
 @inject IUserPreferenceService PreferenceService
 @inject JIM.Web.Models.ThemeSettings ThemeSettings
 <MudThemeProvider @bind-IsDarkMode="@IsDarkMode" Theme="_theme" @ref="@_mudThemeProvider" />
-<MudPopoverProvider/>
+<MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
@@ -12,9 +12,9 @@
 <MudLayout>
 
     <MudDrawerContainer Class="mud-height-full">
-        <MudDrawer @bind-Open="@IsDrawerOpen" Elevation="0" Variant="@DrawerVariant.Mini" Overlay="false" Class="jim-drawer"
-                   @onmouseenter="@OnDrawerMouseEnter" @onmouseleave="@OnDrawerMouseLeave">
-            
+        <MudDrawer @bind-Open="@IsDrawerOpen" Elevation="0" Variant="@DrawerVariant.Mini" Overlay="false"
+                   Class="jim-drawer" @onmouseenter="@OnDrawerMouseEnter" @onmouseleave="@OnDrawerMouseLeave">
+
             <div class="jim-drawer-logo">
                 <MudImage Src="/images/jim-logo.png" Width="28" Class="mt-4 ms-4 mb-3" Alt="JIM Logo"></MudImage>
                 @if (IsDrawerOpen)
@@ -23,29 +23,23 @@
                 }
             </div>
 
-            <NavMenu DrawerOpen="@IsDrawerOpen"/>
+            <NavMenu DrawerOpen="@IsDrawerOpen" />
 
             <div class="jim-drawer-footer mud-text-secondary @(IsDrawerOpen ? "jim-drawer-footer-expanded" : "")">
-                <MudTooltip Text="@(IsDrawerPinned ? UnpinMenuText : PinMenuText)" Arrow="true" Placement="Placement.Top">
-                    <MudToggleIconButton Toggled="@IsDrawerPinned"
-                                         ToggledChanged="@(_ => ToggleDrawerPinned())"
-                                         Icon="@Icons.Material.Outlined.PushPin"
-                                         Color="@Color.Inherit"
-                                         ToggledIcon="@Icons.Material.Filled.PushPin"
-                                         ToggledColor="@Color.Inherit"
-                                         Size="@Size.Small"/>
+                <MudTooltip Text="@(IsDrawerPinned? UnpinMenuText : PinMenuText)" Arrow="true"
+                            Placement="Placement.Top">
+                    <MudToggleIconButton Toggled="@IsDrawerPinned" ToggledChanged="@(_ => ToggleDrawerPinned())"
+                                         Icon="@Icons.Material.Outlined.PushPin" Color="@Color.Inherit"
+                                         ToggledIcon="@Icons.Material.Filled.PushPin" ToggledColor="@Color.Inherit" Size="@Size.Small" />
                 </MudTooltip>
-                <MudTooltip Text="@(IsDarkMode ? LightModeText : DarkModeText)" Arrow="true" Placement="Placement.Top">
-                    <MudToggleIconButton @bind-Toggled="@IsDarkMode"
-                                         Icon="@Icons.Material.Filled.WbSunny"
-                                         Color="@Color.Inherit"
-                                         ToggledIcon="@Icons.Material.Filled.DarkMode"
-                                         ToggledColor="@Color.Inherit"
-                                         Size="@Size.Small"/>
+                <MudTooltip Text="@(IsDarkMode? LightModeText : DarkModeText)" Arrow="true" Placement="Placement.Top">
+                    <MudToggleIconButton @bind-Toggled="@IsDarkMode" Icon="@Icons.Material.Filled.WbSunny"
+                                         Color="@Color.Inherit" ToggledIcon="@Icons.Material.Filled.DarkMode"
+                                         ToggledColor="@Color.Inherit" Size="@Size.Small" />
                 </MudTooltip>
             </div>
 
-            
+
         </MudDrawer>
 
         <MudMainContent>
@@ -59,7 +53,8 @@
 
                     <MudText Align="Align.Center">
                         <MudLink Href="https://github.com/TetronIO/JIM">
-                            <MudIconButton Icon="@Icons.Custom.Brands.GitHub" aria-label="See us on GitHub" Style="color:#515560;"/>
+                            <MudIconButton Icon="@Icons.Custom.Brands.GitHub" aria-label="See us on GitHub"
+                                           Style="color:#515560;" />
                         </MudLink>
                     </MudText>
                 </div>

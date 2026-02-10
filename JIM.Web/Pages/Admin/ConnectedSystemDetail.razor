@@ -55,9 +55,9 @@
                     <MudTextField T="string" Label="Connector" @bind-Value="_connectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
                     <MudTextField T="string" Label="Name" @bind-Value="_connectedSystem.Name" Required="true" RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-5" />
                     <MudTextField T="string" Label="Description" Required="false" @bind-Value="_connectedSystem.Description" Lines="5" Variant="Variant.Outlined" Class="mt-5" />
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync" DropShadow="false">Save Changes</MudButton>
                 </MudForm>
             </MudPaper>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync" DropShadow="false">Save Changes</MudButton>
         </MudTabPanel>
 
         <MudTabPanel Text="Settings">
@@ -193,19 +193,18 @@
                         </ul>
                     </MudAlert>
                 }
-
-                <MudButton Variant="Variant.Filled" Color="@(IsSettingsFormValid || !_settingsBeingSaved ? Color.Primary : Color.Default)" Disabled="@(!IsSettingsFormValid || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync">
-                    @if (_settingsBeingSaved)
-                    {
-                        <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                        <span class="ms-2">Processing</span>
-                    }
-                    else
-                    {
-                        <text>Save Settings</text>
-                    }
-                </MudButton>
             </MudForm>
+            <MudButton Variant="Variant.Filled" Color="@(IsSettingsFormValid || !_settingsBeingSaved ? Color.Primary : Color.Default)" Disabled="@(!IsSettingsFormValid || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync">
+                @if (_settingsBeingSaved)
+                {
+                    <MudProgressCircular Class="ms-n1" Indeterminate="true" />
+                    <span class="ms-2">Processing</span>
+                }
+                else
+                {
+                    <text>Save Settings</text>
+                }
+            </MudButton>
         </MudTabPanel>
 
         <MudTabPanel Text="Schema" Disabled="@AreSettingDependentTabsDisabled()">

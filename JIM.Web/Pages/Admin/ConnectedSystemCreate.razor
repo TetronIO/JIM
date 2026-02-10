@@ -13,10 +13,12 @@
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     Provide some basic details here, and then we'll move on to configuring the Connected System.
 </MudText>
- 
+
 <MudPaper Class="pa-4 mt-5" Outlined="true">
     <MudForm @bind-IsValid="@_isFormValid" @bind-Errors="@_formErrors">
-        <MudSelect T="string" Label="Connector" Placeholder="Please select a connector..." Required="true" @bind-Value="_model.ConnectorId" AdornmentIcon="@Icons.Material.Filled.Power" Adornment="Adornment.Start" Variant="Variant.Outlined">
+        <MudSelect T="string" Label="Connector" Placeholder="Please select a connector..." Required="true"
+                   @bind-Value="_model.ConnectorId" AdornmentIcon="@Icons.Material.Filled.Power" Adornment="Adornment.Start"
+                   Variant="Variant.Outlined">
             @if (_connectorDefinitionHeaders != null)
             {
                 foreach (var header in _connectorDefinitionHeaders)
@@ -25,11 +27,14 @@
                 }
             }
         </MudSelect>
-        <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="_model.Name" Variant="Variant.Outlined" />
+        <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="_model.Name"
+                      Variant="Variant.Outlined" />
         <MudTextField Label="Description" @bind-Value="_model.Description" Lines="5" Variant="Variant.Outlined" />
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!_isFormValid)" Class="mt-5" OnClick="HandleValidSubmit" DropShadow="false">Create Connected System</MudButton>
     </MudForm>
 </MudPaper>
+
+<MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!_isFormValid)" Class="mt-5"
+           OnClick="HandleValidSubmit" DropShadow="false">Create Connected System</MudButton>
 
 @code {
     [CascadingParameter]

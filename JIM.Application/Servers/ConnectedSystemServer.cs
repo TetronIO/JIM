@@ -2993,6 +2993,75 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Validates that direct attribute mappings have compatible types and plurality.
+    /// Expression-based sources are skipped as their output type cannot be statically determined.
+    /// </summary>
+    /// <param name="mapping">The mapping to validate.</param>
+    /// <exception cref="ArgumentException">Thrown when attribute types are incompatible or plurality is invalid.</exception>
+    private static void ValidateMappingTypeCompatibility(SyncRuleMapping mapping)
+    {
+        foreach (var source in mapping.Sources)
+        {
+            // Skip expression-based sources - output type cannot be statically determined
+            if (!string.IsNullOrWhiteSpace(source.Expression))
+                continue;
+
+            // Determine source and target attribute details based on sync rule direction
+            string? sourceAttrName;
+            AttributeDataType sourceType;
+            AttributePlurality sourcePlurality;
+            string? targetAttrName;
+            AttributeDataType targetType;
+            AttributePlurality targetPlurality;
+
+            if (source.ConnectedSystemAttribute != null && mapping.TargetMetaverseAttribute != null)
+            {
+                // Import: CS attribute -> MV attribute
+                sourceAttrName = source.ConnectedSystemAttribute.Name;
+                sourceType = source.ConnectedSystemAttribute.Type;
+                sourcePlurality = source.ConnectedSystemAttribute.AttributePlurality;
+                targetAttrName = mapping.TargetMetaverseAttribute.Name;
+                targetType = mapping.TargetMetaverseAttribute.Type;
+                targetPlurality = mapping.TargetMetaverseAttribute.AttributePlurality;
+            }
+            else if (source.MetaverseAttribute != null && mapping.TargetConnectedSystemAttribute != null)
+            {
+                // Export: MV attribute -> CS attribute
+                sourceAttrName = source.MetaverseAttribute.Name;
+                sourceType = source.MetaverseAttribute.Type;
+                sourcePlurality = source.MetaverseAttribute.AttributePlurality;
+                targetAttrName = mapping.TargetConnectedSystemAttribute.Name;
+                targetType = mapping.TargetConnectedSystemAttribute.Type;
+                targetPlurality = mapping.TargetConnectedSystemAttribute.AttributePlurality;
+            }
+            else
+            {
+                // Cannot determine source/target pair - skip validation for this source
+                continue;
+            }
+
+            // Reject NotSet types - indicates schema issues
+            if (sourceType == AttributeDataType.NotSet)
+                throw new ArgumentException(
+                    $"Source attribute '{sourceAttrName}' has type NotSet. Attributes must have a defined type before they can be used in mappings.");
+
+            if (targetType == AttributeDataType.NotSet)
+                throw new ArgumentException(
+                    $"Target attribute '{targetAttrName}' has type NotSet. Attributes must have a defined type before they can be used in mappings.");
+
+            // Validate type compatibility
+            if (sourceType != targetType)
+                throw new ArgumentException(
+                    $"Type mismatch: source attribute '{sourceAttrName}' ({sourceType}) is not compatible with target attribute '{targetAttrName}' ({targetType}). Source and target attributes must have the same type.");
+
+            // Validate plurality compatibility - cannot flow multi-valued to single-valued
+            if (sourcePlurality == AttributePlurality.MultiValued && targetPlurality == AttributePlurality.SingleValued)
+                throw new ArgumentException(
+                    $"Plurality mismatch: cannot flow multi-valued source attribute '{sourceAttrName}' to single-valued target attribute '{targetAttrName}'. A single-valued attribute cannot hold multiple values.");
+        }
+    }
+
+    /// <summary>
     /// Creates a new sync rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to create.</param>
@@ -3001,6 +3070,8 @@ public class ConnectedSystemServer
     {
         if (mapping == null)
             throw new ArgumentNullException(nameof(mapping));
+
+        ValidateMappingTypeCompatibility(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for sync rule {SyncRuleId}", mapping.SyncRule?.Id);
 
@@ -3027,6 +3098,8 @@ public class ConnectedSystemServer
     {
         if (mapping == null)
             throw new ArgumentNullException(nameof(mapping));
+
+        ValidateMappingTypeCompatibility(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for sync rule {SyncRuleId} (API key initiated)", mapping.SyncRule?.Id);
 
@@ -3055,6 +3128,8 @@ public class ConnectedSystemServer
     {
         if (mapping == null)
             throw new ArgumentNullException(nameof(mapping));
+
+        ValidateMappingTypeCompatibility(mapping);
 
         Log.Debug("UpdateSyncRuleMappingAsync() called for mapping {Id}", mapping.Id);
 
