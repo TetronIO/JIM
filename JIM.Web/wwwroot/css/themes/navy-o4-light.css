@@ -1,0 +1,156 @@
+/*
+ * JIM Colour Theme: Navy O4 Light
+ *
+ * Cloned from navy-o3-light. Same palette, but the navigation drawer
+ * uses the standard paper surface with a right-hand paper border
+ * instead of blending into the page background.
+ *
+ * Depth model:
+ *   Page background:    #f3f3f3  (neutral light grey)
+ *   Container surface:  #ffffff  (white cards)
+ *   Nested containers:  #f7f7f7  (subtle grey tint)
+ *
+ * We use html[lang] instead of :root so that these declarations have
+ * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
+ * styles, ensuring our theme values always win.
+ */
+
+html[lang] {
+    /* === Primary Palette (deep blue — WCAG-safe version of sky-blue) === */
+    --mud-palette-primary: #0076d3;
+    --mud-palette-primary-rgb: 0,118,211;
+    --mud-palette-primary-darken: #005da8;
+    --mud-palette-primary-lighten: #1a8be6;
+    --mud-palette-primary-text: #ffffffff;
+
+    /* === Secondary Palette (navy — from the dark theme's background) === */
+    --mud-palette-secondary: #1e3a5f;
+    --mud-palette-secondary-rgb: 30,58,95;
+    --mud-palette-secondary-darken: #142a48;
+    --mud-palette-secondary-lighten: #2a4e7a;
+    --mud-palette-secondary-text: #ffffffff;
+
+    /* === Tertiary Palette (muted teal) === */
+    --mud-palette-tertiary: #3a8070;
+    --mud-palette-tertiary-rgb: 58,128,112;
+    --mud-palette-tertiary-darken: #2c6858;
+    --mud-palette-tertiary-lighten: #4a9a8a;
+    --mud-palette-tertiary-text: #ffffffff;
+
+    /* === Semantic Colours (WCAG AA accessible on white) === */
+    --mud-palette-success: #2d7a3e;
+    --mud-palette-success-rgb: 45,122,62;
+    --mud-palette-success-text: #ffffffff;
+    --mud-palette-warning: #b85a00;
+    --mud-palette-warning-rgb: 184,90,0;
+    --mud-palette-warning-text: #ffffffff;
+    --mud-palette-info: #0076d3;
+    --mud-palette-info-rgb: 0,118,211;
+    --mud-palette-info-text: #ffffffff;
+    --mud-palette-error: #c62828;
+    --mud-palette-error-rgb: 198,40,40;
+    --mud-palette-error-text: #ffffffff;
+
+    /* === Background & Surface === */
+    --mud-palette-background: #f3f3f3;
+    --mud-palette-surface: #ffffffff;
+    --mud-palette-background-grey: rgba(0, 0, 0, 0.024);
+
+    /* === Inner Surface (subtle grey tint for nested containers) === */
+    --jim-inner-surface: #f7f7f7;
+    --jim-inner-border-color: rgba(30, 58, 95, 0.28);
+
+    /* === Drawer (paper surface with right-hand border) === */
+    --mud-palette-drawer-background: #ffffffff;
+    --mud-palette-drawer-text: #1e3a5f;
+    --mud-palette-drawer-icon: rgba(30, 58, 95, 0.60);
+
+    /* === Text === */
+    --mud-palette-text-primary: #121b29;
+    --mud-palette-text-secondary: #4a5568;
+    --mud-palette-text-disabled: rgba(18, 27, 41, 0.34);
+
+    /* === Action === */
+    --mud-palette-action-default: rgba(18, 27, 41, 0.58);
+    --mud-palette-action-default-hover: rgba(0, 118, 211, 0.12);
+    --mud-palette-action-disabled: rgba(18, 27, 41, 0.34);
+    --mud-palette-action-disabled-background: rgba(18, 27, 41, 0.08);
+
+    /* === Lines & Dividers === */
+    --mud-palette-lines-default: rgba(30, 58, 95, 0.28);
+    --mud-palette-lines-inputs: rgba(30, 58, 95, 0.35);
+    --mud-palette-divider: rgba(30, 58, 95, 0.28);
+    --mud-palette-divider-light: rgba(0, 0, 0, 0.08);
+
+    /* === Table === */
+    --mud-palette-table-lines: rgba(30, 58, 95, 0.28);
+    --mud-palette-table-striped: rgba(0, 0, 0, 0.02);
+    --mud-palette-table-hover: rgba(0, 118, 211, 0.06);
+
+    /* === JIM Custom: Attribute table name column === */
+    --jim-attr-name-bg: #f2f0f0;
+
+    /* === JIM Custom: JSON Syntax Highlighting === */
+    --jim-json-key: #005da8;
+    --jim-json-string: #a31515;
+    --jim-json-number: #0076d3;
+    --jim-json-boolean: #6a329f;
+    --jim-json-null: #6a329f;
+
+    /* === JIM Custom: Navigation === */
+    --jim-nav-top-level-color: #4a5568;
+    --jim-nav-child-color: #4a5568;
+    --jim-nav-hover-color: #005da8;
+    --jim-nav-active-color: #0076d3;
+
+    /* === JIM Custom: Drawer border (paper border — right-hand edge) === */
+    --jim-drawer-border-color: rgba(30, 58, 95, 0.26);
+
+    /* === JIM Custom: Paper border === */
+    --jim-paper-border-color: rgba(30, 58, 95, 0.26);
+
+    /* === JIM Custom: Dialog surfaces (stepped elevation) === */
+    --jim-dialog-surface: #f3f3f3;
+    --jim-dialog-inner-surface: #eaecf0;
+
+    /* === JIM Custom: Content Links === */
+    --jim-link-color: #0076d3;
+    --jim-link-visited-color: #0076d3;
+    --jim-link-hover-color: #005da8;
+
+    /* === JIM Custom: Logo text === */
+    --jim-logo-text-color: #000000;
+}
+
+/* Uncomment to lighten outlined/text primary button text for readability */
+/*
+html[lang] .mud-button-outlined.mud-button-outlined-primary:not(:disabled),
+html[lang] .mud-button-text.mud-button-text-primary:not(:disabled) {
+    color: <lightened-primary>;
+}
+*/
+
+/* Uncomment to match outlined primary button border to the lightened text colour (solo buttons only) */
+/*
+html[lang] .mud-button-outlined.mud-button-outlined-primary:not(:disabled) {
+    border-color: <lightened-primary>;
+}
+*/
+
+/* Uncomment to revert outlined border to primary within button groups */
+/*
+html[lang] .mud-button-group-root .mud-button-outlined.mud-button-outlined-primary:not(:disabled) {
+    border-color: var(--mud-palette-primary);
+}
+*/
+
+/* Use a muted shade of text-primary for labels instead of the primary colour.
+   Exclude links — they use --jim-link-color via site.css instead. */
+html[lang] .mud-primary-text:not(a) {
+    color: #4a5568 !important;
+}
+
+/* Visited link colour (hardcoded — browsers block var() in :visited for privacy) */
+html[lang] a.mud-link.mud-primary-text:visited {
+    color: #0076d3 !important;
+}
