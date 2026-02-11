@@ -115,8 +115,8 @@ html[lang] {
     --jim-dialog-inner-surface: #f1f1f1;
 
     /* === JIM Custom: Content Links === */
-    --jim-link-color: #0076d3;
-    --jim-link-visited-color: #0076d3;
+    --jim-link-color: #0082e8;
+    --jim-link-visited-color: #0082e8;
     --jim-link-hover-color: #005da8;
 
     /* === JIM Custom: Logo text === */
@@ -145,6 +145,11 @@ html[lang] .mud-button-group-root .mud-button-outlined.mud-button-outlined-prima
 }
 */
 
+/* Active/selected nav link — use a clearly blue tint matching primary */
+html[lang] .mud-nav-link.active:not(.mud-nav-link-disabled) {
+    background-color: #f1f1f1 !important;
+}
+
 /* Use a muted shade of text-primary for labels instead of the primary colour.
    Exclude links — they use --jim-link-color via site.css instead. */
 html[lang] .mud-primary-text:not(a) {
@@ -153,5 +158,5 @@ html[lang] .mud-primary-text:not(a) {
 
 /* Visited link colour (hardcoded — browsers block var() in :visited for privacy) */
 html[lang] a.mud-link.mud-primary-text:visited {
-    color: #0076d3 !important;
+    color: #0082e8 !important;
 }
