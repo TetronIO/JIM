@@ -144,8 +144,9 @@ html[lang] .mud-button-group-root .mud-button-outlined.mud-button-outlined-prima
 }
 */
 
-/* Use a muted shade of text-primary for labels instead of the primary colour */
-html[lang] .mud-primary-text {
+/* Use a muted shade of text-primary for labels instead of the primary colour.
+   Exclude links — they use --jim-link-color via site.css instead. */
+html[lang] .mud-primary-text:not(a) {
     color: #b0b8c4 !important;
 }
 
