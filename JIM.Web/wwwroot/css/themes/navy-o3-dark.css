@@ -144,6 +144,11 @@ html[lang] .mud-button-group-root .mud-button-outlined.mud-button-outlined-prima
 }
 */
 
+/* Use a muted shade of text-primary for labels instead of the primary colour */
+html[lang] .mud-primary-text {
+    color: #b0b8c4 !important;
+}
+
 /* Default filled button — slightly lighter navy for contrast on dark backgrounds */
 html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled) {
     background-color: #2c3c59;

@@ -122,18 +122,18 @@ html[lang] {
     --jim-logo-text-color: #ffffff;
 }
 
-/* Lighten primary text colour for readability on dark navy (headings, tabs, etc.) */
+/* Use a muted shade of text-primary for labels instead of the primary colour */
 html[lang] .mud-primary-text {
-    color: #a67ed0 !important;
+    color: #b0b8c4 !important;
 }
 
-/* Lighten MudTabs active tab text and indicator to match */
+/* Match MudTabs active tab text and indicator */
 html[lang] .mud-tab.mud-tab-active {
-    color: #a67ed0 !important;
+    color: #b0b8c4 !important;
 }
 
 html[lang] .mud-tab-slider {
-    background: #a67ed0 !important;
+    background: #b0b8c4 !important;
 }
 
 /* Lighten outlined/text primary button text for readability on dark navy */

@@ -122,6 +122,11 @@ html[lang] {
     --jim-logo-text-color: #000000;
 }
 
+/* Use a muted shade of text-primary for labels instead of the primary colour */
+html[lang] .mud-primary-text {
+    color: #4a5568 !important;
+}
+
 /* Visited link colour (hardcoded — browsers block var() in :visited for privacy) */
 html[lang] a.mud-link.mud-primary-text:visited {
     color: #7a4bb2 !important;
