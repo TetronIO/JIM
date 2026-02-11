@@ -6,9 +6,9 @@
  * the dark theme's sky-blue #67b9ff (darkened for WCAG AA on white).
  *
  * Depth model:
- *   Page background:    #f0f2f5  (cool blue-white)
+ *   Page background:    #f3f3f3  (neutral light grey)
  *   Container surface:  #ffffff  (white cards)
- *   Nested containers:  #e8ecf2  (blue-grey tint)
+ *   Nested containers:  #f7f7f7  (subtle grey tint)
  *
  * We use html[lang] instead of :root so that these declarations have
  * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
@@ -52,16 +52,16 @@ html[lang] {
     --mud-palette-error-text: #ffffffff;
 
     /* === Background & Surface === */
-    --mud-palette-background: #f0f2f5;
+    --mud-palette-background: #f3f3f3;
     --mud-palette-surface: #ffffffff;
     --mud-palette-background-grey: rgba(0, 0, 0, 0.024);
 
-    /* === Inner Surface (blue-grey tint for nested containers) === */
-    --jim-inner-surface: #e8ecf2;
-    --jim-inner-border-color: rgba(30, 58, 95, 0.18);
+    /* === Inner Surface (subtle grey tint for nested containers) === */
+    --jim-inner-surface: #f7f7f7;
+    --jim-inner-border-color: rgba(30, 58, 95, 0.28);
 
     /* === Drawer (blended — same as page background) === */
-    --mud-palette-drawer-background: #f0f2f5;
+    --mud-palette-drawer-background: #f3f3f3;
     --mud-palette-drawer-text: #1e3a5f;
     --mud-palette-drawer-icon: rgba(30, 58, 95, 0.60);
 
@@ -77,28 +77,28 @@ html[lang] {
     --mud-palette-action-disabled-background: rgba(18, 27, 41, 0.08);
 
     /* === Lines & Dividers === */
-    --mud-palette-lines-default: rgba(30, 58, 95, 0.18);
+    --mud-palette-lines-default: rgba(30, 58, 95, 0.28);
     --mud-palette-lines-inputs: rgba(30, 58, 95, 0.35);
-    --mud-palette-divider: rgba(30, 58, 95, 0.18);
+    --mud-palette-divider: rgba(30, 58, 95, 0.28);
     --mud-palette-divider-light: rgba(0, 0, 0, 0.08);
 
     /* === Table === */
-    --mud-palette-table-lines: rgba(30, 58, 95, 0.18);
+    --mud-palette-table-lines: rgba(30, 58, 95, 0.28);
     --mud-palette-table-striped: rgba(0, 0, 0, 0.02);
     --mud-palette-table-hover: rgba(26, 107, 170, 0.06);
 
     /* === JIM Custom: Attribute table name column === */
-    --jim-attr-name-bg: #e4e8ee;
+    --jim-attr-name-bg: #f2f0f0;
 
     /* === JIM Custom: JSON Syntax Highlighting === */
     --jim-json-key: #145288;
     --jim-json-string: #a31515;
-    --jim-json-number: #b85a00;
+    --jim-json-number: #1a6baa;
     --jim-json-boolean: #6a329f;
     --jim-json-null: #6a329f;
 
     /* === JIM Custom: Navigation === */
-    --jim-nav-top-level-color: #1a6baa;
+    --jim-nav-top-level-color: #4a5568;
     --jim-nav-child-color: #4a5568;
     --jim-nav-hover-color: #145288;
     --jim-nav-active-color: #1a6baa;
@@ -107,10 +107,10 @@ html[lang] {
     --jim-drawer-border-color: transparent;
 
     /* === JIM Custom: Paper border === */
-    --jim-paper-border-color: rgba(30, 58, 95, 0.16);
+    --jim-paper-border-color: rgba(30, 58, 95, 0.26);
 
     /* === JIM Custom: Dialog surfaces (stepped elevation) === */
-    --jim-dialog-surface: #f4f6f8;
+    --jim-dialog-surface: #f3f3f3;
     --jim-dialog-inner-surface: #eaecf0;
 
     /* === JIM Custom: Content Links === */
@@ -119,7 +119,7 @@ html[lang] {
     --jim-link-hover-color: #145288;
 
     /* === JIM Custom: Logo text === */
-    --jim-logo-text-color: #121b29;
+    --jim-logo-text-color: #000000;
 }
 
 /* Uncomment to lighten outlined/text primary button text for readability */
