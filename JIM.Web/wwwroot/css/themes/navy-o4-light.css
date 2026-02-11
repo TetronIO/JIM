@@ -1,14 +1,15 @@
 /*
  * JIM Colour Theme: Navy O4 Light
  *
- * Cloned from navy-o3-light. Same palette, but the navigation drawer
- * uses the standard paper surface with a right-hand paper border
- * instead of blending into the page background.
+ * Cloned from navy-o3 with an inverted depth model: the page background
+ * is white and containers get progressively darker as they nest. The
+ * navigation drawer uses the container surface with a right-hand paper
+ * border.
  *
- * Depth model:
- *   Page background:    #f3f3f3  (neutral light grey)
- *   Container surface:  #ffffff  (white cards)
- *   Nested containers:  #f7f7f7  (subtle grey tint)
+ * Depth model (inverted — containers darken inward):
+ *   Page background:    #ffffff  (white)
+ *   Container surface:  #fafafa  (light grey cards)
+ *   Nested containers:  #f1f1f1  (subtle grey step)
  *
  * We use html[lang] instead of :root so that these declarations have
  * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
@@ -51,17 +52,17 @@ html[lang] {
     --mud-palette-error-rgb: 198,40,40;
     --mud-palette-error-text: #ffffffff;
 
-    /* === Background & Surface === */
-    --mud-palette-background: #f3f3f3;
-    --mud-palette-surface: #ffffffff;
+    /* === Background & Surface (inverted — white page, shaded containers) === */
+    --mud-palette-background: #ffffff;
+    --mud-palette-surface: #fafafa;
     --mud-palette-background-grey: rgba(0, 0, 0, 0.024);
 
-    /* === Inner Surface (subtle grey tint for nested containers) === */
-    --jim-inner-surface: #f7f7f7;
-    --jim-inner-border-color: rgba(30, 58, 95, 0.28);
+    /* === Inner Surface (subtle step for nested containers) === */
+    --jim-inner-surface: #f1f1f1;
+    --jim-inner-border-color: rgba(30, 58, 95, 0.26);
 
-    /* === Drawer (paper surface with right-hand border) === */
-    --mud-palette-drawer-background: #ffffffff;
+    /* === Drawer (container surface with right-hand border) === */
+    --mud-palette-drawer-background: #fafafa;
     --mud-palette-drawer-text: #1e3a5f;
     --mud-palette-drawer-icon: rgba(30, 58, 95, 0.60);
 
@@ -88,7 +89,7 @@ html[lang] {
     --mud-palette-table-hover: rgba(0, 118, 211, 0.06);
 
     /* === JIM Custom: Attribute table name column === */
-    --jim-attr-name-bg: #f2f0f0;
+    --jim-attr-name-bg: #eeedec;
 
     /* === JIM Custom: JSON Syntax Highlighting === */
     --jim-json-key: #005da8;
@@ -110,8 +111,8 @@ html[lang] {
     --jim-paper-border-color: rgba(30, 58, 95, 0.26);
 
     /* === JIM Custom: Dialog surfaces (stepped elevation) === */
-    --jim-dialog-surface: #f3f3f3;
-    --jim-dialog-inner-surface: #eaecf0;
+    --jim-dialog-surface: #ffffff;
+    --jim-dialog-inner-surface: #f1f1f1;
 
     /* === JIM Custom: Content Links === */
     --jim-link-color: #0076d3;
