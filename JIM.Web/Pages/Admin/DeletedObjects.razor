@@ -62,61 +62,61 @@
                                    Clearable="true" />
                 </MudItem>
             </MudGrid>
-            <div class="d-flex align-center gap-3 mt-4 mb-4">
+            <div class="d-flex align-center gap-3 mt-4">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchCsosAsync" DropShadow="false">
                     Search
                 </MudButton>
             </div>
-
-            <!-- Results Table -->
-            <MudTable Items="@_deletedCsoChanges" Hover="true" Breakpoint="Breakpoint.Sm" Outlined="true" Elevation="0"
-                      Loading="@_csoLoading" Dense="true" CurrentPage="@(_csoPage - 1)" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged">
-                <HeaderContent>
-                    <MudTh Style="width: 1px;"></MudTh>
-                    <MudTh><MudText Typo="Typo.button">External ID</MudText></MudTh>
-                    <MudTh><MudText Typo="Typo.button">Display Name</MudText></MudTh>
-                    <MudTh><MudText Typo="Typo.button">Object Type</MudText></MudTh>
-                    <MudTh><MudText Typo="Typo.button">Connected System</MudText></MudTh>
-                    <MudTh><MudText Typo="Typo.button">Deleted</MudText></MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd>
-                        <MudButton Variant="Variant.Outlined"
-                                  
-                                   Color="Color.Primary"
-                                   OnClick="() => ViewCsoHistoryAsync(context)">
-                            View
-                        </MudButton>
-                    </MudTd>
-                    <MudTd DataLabel="External ID">
-                        <span class="jim-text-code">@(context.DeletedObjectExternalId ?? "N/A")</span>
-                    </MudTd>
-                    <MudTd DataLabel="Display Name">
-                        @(context.DeletedObjectDisplayName ?? "-")
-                    </MudTd>
-                    <MudTd DataLabel="Object Type">
-                        @(context.DeletedObjectType?.Name ?? "Unknown")
-                    </MudTd>
-                    <MudTd DataLabel="Connected System">
-                        @{
-                            var csName = _connectedSystems?.FirstOrDefault(c => c.Id == context.ConnectedSystemId)?.Name ?? $"ID: {context.ConnectedSystemId}";
-                        }
-                        <MudLink Href="@($"/admin/connected-systems/{context.ConnectedSystemId}")">@csName</MudLink>
-                    </MudTd>
-                    <MudTd DataLabel="Deleted">
-                        <MudTooltip Text="@context.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")" Arrow="true" Placement="Placement.Top">
-                            @context.ChangeTime.ToLocalTime().Humanize()
-                        </MudTooltip>
-                    </MudTd>
-                </RowTemplate>
-                <NoRecordsContent>
-                    <MudText>No deleted CSOs found matching your criteria.</MudText>
-                </NoRecordsContent>
-                <PagerContent>
-                    <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
-                </PagerContent>
-            </MudTable>
         </MudPaper>
+
+        <!-- Results Table -->
+        <MudTable Items="@_deletedCsoChanges" Hover="true" Breakpoint="Breakpoint.Sm" Outlined="true" Elevation="0"
+                  Loading="@_csoLoading" Dense="true" CurrentPage="@(_csoPage - 1)" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged" Class="mt-4">
+            <HeaderContent>
+                <MudTh Style="width: 1px;"></MudTh>
+                <MudTh><MudText Typo="Typo.button">External ID</MudText></MudTh>
+                <MudTh><MudText Typo="Typo.button">Display Name</MudText></MudTh>
+                <MudTh><MudText Typo="Typo.button">Object Type</MudText></MudTh>
+                <MudTh><MudText Typo="Typo.button">Connected System</MudText></MudTh>
+                <MudTh><MudText Typo="Typo.button">Deleted</MudText></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>
+                    <MudButton Variant="Variant.Outlined"
+
+                               Color="Color.Primary"
+                               OnClick="() => ViewCsoHistoryAsync(context)">
+                        View
+                    </MudButton>
+                </MudTd>
+                <MudTd DataLabel="External ID">
+                    <span class="jim-text-code">@(context.DeletedObjectExternalId ?? "N/A")</span>
+                </MudTd>
+                <MudTd DataLabel="Display Name">
+                    @(context.DeletedObjectDisplayName ?? "-")
+                </MudTd>
+                <MudTd DataLabel="Object Type">
+                    @(context.DeletedObjectType?.Name ?? "Unknown")
+                </MudTd>
+                <MudTd DataLabel="Connected System">
+                    @{
+                        var csName = _connectedSystems?.FirstOrDefault(c => c.Id == context.ConnectedSystemId)?.Name ?? $"ID: {context.ConnectedSystemId}";
+                    }
+                    <MudLink Href="@($"/admin/connected-systems/{context.ConnectedSystemId}")">@csName</MudLink>
+                </MudTd>
+                <MudTd DataLabel="Deleted">
+                    <MudTooltip Text="@context.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")" Arrow="true" Placement="Placement.Top">
+                        @context.ChangeTime.ToLocalTime().Humanize()
+                    </MudTooltip>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText>No deleted CSOs found matching your criteria.</MudText>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
+            </PagerContent>
+        </MudTable>
     </MudTabPanel>
 
     <MudTabPanel Text="Deleted MVOs">
@@ -161,75 +161,75 @@
                                    Clearable="true" />
                 </MudItem>
             </MudGrid>
-            <div class="d-flex align-center gap-3 mt-4 mb-4">
+            <div class="d-flex align-center gap-3 mt-4">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchMvosAsync" DropShadow="false">
                     Search
                 </MudButton>
             </div>
-
-            <!-- Results Table -->
-            <MudTable Items="@_deletedMvoChanges" Hover="true" Breakpoint="Breakpoint.Sm" Outlined="true" Elevation="0"
-                      Loading="@_mvoLoading" Dense="true" CurrentPage="@(_mvoPage - 1)" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged">
-                <HeaderContent>
-                    <MudTh Style="width: 1px;"></MudTh>
-                    <MudTh><MudText Typo="Typo.button">Display Name</MudText></MudTh>
-                    <MudTh><MudText Typo="Typo.button">Object Type</MudText></MudTh>
-                    <MudTh><MudText Typo="Typo.button">Deleted</MudText></MudTh>
-                    <MudTh><MudText Typo="Typo.button">Deleted By</MudText></MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd>
-                        <MudButton Variant="Variant.Outlined"
-                                  
-                                   Color="Color.Primary"
-                                   OnClick="() => ViewMvoHistoryAsync(context)">
-                            View
-                        </MudButton>
-                    </MudTd>
-                    <MudTd DataLabel="Display Name">
-                        @(context.DeletedObjectDisplayName ?? "-")
-                    </MudTd>
-                    <MudTd DataLabel="Object Type">
-                        @(context.DeletedObjectType?.Name ?? "Unknown")
-                    </MudTd>
-                    <MudTd DataLabel="Deleted">
-                        <MudTooltip Text="@context.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")" Arrow="true" Placement="Placement.Top">
-                            @context.ChangeTime.ToLocalTime().Humanize()
-                        </MudTooltip>
-                    </MudTd>
-                    <MudTd DataLabel="Deleted By">
-                        @if (!string.IsNullOrEmpty(context.InitiatedByName))
-                        {
-                            <div class="d-flex align-center gap-1">
-                                <MudIcon Icon="@Helpers.GetInitiatorIcon(context.InitiatedByType)" Class="mud-text-secondary" />
-                                @if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.ApiKey && context.InitiatedById.HasValue)
-                                {
-                                    <MudLink Href="@($"/admin/apikeys/{context.InitiatedById}")">@context.InitiatedByName</MudLink>
-                                }
-                                else if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.User && context.InitiatedById.HasValue)
-                                {
-                                    <MudLink Href="@($"/users/{context.InitiatedById}")">@context.InitiatedByName</MudLink>
-                                }
-                                else
-                                {
-                                    @context.InitiatedByName
-                                }
-                            </div>
-                        }
-                        else
-                        {
-                            <span class="mud-text-secondary">Unknown</span>
-                        }
-                    </MudTd>
-                </RowTemplate>
-                <NoRecordsContent>
-                    <MudText>No deleted MVOs found matching your criteria.</MudText>
-                </NoRecordsContent>
-                <PagerContent>
-                    <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
-                </PagerContent>
-            </MudTable>
         </MudPaper>
+
+        <!-- Results Table -->
+        <MudTable Items="@_deletedMvoChanges" Hover="true" Breakpoint="Breakpoint.Sm" Outlined="true" Elevation="0"
+                  Loading="@_mvoLoading" Dense="true" CurrentPage="@(_mvoPage - 1)" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged" Class="mt-4">
+            <HeaderContent>
+                <MudTh Style="width: 1px;"></MudTh>
+                <MudTh><MudText Typo="Typo.button">Display Name</MudText></MudTh>
+                <MudTh><MudText Typo="Typo.button">Object Type</MudText></MudTh>
+                <MudTh><MudText Typo="Typo.button">Deleted</MudText></MudTh>
+                <MudTh><MudText Typo="Typo.button">Deleted By</MudText></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>
+                    <MudButton Variant="Variant.Outlined"
+
+                               Color="Color.Primary"
+                               OnClick="() => ViewMvoHistoryAsync(context)">
+                        View
+                    </MudButton>
+                </MudTd>
+                <MudTd DataLabel="Display Name">
+                    @(context.DeletedObjectDisplayName ?? "-")
+                </MudTd>
+                <MudTd DataLabel="Object Type">
+                    @(context.DeletedObjectType?.Name ?? "Unknown")
+                </MudTd>
+                <MudTd DataLabel="Deleted">
+                    <MudTooltip Text="@context.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")" Arrow="true" Placement="Placement.Top">
+                        @context.ChangeTime.ToLocalTime().Humanize()
+                    </MudTooltip>
+                </MudTd>
+                <MudTd DataLabel="Deleted By">
+                    @if (!string.IsNullOrEmpty(context.InitiatedByName))
+                    {
+                        <div class="d-flex align-center gap-1">
+                            <MudIcon Icon="@Helpers.GetInitiatorIcon(context.InitiatedByType)" Class="mud-text-secondary" />
+                            @if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.ApiKey && context.InitiatedById.HasValue)
+                            {
+                                <MudLink Href="@($"/admin/apikeys/{context.InitiatedById}")">@context.InitiatedByName</MudLink>
+                            }
+                            else if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.User && context.InitiatedById.HasValue)
+                            {
+                                <MudLink Href="@($"/users/{context.InitiatedById}")">@context.InitiatedByName</MudLink>
+                            }
+                            else
+                            {
+                                @context.InitiatedByName
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <span class="mud-text-secondary">Unknown</span>
+                    }
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText>No deleted MVOs found matching your criteria.</MudText>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
+            </PagerContent>
+        </MudTable>
     </MudTabPanel>
 </MudTabs>
 
