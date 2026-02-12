@@ -24,7 +24,7 @@
         <MudSpacer />
         <MudCheckBox @bind-Value="_showConfigurableOnly" @bind-Value:after="UpdateFilteredSettings" Label="Show configurable only" Color="Color.Primary" Class="mr-4" />
         <MudCheckBox @bind-Value="_showOverriddenOnly" @bind-Value:after="UpdateFilteredSettings" Label="Show overridden only" Color="Color.Primary" Class="mr-4" />
-        <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start"
+        <MudTextField @bind-Value="_searchString" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense" Adornment="Adornment.Start"
             AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Immediate="true"></MudTextField>
     </ToolBarContent>
     <ColGroup>

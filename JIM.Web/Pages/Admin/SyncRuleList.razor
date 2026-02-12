@@ -14,130 +14,157 @@
 
 @if (!_canCreateSyncRules)
 {
-    <MudAlert Class="mt-5" Severity="Severity.Warning">Please create a <MudLink Href="/admin/connected-systems/">Connected System</MudLink> first.</MudAlert>
-}
+    <MudAlert Class="mt-5" Severity="Severity.Warning">Please create a <MudLink Href="/admin/connected-systems/">Connected
+        System</MudLink> first.</MudAlert>
+    }
 
-<MudTable Items="@_syncRuleHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By" Filter="new Func<SyncRuleHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
-    <ToolBarContent>
-        <MudButton
-            StartIcon="@Icons.Material.Filled.Add"
-            Variant="Variant.Filled"
-            Href="/admin/sync-rules/new"
-            Color="Color.Primary"
-            Disabled="@(!_canCreateSyncRules)"
-            DropShadow="false">Create Synchronisation Rule</MudButton>
-        <MudSpacer />
-        <MudTextField @bind-Value="_searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
-    </ToolBarContent>
-    <HeaderContent>
-        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Direction)"><MudText Typo="Typo.button">Direction</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ConnectedSystemName)"><MudText Typo="Typo.button">Connected System</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudText Typo="Typo.button">Object Mapping</MudText></MudTh>
-        <MudTh><MudText Typo="Typo.button">Capabilities</MudText></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Enabled)"><MudText Typo="Typo.button">Status</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd DataLabel="Name"><MudLink Href="@("/admin/sync-rules/"+context.Id)">@context.Name</MudLink></MudTd>
-        <MudTd DataLabel="Direction">
-            @if (context.Direction == SyncRuleDirection.Import)
-            {
-                <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Inbound</MudChip>
-            }
-            else
-            {
-                <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Outbound</MudChip>
-            }
-        </MudTd>
-        <MudTd DataLabel="Connected System">@context.ConnectedSystemName</MudTd>
-        <MudTd DataLabel="Object Mapping">
-            <div class="d-flex align-center flex-wrap" style="gap: 2px;">
+    <MudTable Items="@_syncRuleHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By"
+              Filter="new Func<SyncRuleHeader, bool>(FilterFunc1)" Outlined="true" Elevation="0">
+        <ToolBarContent>
+            <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Href="/admin/sync-rules/new"
+                       Color="Color.Primary" Disabled="@(!_canCreateSyncRules)" DropShadow="false">Create Synchronisation Rule
+            </MudButton>
+            <MudSpacer />
+            <MudTextField @bind-Value="_searchString" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium"
+                          Class="mt-0"></MudTextField>
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>
+                <MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Name)">
+                    <MudText Typo="Typo.button">Name</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Direction)">
+                    <MudText Typo="Typo.button">Direction</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.ConnectedSystemName)">
+                    <MudText Typo="Typo.button">Connected System</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudText Typo="Typo.button">Object Mapping</MudText>
+            </MudTh>
+            <MudTh>
+                <MudText Typo="Typo.button">Capabilities</MudText>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Enabled)">
+                    <MudText Typo="Typo.button">Status</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>
+                <MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Created)">
+                    <MudText Typo="Typo.button">Created</MudText>
+                </MudTableSortLabel>
+            </MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">
+                <MudLink Href="@("/admin/sync-rules/" + context.Id)">@context.Name</MudLink>
+            </MudTd>
+            <MudTd DataLabel="Direction">
                 @if (context.Direction == SyncRuleDirection.Import)
                 {
-                    @* Inbound: CS -> MV *@
-                    <MudChip T="string">
-                        <AvatarContent>
-                            <MudTooltip Text="Connected System Object Type" Arrow="true" Placement="Placement.Top">
-                                <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
-                            </MudTooltip>
-                        </AvatarContent>
-                        <ChildContent>@context.ConnectedSystemObjectTypeName</ChildContent>
-                    </MudChip>
-                    <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Class="mud-text-secondary" />
-                    <MudChip T="string">
-                        <AvatarContent>
-                            <MudTooltip Text="Metaverse Object Type" Arrow="true" Placement="Placement.Top">
-                                <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                            </MudTooltip>
-                        </AvatarContent>
-                        <ChildContent>@context.MetaverseObjectTypeName</ChildContent>
-                    </MudChip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Inbound</MudChip>
                 }
                 else
                 {
-                    @* Outbound: MV -> CS *@
-                    <MudChip T="string">
-                        <AvatarContent>
-                            <MudTooltip Text="Metaverse Object Type" Arrow="true" Placement="Placement.Top">
-                                <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                            </MudTooltip>
-                        </AvatarContent>
-                        <ChildContent>@context.MetaverseObjectTypeName</ChildContent>
-                    </MudChip>
-                    <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Class="mud-text-secondary" />
-                    <MudChip T="string">
-                        <AvatarContent>
-                            <MudTooltip Text="Connected System Object Type" Arrow="true" Placement="Placement.Top">
-                                <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
-                            </MudTooltip>
-                        </AvatarContent>
-                        <ChildContent>@context.ConnectedSystemObjectTypeName</ChildContent>
-                    </MudChip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Outbound</MudChip>
                 }
-            </div>
-        </MudTd>
-        <MudTd DataLabel="Capabilities">
-            <div class="d-flex align-center gap-1 flex-wrap">
-                @if (context.Direction == SyncRuleDirection.Import && context.ProjectToMetaverse == true)
+            </MudTd>
+            <MudTd DataLabel="Connected System">@context.ConnectedSystemName</MudTd>
+            <MudTd DataLabel="Object Mapping">
+                <div class="d-flex align-center flex-wrap" style="gap: 2px;">
+                    @if (context.Direction == SyncRuleDirection.Import)
+                    {
+                        @* Inbound: CS -> MV *@
+                        <MudChip T="string">
+                            <AvatarContent>
+                                <MudTooltip Text="Connected System Object Type" Arrow="true" Placement="Placement.Top">
+                                    <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                </MudTooltip>
+                            </AvatarContent>
+                            <ChildContent>@context.ConnectedSystemObjectTypeName</ChildContent>
+                        </MudChip>
+                        <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Class="mud-text-secondary" />
+                        <MudChip T="string">
+                            <AvatarContent>
+                                <MudTooltip Text="Metaverse Object Type" Arrow="true" Placement="Placement.Top">
+                                    <MudAvatar Color="Color.Primary">MV</MudAvatar>
+                                </MudTooltip>
+                            </AvatarContent>
+                            <ChildContent>@context.MetaverseObjectTypeName</ChildContent>
+                        </MudChip>
+                    }
+                    else
+                    {
+                        @* Outbound: MV -> CS *@
+                        <MudChip T="string">
+                            <AvatarContent>
+                                <MudTooltip Text="Metaverse Object Type" Arrow="true" Placement="Placement.Top">
+                                    <MudAvatar Color="Color.Primary">MV</MudAvatar>
+                                </MudTooltip>
+                            </AvatarContent>
+                            <ChildContent>@context.MetaverseObjectTypeName</ChildContent>
+                        </MudChip>
+                        <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Class="mud-text-secondary" />
+                        <MudChip T="string">
+                            <AvatarContent>
+                                <MudTooltip Text="Connected System Object Type" Arrow="true" Placement="Placement.Top">
+                                    <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                </MudTooltip>
+                            </AvatarContent>
+                            <ChildContent>@context.ConnectedSystemObjectTypeName</ChildContent>
+                        </MudChip>
+                    }
+                </div>
+            </MudTd>
+            <MudTd DataLabel="Capabilities">
+                <div class="d-flex align-center gap-1 flex-wrap">
+                    @if (context.Direction == SyncRuleDirection.Import && context.ProjectToMetaverse == true)
+                    {
+                        <MudTooltip Text="Projects new objects to the Metaverse" Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Projects</MudChip>
+                        </MudTooltip>
+                    }
+                    @if (context.Direction == SyncRuleDirection.Export && context.ProvisionToConnectedSystem == true)
+                    {
+                        <MudTooltip Text="Provisions new objects to the Connected System" Arrow="true"
+                                    Placement="Placement.Top">
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Provisions</MudChip>
+                        </MudTooltip>
+                    }
+                    @if (!((context.Direction == SyncRuleDirection.Import && context.ProjectToMetaverse == true) ||
+                                                                                                                           (context.Direction == SyncRuleDirection.Export && context.ProvisionToConnectedSystem == true)))
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">-</MudText>
+                    }
+                </div>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                @if (context.Enabled)
                 {
-                    <MudTooltip Text="Projects new objects to the Metaverse" Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Projects</MudChip>
-                    </MudTooltip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Success">Enabled</MudChip>
                 }
-                @if (context.Direction == SyncRuleDirection.Export && context.ProvisionToConnectedSystem == true)
+                else
                 {
-                    <MudTooltip Text="Provisions new objects to the Connected System" Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Provisions</MudChip>
-                    </MudTooltip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default">Disabled</MudChip>
                 }
-                @if (!((context.Direction == SyncRuleDirection.Import && context.ProjectToMetaverse == true) ||
-                       (context.Direction == SyncRuleDirection.Export && context.ProvisionToConnectedSystem == true)))
-                {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">-</MudText>
-                }
-            </div>
-        </MudTd>
-        <MudTd DataLabel="Status">
-            @if (context.Enabled)
-            {
-                <MudChip T="string" Variant="Variant.Text" Color="Color.Success">Enabled</MudChip>
-            }
-            else
-            {
-                <MudChip T="string" Variant="Variant.Text" Color="Color.Default">Disabled</MudChip>
-            }
-        </MudTd>
-        <MudTd DataLabel="Created">
-            <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                @context.Created.ToLocalTime().ToRelativeTime()
-            </MudTooltip>
-        </MudTd>
-    </RowTemplate>
-    <NoRecordsContent>
-        There are no synchronisation rules
-    </NoRecordsContent>
-</MudTable>
+            </MudTd>
+            <MudTd DataLabel="Created">
+                <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                    @context.Created.ToLocalTime().ToRelativeTime()
+                </MudTooltip>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            There are no synchronisation rules
+        </NoRecordsContent>
+    </MudTable>
 
 @code {
     private IList<SyncRuleHeader>? _syncRuleHeaders;

@@ -24,7 +24,7 @@
         RowClass="cursor-pointer" Loading="@_loading" LoadingProgressColor="Color.Primary">
         <ToolBarContent>
             <MudSpacer />
-            <MudTextField T="string" ValueChanged="@(s => OnSearch(s))" Placeholder="Search..."
+            <MudTextField T="string" ValueChanged="@(s => OnSearch(s))" Variant="Variant.Outlined" Placeholder="Search..." Margin="Margin.Dense"
                 Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium"
                 Class="mt-0" />
         </ToolBarContent>

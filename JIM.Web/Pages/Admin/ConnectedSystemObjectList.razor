@@ -63,7 +63,9 @@
             <MudSpacer />
             <MudTextField T="string"
                           ValueChanged="@(s => OnSearch(s))"
+                          Variant="Variant.Outlined"
                           Placeholder="Search external ID, secondary ID, or display name"
+                          Margin="Margin.Dense"
                           Adornment="Adornment.Start"
                           AdornmentIcon="@Icons.Material.Filled.Search"
                           IconSize="Size.Medium"
