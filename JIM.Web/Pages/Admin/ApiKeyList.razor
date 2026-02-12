@@ -19,19 +19,11 @@
     integration testing, and automation scripts.
 </MudText>
 
-<MudPaper Elevation="0" Class="mt-5 pa-4" Outlined="true">
-    <MudText Typo="Typo.h6">Create API Key</MudText>
-    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
-        Create a new API key for automated access to the JIM API.
-    </MudText>
-    <MudButton OnClick="ShowCreateDialog" StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary"
-        Class="mt-3" DropShadow="false">Create API Key</MudButton>
-</MudPaper>
-
 <MudTable Items="@_apiKeys" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5 mb-5" SortLabel="Sort By"
     Filter="new Func<ApiKey, bool>(FilterFunc)" Outlined="true" Elevation="0" Loading="@_loading">
     <ToolBarContent>
-        <MudText Typo="Typo.h6">API Keys</MudText>
+        <MudButton OnClick="ShowCreateDialog" StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary"
+            DropShadow="false">Create API Key</MudButton>
         <MudSpacer />
         <MudTextField @bind-Value="_searchString" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense" Adornment="Adornment.Start"
             AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
