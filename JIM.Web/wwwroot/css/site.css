@@ -174,11 +174,11 @@ html[lang] .mud-paper .mud-simple-table {
     background-color: var(--jim-inner-surface, transparent);
 }
 
-/* Data cells in nested tables use the page background so they contrast against
+/* Data cells in nested tables use the paper surface so they contrast against
    the shaded header row (table-level background bleeds through transparent rows). */
 html[lang] .mud-paper .mud-simple-table tbody td,
 html[lang] .mud-paper .mud-table .mud-table-body .mud-table-cell {
-    background-color: var(--mud-palette-background, #ffffff);
+    background-color: var(--mud-palette-surface, #ffffff);
 }
 
 html[lang] .mud-paper .mud-table-outlined,
@@ -689,7 +689,7 @@ html[lang] .mud-dialog .mud-paper-outlined {
     line-height: 1.5;
     margin: 0;
     padding: 12px;
-    background: var(--mud-palette-drawer-background, var(--mud-palette-background));
+    background: var(--jim-inner-surface, var(--mud-palette-background));
     border-radius: 8px;
     overflow-x: auto;
     white-space: pre-wrap;

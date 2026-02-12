@@ -8,7 +8,7 @@
  * Depth model:
  *   Page background:    #121b29  (deep navy)
  *   Container surface:  #182234  (slightly lighter navy)
- *   Nested containers:  #192636  (subtle step)
+ *   Nested containers:  #1d273b  (subtle step)
  *
  * We use html[lang] instead of :root so that these declarations have
  * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
@@ -57,7 +57,7 @@ html[lang] {
     --mud-palette-background-grey: rgba(255, 255, 255, 0.03);
 
     /* === Inner Surface (nested containers) === */
-    --jim-inner-surface: #192636;
+    --jim-inner-surface: #1d273b;
     --jim-inner-border-color: #2c3c54;
 
     /* === Drawer (paper surface with right-hand border) === */
@@ -110,7 +110,7 @@ html[lang] {
     --jim-paper-border-color: #2c3c54;
 
     /* === JIM Custom: Dialog surfaces (stepped elevation) === */
-    --jim-dialog-surface: #1a2538;
+    --jim-dialog-surface: #182234;
     --jim-dialog-inner-surface: #202d42;
 
     /* === JIM Custom: Content Links === */
