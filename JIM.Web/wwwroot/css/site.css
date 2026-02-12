@@ -174,6 +174,13 @@ html[lang] .mud-paper .mud-simple-table {
     background-color: var(--jim-inner-surface, transparent);
 }
 
+/* Data cells in nested tables use the page background so they contrast against
+   the shaded header row (table-level background bleeds through transparent rows). */
+html[lang] .mud-paper .mud-simple-table tbody td,
+html[lang] .mud-paper .mud-table .mud-table-body .mud-table-cell {
+    background-color: var(--mud-palette-background, #ffffff);
+}
+
 html[lang] .mud-paper .mud-table-outlined,
 html[lang] .mud-paper .mud-simple-table-outlined {
     border-color: var(--jim-inner-border-color, var(--jim-paper-border-color, transparent)) !important;
