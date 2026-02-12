@@ -73,8 +73,7 @@
     <MudTable @ref="_table" T="Activity" ServerData="ServerReload" @bind-CurrentPage="_currentPage"
               RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged"
               Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
-              Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer"
-              Loading="@_loading" LoadingProgressColor="Color.Primary">
+              Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer">
         <HeaderContent>
             <MudTh>
                 <MudText Typo="Typo.button">Connected System</MudText>
@@ -402,13 +401,15 @@
 
 @code {
     private MudTable<Activity>? _table;
-    private bool _loading;
     private int _currentPage;
     private int _rowsPerPage = 10;
     private bool _preferencesLoaded;
     private bool _panelOpen;
     private Activity? _selectedActivity;
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
+
+    // Snapshot of last-displayed data for change detection during polling
+    private string? _lastDataFingerprint;
 
     // Filter state
     private ActivityFilterOptions? _filterOptions;
@@ -422,7 +423,7 @@
         // Load filter options (distinct connected systems and run profiles)
         _filterOptions = await Jim.Activities.GetWorkerTaskActivityFilterOptionsAsync();
 
-        // Setup polling for auto-refresh
+        // Setup polling for auto-refresh, only reloading when data has actually changed
         var token = _pollingCancellationTokenSource.Token;
         _ = Task.Run(async () =>
         {
@@ -430,14 +431,25 @@
             {
                 try
                 {
-                    // Use a reasonable default polling interval (5 seconds for history is fine)
                     await Task.Delay(TimeSpan.FromSeconds(5), token);
 
                     // Only auto-refresh when on page 1 and panel is closed to avoid jarring UX
-                    // When on other pages, items shifting would be confusing
-                    if (_table != null && !_loading && _currentPage == 0 && !_panelOpen)
+                    if (_table == null || _currentPage != 0 || _panelOpen)
+                        continue;
+
+                    // Fetch current data and compare with what's displayed
+                    var connectedSystems = _filterConnectedSystems.Any() ? _filterConnectedSystems : null;
+                    var runProfiles = _filterRunProfiles.Any() ? _filterRunProfiles : null;
+                    var statuses = _filterStatuses.Any() ? _filterStatuses : null;
+                    var initiatedBy = string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy;
+
+                    var result = await Jim.Activities.GetWorkerTaskActivitiesAsync(
+                        1, _rowsPerPage, connectedSystems, runProfiles, statuses, initiatedBy, "created", true);
+
+                    var fingerprint = BuildFingerprint(result.Results);
+                    if (fingerprint != _lastDataFingerprint)
                     {
-                        await InvokeAsync(() => _table.ReloadServerData());
+                        await InvokeAsync(() => _table!.ReloadServerData());
                     }
                 }
                 catch (TaskCanceledException)
@@ -483,41 +495,42 @@
 
     private async Task<TableData<Activity>> ServerReload(TableState state, CancellationToken token)
     {
-        _loading = true;
-        StateHasChanged();
+        var page = state.Page + 1;
+        var sortDescending = state.SortDirection == SortDirection.Descending;
 
-        try
+        // Get activities filtered for worker tasks
+        var connectedSystems = _filterConnectedSystems.Any() ? _filterConnectedSystems : null;
+        var runProfiles = _filterRunProfiles.Any() ? _filterRunProfiles : null;
+        var statuses = _filterStatuses.Any() ? _filterStatuses : null;
+        var initiatedBy = string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy;
+
+        var result = await Jim.Activities.GetWorkerTaskActivitiesAsync(
+            page,
+            state.PageSize,
+            connectedSystems,
+            runProfiles,
+            statuses,
+            initiatedBy,
+            state.SortLabel,
+            sortDescending);
+
+        _lastDataFingerprint = BuildFingerprint(result.Results);
+
+        return new TableData<Activity>
         {
-            var page = state.Page + 1;
-            var sortDescending = state.SortDirection == SortDirection.Descending;
+            TotalItems = result.TotalResults,
+            Items = result.Results
+        };
+    }
 
-            // Get activities filtered for worker tasks
-            var connectedSystems = _filterConnectedSystems.Any() ? _filterConnectedSystems : null;
-            var runProfiles = _filterRunProfiles.Any() ? _filterRunProfiles : null;
-            var statuses = _filterStatuses.Any() ? _filterStatuses : null;
-            var initiatedBy = string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy;
-
-            var result = await Jim.Activities.GetWorkerTaskActivitiesAsync(
-                page,
-                state.PageSize,
-                connectedSystems,
-                runProfiles,
-                statuses,
-                initiatedBy,
-                state.SortLabel,
-                sortDescending);
-
-            return new TableData<Activity>
-            {
-                TotalItems = result.TotalResults,
-                Items = result.Results
-            };
-        }
-        finally
-        {
-            _loading = false;
-            StateHasChanged();
-        }
+    /// <summary>
+    /// Builds a lightweight fingerprint of the current result set for change detection.
+    /// Captures identity, status, and stats so polling only triggers a reload when data actually changed.
+    /// </summary>
+    private static string BuildFingerprint(IEnumerable<Activity> activities)
+    {
+        return string.Join("|", activities.Select(a =>
+            $"{a.Id}:{a.Status}:{a.TotalObjectCreates},{a.TotalObjectUpdates},{a.TotalObjectFlows},{a.TotalObjectDeletes},{a.TotalObjectErrors}"));
     }
 
     private void OnConnectedSystemFilterChanged(IEnumerable<string> values)
@@ -556,7 +569,7 @@
 
     private void HandleRowClick(TableRowClickEventArgs<Activity> args)
     {
-        if (_loading || args.Item == null)
+        if (args.Item == null)
             return;
 
         _selectedActivity = args.Item;
