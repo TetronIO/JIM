@@ -171,3 +171,11 @@ html[lang] .mud-button-text.mud-button-text-dark:not(:disabled) {
 html[lang] a.mud-link.mud-primary-text:visited {
     color: #e85a4a !important;
 }
+
+/* Nested table footer, pager, and no-records rows use page background
+   to contrast against the shaded header row (inner-surface). */
+html[lang] .mud-paper .mud-table .mud-table-pagination-toolbar,
+html[lang] .mud-paper .mud-table .mud-table-foot .mud-table-cell,
+html[lang] .mud-paper .mud-table .mud-table-empty-row {
+    background-color: #0e100f !important;
+}

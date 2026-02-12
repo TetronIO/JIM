@@ -132,3 +132,11 @@ html[lang] .mud-primary-text:not(a) {
 html[lang] a.mud-link.mud-primary-text:visited {
     color: #7a4bb2 !important;
 }
+
+/* Nested table footer, pager, and no-records rows use page background
+   to contrast against the shaded header row (inner-surface). */
+html[lang] .mud-paper .mud-table .mud-table-pagination-toolbar,
+html[lang] .mud-paper .mud-table .mud-table-foot .mud-table-cell,
+html[lang] .mud-paper .mud-table .mud-table-empty-row {
+    background-color: #f3f3f3 !important;
+}

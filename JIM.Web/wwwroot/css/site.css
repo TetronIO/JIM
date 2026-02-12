@@ -186,11 +186,6 @@ html[lang] .mud-paper .mud-simple-table-outlined {
     border-color: var(--jim-inner-border-color, var(--jim-paper-border-color, transparent)) !important;
 }
 
-/* Ensure table pagination footer inside inner surfaces inherits the inner background */
-html[lang] .mud-paper .mud-table .mud-table-pagination-toolbar {
-    background-color: var(--jim-inner-surface, transparent);
-}
-
 html[lang] .mud-paper .mud-tabs-tabbar {
     background-color: var(--jim-inner-surface, transparent);
 }
