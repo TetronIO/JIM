@@ -8,6 +8,7 @@
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
+@inject IUserPreferenceService PreferenceService
 
 <PageTitle>Metaverse Object Type: @_metaverseObjectType?.Name</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-primary-text">Metaverse Object Type:</span> @_metaverseObjectType?.Name</MudText>
@@ -164,7 +165,7 @@
         </div>
     </MudStack>
 
-    <MudTable Items="@_metaverseObjectType.Attributes.OrderBy(a => a.Name)" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mb-5" SortLabel="Sort By" Elevation="0" Outlined="true" Filter="new Func<MetaverseAttribute, bool>(FilterAttributes)">
+    <MudTable Items="@_metaverseObjectType.Attributes.OrderBy(a => a.Name)" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mb-5" SortLabel="Sort By" Elevation="0" Outlined="true" Filter="new Func<MetaverseAttribute, bool>(FilterAttributes)" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged">
         <ToolBarContent>
             <MudSpacer />
             <MudTextField @bind-Value="_attributeSearchString" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
@@ -206,6 +207,9 @@
                 </MudTooltip>
             </MudTd>
         </RowTemplate>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
     </MudTable>
 }
 
@@ -216,6 +220,7 @@
     private MetaverseObjectType? _metaverseObjectType;
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private string _attributeSearchString = "";
+    private int _rowsPerPage = 10;
 
     // Attribute filter state
     private IReadOnlyCollection<AttributeDataType> _selectedTypes = new List<AttributeDataType>();
@@ -239,6 +244,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _rowsPerPage = await PreferenceService.GetRowsPerPageAsync();
         _metaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeAsync(Id, true);
         if (_metaverseObjectType == null)
         {
@@ -414,6 +420,12 @@
     private void OnBuiltInFilterChanged(IReadOnlyCollection<bool> selectedBuiltIn)
     {
         _selectedBuiltIn = selectedBuiltIn;
+    }
+
+    private async Task OnRowsPerPageChanged(int newSize)
+    {
+        _rowsPerPage = newSize;
+        await PreferenceService.SetRowsPerPageAsync(newSize);
     }
 
     private IEnumerable<KeyValuePair<AttributeDataType, int>> GetAvailableTypes()
