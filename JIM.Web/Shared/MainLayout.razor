@@ -48,7 +48,7 @@
 
                 <div class="jim-page-footer">
                     <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5 mud-text-secondary">
-                        &copy; @DateTime.UtcNow.Year Tetron Ltd. All rights reserved.
+                        &copy; @DateTime.UtcNow.Year Tetron Ltd. All rights reserved. v@(AppVersion)
                     </MudText>
 
                     <MudText Align="Align.Center">
@@ -93,6 +93,18 @@
             DefaultBorderRadius = "4px"
         }
     };
+
+    private static readonly string AppVersion = GetCleanVersion();
+
+    private static string GetCleanVersion()
+    {
+        var version = (System.Reflection.CustomAttributeExtensions
+            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(MainLayout).Assembly))
+            ?.InformationalVersion ?? "unknown";
+        // Strip the source link commit hash suffix (e.g. "+6444a6934e...")
+        var plusIndex = version.IndexOf('+');
+        return plusIndex >= 0 ? version[..plusIndex] : version;
+    }
 
     private MudThemeProvider? _mudThemeProvider;
     private const string LightModeText = "Switch to light mode";
