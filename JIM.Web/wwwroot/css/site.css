@@ -10,6 +10,17 @@
     letter-spacing: 0.02857em;
 }
 
+/* Table header row background — uses jim-inner-surface when defined by theme */
+.mud-simple-table thead tr,
+.mud-table-root .mud-table-head {
+    background-color: var(--jim-inner-surface, transparent);
+}
+
+/* Border between MudTable toolbar and header row */
+.mud-table-outlined > .mud-table-toolbar {
+    border-bottom: 1px solid var(--mud-palette-table-lines, var(--mud-palette-lines-default));
+}
+
 .mud-table-root .mud-table-head .mud-table-cell {
     font-weight: 500;
     font-size: 0.875rem;

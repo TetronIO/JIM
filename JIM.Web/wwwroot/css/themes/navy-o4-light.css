@@ -54,15 +54,15 @@ html[lang] {
 
     /* === Background & Surface (inverted — white page, shaded containers) === */
     --mud-palette-background: #ffffff;
-    --mud-palette-surface: #fafafa;
+    --mud-palette-surface: #ffffff;
     --mud-palette-background-grey: rgba(0, 0, 0, 0.024);
 
     /* === Inner Surface (subtle step for nested containers) === */
-    --jim-inner-surface: #f1f1f1;
+    --jim-inner-surface: #f8f8fa;
     --jim-inner-border-color: rgba(30, 58, 95, 0.26);
 
-    /* === Drawer (container surface with right-hand border) === */
-    --mud-palette-drawer-background: #fafafa;
+    /* === Drawer === */
+    --mud-palette-drawer-background: #f8f8fa;
     --mud-palette-drawer-text: #1e3a5f;
     --mud-palette-drawer-icon: rgba(30, 58, 95, 0.60);
 
@@ -104,8 +104,8 @@ html[lang] {
     --jim-nav-hover-color: #005da8;
     --jim-nav-active-color: #0076d3;
 
-    /* === JIM Custom: Drawer border (paper border — right-hand edge) === */
-    --jim-drawer-border-color: rgba(30, 58, 95, 0.26);
+    /* === JIM Custom: Drawer border === */
+    --jim-drawer-border-color: #e2e1e5;
 
     /* === JIM Custom: Paper border === */
     --jim-paper-border-color: rgba(30, 58, 95, 0.26);
@@ -144,6 +144,21 @@ html[lang] .mud-button-group-root .mud-button-outlined.mud-button-outlined-prima
     border-color: var(--mud-palette-primary);
 }
 */
+
+/* Outlined papers in the main content area are transparent (flush with page background).
+   Does not affect popovers, menus, dialogs, or other overlay surfaces. */
+html[lang] .mud-paper-outlined {
+    background-color: transparent;
+}
+
+/* Default filled button — light grey for contrast on white backgrounds */
+html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled) {
+    background-color: #dedede;
+}
+
+html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled):hover {
+    background-color: #d0d0d0;
+}
 
 /* Active/selected nav link — use a clearly blue tint matching primary */
 html[lang] .mud-nav-link.active:not(.mud-nav-link-disabled) {
