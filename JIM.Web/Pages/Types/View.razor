@@ -179,7 +179,8 @@
         if (change.ChangeInitiatorType is MetaverseObjectChangeInitiatorType.DataGeneration
             or MetaverseObjectChangeInitiatorType.User
             or MetaverseObjectChangeInitiatorType.WorkflowInstance
-            or MetaverseObjectChangeInitiatorType.GroupMembershipRuleEvaluation)
+            or MetaverseObjectChangeInitiatorType.GroupMembershipRuleEvaluation
+            or MetaverseObjectChangeInitiatorType.System)
         {
             return change.ChangeInitiatorType.ToString();
         }

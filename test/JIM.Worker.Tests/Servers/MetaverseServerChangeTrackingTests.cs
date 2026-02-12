@@ -14,6 +14,7 @@ public class MetaverseServerChangeTrackingTests
 {
     private Mock<IRepository> _mockRepository = null!;
     private Mock<IServiceSettingsRepository> _mockServiceSettingsRepo = null!;
+    private Mock<IMetaverseRepository> _mockMetaverseRepo = null!;
     private JimApplication _jim = null!;
 
     private MetaverseObjectType _userType = null!;
@@ -25,8 +26,10 @@ public class MetaverseServerChangeTrackingTests
     {
         _mockRepository = new Mock<IRepository>();
         _mockServiceSettingsRepo = new Mock<IServiceSettingsRepository>();
+        _mockMetaverseRepo = new Mock<IMetaverseRepository>();
 
         _mockRepository.Setup(r => r.ServiceSettings).Returns(_mockServiceSettingsRepo.Object);
+        _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
 
         // Default: change tracking is enabled (GetSettingAsync returns null => default of true)
         _mockServiceSettingsRepo
@@ -58,28 +61,31 @@ public class MetaverseServerChangeTrackingTests
         _jim?.Dispose();
     }
 
+    #region CreateMetaverseObjectAsync change tracking
+
     [Test]
-    public async Task CreateMetaverseObjectChangeAsync_WithCreatedChangeType_CreatesCorrectChangeRecordAsync()
+    public async Task CreateMetaverseObjectAsync_WithChangeTrackingEnabled_CreatesChangeRecordAsync()
     {
         // Arrange
         var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
-        var additions = new List<MetaverseObjectAttributeValue>
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
-            new() { Attribute = _displayNameAttr, StringValue = "Alice Adams" },
-            new() { Attribute = _departmentAttr, StringValue = "Engineering" }
-        };
-        var removals = new List<MetaverseObjectAttributeValue>();
+            Attribute = _displayNameAttr,
+            StringValue = "Alice Adams"
+        });
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Attribute = _departmentAttr,
+            StringValue = "Engineering"
+        });
         var userId = Guid.NewGuid();
 
         // Act
-        await _jim.Metaverse.CreateMetaverseObjectChangeAsync(
+        await _jim.Metaverse.CreateMetaverseObjectAsync(
             mvo,
-            additions,
-            removals,
             ActivityInitiatorType.User,
             userId,
             "Test User",
-            ObjectChangeType.Created,
             MetaverseObjectChangeInitiatorType.DataGeneration);
 
         // Assert
@@ -94,22 +100,24 @@ public class MetaverseServerChangeTrackingTests
     }
 
     [Test]
-    public async Task CreateMetaverseObjectChangeAsync_WithCreatedChangeType_AllAttributeValuesAreAdditionsAsync()
+    public async Task CreateMetaverseObjectAsync_AllAttributeValuesAreAdditionsAsync()
     {
         // Arrange
         var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
-        var additions = new List<MetaverseObjectAttributeValue>
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
-            new() { Attribute = _displayNameAttr, StringValue = "Bob Brown" },
-            new() { Attribute = _departmentAttr, StringValue = "Finance" }
-        };
+            Attribute = _displayNameAttr,
+            StringValue = "Bob Brown"
+        });
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Attribute = _departmentAttr,
+            StringValue = "Finance"
+        });
 
         // Act
-        await _jim.Metaverse.CreateMetaverseObjectChangeAsync(
+        await _jim.Metaverse.CreateMetaverseObjectAsync(
             mvo,
-            additions,
-            new List<MetaverseObjectAttributeValue>(),
-            changeType: ObjectChangeType.Created,
             changeInitiatorType: MetaverseObjectChangeInitiatorType.DataGeneration);
 
         // Assert
@@ -128,7 +136,7 @@ public class MetaverseServerChangeTrackingTests
     }
 
     [Test]
-    public async Task CreateMetaverseObjectChangeAsync_WhenChangeTrackingDisabled_DoesNotCreateChangeRecordAsync()
+    public async Task CreateMetaverseObjectAsync_WhenChangeTrackingDisabled_DoesNotCreateChangeRecordAsync()
     {
         // Arrange - return a setting that disables change tracking
         var disabledSetting = new ServiceSetting
@@ -143,17 +151,15 @@ public class MetaverseServerChangeTrackingTests
             .ReturnsAsync(disabledSetting);
 
         var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
-        var additions = new List<MetaverseObjectAttributeValue>
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
-            new() { Attribute = _displayNameAttr, StringValue = "Charlie Clark" }
-        };
+            Attribute = _displayNameAttr,
+            StringValue = "Charlie Clark"
+        });
 
         // Act
-        await _jim.Metaverse.CreateMetaverseObjectChangeAsync(
+        await _jim.Metaverse.CreateMetaverseObjectAsync(
             mvo,
-            additions,
-            new List<MetaverseObjectAttributeValue>(),
-            changeType: ObjectChangeType.Created,
             changeInitiatorType: MetaverseObjectChangeInitiatorType.DataGeneration);
 
         // Assert
@@ -161,9 +167,72 @@ public class MetaverseServerChangeTrackingTests
     }
 
     [Test]
-    public async Task CreateMetaverseObjectChangeAsync_DefaultParameters_UsesUpdatedChangeTypeAsync()
+    public async Task CreateMetaverseObjectAsync_WithNoAttributes_DoesNotCreateChangeRecordAsync()
     {
-        // Arrange - verify backwards compatibility: default parameters preserve existing behaviour
+        // Arrange - MVO with no attribute values
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
+
+        // Act
+        await _jim.Metaverse.CreateMetaverseObjectAsync(
+            mvo,
+            changeInitiatorType: MetaverseObjectChangeInitiatorType.System);
+
+        // Assert
+        Assert.That(mvo.Changes, Has.Count.EqualTo(0));
+    }
+
+    [Test]
+    public async Task CreateMetaverseObjectAsync_WithSystemInitiator_SetsCorrectChangeInitiatorTypeAsync()
+    {
+        // Arrange
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Attribute = _displayNameAttr,
+            StringValue = "Admin User"
+        });
+
+        // Act
+        await _jim.Metaverse.CreateMetaverseObjectAsync(
+            mvo,
+            changeInitiatorType: MetaverseObjectChangeInitiatorType.System);
+
+        // Assert
+        var change = mvo.Changes[0];
+        Assert.That(change.ChangeType, Is.EqualTo(ObjectChangeType.Created));
+        Assert.That(change.ChangeInitiatorType, Is.EqualTo(MetaverseObjectChangeInitiatorType.System));
+    }
+
+    [Test]
+    public async Task CreateMetaverseObjectAsync_PersistsViaRepositoryAsync()
+    {
+        // Arrange
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Attribute = _displayNameAttr,
+            StringValue = "Test User"
+        });
+
+        // Act
+        await _jim.Metaverse.CreateMetaverseObjectAsync(
+            mvo,
+            changeInitiatorType: MetaverseObjectChangeInitiatorType.System);
+
+        // Assert - verify the repository was called
+        _mockMetaverseRepo.Verify(
+            r => r.CreateMetaverseObjectAsync(mvo),
+            Times.Once);
+    }
+
+    #endregion
+
+    #region UpdateMetaverseObjectAsync change tracking
+
+    [Test]
+    public async Task UpdateMetaverseObjectAsync_WithAdditions_CreatesChangeRecordAsync()
+    {
+        // Arrange
         var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
         var additions = new List<MetaverseObjectAttributeValue>
         {
@@ -175,36 +244,118 @@ public class MetaverseServerChangeTrackingTests
         };
         var userId = Guid.NewGuid();
 
-        // Act - call without the new optional parameters
-        await _jim.Metaverse.CreateMetaverseObjectChangeAsync(
+        // Act
+        await _jim.Metaverse.UpdateMetaverseObjectAsync(
             mvo,
             additions,
             removals,
             ActivityInitiatorType.User,
             userId,
-            "Test User");
+            "Test User",
+            MetaverseObjectChangeInitiatorType.User);
 
-        // Assert - should use Updated and derive User initiator type
+        // Assert
+        Assert.That(mvo.Changes, Has.Count.EqualTo(1));
         var change = mvo.Changes[0];
         Assert.That(change.ChangeType, Is.EqualTo(ObjectChangeType.Updated));
         Assert.That(change.ChangeInitiatorType, Is.EqualTo(MetaverseObjectChangeInitiatorType.User));
+        Assert.That(change.InitiatedByType, Is.EqualTo(ActivityInitiatorType.User));
+        Assert.That(change.InitiatedById, Is.EqualTo(userId));
     }
 
     [Test]
-    public async Task CreateMetaverseObjectChangeAsync_WithNoAdditionsOrRemovals_DoesNotCreateChangeRecordAsync()
+    public async Task UpdateMetaverseObjectAsync_WithoutAdditionsOrRemovals_SkipsChangeTrackingAsync()
+    {
+        // Arrange - operational update (e.g. marking for deletion), no attribute changes
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
+
+        // Act - call without additions/removals
+        await _jim.Metaverse.UpdateMetaverseObjectAsync(mvo);
+
+        // Assert - no change record created, but repository was still called
+        Assert.That(mvo.Changes, Has.Count.EqualTo(0));
+        _mockMetaverseRepo.Verify(
+            r => r.UpdateMetaverseObjectAsync(mvo),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task UpdateMetaverseObjectAsync_WhenChangeTrackingDisabled_DoesNotCreateChangeRecordAsync()
+    {
+        // Arrange
+        var disabledSetting = new ServiceSetting
+        {
+            Key = "ChangeTracking.MvoChangesEnabled",
+            DefaultValue = "True",
+            Value = "False",
+            ValueType = ServiceSettingValueType.Boolean
+        };
+        _mockServiceSettingsRepo
+            .Setup(r => r.GetSettingAsync(It.IsAny<string>()))
+            .ReturnsAsync(disabledSetting);
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
+        var additions = new List<MetaverseObjectAttributeValue>
+        {
+            new() { Attribute = _displayNameAttr, StringValue = "New Name" }
+        };
+
+        // Act
+        await _jim.Metaverse.UpdateMetaverseObjectAsync(
+            mvo,
+            additions: additions,
+            changeInitiatorType: MetaverseObjectChangeInitiatorType.System);
+
+        // Assert - no change record, but update still persisted
+        Assert.That(mvo.Changes, Has.Count.EqualTo(0));
+        _mockMetaverseRepo.Verify(
+            r => r.UpdateMetaverseObjectAsync(mvo),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task UpdateMetaverseObjectAsync_WithEmptyAdditionsAndRemovals_DoesNotCreateChangeRecordAsync()
     {
         // Arrange
         var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
 
-        // Act
-        await _jim.Metaverse.CreateMetaverseObjectChangeAsync(
+        // Act - explicitly pass empty lists (different from null/not provided)
+        await _jim.Metaverse.UpdateMetaverseObjectAsync(
             mvo,
-            new List<MetaverseObjectAttributeValue>(),
-            new List<MetaverseObjectAttributeValue>(),
-            changeType: ObjectChangeType.Created,
-            changeInitiatorType: MetaverseObjectChangeInitiatorType.DataGeneration);
+            additions: new List<MetaverseObjectAttributeValue>(),
+            removals: new List<MetaverseObjectAttributeValue>(),
+            changeInitiatorType: MetaverseObjectChangeInitiatorType.System);
 
-        // Assert
+        // Assert - no change record because no actual changes
         Assert.That(mvo.Changes, Has.Count.EqualTo(0));
+        _mockMetaverseRepo.Verify(
+            r => r.UpdateMetaverseObjectAsync(mvo),
+            Times.Once);
     }
+
+    [Test]
+    public async Task UpdateMetaverseObjectAsync_DeriveUserInitiatorType_WhenNotExplicitlySetAsync()
+    {
+        // Arrange
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = _userType };
+        var userId = Guid.NewGuid();
+        var additions = new List<MetaverseObjectAttributeValue>
+        {
+            new() { Attribute = _displayNameAttr, StringValue = "New Name" }
+        };
+
+        // Act - pass User initiator type but no explicit changeInitiatorType
+        await _jim.Metaverse.UpdateMetaverseObjectAsync(
+            mvo,
+            additions: additions,
+            initiatedByType: ActivityInitiatorType.User,
+            initiatedById: userId,
+            initiatedByName: "Test User");
+
+        // Assert - should derive User from ActivityInitiatorType
+        var change = mvo.Changes[0];
+        Assert.That(change.ChangeInitiatorType, Is.EqualTo(MetaverseObjectChangeInitiatorType.User));
+    }
+
+    #endregion
 }

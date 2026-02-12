@@ -178,7 +178,9 @@ public class JimApplication : IDisposable
             });
 
             Log.Information($"InitialiseSSOAsync: Creating metaverse object user ({initialAdminUniqueIdentifierClaimValue}) and assigning the {Constants.BuiltInRoles.Administrator} role.");
-            await Metaverse.CreateMetaverseObjectAsync(user);
+            await Metaverse.CreateMetaverseObjectAsync(
+                user,
+                changeInitiatorType: MetaverseObjectChangeInitiatorType.System);
             await Security.AddObjectToRoleAsync(user, Constants.BuiltInRoles.Administrator);
         }
     }

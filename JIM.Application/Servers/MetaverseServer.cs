@@ -262,23 +262,53 @@ public class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectHeaderAsync(id);
     }
 
-    public async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
+    /// <summary>
+    /// Updates a Metaverse Object and optionally records the update for audit trail.
+    /// When additions/removals are provided and change tracking is enabled, a change record is created automatically.
+    /// Callers that only update operational metadata (e.g. deletion dates) can omit additions/removals
+    /// to skip change tracking.
+    /// </summary>
+    /// <param name="metaverseObject">The MVO to update.</param>
+    /// <param name="additions">Attribute values being added (null to skip change tracking).</param>
+    /// <param name="removals">Attribute values being removed (null to skip change tracking).</param>
+    /// <param name="initiatedByType">The type of principal initiating the update.</param>
+    /// <param name="initiatedById">The ID of the principal initiating the update.</param>
+    /// <param name="initiatedByName">The display name of the principal initiating the update.</param>
+    /// <param name="changeInitiatorType">The mechanism that initiated the update (e.g. System, User).</param>
+    public async Task UpdateMetaverseObjectAsync(
+        MetaverseObject metaverseObject,
+        List<MetaverseObjectAttributeValue>? additions = null,
+        List<MetaverseObjectAttributeValue>? removals = null,
+        ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,
+        Guid? initiatedById = null,
+        string? initiatedByName = null,
+        MetaverseObjectChangeInitiatorType? changeInitiatorType = null)
     {
+        // Record change history if additions/removals are provided
+        if (additions != null || removals != null)
+        {
+            await CreateMetaverseObjectChangeAsync(
+                metaverseObject,
+                additions ?? new List<MetaverseObjectAttributeValue>(),
+                removals ?? new List<MetaverseObjectAttributeValue>(),
+                initiatedByType,
+                initiatedById,
+                initiatedByName,
+                ObjectChangeType.Updated,
+                changeInitiatorType);
+        }
+
         await Application.Repository.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
     }
 
     /// <summary>
-    /// Creates a MetaverseObjectChange record for direct MVO updates (e.g., via UI/API).
-    /// Call this BEFORE applying changes to the MVO when change tracking is needed.
-    /// This is intended for future UI implementations - sync operations use a different batched approach.
+    /// Creates a MetaverseObjectChange record and adds it to the MVO's Changes collection.
+    /// Called internally by CreateMetaverseObjectAsync and UpdateMetaverseObjectAsync.
+    /// Also available to DataGenerationServer for batch operations where change records
+    /// are attached to MVOs before bulk persistence.
+    /// Sync operations use a separate batched approach in SyncTaskProcessorBase.
     /// </summary>
-    /// <param name="metaverseObject">The MVO being updated.</param>
-    /// <param name="additions">Attribute values being added.</param>
-    /// <param name="removals">Attribute values being removed.</param>
-    /// <param name="initiatedByType">The type of principal initiating the change.</param>
-    /// <param name="initiatedById">The ID of the principal initiating the change.</param>
-    /// <param name="initiatedByName">The display name of the principal initiating the change.</param>
-    public async Task CreateMetaverseObjectChangeAsync(
+    internal async Task CreateMetaverseObjectChangeAsync(
         MetaverseObject metaverseObject,
         List<MetaverseObjectAttributeValue> additions,
         List<MetaverseObjectAttributeValue> removals,
@@ -400,8 +430,36 @@ public class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(metaverseObjectType, metaverseAttribute, attributeValue);
     }
 
-    public async Task CreateMetaverseObjectAsync(MetaverseObject metaverseObject)
+    /// <summary>
+    /// Creates a Metaverse Object and optionally records the creation for audit trail.
+    /// Change tracking is handled automatically when enabled — callers just pass initiator info.
+    /// </summary>
+    /// <param name="metaverseObject">The MVO to create.</param>
+    /// <param name="initiatedByType">The type of principal initiating the creation.</param>
+    /// <param name="initiatedById">The ID of the principal initiating the creation.</param>
+    /// <param name="initiatedByName">The display name of the principal initiating the creation.</param>
+    /// <param name="changeInitiatorType">The mechanism that initiated the creation (e.g. System, DataGeneration).</param>
+    public async Task CreateMetaverseObjectAsync(
+        MetaverseObject metaverseObject,
+        ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,
+        Guid? initiatedById = null,
+        string? initiatedByName = null,
+        MetaverseObjectChangeInitiatorType? changeInitiatorType = null)
     {
+        // Record change history if enabled (before persist so EF saves in same transaction)
+        if (metaverseObject.AttributeValues.Count > 0)
+        {
+            await CreateMetaverseObjectChangeAsync(
+                metaverseObject,
+                metaverseObject.AttributeValues,
+                new List<MetaverseObjectAttributeValue>(),
+                initiatedByType,
+                initiatedById,
+                initiatedByName,
+                ObjectChangeType.Created,
+                changeInitiatorType);
+        }
+
         await Application.Repository.Metaverse.CreateMetaverseObjectAsync(metaverseObject);
     }
 

@@ -678,7 +678,7 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
 static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, MetaverseObject user, ClaimsPrincipal claimsPrincipal)
 {
     Log.Verbose("UpdateUserAttributesFromClaimsAsync: Called.");
-    var updateRequired = false;
+    var additions = new List<MetaverseObjectAttributeValue>();
 
     if (!user.HasAttributeValue(Constants.BuiltInAttributes.DisplayName))
     {
@@ -688,18 +688,17 @@ static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, Metave
             var displayNameAttribute = await jim.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.DisplayName);
             if (displayNameAttribute != null)
             {
-                user.AttributeValues.Add(new MetaverseObjectAttributeValue
+                var attributeValue = new MetaverseObjectAttributeValue
                 {
                     Attribute = displayNameAttribute,
                     StringValue = nameClaim.Value
-                });
-
-                updateRequired = true;
+                };
+                user.AttributeValues.Add(attributeValue);
+                additions.Add(attributeValue);
                 Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + nameClaim.Type);
             }
         }
     }
-
 
     // Map given_name claim (standard OIDC claim for first name)
     if (!user.HasAttributeValue(Constants.BuiltInAttributes.FirstName))
@@ -710,13 +709,13 @@ static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, Metave
             var firstNameAttribute = await jim.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.FirstName);
             if (firstNameAttribute != null)
             {
-                user.AttributeValues.Add(new MetaverseObjectAttributeValue
+                var attributeValue = new MetaverseObjectAttributeValue
                 {
                     Attribute = firstNameAttribute,
                     StringValue = givenNameClaim.Value
-                });
-
-                updateRequired = true;
+                };
+                user.AttributeValues.Add(attributeValue);
+                additions.Add(attributeValue);
                 Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + givenNameClaim.Type);
             }
         }
@@ -731,13 +730,13 @@ static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, Metave
             var lastNameAttribute = await jim.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.LastName);
             if (lastNameAttribute != null)
             {
-                user.AttributeValues.Add(new MetaverseObjectAttributeValue
+                var attributeValue = new MetaverseObjectAttributeValue
                 {
                     Attribute = lastNameAttribute,
                     StringValue = familyNameClaim.Value
-                });
-
-                updateRequired = true;
+                };
+                user.AttributeValues.Add(attributeValue);
+                additions.Add(attributeValue);
                 Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + familyNameClaim.Type);
             }
         }
@@ -752,22 +751,25 @@ static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, Metave
             var upnAttribute = await jim.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.UserPrincipalName);
             if (upnAttribute != null)
             {
-                user.AttributeValues.Add(new MetaverseObjectAttributeValue
+                var attributeValue = new MetaverseObjectAttributeValue
                 {
                     Attribute = upnAttribute,
                     StringValue = preferredUsernameClaim.Value
-                });
-
-                updateRequired = true;
+                };
+                user.AttributeValues.Add(attributeValue);
+                additions.Add(attributeValue);
                 Log.Verbose("UpdateUserAttributesFromClaimsAsync: Added value from claim: " + preferredUsernameClaim.Type);
             }
         }
     }
 
-    if (updateRequired)
+    if (additions.Count > 0)
     {
-        // update the user with the new attribute values
-        await jim.Metaverse.UpdateMetaverseObjectAsync(user);
+        // update the user with the new attribute values (change tracking handled automatically)
+        await jim.Metaverse.UpdateMetaverseObjectAsync(
+            user,
+            additions: additions,
+            changeInitiatorType: MetaverseObjectChangeInitiatorType.System);
         Log.Debug("UpdateUserAttributesFromClaimsAsync: Updated user with new attribute values from some claims");
     }
 }

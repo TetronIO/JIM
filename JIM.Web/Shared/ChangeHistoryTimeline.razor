@@ -1113,6 +1113,7 @@ else
                 "Export" => Icons.Material.Filled.Output,
                 "Import" => Icons.Material.Filled.Input,
                 "DataGeneration" => Icons.Material.Filled.AutoAwesome,
+                "System" => Icons.Material.Filled.Settings,
                 _ => Icons.Material.Filled.HelpOutline
             };
 
@@ -1132,7 +1133,7 @@ else
     {
         // If we already have a specific mechanism type (not generic "Import"), use it
         if (changeGroup.ChangeMechanismType is "SynchronisationRule" or "Export" or "User" or "WorkflowInstance" or
-        "GroupMembershipRuleEvaluation" or "DataGeneration")
+        "GroupMembershipRuleEvaluation" or "DataGeneration" or "System")
             return changeGroup.ChangeMechanismType;
 
         // For "Import" or unknown, check if RunProfileName suggests a different type
@@ -1244,6 +1245,7 @@ else
                     "Import" => !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName : "Import",
                     "Export" => !string.IsNullOrEmpty(changeGroup.RunProfileName) ? changeGroup.RunProfileName : "Export",
                     "DataGeneration" => "Data Generation",
+                    "System" => "System",
                     _ => changeGroup.ChangeMechanismType
                 };
 
