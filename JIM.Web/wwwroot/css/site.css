@@ -301,7 +301,6 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     font-weight: 500;
     vertical-align: middle;
     color: var(--jim-logo-text-color, #ffffff) !important;
-    opacity: 0.6;
 }
 
 .jim-drawer-footer {
