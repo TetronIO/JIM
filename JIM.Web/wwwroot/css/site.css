@@ -275,14 +275,14 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     font-family: "Lucida Console", "Courier New", monospace;
     font-size: 0.9em;
     padding: 8px 6px;
-    border-radius: 3px;
-    background-color: rgba(175, 184, 193, 0.2);
+    border-radius: 5px;
+    background-color: var(--jim-code-inline-bg, rgba(175, 184, 193, 0.2));
 }
 
 /* Dark mode support for inline code */
 @media (prefers-color-scheme: dark) {
     .jim-code-inline {
-        background-color: rgba(110, 118, 129, 0.4);
+        background-color: var(--jim-code-inline-bg, rgba(110, 118, 129, 0.4));
     }
 }
 

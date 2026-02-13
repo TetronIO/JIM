@@ -118,6 +118,9 @@ html[lang] {
     --jim-link-visited-color: #0076d3;
     --jim-link-hover-color: #005da8;
 
+    /* === JIM Custom: Inline code background === */
+    --jim-code-inline-bg: rgba(30, 58, 95, 0.08);
+
     /* === JIM Custom: Logo text === */
     --jim-logo-text-color: #7c889d;
 }
