@@ -1,0 +1,232 @@
+@using JIM.Application
+@using JIM.Models.Staging
+@using JIM.Utilities
+@inject JimApplication Jim
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Run profiles define what operations can be performed on a Connector, i.e. import, export and synchronisation, with any required settings.</MudAlert>
+
+<MudButton
+    Variant="Variant.Filled"
+    Color="Color.Primary"
+    Class="mt-5"
+    DropShadow="false"
+    StartIcon="@Icons.Material.Filled.Add"
+    OnClick="HandleShowNewRunProfileDialogAsync">
+    Create Run Profile
+</MudButton>
+
+<MudTable Items="@ConnectedSystem.RunProfiles" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" SortLabel="Sort By" Outlined="true" Elevation="0">
+    <HeaderContent>
+        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.RunType)"><MudText Typo="Typo.button">Run Type</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Partition?.Name!)"><MudText Typo="Typo.button">Partition</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.PageSize)"><MudText Typo="Typo.button">Page Size</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.FilePath!)"><MudText Typo="Typo.button">File Path</MudText></MudTableSortLabel></MudTh>
+        <MudTh Style="text-align: center"><MudText Typo="Typo.button">Actions</MudText></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Name">@context.Name</MudTd>
+        <MudTd DataLabel="Run Type">@context.RunType.ToString().SplitOnCapitalLetters()</MudTd>
+        <MudTd DataLabel="Partition">@(context.Partition != null ? context.Partition.Name : "-")</MudTd>
+        <MudTd DataLabel="Page Size">@context.PageSize</MudTd>
+        <MudTd DataLabel="File Path">
+            @if (!string.IsNullOrEmpty(context.FilePath))
+            {
+                <span class="jim-code-inline">@context.FilePath</span>
+            }
+            else
+            {
+                <span>-</span>
+            }
+        </MudTd>
+        <MudTd DataLabel="Actions" Style="text-align: center">
+            <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                               Color="Color.Error"
+                               Variant="Variant.Outlined"
+                               OnClick="_ => HandleRunProfileDeleteAsync(context)" />
+            </MudTooltip>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        There are no run profiles. Create your first.
+    </NoRecordsContent>
+</MudTable>
+
+@* New Run Profile Dialog *@
+<MudDialog @bind-Visible="_newRunProfileDialogVisible" Options="_newRunProfileDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Add" Class="me-3" /> Create New Run Profile
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @bind-IsValid="@IsNewRunProfileFormValid">
+            <MudTextField T="string" @bind-Value="_newRunProfile.Name" Label="Name" Variant="Variant.Outlined" Class="mt-3" Required="true" RequiredError="A name for the run profile is required" />
+
+            <MudSelect
+                T="ConnectedSystemRunType"
+                @bind-Value="_newRunProfile.RunType"
+                Label="Run Type"
+                Variant="Variant.Outlined"
+                AnchorOrigin="Origin.BottomCenter"
+                Class="mt-5"
+                Required="true"
+                RequiredError="A run profile type is required"
+                Validation="@(new Func<ConnectedSystemRunType, string?>(ValidateRunType))"
+                Immediate="true">
+                <MudSelectItem Value="ConnectedSystemRunType.NotSet" Disabled="true">Select run type</MudSelectItem>
+                @foreach (ConnectedSystemRunType runType in Enum.GetValues(typeof(ConnectedSystemRunType)))
+                {
+                    if (runType == ConnectedSystemRunType.NotSet)
+                        continue;
+
+                    var runTypeSupported = true;
+                    switch (runType)
+                    {
+                        case ConnectedSystemRunType.Export when !ConnectedSystem.ConnectorDefinition.SupportsExport:
+                        case ConnectedSystemRunType.DeltaImport when !ConnectedSystem.ConnectorDefinition.SupportsDeltaImport:
+                        case ConnectedSystemRunType.FullImport when !ConnectedSystem.ConnectorDefinition.SupportsFullImport:
+                            runTypeSupported = false;
+                            break;
+                        case ConnectedSystemRunType.FullSynchronisation:
+                        case ConnectedSystemRunType.DeltaSynchronisation:
+                            break;
+                    }
+
+                    <MudSelectItem Value="@runType" Disabled="@(!runTypeSupported)">
+                        @runType.ToString().SplitOnCapitalLetters()
+                        @if (!runTypeSupported)
+                        {
+                            <span> (not supported by Connector)</span>
+                        }
+                    </MudSelectItem>
+                }
+            </MudSelect>
+
+            @if (_newRunProfile.RunType == ConnectedSystemRunType.FullImport ||
+                 _newRunProfile.RunType == ConnectedSystemRunType.DeltaImport ||
+                 _newRunProfile.RunType == ConnectedSystemRunType.Export)
+            {
+                <MudTextField
+                    T="string"
+                    @bind-Value="_newRunProfile.FilePath"
+                    Label="File Path"
+                    Variant="Variant.Outlined"
+                    Class="mt-3"
+                    HelperText="File-based connectors need the in-container path specifying, i.e. /var/connector-files/test-data/Users.csv" />
+            }
+
+            @if (ConnectedSystem.ConnectorDefinition.SupportsPartitions && ConnectedSystem.Partitions != null)
+            {
+                <MudSelect
+                    T="ConnectedSystemPartition"
+                    @bind-Value="_newRunProfile.Partition"
+                    Label="Partition"
+                    Variant="Variant.Outlined"
+                    Class="mt-5"
+                    AnchorOrigin="Origin.BottomCenter"
+                    Required="@ConnectedSystem.ConnectorDefinition.SupportsPartitions"
+                    RequiredError="A run profile partition is required">
+                    @foreach (var partition in ConnectedSystem.Partitions.Where(p => p.Selected))
+                    {
+                        <MudSelectItem Value="@partition" />
+                    }
+                </MudSelect>
+            }
+
+            @if (_newRunProfile.RunType == ConnectedSystemRunType.FullImport ||
+                 _newRunProfile.RunType == ConnectedSystemRunType.DeltaImport ||
+                 _newRunProfile.RunType == ConnectedSystemRunType.Export)
+            {
+                <MudNumericField @bind-Value="_newRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined" Class="mt-3" Min="0" Step="100" Required="true" RequiredError="How many items to process in one go when importing/exporting" />
+            }
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _newRunProfileDialogVisible = false)" DropShadow="false">Cancel</MudButton>
+        <MudButton
+            Color="Color.Primary"
+            Variant="Variant.Filled"
+            DropShadow="false"
+            OnClick="HandleNewRunProfileFormSubmitAsync"
+            Disabled="@(!IsNewRunProfileFormValid || _newRunProfile.RunType == ConnectedSystemRunType.NotSet)">
+            Create Run Profile
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired]
+    public ConnectedSystem ConnectedSystem { get; set; } = null!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private bool IsNewRunProfileFormValid { get; set; }
+    private ConnectedSystemRunProfile _newRunProfile = new() { PageSize = 500, RunType = ConnectedSystemRunType.NotSet };
+    private readonly DialogOptions _newRunProfileDialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Small };
+    private bool _newRunProfileDialogVisible;
+
+    private string? ValidateRunType(ConnectedSystemRunType runType)
+    {
+        if (runType == ConnectedSystemRunType.NotSet)
+            return "Please select a run type";
+
+        return null;
+    }
+
+    private Task HandleShowNewRunProfileDialogAsync()
+    {
+        _newRunProfile = new ConnectedSystemRunProfile { PageSize = 500, RunType = ConnectedSystemRunType.NotSet };
+        _newRunProfileDialogVisible = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task HandleNewRunProfileFormSubmitAsync()
+    {
+        if (ConnectedSystem.RunProfiles == null)
+            return;
+
+        var runProfile = new ConnectedSystemRunProfile {
+            ConnectedSystemId = ConnectedSystem.Id,
+            Name = _newRunProfile.Name,
+            RunType = _newRunProfile.RunType,
+            Partition = _newRunProfile.Partition,
+            PageSize = _newRunProfile.PageSize,
+            FilePath = _newRunProfile.FilePath
+        };
+
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        await Jim.ConnectedSystems.CreateConnectedSystemRunProfileAsync(runProfile, user);
+
+        Snackbar.Add("New run profile added.", Severity.Success);
+
+        _newRunProfileDialogVisible = false;
+        _newRunProfile = new ConnectedSystemRunProfile { PageSize = 500, RunType = ConnectedSystemRunType.NotSet };
+    }
+
+    private async Task HandleRunProfileDeleteAsync(ConnectedSystemRunProfile connectedSystemRunProfile)
+    {
+        if (ConnectedSystem.RunProfiles == null)
+            return;
+
+        var confirmationResult = await DialogService.ShowMessageBox(
+            "Delete Run Profile",
+            $"Are you sure you want to delete the run profile '{connectedSystemRunProfile.Name}'? This action cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirmationResult != true)
+            return;
+
+        ConnectedSystem.RunProfiles.Remove(connectedSystemRunProfile);
+
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        await Jim.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile, user);
+
+        Snackbar.Add("Run profile removed.", Severity.Success);
+    }
+}

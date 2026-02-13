@@ -1,0 +1,510 @@
+@using JIM.Application
+@using JIM.Models.Core
+@using JIM.Models.Logic
+@using JIM.Models.Staging
+@using Serilog
+@inject JimApplication Jim
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <div>
+        <MudText Typo="Typo.body1">
+            @if (ConnectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem)
+            {
+                <text>Matching rules are defined here per object type and shared across all sync rules.</text>
+            }
+            else
+            {
+                <text>Matching rules are configured on each individual sync rule.</text>
+            }
+        </MudText>
+    </div>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudText Class="mud-text-secondary">Simple</MudText>
+        <MudSwitch T="bool"
+                   Value="@(ConnectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.SyncRule)"
+                   ValueChanged="HandleObjectMatchingModeToggleAsync"
+                   Color="Color.Primary" />
+        <MudText Class="mud-text-secondary">Advanced</MudText>
+    </MudStack>
+</MudStack>
+
+@if (ConnectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.SyncRule)
+{
+    @* Advanced Mode - matching rules are on sync rules *@
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
+        In Advanced Mode, matching rules are configured on each individual sync rule. This allows different
+        matching logic for different scenarios.
+    </MudAlert>
+    <MudButton StartIcon="@Icons.Material.Filled.OpenInNew"
+               Variant="Variant.Filled"
+               Href="/admin/sync-rules"
+               Color="Color.Primary"
+               Class="mt-4"
+               DropShadow="false">
+        Go to Synchronisation Rules
+    </MudButton>
+}
+else if (ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count == 0)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        No object types have been configured. Import the schema first to configure object matching rules.
+    </MudAlert>
+}
+else
+{
+    var selectedObjectTypes = ConnectedSystem.ObjectTypes.Where(ot => ot.Selected).ToList();
+
+    @if (selectedObjectTypes.Count == 0)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+            No object types have been selected. Select object types in the Schema tab first.
+        </MudAlert>
+    }
+    else if (selectedObjectTypes.Count == 1)
+    {
+        @* Single object type - show directly without selection UI *@
+        @RenderMatchingRulesForObjectType(selectedObjectTypes[0])
+    }
+    else
+    {
+        @* Multiple object types - use tabs for navigation *@
+        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" PanelClass="pt-4" Outlined="true" @bind-ActivePanelIndex="_selectedMatchingRuleTabIndex">
+            @foreach (var objectType in selectedObjectTypes)
+            {
+                <MudTabPanel Text="@objectType.Name" Tag="@objectType">
+                    @RenderMatchingRulesForObjectType(objectType)
+                </MudTabPanel>
+            }
+        </MudTabs>
+    }
+}
+
+@* Mode Switch Dialog *@
+<MudDialog @bind-Visible="_modeSwitchDialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.SwapHoriz" Class="mr-3 mb-n1" />
+            Switch to @(_switchingToAdvancedMode ? "Advanced" : "Simple") Mode
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_switchingToAdvancedMode)
+        {
+            <MudText>
+                Switching to <strong>Advanced Mode</strong> will allow you to configure different matching rules for each sync rule.
+            </MudText>
+            <MudAlert Severity="Severity.Info" Class="mt-4">
+                The current matching rules will be copied to all existing import sync rules for this Connected System, giving you a starting point to customise.
+            </MudAlert>
+        }
+        else
+        {
+            <MudText>
+                Switching to <strong>Simple Mode</strong> will configure matching rules here, shared across all sync rules.
+            </MudText>
+            <MudAlert Severity="Severity.Warning" Class="mt-4">
+                <strong>Migration:</strong> Matching rules from sync rules will be analysed and migrated to the object type level:
+                <ul class="mt-2 mb-0">
+                    <li>If all sync rules have the same matching rules, they will be used directly.</li>
+                    <li>If sync rules have different matching rules, the most common configuration will be selected.</li>
+                    <li>Matching rules will be cleared from all sync rules after migration.</li>
+                </ul>
+            </MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _modeSwitchDialogVisible = false)" DropShadow="false" Disabled="_modeSwitchInProgress">Cancel</MudButton>
+        <MudButton
+            Color="Color.Primary"
+            Variant="Variant.Filled"
+            DropShadow="false"
+            OnClick="HandleModeSwitchConfirmedAsync"
+            Disabled="_modeSwitchInProgress">
+            @if (_modeSwitchInProgress)
+            {
+                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
+                <span class="ms-2">Switching...</span>
+            }
+            else
+            {
+                <text>Switch Mode</text>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired]
+    public ConnectedSystem ConnectedSystem { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public IList<MetaverseAttribute> MetaverseAttributes { get; set; } = null!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    // Object Matching Rules
+    private int _selectedMatchingRuleTabIndex;
+    private ConnectedSystemObjectTypeAttribute? _newMatchingRuleSourceAttribute;
+    private MetaverseAttribute? _newMatchingRuleTargetAttribute;
+    private bool _newMatchingRuleCaseSensitive = false;
+    // Track the currently active object type for the matching rules form state
+    private ConnectedSystemObjectType? _currentMatchingRuleObjectType;
+    // Mode switch dialog
+    private readonly DialogOptions _dialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Small };
+    private bool _modeSwitchDialogVisible;
+    private bool _switchingToAdvancedMode;
+    private bool _modeSwitchInProgress;
+
+    private async Task HandleAddMatchingRuleAsync(ConnectedSystemObjectType objectType)
+    {
+        if (_newMatchingRuleSourceAttribute == null || _newMatchingRuleTargetAttribute == null)
+            return;
+
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+
+        // Calculate the next order value
+        var nextOrder = objectType.ObjectMatchingRules.Count > 0
+            ? objectType.ObjectMatchingRules.Max(r => r.Order) + 1
+            : 0;
+
+        var rule = new ObjectMatchingRule
+        {
+            Order = nextOrder,
+            ConnectedSystemObjectTypeId = objectType.Id,
+            ConnectedSystemObjectType = objectType,
+            TargetMetaverseAttributeId = _newMatchingRuleTargetAttribute.Id,
+            TargetMetaverseAttribute = _newMatchingRuleTargetAttribute,
+            CaseSensitive = _newMatchingRuleCaseSensitive,
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new()
+                {
+                    Order = 0,
+                    ConnectedSystemAttributeId = _newMatchingRuleSourceAttribute.Id,
+                    ConnectedSystemAttribute = _newMatchingRuleSourceAttribute
+                }
+            }
+        };
+
+        try
+        {
+            await Jim.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, user);
+
+            // Note: EF Core automatically adds the rule to the ObjectMatchingRules collection
+            // because we set ConnectedSystemObjectType on the rule before saving
+
+            // Reset the form
+            _newMatchingRuleSourceAttribute = null;
+            _newMatchingRuleTargetAttribute = null;
+            _newMatchingRuleCaseSensitive = false;
+
+            Snackbar.Add("Matching rule has been created.", Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to create matching rule for object type {ObjectTypeId}", objectType.Id);
+            Snackbar.Add($"Failed to create matching rule: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleDeleteMatchingRuleAsync(ObjectMatchingRule rule, ConnectedSystemObjectType objectType)
+    {
+        var confirmationResult = await DialogService.ShowMessageBox(
+            "Delete Matching Rule",
+            $"Are you sure you want to delete this matching rule? This action cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirmationResult != true)
+            return;
+
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+
+        try
+        {
+            await Jim.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule, user);
+
+            // Remove from the local list for immediate UI update
+            objectType.ObjectMatchingRules.Remove(rule);
+
+            Snackbar.Add("Matching rule has been deleted.", Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to delete matching rule {RuleId}", rule.Id);
+            Snackbar.Add($"Failed to delete matching rule: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleToggleMatchingRuleCaseSensitiveAsync(ObjectMatchingRule rule, bool caseSensitive)
+    {
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+
+        try
+        {
+            rule.CaseSensitive = caseSensitive;
+            await Jim.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, user);
+
+            Snackbar.Add($"Matching rule is now {(caseSensitive ? "case-sensitive" : "case-insensitive")}.", Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            // Revert the change on failure
+            rule.CaseSensitive = !caseSensitive;
+            Log.Error(ex, "Failed to update matching rule {RuleId}", rule.Id);
+            Snackbar.Add($"Failed to update matching rule: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleMoveMatchingRuleUpAsync(ObjectMatchingRule rule, ConnectedSystemObjectType objectType)
+    {
+        await SwapMatchingRuleOrderAsync(rule, -1, objectType);
+    }
+
+    private async Task HandleMoveMatchingRuleDownAsync(ObjectMatchingRule rule, ConnectedSystemObjectType objectType)
+    {
+        await SwapMatchingRuleOrderAsync(rule, 1, objectType);
+    }
+
+    private async Task SwapMatchingRuleOrderAsync(ObjectMatchingRule rule, int direction, ConnectedSystemObjectType objectType)
+    {
+        var rules = objectType.ObjectMatchingRules.OrderBy(r => r.Order).ToList();
+        var currentIndex = rules.IndexOf(rule);
+        var targetIndex = currentIndex + direction;
+
+        if (targetIndex < 0 || targetIndex >= rules.Count)
+            return;
+
+        var targetRule = rules[targetIndex];
+
+        // Swap the order values
+        var tempOrder = rule.Order;
+        rule.Order = targetRule.Order;
+        targetRule.Order = tempOrder;
+
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+
+        try
+        {
+            // Update both rules
+            await Jim.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, user);
+            await Jim.ConnectedSystems.UpdateObjectMatchingRuleAsync(targetRule, user);
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to reorder matching rules");
+            Snackbar.Add($"Failed to reorder matching rules: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private Task HandleObjectMatchingModeToggleAsync(bool advancedMode)
+    {
+        _switchingToAdvancedMode = advancedMode;
+        _modeSwitchDialogVisible = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task HandleModeSwitchConfirmedAsync()
+    {
+        _modeSwitchInProgress = true;
+        StateHasChanged();
+
+        try
+        {
+            var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+            var newMode = _switchingToAdvancedMode ? ObjectMatchingRuleMode.SyncRule : ObjectMatchingRuleMode.ConnectedSystem;
+
+            var result = await Jim.ConnectedSystems.SwitchObjectMatchingModeAsync(ConnectedSystem, newMode, user);
+
+            if (!result.Success)
+            {
+                Snackbar.Add($"Failed to switch mode: {result.ErrorMessage}", Severity.Error);
+                return;
+            }
+
+            if (_switchingToAdvancedMode)
+            {
+                Snackbar.Add($"Switched to Advanced Mode. Matching rules copied to {result.SyncRulesUpdated} sync rule(s).", Severity.Success);
+            }
+            else
+            {
+                // Show success message
+                var message = $"Switched to Simple Mode. Matching rules set on {result.ObjectTypesUpdated} object type(s).";
+                Snackbar.Add(message, Severity.Success);
+
+                // Show any warnings about diverging rules
+                foreach (var warning in result.Warnings)
+                {
+                    Snackbar.Add(warning, Severity.Warning);
+                }
+            }
+
+            _modeSwitchDialogVisible = false;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to switch object matching mode");
+            Snackbar.Add($"Failed to switch mode: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _modeSwitchInProgress = false;
+            StateHasChanged();
+        }
+    }
+
+    #region Object Matching Rules Render Fragment
+    private RenderFragment RenderMatchingRulesForObjectType(ConnectedSystemObjectType objectType) => __builder =>
+    {
+        // Track the current object type for form operations
+        _currentMatchingRuleObjectType = objectType;
+
+        <MudPaper Outlined="true" Class="pa-4 mb-4">
+            <MudText Typo="Typo.h6" Class="mb-3">Matching Rules for @objectType.Name</MudText>
+
+            @if (objectType.ObjectMatchingRules.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                    No matching rules configured. Objects will only match if explicitly joined.
+                </MudAlert>
+            }
+            else
+            {
+                <MudTable Items="@objectType.ObjectMatchingRules.OrderBy(r => r.Order)"
+                          Hover="true"
+                          Outlined="true"
+                          Elevation="0"
+                          Class="mb-4">
+                    <HeaderContent>
+                        <MudTh><MudText Typo="Typo.button">Connected System Attribute</MudText></MudTh>
+                        <MudTh><MudText Typo="Typo.button">Operator</MudText></MudTh>
+                        <MudTh><MudText Typo="Typo.button">Metaverse Attribute</MudText></MudTh>
+                        <MudTh><MudText Typo="Typo.button">Case Sensitive</MudText></MudTh>
+                        <MudTh><MudText Typo="Typo.button">Actions</MudText></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Source">
+                            @if (context.Sources.Count > 0)
+                            {
+                                var source = context.Sources.First();
+                                @if (source.ConnectedSystemAttribute != null)
+                                {
+                                    <text>@source.ConnectedSystemAttribute.Name</text>
+                                }
+                                else if (source.MetaverseAttribute != null)
+                                {
+                                    <text>@source.MetaverseAttribute.Name (MV)</text>
+                                }
+                                else
+                                {
+                                    <text>-</text>
+                                }
+                            }
+                            else
+                            {
+                                <text>-</text>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Operator">=</MudTd>
+                        <MudTd DataLabel="Target">@(context.TargetMetaverseAttribute?.Name ?? "-")</MudTd>
+                        <MudTd DataLabel="Case Sensitive">
+                            <MudSwitch T="bool" Value="@context.CaseSensitive"
+                                       ValueChanged="@(value => HandleToggleMatchingRuleCaseSensitiveAsync(context, value))"
+                                       Color="Color.Primary"
+                                       />
+                        </MudTd>
+                        <MudTd>
+                            <MudTooltip Text="Move up" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Outlined.ArrowUpward"
+                                               Variant="Variant.Outlined"
+
+                                               Color="Color.Default"
+                                               Disabled="@(context.Order == 0)"
+                                               OnClick="() => HandleMoveMatchingRuleUpAsync(context, objectType)" />
+                            </MudTooltip>
+                            <MudTooltip Text="Move down" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Outlined.ArrowDownward"
+                                               Variant="Variant.Outlined"
+
+                                               Color="Color.Default"
+                                               Disabled="@(context.Order == objectType.ObjectMatchingRules.Max(r => r.Order))"
+                                               OnClick="() => HandleMoveMatchingRuleDownAsync(context, objectType)" />
+                            </MudTooltip>
+                            <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton
+                                    Icon="@Icons.Material.Outlined.Delete"
+                                    Variant="Variant.Outlined"
+
+                                    Color="Color.Error"
+                                    OnClick="() => HandleDeleteMatchingRuleAsync(context, objectType)" />
+                            </MudTooltip>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+
+            <MudDivider Class="my-4" />
+            <MudText Typo="Typo.subtitle1" Class="mb-3">Add New Matching Rule</MudText>
+
+            <MudGrid>
+                <MudItem xs="12" md="5">
+                    <MudSelect T="ConnectedSystemObjectTypeAttribute"
+                               @bind-Value="_newMatchingRuleSourceAttribute"
+                               Label="Connected System Attribute"
+                               Variant="Variant.Outlined"
+                               HelperText="The Connected System attribute to match from">
+                        @foreach (var attr in objectType.Attributes.Where(a => a.Selected).OrderBy(a => a.Name))
+                        {
+                            <MudSelectItem Value="@attr">@attr.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="2" Class="d-flex align-center justify-center">
+                    <MudText Typo="Typo.h6">=</MudText>
+                </MudItem>
+                <MudItem xs="12" md="5">
+                    <MudSelect T="MetaverseAttribute"
+                               @bind-Value="_newMatchingRuleTargetAttribute"
+                               Label="Metaverse Attribute"
+                               Variant="Variant.Outlined"
+                               HelperText="The Metaverse attribute to match against">
+                        @if (MetaverseAttributes != null)
+                        {
+                            @foreach (var attr in MetaverseAttributes.OrderBy(a => a.Name))
+                            {
+                                <MudSelectItem Value="@attr">@attr.Name</MudSelectItem>
+                            }
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudCheckBox T="bool" @bind-Value="_newMatchingRuleCaseSensitive"
+                                 Label="Case sensitive"
+                                 Color="Color.Primary" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        When enabled (default), attribute values must match exactly including case. When disabled, "John" matches "JOHN".
+                    </MudText>
+                </MudItem>
+            </MudGrid>
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Class="mt-4"
+                       DropShadow="false"
+                       Disabled="@(_newMatchingRuleSourceAttribute == null || _newMatchingRuleTargetAttribute == null)"
+                       OnClick="() => HandleAddMatchingRuleAsync(objectType)">
+                Add Matching Rule
+            </MudButton>
+        </MudPaper>
+    };
+    #endregion
+}

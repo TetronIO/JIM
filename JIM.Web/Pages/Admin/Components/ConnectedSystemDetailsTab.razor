@@ -1,0 +1,50 @@
+@using JIM.Application
+@using JIM.Models.Staging
+@inject JimApplication Jim
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4" Outlined="true">
+    <MudStack Row Spacing="2" Class="mb-4">
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Default"
+                   Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.Storage"
+                   Href="@($"/admin/connected-systems/{ConnectedSystem.Id}/objects")">
+            View Objects
+        </MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="@(PendingExportCount > 0 ? Color.Warning : Color.Default)"
+                   Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.Outbox"
+                   Href="@($"/admin/connected-systems/{ConnectedSystem.Id}/pending-exports")">
+            View Pending Exports @(PendingExportCount > 0 ? $"({PendingExportCount})" : "")
+        </MudButton>
+    </MudStack>
+    <MudForm @bind-IsValid="@IsDetailsFormValid" @bind-Errors="@DetailsFormErrors">
+        <MudTextField T="string" Label="Connector" @bind-Value="ConnectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
+        <MudTextField T="string" Label="Name" @bind-Value="ConnectedSystem.Name" Required="true" RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-5" />
+        <MudTextField T="string" Label="Description" Required="false" @bind-Value="ConnectedSystem.Description" Lines="5" Variant="Variant.Outlined" Class="mt-5" />
+    </MudForm>
+</MudPaper>
+<MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync" DropShadow="false">Save Changes</MudButton>
+
+@code {
+    [Parameter, EditorRequired]
+    public ConnectedSystem ConnectedSystem { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public int PendingExportCount { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private bool IsDetailsFormValid { get; set; }
+    private string[] DetailsFormErrors { get; set; } = [];
+
+    private async Task HandleValidDetailsSubmitAsync()
+    {
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user);
+        Snackbar.Add("Your details changes have been saved.", Severity.Success);
+    }
+}

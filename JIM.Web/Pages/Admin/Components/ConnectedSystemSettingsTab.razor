@@ -1,0 +1,254 @@
+@using JIM.Application
+@using JIM.Models.Core
+@using JIM.Models.Staging
+@inject JimApplication Jim
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<MudText Class="mud-text-secondary">
+    Each connector requires specific settings to connect to your environment.
+    Complete the required fields below, then save your changes before importing the schema.
+</MudText>
+
+<MudForm @ref="_settingsForm" @bind-IsValid="@IsSettingsFormValid" @bind-Errors="@SettingsFormErrors">
+    @if (SettingCategories != null)
+    {
+        @for (var i = 0; i < SettingCategories.Count; i++)
+        {
+            var settingCategory = SettingCategories[i];
+            <MudPaper Class="pa-5 mt-5" Outlined="true">
+                <MudText Typo="Typo.h5" Class="mb-5">@settingCategory.ToString()</MudText>
+                @{
+                    var categorySettings = ConnectedSystem.SettingValues
+                        .Where(sv => sv.Setting.Category == settingCategory)
+                        .OrderBy(sv => sv.Setting.Id)
+                        .ToList();
+                }
+                @for (var j = 0; j < categorySettings.Count; j++)
+                {
+                    var settingValue = categorySettings[j];
+                    var isLast = j == categorySettings.Count - 1;
+                    var spacingClass = isLast ? "" : "mb-5";
+
+                    if (settingValue.Setting.Type == ConnectedSystemSettingType.Heading)
+                    {
+                        <MudText Typo="Typo.h6" Class="@spacingClass">@settingValue.Setting.Name</MudText>
+                    }
+                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.Divider)
+                    {
+                        <hr />
+                    }
+                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.String)
+                    {
+                        <MudTextField T="string"
+                                      Label="@settingValue.Setting.Name"
+                                      @bind-Value="settingValue.StringValue"
+                                      Required="@settingValue.Setting.Required"
+                                      RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                      HelperText="@settingValue.Setting.Description"
+                                      Variant="Variant.Outlined"
+                                      Class="@spacingClass" />
+                    }
+                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.StringEncrypted)
+                    {
+                        var settingId = settingValue.Setting.Id;
+                        <MudTextField T="string"
+                                      Label="@settingValue.Setting.Name"
+                                      @bind-Value="settingValue.StringEncryptedValue"
+                                      Required="@settingValue.Setting.Required"
+                                      RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                      HelperText="@settingValue.Setting.Description"
+                                      InputType="@(_passwordVisibility.GetValueOrDefault(settingId) ? InputType.Text : InputType.Password)"
+                                      Adornment="Adornment.End"
+                                      AdornmentIcon="@(_passwordVisibility.GetValueOrDefault(settingId) ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                      AdornmentAriaLabel="Toggle password visibility"
+                                      OnAdornmentClick="@(() => _passwordVisibility[settingId] = !_passwordVisibility.GetValueOrDefault(settingId))"
+                                      Variant="Variant.Outlined"
+                                      Class="@spacingClass" />
+                    }
+                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.Integer)
+                    {
+                        <MudTextField T="int?"
+                                      Label="@settingValue.Setting.Name"
+                                      @bind-Value="settingValue.IntValue"
+                                      Required="@settingValue.Setting.Required"
+                                      RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                      HelperText="@settingValue.Setting.Description"
+                                      InputType="InputType.Number"
+                                      Variant="Variant.Outlined"
+                                      Class="@spacingClass" />
+                    }
+                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
+                    {
+                        <div class="@spacingClass">
+                            <MudSwitch @bind-Value="settingValue.CheckboxValue" Color="Color.Primary" Label="@settingValue.Setting.Name" />
+                            @if (!string.IsNullOrEmpty(settingValue.Setting.Description))
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary ml-12">@settingValue.Setting.Description</MudText>
+                            }
+                        </div>
+                    }
+                    else if (settingValue.Setting is { Type: ConnectedSystemSettingType.DropDown, DropDownValues: not null })
+                    {
+                        <MudSelect @bind-Value="settingValue.StringValue"
+                                   HelperText="@settingValue.Setting.Description"
+                                   Label="@settingValue.Setting.Name"
+                                   Variant="Variant.Outlined"
+                                   Class="@spacingClass"
+                                   Required="@settingValue.Setting.Required"
+                                   RequiredError="@($"A {settingValue.Setting.Name} is required")">
+                            @foreach (var dropDownValue in settingValue.Setting.DropDownValues)
+                            {
+                                <MudSelectItem T="string" Value="@dropDownValue">@dropDownValue</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
+                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.Label)
+                    {
+                        <MudText Class="@spacingClass">
+                            @settingValue.Setting.Description
+                        </MudText>
+                    }
+                    else if (settingValue.Setting.Type == ConnectedSystemSettingType.File)
+                    {
+                        <MudTextField T="string"
+                                      Label="@settingValue.Setting.Name"
+                                      @bind-Value="settingValue.StringValue"
+                                      Required="@settingValue.Setting.Required"
+                                      RequiredError="@($"A {settingValue.Setting.Name} is required")"
+                                      HelperText="@settingValue.Setting.Description"
+                                      Variant="Variant.Outlined"
+                                      ReadOnly="true"
+                                      Adornment="Adornment.End"
+                                      AdornmentIcon="@Icons.Material.Filled.FolderOpen"
+                                      OnAdornmentClick="@(() => OpenFileBrowserAsync(settingValue))"
+                                      Class="@spacingClass" />
+                    }
+                    else
+                    {
+                        <MudText Class="mt-b">Oops. Unknown setting type!</MudText>
+                    }
+                }
+            </MudPaper>
+        }
+    }
+
+    @if (SettingsFormCustomErrors.Count > 0)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-5">
+            <MudText>There are issues with the settings:</MudText>
+            <ul class="mt-5">
+                @foreach (var error in SettingsFormCustomErrors)
+                {
+                    <li>@error.Key: @error.Value</li>
+                }
+            </ul>
+        </MudAlert>
+    }
+</MudForm>
+<MudButton Variant="Variant.Filled" Color="@(IsSettingsFormValid || !_settingsBeingSaved ? Color.Primary : Color.Default)" Disabled="@(!IsSettingsFormValid || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync">
+    @if (_settingsBeingSaved)
+    {
+        <MudProgressCircular Class="ms-n1" Indeterminate="true" />
+        <span class="ms-2">Processing</span>
+    }
+    else
+    {
+        <text>Save Settings</text>
+    }
+</MudButton>
+
+@code {
+    [Parameter, EditorRequired]
+    public ConnectedSystem ConnectedSystem { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public List<ConnectedSystemSettingCategory> SettingCategories { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback OnConnectedSystemChanged { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private bool IsSettingsFormValid { get; set; }
+    private string[] SettingsFormErrors { get; set; } = [];
+    private Dictionary<string, string> SettingsFormCustomErrors { get; } = new();
+    private bool _settingsBeingSaved;
+    private MudForm? _settingsForm;
+    private readonly Dictionary<int, bool> _passwordVisibility = new();
+
+    private async Task HandleValidSettingsSubmitAsync()
+    {
+        _settingsBeingSaved = true;
+        SettingsFormCustomErrors.Clear();
+
+        StateHasChanged();
+        await Task.Delay(1);
+
+        var results = Jim.ConnectedSystems.ValidateConnectedSystemSettings(ConnectedSystem);
+        for (var i = 0; i < results.Count; i++)
+        {
+            var result = results[i];
+            if (result.IsValid)
+                continue;
+
+            switch (result.SettingValue)
+            {
+                case { Setting.Name: not null } when !string.IsNullOrEmpty(result.ErrorMessage):
+                    SettingsFormCustomErrors.Add(result.SettingValue.Setting.Name, result.ErrorMessage);
+                    break;
+                case null when !string.IsNullOrEmpty(result.ErrorMessage):
+                    SettingsFormCustomErrors.Add($"General issue {i + 1}", result.ErrorMessage);
+                    break;
+            }
+        }
+
+        if (SettingsFormCustomErrors.Any())
+        {
+            _settingsBeingSaved = false;
+            return;
+        }
+
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user);
+        Snackbar.Add("Your setting changes have been saved.", Severity.Success);
+        _settingsBeingSaved = false;
+
+        await OnConnectedSystemChanged.InvokeAsync();
+    }
+
+    private async Task OpenFileBrowserAsync(ConnectedSystemSettingValue settingValue)
+    {
+        var isExportMode = ConnectedSystem.IsExportOnlyMode();
+        var title = isExportMode ? "Select Export Location" : "Select File";
+
+        var parameters = new DialogParameters<FileBrowserDialog>
+        {
+            { x => x.Title, title },
+            { x => x.AllowNewFilename, isExportMode },
+            { x => x.InitialPath, settingValue.StringValue }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<FileBrowserDialog>(title, parameters, options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: string selectedPath })
+        {
+            settingValue.StringValue = selectedPath;
+            StateHasChanged();
+
+            if (_settingsForm != null)
+            {
+                await _settingsForm.Validate();
+            }
+        }
+    }
+}

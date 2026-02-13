@@ -1,0 +1,255 @@
+@using JIM.Application
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+@using Serilog
+@inject JimApplication Jim
+@inject ISnackbar Snackbar
+@inject NavigationManager NavManager
+
+<MudPaper Class="pa-4 jim-paper-danger-zone">
+    <MudText Typo="Typo.h6" Color="Color.Error">Delete Connected System</MudText>
+    <MudText Class="mt-2">
+        Permanently delete this Connected System and all its related data, including:
+    </MudText>
+    <ul class="mt-2 ml-4">
+        <li>All Connected System Objects (CSOs)</li>
+        <li>All Sync Rules</li>
+        <li>All Run Profiles</li>
+        <li>All Partitions and Containers</li>
+        <li>All Pending Exports</li>
+    </ul>
+    <MudText Class="mt-2">
+        Metaverse Objects joined to this system's CSOs will be disconnected but not deleted.
+    </MudText>
+
+    <MudButton
+        Variant="Variant.Filled"
+        Color="Color.Error"
+        Class="mt-5"
+        DropShadow="false"
+        StartIcon="@Icons.Material.Filled.Delete"
+        OnClick="HandleShowDeleteConfirmationAsync"
+        Disabled="@(ConnectedSystem.Status == ConnectedSystemStatus.Deleting)">
+        @if (ConnectedSystem.Status == ConnectedSystemStatus.Deleting)
+        {
+            <MudProgressCircular Class="ms-n1" Indeterminate="true" />
+            <span class="ms-2">Deletion in Progress...</span>
+        }
+        else
+        {
+            <text>Delete Connected System</text>
+        }
+    </MudButton>
+</MudPaper>
+
+@* Delete Confirmation Dialog *@
+<MudDialog @bind-Visible="_deleteConfirmationDialogVisible" Options="_deleteDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Class="mr-3" /> Confirm Deletion
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_deletionPreview != null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-4">
+                This action is <strong>permanent</strong> and cannot be undone!
+            </MudAlert>
+
+            <MudText Typo="Typo.subtitle1">The following will be deleted:</MudText>
+            <MudSimpleTable Dense="true" Hover="true" Class="mt-2" Elevation="0" Outlined="true">
+                <tbody>
+                    <tr>
+                        <td>Connected System Objects</td>
+                        <td class="text-right">@_deletionPreview.ConnectedSystemObjectCount.ToString("N0")</td>
+                    </tr>
+                    <tr>
+                        <td>Sync Rules</td>
+                        <td class="text-right">@_deletionPreview.SyncRuleCount.ToString("N0")</td>
+                    </tr>
+                    <tr>
+                        <td>Run Profiles</td>
+                        <td class="text-right">@_deletionPreview.RunProfileCount.ToString("N0")</td>
+                    </tr>
+                    <tr>
+                        <td>Partitions</td>
+                        <td class="text-right">@_deletionPreview.PartitionCount.ToString("N0")</td>
+                    </tr>
+                    <tr>
+                        <td>Containers</td>
+                        <td class="text-right">@_deletionPreview.ContainerCount.ToString("N0")</td>
+                    </tr>
+                    <tr>
+                        <td>Pending Exports</td>
+                        <td class="text-right">@_deletionPreview.PendingExportCount.ToString("N0")</td>
+                    </tr>
+                    <tr>
+                        <td>Activities (will be preserved)</td>
+                        <td class="text-right">@_deletionPreview.ActivityCount.ToString("N0")</td>
+                    </tr>
+                </tbody>
+            </MudSimpleTable>
+
+            @if (_deletionPreview.JoinedMvoCount > 0)
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-4">
+                    @_deletionPreview.JoinedMvoCount.ToString("N0") Metaverse Object(s) will be disconnected from this system.
+                </MudAlert>
+            }
+
+            @if (_deletionPreview.Warnings.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle1" Class="mt-4">Warnings:</MudText>
+                <ul class="mt-2 ml-4">
+                    @foreach (var warning in _deletionPreview.Warnings)
+                    {
+                        <li><MudText Color="Color.Warning">@warning</MudText></li>
+                    }
+                </ul>
+            }
+
+            @if (_deletionPreview.WillRunAsBackgroundJob)
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-4">
+                    Due to the size of this system, deletion will run as a background job.
+                    Estimated time: @_deletionPreview.EstimatedDeletionTime.ToString(@"hh\:mm\:ss")
+                </MudAlert>
+            }
+
+            <MudCheckBox @bind-Value="_deleteChangeHistory" Class="mt-4" Color="Color.Primary">
+                <MudText>Delete change history for deleted objects</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    When enabled, all change history records for the deleted CSOs will also be deleted.
+                    Leave unchecked to preserve the audit trail.
+                </MudText>
+            </MudCheckBox>
+
+            <MudTextField
+                T="string"
+                @bind-Value="_deleteConfirmationText"
+                Label="@($"Type \"{ConnectedSystem.Name}\" to confirm")"
+                Variant="Variant.Outlined"
+                Class="mt-4"
+                FullWidth="true"
+                Immediate="true" />
+        }
+        else if (_deletionPreviewLoading)
+        {
+            <div class="d-flex justify-center align-center pa-8">
+                <MudProgressCircular Indeterminate="true" />
+                <MudText Class="ml-4">Loading deletion preview...</MudText>
+            </div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _deleteConfirmationDialogVisible = false)" DropShadow="false">Cancel</MudButton>
+        <MudButton
+            Color="Color.Error"
+            Variant="Variant.Filled"
+            DropShadow="false"
+            OnClick="HandleDeleteConfirmedAsync"
+            Disabled="@(!IsDeleteConfirmationValid())">
+            @if (_deletionInProgress)
+            {
+                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
+                <span class="ms-2">Deleting...</span>
+            }
+            else
+            {
+                <text>Delete Permanently</text>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired]
+    public ConnectedSystem ConnectedSystem { get; set; } = null!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private readonly DialogOptions _deleteDialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Small };
+    private bool _deleteConfirmationDialogVisible;
+    private ConnectedSystemDeletionPreview? _deletionPreview;
+    private bool _deletionPreviewLoading;
+    private bool _deletionInProgress;
+    private string? _deleteConfirmationText;
+    private bool _deleteChangeHistory;
+
+    private async Task HandleShowDeleteConfirmationAsync()
+    {
+        _deleteConfirmationText = string.Empty;
+        _deletionPreview = null;
+        _deletionPreviewLoading = true;
+        _deleteConfirmationDialogVisible = true;
+
+        StateHasChanged();
+        await Task.Delay(1);
+
+        _deletionPreview = await Jim.ConnectedSystems.GetDeletionPreviewAsync(ConnectedSystem.Id);
+        _deletionPreviewLoading = false;
+
+        StateHasChanged();
+    }
+
+    private bool IsDeleteConfirmationValid()
+    {
+        if (_deletionPreview == null || _deletionInProgress)
+            return false;
+
+        return string.Equals(_deleteConfirmationText?.Trim(), ConnectedSystem.Name, StringComparison.Ordinal);
+    }
+
+    private async Task HandleDeleteConfirmedAsync()
+    {
+        if (!IsDeleteConfirmationValid())
+            return;
+
+        _deletionInProgress = true;
+        StateHasChanged();
+        await Task.Delay(1);
+
+        try
+        {
+            var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+            var result = await Jim.ConnectedSystems.DeleteAsync(ConnectedSystem.Id, user, _deleteChangeHistory);
+
+            _deleteConfirmationDialogVisible = false;
+            _deletionInProgress = false;
+
+            if (result.Success)
+            {
+                switch (result.Outcome)
+                {
+                    case DeletionOutcome.CompletedImmediately:
+                        Snackbar.Add("Connected System has been deleted.", Severity.Success);
+                        NavManager.NavigateTo("/admin/connected-systems/");
+                        break;
+
+                    case DeletionOutcome.QueuedAsBackgroundJob:
+                        Snackbar.Add("Deletion has been queued as a background job. You can monitor progress in the Operations view.", Severity.Info);
+                        NavManager.NavigateTo("/admin/connected-systems/");
+                        break;
+
+                    case DeletionOutcome.QueuedAfterSync:
+                        Snackbar.Add("A sync operation is running. Deletion will proceed after it completes.", Severity.Info);
+                        NavManager.NavigateTo("/admin/connected-systems/");
+                        break;
+                }
+            }
+            else
+            {
+                Snackbar.Add($"Failed to delete: {result.ErrorMessage}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            _deletionInProgress = false;
+            Log.Error(ex, "Error deleting connected system {Id}", ConnectedSystem.Id);
+            Snackbar.Add($"An error occurred: {ex.Message}", Severity.Error);
+        }
+
+        StateHasChanged();
+    }
+}

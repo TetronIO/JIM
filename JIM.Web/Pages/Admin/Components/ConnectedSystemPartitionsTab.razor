@@ -1,0 +1,649 @@
+@using JIM.Application
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+@using Serilog
+@using System.Text
+@inject JimApplication Jim
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+
+<MudAlert Severity="(ConnectedSystem.Partitions is { Count: > 0 } ? Severity.Warning : Severity.Info)" Variant="Variant.Outlined">
+    @if (ConnectedSystem.Partitions == null || ConnectedSystem.Partitions.Count == 0)
+    {
+        <MudText>Retrieve the hierarchy @PartitionAndHierarchyText hierarchy from the connected system, to be able to select which ones you want to manage with JIM.</MudText>
+    }
+    else
+    {
+        <MudText>
+            <strong>Refreshing the @PartitionAndHierarchyText hierarchy preserves your selections</strong> where possible. Existing partitions and containers are matched
+            by their external ID, so renamed or moved items will keep their selection state. However, if partitions or containers no longer exist in the external system
+            (e.g., deleted OUs, permission changes), they will be removed. Ensure the Connected System identity has the right permissions needed to retrieve the hierarchy.
+        </MudText>
+    }
+    <MudButton
+            Disabled="@_hierarchyBeingRetrieved"
+            Color="ConnectedSystem.Partitions == null || ConnectedSystem.Partitions.Count == 0 ? Color.Primary : Color.Warning"
+
+            OnClick="HandleImportHierarchyAsync"
+            Variant="Variant.Filled"
+            Class="mt-5"
+            DropShadow="false">
+        @if (ConnectedSystem.Partitions?.Count == 0)
+        {
+            if (_hierarchyBeingRetrieved)
+            {
+                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
+                <span class="ms-2">Retrieving Hierarchy</span>
+            }
+            else
+            {
+                <text>Retrieve Hierarchy</text>
+            }
+        }
+        else
+        {
+            if (_hierarchyBeingRetrieved)
+            {
+                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
+                <span class="ms-2">Refreshing Hierarchy</span>
+            }
+            else
+            {
+                <text>Refresh Hierarchy</text>
+            }
+        }
+    </MudButton>
+</MudAlert>
+
+@* Hierarchy Refresh Results Panel *@
+@if (_hierarchyRefreshResult != null && _hierarchyRefreshResult.HasChanges)
+{
+    <MudExpansionPanels Class="mt-4" Elevation="0">
+        <MudExpansionPanel Expanded="false">
+            <TitleContent>
+                <div class="d-flex align-center gap-3">
+                    <MudIcon Icon="@Icons.Material.Filled.Sync" />
+                    <MudText Typo="Typo.body1">
+                        Hierarchy refreshed: @_hierarchyRefreshResult.GetSummary()
+                    </MudText>
+                    @if (_hierarchyRefreshResult.HasSelectedItemsRemoved)
+                    {
+                        <MudChip T="string" Color="Color.Warning" Variant="Variant.Filled">
+                            Selected items removed
+                        </MudChip>
+                    }
+                </div>
+            </TitleContent>
+            <ChildContent>
+                <div class="pa-4">
+                    <div class="d-flex justify-end mb-3">
+                        <MudButton StartIcon="@Icons.Material.Filled.ContentCopy"
+                                   Variant="Variant.Outlined"
+
+                                   OnClick="CopyHierarchyChangesToClipboardAsync">
+                            Copy Changes
+                        </MudButton>
+                    </div>
+
+                    @* Removed Items (show first if any were selected - important warning) *@
+                    @if (_hierarchyRefreshResult.RemovedPartitions.Count > 0 || _hierarchyRefreshResult.RemovedContainers.Count > 0)
+                    {
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Delete" Class="mr-1" Color="Color.Error" />
+                            Removed
+                        </MudText>
+                        <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Name</th>
+                                    <th>External ID</th>
+                                    <th>Was Selected</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in _hierarchyRefreshResult.RemovedPartitions)
+                                {
+                                    <tr class="@(item.WasSelected ? "mud-error-text" : "")">
+                                        <td>Partition</td>
+                                        <td>@item.Name</td>
+                                        <td style="font-family: monospace; font-size: 0.85em;">@item.ExternalId</td>
+                                        <td>
+                                            @if (item.WasSelected)
+                                            {
+                                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-1" />
+                                                <text>Yes</text>
+                                            }
+                                            else
+                                            {
+                                                <text>No</text>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                                @foreach (var item in _hierarchyRefreshResult.RemovedContainers)
+                                {
+                                    <tr class="@(item.WasSelected ? "mud-error-text" : "")">
+                                        <td>Container</td>
+                                        <td>@item.Name</td>
+                                        <td style="font-family: monospace; font-size: 0.85em;">@item.ExternalId</td>
+                                        <td>
+                                            @if (item.WasSelected)
+                                            {
+                                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-1" />
+                                                <text>Yes</text>
+                                            }
+                                            else
+                                            {
+                                                <text>No</text>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+
+                    @* Added Items *@
+                    @if (_hierarchyRefreshResult.AddedPartitions.Count > 0 || _hierarchyRefreshResult.AddedContainers.Count > 0)
+                    {
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-1" Color="Color.Success" />
+                            Added
+                        </MudText>
+                        <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Name</th>
+                                    <th>External ID</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in _hierarchyRefreshResult.AddedPartitions)
+                                {
+                                    <tr>
+                                        <td>Partition</td>
+                                        <td>@item.Name</td>
+                                        <td style="font-family: monospace; font-size: 0.85em;">@item.ExternalId</td>
+                                    </tr>
+                                }
+                                @foreach (var item in _hierarchyRefreshResult.AddedContainers)
+                                {
+                                    <tr>
+                                        <td>Container</td>
+                                        <td>@item.Name</td>
+                                        <td style="font-family: monospace; font-size: 0.85em;">@item.ExternalId</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+
+                    @* Renamed Items *@
+                    @if (_hierarchyRefreshResult.RenamedPartitions.Count > 0 || _hierarchyRefreshResult.RenamedContainers.Count > 0)
+                    {
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-1" Color="Color.Info" />
+                            Renamed
+                        </MudText>
+                        <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Old Name</th>
+                                    <th>New Name</th>
+                                    <th>External ID</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in _hierarchyRefreshResult.RenamedPartitions)
+                                {
+                                    <tr>
+                                        <td>Partition</td>
+                                        <td>@item.OldName</td>
+                                        <td>@item.NewName</td>
+                                        <td style="font-family: monospace; font-size: 0.85em;">@item.ExternalId</td>
+                                    </tr>
+                                }
+                                @foreach (var item in _hierarchyRefreshResult.RenamedContainers)
+                                {
+                                    <tr>
+                                        <td>Container</td>
+                                        <td>@item.OldName</td>
+                                        <td>@item.NewName</td>
+                                        <td style="font-family: monospace; font-size: 0.85em;">@item.ExternalId</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+
+                    @* Moved Containers *@
+                    @if (_hierarchyRefreshResult.MovedContainers.Count > 0)
+                    {
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.DriveFileMove" Class="mr-1" Color="Color.Info" />
+                            Moved
+                        </MudText>
+                        <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Old Parent</th>
+                                    <th>New Parent</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in _hierarchyRefreshResult.MovedContainers)
+                                {
+                                    <tr>
+                                        <td>@item.Name</td>
+                                        <td style="font-family: monospace; font-size: 0.85em;">@(item.OldParentExternalId ?? "(root)")</td>
+                                        <td style="font-family: monospace; font-size: 0.85em;">@(item.NewParentExternalId ?? "(root)")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+                </div>
+            </ChildContent>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+}
+
+@if (ConnectedSystem.Partitions is { Count: > 0 } && !ConnectedSystem.HasPartitionsOrContainersSelected())
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-5">
+        <MudText>
+            <strong>No partitions or containers have been selected.</strong> You must select at least one partition
+            @if (ConnectedSystem.ConnectorDefinition.SupportsPartitionContainers)
+            {
+                <text> and at least one container within that partition</text>
+            }
+            before you can configure object matching rules or create run profiles.
+        </MudText>
+    </MudAlert>
+}
+
+@if (ConnectedSystem.Partitions is { Count: > 0 })
+{
+    <MudText Class="mt-5">Select which @PartitionsAndHierarchiesText are to be managed by JIM here. To maximise performance, only select those that need managing.</MudText>
+    @foreach (var partition in ConnectedSystem.Partitions)
+    {
+        <MudPaper Class="mt-5" Outlined="true">
+            <div class="pa-4">
+                <MudText Typo="Typo.h5" Class="mb-5">@partition.Name</MudText>
+                <MudSwitch @bind-Value="@partition.Selected" Color="Color.Primary" Label="Manage this partition?" />
+            </div>
+            <MudDivider />
+
+            <div class="pa-4">
+                <MudText>Select the containers you want to manage in this partition.</MudText>
+
+                @*
+                TODO:
+                <MudButtonGroup Color="Color.Default" Variant="Variant.Outlined" Class="mt-5 mb-5">
+                    <MudButton>Select All</MudButton>
+                    <MudButton>Clear All</MudButton>
+                </MudButtonGroup>
+                *@
+
+                @if (partition.Containers != null)
+                {
+                    <MudTreeView Items="@GetTreeItemData(partition.Containers)" ReadOnly AutoExpand>
+                        <ItemTemplate Context="item">
+                            <MudTreeViewItem @bind-Expanded="@item.Expanded" Items="@item.Children">
+                                <BodyContent>
+                                    @if (item.Value != null)
+                                    {
+                                        @if (item.Value.Included)
+                                        {
+                                            <MudCheckBox T="bool?"
+                                                         Value="@(item.Value.AreAnyChildContainersSelected() ? null : item.Value.Selected)"
+                                                         ValueChanged="@(_ => ConnectedSystemContainerSelectedChanged(item.Value))"
+                                                         UncheckedIcon="@Icons.Material.Outlined.FilterCenterFocus"
+                                                         Disabled="true"
+                                                         title="Included"/>
+                                        }
+                                        else
+                                        {
+                                            <MudCheckBox T="bool?"
+                                                         Value="@(item.Value.AreAnyChildContainersSelected() ? null : item.Value.Selected)"
+                                                         ValueChanged="@(_ => ConnectedSystemContainerSelectedChanged(item.Value))"
+                                                         title="@(item.Value.Selected ? "Selected" : string.Empty)"/>
+                                        }
+                                        <MudText>@item.Value.Name</MudText>
+                                    }
+                                </BodyContent>
+                            </MudTreeViewItem>
+                        </ItemTemplate>
+                    </MudTreeView>
+                }
+            </div>
+        </MudPaper>
+    }
+
+    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="HandleHierarchySelectionSubmitAsync" Class="mt-5" DropShadow="false">Save Changes</MudButton>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public ConnectedSystem ConnectedSystem { get; set; } = null!;
+
+    [Parameter]
+    public string? PartitionsAndHierarchiesText { get; set; }
+
+    [Parameter]
+    public string? PartitionAndHierarchyText { get; set; }
+
+    [Parameter]
+    public EventCallback OnConnectedSystemChanged { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private bool _hierarchyBeingRetrieved;
+    private HierarchyRefreshResult? _hierarchyRefreshResult;
+
+    protected override void OnParametersSet()
+    {
+        ApplyContainerIncludedToPartitions(ConnectedSystem);
+    }
+
+    private async Task HandleImportHierarchyAsync()
+    {
+        // attribute the import to the user
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+
+        _hierarchyBeingRetrieved = true;
+        _hierarchyRefreshResult = null; // Clear previous result
+        StateHasChanged();
+        await Task.Delay(1);
+
+        try
+        {
+            _hierarchyRefreshResult = await Jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(ConnectedSystem, user);
+
+            if (_hierarchyRefreshResult.Success)
+            {
+                if (_hierarchyRefreshResult.HasSelectedItemsRemoved)
+                {
+                    Snackbar.Add("Hierarchy refreshed with warnings. Some selected items were removed.", Severity.Warning);
+                }
+                else if (_hierarchyRefreshResult.HasChanges)
+                {
+                    Snackbar.Add($"Hierarchy refreshed: {_hierarchyRefreshResult.GetSummary()}", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add("Hierarchy refreshed. No changes detected.", Severity.Info);
+                }
+            }
+            else
+            {
+                Snackbar.Add($"Hierarchy refresh failed: {_hierarchyRefreshResult.ErrorMessage}", Severity.Error);
+            }
+
+            await OnConnectedSystemChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to import hierarchy for Connected System {ConnectedSystemId}", ConnectedSystem.Id);
+            Snackbar.Add($"Failed to retrieve hierarchy: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _hierarchyBeingRetrieved = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CopyHierarchyChangesToClipboardAsync()
+    {
+        if (_hierarchyRefreshResult == null)
+            return;
+
+        var sb = new StringBuilder();
+        sb.AppendLine("Hierarchy Refresh Results");
+        sb.AppendLine(new string('=', 50));
+        sb.AppendLine($"Summary: {_hierarchyRefreshResult.GetSummary()}");
+        sb.AppendLine($"Total Partitions: {_hierarchyRefreshResult.TotalPartitions}");
+        sb.AppendLine($"Total Containers: {_hierarchyRefreshResult.TotalContainers}");
+        sb.AppendLine();
+
+        if (_hierarchyRefreshResult.RemovedPartitions.Count > 0 || _hierarchyRefreshResult.RemovedContainers.Count > 0)
+        {
+            sb.AppendLine("REMOVED:");
+            foreach (var item in _hierarchyRefreshResult.RemovedPartitions)
+                sb.AppendLine($"  [Partition] {item.Name} ({item.ExternalId}){(item.WasSelected ? " - WAS SELECTED!" : "")}");
+            foreach (var item in _hierarchyRefreshResult.RemovedContainers)
+                sb.AppendLine($"  [Container] {item.Name} ({item.ExternalId}){(item.WasSelected ? " - WAS SELECTED!" : "")}");
+            sb.AppendLine();
+        }
+
+        if (_hierarchyRefreshResult.AddedPartitions.Count > 0 || _hierarchyRefreshResult.AddedContainers.Count > 0)
+        {
+            sb.AppendLine("ADDED:");
+            foreach (var item in _hierarchyRefreshResult.AddedPartitions)
+                sb.AppendLine($"  [Partition] {item.Name} ({item.ExternalId})");
+            foreach (var item in _hierarchyRefreshResult.AddedContainers)
+                sb.AppendLine($"  [Container] {item.Name} ({item.ExternalId})");
+            sb.AppendLine();
+        }
+
+        if (_hierarchyRefreshResult.RenamedPartitions.Count > 0 || _hierarchyRefreshResult.RenamedContainers.Count > 0)
+        {
+            sb.AppendLine("RENAMED:");
+            foreach (var item in _hierarchyRefreshResult.RenamedPartitions)
+                sb.AppendLine($"  [Partition] \"{item.OldName}\" -> \"{item.NewName}\" ({item.ExternalId})");
+            foreach (var item in _hierarchyRefreshResult.RenamedContainers)
+                sb.AppendLine($"  [Container] \"{item.OldName}\" -> \"{item.NewName}\" ({item.ExternalId})");
+            sb.AppendLine();
+        }
+
+        if (_hierarchyRefreshResult.MovedContainers.Count > 0)
+        {
+            sb.AppendLine("MOVED:");
+            foreach (var item in _hierarchyRefreshResult.MovedContainers)
+                sb.AppendLine($"  [Container] {item.Name}: {item.OldParentExternalId ?? "(root)"} -> {item.NewParentExternalId ?? "(root)"}");
+        }
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", sb.ToString());
+            Snackbar.Add("Changes copied to clipboard", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Failed to copy to clipboard. Please copy manually.", Severity.Warning);
+        }
+    }
+
+    private async Task HandleHierarchySelectionSubmitAsync()
+    {
+        // attribute the action to the user
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user);
+        Snackbar.Add("Your hierarchy changes have been saved.", Severity.Success);
+        await OnConnectedSystemChanged.InvokeAsync();
+    }
+
+    private static List<TreeItemData<ConnectedSystemContainer>> GetTreeItemData(HashSet<ConnectedSystemContainer> containers)
+    {
+        return containers.Select(connectedSystemContainer => new TreeItemData<ConnectedSystemContainer>
+        {
+            Value = connectedSystemContainer,
+            Children = GetTreeItemData(connectedSystemContainer.ChildContainers)
+        }).ToList();
+    }
+
+    private static void ConnectedSystemContainerSelectedChanged(ConnectedSystemContainer container)
+    {
+        // if included and clicked, change to not included, not selected
+        if (container.Included)
+        {
+            container.Selected = false;
+        }
+        else
+        {
+            // toggle the current setting
+            container.Selected = !container.Selected;
+        }
+
+        container.Included = false;
+
+        // set the right selected/included values for all children
+        if (container.Selected)
+        {
+            // all children should be included and not selected
+            foreach (var child in container.ChildContainers)
+            {
+                child.Included = true;
+                child.Selected = false;
+                ApplyContainerStatusDownBranch(child, false, true);
+            }
+        }
+        else
+        {
+            // all children should be not selected and not included
+            foreach (var child in container.ChildContainers)
+            {
+                child.Included = false;
+                child.Selected = false;
+                ApplyContainerStatusDownBranch(child, false, false);
+            }
+        }
+
+        // set the parent(s) if necessary
+        if (container.ParentContainer != null)
+        {
+            // go up a level. if all children are selected, then make parent selected and all children (recursively) included.
+            CorrectUpwardContainerStatus(container.ParentContainer);
+        }
+
+        // make sure the partition is selected if not already
+        AutoSelectPartitionIfContainersSelected(container);
+    }
+
+    /// <summary>
+    /// Makes sure the partition is selected if any contains in its hierarchy are selected.
+    /// </summary>
+    private static void AutoSelectPartitionIfContainersSelected(ConnectedSystemContainer container)
+    {
+        // this method could probably be optimised. I was having a hard time writing this.
+        // get the partition at the top of the container hierarchy
+        var partition = container.Partition;
+        var areAnyContainersSelected = container.Selected;
+        if (partition != null && areAnyContainersSelected && !partition.Selected)
+        {
+            partition.Selected = true;
+            return;
+        }
+
+        // we need a variable to hold the TLC when we eventually find it
+        ConnectedSystemContainer? topLevelContainer = null;
+
+        // we need a variable to hold the current container as we navigate up the hierarchy
+        var currentContainer = container;
+
+        // keep moving up the container hierarchy until we find the TLC
+        // ReSharper disable once LoopVariableIsNeverChangedInsideLoop : incorrect
+        while (topLevelContainer == null)
+        {
+            if (currentContainer.ParentContainer == null)
+            {
+                // found it! stop looping
+                topLevelContainer = currentContainer;
+                break;
+            }
+
+            // move up one level in the container hierarchy
+            currentContainer = currentContainer.ParentContainer;
+        }
+
+        // it's possible the TLC hasn't been found
+        // ReSharper disable once ConditionIsAlwaysTrueOrFalse : incorrect
+        if (topLevelContainer == null)
+        {
+            Log.Warning("Couldn't find the top-level container. unable to auto-select partition.");
+            return;
+        }
+
+        // we might already know if any containers are selected
+        if (!areAnyContainersSelected)
+        {
+            // we have a TLC! now, are any containers in the hierarchy selected?
+            if (topLevelContainer.Partition is { Containers: not null })
+                if (topLevelContainer.Partition.Containers.Any(IsContainerOrAnyChildrenSelected))
+                    areAnyContainersSelected = true;
+        }
+
+        // does the top-level container have a parent partition?
+        if (topLevelContainer.Partition != null && areAnyContainersSelected)
+            topLevelContainer.Partition.Selected = true;
+    }
+
+    private static bool IsContainerOrAnyChildrenSelected(ConnectedSystemContainer container)
+    {
+        return container.Selected || container.ChildContainers.Any(IsContainerOrAnyChildrenSelected);
+    }
+
+    private static void ApplyContainerStatusDownBranch(ConnectedSystemContainer container, bool selected, bool included)
+    {
+        foreach (var child in container.ChildContainers)
+        {
+            child.Included = included;
+            child.Selected = selected;
+            ApplyContainerStatusDownBranch(child, selected, included);
+        }
+    }
+
+    private static void ApplyContainerIncludedToPartitions(ConnectedSystem connectedSystemInQuestion)
+    {
+        if (connectedSystemInQuestion.Partitions == null)
+            return;
+
+        foreach (var partition in connectedSystemInQuestion.Partitions)
+            if (partition.Containers != null)
+                foreach (var container in partition.Containers)
+                    ApplyContainerIncludedRecursively(container, container.Selected);
+    }
+
+    private static void ApplyContainerIncludedRecursively(ConnectedSystemContainer connectedSystemContainer, bool aParentWasSelected)
+    {
+        foreach (var childContainer in connectedSystemContainer.ChildContainers)
+        {
+            var shouldChildBeIncluded = aParentWasSelected;
+
+            // parent was selected, so this child container should be marked as included
+            if (aParentWasSelected)
+                childContainer.Included = true;
+
+            // if this child container is selected, then it's children should be marked as included
+            if (childContainer.Selected)
+                shouldChildBeIncluded = true;
+
+            ApplyContainerIncludedRecursively(childContainer, shouldChildBeIncluded);
+        }
+    }
+
+    private static void CorrectUpwardContainerStatus(ConnectedSystemContainer parentContainer)
+    {
+        if (parentContainer.ChildContainers.All(q => q.Selected))
+        {
+            parentContainer.Selected = true;
+            parentContainer.Included = false;
+
+            foreach (var childContainer in parentContainer.ChildContainers)
+            {
+                childContainer.Selected = false;
+                childContainer.Included = true;
+                ApplyContainerStatusDownBranch(childContainer, false, true);
+            }
+        }
+
+        if (parentContainer.ParentContainer != null)
+            CorrectUpwardContainerStatus(parentContainer.ParentContainer);
+    }
+}

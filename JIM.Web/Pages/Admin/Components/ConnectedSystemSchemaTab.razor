@@ -1,0 +1,873 @@
+@using JIM.Application
+@using JIM.Models.Core
+@using JIM.Models.Exceptions
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+@using JIM.Utilities
+@using Serilog
+@using JIM.Web.Services
+@inject JimApplication Jim
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IUserPreferenceService PreferenceService
+
+<MudAlert Severity="ConnectedSystem.ObjectTypes is { Count: > 0 } ? Severity.Warning : Severity.Info" Variant="Variant.Outlined">
+    @if (ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count == 0)
+    {
+        <MudText>Retrieve the schema from the connected system, to be able to select which object types and attributes you want to manage with JIM.</MudText>
+    }
+    else
+    {
+        <MudText>
+            <strong>Refreshing the schema can result in data-loss</strong>. If object types or attributes are discovered to have been removed at the connected system, then this
+            will result in all references to them being removed from within JIM, i.e. synchronisation rules, attribute flow, attributes values and even entire objects will be
+            deleted if object types are removed. Refresh with caution. Ensure the Connected System identity has the right permissions needed to retrieve the schema, and consider
+            a database backup before proceeding.
+        </MudText>
+    }
+    <MudButton
+        Color="ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count == 0 ? Color.Info : Color.Warning"
+        Disabled="@(_schemaBeingRetrieved)"
+        Variant="Variant.Filled"
+
+        OnClick="HandleImportSchemaAsync"
+        Class="mt-5"
+        DropShadow="false">
+        @if (ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count == 0)
+        {
+            if (_schemaBeingRetrieved)
+            {
+                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
+                <span class="ms-2">Retrieving Schema</span>
+            }
+            else
+            {
+                <text>Retrieve Schema</text>
+            }
+        }
+        else
+        {
+            if (_schemaBeingRetrieved)
+            {
+                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
+                <span class="ms-2">Refreshing Schema</span>
+            }
+            else
+            {
+                <text>Refresh Schema</text>
+            }
+        }
+    </MudButton>
+</MudAlert>
+
+@if (_schemaRefreshResult != null)
+{
+    var result = _schemaRefreshResult;
+    <MudAlert Severity="@(result.Success ? (result.HasChanges ? Severity.Info : Severity.Success) : Severity.Error)"
+              Variant="Variant.Outlined"
+              Icon="@(result.Success ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Error)"
+              Class="mt-3 jim-alert-schema-refresh"
+              ShowCloseIcon="true"
+              CloseIconClicked="HandleCloseSchemaRefreshResult">
+        <MudText Typo="Typo.subtitle1" Class="mb-2">
+            Schema Refresh @(result.Success ? "Complete" : "Failed")
+        </MudText>
+
+        @if (result.Success)
+        {
+            <MudText Class="mb-2">
+                Found <strong>@result.TotalObjectTypes</strong> object type(s) with <strong>@result.TotalAttributes</strong> attribute(s).
+            </MudText>
+
+            @if (!result.HasChanges)
+            {
+                <MudText Color="Color.Success">No changes detected. The schema is up to date.</MudText>
+            }
+            else
+            {
+                <MudSimpleTable Dense="true" Hover="true" Bordered="true" Class="mt-2">
+                    <thead>
+                        <tr>
+                            <th>Change Type</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (result.AddedObjectTypes.Count > 0)
+                        {
+                            <tr>
+                                <td><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Class="me-1" /> Object Types Added</td>
+                                <td>@string.Join(", ", result.AddedObjectTypes)</td>
+                            </tr>
+                        }
+                        @if (result.RemovedObjectTypes.Count > 0)
+                        {
+                            <tr>
+                                <td><MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Error" Class="me-1" /> Object Types Removed</td>
+                                <td>@string.Join(", ", result.RemovedObjectTypes)</td>
+                            </tr>
+                        }
+                        @if (result.UpdatedObjectTypes.Count > 0)
+                        {
+                            <tr>
+                                <td><MudIcon Icon="@Icons.Material.Filled.Update" Color="Color.Info" Class="me-1" /> Object Types Updated</td>
+                                <td>@string.Join(", ", result.UpdatedObjectTypes)</td>
+                            </tr>
+                        }
+                        @foreach (var kvp in result.AddedAttributes)
+                        {
+                            <tr>
+                                <td><MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" Class="me-1" /> Attributes Added (@kvp.Key)</td>
+                                <td>@string.Join(", ", kvp.Value)</td>
+                            </tr>
+                        }
+                        @foreach (var kvp in result.RemovedAttributes)
+                        {
+                            <tr>
+                                <td><MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Warning" Class="me-1" /> Attributes Removed (@kvp.Key)</td>
+                                <td>@string.Join(", ", kvp.Value)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+
+                @if (result.ActionRequired)
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-3">
+                        <strong>Action Required:</strong> Some attributes that were removed are still referenced by sync rules.
+                        Please update your sync rules to remove references to these attributes.
+                    </MudAlert>
+                }
+            }
+        }
+        else
+        {
+            <MudText Color="Color.Error">@result.ErrorMessage</MudText>
+        }
+    </MudAlert>
+}
+
+<MudDialog @bind-Visible="_editSchemaAttributeDialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-3" /> Edit Schema Attribute: @_objectTypeAttributeBeingEdited?.Name
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (!_objectTypeAttributeBeingEditedIsEditable)
+        {
+            <MudAlert Severity="Severity.Error">
+                This Connected System attribute cannot be edited as it is being referenced by either a synchronisation rule, or has values already populated.
+            </MudAlert>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info">
+                This Connector supports changing the data type of a Connected System attribute. This might be because the data type
+                was detected automatically, and might need adjusting if not right.
+            </MudAlert>
+        }
+
+        <MudSelect
+            T="string"
+            Label="Please choose a data type"
+            Required="true"
+            Variant="Variant.Outlined"
+            Class="mt-5"
+            Disabled="!_objectTypeAttributeBeingEditedIsEditable"
+            @bind-Value="_objectTypeAttributeBeingEditedText">
+            @foreach (AttributeDataType type in Enum.GetValues(typeof(AttributeDataType)))
+            {
+                if (type != AttributeDataType.NotSet)
+                {
+                    <MudSelectItem Value="@type.ToString()"/>
+                }
+            }
+        </MudSelect>
+
+    </DialogContent>
+    <DialogActions>
+        <MudButton
+            DropShadow="false"
+            Variant="Variant.Text"
+            OnClick="@(() => _editSchemaAttributeDialogVisible = false)"
+            Class="ma-4">Cancel</MudButton>
+        <MudButton
+            Disabled="!_objectTypeAttributeBeingEditedIsEditable"
+            DropShadow="false"
+            Variant="Variant.Filled"
+            Color="Color.Primary"
+            OnClick="HandleEditAttributeDataTypeButtonClick"
+            Class="ma-4">Confirm Change</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@if (ConnectedSystem.ObjectTypes is { Count: > 0 })
+{
+    if (ConnectedSystem.ObjectTypes.Count > 1 || (ConnectedSystem.ObjectTypes.Count == 1 && !ConnectedSystem.ObjectTypes[0].Selected))
+    {
+        <MudPaper Outlined="true" Class="pa-4 mt-5">
+            <MudText>
+                Select which object types from this system you would like to use in JIM.
+            </MudText>
+            <div class="d-flex flex-grow-1 flex-wrap">
+                @foreach (var objectType in ConnectedSystem.ObjectTypes)
+                {
+                    <MudCheckBox T="bool" Value="@objectType.Selected" Color="Color.Primary" Label="@objectType.Name" ValueChanged="((e) => HandleSelectedObjectTypeClick(objectType, e))" />
+                }
+            </div>
+        </MudPaper>
+    }
+
+    @if (ConnectedSystem.ObjectTypes.Count(q => q.Selected) > 1)
+    {
+        <MudButtonGroup Class="mt-5" OverrideStyles="false">
+            @foreach (var objectType in ConnectedSystem.ObjectTypes.Where(q => q.Selected))
+            {
+                <MudButton
+                    OnClick="@((_) => HandleActiveObjectTypeClick(objectType))"
+                    Variant="@(_selectedObjectType == objectType ? Variant.Filled : Variant.Outlined)"
+                    Color="Color.Primary">@objectType.Name</MudButton>
+            }
+        </MudButtonGroup>
+    }
+
+    @if (_selectedObjectType != null)
+    {
+        <MudText Typo="Typo.h5" Class="mt-5"><span class="mud-primary-text">Object Type:</span> @_selectedObjectType.Name</MudText>
+        @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
+        {
+            <MudPaper Outlined="true" Class="pa-4 mt-5">
+                <MudText>This connector requires you to select the attribute that is used as the External ID. Please select one below.</MudText>
+                <MudSelect
+                    T="ConnectedSystemObjectTypeAttribute"
+                    Label="External ID Attribute"
+                    Variant="Variant.Outlined"
+                    Class="mt-5"
+                    Required="true"
+                    RequiredError="You must select an attribute as the External ID."
+                    Value="_selectedObjectType.Attributes.SingleOrDefault(q => q.IsExternalId)"
+                    ValueChanged="HandleMakeExternalId">
+                    @foreach (var objectTypeAttribute in _selectedObjectType.Attributes.Where(q => q.AttributePlurality == AttributePlurality.SingleValued))
+                    {
+                        <MudSelectItem Value="@objectTypeAttribute">@(objectTypeAttribute.Name)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudPaper>
+        }
+
+        @if (ConnectedSystem.SupportsImportMode())
+        {
+            <MudPaper Outlined="true" Class="pa-4 mt-5">
+                <MudText Typo="Typo.h6" Class="mb-3">Settings</MudText>
+                <MudSwitch
+                    @bind-Value="@_selectedObjectType.RemoveContributedAttributesOnObsoletion"
+                    Color="@Color.Primary"
+                    Label="Remove contributed attributes when objects are obsoleted" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    When enabled, attribute values contributed by objects of this type will be removed from the Metaverse when the source object is deleted or no longer present in the connected system.
+                </MudText>
+            </MudPaper>
+        }
+
+        <MudPaper Outlined="true" Class="pa-4 mt-5">
+            <MudText Typo="Typo.h6" Class="mb-3">Attribute Selection</MudText>
+            <MudText>
+                Select which attributes you would like JIM to import, or export for this object type. To maximise system performance, only select those you actually need.
+            </MudText>
+
+            <MudGrid Class="mt-3">
+                <MudItem xs="@(_selectedObjectTypeHasClasses ? 4 : 6)">
+                    <MudTextField
+                        T="string"
+                        @bind-Value="_schemaSearchString"
+                        Label="Filter by name"
+                        Adornment="Adornment.Start"
+                        AdornmentIcon="@Icons.Material.Filled.Search"
+                        IconSize="Size.Small"
+                        Variant="Variant.Outlined"
+                        HelperText="Show only attributes where the name contains a specific value"
+                        autocomplete="schema_search_string" />
+                </MudItem>
+
+                @if (_selectedObjectTypeHasClasses)
+                {
+                    <MudItem xs="4">
+                        <MudSelect
+                            T="string"
+                            Label="Filter by class"
+                            MultiSelection="true"
+                            @bind-SelectedValues="AttributeClassFilterSelectedValues"
+                            Variant="Variant.Outlined"
+                            HelperText="Show only attributes with a particular class"
+                            Adornment="Adornment.Start"
+                            AdornmentIcon="@Icons.Material.Filled.FilterAlt"
+                            IconSize="Size.Small">
+                            @foreach (var className in _selectedObjectType.Attributes.Select(a => a.ClassName).Distinct().OrderBy(a => a))
+                            {
+                                <MudSelectItem T="string" Value="@className">@className</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                }
+
+                <MudItem xs="@(_selectedObjectTypeHasClasses ? 4 : 6)">
+                    <MudTextField
+                        T="string"
+                        Label="Select attributes via CSV"
+                        @bind-Value="_attributeSelectionCsv"
+                        HelperText="Quick-select by comma-separated list, e.g. DisplayName,sAMAccountName"
+                        InputType="InputType.Text"
+                        Adornment="Adornment.End"
+                        AdornmentIcon="@Icons.Material.Filled.Check"
+                        OnAdornmentClick="HandleAttributeCsvSubmit"
+                        IconSize="Size.Small"
+                        Variant="Variant.Outlined" />
+                </MudItem>
+            </MudGrid>
+
+            <MudStack Row="true" Spacing="6" Class="mt-4 flex-wrap" AlignItems="AlignItems.Start">
+                <div>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Type:</MudText>
+                    <MudChipSet T="AttributeDataType"
+                                SelectionMode="SelectionMode.MultiSelection"
+                                SelectedValues="_selectedSchemaTypes"
+                                SelectedValuesChanged="OnSchemaTypeFilterChanged">
+                        @foreach (var type in GetAvailableSchemaTypes())
+                        {
+                            <MudChip Value="@type.Key"
+                                     Color="Color.Primary"
+                                     Variant="@(_selectedSchemaTypes.Contains(type.Key) ? Variant.Outlined : Variant.Text)">
+                                @type.Key.ToString().SplitOnCapitalLetters() (@type.Value)
+                            </MudChip>
+                        }
+                    </MudChipSet>
+                </div>
+
+                <div>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Plurality:</MudText>
+                    <MudChipSet T="AttributePlurality"
+                                SelectionMode="SelectionMode.MultiSelection"
+                                SelectedValues="_selectedSchemaPluralites"
+                                SelectedValuesChanged="OnSchemaPluralityFilterChanged">
+                        @foreach (var plurality in GetAvailableSchemaPluralites())
+                        {
+                            <MudChip Value="@plurality.Key"
+                                     Color="Color.Info"
+                                     Variant="@(_selectedSchemaPluralites.Contains(plurality.Key) ? Variant.Outlined : Variant.Text)">
+                                @(plurality.Key == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued") (@plurality.Value)
+                            </MudChip>
+                        }
+                    </MudChipSet>
+                </div>
+
+                @{
+                    var selectionCounts = GetSchemaSelectionCounts();
+                }
+                <div>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Selection:</MudText>
+                    <MudChipSet T="bool"
+                                SelectionMode="SelectionMode.SingleSelection"
+                                SelectedValue="_attributeSelectedFilter"
+                                SelectedValueChanged="@((bool val) => _attributeSelectedFilter = val)">
+                        <MudChip Value="false"
+                                 Color="Color.Default"
+                                 Variant="@(!_attributeSelectedFilter ? Variant.Outlined : Variant.Text)">
+                            All (@selectionCounts.allCount)
+                        </MudChip>
+                        <MudChip Value="true"
+                                 Color="Color.Default"
+                                 Variant="@(_attributeSelectedFilter ? Variant.Outlined : Variant.Text)">
+                            Selected Only (@selectionCounts.selectedCount)
+                        </MudChip>
+                    </MudChipSet>
+                </div>
+            </MudStack>
+        </MudPaper>
+
+        <MudTable
+            Items="@_selectedObjectType.Attributes"
+            Hover="true"
+            Dense="true"
+            Breakpoint="Breakpoint.Sm"
+            SortLabel="Sort By"
+            Filter="new Func<ConnectedSystemObjectTypeAttribute,bool>(SchemaFilterFuncHandler)"
+            Class="mt-5"
+            Outlined="true"
+            Elevation="0"
+            RowsPerPage="@_schemaRowsPerPage"
+            RowsPerPageChanged="OnSchemaRowsPerPageChanged">
+            <HeaderContent>
+                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Selected)"><MudText Typo="Typo.button">Selected</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.IsExternalId)"><MudText Typo="Typo.button">External ID</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
+                @if (_selectedObjectTypeHasClasses)
+                {
+                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.ClassName!)"><MudText Typo="Typo.button">Class</MudText></MudTableSortLabel></MudTh>
+                }
+                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Type)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.AttributePlurality)"><MudText Typo="Typo.button">Plurality</MudText></MudTableSortLabel></MudTh>
+                @if (_selectedObjectTypeHasDescriptions)
+                {
+                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Description!)"><MudText Typo="Typo.button">Description</MudText></MudTableSortLabel></MudTh>
+                }
+                @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes)
+                {
+                    <MudTh><MudText Typo="Typo.button">Action</MudText></MudTh>
+                }
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Selected">
+                    @if (context.IsExternalId || context.IsSecondaryExternalId)
+                    {
+                        <MudTooltip Text="This attribute cannot be unselected because it is the External ID or Secondary External ID. These attributes must remain selected for sync operations to function correctly." Arrow="true" Placement="Placement.Top">
+                            <MudSwitch Value="@context.Selected" Color="@Color.Primary" Disabled="true" />
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <MudSwitch @bind-Value="@context.Selected" Color="@Color.Primary" />
+                    }
+                </MudTd>
+                <MudTd DataLabel="External ID">
+                    @if (context.IsExternalId)
+                    {
+                        <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
+                    }
+                    else if (context.IsSecondaryExternalId)
+                    {
+                        <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
+                    }
+                    else
+                    {
+                        <span>-</span>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Name">@context.Name</MudTd>
+                @if (_selectedObjectTypeHasClasses)
+                {
+                    <MudTd DataLabel="Class">
+                        @context.ClassName
+                    </MudTd>
+                }
+                <MudTd DataLabel="Type">
+                    <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Type)" Variant="Variant.Outlined">
+                        @context.Type.ToString().SplitOnCapitalLetters()
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Plurality">
+                    <MudChip T="string" Color="@Helpers.GetAttributePluralityChipColour(context.AttributePlurality)" Variant="Variant.Text">
+                        @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                    </MudChip>
+                </MudTd>
+                @if (_selectedObjectTypeHasDescriptions)
+                {
+                    <MudTd DataLabel="Description">
+                        @context.Description
+                    </MudTd>
+                }
+                @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes)
+                {
+                    <MudTd>
+                        <MudButton
+                            DropShadow="false"
+                            Color="Color.Primary"
+                            Variant="Variant.Outlined"
+                            Size="Size.Small"
+                            OnClick="() => HandleShowEditAttributeDialogAsync(context)"
+                            StartIcon="@Icons.Material.Filled.Edit">
+                            Edit
+                        </MudButton>
+                    </MudTd>
+                }
+            </RowTemplate>
+            <NoRecordsContent>
+                @if (_attributeSelectedFilter) {
+                    <MudText>There are no selected attributes for this object type.</MudText>
+                } else {
+                    <MudText>There are no attributes to show.</MudText>
+                }
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new[] { 10, 25, 50, 100 }" />
+            </PagerContent>
+        </MudTable>
+    }
+
+    <MudButton
+        Color="Color.Primary"
+        Variant="Variant.Filled"
+        OnClick="HandleObjectTypesAndAttributeSelectionSubmitAsync"
+        Class="mt-5"
+        DropShadow="false"
+        Disabled="DisableSaveSchemaButton()">Save Changes</MudButton>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public ConnectedSystem ConnectedSystem { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback OnConnectedSystemChanged { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private bool _schemaBeingRetrieved;
+    private SchemaRefreshResult? _schemaRefreshResult;
+    private ConnectedSystemObjectType? _selectedObjectType;
+    private bool _selectedObjectTypeHasClasses;
+    private bool _selectedObjectTypeHasDescriptions;
+    private string _schemaSearchString = "";
+    private IEnumerable<string> AttributeClassFilterSelectedValues { get; set; } = new HashSet<string>();
+    private bool _attributeSelectedFilter;
+    private string? _attributeSelectionCsv;
+    private IReadOnlyCollection<AttributeDataType> _selectedSchemaTypes = new List<AttributeDataType>();
+    private IReadOnlyCollection<AttributePlurality> _selectedSchemaPluralites = new List<AttributePlurality>();
+    private int _schemaRowsPerPage = 10;
+    private bool _schemaPreferencesLoaded;
+
+    private readonly DialogOptions _dialogOptions = new() { FullWidth = true };
+    private bool _editSchemaAttributeDialogVisible;
+    private ConnectedSystemObjectTypeAttribute? _objectTypeAttributeBeingEdited;
+    private string? _objectTypeAttributeBeingEditedText;
+    private bool _objectTypeAttributeBeingEditedIsEditable;
+
+    protected override void OnParametersSet()
+    {
+        _selectedObjectType ??= ConnectedSystem.ObjectTypes?.FirstOrDefault(q => q.Selected);
+
+        if (_selectedObjectType != null)
+        {
+            _selectedObjectTypeHasClasses = _selectedObjectType.Attributes.Any(q => q.ClassName != null);
+            _selectedObjectTypeHasDescriptions = _selectedObjectType.Attributes.Any(q => q.Description != null);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_schemaPreferencesLoaded)
+        {
+            try
+            {
+                var preferredSize = await PreferenceService.GetRowsPerPageAsync();
+                _schemaRowsPerPage = preferredSize;
+                _schemaPreferencesLoaded = true;
+                StateHasChanged();
+            }
+            catch
+            {
+                // JS interop not yet available, will retry on next render
+            }
+        }
+    }
+
+    private async Task OnSchemaRowsPerPageChanged(int newSize)
+    {
+        _schemaRowsPerPage = newSize;
+        await PreferenceService.SetRowsPerPageAsync(newSize);
+    }
+
+    private async Task HandleImportSchemaAsync()
+    {
+        // attribute the import to the user
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+
+        _schemaBeingRetrieved = true;
+        _schemaRefreshResult = null; // Clear any previous result
+        StateHasChanged();
+        await Task.Delay(1);
+
+        try
+        {
+            _schemaRefreshResult = await Jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(ConnectedSystem, user);
+
+            // if there's just a single object type in the schema, auto-select it
+            if (ConnectedSystem.ObjectTypes is { Count: 1 })
+                HandleSelectedObjectTypeClick(ConnectedSystem.ObjectTypes[0], true);
+
+            await OnConnectedSystemChanged.InvokeAsync();
+        }
+        catch (CsvParsingException ex)
+        {
+            await ShowCsvErrorDialogAsync(ex);
+            _schemaRefreshResult = SchemaRefreshResult.Failed(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to import schema for connected system {SystemId}", ConnectedSystem.Id);
+            _schemaRefreshResult = SchemaRefreshResult.Failed(ex.Message);
+        }
+        finally
+        {
+            _schemaBeingRetrieved = false;
+            StateHasChanged();
+            await Task.Delay(1);
+        }
+    }
+
+    private void HandleCloseSchemaRefreshResult()
+    {
+        _schemaRefreshResult = null;
+        StateHasChanged();
+    }
+
+    private void HandleSelectedObjectTypeClick(ConnectedSystemObjectType connectedSystemObjectType, bool isObjectTypeChecked)
+    {
+        // actuate the state change
+        connectedSystemObjectType.Selected = isObjectTypeChecked;
+
+        // now cascade
+        // if only one type is selected, make that the selected object type
+        // if none are selected, clear selected object type
+        // if the selected type is being de-selected, null the selected type
+        if (ConnectedSystem.ObjectTypes != null && ConnectedSystem.ObjectTypes.Count(q => q.Selected) == 1)
+            _selectedObjectType = ConnectedSystem.ObjectTypes.Single(q => q.Selected);
+        else if (ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count(q => q.Selected) == 0)
+            _selectedObjectType = null;
+        else if (_selectedObjectType != null && _selectedObjectType.Id == connectedSystemObjectType.Id && !isObjectTypeChecked)
+            _selectedObjectType = null;
+
+        // some parts of the UI only make sense if the attributes have classes
+        _selectedObjectTypeHasClasses = connectedSystemObjectType.Attributes.Any(q => q.ClassName != null);
+        _selectedObjectTypeHasDescriptions = connectedSystemObjectType.Attributes.Any(q => q.Description != null);
+    }
+
+    private void HandleActiveObjectTypeClick(ConnectedSystemObjectType connectedSystemObjectType)
+    {
+        _selectedObjectType = connectedSystemObjectType;
+    }
+
+    private void HandleMakeExternalId(ConnectedSystemObjectTypeAttribute selectedAttribute)
+    {
+        if (_selectedObjectType == null)
+        {
+            Log.Error($"Schema Tab > HandleMakeExternalId: {nameof(_selectedObjectType)} is null!");
+            return;
+        }
+
+        // make sure there's not already an attribute marked as the external id
+        foreach (var attribute in _selectedObjectType.Attributes.Where(a => a.IsExternalId))
+            attribute.IsExternalId = false;
+
+        // mark the intended attribute as the external id, and select it
+        selectedAttribute.IsExternalId = true;
+        selectedAttribute.Selected = true;
+        Log.Verbose($"Schema Tab > HandleMakeExternalId: Set attribute id {selectedAttribute} as the external id.");
+    }
+
+    private async Task HandleObjectTypesAndAttributeSelectionSubmitAsync()
+    {
+        // attribute the update to the user
+        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+        await Jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user);
+        Snackbar.Add("Your attribute changes have been saved.", Severity.Success);
+
+        await OnConnectedSystemChanged.InvokeAsync();
+    }
+
+    private bool SchemaFilterFuncHandler(ConnectedSystemObjectTypeAttribute element) =>
+        SchemaFilterFunc(element, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter, _selectedSchemaTypes, _selectedSchemaPluralites);
+
+    private static bool SchemaFilterFunc(
+        ConnectedSystemObjectTypeAttribute element,
+        string searchString,
+        IEnumerable<string> attributeClassFilterSelectedValues,
+        bool attributeSelectedFilter,
+        IReadOnlyCollection<AttributeDataType> selectedTypes,
+        IReadOnlyCollection<AttributePlurality> selectedPluralites)
+    {
+        // All filters must pass (AND logic)
+        var classHashset = (HashSet<string>)attributeClassFilterSelectedValues;
+
+        // Filter by "show only selected" checkbox
+        if (attributeSelectedFilter && !element.Selected)
+            return false;
+
+        // Filter by name search string
+        if (!string.IsNullOrEmpty(searchString) && !element.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // Filter by class selection
+        if (classHashset.Count > 0 && !classHashset.Any(q => q == element.ClassName))
+            return false;
+
+        // Filter by type selection
+        if (selectedTypes.Count > 0 && !selectedTypes.Contains(element.Type))
+            return false;
+
+        // Filter by plurality selection
+        if (selectedPluralites.Count > 0 && !selectedPluralites.Contains(element.AttributePlurality))
+            return false;
+
+        return true;
+    }
+
+    private void OnSchemaTypeFilterChanged(IReadOnlyCollection<AttributeDataType> selectedTypes)
+    {
+        _selectedSchemaTypes = selectedTypes;
+    }
+
+    private void OnSchemaPluralityFilterChanged(IReadOnlyCollection<AttributePlurality> selectedPluralites)
+    {
+        _selectedSchemaPluralites = selectedPluralites;
+    }
+
+    private IEnumerable<KeyValuePair<AttributeDataType, int>> GetAvailableSchemaTypes()
+    {
+        if (_selectedObjectType == null)
+            return Enumerable.Empty<KeyValuePair<AttributeDataType, int>>();
+
+        // Apply all filters EXCEPT type filter to get contextual counts
+        var filteredAttributes = _selectedObjectType.Attributes
+            .Where(a => SchemaFilterFunc(a, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter,
+                new List<AttributeDataType>(), _selectedSchemaPluralites));
+
+        return filteredAttributes
+            .GroupBy(a => a.Type)
+            .Select(g => new KeyValuePair<AttributeDataType, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key.ToString());
+    }
+
+    private IEnumerable<KeyValuePair<AttributePlurality, int>> GetAvailableSchemaPluralites()
+    {
+        if (_selectedObjectType == null)
+            return Enumerable.Empty<KeyValuePair<AttributePlurality, int>>();
+
+        // Apply all filters EXCEPT plurality filter to get contextual counts
+        var filteredAttributes = _selectedObjectType.Attributes
+            .Where(a => SchemaFilterFunc(a, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter,
+                _selectedSchemaTypes, new List<AttributePlurality>()));
+
+        return filteredAttributes
+            .GroupBy(a => a.AttributePlurality)
+            .Select(g => new KeyValuePair<AttributePlurality, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key);
+    }
+
+    private (int allCount, int selectedCount) GetSchemaSelectionCounts()
+    {
+        if (_selectedObjectType == null)
+            return (0, 0);
+
+        // Apply all filters EXCEPT selection filter to get contextual counts
+        var filteredAttributes = _selectedObjectType.Attributes
+            .Where(a => SchemaFilterFunc(a, _schemaSearchString, AttributeClassFilterSelectedValues, false,
+                _selectedSchemaTypes, _selectedSchemaPluralites))
+            .ToList();
+
+        return (filteredAttributes.Count, filteredAttributes.Count(a => a.Selected));
+    }
+
+    private void HandleAttributeCsvSubmit()
+    {
+        if (_selectedObjectType == null)
+        {
+            Console.WriteLine($"{nameof(HandleAttributeCsvSubmit)}: connectedSystem was null");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(_attributeSelectionCsv))
+        {
+            Console.WriteLine($"{nameof(HandleAttributeCsvSubmit)}: attributeSelectionCsv is null or empty");
+            return;
+        }
+
+        // clear the other search boxes
+        _schemaSearchString = string.Empty;
+        ((HashSet<string>)AttributeClassFilterSelectedValues).Clear();
+
+        // convert the csv to a list and trim the entries
+        // go through each attribute on the object type and select it
+        foreach (var attributeName in _attributeSelectionCsv.Split(','))
+        {
+            var attribute = _selectedObjectType.Attributes.SingleOrDefault(a => a.Name.Equals(attributeName.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (attribute == null)
+                continue;
+
+            attribute.Selected = true;
+        }
+
+        // filter by selected
+        _attributeSelectedFilter = true;
+
+        // clear the attribute csv text box
+        _attributeSelectionCsv = null;
+
+        // all done, let the user know
+        Snackbar.Add("Attributes selected.", Severity.Success);
+    }
+
+    private bool DisableSelectedSchemaObjectType(ConnectedSystemObjectType connectedSystemObjectType)
+    {
+        if (_selectedObjectType == null)
+            return false;
+
+        if (connectedSystemObjectType.Id.Equals(_selectedObjectType.Id))
+            return true; // BOTH IDS ARE 0 WHEN THEY'RE DIFFERENT TYPES! HOW?! - BECAUSE THEY HAVEN'T BEEN PERSISTED YET!
+
+        return false;
+    }
+
+    /// <summary>
+    /// Determines whether the Save Schema changes button should be disabled or not.
+    /// </summary>
+    private bool DisableSaveSchemaButton()
+    {
+        // must select at least one object type
+        // all selected object types must have an external id selected
+
+        if (ConnectedSystem.ObjectTypes == null)
+            return true;
+
+        var objectTypesSelected = ConnectedSystem.ObjectTypes.Any(ot => ot.Selected);
+        var externalIdsSet = ConnectedSystem.ObjectTypes.Where(ot => ot.Selected).All(ot => ot.Attributes.Any(a => a.IsExternalId));
+
+        return !objectTypesSelected || !externalIdsSet;
+    }
+
+    private async Task HandleShowEditAttributeDialogAsync(ConnectedSystemObjectTypeAttribute connectedSystemObjectTypeAttribute)
+    {
+        // can the connected system attribute be edited? are there any references to it?
+        _objectTypeAttributeBeingEditedIsEditable = !await Jim.ConnectedSystems.IsObjectTypeAttributeBeingReferencedAsync(connectedSystemObjectTypeAttribute);
+        _objectTypeAttributeBeingEdited = connectedSystemObjectTypeAttribute;
+        _objectTypeAttributeBeingEditedText = connectedSystemObjectTypeAttribute.Type.ToString();
+        _editSchemaAttributeDialogVisible = true;
+    }
+
+    private void HandleEditAttributeDataTypeButtonClick()
+    {
+        if (_objectTypeAttributeBeingEdited == null)
+            return;
+
+        if (_objectTypeAttributeBeingEditedText == null)
+            return;
+
+        _objectTypeAttributeBeingEdited.Type = (AttributeDataType)Enum.Parse(typeof(AttributeDataType), _objectTypeAttributeBeingEditedText);
+        _editSchemaAttributeDialogVisible = false;
+
+        // all done, let the user know
+        Snackbar.Add("Attribute data type updated.", Severity.Success);
+    }
+
+    private async Task ShowCsvErrorDialogAsync(CsvParsingException ex)
+    {
+        var parameters = new DialogParameters<CsvErrorDialog>
+        {
+            { x => x.ErrorMessage, ex.Message },
+            { x => x.RowNumber, ex.RowNumber },
+            { x => x.ColumnInfo, ex.ColumnInfo },
+            { x => x.RawData, ex.RawRow },
+            { x => x.Suggestion, ex.Suggestion }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        await DialogService.ShowAsync<CsvErrorDialog>("CSV Parsing Error", parameters, options);
+    }
+}
