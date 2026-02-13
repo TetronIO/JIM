@@ -8,22 +8,24 @@
 else
 {
     <!-- Search and Filter Controls -->
-    <div style="display: flex; flex-direction: row; gap: 12px; margin-bottom: 16px;">
-        <div style="width: 250px;">
-            <MudTextField @bind-Value="_searchText" Label="Search" Variant="Variant.Outlined" Adornment="Adornment.Start"
-                AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" DebounceInterval="300"
-                Margin="Margin.Dense" />
-        </div>
-        <div style="width: 150px;">
-            <MudSelect T="ValueChangeType ?" @bind-Value="_filterChangeType" Label="Change type" Variant="Variant.Outlined"
-                Dense="true" Margin="Margin.Dense">
-                <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)null)">All Changes</MudSelectItem>
-                <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Add)">Add</MudSelectItem>
-                <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Remove)">Remove
-                </MudSelectItem>
-            </MudSelect>
-        </div>
-    </div>
+    <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="3">
+                <MudTextField @bind-Value="_searchText" Label="Search" Variant="Variant.Outlined" Adornment="Adornment.Start"
+                    AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" DebounceInterval="300"
+                    Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="ValueChangeType ?" @bind-Value="_filterChangeType" Label="Change type" Variant="Variant.Outlined"
+                    Dense="true" Margin="Margin.Dense">
+                    <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)null)">All Changes</MudSelectItem>
+                    <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Add)">Add</MudSelectItem>
+                    <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Remove)">Remove
+                    </MudSelectItem>
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
 
     <!-- Timeline -->
     <MudTimeline TimelinePosition="TimelinePosition.Start" TimelineOrientation="TimelineOrientation.Vertical">
