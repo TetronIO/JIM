@@ -178,6 +178,28 @@ html[lang] a.mud-link.mud-primary-text:visited {
     color: #67b9ff !important;
 }
 
+/* Boost alert background contrast — MudBlazor outlined alerts default to
+   transparent on dark themes. Add a subtle semantic-colour fill. */
+html[lang] .mud-alert-outlined-normal {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+html[lang] .mud-alert-outlined-info {
+    background-color: rgba(var(--mud-palette-info-rgb), 0.06) !important;
+}
+
+html[lang] .mud-alert-outlined-success {
+    background-color: rgba(var(--mud-palette-success-rgb), 0.06) !important;
+}
+
+html[lang] .mud-alert-outlined-warning {
+    background-color: rgba(var(--mud-palette-warning-rgb), 0.06) !important;
+}
+
+html[lang] .mud-alert-outlined-error {
+    background-color: rgba(var(--mud-palette-error-rgb), 0.06) !important;
+}
+
 /* Nested table footer, pager, and no-records rows use page background
    to contrast against the shaded header row (inner-surface). */
 html[lang] .mud-paper .mud-table .mud-table-pagination-toolbar,
