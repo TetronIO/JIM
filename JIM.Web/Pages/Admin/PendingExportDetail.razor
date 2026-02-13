@@ -247,7 +247,7 @@
 }
 else if (_notFound)
 {
-    <MudAlert Severity="Severity.Warning">Pending export not found.</MudAlert>
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Pending export not found.</MudAlert>
     <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.ArrowBack"
                Href="@($"/admin/connected-systems/{ConnectedSystemId}/pending-exports")" Class="mt-4">
         Back to List

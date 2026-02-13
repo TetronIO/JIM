@@ -133,6 +133,49 @@ html[lang] a.mud-link.mud-primary-text:visited {
     color: #7a4bb2 !important;
 }
 
+/* Boost alert background contrast — MudBlazor defaults are too faint on light backgrounds.
+   Text variant: stronger background wash (~18% vs default ~8%).
+   Outlined variant: add a subtle fill instead of transparent. */
+html[lang] .mud-alert-text-normal {
+    background-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+html[lang] .mud-alert-text-info {
+    background-color: rgba(var(--mud-palette-info-rgb), 0.12) !important;
+}
+
+html[lang] .mud-alert-text-success {
+    background-color: rgba(var(--mud-palette-success-rgb), 0.14) !important;
+}
+
+html[lang] .mud-alert-text-warning {
+    background-color: rgba(var(--mud-palette-warning-rgb), 0.14) !important;
+}
+
+html[lang] .mud-alert-text-error {
+    background-color: rgba(var(--mud-palette-error-rgb), 0.12) !important;
+}
+
+html[lang] .mud-alert-outlined-normal {
+    background-color: rgba(0, 0, 0, 0.03) !important;
+}
+
+html[lang] .mud-alert-outlined-info {
+    background-color: rgba(var(--mud-palette-info-rgb), 0.06) !important;
+}
+
+html[lang] .mud-alert-outlined-success {
+    background-color: rgba(var(--mud-palette-success-rgb), 0.06) !important;
+}
+
+html[lang] .mud-alert-outlined-warning {
+    background-color: rgba(var(--mud-palette-warning-rgb), 0.06) !important;
+}
+
+html[lang] .mud-alert-outlined-error {
+    background-color: rgba(var(--mud-palette-error-rgb), 0.06) !important;
+}
+
 /* Nested table footer, pager, and no-records rows use page background
    to contrast against the shaded header row (inner-surface). */
 html[lang] .mud-paper .mud-table .mud-table-pagination-toolbar,

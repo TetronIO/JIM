@@ -191,7 +191,7 @@
 
                 @if (SettingsFormCustomErrors.Count > 0)
                 {
-                    <MudAlert Severity="Severity.Error" Class="mt-5">
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-5">
                         <MudText>There are issues with the settings:</MudText>
                         <ul class="mt-5">
                             @foreach (var error in SettingsFormCustomErrors)
@@ -217,7 +217,7 @@
 
         <MudTabPanel Text="Schema" Disabled="@AreSettingDependentTabsDisabled()">
 
-            <MudAlert Severity="_connectedSystem.ObjectTypes is { Count: > 0 } ? Severity.Warning : Severity.Info">
+            <MudAlert Severity="_connectedSystem.ObjectTypes is { Count: > 0 } ? Severity.Warning : Severity.Info" Variant="Variant.Outlined">
                 @if (_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0)
                 {
                     <MudText>Retrieve the schema from the connected system, to be able to select which object types and attributes you want to manage with JIM.</MudText>
@@ -270,6 +270,7 @@
             {
                 var result = _schemaRefreshResult;
                 <MudAlert Severity="@(result.Success ? (result.HasChanges ? Severity.Info : Severity.Success) : Severity.Error)"
+                          Variant="Variant.Outlined"
                           Icon="@(result.Success ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Error)"
                           Class="mt-3 jim-alert-schema-refresh"
                           ShowCloseIcon="true"
@@ -338,7 +339,7 @@
 
                             @if (result.ActionRequired)
                             {
-                                <MudAlert Severity="Severity.Warning" Class="mt-3">
+                                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-3">
                                     <strong>Action Required:</strong> Some attributes that were removed are still referenced by sync rules.
                                     Please update your sync rules to remove references to these attributes.
                                 </MudAlert>
@@ -714,7 +715,7 @@
         {
             <MudTabPanel Text="Partitions & Containers" Disabled="@AreSettingDependentTabsDisabled()">
 
-                <MudAlert Severity="(_connectedSystem.Partitions is { Count: > 0 } ? Severity.Warning : Severity.Info)">
+                <MudAlert Severity="(_connectedSystem.Partitions is { Count: > 0 } ? Severity.Warning : Severity.Info)" Variant="Variant.Outlined">
                     @if (_connectedSystem.Partitions == null || _connectedSystem.Partitions.Count == 0)
                     {
                         <MudText>Retrieve the hierarchy @_partitionAndHierarchyText hierarchy from the connected system, to be able to select which ones you want to manage with JIM.</MudText>
@@ -961,7 +962,7 @@
 
                 @if (_connectedSystem.Partitions is { Count: > 0 } && !_connectedSystem.HasPartitionsOrContainersSelected())
                 {
-                    <MudAlert Severity="Severity.Warning" Class="mt-5">
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-5">
                         <MudText>
                             <strong>No partitions or containers have been selected.</strong> You must select at least one partition
                             @if (_connectedSystem.ConnectorDefinition.SupportsPartitionContainers)
@@ -1063,7 +1064,7 @@
             @if (_connectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.SyncRule)
             {
                 @* Advanced Mode - matching rules are on sync rules *@
-                <MudAlert Severity="Severity.Info" Class="mt-4">
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
                     In Advanced Mode, matching rules are configured on each individual sync rule. This allows different
                     matching logic for different scenarios.
                 </MudAlert>
@@ -1078,7 +1079,7 @@
             }
             else if (_connectedSystem.ObjectTypes == null || _connectedSystem.ObjectTypes.Count == 0)
             {
-                <MudAlert Severity="Severity.Warning">
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
                     No object types have been configured. Import the schema first to configure object matching rules.
                 </MudAlert>
             }
@@ -1088,7 +1089,7 @@
 
                 @if (selectedObjectTypes.Count == 0)
                 {
-                    <MudAlert Severity="Severity.Warning">
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
                         No object types have been selected. Select object types in the Schema tab first.
                     </MudAlert>
                 }
@@ -1113,7 +1114,7 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Run Profiles" Disabled="@IsRunProfilesTabDisabled()">
-            <MudAlert Severity="Severity.Info">Run profiles define what operations can be performed on a Connector, i.e. import, export and synchronisation, with any required settings.</MudAlert>
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Run profiles define what operations can be performed on a Connector, i.e. import, export and synchronisation, with any required settings.</MudAlert>
 
             <MudButton
                 Variant="Variant.Filled"

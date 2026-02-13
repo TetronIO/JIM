@@ -155,7 +155,7 @@ else if (_syncRule != null)
                 {
                     <MudSwitch @bind-Value="@_syncRule.ProjectToMetaverse" Color="Color.Primary"
                         Label="Create imported objects in the Metaverse?" />
-                    <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Text">By default, objects imported from this
+                    <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Outlined">By default, objects imported from this
                         Connected System matched in this synchronisation rule will not result in a Metaverse object being created.
                         Enabling this option causes the object to be projected to the Metaverse, allowing it to be managed within
                         JIM and synchronised to other Connected Systems. You would typically enable this for a source system, i.e. a
@@ -166,7 +166,7 @@ else if (_syncRule != null)
                 {
                     <MudSwitch @bind-Value="@_syncRule.ProvisionToConnectedSystem" Color="Color.Primary"
                         Label="Create objects in the Connected System?" />
-                    <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Text">By default, Metaverse objects matched
+                    <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Outlined">By default, Metaverse objects matched
                         in this synchronisation rule will not be created (provisioned) in the Connected Systems. Enabling this
                         option will cause the Metaverse object to be created in the Connected System. You would typically enable
                         this option for a destination system, i.e. when trying to implement a HR to Active Directory flow.
@@ -225,7 +225,7 @@ else if (_syncRule != null)
 
             @if (_syncRule.ConnectedSystem?.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem)
             {
-                <MudAlert Severity="Severity.Info" Class="mt-3" Icon="@Icons.Material.Outlined.Info">
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3" Icon="@Icons.Material.Outlined.Info">
                     This Connected System uses <strong>Simple Mode</strong> for object matching.
                     <MudLink Href="@($"/admin/connected-systems/{_syncRule.ConnectedSystemId}")" Underline="Underline.Always" Class="ms-1">
                         <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Class="me-1" Style="vertical-align: middle;" />Configure Matching Rules
@@ -423,7 +423,7 @@ else if (_syncRule != null)
                             Remain joined (stop attribute flow)
                         </MudSelectItem>
                     </MudSelect>
-                    <MudAlert Severity="Severity.Info" Class="mt-3" Variant="Variant.Text" Dense="true">
+                    <MudAlert Severity="Severity.Info" Class="mt-3" Variant="Variant.Outlined" Dense="true">
                         @if (_syncRule.InboundOutOfScopeAction == InboundOutOfScopeAction.Disconnect)
                         {
                             <text>Objects that fall out of scope will be disconnected from their Metaverse object. This may trigger
@@ -531,10 +531,10 @@ else if (_syncRule != null)
                             break;
                         }
                     case "Function":
-                        <MudAlert Severity="Severity.Error" Class="mt-5">Sorry, functions are no yet supported.</MudAlert>
+                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-5">Sorry, functions are no yet supported.</MudAlert>
                         break;
                     case "Expression":
-                        <MudAlert Severity="Severity.Error" Class="mt-5">Sorry, expressions are no yet supported.</MudAlert>
+                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-5">Sorry, expressions are no yet supported.</MudAlert>
                         break;
                 }
 
@@ -692,7 +692,7 @@ else if (_syncRule != null)
 
     @if (_syncRule.Validate().Count > 0)
     {
-        <MudAlert Severity="Severity.Normal" Class="mt-5">
+        <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Class="mt-5">
             <MudText Class="mb-3">There are issues:</MudText>
             @foreach (var item in _syncRule.Validate())
             {
