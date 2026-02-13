@@ -163,6 +163,20 @@ html[lang] a.mud-link.mud-primary-text:visited {
     color: #0076d3 !important;
 }
 
+/* Default filled button — lighter neutral grey for light backgrounds */
+html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled) {
+    background-color: #ededee;
+}
+
+html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled):hover {
+    background-color: #e2e3e5;
+}
+
+/* Default outlined button hover — neutral grey instead of blue tint */
+html[lang] .mud-button-outlined.mud-button-outlined-default:not(:disabled):hover {
+    background-color: rgba(0, 0, 0, 0.06);
+}
+
 /* Boost alert background contrast — MudBlazor defaults are too faint on light backgrounds.
    Text variant: stronger background wash (~18% vs default ~8%).
    Outlined variant: add a subtle fill instead of transparent. */
