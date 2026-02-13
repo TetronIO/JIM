@@ -1,9 +1,9 @@
 /*
- * JIM Colour Theme: Navy O3 Light
+ * JIM Colour Theme: Navy O5 Light
  *
- * The light counterpart to navy-o3-dark. A clean, cool-toned light
- * theme with navy accents and a deep blue primary derived from
- * the dark theme's sky-blue #67b9ff (darkened for WCAG AA on white).
+ * Combines the navy-o3 light colour palette (shaded page background,
+ * white content panels) with the navy-o4 drawer style (white sidebar
+ * with a right-hand paper border instead of blending into the page).
  *
  * Depth model:
  *   Page background:    #f3f3f3  (neutral light grey)
@@ -60,8 +60,8 @@ html[lang] {
     --jim-inner-surface: #f7f7f7;
     --jim-inner-border-color: rgba(30, 58, 95, 0.28);
 
-    /* === Drawer (blended — same as page background) === */
-    --mud-palette-drawer-background: #f3f3f3;
+    /* === Drawer (white surface with right-hand border) === */
+    --mud-palette-drawer-background: #ffffff;
     --mud-palette-drawer-text: #1e3a5f;
     --mud-palette-drawer-icon: rgba(30, 58, 95, 0.60);
 
@@ -103,8 +103,8 @@ html[lang] {
     --jim-nav-hover-color: #005da8;
     --jim-nav-active-color: #0076d3;
 
-    /* === JIM Custom: Drawer border (transparent — blended) === */
-    --jim-drawer-border-color: transparent;
+    /* === JIM Custom: Drawer border (paper border — right-hand edge) === */
+    --jim-drawer-border-color: rgba(30, 58, 95, 0.26);
 
     /* === JIM Custom: Paper border === */
     --jim-paper-border-color: rgba(30, 58, 95, 0.26);

@@ -17,7 +17,7 @@
 }
 
 /* Border between MudTable toolbar and header row */
-.mud-table-outlined > .mud-table-toolbar {
+.mud-table-outlined>.mud-table-toolbar {
     border-bottom: 1px solid var(--mud-palette-table-lines, var(--mud-palette-lines-default));
 }
 
@@ -56,18 +56,23 @@ a.mud-link.mud-primary-text:hover {
 .mud-chip.mud-chip-text.mud-chip-color-primary {
     background-color: color-mix(in srgb, var(--mud-palette-primary) 15%, transparent) !important;
 }
+
 .mud-chip.mud-chip-text.mud-chip-color-secondary {
     background-color: color-mix(in srgb, var(--mud-palette-secondary) 15%, transparent) !important;
 }
+
 .mud-chip.mud-chip-text.mud-chip-color-info {
     background-color: color-mix(in srgb, var(--mud-palette-info) 15%, transparent) !important;
 }
+
 .mud-chip.mud-chip-text.mud-chip-color-success {
     background-color: color-mix(in srgb, var(--mud-palette-success) 15%, transparent) !important;
 }
+
 .mud-chip.mud-chip-text.mud-chip-color-warning {
     background-color: color-mix(in srgb, var(--mud-palette-warning) 15%, transparent) !important;
 }
+
 .mud-chip.mud-chip-text.mud-chip-color-error {
     background-color: color-mix(in srgb, var(--mud-palette-error) 15%, transparent) !important;
 }
@@ -262,10 +267,10 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
 
 .jim-text-code {
     font-family: "Lucida Console", "Courier New", monospace;
-    font-size: 0.9em;
+    font-size: 0.9em !important;
 }
 
-/* Inline code styling - similar to GitHub/markdown code blocks */
+/* Inline code styling - similar to markdown code blocks */
 .jim-code-inline {
     font-family: "Lucida Console", "Courier New", monospace;
     font-size: 0.9em;
@@ -297,7 +302,7 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
 .jim-drawer-logo p,
 .jim-drawer-logo span {
     margin: 4px 0 0 10px;
-    font-size: 1.5rem;
+    font-size: 1rem;
     font-weight: 500;
     vertical-align: middle;
     color: var(--jim-logo-text-color, #ffffff) !important;
@@ -1048,4 +1053,3 @@ html[lang] .mud-dialog .mud-paper-outlined {
     width: 100% !important;
     min-width: unset !important;
 }
-
