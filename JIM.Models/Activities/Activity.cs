@@ -195,6 +195,23 @@ public class Activity
     public ConnectedSystemRunType? ConnectedSystemRunType { get; set; } = Staging.ConnectedSystemRunType.NotSet;
 
     // -----------------------------------------------------------------------------------------------------------------
+    // schedule execution context
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// If this activity was created as part of a schedule execution, the execution ID is recorded here.
+    /// This enables the scheduler to query activity outcomes directly (since worker tasks are ephemeral
+    /// and deleted upon completion) and supports drill-down from schedule execution steps to activities.
+    /// </summary>
+    public Guid? ScheduleExecutionId { get; set; }
+
+    /// <summary>
+    /// The step index within the schedule execution that this activity corresponds to.
+    /// Used together with ScheduleExecutionId to identify which step produced this activity.
+    /// </summary>
+    public int? ScheduleStepIndex { get; set; }
+
+    // -----------------------------------------------------------------------------------------------------------------
     // history retention cleanup stats (for HistoryRetentionCleanup activities)
     // -----------------------------------------------------------------------------------------------------------------
 

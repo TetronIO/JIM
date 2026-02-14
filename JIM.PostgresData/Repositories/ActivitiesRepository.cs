@@ -281,6 +281,29 @@ public class ActivityRepository : IActivityRepository
             .AsQueryable();
     }
 
+    // -----------------------------------------------------------------------------------------------------------------
+    // Schedule execution queries
+    // -----------------------------------------------------------------------------------------------------------------
+
+    public async Task<List<Activity>> GetActivitiesByScheduleExecutionAsync(Guid scheduleExecutionId)
+    {
+        return await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ScheduleExecutionId == scheduleExecutionId)
+            .OrderBy(a => a.ScheduleStepIndex)
+            .ThenBy(a => a.Created)
+            .ToListAsync();
+    }
+
+    public async Task<List<Activity>> GetActivitiesByScheduleExecutionStepAsync(Guid scheduleExecutionId, int stepIndex)
+    {
+        return await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ScheduleExecutionId == scheduleExecutionId && a.ScheduleStepIndex == stepIndex)
+            .OrderBy(a => a.Created)
+            .ToListAsync();
+    }
+
     #region synchronisation related
     public async Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(
         Guid activityId,

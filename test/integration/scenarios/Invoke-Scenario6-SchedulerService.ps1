@@ -291,7 +291,7 @@ if ($Step -eq "ManualTrigger" -or $Step -eq "All") {
     }
 
     Assert-NotNull -Value $finalExecution -Message "Execution retrieved"
-    Assert-Condition -Condition ($finalExecution.status -eq "Completed" -or $finalExecution.status -eq 2) -Message "Execution completed successfully"
+    Assert-ScheduleExecutionSuccess -ExecutionId $finalExecution.id -Name "Manual Trigger Execution"
 
     $testResults.Steps += @{ Name = "Manual Trigger Completed"; Success = $true }
 
@@ -510,7 +510,7 @@ if ($Step -eq "MultiStep" -or $Step -eq "All") {
     }
 
     $finalExecution = Get-JIMScheduleExecution -Id $execution.id
-    Assert-Condition -Condition ($finalExecution.status -eq "Completed" -or $finalExecution.status -eq 2) -Message "Multi-step execution completed successfully"
+    Assert-ScheduleExecutionSuccess -ExecutionId $finalExecution.id -Name "Multi-Step Execution"
 
     $testResults.Steps += @{ Name = "Multi-Step Execution Completed"; Success = $true }
 
@@ -784,7 +784,7 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
             }
 
             $finalExecution = Get-JIMScheduleExecution -Id $execution.id
-            Assert-Condition -Condition ($finalExecution.status -eq "Completed" -or $finalExecution.status -eq 2) -Message "Complex parallel execution completed successfully"
+            Assert-ScheduleExecutionSuccess -ExecutionId $finalExecution.id -Name "Complex Parallel Execution"
 
             $testResults.Steps += @{ Name = "Complex Parallel Execution Completed"; Success = $true }
         }

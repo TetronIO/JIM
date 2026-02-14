@@ -165,6 +165,8 @@ public class SchedulerServer
 
     /// <summary>
     /// Checks if all tasks for the current step group have completed and advances to the next step if so.
+    /// Uses Activities (the immutable audit record) to determine step outcomes, because worker tasks
+    /// are deleted upon completion and may not be present when the scheduler polls.
     /// </summary>
     /// <returns>True if the execution is still in progress, false if it has completed or failed.</returns>
     public async Task<bool> CheckAndAdvanceExecutionAsync(ScheduleExecution execution)
@@ -184,38 +186,64 @@ public class SchedulerServer
             return false;
         }
 
-        // Get all tasks for the current step group
         var currentStepIndex = freshExecution.CurrentStepIndex;
+
+        // First, check if any worker tasks are still active (Queued or Processing).
+        // If so, the step is still in progress.
         var tasksForCurrentStep = await Application.Repository.Tasking.GetWorkerTasksByScheduleExecutionStepAsync(
             execution.Id, currentStepIndex);
 
-        // Check if all tasks for the current step are complete
-        var allComplete = true;
-        var anyFailed = false;
+        var hasActiveTasks = tasksForCurrentStep.Any(t =>
+            t.Status == WorkerTaskStatus.Queued || t.Status == WorkerTaskStatus.Processing);
 
-        foreach (var task in tasksForCurrentStep)
+        if (hasActiveTasks)
         {
-            if (task.Status == WorkerTaskStatus.Queued || task.Status == WorkerTaskStatus.Processing)
-            {
-                allComplete = false;
-                break;
-            }
-
-            // Check if the task's activity failed
-            if (task.Activity?.Status == ActivityStatus.FailedWithError ||
-                task.Activity?.Status == ActivityStatus.CompleteWithError ||
-                task.Activity?.Status == ActivityStatus.Cancelled)
-            {
-                anyFailed = true;
-            }
-        }
-
-        if (!allComplete)
-        {
-            Log.Debug("CheckAndAdvanceExecutionAsync: Execution {ExecutionId} step {StepIndex} has {TaskCount} tasks, not all complete.",
-                execution.Id, currentStepIndex, tasksForCurrentStep.Count);
+            Log.Debug("CheckAndAdvanceExecutionAsync: Execution {ExecutionId} step {StepIndex} has active tasks, not yet complete.",
+                execution.Id, currentStepIndex);
             return true; // Still in progress
         }
+
+        // No active worker tasks. Query Activities to determine step outcomes.
+        // Activities persist after worker task deletion and are the source of truth for step results.
+        var activitiesForStep = await Application.Repository.Activity.GetActivitiesByScheduleExecutionStepAsync(
+            execution.Id, currentStepIndex);
+
+        if (activitiesForStep.Count == 0)
+        {
+            // No activities and no active tasks — the step may not have produced activities yet
+            // (e.g. unsupported step type that was skipped). Check if tasks were ever created.
+            if (tasksForCurrentStep.Count == 0)
+            {
+                // No tasks were ever created for this step (or they were already cleaned up with no activity).
+                // Treat as complete and advance.
+                Log.Information("CheckAndAdvanceExecutionAsync: Execution {ExecutionId} step {StepIndex} has no tasks or activities. Advancing.",
+                    execution.Id, currentStepIndex);
+            }
+            else
+            {
+                // Tasks exist but no activities yet — tasks may still be starting up.
+                Log.Debug("CheckAndAdvanceExecutionAsync: Execution {ExecutionId} step {StepIndex} has tasks but no activities yet. Waiting.",
+                    execution.Id, currentStepIndex);
+                return true;
+            }
+        }
+
+        // Check if all activities for this step have reached a terminal status
+        var allActivitiesComplete = activitiesForStep.All(a =>
+            a.Status != ActivityStatus.InProgress && a.Status != ActivityStatus.NotSet);
+
+        if (!allActivitiesComplete)
+        {
+            Log.Debug("CheckAndAdvanceExecutionAsync: Execution {ExecutionId} step {StepIndex} has {ActivityCount} activities, not all complete.",
+                execution.Id, currentStepIndex, activitiesForStep.Count);
+            return true; // Still in progress
+        }
+
+        // All activities are in a terminal state. Check for failures.
+        var anyFailed = activitiesForStep.Any(a =>
+            a.Status == ActivityStatus.FailedWithError ||
+            a.Status == ActivityStatus.CompleteWithError ||
+            a.Status == ActivityStatus.Cancelled);
 
         Log.Information("CheckAndAdvanceExecutionAsync: Execution {ExecutionId} step {StepIndex} completed. AnyFailed: {AnyFailed}",
             execution.Id, currentStepIndex, anyFailed);
@@ -223,25 +251,34 @@ public class SchedulerServer
         // Check if any failed and ContinueOnFailure is false
         if (anyFailed)
         {
-            var currentStep = freshExecution.Schedule.Steps.FirstOrDefault(s => s.StepIndex == currentStepIndex);
-            if (currentStep != null && !currentStep.ContinueOnFailure)
+            // Check ALL steps at this index (parallel steps share the same index),
+            // not just the first one. Fail if ANY step has ContinueOnFailure = false.
+            var stepsAtIndex = freshExecution.Schedule.Steps
+                .Where(s => s.StepIndex == currentStepIndex).ToList();
+
+            if (stepsAtIndex.Count == 0 || stepsAtIndex.Any(s => !s.ContinueOnFailure))
             {
-                Log.Warning("CheckAndAdvanceExecutionAsync: Execution {ExecutionId} failed at step {StepIndex} due to task failure.",
-                    execution.Id, currentStepIndex);
+                var failedStepNames = stepsAtIndex
+                    .Where(s => !s.ContinueOnFailure)
+                    .Select(s => s.Name ?? $"Step {s.StepIndex}")
+                    .ToList();
+
+                var stepDescription = failedStepNames.Count > 0
+                    ? string.Join(", ", failedStepNames)
+                    : $"Step index {currentStepIndex}";
+
+                Log.Warning("CheckAndAdvanceExecutionAsync: Execution {ExecutionId} failed at step {StepIndex} ({StepNames}) due to activity failure.",
+                    execution.Id, currentStepIndex, stepDescription);
 
                 freshExecution.Status = ScheduleExecutionStatus.Failed;
                 freshExecution.CompletedAt = DateTime.UtcNow;
-                freshExecution.ErrorMessage = $"Step '{currentStep.Name}' failed and ContinueOnFailure is false.";
+                freshExecution.ErrorMessage = $"Step '{stepDescription}' failed and ContinueOnFailure is false.";
                 await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(freshExecution);
                 return false;
             }
         }
 
-        // Find the next step index
-        var nextStepIndex = currentStepIndex + 1;
-
-        // Skip over any parallel steps (they would have the same index as the current one due to grouping)
-        // Actually, find the next distinct step index
+        // Find the next distinct step index
         var orderedSteps = freshExecution.Schedule.Steps.OrderBy(s => s.StepIndex).ToList();
         var nextStep = orderedSteps.FirstOrDefault(s => s.StepIndex > currentStepIndex);
 

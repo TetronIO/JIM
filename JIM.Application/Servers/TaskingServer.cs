@@ -38,9 +38,18 @@ namespace JIM.Application.Servers
 
         /// <summary>
         /// Creates an activity from a worker task, using the initiator triad from the task.
+        /// Also copies schedule execution context if the task is part of a scheduled execution.
         /// </summary>
         private async Task CreateActivityFromWorkerTaskAsync(Activity activity, WorkerTask workerTask)
         {
+            // Copy schedule execution context so that Activities survive worker task deletion
+            // and the scheduler can query step outcomes directly from Activities.
+            if (workerTask.ScheduleExecutionId.HasValue)
+            {
+                activity.ScheduleExecutionId = workerTask.ScheduleExecutionId;
+                activity.ScheduleStepIndex = workerTask.ScheduleStepIndex;
+            }
+
             await Application.Activities.CreateActivityWithTriadAsync(
                 activity,
                 workerTask.InitiatedByType,
@@ -81,6 +90,7 @@ namespace JIM.Application.Servers
                 workerTask.Activity = activity;
             }
             else if (workerTask is DataGenerationTemplateWorkerTask dataGenerationWorkerTask)
+
             {
                 var template = await Application.DataGeneration.GetTemplateAsync(dataGenerationWorkerTask.TemplateId) ??
                     throw new InvalidDataException("CreateWorkerTaskAsync: template not found for id " + dataGenerationWorkerTask.TemplateId);

@@ -50,4 +50,16 @@ public interface IActivityRepository
     public Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId);
 
     public Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id);
+
+    /// <summary>
+    /// Gets all activities associated with a schedule execution.
+    /// Used by the scheduler to determine step outcomes after worker tasks have been deleted.
+    /// </summary>
+    public Task<List<Activity>> GetActivitiesByScheduleExecutionAsync(Guid scheduleExecutionId);
+
+    /// <summary>
+    /// Gets all activities for a specific step within a schedule execution.
+    /// A step may have multiple activities if it runs multiple run profiles in parallel.
+    /// </summary>
+    public Task<List<Activity>> GetActivitiesByScheduleExecutionStepAsync(Guid scheduleExecutionId, int stepIndex);
 }
