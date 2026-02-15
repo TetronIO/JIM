@@ -69,15 +69,15 @@
             <MudTd DataLabel="Value" Class="@GetRowClass(settingContext)">
                 @if (settingContext.ValueType == ServiceSettingValueType.StringEncrypted)
                 {
-                    @if (_revealedSecrets.Contains(settingContext.Key))
+                    @if (_revealedSecrets.Contains(settingContext.Key) && _decryptedCache.TryGetValue(settingContext.Key, out var decrypted))
                     {
-                        <span class="jim-text-code">@(GetDecryptedValue(settingContext) ?? "(not set)")</span>
-                        <MudIconButton Icon="@Icons.Material.Outlined.VisibilityOff" Variant="Variant.Outlined" OnClick="() => HideSecret(settingContext.Key)" />
+                        <span class="jim-text-code">@(decrypted.Value ?? "(not set)")</span>
+                        <MudIconButton Icon="@Icons.Material.Outlined.VisibilityOff" Variant="Variant.Filled" Size="Size.Small" OnClick="() => HideSecret(settingContext.Key)" />
                     }
                     else
                     {
                         <span class="jim-text-code">********</span>
-                        <MudIconButton Icon="@Icons.Material.Outlined.Visibility" Variant="Variant.Outlined" OnClick="() => RevealSecret(settingContext.Key)" />
+                        <MudIconButton Icon="@Icons.Material.Outlined.Visibility" Variant="Variant.Filled" Size="Size.Small" OnClick="() => RevealSecretAsync(settingContext.Key)" />
                     }
                 }
                 else
@@ -118,12 +118,12 @@
                     @if (!settingContext.IsReadOnly)
                     {
                         <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Outlined" Color="Color.Primary" OnClick="_ => ShowEditDialog(settingContext)" />
+                            <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => ShowEditDialog(settingContext)" />
                         </MudTooltip>
                         @if (settingContext.IsOverridden)
                         {
                             <MudTooltip Text="Revert to Default" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton Icon="@Icons.Material.Outlined.RestartAlt" Variant="Variant.Outlined" Color="Color.Primary" OnClick="_ => HandleRevertAsync(settingContext)" />
+                                <MudIconButton Icon="@Icons.Material.Outlined.RestartAlt" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => HandleRevertAsync(settingContext)" />
                             </MudTooltip>
                         }
                     }
@@ -144,6 +144,7 @@
     private bool _showOverriddenOnly;
     private bool _loading = true;
     private HashSet<string> _revealedSecrets = new();
+    private Dictionary<string, (string? Value, bool Error)> _decryptedCache = new();
     private HashSet<object> _expandedGroups = new();
 
     [CascadingParameter]
@@ -171,6 +172,8 @@
     {
         _loading = true;
         _settings = await Jim.ServiceSettings.GetAllSettingsAsync();
+        _decryptedCache.Clear();
+        _revealedSecrets.Clear();
         UpdateFilteredSettings();
         _loading = false;
     }
@@ -241,23 +244,46 @@
             _expandedGroups.Add(groupKey);
     }
 
-    private void RevealSecret(string key)
+    private async Task RevealSecretAsync(string key)
     {
+        var setting = _settings.FirstOrDefault(s => s.Key == key);
+        if (setting == null)
+            return;
+
+        var result = GetDecryptedValue(setting);
+        if (result.Error)
+        {
+            await DialogService.ShowMessageBox(
+                "Decryption Failed",
+                "Unable to decrypt this value. The encryption key may have changed or been deleted (e.g. after a environment reset). Edit and re-save this setting to re-encrypt it with the current key.",
+                yesText: "OK");
+            return;
+        }
+
+        _decryptedCache[key] = result;
         _revealedSecrets.Add(key);
     }
 
     private void HideSecret(string key)
     {
         _revealedSecrets.Remove(key);
+        _decryptedCache.Remove(key);
     }
 
-    private string? GetDecryptedValue(ServiceSetting setting)
+    private (string? Value, bool Error) GetDecryptedValue(ServiceSetting setting)
     {
         var effectiveValue = setting.GetEffectiveValue();
         if (string.IsNullOrEmpty(effectiveValue))
-            return null;
+            return (null, false);
 
-        return CredentialProtection.Unprotect(effectiveValue);
+        try
+        {
+            return (CredentialProtection.Unprotect(effectiveValue), false);
+        }
+        catch (System.Security.Cryptography.CryptographicException)
+        {
+            return (null, true);
+        }
     }
 
     private async Task ShowEditDialog(ServiceSetting setting)
