@@ -25,9 +25,9 @@
 {
     <MudPaper Class="pa-4 mt-4 mb-4" Outlined="true">
         @* First row: Type, Status, Created, Updated, MVO Link *@
-            <MudStack Row="true" AlignItems="AlignItems.Center" Class="flex-wrap" Spacing="3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="flex-wrap" Spacing="3">
             @* Object Type *@
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                 <MudText Typo="Typo.body1" Class="mud-text-secondary">Type:</MudText>
                 <MudChip T="string" Variant="Variant.Text" Color="Color.Primary">
                     @ConnectedSystemObject.Type.Name
@@ -36,7 +36,7 @@
             <MudDivider Vertical="true" FlexItem="true" Class="my-1" />
 
             @* Status *@
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                 <MudText Typo="Typo.body1" Class="mud-text-secondary">Status:</MudText>
                 <MudChip T="string" Variant="Variant.Text" Color="GetStatusColor(ConnectedSystemObject.Status)">
                     @ConnectedSystemObject.Status.ToString().SplitOnCapitalLetters()
@@ -45,7 +45,7 @@
             <MudDivider Vertical="true" FlexItem="true" Class="my-1" />
 
             @* Created *@
-                <MudTooltip Text="@ConnectedSystemObject.Created.ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+            <MudTooltip Text="@ConnectedSystemObject.Created.ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                     <MudText Typo="Typo.body1" Class="mud-text-secondary">Created:</MudText>
                     <MudText Typo="Typo.body1">@ConnectedSystemObject.Created.ToRelativeTime()</MudText>
@@ -53,7 +53,7 @@
             </MudTooltip>
 
             @* Last Updated *@
-                @if (ConnectedSystemObject.LastUpdated.HasValue)
+            @if (ConnectedSystemObject.LastUpdated.HasValue)
             {
                 <MudDivider Vertical="true" FlexItem="true" Class="my-1" />
                 <MudTooltip Text="@ConnectedSystemObject.LastUpdated.Value.ToFriendlyDate()" Arrow="true"
@@ -75,7 +75,9 @@
                         @(Utilities.GetMetaverseObjectHrefText(ConnectedSystemObject.MetaverseObject) ??
                                         ConnectedSystemObject.MetaverseObjectId.ToString())
                     </MudLink>
-                    <MudDivider Vertical="true" FlexItem="true" Class="my-1" />
+                </MudStack>
+                <MudDivider Vertical="true" FlexItem="true" Class="my-1" />
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                     <MudText Typo="Typo.body1" Class="mud-text-secondary">Join Type:</MudText>
                     <MudChip T="string" Variant="Variant.Text" Color="GetJoinTypeColor(ConnectedSystemObject.JoinType)">
                         @ConnectedSystemObject.JoinType
@@ -84,40 +86,6 @@
             }
         </MudStack>
 
-        @* External IDs table *@
-            @if (ExternalIdAttributeValue != null || SecondaryExternalIdAttributeValue != null)
-        {
-            <MudSimpleTable Dense="true" Hover="true" Class="mt-3" Style="background: transparent;" Elevation="0">
-                <tbody>
-                    @if (ExternalIdAttributeValue != null)
-                    {
-                        <tr>
-                            <td style="width: 200px;">
-                                <MudText Typo="Typo.body1" Class="mud-text-secondary">@ExternalIdAttributeValue.Attribute.Name
-                                </MudText>
-                            </td>
-                            <td>
-                                <MudText Typo="Typo.body1" Class="jim-text-code">@ExternalIdAttributeValue.ToStringNoName()
-                                </MudText>
-                            </td>
-                        </tr>
-                    }
-                    @if (SecondaryExternalIdAttributeValue != null)
-                    {
-                        <tr>
-                            <td>
-                                <MudText Typo="Typo.body1" Class="mud-text-secondary">
-                                    @SecondaryExternalIdAttributeValue.Attribute.Name</MudText>
-                            </td>
-                            <td>
-                                <MudText Typo="Typo.body1" Class="jim-text-code">@SecondaryExternalIdAttributeValue.ToStringNoName()
-                                </MudText>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </MudSimpleTable>
-        }
     </MudPaper>
 
     @if (PendingExport != null && PendingExport.AttributeValueChanges.Count > 0)
@@ -182,6 +150,7 @@
                             <th class="jim-attr-header-name">Attribute</th>
                             <th class="jim-attr-header-type">Type</th>
                             <th class="jim-attr-header-plurality">Plurality</th>
+                            <th class="jim-attr-header-extid">External ID</th>
                             <th class="jim-attr-header-value">Value</th>
                         </tr>
                     </thead>
@@ -192,7 +161,7 @@
                         @if (!groupedAttributes.Any())
                         {
                             <tr>
-                                <td colspan="4" class="text-center pa-4">
+                                <td colspan="5" class="text-center pa-4">
                                     <MudText Typo="Typo.body1" Class="mud-text-secondary">No attributes to display</MudText>
                                 </td>
                             </tr>
@@ -217,6 +186,20 @@
                                         else
                                         {
                                             <MudText Typo="Typo.body2" Class="mud-text-secondary">Single</MudText>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (IsExternalId(group.Values[0]))
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
+                                        }
+                                        else if (IsSecondaryExternalId(group.Values[0]))
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <span>-</span>
                                         }
                                     </td>
                                     <td class="jim-attr-value">
@@ -326,13 +309,13 @@
         }
 
         Breadcrumbs = new List<BreadcrumbItem>
-{
-new("Home", href: "/", icon: Icons.Material.Filled.Home),
-new("Connected Systems", href: "/admin/connected-systems/"),
-new(ConnectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(ConnectedSystemHeader)),
-new("Objects", href: Utilities.GetConnectedSystemObjectsHref(ConnectedSystemHeader)),
-new(GetDisplayIdentifier(), href: null, disabled: true)
-};
+        {
+            new("Home", href: "/", icon: Icons.Material.Filled.Home),
+            new("Connected Systems", href: "/admin/connected-systems/"),
+            new(ConnectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(ConnectedSystemHeader)),
+            new("Objects", href: Utilities.GetConnectedSystemObjectsHref(ConnectedSystemHeader)),
+            new(GetDisplayIdentifier(), href: null, disabled: true)
+        };
 
         ExternalIdAttributeValue = ConnectedSystemObject.ExternalIdAttributeValue;
         SecondaryExternalIdAttributeValue = ConnectedSystemObject.SecondaryExternalIdAttributeValue;
@@ -367,6 +350,20 @@ new(GetDisplayIdentifier(), href: null, disabled: true)
         g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued,
         _collapsedAttributes.Contains(g.Key)))
         .ToList();
+    }
+
+    private bool IsExternalId(ConnectedSystemObjectAttributeValue value)
+    {
+        if (ConnectedSystemObject == null) return false;
+        var attributeId = value.AttributeId != 0 ? value.AttributeId : value.Attribute?.Id ?? 0;
+        return attributeId == ConnectedSystemObject.ExternalIdAttributeId;
+    }
+
+    private bool IsSecondaryExternalId(ConnectedSystemObjectAttributeValue value)
+    {
+        if (ConnectedSystemObject?.SecondaryExternalIdAttributeId == null) return false;
+        var attributeId = value.AttributeId != 0 ? value.AttributeId : value.Attribute?.Id ?? 0;
+        return attributeId == ConnectedSystemObject.SecondaryExternalIdAttributeId;
     }
 
     private void ToggleCollapse(string attributeName)
