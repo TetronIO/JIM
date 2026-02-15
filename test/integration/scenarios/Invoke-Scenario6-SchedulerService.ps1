@@ -119,6 +119,11 @@ $connectedSystems = @(Get-JIMConnectedSystem)  # Force array even for single res
 if ($connectedSystems.Count -eq 0) {
     Write-Host "  No connected systems found - running Setup-Scenario1..." -ForegroundColor Yellow
 
+    # Generate test CSV data first (training-records.csv, cross-domain-users.csv, etc.)
+    # These must exist BEFORE Setup-Scenario1 runs, so schema discovery succeeds
+    Write-Host "  Generating test CSV data..." -ForegroundColor DarkGray
+    & "$PSScriptRoot/../Generate-TestCSV.ps1" -Template "Micro" -OutputPath "$PSScriptRoot/../../test-data"
+
     # Run Setup-Scenario1 to create the required test infrastructure
     $setupScript = "$PSScriptRoot/../Setup-Scenario1.ps1"
     if (-not (Test-Path $setupScript)) {
@@ -137,7 +142,21 @@ if ($connectedSystems.Count -eq 0) {
     }
 }
 
-$testSystem = $connectedSystems | Select-Object -First 1
+# Prefer "HR CSV Source" as it's always set up correctly by Setup-Scenario1
+$testSystem = $connectedSystems | Where-Object { $_.name -eq "HR CSV Source" } | Select-Object -First 1
+if (-not $testSystem) {
+    # Fall back to any system that has run profiles
+    foreach ($cs in $connectedSystems) {
+        $rp = @(Get-JIMRunProfile -ConnectedSystemId $cs.id)
+        if ($rp.Count -gt 0) {
+            $testSystem = $cs
+            break
+        }
+    }
+}
+if (-not $testSystem) {
+    throw "No suitable connected system found with run profiles."
+}
 Write-Host "  Using connected system: $($testSystem.name) (ID: $($testSystem.id))" -ForegroundColor DarkGray
 
 $runProfiles = @(Get-JIMRunProfile -ConnectedSystemId $testSystem.id)  # Force array

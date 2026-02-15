@@ -260,7 +260,7 @@ public class SchedulerServer
             {
                 var failedStepNames = stepsAtIndex
                     .Where(s => !s.ContinueOnFailure)
-                    .Select(s => s.Name ?? $"Step {s.StepIndex}")
+                    .Select(s => string.IsNullOrEmpty(s.Name) ? $"Step {s.StepIndex}" : s.Name)
                     .ToList();
 
                 var stepDescription = failedStepNames.Count > 0
