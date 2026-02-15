@@ -50,7 +50,6 @@
         // Utilities
         "humao.rest-client",
         "eamodio.gitlens",
-        "usernamehw.errorlens",
         // CSV viewing and editing
         "mechatroner.rainbow-csv"
       ],
