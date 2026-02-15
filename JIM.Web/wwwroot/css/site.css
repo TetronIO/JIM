@@ -516,7 +516,6 @@ html[lang] .jim-paper-danger-zone {
 
 /* Description text below switches/checkboxes */
 .mud-text-secondary {
-    color: var(--mud-palette-text-primary) !important;
     opacity: 0.8 !important;
 }
 
