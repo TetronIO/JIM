@@ -2,6 +2,7 @@
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Exceptions;
 using JIM.Models.Security;
 using JIM.Models.Utility;
 namespace JIM.Application.Servers;
@@ -139,7 +140,12 @@ public class ActivityServer
         var now = DateTime.UtcNow;
         activity.ExecutionTime = DateTime.UtcNow - activity.Executed;
         activity.ErrorMessage = exception.Message;
-        activity.ErrorStackTrace = exception.StackTrace;
+
+        // Only persist stack traces for unexpected errors (bugs), not for operational errors
+        // that have clear, user-actionable messages
+        if (exception is not OperationalException)
+            activity.ErrorStackTrace = exception.StackTrace;
+
         activity.ExecutionTime = now - activity.Executed;
         activity.TotalActivityTime = now - activity.Created;
         activity.Status = ActivityStatus.CompleteWithError;
@@ -161,7 +167,12 @@ public class ActivityServer
     {
         var now = DateTime.UtcNow;
         activity.ErrorMessage = exception.Message;
-        activity.ErrorStackTrace = exception.StackTrace;
+
+        // Only persist stack traces for unexpected errors (bugs), not for operational errors
+        // that have clear, user-actionable messages
+        if (exception is not OperationalException)
+            activity.ErrorStackTrace = exception.StackTrace;
+
         activity.Status = ActivityStatus.FailedWithError;
         activity.ExecutionTime = now - activity.Executed;
         activity.TotalActivityTime = now - activity.Created;

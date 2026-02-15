@@ -4,7 +4,7 @@ namespace JIM.Models.Exceptions;
 /// Represents an error that occurred while parsing a CSV file.
 /// Provides user-friendly context about the error and suggestions for resolution.
 /// </summary>
-public class CsvParsingException : Exception
+public class CsvParsingException : OperationalException
 {
     /// <summary>
     /// The row number where the error occurred (1-based, excluding header).

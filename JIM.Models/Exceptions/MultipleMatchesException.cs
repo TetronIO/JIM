@@ -3,7 +3,7 @@
 /// <summary>
 /// Represents an exception to the Metaverse Object Matching process.
 /// </summary>
-public class MultipleMatchesException : Exception
+public class MultipleMatchesException : OperationalException
 {
     public MultipleMatchesException(string message, List<Guid> matches) : base(message)
     {

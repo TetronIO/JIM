@@ -1,5 +1,6 @@
 ﻿using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Exceptions;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
@@ -147,14 +148,14 @@ internal class LdapConnectorImport
         if (string.IsNullOrEmpty(_persistedConnectorData))
         {
             _logger.Warning("GetDeltaImportObjects: No persisted connector data available. A full import must be run first before delta imports.");
-            throw new InvalidOperationException("No persisted connector data available. Run a full import first to establish a baseline.");
+            throw new CannotPerformDeltaImportException("No persisted connector data available. Run a full import first to establish a baseline.");
         }
 
         _previousRootDse = JsonSerializer.Deserialize<LdapConnectorRootDse>(_persistedConnectorData);
         if (_previousRootDse == null)
         {
             _logger.Warning("GetDeltaImportObjects: Could not deserialise persisted connector data.");
-            throw new InvalidOperationException("Could not deserialise persisted connector data. Run a full import to re-establish baseline.");
+            throw new CannotPerformDeltaImportException("Could not deserialise persisted connector data. Run a full import to re-establish baseline.");
         }
 
         if (_paginationTokens.Count == 0)
@@ -169,7 +170,7 @@ internal class LdapConnectorImport
         {
             if (!_previousRootDse.HighestCommittedUsn.HasValue)
             {
-                throw new InvalidOperationException("Previous USN watermark not available. Run a full import first.");
+                throw new CannotPerformDeltaImportException("Previous USN watermark not available. Run a full import first.");
             }
 
             _logger.Debug("GetDeltaImportObjects: Using AD USN-based delta import. Previous USN: {PreviousUsn}",
@@ -214,7 +215,7 @@ internal class LdapConnectorImport
             // For changelog-based directories
             if (!_previousRootDse.LastChangeNumber.HasValue)
             {
-                throw new InvalidOperationException("Previous changelog number not available. Run a full import first.");
+                throw new CannotPerformDeltaImportException("Previous changelog number not available. Run a full import first.");
             }
 
             _logger.Debug("GetDeltaImportObjects: Using changelog-based delta import. Previous ChangeNumber: {PreviousChange}",
@@ -285,13 +286,13 @@ internal class LdapConnectorImport
         var response = (SearchResponse)_connection.SendRequest(request);
 
         if (response == null)
-            throw new InvalidOperationException("GetRootDseInformation: LDAP response was null");
+            throw new LdapCommunicationException("LDAP response was null when querying directory information.");
 
         if (response.ResultCode != ResultCode.Success)
-            throw new InvalidOperationException($"GetRootDseInformation: LDAP request failed with result code {response.ResultCode}");
+            throw new LdapCommunicationException($"LDAP request failed with result code {response.ResultCode} when querying directory information.");
 
         if (response.Entries.Count == 0)
-            throw new InvalidOperationException("GetRootDseInformation: No entries returned from rootDSE query");
+            throw new LdapCommunicationException("No entries returned from rootDSE query. Verify the LDAP server is reachable and correctly configured.");
 
         var rootDseEntry = response.Entries[0];
 

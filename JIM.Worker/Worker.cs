@@ -6,6 +6,7 @@ using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
@@ -618,7 +619,11 @@ public class Worker : BackgroundService
                 // This handles EF Core tracking issues or DbContext disposal problems
                 activity.Status = ActivityStatus.FailedWithError;
                 activity.ErrorMessage = $"{context}: {originalException.Message}";
-                activity.ErrorStackTrace = originalException.StackTrace;
+
+                // Only persist stack traces for unexpected errors (bugs), not for operational errors
+                if (originalException is not OperationalException)
+                    activity.ErrorStackTrace = originalException.StackTrace;
+
                 activity.ExecutionTime = DateTime.UtcNow - activity.Executed;
                 activity.TotalActivityTime = DateTime.UtcNow - activity.Created;
 

@@ -1,6 +1,6 @@
 ﻿namespace JIM.Models.Exceptions;
 
-public class DuplicateAttributesException : Exception
+public class DuplicateAttributesException : OperationalException
 {
     public DuplicateAttributesException(string message) : base(message) { }
 }

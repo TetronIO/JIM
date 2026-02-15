@@ -1,6 +1,6 @@
 ﻿namespace JIM.Models.Exceptions;
 
-public class DataGenerationTemplateException : Exception
+public class DataGenerationTemplateException : OperationalException
 {
     public DataGenerationTemplateException(string message) : base(message)
     {

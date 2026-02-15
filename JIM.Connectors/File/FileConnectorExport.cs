@@ -1,6 +1,7 @@
 using CsvHelper;
 using CsvHelper.Configuration;
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using Serilog;
@@ -41,7 +42,7 @@ internal class FileConnectorExport
 
         var exportFilePath = GetSettingValue("File Path");
         if (string.IsNullOrEmpty(exportFilePath))
-            throw new InvalidOperationException("File Path setting is required for export operations.");
+            throw new InvalidSettingValuesException("File Path setting is required for export operations.");
 
         var delimiter = GetSettingValue("Delimiter") ?? ",";
         var multiValueDelimiter = GetSettingValue("Multi-Value Delimiter") ?? "|";
