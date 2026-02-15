@@ -594,7 +594,7 @@ else if (_syncRule != null)
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
                     <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span>
                         @attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
-                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Outlined" Color="Color.Error"
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error"
                         Size="Size.Small" Style="flex-shrink: 0;" aria-label="delete"
                         OnClick="@(() => HandleAttributeFlowRuleDeleteClick(attributeFlowRule))">
                     </MudIconButton>
