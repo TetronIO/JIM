@@ -310,9 +310,19 @@ if ($Step -eq "ManualTrigger" -or $Step -eq "All") {
     }
 
     Assert-NotNull -Value $finalExecution -Message "Execution retrieved"
-    Assert-ScheduleExecutionSuccess -ExecutionId $finalExecution.id -Name "Manual Trigger Execution"
 
-    $testResults.Steps += @{ Name = "Manual Trigger Completed"; Success = $true }
+    try {
+        Assert-ScheduleExecutionSuccess -ExecutionId $finalExecution.id -Name "Manual Trigger Execution"
+        $testResults.Steps += @{ Name = "Manual Trigger Completed"; Success = $true }
+    }
+    catch {
+        $testResults.Steps += @{ Name = "Manual Trigger Completed"; Success = $false; Error = $_.Exception.Message }
+        if (-not $ContinueOnError) {
+            Write-Host ""
+            Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+            exit 1
+        }
+    }
 
     Write-Host ""
 }
@@ -529,9 +539,19 @@ if ($Step -eq "MultiStep" -or $Step -eq "All") {
     }
 
     $finalExecution = Get-JIMScheduleExecution -Id $execution.id
-    Assert-ScheduleExecutionSuccess -ExecutionId $finalExecution.id -Name "Multi-Step Execution"
 
-    $testResults.Steps += @{ Name = "Multi-Step Execution Completed"; Success = $true }
+    try {
+        Assert-ScheduleExecutionSuccess -ExecutionId $finalExecution.id -Name "Multi-Step Execution"
+        $testResults.Steps += @{ Name = "Multi-Step Execution Completed"; Success = $true }
+    }
+    catch {
+        $testResults.Steps += @{ Name = "Multi-Step Execution Completed"; Success = $false; Error = $_.Exception.Message }
+        if (-not $ContinueOnError) {
+            Write-Host ""
+            Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+            exit 1
+        }
+    }
 
     Write-Host ""
 }
@@ -803,9 +823,19 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
             }
 
             $finalExecution = Get-JIMScheduleExecution -Id $execution.id
-            Assert-ScheduleExecutionSuccess -ExecutionId $finalExecution.id -Name "Complex Parallel Execution"
 
-            $testResults.Steps += @{ Name = "Complex Parallel Execution Completed"; Success = $true }
+            try {
+                Assert-ScheduleExecutionSuccess -ExecutionId $finalExecution.id -Name "Complex Parallel Execution"
+                $testResults.Steps += @{ Name = "Complex Parallel Execution Completed"; Success = $true }
+            }
+            catch {
+                $testResults.Steps += @{ Name = "Complex Parallel Execution Completed"; Success = $false; Error = $_.Exception.Message }
+                if (-not $ContinueOnError) {
+                    Write-Host ""
+                    Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                    exit 1
+                }
+            }
         }
     }
 

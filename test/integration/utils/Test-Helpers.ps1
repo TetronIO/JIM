@@ -1048,18 +1048,26 @@ function Assert-ScheduleExecutionSuccess {
 
     # Check overall execution status
     $status = $execution.status
-    if ($status -ne "Completed" -and $status -ne 2) {
-        $errorMsg = "Schedule execution '$Name' ended with status: $status"
-        if ($execution.errorMessage) {
-            $errorMsg += " - Error: $($execution.errorMessage)"
-        }
+    $executionFailed = ($status -ne "Completed" -and $status -ne 2)
+
+    if ($executionFailed) {
         Write-Host "  ✗ $Name FAILED (execution status: $status)" -ForegroundColor Red
-        throw $errorMsg
+        if ($execution.errorMessage) {
+            Write-Host "    Error: $($execution.errorMessage)" -ForegroundColor Red
+        }
     }
 
     # Validate individual step activity statuses from the execution detail
     $steps = $execution.steps
+
     if (-not $steps -or $steps.Count -eq 0) {
+        if ($executionFailed) {
+            $errorMsg = "Schedule execution '$Name' ended with status: $status"
+            if ($execution.errorMessage) {
+                $errorMsg += " - Error: $($execution.errorMessage)"
+            }
+            throw $errorMsg
+        }
         # No step detail available - fall back to execution status check only
         Write-Host "  ✓ $Name completed successfully (Status: Completed)" -ForegroundColor Green
         return
@@ -1108,7 +1116,16 @@ function Assert-ScheduleExecutionSuccess {
                 }
             }
         }
-        throw "Schedule execution '$Name' completed but $($failedSteps.Count) step activity/activities had non-success status (ExecutionId: $ExecutionId)"
+        throw "Schedule execution '$Name' failed: $($failedSteps.Count) step activity/activities had non-success status (ExecutionId: $ExecutionId)"
+    }
+
+    if ($executionFailed) {
+        # Execution failed but no step-level failures found (e.g. infrastructure error)
+        $errorMsg = "Schedule execution '$Name' ended with status: $status"
+        if ($execution.errorMessage) {
+            $errorMsg += " - Error: $($execution.errorMessage)"
+        }
+        throw $errorMsg
     }
 
     Write-Host "  ✓ $Name completed successfully (Status: Completed, $validatedCount step activities OK)" -ForegroundColor Green
