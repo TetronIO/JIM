@@ -172,13 +172,26 @@ When running the Docker stack and you make code changes to JIM.Web, JIM.Worker, 
 
 Blazor pages, API controllers, and other compiled code require container rebuilds. Simply refreshing the browser will not show changes.
 
-**IMPORTANT - Docker Dependency Pinning:**
-Production Dockerfiles pin base image digests (`@sha256:...`) and functional apt package versions for reproducible builds. When modifying Dockerfiles:
+**IMPORTANT - Dependency Update Policy:**
+All dependency updates from Dependabot require human review before merging - there is no auto-merge. This applies to all ecosystems: NuGet packages, Docker base images, and GitHub Actions. A maintainer must review each PR, verify the changes are appropriate, and merge manually.
+
+**NuGet Packages:**
+- Pin dependency versions in `.csproj` files (avoid floating versions)
+- Dependabot proposes weekly PRs for patch and minor updates
+- Review each update for compatibility, changelog notes, and known issues before merging
+- Run `dotnet list package --vulnerable` to check for known vulnerabilities
+
+**Docker Base Images:**
+- Production Dockerfiles pin base image digests (`@sha256:...`) and functional apt package versions for reproducible builds
 - **NEVER** remove the `@sha256:` digest from `FROM` lines
 - **NEVER** remove version pins from functional apt packages (libldap, cifs-utils)
 - Diagnostic utilities (curl, iputils-ping) are intentionally unpinned
 - If updating a base image digest, check and update pinned apt versions to match (see `docs/DEVELOPER_GUIDE.md` "Dependency Pinning" section)
-- Dependabot manages digest updates via weekly PRs - these require manual review, not auto-merge
+
+**GitHub Actions:**
+- Pin action versions by major version tag (e.g., `@v4`) in workflow files
+- Dependabot proposes weekly PRs for patch and minor updates
+- Review each update before merging
 
 ## Key Project Locations
 
@@ -664,6 +677,8 @@ JIM's target customers (government, defence, CNI) require confidence in the soft
 
 ### Dependency Management
 
+- **All dependency updates require human review** - no auto-merge for any ecosystem (NuGet, Docker, GitHub Actions)
+- Dependabot proposes weekly PRs for all ecosystems; a maintainer must review and merge each one
 - Review all new NuGet package additions for:
   - Maintenance status (actively maintained, last update date)
   - Known vulnerabilities (check NVD/GitHub Advisory Database)
@@ -671,6 +686,8 @@ JIM's target customers (government, defence, CNI) require confidence in the soft
   - Publisher reputation and community adoption
 - Prefer well-established, widely-used packages over niche alternatives
 - Pin dependency versions in `.csproj` files (avoid floating versions)
+- Pin Docker base images by digest (`@sha256:...`) with functional apt packages version-pinned
+- Pin GitHub Actions by major version tag (e.g., `@v4`)
 - Run `dotnet list package --vulnerable` regularly to check for known vulnerabilities
 - Run `dotnet list package --outdated` regularly to identify available updates
 
@@ -686,7 +703,7 @@ JIM's target customers (government, defence, CNI) require confidence in the soft
 - Release builds must be reproducible from a specific Git commit
 - All release artefacts include SHA256 checksums (already implemented)
 - Docker images should be built from pinned base images with digest references
-- GitHub Actions workflows should pin action versions by SHA, not tag
+- GitHub Actions are pinned by major version tag (e.g., `@v4`) and updated via Dependabot PRs with human review
 
 ### Third-Party Component Policy
 

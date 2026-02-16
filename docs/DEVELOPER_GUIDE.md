@@ -678,7 +678,20 @@ docker compose build
 docker compose up -d
 ```
 
-### Dependency Pinning
+### Dependency Pinning and Updates
+
+All dependency updates require human review before merging. Dependabot proposes weekly PRs for all ecosystems (NuGet, Docker, GitHub Actions), but there is no auto-merge - a maintainer must review and merge each PR manually.
+
+#### NuGet Packages
+
+- All NuGet package versions are pinned in `.csproj` files (no floating versions)
+- Dependabot proposes weekly PRs for patch and minor version updates (major versions are ignored)
+- Before merging a NuGet update PR:
+  1. Review the package changelog for breaking changes or behavioural differences
+  2. Verify CI build and tests pass
+  3. Check for any new known vulnerabilities in transitive dependencies
+
+#### Docker Base Images
 
 All production Dockerfiles pin their dependencies for reproducible, auditable builds:
 
@@ -688,7 +701,7 @@ All production Dockerfiles pin their dependencies for reproducible, auditable bu
 
 **Why this matters**: `System.DirectoryServices.Protocols` (the .NET LDAP client) P/Invokes into the native `libldap` shared library at runtime. An incompatible libldap version could cause silent behavioural differences or crashes during LDAP/AD operations.
 
-**Dependabot** monitors for base image digest updates weekly and opens PRs. These PRs are excluded from auto-merge because they require manual verification:
+Before merging a Docker digest update PR:
 
 1. Check if apt package versions need updating against the new base image
 2. Run integration tests (especially LDAP connector tests) against the updated image
@@ -699,6 +712,12 @@ To check available package versions in a new base image:
 docker run --rm <image>@<new-digest> bash -c \
   "apt-get update -qq && apt-cache policy libldap-common libldap-2.5-0 cifs-utils"
 ```
+
+#### GitHub Actions
+
+- Actions are pinned by major version tag (e.g., `actions/checkout@v4`)
+- Dependabot proposes weekly PRs for patch and minor version updates
+- Before merging, review the action's changelog for any changes to inputs, outputs, or behaviour
 
 ### Migrations
 Apply migrations on first run:
