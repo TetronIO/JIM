@@ -189,7 +189,7 @@ if ($Step -eq "Create" -or $Step -eq "All") {
     # Test 1: Create a manual schedule
     Write-Host "  Creating manual schedule..." -ForegroundColor DarkGray
     $manualSchedule = New-JIMSchedule -Name "Integration Test - Manual" `
-        -Description "Test schedule for manual trigger" `
+        -Description "Creation-only test - verifies schedule properties, not executed" `
         -TriggerType Manual `
         -PassThru
 
@@ -203,7 +203,7 @@ if ($Step -eq "Create" -or $Step -eq "All") {
     # Test 2: Create a cron schedule with custom expression (weekdays at 6am, noon, and 6pm)
     Write-Host "  Creating cron schedule with custom expression..." -ForegroundColor DarkGray
     $cronSchedule = New-JIMSchedule -Name "Integration Test - Cron" `
-        -Description "Test schedule for automatic trigger" `
+        -Description "Creation-only test - verifies cron trigger properties, not executed" `
         -TriggerType Cron `
         -PatternType Custom `
         -CronExpression "0 6,12,18 * * 1-5" `
@@ -218,7 +218,7 @@ if ($Step -eq "Create" -or $Step -eq "All") {
     # Test 3: Create an interval-style schedule using custom cron (every 2 hours on weekdays)
     Write-Host "  Creating interval-style schedule..." -ForegroundColor DarkGray
     $intervalSchedule = New-JIMSchedule -Name "Integration Test - Interval" `
-        -Description "Test schedule for interval trigger" `
+        -Description "Creation-only test - verifies interval cron properties, not executed" `
         -TriggerType Cron `
         -PatternType Custom `
         -CronExpression "0 8-18/2 * * *" `
