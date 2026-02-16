@@ -442,6 +442,269 @@ The SQL script at `test/data/seed-change-history.sql` generates realistic change
   - "enterprise identity platforms" for general comparisons
 - Exception: Generic industry terms and standards (SCIM, LDAP, OIDC, etc.) are acceptable
 
+## Security Development Guidelines
+
+**Aligned with: NCSC Secure Development Principles, CISA Secure by Design, OWASP ASVS, UK Software Security Code of Practice**
+
+JIM is an identity management system deployed in government, defence, healthcare, financial services, and critical national infrastructure environments. All code MUST meet the security expectations of these sectors.
+
+**Reference Standards:**
+- UK NCSC: Secure Development and Deployment Guidance
+- UK Government: Software Security Code of Practice (May 2025)
+- CISA: Secure by Design Principles
+- OWASP: Application Security Verification Standard (ASVS) v4.0
+- NIST: SP 800-53 Rev 5 (Security and Privacy Controls)
+
+### OWASP Top 10 Awareness
+
+All developers MUST be aware of and actively prevent the OWASP Top 10 vulnerabilities:
+
+1. **Broken Access Control**
+   - Enforce authorisation checks on every API endpoint and Blazor page
+   - Use `[Authorize]` attributes - never rely on UI-only access control
+   - Deny by default - explicitly grant access, never implicitly allow
+   - Validate that the authenticated user has permission for the requested resource (not just role, but ownership/scope)
+
+2. **Cryptographic Failures**
+   - Use AES-256-GCM for encryption at rest (already implemented for credentials)
+   - Enforce TLS for all data in transit
+   - NEVER implement custom cryptography - use ASP.NET Core Data Protection API or established libraries
+   - NEVER log sensitive data (credentials, tokens, personal data)
+
+3. **Injection**
+   - ALWAYS use parameterised queries (EF Core does this by default - never bypass with raw SQL unless parameterised)
+   - Validate and sanitise all input at API boundaries
+   - Use DTOs with data annotations for API request models
+   - For LDAP operations: escape special characters in DN components and search filters
+
+4. **Insecure Design**
+   - Conduct threat modelling for new features that handle authentication, authorisation, or sensitive data
+   - Apply the principle of least privilege throughout
+   - Fail securely - errors must not expose internal details or grant unintended access
+   - Design sync operations to be idempotent where possible
+
+5. **Security Misconfiguration**
+   - Ship secure defaults (SSO required, no default credentials, HTTPS enforced)
+   - Remove or disable development/debug features in production builds
+   - Keep Swagger UI to development environment only
+   - Validate all configuration values at startup
+
+6. **Vulnerable and Outdated Components**
+   - Monitor NuGet dependencies for known vulnerabilities (see Supply Chain Security)
+   - Keep .NET runtime and all packages up to date
+   - Review transitive dependency vulnerabilities
+
+7. **Identification and Authentication Failures**
+   - SSO/OIDC is mandatory - no local authentication
+   - API keys must be cryptographically random and sufficiently long
+   - Implement proper session management via ASP.NET Core authentication middleware
+   - Enforce PKCE for OIDC flows
+
+8. **Software and Data Integrity Failures**
+   - Verify integrity of release artefacts (SHA256 checksums already implemented)
+   - Sign Docker images where possible
+   - Validate data imported from connected systems before processing
+   - Protect sync rules and configuration from unauthorised modification
+
+9. **Security Logging and Monitoring Failures**
+   - Log all authentication events (success and failure)
+   - Log all authorisation failures
+   - Log all administrative actions (configuration changes, sync rule modifications)
+   - Log API key creation and usage
+   - NEVER log credentials, tokens, or personal data in cleartext
+   - Include correlation IDs for tracing across services
+
+10. **Server-Side Request Forgery (SSRF)**
+    - Validate and restrict connector target URLs/hosts
+    - Do not allow user-controlled URLs to be fetched without validation
+    - Restrict outbound network access from the application where possible
+
+### Input Validation Requirements
+
+- Validate ALL input at system boundaries (API controllers, Blazor form submissions)
+- Use Data Annotation attributes on all API request DTOs
+- Apply maximum length constraints to all string properties
+- Validate GUIDs, enums, and numeric ranges explicitly
+- For file paths (connector configuration): validate against path traversal (`..`, absolute paths outside allowed directories)
+- For LDAP filters and DNs: use library-provided escaping functions
+- For expressions (sync rule attribute flows): evaluate in a sandboxed context (DynamicExpresso is already sandboxed)
+
+### Authentication and Authorisation Patterns
+
+```csharp
+// CORRECT: Authorise at the controller level
+[Authorize]
+[ApiController]
+public class SensitiveController : ControllerBase
+{
+    [HttpGet("{id}")]
+    public async Task<ActionResult<ResourceDto>> GetResource(Guid id)
+    {
+        // Verify user has access to this specific resource
+        var resource = await _app.GetResourceAsync(id);
+        if (resource == null) return NotFound();
+        return Ok(resource.ToDto());
+    }
+}
+
+// WRONG: No authorisation, or relying on UI to hide the endpoint
+[ApiController]
+public class InsecureController : ControllerBase
+{
+    [HttpGet("{id}")]
+    public async Task<ActionResult<ResourceDto>> GetResource(Guid id)
+    {
+        // No [Authorize] attribute - accessible to anyone
+        return Ok(await _app.GetResourceAsync(id));
+    }
+}
+```
+
+### Cryptography Standards
+
+- **Encryption at rest**: AES-256-GCM (NIST approved) via ASP.NET Core Data Protection API
+- **Integrity verification**: HMAC-SHA256
+- **Hashing**: SHA-256 or SHA-512 (never MD5 or SHA-1)
+- **Random number generation**: `System.Security.Cryptography.RandomNumberGenerator` (never `System.Random` for security-sensitive values)
+- **Key management**: Automatic rotation via Data Protection API, keys stored separately from data
+- **TLS**: Minimum TLS 1.2 for all network connections (connectors, LDAP, OIDC)
+
+### Secrets Handling
+
+- NEVER hardcode secrets, credentials, API keys, or connection strings in source code
+- NEVER log secrets or include them in error messages
+- NEVER commit `.env` files, certificates, or key material to the repository
+- Store all secrets via environment variables (loaded from `.env` which is gitignored)
+- Encrypt stored credentials using the Data Protection API (already implemented)
+- Ensure secrets are excluded from serialisation (use `[JsonIgnore]` where appropriate)
+- Clear sensitive data from memory when no longer needed (use `SecureString` where practical)
+
+### Security Testing Requirements
+
+- Write tests that verify authorisation enforcement (attempt access without credentials, with wrong role)
+- Write tests that verify input validation rejects malformed data
+- Write tests for boundary conditions (empty strings, maximum lengths, special characters)
+- For sync operations: test with adversarial data (special characters in attribute values, oversized payloads, unexpected types)
+
+## Secure by Design Principles
+
+**Aligned with: NCSC Secure Development and Deployment Guidance, CISA Secure by Design Pledge, UK Software Security Code of Practice**
+
+These principles are mandatory for all JIM development. They align with the expectations of government, defence, and regulated industry customers.
+
+### 1. Take Ownership of Security Outcomes
+
+- Security is every developer's responsibility, not a separate team's concern
+- Consider the security impact of every change, however small
+- When in doubt about a security implication, raise it - do not assume it is acceptable
+
+### 2. Embrace Radical Transparency
+
+- Maintain a clear vulnerability disclosure policy (SECURITY.md)
+- Publish complete CVE records for any discovered vulnerabilities
+- Document security-relevant design decisions in ADRs (Architecture Decision Records)
+- Provide customers with sufficient information to assess JIM's security posture
+
+### 3. Lead from the Top
+
+- Security requirements take precedence over feature velocity
+- A security issue is always a valid reason to delay a release
+- Security-relevant changes require explicit review
+
+### 4. Secure by Default
+
+- JIM ships with secure defaults that require no additional configuration to be safe:
+  - SSO/OIDC required (no option for insecure local authentication)
+  - Credentials encrypted at rest by default
+  - HTTPS enforced in production deployments
+  - API authentication required on all endpoints
+  - Audit logging enabled by default
+- Security features must not be optional or require the customer to "turn them on"
+- If a configuration can be insecure, make the secure option the default
+
+### 5. Secure Design from the Start
+
+- New features involving authentication, authorisation, data handling, or external system communication MUST include a threat assessment before implementation
+- Use threat modelling (STRIDE or similar) for significant new features
+- Consider: What could go wrong? What is the blast radius? How would we detect misuse?
+- Document threat considerations in the feature plan (in `docs/plans/`)
+
+### 6. Defence in Depth
+
+- Never rely on a single security control
+- Layers of defence: network segmentation, authentication, authorisation, input validation, encryption, logging
+- Assume any single layer can be bypassed and design accordingly
+- Example: Even though EF Core parameterises queries, still validate input at the API boundary
+
+### 7. Minimise Attack Surface
+
+- Do not expose unnecessary endpoints, services, or configuration options
+- Remove or disable development features in production (Swagger UI, detailed error messages)
+- Apply the principle of least privilege to service accounts, database permissions, and API scopes
+- JIM's air-gapped deployment model inherently reduces network-based attack surface
+
+### 8. Fail Securely
+
+- Errors must not reveal internal implementation details to end users
+- Authentication/authorisation failures must not distinguish between "user not found" and "wrong password"
+- Failed operations must leave the system in a secure state (no partial writes that bypass validation)
+- This aligns with the existing Synchronisation Integrity Requirements: fail fast, report clearly
+
+### 9. Maintain and Patch
+
+- Respond to reported vulnerabilities within the timescales in SECURITY.md
+- Keep all dependencies updated (see Supply Chain Security)
+- Monitor for security advisories affecting .NET, Npgsql, and other core dependencies
+
+## Supply Chain Security
+
+**Aligned with: NCSC Supply Chain Security Guidance, CISA SBOM Requirements, NIST SP 800-161**
+
+JIM's target customers (government, defence, CNI) require confidence in the software supply chain. These requirements ensure JIM meets procurement expectations.
+
+### Dependency Management
+
+- Review all new NuGet package additions for:
+  - Maintenance status (actively maintained, last update date)
+  - Known vulnerabilities (check NVD/GitHub Advisory Database)
+  - Licence compatibility
+  - Publisher reputation and community adoption
+- Prefer well-established, widely-used packages over niche alternatives
+- Pin dependency versions in `.csproj` files (avoid floating versions)
+- Run `dotnet list package --vulnerable` regularly to check for known vulnerabilities
+- Run `dotnet list package --outdated` regularly to identify available updates
+
+### SBOM (Software Bill of Materials)
+
+- Generate SBOM in CycloneDX or SPDX format as part of the release process
+- Include all direct and transitive dependencies
+- Customers in government and defence procurement increasingly require SBOM as a procurement condition
+- Tool: Consider `CycloneDX` dotnet tool for automated SBOM generation
+
+### Build Integrity
+
+- Release builds must be reproducible from a specific Git commit
+- All release artefacts include SHA256 checksums (already implemented)
+- Docker images should be built from pinned base images with digest references
+- GitHub Actions workflows should pin action versions by SHA, not tag
+
+### Third-Party Component Policy
+
+- Only use NuGet packages from NuGet.org (no private/unknown feeds in production builds)
+- Evaluate any new dependency against:
+  - Does it have known CVEs?
+  - Is it actively maintained (commits within last 12 months)?
+  - Does it have a responsible disclosure/security policy?
+  - What is the licence? (Compatible with JIM's source-available licence?)
+- Document all third-party components and their purposes in the SBOM
+
+### Container Security
+
+- Use minimal base images (e.g., `mcr.microsoft.com/dotnet/aspnet:9.0` for runtime, not SDK)
+- Run containers as non-root users
+- Do not include build tools, debug utilities, or package managers in production images
+- Scan container images for vulnerabilities before release
+
 ## Third-Party Dependency Governance
 
 **IMPORTANT: JIM maintains strict supply chain security standards for SBOM compliance and customer assurance.**
@@ -512,6 +775,7 @@ The SQL script at `test/data/seed-change-history.sql` generates realistic change
 **Documentation organisation:**
 - `docs/plans/` - Feature plans and design documents (future work)
 - `docs/` - Active guides and references (current/completed work)
+  - COMPLIANCE_MAPPING.md - Security framework and standards compliance mapping
   - DEVELOPER_GUIDE.md - Comprehensive development guide
   - INTEGRATION_TESTING.md - Integration testing guide
   - MVP_DEFINITION.md - MVP scope and criteria
