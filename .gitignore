@@ -442,10 +442,10 @@ Vagrantfile
 *.exe
 env
 
-# Claude Code configuration
-.claude/
-# But allow spec-kit commands to be committed
+# Claude Code configuration (ignore all except commands and skills)
+.claude/*
 !.claude/commands/
+!.claude/skills/
 
 # Local connector files directory (contains symlinks to test data)
 connector-files/
