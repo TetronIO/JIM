@@ -212,6 +212,15 @@
                                         </MudChip>
                                     </MudTooltip>
                                 }
+                                @if (context.TotalPendingExports > 0)
+                                {
+                                    <MudTooltip Text="Pending Exports" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
+                                                 Icon="@Icons.Material.Filled.Outbox" Class="px-2">
+                                            @context.TotalPendingExports
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
                             }
                             else if (runType == "Export")
                             {
@@ -404,6 +413,10 @@
                             <div class="text-center">
                                 <MudText Typo="Typo.h5" Color="Color.Warning">@_selectedActivity.TotalDriftCorrections</MudText>
                                 <MudText Typo="Typo.caption">@(_selectedActivity.TotalDriftCorrections == 1 ? "Drift Correction" : "Drift Corrections")</MudText>
+                            </div>
+                            <div class="text-center">
+                                <MudText Typo="Typo.h5" Color="Color.Info">@_selectedActivity.TotalPendingExports</MudText>
+                                <MudText Typo="Typo.caption">@(_selectedActivity.TotalPendingExports == 1 ? "Pending Export" : "Pending Exports")</MudText>
                             </div>
                         }
                         else if (sidebarRunType == "Export")

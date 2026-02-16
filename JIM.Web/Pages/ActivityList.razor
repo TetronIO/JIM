@@ -180,6 +180,15 @@
                                     </MudChip>
                                 </MudTooltip>
                             }
+                            @if (context.TotalPendingExports > 0)
+                            {
+                                <MudTooltip Text="Pending Exports" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
+                                             Icon="@Icons.Material.Filled.Outbox" Class="px-2">
+                                        @context.TotalPendingExports
+                                    </MudChip>
+                                </MudTooltip>
+                            }
                         }
                         else if (effectiveRunType == "Export")
                         {
