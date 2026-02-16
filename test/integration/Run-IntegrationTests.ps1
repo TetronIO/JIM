@@ -8,10 +8,14 @@
     2. Rebuilds and starts the JIM stack and Samba AD
     3. Waits for all services to be ready
     4. Creates an infrastructure API key
-    5. Runs the specified test scenario
+    5. Configures JIM with connected systems and sync rules (via scenario setup)
+    6. Runs the specified test scenario
 
     When run without parameters, displays interactive menus to select a scenario
     and template size using arrow keys.
+
+    Use -SetupOnly to stop after environment setup and configuration (step 5),
+    leaving the environment running for manual exploration, demos, or development.
 
 .PARAMETER Scenario
     The test scenario to run. If not specified, an interactive menu will be displayed.
@@ -30,6 +34,11 @@
 
 .PARAMETER SkipBuild
     Skip rebuilding Docker images (use existing images).
+
+.PARAMETER SetupOnly
+    Stop after environment setup and scenario configuration. The JIM stack, Samba AD,
+    and all connected systems/sync rules will be configured, but no test steps will run.
+    Use this for demos, manual exploration, or iterative development.
 
 .PARAMETER TimeoutSeconds
     Maximum time to wait for services to be ready. Default: 180 seconds.
@@ -63,6 +72,11 @@
     ./Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Template Small
 
     Runs Scenario 2 (cross-domain sync between APAC and EMEA directories).
+
+.EXAMPLE
+    ./Run-IntegrationTests.ps1 -Scenario "Scenario1-HRToIdentityDirectory" -SetupOnly
+
+    Sets up the full environment with Scenario 1 configuration, then stops for manual use.
 #>
 
 param(
@@ -81,6 +95,9 @@ param(
 
     [Parameter(Mandatory=$false)]
     [switch]$SkipBuild,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$SetupOnly,
 
     [Parameter(Mandatory=$false)]
     [int]$TimeoutSeconds = 180
@@ -475,6 +492,7 @@ if ($templateRelevant) {
 Write-Host "  Step:               ${CYAN}$Step${NC}"
 Write-Host "  Skip Reset:         ${CYAN}$SkipReset${NC}"
 Write-Host "  Skip Build:         ${CYAN}$SkipBuild${NC}"
+Write-Host "  Setup Only:         ${CYAN}$SetupOnly${NC}"
 Write-Host "  Service Timeout:    ${CYAN}${TimeoutSeconds}s${NC}"
 Write-Host ""
 
@@ -865,8 +883,95 @@ if ($Scenario -like "*Scenario1*") {
     }
 }
 
-# Step 5: Run test scenario
+# Step 5: Setup / Run test scenario
 $step5Start = Get-Date
+
+if ($SetupOnly) {
+    # SetupOnly mode: configure JIM with connected systems and sync rules, then stop
+    Write-Section "Step 5: Setting Up Scenario Configuration (SetupOnly)"
+
+    # Validate that a setup script exists for this scenario
+    # Extract scenario number from name (e.g., "Scenario1-HRToIdentityDirectory" -> "1")
+    $scenarioNumber = if ($Scenario -match 'Scenario(\d+)') { $Matches[1] } else { $null }
+    $setupScript = if ($scenarioNumber) {
+        $candidate = Join-Path $scriptRoot "Setup-Scenario$scenarioNumber.ps1"
+        if (Test-Path $candidate) { $candidate } else { $null }
+    } else { $null }
+
+    if (-not $setupScript) {
+        Write-Warning "No dedicated setup script found for '$Scenario'"
+        Write-Warning "SetupOnly mode requires a Setup-Scenario*.ps1 script"
+        Write-Host "${GRAY}Environment is running but not configured with scenario-specific connected systems.${NC}"
+    }
+    else {
+        # Generate test data (CSV files) if scenario uses template-based data
+        if ($templateRelevant) {
+            Write-Step "Generating test data (Template: $Template)..."
+            & "$scriptRoot/Generate-TestCSV.ps1" -Template $Template -OutputPath "$scriptRoot/../test-data"
+            Write-Success "Test data generated"
+        }
+
+        # Run the scenario setup script to configure connected systems, sync rules, and run profiles
+        Write-Step "Running scenario setup: Setup-Scenario$scenarioNumber.ps1..."
+        $config = & $setupScript -JIMUrl "http://localhost:5200" -ApiKey $apiKey -Template $Template
+        if ($config) {
+            Write-Success "Scenario configured successfully"
+        }
+        else {
+            Write-Failure "Scenario setup returned no configuration"
+        }
+    }
+
+    $timings["5. Setup (SetupOnly)"] = (Get-Date) - $step5Start
+
+    # Print a helpful summary for the user
+    $endTime = Get-Date
+    $duration = $endTime - $startTime
+
+    Write-Banner "SetupOnly Complete - Environment Ready"
+
+    Write-Host "${GRAY}Services:${NC}"
+    Write-Host "  JIM Web:            ${CYAN}http://localhost:5200${NC}"
+    Write-Host "  JIM API:            ${CYAN}http://localhost:5200/api${NC}"
+    Write-Host "  Swagger:            ${CYAN}http://localhost:5200/api/swagger${NC}"
+    Write-Host ""
+    Write-Host "${GRAY}API Key:${NC}"
+    Write-Host "  ${CYAN}$apiKey${NC}"
+    Write-Host ""
+    Write-Host "${GRAY}Scenario:${NC}              ${CYAN}$Scenario${NC}"
+    if ($templateRelevant) {
+        Write-Host "${GRAY}Template:${NC}              ${CYAN}$Template${NC}"
+    }
+    Write-Host ""
+    Write-Host "${GRAY}To run tests manually:${NC}"
+    Write-Host "  ${BLUE}pwsh test/integration/scenarios/Invoke-$Scenario.ps1 -Template $Template -ApiKey `"$apiKey`"${NC}"
+    Write-Host ""
+    Write-Host "${GRAY}To re-run with existing environment:${NC}"
+    Write-Host "  ${BLUE}./Run-IntegrationTests.ps1 -Scenario `"$Scenario`" -Template $Template -SkipReset -SkipBuild${NC}"
+    Write-Host ""
+
+    # Performance Summary
+    Write-Section "Performance Summary"
+    Write-Host ""
+    Write-Host "${CYAN}Stage Timings:${NC}"
+
+    $sortedTimings = $timings.GetEnumerator() | Sort-Object Name
+    $totalSeconds = 0
+    foreach ($timing in $sortedTimings) {
+        $seconds = [math]::Round($timing.Value.TotalSeconds, 1)
+        $totalSeconds += $seconds
+        $bar = "█" * [math]::Min(50, [math]::Floor($seconds / 2))
+        Write-Host ("  {0,-25} {1,6}s  {2}" -f $timing.Name, $seconds, $bar) -ForegroundColor $(if ($seconds -gt 60) { "Yellow" } elseif ($seconds -gt 30) { "Cyan" } else { "Green" })
+    }
+
+    Write-Host ""
+    Write-Host "${CYAN}Total Duration: ${NC}$($duration.ToString('hh\:mm\:ss')) (${totalSeconds}s)"
+    Write-Host ""
+    Write-Host "${GREEN}Environment is ready for use. No tests were executed.${NC}"
+    Write-Host ""
+    exit 0
+}
+
 Write-Section "Step 5: Running Test Scenario"
 
 $scenarioScript = Join-Path $scriptRoot "scenarios" "Invoke-$Scenario.ps1"

@@ -661,6 +661,9 @@ cd /workspaces/JIM
 
 # Skip rebuild (use existing Docker images)
 ./test/integration/Run-IntegrationTests.ps1 -SkipReset -SkipBuild
+
+# Setup only - configure environment without running tests (for demos, manual exploration)
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -SetupOnly
 ```
 
 **What the runner does automatically:**
