@@ -206,7 +206,9 @@ function Start-JIMRunProfile {
             }
         }
         catch {
-            Write-Error "Failed to execute Run Profile: $_"
+            # Use throw to propagate as a terminating error so callers with
+            # $ErrorActionPreference = "Stop" will see it immediately
+            throw "Failed to execute Run Profile: $_"
         }
     }
 }

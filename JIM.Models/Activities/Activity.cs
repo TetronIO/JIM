@@ -122,42 +122,73 @@ public class Activity
     public int ObjectsProcessed { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
-    // summary stats for run profile executions (for list view display)
+    // granular summary stats for run profile executions (for list view display)
+    // populated when activity completes by CalculateActivitySummaryStats() in Worker.cs
     // -----------------------------------------------------------------------------------------------------------------
 
-    /// <summary>
-    /// Aggregate count of all "create" operations from RPEIs.
-    /// Includes: Added (import), Projected (sync), Provisioned (export).
-    /// Populated when activity completes.
-    /// </summary>
-    public int TotalObjectCreates { get; set; }
+    #region Import Stats
+    /// <summary>Count of new CSOs added to staging during import.</summary>
+    public int TotalAdded { get; set; }
+
+    /// <summary>Count of existing CSOs updated during import.</summary>
+    public int TotalUpdated { get; set; }
+
+    /// <summary>Count of CSOs marked as deleted (source system deletion detected).</summary>
+    public int TotalDeleted { get; set; }
+    #endregion
+
+    #region Sync Stats
+    /// <summary>Count of new MVOs created via projection.</summary>
+    public int TotalProjected { get; set; }
+
+    /// <summary>Count of CSOs joined to existing MVOs.</summary>
+    public int TotalJoined { get; set; }
 
     /// <summary>
-    /// Aggregate count of all "update" operations from RPEIs.
-    /// Includes: Updated (import), Joined (sync), Exported (export).
-    /// Populated when activity completes.
+    /// Count of attribute flow operations. Includes both standalone attribute flows
+    /// (to already-joined CSOs) and absorbed flows that occurred alongside joins, projections,
+    /// or disconnections (tracked via RPEI.AttributeFlowCount).
     /// </summary>
-    public int TotalObjectUpdates { get; set; }
+    public int TotalAttributeFlows { get; set; }
 
-    /// <summary>
-    /// Aggregate count of attribute flow operations from RPEIs.
-    /// Only applies to sync runs - data flowing through existing connections.
-    /// Populated when activity completes.
-    /// </summary>
-    public int TotalObjectFlows { get; set; }
+    /// <summary>Count of CSOs disconnected from MVOs.</summary>
+    public int TotalDisconnected { get; set; }
 
-    /// <summary>
-    /// Aggregate count of all "delete" operations from RPEIs.
-    /// Includes: Deleted (import), Disconnected (sync), Deprovisioned (export).
-    /// Populated when activity completes.
-    /// </summary>
-    public int TotalObjectDeletes { get; set; }
+    /// <summary>Count of CSOs disconnected because they fell out of scope of import sync rule scoping criteria.</summary>
+    public int TotalDisconnectedOutOfScope { get; set; }
 
-    /// <summary>
-    /// Count of RPEIs with errors.
-    /// Populated when activity completes.
-    /// </summary>
-    public int TotalObjectErrors { get; set; }
+    /// <summary>Count of CSOs that fell out of scope but remained joined (InboundOutOfScopeAction = RemainJoined).</summary>
+    public int TotalOutOfScopeRetainJoin { get; set; }
+
+    /// <summary>Count of CSOs where drift was detected and corrective pending exports were created.</summary>
+    public int TotalDriftCorrections { get; set; }
+    #endregion
+
+    #region Export Stats
+    /// <summary>Count of new objects provisioned to target systems.</summary>
+    public int TotalProvisioned { get; set; }
+
+    /// <summary>Count of existing objects exported with updated attributes.</summary>
+    public int TotalExported { get; set; }
+
+    /// <summary>Count of objects deprovisioned from target systems.</summary>
+    public int TotalDeprovisioned { get; set; }
+    #endregion
+
+    #region Direct Creation Stats
+    /// <summary>Count of MVOs created directly (data generation, admin UI) rather than via projection/sync.</summary>
+    public int TotalCreated { get; set; }
+    #endregion
+
+    #region Pending Export Stats
+    /// <summary>Count of pending exports staged for the next export run (surfaced during sync).</summary>
+    public int TotalPendingExports { get; set; }
+    #endregion
+
+    #region Shared Stats
+    /// <summary>Count of RPEIs with errors. Populated when activity completes.</summary>
+    public int TotalErrors { get; set; }
+    #endregion
 
     // -----------------------------------------------------------------------------------------------------------------
     // pending export reconciliation stats (for confirming imports)
@@ -193,6 +224,23 @@ public class Activity
     /// If the run profile has been deleted, the type of sync run this was can be accessed here still.
     /// </summary>
     public ConnectedSystemRunType? ConnectedSystemRunType { get; set; } = Staging.ConnectedSystemRunType.NotSet;
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // schedule execution context
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// If this activity was created as part of a schedule execution, the execution ID is recorded here.
+    /// This enables the scheduler to query activity outcomes directly (since worker tasks are ephemeral
+    /// and deleted upon completion) and supports drill-down from schedule execution steps to activities.
+    /// </summary>
+    public Guid? ScheduleExecutionId { get; set; }
+
+    /// <summary>
+    /// The step index within the schedule execution that this activity corresponds to.
+    /// Used together with ScheduleExecutionId to identify which step produced this activity.
+    /// </summary>
+    public int? ScheduleStepIndex { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
     // history retention cleanup stats (for HistoryRetentionCleanup activities)

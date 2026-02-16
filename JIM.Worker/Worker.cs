@@ -6,6 +6,7 @@ using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
@@ -186,7 +187,7 @@ public class Worker : BackgroundService
                                                 dataGenTemplateServiceTask.InitiatedByType,
                                                 dataGenTemplateServiceTask.InitiatedById,
                                                 dataGenTemplateServiceTask.InitiatedByName);
-                                            newWorkerTask.Activity.TotalObjectCreates = objectsCreated;
+                                            newWorkerTask.Activity.TotalCreated = objectsCreated;
                                             await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
                                         }
                                         catch (Exception ex)
@@ -557,40 +558,64 @@ public class Worker : BackgroundService
     }
 
     /// <summary>
-    /// Calculates aggregate summary stats from Run Profile Execution Items for activity list display.
-    /// Creates = Added (import) + Projected (sync) + Provisioned (export)
-    /// Updates = Updated (import) + Joined (sync) + Exported (export)
-    /// Flows = AttributeFlow (sync only)
-    /// Deletes = Deleted (import) + Disconnected (sync) + Deprovisioned (export)
-    /// Errors = Any RPEI with an error type set
+    /// Calculates granular summary stats from Run Profile Execution Items for activity list display.
+    /// Each ObjectChangeType maps directly to a corresponding Activity counter field.
+    /// TotalAttributeFlows includes both standalone AttributeFlow RPEIs and absorbed flows
+    /// (tracked via RPEI.AttributeFlowCount) that occurred alongside other operations.
     /// </summary>
-    private static void CalculateActivitySummaryStats(Activity activity)
+    internal static void CalculateActivitySummaryStats(Activity activity)
     {
         var rpeis = activity.RunProfileExecutionItems;
 
-        // Creates: Added (import), Projected (sync), Provisioned (export)
-        activity.TotalObjectCreates = rpeis.Count(r =>
-            r.ObjectChangeType is ObjectChangeType.Added or ObjectChangeType.Projected or ObjectChangeType.Provisioned);
+        // Import stats
+        activity.TotalAdded = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Added);
+        activity.TotalUpdated = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Updated);
+        activity.TotalDeleted = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Deleted);
 
-        // Updates: Updated (import), Joined (sync), Exported (export)
-        activity.TotalObjectUpdates = rpeis.Count(r =>
-            r.ObjectChangeType is ObjectChangeType.Updated or ObjectChangeType.Joined or ObjectChangeType.Exported);
+        // Sync stats
+        activity.TotalProjected = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Projected);
+        activity.TotalJoined = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Joined);
 
-        // Flows: AttributeFlow, DriftCorrection (sync only) - data flowing through existing connections
-        // DriftCorrection is included as it represents corrective attribute changes being staged for export
-        activity.TotalObjectFlows = rpeis.Count(r =>
-            r.ObjectChangeType is ObjectChangeType.AttributeFlow or ObjectChangeType.DriftCorrection);
+        // Attribute flows: count RPEIs with primary type AttributeFlow, plus absorbed flows
+        // from RPEIs where the primary type is something else (e.g. Joined, Projected, Disconnected)
+        // but attribute flows also occurred (tracked via AttributeFlowCount)
+        activity.TotalAttributeFlows = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.AttributeFlow)
+            + rpeis.Where(r => r.AttributeFlowCount is > 0).Sum(r => r.AttributeFlowCount!.Value);
 
-        // Deletes: Deleted (import), Disconnected (sync), Deprovisioned (export)
-        activity.TotalObjectDeletes = rpeis.Count(r =>
-            r.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected or ObjectChangeType.Deprovisioned);
+        activity.TotalDisconnected = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Disconnected);
+        activity.TotalDisconnectedOutOfScope = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.DisconnectedOutOfScope);
+        activity.TotalOutOfScopeRetainJoin = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.OutOfScopeRetainJoin);
+        activity.TotalDriftCorrections = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.DriftCorrection);
 
-        // Errors: Any RPEI with an error
-        activity.TotalObjectErrors = rpeis.Count(r =>
+        // Export stats
+        activity.TotalProvisioned = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Provisioned);
+        activity.TotalExported = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Exported);
+        activity.TotalDeprovisioned = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Deprovisioned);
+
+        // Direct creation stats
+        activity.TotalCreated = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Created);
+
+        // Pending export stats
+        activity.TotalPendingExports = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.PendingExport);
+
+        // Errors: any RPEI with an error type set
+        activity.TotalErrors = rpeis.Count(r =>
             r.ErrorType.HasValue && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
 
-        Log.Verbose("CalculateActivitySummaryStats: Activity {ActivityId} - Creates={Creates}, Updates={Updates}, Flows={Flows}, Deletes={Deletes}, Errors={Errors}",
-            activity.Id, activity.TotalObjectCreates, activity.TotalObjectUpdates, activity.TotalObjectFlows, activity.TotalObjectDeletes, activity.TotalObjectErrors);
+        Log.Verbose("CalculateActivitySummaryStats: Activity {ActivityId} - " +
+            "Added={Added}, Updated={Updated}, Deleted={Deleted}, " +
+            "Projected={Projected}, Joined={Joined}, AttributeFlows={AttributeFlows}, " +
+            "Disconnected={Disconnected}, DisconnectedOutOfScope={DisconnectedOutOfScope}, " +
+            "OutOfScopeRetainJoin={OutOfScopeRetainJoin}, DriftCorrections={DriftCorrections}, " +
+            "Provisioned={Provisioned}, Exported={Exported}, Deprovisioned={Deprovisioned}, " +
+            "Created={Created}, PendingExports={PendingExports}, Errors={Errors}",
+            activity.Id,
+            activity.TotalAdded, activity.TotalUpdated, activity.TotalDeleted,
+            activity.TotalProjected, activity.TotalJoined, activity.TotalAttributeFlows,
+            activity.TotalDisconnected, activity.TotalDisconnectedOutOfScope,
+            activity.TotalOutOfScopeRetainJoin, activity.TotalDriftCorrections,
+            activity.TotalProvisioned, activity.TotalExported, activity.TotalDeprovisioned,
+            activity.TotalCreated, activity.TotalPendingExports, activity.TotalErrors);
     }
 
     /// <summary>
@@ -618,7 +643,11 @@ public class Worker : BackgroundService
                 // This handles EF Core tracking issues or DbContext disposal problems
                 activity.Status = ActivityStatus.FailedWithError;
                 activity.ErrorMessage = $"{context}: {originalException.Message}";
-                activity.ErrorStackTrace = originalException.StackTrace;
+
+                // Only persist stack traces for unexpected errors (bugs), not for operational errors
+                if (originalException is not OperationalException)
+                    activity.ErrorStackTrace = originalException.StackTrace;
+
                 activity.ExecutionTime = DateTime.UtcNow - activity.Executed;
                 activity.TotalActivityTime = DateTime.UtcNow - activity.Created;
 

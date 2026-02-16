@@ -327,7 +327,7 @@
                           Style="@(_activityRunProfileExecutionStats.TotalObjectErrors > 0
                                  ? $"background-color: {Colors.Red.Default}; color: {Colors.Shades.White}; border-left: 4px solid {Colors.Red.Darken3}; min-width: 120px;"
                                  : $"border-left: 4px solid {Colors.Green.Default}; min-width: 120px;")">
-                    <MudText Typo="Typo.button" Style="@(_activityRunProfileExecutionStats.TotalObjectErrors > 0 ? $"color: {Colors.Shades.White};" : "")">Errors</MudText>
+                    <MudText Typo="Typo.button" Class="mud-text-secondary" Style="@(_activityRunProfileExecutionStats.TotalObjectErrors > 0 ? $"color: {Colors.Shades.White};" : "")">Errors</MudText>
                     <MudText Typo="Typo.h4" Style="@(_activityRunProfileExecutionStats.TotalObjectErrors > 0 ? $"color: {Colors.Shades.White};" : "")">@_activityRunProfileExecutionStats.TotalObjectErrors.ToString("N0")</MudText>
                 </MudPaper>
             </MudStack>

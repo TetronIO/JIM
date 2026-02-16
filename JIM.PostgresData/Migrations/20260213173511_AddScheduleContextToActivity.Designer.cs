@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260213173511_AddScheduleContextToActivity")]
+    partial class AddScheduleContextToActivity
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -155,52 +158,19 @@ namespace JIM.PostgresData.Migrations
                     b.Property<TimeSpan?>("TotalActivityTime")
                         .HasColumnType("interval");
 
-                    b.Property<int>("TotalAdded")
+                    b.Property<int>("TotalObjectCreates")
                         .HasColumnType("integer");
 
-                    b.Property<int>("TotalAttributeFlows")
+                    b.Property<int>("TotalObjectDeletes")
                         .HasColumnType("integer");
 
-                    b.Property<int>("TotalCreated")
+                    b.Property<int>("TotalObjectErrors")
                         .HasColumnType("integer");
 
-                    b.Property<int>("TotalDeleted")
+                    b.Property<int>("TotalObjectFlows")
                         .HasColumnType("integer");
 
-                    b.Property<int>("TotalDeprovisioned")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TotalDisconnected")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TotalDisconnectedOutOfScope")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TotalDriftCorrections")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TotalErrors")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TotalExported")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TotalJoined")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TotalOutOfScopeRetainJoin")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TotalPendingExports")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TotalProjected")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TotalProvisioned")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TotalUpdated")
+                    b.Property<int>("TotalObjectUpdates")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
@@ -226,9 +196,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<Guid>("ActivityId")
                         .HasColumnType("uuid");
-
-                    b.Property<int?>("AttributeFlowCount")
-                        .HasColumnType("integer");
 
                     b.Property<Guid?>("ConnectedSystemObjectId")
                         .HasColumnType("uuid");

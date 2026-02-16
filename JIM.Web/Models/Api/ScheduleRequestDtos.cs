@@ -293,7 +293,7 @@ public class ScheduleStepRequest
             Id = Id ?? Guid.NewGuid(),
             ScheduleId = scheduleId,
             StepIndex = StepIndex,
-            Name = Name ?? string.Empty,
+            Name = Name,
             ExecutionMode = ExecutionMode,
             StepType = StepType,
             ContinueOnFailure = ContinueOnFailure,

@@ -22,9 +22,9 @@
                 New Schedule
             </MudButton>
             <MudSpacer />
-            <MudTextField T="string" ValueChanged="@(s => OnSearch(s))" Variant="Variant.Outlined" Placeholder="Search..." Margin="Margin.Dense"
+            <MudTextField T="string" ValueChanged="@(s => OnSearch(s))" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense"
                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                          IconSize="Size.Medium" Class="mt-0" Style="max-width: 300px;" />
+                          IconSize="Size.Medium" Class="mt-0" />
         </ToolBarContent>
         <HeaderContent>
             <MudTh>
@@ -127,24 +127,24 @@
                     @if (context.IsEnabled)
                     {
                         <MudTooltip Text="Disable" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Pause"
+                            <MudIconButton Icon="@Icons.Material.Filled.Pause" Size="Size.Small"
                                            OnClick="@(() => HandleToggleEnabledAsync(context))" />
                         </MudTooltip>
                     }
                     else
                     {
                         <MudTooltip Text="Enable" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Outlined.PlayArrow"
+                            <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small"
                                            OnClick="@(() => HandleToggleEnabledAsync(context))" />
                         </MudTooltip>
                     }
                     <MudTooltip Text="Run Now" Arrow="true" Placement="Placement.Top">
-                        <MudIconButton Icon="@Icons.Material.Outlined.PlayCircle" Color="Color.Primary"
+                        <MudIconButton Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Small" Color="Color.Primary"
                                        OnClick="@(() => HandleRunNowAsync(context))"
                                        Disabled="@(context.Steps.Count == 0)" />
                     </MudTooltip>
                     <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
-                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error"
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                        OnClick="@(() => HandleDeleteAsync(context))" />
                     </MudTooltip>
                 </MudStack>

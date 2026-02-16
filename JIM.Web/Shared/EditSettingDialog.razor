@@ -10,10 +10,7 @@
                 @switch (Setting.ValueType)
                 {
                     case ServiceSettingValueType.Boolean:
-                        <MudSelect T="string" @bind-Value="_value" Label="Value" Variant="Variant.Outlined">
-                            <MudSelectItem Value="@("true")">True</MudSelectItem>
-                            <MudSelectItem Value="@("false")">False</MudSelectItem>
-                        </MudSelect>
+                        <MudSwitch T="bool" @bind-Value="_boolValue" Color="Color.Primary" Label="@(_boolValue ? "Enabled" : "Disabled")" />
                         break;
 
                     case ServiceSettingValueType.Enum:
@@ -50,7 +47,7 @@
 
                 @if (!string.IsNullOrEmpty(Setting.DefaultValue))
                 {
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Default: @Setting.DefaultValue</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Default: @GetDefaultDisplayValue()</MudText>
                 }
             }
         </MudStack>
@@ -70,6 +67,7 @@
 
     private string? _value;
     private int? _intValue;
+    private bool _boolValue;
     private bool _showPassword;
 
     protected override void OnInitialized()
@@ -80,6 +78,10 @@
             if (Setting.ValueType == ServiceSettingValueType.Integer && int.TryParse(_value, out var intVal))
             {
                 _intValue = intVal;
+            }
+            if (Setting.ValueType == ServiceSettingValueType.Boolean)
+            {
+                _boolValue = string.Equals(_value, "true", StringComparison.OrdinalIgnoreCase);
             }
         }
     }
@@ -98,13 +100,23 @@
         return Enumerable.Empty<string>();
     }
 
+    private string GetDefaultDisplayValue()
+    {
+        if (Setting?.ValueType == ServiceSettingValueType.Boolean)
+            return string.Equals(Setting.DefaultValue, "true", StringComparison.OrdinalIgnoreCase) ? "Enabled" : "Disabled";
+        return Setting?.DefaultValue ?? string.Empty;
+    }
+
     private void Cancel() => MudDialog.Cancel();
 
     private void Submit()
     {
-        var result = Setting?.ValueType == ServiceSettingValueType.Integer
-            ? _intValue?.ToString()
-            : _value;
+        var result = Setting?.ValueType switch
+        {
+            ServiceSettingValueType.Integer => _intValue?.ToString(),
+            ServiceSettingValueType.Boolean => _boolValue.ToString().ToLowerInvariant(),
+            _ => _value
+        };
         MudDialog.Close(DialogResult.Ok(result));
     }
 }

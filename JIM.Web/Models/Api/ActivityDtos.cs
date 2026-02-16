@@ -94,6 +94,98 @@ public class ActivityHeader
     /// </summary>
     public ConnectedSystemRunType? ConnectedSystemRunType { get; set; }
 
+    #region Import Stats
+    /// <summary>
+    /// Count of new CSOs added to staging during import.
+    /// </summary>
+    public int TotalAdded { get; set; }
+
+    /// <summary>
+    /// Count of existing CSOs updated during import.
+    /// </summary>
+    public int TotalUpdated { get; set; }
+
+    /// <summary>
+    /// Count of CSOs marked as deleted (source system deletion detected).
+    /// </summary>
+    public int TotalDeleted { get; set; }
+    #endregion
+
+    #region Sync Stats
+    /// <summary>
+    /// Count of new MVOs created via projection.
+    /// </summary>
+    public int TotalProjected { get; set; }
+
+    /// <summary>
+    /// Count of CSOs joined to existing MVOs.
+    /// </summary>
+    public int TotalJoined { get; set; }
+
+    /// <summary>
+    /// Count of attribute flow operations.
+    /// </summary>
+    public int TotalAttributeFlows { get; set; }
+
+    /// <summary>
+    /// Count of CSOs disconnected from MVOs.
+    /// </summary>
+    public int TotalDisconnected { get; set; }
+
+    /// <summary>
+    /// Count of CSOs disconnected because they fell out of scope of import sync rule scoping criteria.
+    /// </summary>
+    public int TotalDisconnectedOutOfScope { get; set; }
+
+    /// <summary>
+    /// Count of CSOs that fell out of scope but remained joined (InboundOutOfScopeAction = RemainJoined).
+    /// </summary>
+    public int TotalOutOfScopeRetainJoin { get; set; }
+
+    /// <summary>
+    /// Count of CSOs where drift was detected and corrective pending exports were created.
+    /// </summary>
+    public int TotalDriftCorrections { get; set; }
+    #endregion
+
+    #region Export Stats
+    /// <summary>
+    /// Count of new objects provisioned to target systems.
+    /// </summary>
+    public int TotalProvisioned { get; set; }
+
+    /// <summary>
+    /// Count of existing objects exported with updated attributes.
+    /// </summary>
+    public int TotalExported { get; set; }
+
+    /// <summary>
+    /// Count of objects deprovisioned from target systems.
+    /// </summary>
+    public int TotalDeprovisioned { get; set; }
+    #endregion
+
+    #region Direct Creation Stats
+    /// <summary>
+    /// Count of MVOs created directly (data generation, admin UI) rather than via projection/sync.
+    /// </summary>
+    public int TotalCreated { get; set; }
+    #endregion
+
+    #region Pending Export Stats
+    /// <summary>
+    /// Count of pending exports staged for the next export run.
+    /// </summary>
+    public int TotalPendingExports { get; set; }
+    #endregion
+
+    #region Shared Stats
+    /// <summary>
+    /// Count of RPEIs with errors.
+    /// </summary>
+    public int TotalErrors { get; set; }
+    #endregion
+
     /// <summary>
     /// Creates a header DTO from an Activity entity.
     /// </summary>
@@ -117,7 +209,35 @@ public class ActivityHeader
             ObjectsProcessed = activity.ObjectsProcessed,
             ExecutionTime = activity.ExecutionTime,
             TotalActivityTime = activity.TotalActivityTime,
-            ConnectedSystemRunType = activity.ConnectedSystemRunType
+            ConnectedSystemRunType = activity.ConnectedSystemRunType,
+
+            // Import
+            TotalAdded = activity.TotalAdded,
+            TotalUpdated = activity.TotalUpdated,
+            TotalDeleted = activity.TotalDeleted,
+
+            // Sync
+            TotalProjected = activity.TotalProjected,
+            TotalJoined = activity.TotalJoined,
+            TotalAttributeFlows = activity.TotalAttributeFlows,
+            TotalDisconnected = activity.TotalDisconnected,
+            TotalDisconnectedOutOfScope = activity.TotalDisconnectedOutOfScope,
+            TotalOutOfScopeRetainJoin = activity.TotalOutOfScopeRetainJoin,
+            TotalDriftCorrections = activity.TotalDriftCorrections,
+
+            // Export
+            TotalProvisioned = activity.TotalProvisioned,
+            TotalExported = activity.TotalExported,
+            TotalDeprovisioned = activity.TotalDeprovisioned,
+
+            // Direct Creation
+            TotalCreated = activity.TotalCreated,
+
+            // Pending Exports
+            TotalPendingExports = activity.TotalPendingExports,
+
+            // Shared
+            TotalErrors = activity.TotalErrors
         };
     }
 }
@@ -375,6 +495,11 @@ public class ActivityRunProfileExecutionStatsDto
     /// Number of CSOs that fell out of scope but remained joined (InboundOutOfScopeAction = RemainJoined).
     /// </summary>
     public int TotalOutOfScopeRetainJoin { get; set; }
+
+    /// <summary>
+    /// Number of CSOs where drift was detected and corrective pending exports were created.
+    /// </summary>
+    public int TotalDriftCorrections { get; set; }
     #endregion
 
     #region Export Stats
@@ -423,21 +548,11 @@ public class ActivityRunProfileExecutionStatsDto
     public int TotalPendingExportsFailed { get; set; }
     #endregion
 
-    #region Aggregate Stats (for backward compatibility)
+    #region Direct Creation Stats
     /// <summary>
-    /// Aggregate count of all "create" operations (CSO adds, projections, provisioning).
+    /// Number of MVOs created directly (data generation, admin UI) rather than via projection/sync.
     /// </summary>
-    public int TotalObjectCreates { get; set; }
-
-    /// <summary>
-    /// Aggregate count of all "update" operations (CSO updates, joins, attribute flows, exports).
-    /// </summary>
-    public int TotalObjectUpdates { get; set; }
-
-    /// <summary>
-    /// Aggregate count of all "delete" operations (CSO deletes, disconnections, deprovisioning).
-    /// </summary>
-    public int TotalObjectDeletes { get; set; }
+    public int TotalCreated { get; set; }
     #endregion
 
     /// <summary>
@@ -466,6 +581,7 @@ public class ActivityRunProfileExecutionStatsDto
             TotalDisconnections = stats.TotalDisconnections,
             TotalDisconnectedOutOfScope = stats.TotalDisconnectedOutOfScope,
             TotalOutOfScopeRetainJoin = stats.TotalOutOfScopeRetainJoin,
+            TotalDriftCorrections = stats.TotalDriftCorrections,
 
             // Export
             TotalProvisioned = stats.TotalProvisioned,
@@ -480,10 +596,8 @@ public class ActivityRunProfileExecutionStatsDto
             TotalPendingExportsRetrying = stats.TotalPendingExportsRetrying,
             TotalPendingExportsFailed = stats.TotalPendingExportsFailed,
 
-            // Aggregates (computed from model)
-            TotalObjectCreates = stats.TotalObjectCreates,
-            TotalObjectUpdates = stats.TotalObjectUpdates,
-            TotalObjectDeletes = stats.TotalObjectDeletes
+            // Direct Creation
+            TotalCreated = stats.TotalCreated
         };
     }
 }

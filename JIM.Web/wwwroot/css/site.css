@@ -516,7 +516,6 @@ html[lang] .jim-paper-danger-zone {
 
 /* Description text below switches/checkboxes */
 .mud-text-secondary {
-    color: var(--mud-palette-text-primary) !important;
     opacity: 0.8 !important;
 }
 
@@ -753,13 +752,17 @@ html[lang] .mud-dialog .mud-paper-outlined {
     width: 80px;
 }
 
+.jim-attr-header-extid {
+    width: 140px;
+}
+
 .jim-attr-header-value {
     width: auto;
 }
 
 .jim-attribute-table tbody tr td {
     padding: 12px 16px !important;
-    vertical-align: top;
+    vertical-align: middle;
 }
 
 .jim-attr-name {

@@ -779,11 +779,28 @@ function Assert-ActivitySuccess {
         $stats = Get-JIMActivityStats -ActivityId $ActivityId -ErrorAction SilentlyContinue
         if ($stats) {
             $errorDetails += "Statistics:"
-            $errorDetails += "  - Objects Processed: $($stats.totalObjectChangeCount)"
-            $errorDetails += "  - Creates: $($stats.totalObjectCreates)"
-            $errorDetails += "  - Updates: $($stats.totalObjectUpdates)"
-            $errorDetails += "  - Deletes: $($stats.totalObjectDeletes)"
+            $errorDetails += "  - Objects Processed: $($stats.totalObjectsProcessed)"
+            $errorDetails += "  - Object Changes: $($stats.totalObjectChangeCount)"
+            $errorDetails += "  - Unchanged: $($stats.totalUnchanged)"
             $errorDetails += "  - Errors: $($stats.totalObjectErrors)"
+            # Import stats
+            if ($stats.totalCsoAdds -gt 0) { $errorDetails += "  - CSO Adds: $($stats.totalCsoAdds)" }
+            if ($stats.totalCsoUpdates -gt 0) { $errorDetails += "  - CSO Updates: $($stats.totalCsoUpdates)" }
+            if ($stats.totalCsoDeletes -gt 0) { $errorDetails += "  - CSO Deletes: $($stats.totalCsoDeletes)" }
+            # Sync stats
+            if ($stats.totalProjections -gt 0) { $errorDetails += "  - Projections: $($stats.totalProjections)" }
+            if ($stats.totalJoins -gt 0) { $errorDetails += "  - Joins: $($stats.totalJoins)" }
+            if ($stats.totalAttributeFlows -gt 0) { $errorDetails += "  - Attribute Flows: $($stats.totalAttributeFlows)" }
+            if ($stats.totalDisconnections -gt 0) { $errorDetails += "  - Disconnections: $($stats.totalDisconnections)" }
+            if ($stats.totalDisconnectedOutOfScope -gt 0) { $errorDetails += "  - Disconnected (Out of Scope): $($stats.totalDisconnectedOutOfScope)" }
+            if ($stats.totalOutOfScopeRetainJoin -gt 0) { $errorDetails += "  - Out of Scope (Retain Join): $($stats.totalOutOfScopeRetainJoin)" }
+            if ($stats.totalDriftCorrections -gt 0) { $errorDetails += "  - Drift Corrections: $($stats.totalDriftCorrections)" }
+            # Export stats
+            if ($stats.totalProvisioned -gt 0) { $errorDetails += "  - Provisioned: $($stats.totalProvisioned)" }
+            if ($stats.totalExported -gt 0) { $errorDetails += "  - Exported: $($stats.totalExported)" }
+            if ($stats.totalDeprovisioned -gt 0) { $errorDetails += "  - Deprovisioned: $($stats.totalDeprovisioned)" }
+            # Direct creation stats
+            if ($stats.totalCreated -gt 0) { $errorDetails += "  - Created: $($stats.totalCreated)" }
 
             # If there are errors, try to get the first few error items
             if ($stats.totalObjectErrors -gt 0) {
@@ -996,6 +1013,139 @@ function Get-ActivityChangeCount {
         'PendingExportConfirmed' { return $stats.totalPendingExportsConfirmed }
         default { return 0 }
     }
+}
+
+function Assert-ScheduleExecutionSuccess {
+    <#
+    .SYNOPSIS
+        Assert that a Schedule Execution completed successfully and all step activities succeeded.
+
+    .DESCRIPTION
+        Validates that a JIM Schedule Execution completed without errors by checking:
+        1. The overall execution status is 'Completed'
+        2. Every step's activity status is acceptable (Complete, or CompleteWithWarning if allowed)
+
+        Uses the execution detail endpoint which returns step-level activity status information.
+        This prevents integration tests from silently passing when a schedule execution
+        reports 'Completed' but individual step activities had warnings or errors.
+
+    .PARAMETER ExecutionId
+        The Schedule Execution ID (GUID) to validate.
+
+    .PARAMETER Name
+        A friendly name for the execution (used in error messages).
+
+    .PARAMETER AllowWarnings
+        If specified, allows 'CompleteWithWarning' activity status to pass.
+        Use sparingly - warnings often indicate real issues.
+
+    .EXAMPLE
+        Assert-ScheduleExecutionSuccess -ExecutionId $execution.id -Name "Multi-Step Schedule"
+
+    .EXAMPLE
+        Assert-ScheduleExecutionSuccess -ExecutionId $execution.id -Name "Parallel Schedule" -AllowWarnings
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ExecutionId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Name,
+
+        [Parameter(Mandatory=$false)]
+        [switch]$AllowWarnings
+    )
+
+    # Fetch the execution details (includes step info with activityId and activityStatus)
+    $execution = Get-JIMScheduleExecution -Id $ExecutionId
+
+    if (-not $execution) {
+        throw "Schedule execution not found: $ExecutionId for '$Name'"
+    }
+
+    # Check overall execution status
+    $status = $execution.status
+    $executionFailed = ($status -ne "Completed" -and $status -ne 2)
+
+    if ($executionFailed) {
+        Write-Host "  ✗ $Name FAILED (execution status: $status)" -ForegroundColor Red
+        if ($execution.errorMessage) {
+            Write-Host "    Error: $($execution.errorMessage)" -ForegroundColor Red
+        }
+    }
+
+    # Validate individual step activity statuses from the execution detail
+    $steps = $execution.steps
+
+    if (-not $steps -or $steps.Count -eq 0) {
+        if ($executionFailed) {
+            $errorMsg = "Schedule execution '$Name' ended with status: $status"
+            if ($execution.errorMessage) {
+                $errorMsg += " - Error: $($execution.errorMessage)"
+            }
+            throw $errorMsg
+        }
+        # No step detail available - fall back to execution status check only
+        Write-Host "  ✓ $Name completed successfully (Status: Completed)" -ForegroundColor Green
+        return
+    }
+
+    # Define acceptable activity statuses
+    $acceptableStatuses = @('Complete')
+    if ($AllowWarnings) {
+        $acceptableStatuses += 'CompleteWithWarning'
+    }
+
+    $failedSteps = @()
+    $validatedCount = 0
+
+    foreach ($step in $steps) {
+        $activityStatus = $step.activityStatus
+
+        # Skip steps without activity status (not yet run, or no activity linked)
+        if (-not $activityStatus) {
+            continue
+        }
+
+        $validatedCount++
+
+        if ($activityStatus -notin $acceptableStatuses) {
+            $failedSteps += $step
+        }
+    }
+
+    if ($failedSteps.Count -gt 0) {
+        Write-Host "  ✗ $Name has $($failedSteps.Count) failed step activity/activities:" -ForegroundColor Red
+        foreach ($failed in $failedSteps) {
+            $stepName = $failed.name ?? "Step $($failed.stepIndex)"
+            Write-Host "    - $stepName : ActivityStatus=$($failed.activityStatus)" -ForegroundColor Red
+            if ($failed.errorMessage) {
+                Write-Host "      Error: $($failed.errorMessage)" -ForegroundColor Red
+            }
+
+            # If the step has an activityId, use Assert-ActivitySuccess for detailed diagnostics
+            if ($failed.activityId) {
+                try {
+                    Assert-ActivitySuccess -ActivityId $failed.activityId -Name $stepName
+                }
+                catch {
+                    # Assert-ActivitySuccess already printed diagnostics, continue to next step
+                }
+            }
+        }
+        throw "Schedule execution '$Name' failed: $($failedSteps.Count) step activity/activities had non-success status (ExecutionId: $ExecutionId)"
+    }
+
+    if ($executionFailed) {
+        # Execution failed but no step-level failures found (e.g. infrastructure error)
+        $errorMsg = "Schedule execution '$Name' ended with status: $status"
+        if ($execution.errorMessage) {
+            $errorMsg += " - Error: $($execution.errorMessage)"
+        }
+        throw $errorMsg
+    }
+
+    Write-Host "  ✓ $Name completed successfully (Status: Completed, $validatedCount step activities OK)" -ForegroundColor Green
 }
 
 # Functions are automatically available when dot-sourced

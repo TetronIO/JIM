@@ -281,6 +281,29 @@ public class ActivityRepository : IActivityRepository
             .AsQueryable();
     }
 
+    // -----------------------------------------------------------------------------------------------------------------
+    // Schedule execution queries
+    // -----------------------------------------------------------------------------------------------------------------
+
+    public async Task<List<Activity>> GetActivitiesByScheduleExecutionAsync(Guid scheduleExecutionId)
+    {
+        return await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ScheduleExecutionId == scheduleExecutionId)
+            .OrderBy(a => a.ScheduleStepIndex)
+            .ThenBy(a => a.Created)
+            .ToListAsync();
+    }
+
+    public async Task<List<Activity>> GetActivitiesByScheduleExecutionStepAsync(Guid scheduleExecutionId, int stepIndex)
+    {
+        return await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ScheduleExecutionId == scheduleExecutionId && a.ScheduleStepIndex == stepIndex)
+            .OrderBy(a => a.Created)
+            .ToListAsync();
+    }
+
     #region synchronisation related
     public async Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(
         Guid activityId,
@@ -514,10 +537,22 @@ public class ActivityRepository : IActivityRepository
         var totalProjections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Projected).Sum(x => x.Count);
         var totalJoins = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Joined).Sum(x => x.Count);
         var totalAttributeFlows = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.AttributeFlow).Sum(x => x.Count);
+
+        // Count absorbed attribute flows: RPEIs where the primary change type is not AttributeFlow
+        // but attribute flows still occurred (e.g. Joined + attribute flow, Projected + attribute flow).
+        // These are tracked via the AttributeFlowCount field on the RPEI.
+        var absorbedAttributeFlows = await rpeiQuery
+            .Where(q => q.AttributeFlowCount != null && q.AttributeFlowCount > 0 && q.ObjectChangeType != ObjectChangeType.AttributeFlow)
+            .SumAsync(q => q.AttributeFlowCount!.Value);
+        totalAttributeFlows += absorbedAttributeFlows;
+
         var totalDisconnections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Disconnected).Sum(x => x.Count);
         var totalDisconnectedOutOfScope = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.DisconnectedOutOfScope).Sum(x => x.Count);
         var totalOutOfScopeRetainJoin = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.OutOfScopeRetainJoin).Sum(x => x.Count);
         var totalDriftCorrections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.DriftCorrection).Sum(x => x.Count);
+
+        // Direct creation stats
+        var totalCreated = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Created).Sum(x => x.Count);
 
         // Export stats
         var totalProvisioned = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Provisioned).Sum(x => x.Count);
@@ -563,6 +598,9 @@ public class ActivityRepository : IActivityRepository
             TotalDisconnectedOutOfScope = totalDisconnectedOutOfScope,
             TotalOutOfScopeRetainJoin = totalOutOfScopeRetainJoin,
             TotalDriftCorrections = totalDriftCorrections,
+
+            // Direct creation stats
+            TotalCreated = totalCreated,
 
             // Export stats
             TotalProvisioned = totalProvisioned,

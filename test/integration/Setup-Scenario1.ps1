@@ -1463,6 +1463,20 @@ try {
     $crossDomainDeltaImportProfile = $crossDomainImportProfile
     Write-Host "  (Cross-Domain uses Full Import for confirming exports - no Delta Import for CSV)" -ForegroundColor DarkGray
 
+    # Full Synchronisation (Cross-Domain)
+    $crossDomainFullSyncProfile = $crossDomainProfiles | Where-Object { $_.name -eq "Full Synchronisation" }
+    if (-not $crossDomainFullSyncProfile) {
+        $crossDomainFullSyncProfile = New-JIMRunProfile `
+            -Name "Full Synchronisation" `
+            -ConnectedSystemId $crossDomainSystem.id `
+            -RunType "FullSynchronisation" `
+            -PassThru
+        Write-Host "  ✓ Created 'Full Synchronisation' run profile (Cross-Domain)" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Run profile 'Full Synchronisation' already exists (Cross-Domain)" -ForegroundColor Gray
+    }
+
     # Delta Synchronisation (Cross-Domain)
     $crossDomainDeltaSyncProfile = $crossDomainProfiles | Where-Object { $_.name -eq "Delta Synchronisation" }
     if (-not $crossDomainDeltaSyncProfile) {

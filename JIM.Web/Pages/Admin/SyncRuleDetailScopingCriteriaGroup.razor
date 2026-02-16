@@ -88,12 +88,13 @@
             </MudSelect>
         </DialogContent>
         <DialogActions>
+            <MudButton DropShadow="false" Variant="Variant.Filled" Color="Color.Default"
+                       OnClick="@(() => _addCriteriaGroupDialogVisible = false)" Class="me-2">Cancel</MudButton>
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        OnClick="HandleAddCriteriaGroupButtonClick"
                        Disabled="DisableAddCriteriaGroupFormButton()"
-                       DropShadow="false"
-                       Class="ma-4">Add Group</MudButton>
+                       DropShadow="false">Add Group</MudButton>
         </DialogActions>
     </MudDialog>
 
@@ -192,7 +193,10 @@
 
     </DialogContent>
     <DialogActions>
-        <MudButton Disabled="DisableAddCriteriaButton()" Variant="Variant.Filled" DropShadow="false" Color="Color.Primary" OnClick="HandleAddCriteriaButtonClick" Class="ma-4">Add Criteria</MudButton>
+        <MudButton DropShadow="false" Variant="Variant.Filled" Color="Color.Default"
+            OnClick="@(() => _addCriteriaDialogVisible = false)" Class="me-2">Cancel</MudButton>
+        <MudButton Disabled="DisableAddCriteriaButton()" Variant="Variant.Filled" DropShadow="false"
+            Color="Color.Primary" OnClick="HandleAddCriteriaButtonClick">Add Criteria</MudButton>
     </DialogActions>
 </MudDialog>
 

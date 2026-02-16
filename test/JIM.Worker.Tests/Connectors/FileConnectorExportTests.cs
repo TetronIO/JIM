@@ -79,7 +79,7 @@ public class FileConnectorExportTests
         var pendingExports = CreateSingleCreatePendingExport("emp001");
 
         // Act & Assert
-        Assert.Throws<InvalidOperationException>(() => _connector.Export(settingValues, pendingExports));
+        Assert.Throws<JIM.Models.Exceptions.InvalidSettingValuesException>(() => _connector.Export(settingValues, pendingExports));
     }
 
     [Test]

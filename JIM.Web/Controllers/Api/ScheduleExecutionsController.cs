@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using JIM.Application;
+using JIM.Models.Activities;
 using JIM.Models.Scheduling;
 using JIM.Models.Tasking;
 using JIM.Web.Models.Api;
@@ -78,8 +79,15 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
 
         var dto = ScheduleExecutionDetailDto.FromEntity(execution);
 
-        // Get worker tasks to populate step details
+        // Get Activities for this execution (persist after worker task deletion)
+        var activities = await _application.Repository.Activity.GetActivitiesByScheduleExecutionAsync(id);
+        var activitiesByStep = activities.GroupBy(a => a.ScheduleStepIndex ?? -1)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Also get any still-active worker tasks (for in-progress status display)
         var workerTasks = await _application.Repository.Tasking.GetWorkerTasksByScheduleExecutionAsync(id);
+        var tasksByStep = workerTasks.GroupBy(t => t.ScheduleStepIndex ?? -1)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         // Get the schedule steps for step names and types
         if (execution.Schedule != null)
@@ -91,18 +99,28 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
             for (var i = 0; i < execution.TotalSteps; i++)
             {
                 var step = stepsByIndex.GetValueOrDefault(i);
-                var task = workerTasks.FirstOrDefault(t => t.ScheduleStepIndex == i);
+                var stepActivities = activitiesByStep.GetValueOrDefault(i);
+                var stepTasks = tasksByStep.GetValueOrDefault(i);
+
+                // Use the first activity for this step (for single-step cases; parallel steps may have multiple)
+                var activity = stepActivities?.FirstOrDefault();
+                var task = stepTasks?.FirstOrDefault();
 
                 dto.Steps.Add(new ScheduleExecutionStepDto
                 {
                     StepIndex = i,
                     Name = step?.Name ?? $"Step {i + 1}",
                     StepType = step?.StepType ?? ScheduleStepType.RunProfile,
-                    Status = GetStepStatus(task, i, execution.CurrentStepIndex, execution.Status),
+                    Status = GetStepStatus(task, activity, i, execution.CurrentStepIndex, execution.Status),
                     TaskId = task?.Id,
-                    StartedAt = null, // WorkerTask doesn't track start time directly
-                    CompletedAt = null, // WorkerTask doesn't track completion time directly
-                    ErrorMessage = null
+                    StartedAt = activity?.Executed,
+                    CompletedAt = activity?.Status is ActivityStatus.Complete or ActivityStatus.CompleteWithWarning
+                        or ActivityStatus.CompleteWithError or ActivityStatus.FailedWithError or ActivityStatus.Cancelled
+                        ? activity.Created + (activity.TotalActivityTime ?? TimeSpan.Zero)
+                        : null,
+                    ErrorMessage = activity?.ErrorMessage,
+                    ActivityId = activity?.Id,
+                    ActivityStatus = activity?.Status.ToString()
                 });
             }
         }
@@ -180,33 +198,52 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
     }
 
     /// <summary>
-    /// Determines the display status for a step based on its task and execution state.
+    /// Determines the display status for a step based on its activity, task, and execution state.
+    /// Prefers Activity status (persists after task deletion) over WorkerTask status (ephemeral).
     /// </summary>
     private static string GetStepStatus(
         WorkerTask? task,
+        Activity? activity,
         int stepIndex,
         int currentStepIndex,
         ScheduleExecutionStatus executionStatus)
     {
-        if (task == null)
+        // If there's an active worker task, use its status
+        if (task != null)
         {
-            if (stepIndex < currentStepIndex)
+            return task.Status switch
             {
-                return "Completed";
-            }
-            if (stepIndex == currentStepIndex && executionStatus == ScheduleExecutionStatus.InProgress)
-            {
-                return "Waiting";
-            }
-            return "Pending";
+                WorkerTaskStatus.Queued => "Queued",
+                WorkerTaskStatus.Processing => "Processing",
+                WorkerTaskStatus.CancellationRequested => "Cancelling",
+                _ => "Unknown"
+            };
         }
 
-        return task.Status switch
+        // If there's an activity (persists after worker task deletion), use its status
+        if (activity != null)
         {
-            WorkerTaskStatus.Queued => "Queued",
-            WorkerTaskStatus.Processing => "Processing",
-            WorkerTaskStatus.CancellationRequested => "Cancelling",
-            _ => "Unknown"
-        };
+            return activity.Status switch
+            {
+                ActivityStatus.InProgress => "Processing",
+                ActivityStatus.Complete => "Completed",
+                ActivityStatus.CompleteWithWarning => "Completed with Warning",
+                ActivityStatus.CompleteWithError => "Completed with Error",
+                ActivityStatus.FailedWithError => "Failed",
+                ActivityStatus.Cancelled => "Cancelled",
+                _ => "Unknown"
+            };
+        }
+
+        // No task or activity — infer status from execution position
+        if (stepIndex < currentStepIndex)
+        {
+            return "Completed";
+        }
+        if (stepIndex == currentStepIndex && executionStatus == ScheduleExecutionStatus.InProgress)
+        {
+            return "Waiting";
+        }
+        return "Pending";
     }
 }

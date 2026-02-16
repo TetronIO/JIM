@@ -119,6 +119,11 @@ $connectedSystems = @(Get-JIMConnectedSystem)  # Force array even for single res
 if ($connectedSystems.Count -eq 0) {
     Write-Host "  No connected systems found - running Setup-Scenario1..." -ForegroundColor Yellow
 
+    # Generate test CSV data first (training-records.csv, cross-domain-users.csv, etc.)
+    # These must exist BEFORE Setup-Scenario1 runs, so schema discovery succeeds
+    Write-Host "  Generating test CSV data..." -ForegroundColor DarkGray
+    & "$PSScriptRoot/../Generate-TestCSV.ps1" -Template "Micro" -OutputPath "$PSScriptRoot/../../test-data"
+
     # Run Setup-Scenario1 to create the required test infrastructure
     $setupScript = "$PSScriptRoot/../Setup-Scenario1.ps1"
     if (-not (Test-Path $setupScript)) {
@@ -137,7 +142,21 @@ if ($connectedSystems.Count -eq 0) {
     }
 }
 
-$testSystem = $connectedSystems | Select-Object -First 1
+# Prefer "HR CSV Source" as it's always set up correctly by Setup-Scenario1
+$testSystem = $connectedSystems | Where-Object { $_.name -eq "HR CSV Source" } | Select-Object -First 1
+if (-not $testSystem) {
+    # Fall back to any system that has run profiles
+    foreach ($cs in $connectedSystems) {
+        $rp = @(Get-JIMRunProfile -ConnectedSystemId $cs.id)
+        if ($rp.Count -gt 0) {
+            $testSystem = $cs
+            break
+        }
+    }
+}
+if (-not $testSystem) {
+    throw "No suitable connected system found with run profiles."
+}
 Write-Host "  Using connected system: $($testSystem.name) (ID: $($testSystem.id))" -ForegroundColor DarkGray
 
 $runProfiles = @(Get-JIMRunProfile -ConnectedSystemId $testSystem.id)  # Force array
@@ -170,7 +189,7 @@ if ($Step -eq "Create" -or $Step -eq "All") {
     # Test 1: Create a manual schedule
     Write-Host "  Creating manual schedule..." -ForegroundColor DarkGray
     $manualSchedule = New-JIMSchedule -Name "Integration Test - Manual" `
-        -Description "Test schedule for manual trigger" `
+        -Description "Creation-only test - verifies schedule properties, not executed" `
         -TriggerType Manual `
         -PassThru
 
@@ -184,7 +203,7 @@ if ($Step -eq "Create" -or $Step -eq "All") {
     # Test 2: Create a cron schedule with custom expression (weekdays at 6am, noon, and 6pm)
     Write-Host "  Creating cron schedule with custom expression..." -ForegroundColor DarkGray
     $cronSchedule = New-JIMSchedule -Name "Integration Test - Cron" `
-        -Description "Test schedule for automatic trigger" `
+        -Description "Creation-only test - verifies cron trigger properties, not executed" `
         -TriggerType Cron `
         -PatternType Custom `
         -CronExpression "0 6,12,18 * * 1-5" `
@@ -199,7 +218,7 @@ if ($Step -eq "Create" -or $Step -eq "All") {
     # Test 3: Create an interval-style schedule using custom cron (every 2 hours on weekdays)
     Write-Host "  Creating interval-style schedule..." -ForegroundColor DarkGray
     $intervalSchedule = New-JIMSchedule -Name "Integration Test - Interval" `
-        -Description "Test schedule for interval trigger" `
+        -Description "Creation-only test - verifies interval cron properties, not executed" `
         -TriggerType Cron `
         -PatternType Custom `
         -CronExpression "0 8-18/2 * * *" `
@@ -291,9 +310,19 @@ if ($Step -eq "ManualTrigger" -or $Step -eq "All") {
     }
 
     Assert-NotNull -Value $finalExecution -Message "Execution retrieved"
-    Assert-Condition -Condition ($finalExecution.status -eq "Completed" -or $finalExecution.status -eq 2) -Message "Execution completed successfully"
 
-    $testResults.Steps += @{ Name = "Manual Trigger Completed"; Success = $true }
+    try {
+        Assert-ScheduleExecutionSuccess -ExecutionId $finalExecution.id -Name "Manual Trigger Execution"
+        $testResults.Steps += @{ Name = "Manual Trigger Completed"; Success = $true }
+    }
+    catch {
+        $testResults.Steps += @{ Name = "Manual Trigger Completed"; Success = $false; Error = $_.Exception.Message }
+        if (-not $ContinueOnError) {
+            Write-Host ""
+            Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+            exit 1
+        }
+    }
 
     Write-Host ""
 }
@@ -510,9 +539,19 @@ if ($Step -eq "MultiStep" -or $Step -eq "All") {
     }
 
     $finalExecution = Get-JIMScheduleExecution -Id $execution.id
-    Assert-Condition -Condition ($finalExecution.status -eq "Completed" -or $finalExecution.status -eq 2) -Message "Multi-step execution completed successfully"
 
-    $testResults.Steps += @{ Name = "Multi-Step Execution Completed"; Success = $true }
+    try {
+        Assert-ScheduleExecutionSuccess -ExecutionId $finalExecution.id -Name "Multi-Step Execution"
+        $testResults.Steps += @{ Name = "Multi-Step Execution Completed"; Success = $true }
+    }
+    catch {
+        $testResults.Steps += @{ Name = "Multi-Step Execution Completed"; Success = $false; Error = $_.Exception.Message }
+        if (-not $ContinueOnError) {
+            Write-Host ""
+            Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+            exit 1
+        }
+    }
 
     Write-Host ""
 }
@@ -542,10 +581,15 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
     if (-not $crossDomainSystem) { $missingCount++; Write-Host "  Missing: Cross-Domain Export" -ForegroundColor Yellow }
 
     if ($missingCount -gt 0) {
-        Write-Host "  SKIPPED: Parallel step testing requires 4 connected systems from extended Scenario1 setup" -ForegroundColor Yellow
+        Write-Host "  ✗ FAILED: Parallel step testing requires 4 connected systems from extended Scenario1 setup" -ForegroundColor Red
         Write-Host "  Found $($connectedSystems.Count) systems, missing $missingCount required systems" -ForegroundColor DarkGray
         Write-Host "  Run: ./Setup-Scenario1.ps1 first to create all required systems" -ForegroundColor DarkGray
-        $testResults.Steps += @{ Name = "Parallel Steps (Skipped - need 4 systems)"; Success = $true }
+        $testResults.Steps += @{ Name = "Parallel Steps (Missing $missingCount connected systems)"; Success = $false; Error = "Required connected systems not found" }
+        if (-not $ContinueOnError) {
+            Write-Host ""
+            Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+            exit 1
+        }
     }
     else {
         Write-Host "  Found all 4 required connected systems:" -ForegroundColor Green
@@ -563,9 +607,13 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
         $hrSync = $hrProfiles | Where-Object { $_.name -eq "Full Synchronisation" } | Select-Object -First 1
         $trainingImport = $trainingProfiles | Where-Object { $_.name -eq "Full Import" } | Select-Object -First 1
         $trainingSync = $trainingProfiles | Where-Object { $_.name -eq "Full Synchronisation" } | Select-Object -First 1
+        $ldapImport = $ldapProfiles | Where-Object { $_.name -eq "Full Import" } | Select-Object -First 1
+        $ldapSync = $ldapProfiles | Where-Object { $_.name -eq "Full Synchronisation" } | Select-Object -First 1
         $ldapExport = $ldapProfiles | Where-Object { $_.name -eq "Export" } | Select-Object -First 1
         $ldapDeltaImport = $ldapProfiles | Where-Object { $_.name -eq "Delta Import" } | Select-Object -First 1
         $ldapDeltaSync = $ldapProfiles | Where-Object { $_.name -eq "Delta Synchronisation" } | Select-Object -First 1
+        $crossDomainImport = $crossDomainProfiles | Where-Object { $_.name -eq "Full Import" } | Select-Object -First 1
+        $crossDomainSync = $crossDomainProfiles | Where-Object { $_.name -eq "Full Synchronisation" } | Select-Object -First 1
         $crossDomainExport = $crossDomainProfiles | Where-Object { $_.name -eq "Export" } | Select-Object -First 1
         # Note: CSV/File connectors don't support Delta Import (no USN change tracking)
         # Use Full Import for Cross-Domain confirming imports
@@ -573,12 +621,33 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
         $crossDomainDeltaSync = $crossDomainProfiles | Where-Object { $_.name -eq "Delta Synchronisation" } | Select-Object -First 1
 
         $profilesOK = $hrImport -and $hrSync -and $trainingImport -and $trainingSync -and
-                      $ldapExport -and $ldapDeltaImport -and $ldapDeltaSync -and
+                      $ldapImport -and $ldapSync -and $ldapExport -and $ldapDeltaImport -and $ldapDeltaSync -and
+                      $crossDomainImport -and $crossDomainSync -and
                       $crossDomainExport -and $crossDomainDeltaImport -and $crossDomainDeltaSync
 
         if (-not $profilesOK) {
-            Write-Host "  SKIPPED: Could not find all required run profiles" -ForegroundColor Yellow
-            $testResults.Steps += @{ Name = "Parallel Steps (Skipped - missing profiles)"; Success = $true }
+            Write-Host "  ✗ FAILED: Could not find all required run profiles" -ForegroundColor Red
+            # Report which profiles are missing
+            if (-not $hrImport) { Write-Host "    Missing: HR CSV 'Full Import'" -ForegroundColor Yellow }
+            if (-not $hrSync) { Write-Host "    Missing: HR CSV 'Full Synchronisation'" -ForegroundColor Yellow }
+            if (-not $trainingImport) { Write-Host "    Missing: Training 'Full Import'" -ForegroundColor Yellow }
+            if (-not $trainingSync) { Write-Host "    Missing: Training 'Full Synchronisation'" -ForegroundColor Yellow }
+            if (-not $ldapImport) { Write-Host "    Missing: LDAP 'Full Import'" -ForegroundColor Yellow }
+            if (-not $ldapSync) { Write-Host "    Missing: LDAP 'Full Synchronisation'" -ForegroundColor Yellow }
+            if (-not $ldapExport) { Write-Host "    Missing: LDAP 'Export'" -ForegroundColor Yellow }
+            if (-not $ldapDeltaImport) { Write-Host "    Missing: LDAP 'Delta Import'" -ForegroundColor Yellow }
+            if (-not $ldapDeltaSync) { Write-Host "    Missing: LDAP 'Delta Synchronisation'" -ForegroundColor Yellow }
+            if (-not $crossDomainImport) { Write-Host "    Missing: Cross-Domain 'Full Import'" -ForegroundColor Yellow }
+            if (-not $crossDomainSync) { Write-Host "    Missing: Cross-Domain 'Full Synchronisation'" -ForegroundColor Yellow }
+            if (-not $crossDomainExport) { Write-Host "    Missing: Cross-Domain 'Export'" -ForegroundColor Yellow }
+            if (-not $crossDomainDeltaImport) { Write-Host "    Missing: Cross-Domain 'Full Import' (for delta)" -ForegroundColor Yellow }
+            if (-not $crossDomainDeltaSync) { Write-Host "    Missing: Cross-Domain 'Delta Synchronisation'" -ForegroundColor Yellow }
+            $testResults.Steps += @{ Name = "Parallel Steps (Missing run profiles)"; Success = $false; Error = "Required run profiles not found" }
+            if (-not $ContinueOnError) {
+                Write-Host ""
+                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                exit 1
+            }
         }
         else {
             # Make CSV changes BEFORE running the schedule to test actual data flow through parallel steps
@@ -636,17 +705,19 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
             Write-Host "  Creating complex parallel-step schedule..." -ForegroundColor DarkGray
             Write-Host ""
             Write-Host "  Schedule structure:" -ForegroundColor Cyan
-            Write-Host "    Step 0-1 [PARALLEL]: Full Import HR + Full Import Training" -ForegroundColor DarkGray
-            Write-Host "    Step 2 [SEQUENTIAL]: Full Sync HR" -ForegroundColor DarkGray
-            Write-Host "    Step 3 [SEQUENTIAL]: Full Sync Training" -ForegroundColor DarkGray
-            Write-Host "    Step 4-5 [PARALLEL]: Export AD + Export Cross-Domain" -ForegroundColor DarkGray
-            Write-Host "    Step 6-7 [PARALLEL]: Delta Import AD + Full Import Cross-Domain (CSV has no delta)" -ForegroundColor DarkGray
-            Write-Host "    Step 8 [SEQUENTIAL]: Delta Sync Cross-Domain" -ForegroundColor DarkGray
-            Write-Host "    Step 9 [SEQUENTIAL]: Delta Sync AD" -ForegroundColor DarkGray
+            Write-Host "    Step 0-3  [PARALLEL]:    Full Import HR + Full Import Training + Full Import Cross-Domain + Full Import AD" -ForegroundColor DarkGray
+            Write-Host "    Step 4    [SEQUENTIAL]:  Full Sync HR" -ForegroundColor DarkGray
+            Write-Host "    Step 5    [SEQUENTIAL]:  Full Sync Training" -ForegroundColor DarkGray
+            Write-Host "    Step 6    [SEQUENTIAL]:  Full Sync Cross-Domain" -ForegroundColor DarkGray
+            Write-Host "    Step 7    [SEQUENTIAL]:  Full Sync AD" -ForegroundColor DarkGray
+            Write-Host "    Step 8-9  [PARALLEL]:    Export AD + Export Cross-Domain" -ForegroundColor DarkGray
+            Write-Host "    Step 10-11 [PARALLEL]:   Delta Import AD + Full Import Cross-Domain (CSV has no delta)" -ForegroundColor DarkGray
+            Write-Host "    Step 12   [SEQUENTIAL]:  Delta Sync Cross-Domain" -ForegroundColor DarkGray
+            Write-Host "    Step 13   [SEQUENTIAL]:  Delta Sync AD" -ForegroundColor DarkGray
             Write-Host ""
 
             $parallelSchedule = New-JIMSchedule -Name $testScheduleName `
-                -Description "Complex schedule with parallel imports, sequential syncs, parallel exports" `
+                -Description "Complex schedule with parallel imports (incl. AD and Cross-Domain), sequential syncs, parallel exports" `
                 -TriggerType Manual `
                 -PassThru
 
@@ -665,60 +736,90 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
                 -RunProfileId $trainingImport.id `
                 -Parallel
 
-            # Step 2: Full Sync HR (sequential - waits for imports to complete)
-            Write-Host "  Adding step 2: Full Sync HR (sequential)..." -ForegroundColor DarkGray
+            # Step 2: Full Import Cross-Domain (parallel with HR + Training imports)
+            Write-Host "  Adding step 2: Full Import Cross-Domain (parallel with steps 0-1)..." -ForegroundColor DarkGray
+            Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
+                -StepType RunProfile `
+                -ConnectedSystemId $crossDomainSystem.id `
+                -RunProfileId $crossDomainImport.id `
+                -Parallel
+
+            # Step 3: Full Import AD (parallel with HR + Training + Cross-Domain imports)
+            Write-Host "  Adding step 3: Full Import AD (parallel with steps 0-2)..." -ForegroundColor DarkGray
+            Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
+                -StepType RunProfile `
+                -ConnectedSystemId $ldapSystem.id `
+                -RunProfileId $ldapImport.id `
+                -Parallel
+
+            # Step 4: Full Sync HR (sequential - waits for imports to complete)
+            Write-Host "  Adding step 4: Full Sync HR (sequential)..." -ForegroundColor DarkGray
             Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
                 -StepType RunProfile `
                 -ConnectedSystemId $hrSystem.id `
                 -RunProfileId $hrSync.id
 
-            # Step 3: Full Sync Training (sequential - after HR sync)
-            Write-Host "  Adding step 3: Full Sync Training (sequential)..." -ForegroundColor DarkGray
+            # Step 5: Full Sync Training (sequential - after HR sync)
+            Write-Host "  Adding step 5: Full Sync Training (sequential)..." -ForegroundColor DarkGray
             Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
                 -StepType RunProfile `
                 -ConnectedSystemId $trainingSystem.id `
                 -RunProfileId $trainingSync.id
 
-            # Step 4: Export AD (sequential - starts new parallel group)
-            Write-Host "  Adding step 4: Export AD (sequential)..." -ForegroundColor DarkGray
+            # Step 6: Full Sync Cross-Domain (sequential - after Training sync)
+            Write-Host "  Adding step 6: Full Sync Cross-Domain (sequential)..." -ForegroundColor DarkGray
+            Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
+                -StepType RunProfile `
+                -ConnectedSystemId $crossDomainSystem.id `
+                -RunProfileId $crossDomainSync.id
+
+            # Step 7: Full Sync AD (sequential - after Cross-Domain sync)
+            Write-Host "  Adding step 7: Full Sync AD (sequential)..." -ForegroundColor DarkGray
+            Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
+                -StepType RunProfile `
+                -ConnectedSystemId $ldapSystem.id `
+                -RunProfileId $ldapSync.id
+
+            # Step 8: Export AD (sequential - starts new parallel group)
+            Write-Host "  Adding step 8: Export AD (sequential)..." -ForegroundColor DarkGray
             Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
                 -StepType RunProfile `
                 -ConnectedSystemId $ldapSystem.id `
                 -RunProfileId $ldapExport.id
 
-            # Step 5: Export Cross-Domain (parallel with AD export)
-            Write-Host "  Adding step 5: Export Cross-Domain (parallel with step 4)..." -ForegroundColor DarkGray
+            # Step 9: Export Cross-Domain (parallel with AD export)
+            Write-Host "  Adding step 9: Export Cross-Domain (parallel with step 8)..." -ForegroundColor DarkGray
             Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
                 -StepType RunProfile `
                 -ConnectedSystemId $crossDomainSystem.id `
                 -RunProfileId $crossDomainExport.id `
                 -Parallel
 
-            # Step 6: Delta Import AD (sequential - starts new parallel group)
-            Write-Host "  Adding step 6: Delta Import AD (sequential)..." -ForegroundColor DarkGray
+            # Step 10: Delta Import AD (sequential - starts new parallel group)
+            Write-Host "  Adding step 10: Delta Import AD (sequential)..." -ForegroundColor DarkGray
             Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
                 -StepType RunProfile `
                 -ConnectedSystemId $ldapSystem.id `
                 -RunProfileId $ldapDeltaImport.id
 
-            # Step 7: Full Import Cross-Domain (parallel with AD delta import)
+            # Step 11: Full Import Cross-Domain (parallel with AD delta import)
             # Note: CSV connectors don't support Delta Import, so we use Full Import
-            Write-Host "  Adding step 7: Full Import Cross-Domain (parallel with step 6)..." -ForegroundColor DarkGray
+            Write-Host "  Adding step 11: Full Import Cross-Domain (parallel with step 10)..." -ForegroundColor DarkGray
             Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
                 -StepType RunProfile `
                 -ConnectedSystemId $crossDomainSystem.id `
                 -RunProfileId $crossDomainDeltaImport.id `
                 -Parallel
 
-            # Step 8: Delta Sync Cross-Domain (sequential)
-            Write-Host "  Adding step 8: Delta Sync Cross-Domain (sequential)..." -ForegroundColor DarkGray
+            # Step 12: Delta Sync Cross-Domain (sequential)
+            Write-Host "  Adding step 12: Delta Sync Cross-Domain (sequential)..." -ForegroundColor DarkGray
             Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
                 -StepType RunProfile `
                 -ConnectedSystemId $crossDomainSystem.id `
                 -RunProfileId $crossDomainDeltaSync.id
 
-            # Step 9: Delta Sync AD (sequential)
-            Write-Host "  Adding step 9: Delta Sync AD (sequential)..." -ForegroundColor DarkGray
+            # Step 13: Delta Sync AD (sequential)
+            Write-Host "  Adding step 13: Delta Sync AD (sequential)..." -ForegroundColor DarkGray
             Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
                 -StepType RunProfile `
                 -ConnectedSystemId $ldapSystem.id `
@@ -726,7 +827,7 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
 
             # Verify steps were added correctly
             $scheduleWithSteps = Get-JIMSchedule -Id $parallelSchedule.id -IncludeSteps
-            Assert-Equal -Expected 10 -Actual $scheduleWithSteps.steps.Count -Message "Schedule has 10 steps"
+            Assert-Equal -Expected 14 -Actual $scheduleWithSteps.steps.Count -Message "Schedule has 14 steps"
 
             # Verify step grouping (parallel steps share stepIndex)
             $stepIndices = @{}
@@ -747,19 +848,19 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
             }
             Write-Host ""
 
-            $testResults.Steps += @{ Name = "Complex Parallel Schedule Created (10 steps)"; Success = $true }
+            $testResults.Steps += @{ Name = "Complex Parallel Schedule Created (14 steps)"; Success = $true }
 
             # Execute the schedule
             Write-Host "  Executing complex parallel schedule..." -ForegroundColor DarkGray
             $execution = Start-JIMSchedule -Id $parallelSchedule.id -PassThru
 
             Assert-NotNull -Value $execution -Message "Complex parallel execution started"
-            Assert-Equal -Expected 10 -Actual $execution.totalSteps -Message "Execution shows 10 total steps"
+            Assert-Equal -Expected 14 -Actual $execution.totalSteps -Message "Execution shows 14 total steps"
 
             $testResults.Steps += @{ Name = "Complex Parallel Execution Started"; Success = $true }
 
-            # Wait for completion (this schedule has 10 steps, so give it more time)
-            Write-Host "  Waiting for complex schedule to complete (10 steps, max 300s)..." -ForegroundColor DarkGray
+            # Wait for completion (this schedule has 14 steps, so give it more time)
+            Write-Host "  Waiting for complex schedule to complete (14 steps, max 300s)..." -ForegroundColor DarkGray
             $maxWait = 300  # 5 minutes for complex schedule
             $pollInterval = 5
             $elapsed = 0
@@ -784,9 +885,19 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
             }
 
             $finalExecution = Get-JIMScheduleExecution -Id $execution.id
-            Assert-Condition -Condition ($finalExecution.status -eq "Completed" -or $finalExecution.status -eq 2) -Message "Complex parallel execution completed successfully"
 
-            $testResults.Steps += @{ Name = "Complex Parallel Execution Completed"; Success = $true }
+            try {
+                Assert-ScheduleExecutionSuccess -ExecutionId $finalExecution.id -Name "Complex Parallel Execution"
+                $testResults.Steps += @{ Name = "Complex Parallel Execution Completed"; Success = $true }
+            }
+            catch {
+                $testResults.Steps += @{ Name = "Complex Parallel Execution Completed"; Success = $false; Error = $_.Exception.Message }
+                if (-not $ContinueOnError) {
+                    Write-Host ""
+                    Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                    exit 1
+                }
+            }
         }
     }
 
@@ -825,13 +936,11 @@ else {
     }
 }
 
-# Cleanup test schedules
+# Disable test schedules (but keep them for inspection)
 Write-Host ""
-Write-Host "Cleaning up test schedules..." -ForegroundColor DarkGray
+Write-Host "Disabling test schedules..." -ForegroundColor DarkGray
 $testSchedules = Get-JIMSchedule -Name "Integration Test*"
 foreach ($schedule in $testSchedules) {
-    # Disable first to prevent any scheduled runs
     Disable-JIMSchedule -Id $schedule.id -ErrorAction SilentlyContinue
-    Remove-JIMSchedule -Id $schedule.id -Force
 }
-Write-Host "Cleanup complete." -ForegroundColor DarkGray
+Write-Host "Test schedules disabled (not deleted)." -ForegroundColor DarkGray

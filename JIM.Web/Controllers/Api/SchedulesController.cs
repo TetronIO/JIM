@@ -208,7 +208,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
                 if (existingStep != null)
                 {
                     existingStep.StepIndex = stepRequest.StepIndex;
-                    existingStep.Name = stepRequest.Name ?? string.Empty;
+                    existingStep.Name = stepRequest.Name;
                     existingStep.ExecutionMode = stepRequest.ExecutionMode;
                     existingStep.StepType = stepRequest.StepType;
                     existingStep.ContinueOnFailure = stepRequest.ContinueOnFailure;

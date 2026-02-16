@@ -177,4 +177,15 @@ public class ScheduleExecutionStepDto
     /// Error message if the step failed.
     /// </summary>
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// The Activity ID associated with this step's worker task (if available).
+    /// </summary>
+    public Guid? ActivityId { get; set; }
+
+    /// <summary>
+    /// The Activity status for this step (e.g. Complete, CompleteWithWarning, FailedWithError).
+    /// Only populated when the step has completed and an activity exists.
+    /// </summary>
+    public string? ActivityStatus { get; set; }
 }

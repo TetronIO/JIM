@@ -173,20 +173,10 @@ public class ActivityRunProfileExecutionStats
     public int TotalCsoAlreadyCurrent { get; set; }
     #endregion
 
-    #region Aggregate Stats (for backward compatibility)
+    #region Direct Creation Stats
     /// <summary>
-    /// Aggregate count of all "create" operations (CSO adds, projections, provisioning).
+    /// Count of MVOs directly created (e.g. via admin UI or data generation), not through sync operations.
     /// </summary>
-    public int TotalObjectCreates => TotalCsoAdds + TotalProjections + TotalProvisioned;
-
-    /// <summary>
-    /// Aggregate count of all "update" operations (CSO updates, joins, attribute flows, exports).
-    /// </summary>
-    public int TotalObjectUpdates => TotalCsoUpdates + TotalJoins + TotalAttributeFlows + TotalExported;
-
-    /// <summary>
-    /// Aggregate count of all "delete" operations (CSO deletes, disconnections, deprovisioning).
-    /// </summary>
-    public int TotalObjectDeletes => TotalCsoDeletes + TotalDisconnections + TotalDisconnectedOutOfScope + TotalDeprovisioned;
+    public int TotalCreated { get; set; }
     #endregion
 }
