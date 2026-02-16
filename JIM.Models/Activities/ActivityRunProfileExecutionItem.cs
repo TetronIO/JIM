@@ -74,6 +74,15 @@ public class ActivityRunProfileExecutionItem
 
     public string? ErrorStackTrace { get; set; }
 
+    /// <summary>
+    /// When the primary ObjectChangeType is Joined, Projected, Disconnected, or DisconnectedOutOfScope,
+    /// this field records how many MVO attributes were added or removed as part of the same operation.
+    /// This prevents attribute flow from being "absorbed" into the primary change type, enabling accurate
+    /// attribute flow counting alongside joins, projections, and disconnections.
+    /// Null when no attribute changes occurred or when the primary type is already AttributeFlow.
+    /// </summary>
+    public int? AttributeFlowCount { get; set; }
+
     public ConnectedSystemObjectAttributeValue? GetExternalIdAttributeValue()
     {
         // try and get an external id for the target object

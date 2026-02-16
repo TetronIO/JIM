@@ -30,6 +30,14 @@ public readonly struct MetaverseObjectChangeResult
     public int AttributesRemoved { get; init; }
 
     /// <summary>
+    /// The number of attribute flows that occurred alongside a non-AttributeFlow change type
+    /// (e.g., Join, Projection, DisconnectedOutOfScope). This prevents attribute flows from being
+    /// "absorbed" into the primary change type and becoming invisible in reporting.
+    /// Only populated when the primary ChangeType is not AttributeFlow itself.
+    /// </summary>
+    public int? AttributeFlowCount { get; init; }
+
+    /// <summary>
     /// Creates a result indicating no changes occurred.
     /// </summary>
     public static MetaverseObjectChangeResult NoChanges() => new() { HasChanges = false };
@@ -79,10 +87,12 @@ public readonly struct MetaverseObjectChangeResult
     /// Creates a result indicating a CSO was disconnected because it fell out of scope
     /// of import sync rule scoping criteria.
     /// </summary>
-    public static MetaverseObjectChangeResult DisconnectedOutOfScope() => new()
+    /// <param name="attributeFlowCount">Optional count of attribute removals that occurred during disconnection.</param>
+    public static MetaverseObjectChangeResult DisconnectedOutOfScope(int? attributeFlowCount = null) => new()
     {
         HasChanges = true,
-        ChangeType = ObjectChangeType.DisconnectedOutOfScope
+        ChangeType = ObjectChangeType.DisconnectedOutOfScope,
+        AttributeFlowCount = attributeFlowCount
     };
 
     /// <summary>

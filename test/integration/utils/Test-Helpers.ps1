@@ -779,11 +779,28 @@ function Assert-ActivitySuccess {
         $stats = Get-JIMActivityStats -ActivityId $ActivityId -ErrorAction SilentlyContinue
         if ($stats) {
             $errorDetails += "Statistics:"
-            $errorDetails += "  - Objects Processed: $($stats.totalObjectChangeCount)"
-            $errorDetails += "  - Creates: $($stats.totalObjectCreates)"
-            $errorDetails += "  - Updates: $($stats.totalObjectUpdates)"
-            $errorDetails += "  - Deletes: $($stats.totalObjectDeletes)"
+            $errorDetails += "  - Objects Processed: $($stats.totalObjectsProcessed)"
+            $errorDetails += "  - Object Changes: $($stats.totalObjectChangeCount)"
+            $errorDetails += "  - Unchanged: $($stats.totalUnchanged)"
             $errorDetails += "  - Errors: $($stats.totalObjectErrors)"
+            # Import stats
+            if ($stats.totalCsoAdds -gt 0) { $errorDetails += "  - CSO Adds: $($stats.totalCsoAdds)" }
+            if ($stats.totalCsoUpdates -gt 0) { $errorDetails += "  - CSO Updates: $($stats.totalCsoUpdates)" }
+            if ($stats.totalCsoDeletes -gt 0) { $errorDetails += "  - CSO Deletes: $($stats.totalCsoDeletes)" }
+            # Sync stats
+            if ($stats.totalProjections -gt 0) { $errorDetails += "  - Projections: $($stats.totalProjections)" }
+            if ($stats.totalJoins -gt 0) { $errorDetails += "  - Joins: $($stats.totalJoins)" }
+            if ($stats.totalAttributeFlows -gt 0) { $errorDetails += "  - Attribute Flows: $($stats.totalAttributeFlows)" }
+            if ($stats.totalDisconnections -gt 0) { $errorDetails += "  - Disconnections: $($stats.totalDisconnections)" }
+            if ($stats.totalDisconnectedOutOfScope -gt 0) { $errorDetails += "  - Disconnected (Out of Scope): $($stats.totalDisconnectedOutOfScope)" }
+            if ($stats.totalOutOfScopeRetainJoin -gt 0) { $errorDetails += "  - Out of Scope (Retain Join): $($stats.totalOutOfScopeRetainJoin)" }
+            if ($stats.totalDriftCorrections -gt 0) { $errorDetails += "  - Drift Corrections: $($stats.totalDriftCorrections)" }
+            # Export stats
+            if ($stats.totalProvisioned -gt 0) { $errorDetails += "  - Provisioned: $($stats.totalProvisioned)" }
+            if ($stats.totalExported -gt 0) { $errorDetails += "  - Exported: $($stats.totalExported)" }
+            if ($stats.totalDeprovisioned -gt 0) { $errorDetails += "  - Deprovisioned: $($stats.totalDeprovisioned)" }
+            # Direct creation stats
+            if ($stats.totalCreated -gt 0) { $errorDetails += "  - Created: $($stats.totalCreated)" }
 
             # If there are errors, try to get the first few error items
             if ($stats.totalObjectErrors -gt 0) {

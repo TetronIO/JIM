@@ -169,6 +169,12 @@ public abstract class SyncTaskProcessorBase
                 {
                     // Update the existing RPEI with the ObjectChangeType
                     existingRpei.ObjectChangeType = changeResult.ChangeType;
+
+                    // Propagate attribute flow count from change result (e.g., DisconnectedOutOfScope with attribute removals)
+                    if (changeResult.AttributeFlowCount.HasValue)
+                    {
+                        existingRpei.AttributeFlowCount = changeResult.AttributeFlowCount;
+                    }
                 }
                 else
                 {
@@ -176,6 +182,13 @@ public abstract class SyncTaskProcessorBase
                     var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
                     runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                     runProfileExecutionItem.ObjectChangeType = changeResult.ChangeType;
+
+                    // Propagate attribute flow count from change result (e.g., DisconnectedOutOfScope with attribute removals)
+                    if (changeResult.AttributeFlowCount.HasValue)
+                    {
+                        runProfileExecutionItem.AttributeFlowCount = changeResult.AttributeFlowCount;
+                    }
+
                     _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
                 }
             }
@@ -453,6 +466,9 @@ public abstract class SyncTaskProcessorBase
             {
                 var changedAttributes = mvo.PendingAttributeValueRemovals.ToList();
                 var removedAttributes = mvo.PendingAttributeValueRemovals.ToHashSet();
+
+                // Track attribute removals on the RPEI so they aren't invisible within the Deleted change type
+                runProfileExecutionItem.AttributeFlowCount = mvo.PendingAttributeValueRemovals.Count;
 
                 Log.Information("ProcessObsoleteConnectedSystemObjectAsync: Applying {Count} attribute removals to MVO {MvoId} and queueing for export evaluation",
                     changedAttributes.Count, mvo.Id);
@@ -752,6 +768,14 @@ public abstract class SyncTaskProcessorBase
                 var rpei = _activity.PrepareRunProfileExecutionItem();
                 rpei.ConnectedSystemObject = connectedSystemObject;
                 _activity.RunProfileExecutionItems.Add(rpei);
+
+                // Track attribute flow count when the primary change type is Join or Projection
+                // This prevents attribute flows from being "absorbed" into joins/projections
+                if (changeType is ObjectChangeType.Joined or ObjectChangeType.Projected)
+                {
+                    rpei.AttributeFlowCount = attributesAdded + attributesRemoved;
+                }
+
                 _pendingMvoChanges.Add((connectedSystemObject.MetaverseObject, additions, removals, changeType, rpei));
             }
 
@@ -990,6 +1014,16 @@ public abstract class SyncTaskProcessorBase
                         // Merge reference changes into existing entry (keeps existing ChangeType)
                         existingChangeEntry.Additions.AddRange(refAddedAttributes);
                         existingChangeEntry.Removals.AddRange(refRemovedAttributesList);
+
+                        // If the existing entry is a Join or Projection, increment AttributeFlowCount
+                        // so reference attribute flows aren't absorbed into the primary change type
+                        if (existingChangeEntry.ChangeType is ObjectChangeType.Joined or ObjectChangeType.Projected
+                            && existingChangeEntry.Rpei != null)
+                        {
+                            existingChangeEntry.Rpei.AttributeFlowCount =
+                                (existingChangeEntry.Rpei.AttributeFlowCount ?? 0)
+                                + refAddedAttributes.Count + refRemovedAttributesList.Count;
+                        }
                     }
                     else
                     {
@@ -1593,6 +1627,7 @@ public abstract class SyncTaskProcessorBase
                 var remainingCsoCount = Math.Max(0, totalCsoCount - 1);
 
                 // Check if we should remove contributed attributes based on the object type setting
+                int attributeRemovalCount = 0;
                 if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion)
                 {
                     var contributedAttributes = mvo.AttributeValues
@@ -1605,6 +1640,8 @@ public abstract class SyncTaskProcessorBase
                         Log.Verbose("HandleCsoOutOfScopeAsync: Marking attribute '{AttrName}' for removal from MVO {MvoId}",
                             attributeValue.Attribute?.Name, mvo.Id);
                     }
+
+                    attributeRemovalCount = contributedAttributes.Count;
                 }
 
                 // Break the CSO-MVO join
@@ -1622,7 +1659,8 @@ public abstract class SyncTaskProcessorBase
                 // Evaluate MVO deletion rule based on type configuration
                 await ProcessMvoDeletionRuleAsync(mvo, _connectedSystem.Id, remainingCsoCount);
 
-                return MetaverseObjectChangeResult.DisconnectedOutOfScope();
+                return MetaverseObjectChangeResult.DisconnectedOutOfScope(
+                    attributeFlowCount: attributeRemovalCount > 0 ? attributeRemovalCount : null);
         }
     }
 
