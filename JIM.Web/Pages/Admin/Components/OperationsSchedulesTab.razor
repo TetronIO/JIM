@@ -127,24 +127,24 @@
                     @if (context.IsEnabled)
                     {
                         <MudTooltip Text="Disable" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Filled.Pause" Variant="Variant.Filled" Size="Size.Small"
+                            <MudIconButton Icon="@Icons.Material.Filled.Pause" Size="Size.Small"
                                            OnClick="@(() => HandleToggleEnabledAsync(context))" />
                         </MudTooltip>
                     }
                     else
                     {
                         <MudTooltip Text="Enable" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Variant="Variant.Filled" Size="Size.Small"
+                            <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small"
                                            OnClick="@(() => HandleToggleEnabledAsync(context))" />
                         </MudTooltip>
                     }
                     <MudTooltip Text="Run Now" Arrow="true" Placement="Placement.Top">
-                        <MudIconButton Icon="@Icons.Material.Filled.PlayCircle" Variant="Variant.Filled" Size="Size.Small" Color="Color.Primary"
+                        <MudIconButton Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Small" Color="Color.Primary"
                                        OnClick="@(() => HandleRunNowAsync(context))"
                                        Disabled="@(context.Steps.Count == 0)" />
                     </MudTooltip>
                     <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Variant="Variant.Filled" Size="Size.Small" Color="Color.Error"
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                        OnClick="@(() => HandleDeleteAsync(context))" />
                     </MudTooltip>
                 </MudStack>

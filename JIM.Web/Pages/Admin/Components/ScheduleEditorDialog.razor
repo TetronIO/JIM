@@ -187,7 +187,7 @@
                             <MudStack Spacing="3">
                                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                                     <MudText Typo="Typo.h6">@(_isNewStep ? "Add Step" : "Edit Step")</MudText>
-                                    <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="CancelStepEditor" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CancelStepEditor" />
                                 </MudStack>
 
                                 <MudSelect T="ScheduleStepType" @bind-Value="_editingStep.StepType" Label="Step Type" Variant="Variant.Outlined">
@@ -274,26 +274,26 @@
                                                     </MudStack>
                                                     <MudStack Row="true" Spacing="0">
                                                         <MudTooltip Text="Run in parallel with this step" Arrow="true" Placement="Placement.Top">
-                                                            <MudIconButton Icon="@Icons.Material.Filled.CallSplit"
+                                                            <MudIconButton Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small"
                                                                            Style="transform: rotate(180deg);"
                                                                            OnClick="@(() => HandleAddParallelStepAsync(block.BlockIndex))" />
                                                         </MudTooltip>
                                                         <MudTooltip Text="Move up" Arrow="true" Placement="Placement.Top">
-                                                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp"
+                                                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small"
                                                                            Disabled="@(block.BlockIndex == 0)"
                                                                            OnClick="@(() => MoveBlockUp(block.BlockIndex))" />
                                                         </MudTooltip>
                                                         <MudTooltip Text="Move down" Arrow="true" Placement="Placement.Top">
-                                                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown"
+                                                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small"
                                                                            Disabled="@(block.BlockIndex == GetMaxBlockIndex())"
                                                                            OnClick="@(() => MoveBlockDown(block.BlockIndex))" />
                                                         </MudTooltip>
                                                         <MudTooltip Text="Edit step" Arrow="true" Placement="Placement.Top">
-                                                            <MudIconButton Icon="@Icons.Material.Outlined.Edit"
+                                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                                                            OnClick="@(() => HandleEditStepAsync(step))" />
                                                         </MudTooltip>
                                                         <MudTooltip Text="Delete step" Arrow="true" Placement="Placement.Top">
-                                                            <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error"
+                                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                                                            OnClick="@(() => HandleRemoveStep(step))" />
                                                         </MudTooltip>
                                                     </MudStack>
@@ -328,21 +328,21 @@
                                                         </MudStack>
                                                         <MudStack Row="true" Spacing="0">
                                                             <MudTooltip Text="Add parallel step" Arrow="true" Placement="Placement.Top">
-                                                                <MudIconButton Icon="@Icons.Material.Filled.Add"
+                                                                <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small"
                                                                                OnClick="@(() => HandleAddParallelStepAsync(block.BlockIndex))" />
                                                             </MudTooltip>
                                                             <MudTooltip Text="Move up" Arrow="true" Placement="Placement.Top">
-                                                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp"
+                                                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small"
                                                                                Disabled="@(block.BlockIndex == 0)"
                                                                                OnClick="@(() => MoveBlockUp(block.BlockIndex))" />
                                                             </MudTooltip>
                                                             <MudTooltip Text="Move down" Arrow="true" Placement="Placement.Top">
-                                                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown"
+                                                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small"
                                                                                Disabled="@(block.BlockIndex == GetMaxBlockIndex())"
                                                                                OnClick="@(() => MoveBlockDown(block.BlockIndex))" />
                                                             </MudTooltip>
                                                             <MudTooltip Text="Delete entire group" Arrow="true" Placement="Placement.Top">
-                                                                <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error"
+                                                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                                                                OnClick="@(() => HandleRemoveBlock(block.BlockIndex))" />
                                                             </MudTooltip>
                                                         </MudStack>
@@ -361,11 +361,11 @@
                                                                 </MudText>
                                                                 <MudStack Row="true" Spacing="0">
                                                                     <MudTooltip Text="Edit step" Arrow="true" Placement="Placement.Top">
-                                                                        <MudIconButton Icon="@Icons.Material.Outlined.Edit"
+                                                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                                                                        OnClick="@(() => HandleEditStepAsync(step))" />
                                                                     </MudTooltip>
                                                                     <MudTooltip Text="Remove from group" Arrow="true" Placement="Placement.Top">
-                                                                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error"
+                                                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                                                                        OnClick="@(() => HandleRemoveStep(step))" />
                                                                     </MudTooltip>
                                                                 </MudStack>
@@ -1073,11 +1073,8 @@
         if (step.StepType == ScheduleStepType.RunProfile && step.ConnectedSystemId.HasValue)
         {
             _selectedConnectedSystemId = step.ConnectedSystemId.Value;
-            _selectedRunProfileId = step.RunProfileId ?? 0;
             _runProfiles = await Jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(_selectedConnectedSystemId);
-            _selectedConnectedSystemId = 0;
-            _selectedRunProfileId = 0;
-            _runProfiles = null;
+            _selectedRunProfileId = step.RunProfileId ?? 0;
         }
     }
 
