@@ -377,8 +377,10 @@ else if (_syncRule != null)
                 }
             </DialogContent>
             <DialogActions>
+                <MudButton DropShadow="false" Variant="Variant.Filled" Color="Color.Default"
+                    OnClick="@(() => _addMatchingRuleDialogVisible = false)" Class="me-2">Cancel</MudButton>
                 <MudButton Disabled="DisableAddMappingButton()" DropShadow="false" Variant="Variant.Filled"
-                    Color="Color.Primary" OnClick="HandleAddMappingButtonClick" Class="ma-4">Add Matching Rule</MudButton>
+                    Color="Color.Primary" OnClick="HandleAddMappingButtonClick">Add Matching Rule</MudButton>
             </DialogActions>
         </MudDialog>
     }
@@ -459,8 +461,10 @@ else if (_syncRule != null)
                         </MudSelect>
                     </DialogContent>
                     <DialogActions>
+                        <MudButton DropShadow="false" Variant="Variant.Filled" Color="Color.Default"
+                            OnClick="@(() => _addScopingCriteriaGroupDialogVisible = false)" Class="me-2">Cancel</MudButton>
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleAddCriteriaGroupButtonClick"
-                            Disabled="DisableAddScopingCriteriaGroupFormButton()" DropShadow="false" Class="ma-4">Add Group
+                            Disabled="DisableAddScopingCriteriaGroupFormButton()" DropShadow="false">Add Group
                         </MudButton>
                     </DialogActions>
                 </MudDialog>
