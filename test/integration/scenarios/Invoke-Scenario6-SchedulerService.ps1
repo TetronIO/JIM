@@ -581,10 +581,15 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
     if (-not $crossDomainSystem) { $missingCount++; Write-Host "  Missing: Cross-Domain Export" -ForegroundColor Yellow }
 
     if ($missingCount -gt 0) {
-        Write-Host "  SKIPPED: Parallel step testing requires 4 connected systems from extended Scenario1 setup" -ForegroundColor Yellow
+        Write-Host "  ✗ FAILED: Parallel step testing requires 4 connected systems from extended Scenario1 setup" -ForegroundColor Red
         Write-Host "  Found $($connectedSystems.Count) systems, missing $missingCount required systems" -ForegroundColor DarkGray
         Write-Host "  Run: ./Setup-Scenario1.ps1 first to create all required systems" -ForegroundColor DarkGray
-        $testResults.Steps += @{ Name = "Parallel Steps (Skipped - need 4 systems)"; Success = $true }
+        $testResults.Steps += @{ Name = "Parallel Steps (Missing $missingCount connected systems)"; Success = $false; Error = "Required connected systems not found" }
+        if (-not $ContinueOnError) {
+            Write-Host ""
+            Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+            exit 1
+        }
     }
     else {
         Write-Host "  Found all 4 required connected systems:" -ForegroundColor Green
@@ -619,8 +624,26 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
                       $crossDomainExport -and $crossDomainDeltaImport -and $crossDomainDeltaSync
 
         if (-not $profilesOK) {
-            Write-Host "  SKIPPED: Could not find all required run profiles" -ForegroundColor Yellow
-            $testResults.Steps += @{ Name = "Parallel Steps (Skipped - missing profiles)"; Success = $true }
+            Write-Host "  ✗ FAILED: Could not find all required run profiles" -ForegroundColor Red
+            # Report which profiles are missing
+            if (-not $hrImport) { Write-Host "    Missing: HR CSV 'Full Import'" -ForegroundColor Yellow }
+            if (-not $hrSync) { Write-Host "    Missing: HR CSV 'Full Synchronisation'" -ForegroundColor Yellow }
+            if (-not $trainingImport) { Write-Host "    Missing: Training 'Full Import'" -ForegroundColor Yellow }
+            if (-not $trainingSync) { Write-Host "    Missing: Training 'Full Synchronisation'" -ForegroundColor Yellow }
+            if (-not $ldapExport) { Write-Host "    Missing: LDAP 'Export'" -ForegroundColor Yellow }
+            if (-not $ldapDeltaImport) { Write-Host "    Missing: LDAP 'Delta Import'" -ForegroundColor Yellow }
+            if (-not $ldapDeltaSync) { Write-Host "    Missing: LDAP 'Delta Synchronisation'" -ForegroundColor Yellow }
+            if (-not $crossDomainImport) { Write-Host "    Missing: Cross-Domain 'Full Import'" -ForegroundColor Yellow }
+            if (-not $crossDomainSync) { Write-Host "    Missing: Cross-Domain 'Full Synchronisation'" -ForegroundColor Yellow }
+            if (-not $crossDomainExport) { Write-Host "    Missing: Cross-Domain 'Export'" -ForegroundColor Yellow }
+            if (-not $crossDomainDeltaImport) { Write-Host "    Missing: Cross-Domain 'Full Import' (for delta)" -ForegroundColor Yellow }
+            if (-not $crossDomainDeltaSync) { Write-Host "    Missing: Cross-Domain 'Delta Synchronisation'" -ForegroundColor Yellow }
+            $testResults.Steps += @{ Name = "Parallel Steps (Missing run profiles)"; Success = $false; Error = "Required run profiles not found" }
+            if (-not $ContinueOnError) {
+                Write-Host ""
+                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                exit 1
+            }
         }
         else {
             # Make CSV changes BEFORE running the schedule to test actual data flow through parallel steps
