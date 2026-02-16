@@ -607,6 +607,8 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
         $hrSync = $hrProfiles | Where-Object { $_.name -eq "Full Synchronisation" } | Select-Object -First 1
         $trainingImport = $trainingProfiles | Where-Object { $_.name -eq "Full Import" } | Select-Object -First 1
         $trainingSync = $trainingProfiles | Where-Object { $_.name -eq "Full Synchronisation" } | Select-Object -First 1
+        $ldapImport = $ldapProfiles | Where-Object { $_.name -eq "Full Import" } | Select-Object -First 1
+        $ldapSync = $ldapProfiles | Where-Object { $_.name -eq "Full Synchronisation" } | Select-Object -First 1
         $ldapExport = $ldapProfiles | Where-Object { $_.name -eq "Export" } | Select-Object -First 1
         $ldapDeltaImport = $ldapProfiles | Where-Object { $_.name -eq "Delta Import" } | Select-Object -First 1
         $ldapDeltaSync = $ldapProfiles | Where-Object { $_.name -eq "Delta Synchronisation" } | Select-Object -First 1
@@ -619,7 +621,7 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
         $crossDomainDeltaSync = $crossDomainProfiles | Where-Object { $_.name -eq "Delta Synchronisation" } | Select-Object -First 1
 
         $profilesOK = $hrImport -and $hrSync -and $trainingImport -and $trainingSync -and
-                      $ldapExport -and $ldapDeltaImport -and $ldapDeltaSync -and
+                      $ldapImport -and $ldapSync -and $ldapExport -and $ldapDeltaImport -and $ldapDeltaSync -and
                       $crossDomainImport -and $crossDomainSync -and
                       $crossDomainExport -and $crossDomainDeltaImport -and $crossDomainDeltaSync
 
@@ -630,6 +632,8 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
             if (-not $hrSync) { Write-Host "    Missing: HR CSV 'Full Synchronisation'" -ForegroundColor Yellow }
             if (-not $trainingImport) { Write-Host "    Missing: Training 'Full Import'" -ForegroundColor Yellow }
             if (-not $trainingSync) { Write-Host "    Missing: Training 'Full Synchronisation'" -ForegroundColor Yellow }
+            if (-not $ldapImport) { Write-Host "    Missing: LDAP 'Full Import'" -ForegroundColor Yellow }
+            if (-not $ldapSync) { Write-Host "    Missing: LDAP 'Full Synchronisation'" -ForegroundColor Yellow }
             if (-not $ldapExport) { Write-Host "    Missing: LDAP 'Export'" -ForegroundColor Yellow }
             if (-not $ldapDeltaImport) { Write-Host "    Missing: LDAP 'Delta Import'" -ForegroundColor Yellow }
             if (-not $ldapDeltaSync) { Write-Host "    Missing: LDAP 'Delta Synchronisation'" -ForegroundColor Yellow }
@@ -701,18 +705,19 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
             Write-Host "  Creating complex parallel-step schedule..." -ForegroundColor DarkGray
             Write-Host ""
             Write-Host "  Schedule structure:" -ForegroundColor Cyan
-            Write-Host "    Step 0-2  [PARALLEL]:   Full Import HR + Full Import Training + Full Import Cross-Domain" -ForegroundColor DarkGray
-            Write-Host "    Step 3    [SEQUENTIAL]:  Full Sync HR" -ForegroundColor DarkGray
-            Write-Host "    Step 4    [SEQUENTIAL]:  Full Sync Training" -ForegroundColor DarkGray
-            Write-Host "    Step 5    [SEQUENTIAL]:  Full Sync Cross-Domain" -ForegroundColor DarkGray
-            Write-Host "    Step 6-7  [PARALLEL]:    Export AD + Export Cross-Domain" -ForegroundColor DarkGray
-            Write-Host "    Step 8-9  [PARALLEL]:    Delta Import AD + Full Import Cross-Domain (CSV has no delta)" -ForegroundColor DarkGray
-            Write-Host "    Step 10   [SEQUENTIAL]:  Delta Sync Cross-Domain" -ForegroundColor DarkGray
-            Write-Host "    Step 11   [SEQUENTIAL]:  Delta Sync AD" -ForegroundColor DarkGray
+            Write-Host "    Step 0-3  [PARALLEL]:    Full Import HR + Full Import Training + Full Import Cross-Domain + Full Import AD" -ForegroundColor DarkGray
+            Write-Host "    Step 4    [SEQUENTIAL]:  Full Sync HR" -ForegroundColor DarkGray
+            Write-Host "    Step 5    [SEQUENTIAL]:  Full Sync Training" -ForegroundColor DarkGray
+            Write-Host "    Step 6    [SEQUENTIAL]:  Full Sync Cross-Domain" -ForegroundColor DarkGray
+            Write-Host "    Step 7    [SEQUENTIAL]:  Full Sync AD" -ForegroundColor DarkGray
+            Write-Host "    Step 8-9  [PARALLEL]:    Export AD + Export Cross-Domain" -ForegroundColor DarkGray
+            Write-Host "    Step 10-11 [PARALLEL]:   Delta Import AD + Full Import Cross-Domain (CSV has no delta)" -ForegroundColor DarkGray
+            Write-Host "    Step 12   [SEQUENTIAL]:  Delta Sync Cross-Domain" -ForegroundColor DarkGray
+            Write-Host "    Step 13   [SEQUENTIAL]:  Delta Sync AD" -ForegroundColor DarkGray
             Write-Host ""
 
             $parallelSchedule = New-JIMSchedule -Name $testScheduleName `
-                -Description "Complex schedule with parallel imports (incl. Cross-Domain), sequential syncs, parallel exports" `
+                -Description "Complex schedule with parallel imports (incl. AD and Cross-Domain), sequential syncs, parallel exports" `
                 -TriggerType Manual `
                 -PassThru
 
@@ -739,67 +744,82 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
                 -RunProfileId $crossDomainImport.id `
                 -Parallel
 
-            # Step 3: Full Sync HR (sequential - waits for imports to complete)
-            Write-Host "  Adding step 3: Full Sync HR (sequential)..." -ForegroundColor DarkGray
+            # Step 3: Full Import AD (parallel with HR + Training + Cross-Domain imports)
+            Write-Host "  Adding step 3: Full Import AD (parallel with steps 0-2)..." -ForegroundColor DarkGray
+            Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
+                -StepType RunProfile `
+                -ConnectedSystemId $ldapSystem.id `
+                -RunProfileId $ldapImport.id `
+                -Parallel
+
+            # Step 4: Full Sync HR (sequential - waits for imports to complete)
+            Write-Host "  Adding step 4: Full Sync HR (sequential)..." -ForegroundColor DarkGray
             Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
                 -StepType RunProfile `
                 -ConnectedSystemId $hrSystem.id `
                 -RunProfileId $hrSync.id
 
-            # Step 4: Full Sync Training (sequential - after HR sync)
-            Write-Host "  Adding step 4: Full Sync Training (sequential)..." -ForegroundColor DarkGray
+            # Step 5: Full Sync Training (sequential - after HR sync)
+            Write-Host "  Adding step 5: Full Sync Training (sequential)..." -ForegroundColor DarkGray
             Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
                 -StepType RunProfile `
                 -ConnectedSystemId $trainingSystem.id `
                 -RunProfileId $trainingSync.id
 
-            # Step 5: Full Sync Cross-Domain (sequential - after Training sync)
-            Write-Host "  Adding step 5: Full Sync Cross-Domain (sequential)..." -ForegroundColor DarkGray
+            # Step 6: Full Sync Cross-Domain (sequential - after Training sync)
+            Write-Host "  Adding step 6: Full Sync Cross-Domain (sequential)..." -ForegroundColor DarkGray
             Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
                 -StepType RunProfile `
                 -ConnectedSystemId $crossDomainSystem.id `
                 -RunProfileId $crossDomainSync.id
 
-            # Step 6: Export AD (sequential - starts new parallel group)
-            Write-Host "  Adding step 6: Export AD (sequential)..." -ForegroundColor DarkGray
+            # Step 7: Full Sync AD (sequential - after Cross-Domain sync)
+            Write-Host "  Adding step 7: Full Sync AD (sequential)..." -ForegroundColor DarkGray
+            Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
+                -StepType RunProfile `
+                -ConnectedSystemId $ldapSystem.id `
+                -RunProfileId $ldapSync.id
+
+            # Step 8: Export AD (sequential - starts new parallel group)
+            Write-Host "  Adding step 8: Export AD (sequential)..." -ForegroundColor DarkGray
             Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
                 -StepType RunProfile `
                 -ConnectedSystemId $ldapSystem.id `
                 -RunProfileId $ldapExport.id
 
-            # Step 7: Export Cross-Domain (parallel with AD export)
-            Write-Host "  Adding step 7: Export Cross-Domain (parallel with step 6)..." -ForegroundColor DarkGray
+            # Step 9: Export Cross-Domain (parallel with AD export)
+            Write-Host "  Adding step 9: Export Cross-Domain (parallel with step 8)..." -ForegroundColor DarkGray
             Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
                 -StepType RunProfile `
                 -ConnectedSystemId $crossDomainSystem.id `
                 -RunProfileId $crossDomainExport.id `
                 -Parallel
 
-            # Step 8: Delta Import AD (sequential - starts new parallel group)
-            Write-Host "  Adding step 8: Delta Import AD (sequential)..." -ForegroundColor DarkGray
+            # Step 10: Delta Import AD (sequential - starts new parallel group)
+            Write-Host "  Adding step 10: Delta Import AD (sequential)..." -ForegroundColor DarkGray
             Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
                 -StepType RunProfile `
                 -ConnectedSystemId $ldapSystem.id `
                 -RunProfileId $ldapDeltaImport.id
 
-            # Step 9: Full Import Cross-Domain (parallel with AD delta import)
+            # Step 11: Full Import Cross-Domain (parallel with AD delta import)
             # Note: CSV connectors don't support Delta Import, so we use Full Import
-            Write-Host "  Adding step 9: Full Import Cross-Domain (parallel with step 8)..." -ForegroundColor DarkGray
+            Write-Host "  Adding step 11: Full Import Cross-Domain (parallel with step 10)..." -ForegroundColor DarkGray
             Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
                 -StepType RunProfile `
                 -ConnectedSystemId $crossDomainSystem.id `
                 -RunProfileId $crossDomainDeltaImport.id `
                 -Parallel
 
-            # Step 10: Delta Sync Cross-Domain (sequential)
-            Write-Host "  Adding step 10: Delta Sync Cross-Domain (sequential)..." -ForegroundColor DarkGray
+            # Step 12: Delta Sync Cross-Domain (sequential)
+            Write-Host "  Adding step 12: Delta Sync Cross-Domain (sequential)..." -ForegroundColor DarkGray
             Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
                 -StepType RunProfile `
                 -ConnectedSystemId $crossDomainSystem.id `
                 -RunProfileId $crossDomainDeltaSync.id
 
-            # Step 11: Delta Sync AD (sequential)
-            Write-Host "  Adding step 11: Delta Sync AD (sequential)..." -ForegroundColor DarkGray
+            # Step 13: Delta Sync AD (sequential)
+            Write-Host "  Adding step 13: Delta Sync AD (sequential)..." -ForegroundColor DarkGray
             Add-JIMScheduleStep -ScheduleId $parallelSchedule.id `
                 -StepType RunProfile `
                 -ConnectedSystemId $ldapSystem.id `
@@ -807,7 +827,7 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
 
             # Verify steps were added correctly
             $scheduleWithSteps = Get-JIMSchedule -Id $parallelSchedule.id -IncludeSteps
-            Assert-Equal -Expected 12 -Actual $scheduleWithSteps.steps.Count -Message "Schedule has 12 steps"
+            Assert-Equal -Expected 14 -Actual $scheduleWithSteps.steps.Count -Message "Schedule has 14 steps"
 
             # Verify step grouping (parallel steps share stepIndex)
             $stepIndices = @{}
@@ -828,19 +848,19 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
             }
             Write-Host ""
 
-            $testResults.Steps += @{ Name = "Complex Parallel Schedule Created (12 steps)"; Success = $true }
+            $testResults.Steps += @{ Name = "Complex Parallel Schedule Created (14 steps)"; Success = $true }
 
             # Execute the schedule
             Write-Host "  Executing complex parallel schedule..." -ForegroundColor DarkGray
             $execution = Start-JIMSchedule -Id $parallelSchedule.id -PassThru
 
             Assert-NotNull -Value $execution -Message "Complex parallel execution started"
-            Assert-Equal -Expected 12 -Actual $execution.totalSteps -Message "Execution shows 12 total steps"
+            Assert-Equal -Expected 14 -Actual $execution.totalSteps -Message "Execution shows 14 total steps"
 
             $testResults.Steps += @{ Name = "Complex Parallel Execution Started"; Success = $true }
 
-            # Wait for completion (this schedule has 10 steps, so give it more time)
-            Write-Host "  Waiting for complex schedule to complete (12 steps, max 300s)..." -ForegroundColor DarkGray
+            # Wait for completion (this schedule has 14 steps, so give it more time)
+            Write-Host "  Waiting for complex schedule to complete (14 steps, max 300s)..." -ForegroundColor DarkGray
             $maxWait = 300  # 5 minutes for complex schedule
             $pollInterval = 5
             $elapsed = 0
