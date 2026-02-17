@@ -3,6 +3,7 @@ services:
     container_name: JIM.Database
     image: postgres:18
     restart: always
+    # shm_size must be >= shared_buffers - see docker-compose.yml for sizing guidance
     shm_size: '512mb'
     volumes:
       - jim-db-volume:/var/lib/postgresql

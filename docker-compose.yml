@@ -86,13 +86,19 @@ services:
     image: postgres:18
     profiles:
       - with-db
-    # customise the following command parameter values for your environment: https://pgtune.leopard.in.ua/
-    # the default values are for a 64gb windows/32gb wsl 16 core ssd system
+    # PostgreSQL tuning - customise for your environment using https://pgtune.leopard.in.ua/
+    # The default values below are for a 64GB Windows / 32GB WSL / 16 core / SSD system.
+    # For other host sizes, override 'command' and 'shm_size' in a compose override file
+    # (see docker-compose.override.codespaces.yml for an example with 8GB hosts).
+    # IMPORTANT: shm_size must be >= shared_buffers (with ~25% headroom recommended):
+    #   shared_buffers=2GB  -> shm_size: '3gb'    (e.g. 16GB host)
+    #   shared_buffers=4GB  -> shm_size: '5gb'    (e.g. 32GB host)
+    #   shared_buffers=8GB  -> shm_size: '10gb'   (e.g. 64GB host)
+    #   shared_buffers=16GB -> shm_size: '20gb'   (e.g. 128GB host)
     # statement_timeout=300000 (5 minutes) prevents runaway queries
     # log_min_duration_statement=1000 (1 second) logs slow queries for performance analysis
     command: postgres -c max_connections=200 -c shared_buffers=8GB -c effective_cache_size=24GB -c maintenance_work_mem=2GB -c checkpoint_completion_target=0.9 -c wal_buffers=16MB -c default_statistics_target=100 -c random_page_cost=1.1 -c effective_io_concurrency=200 -c work_mem=10485kB -c min_wal_size=1GB -c max_wal_size=4GB -c max_worker_processes=16 -c max_parallel_workers_per_gather=4 -c max_parallel_workers=16 -c max_parallel_maintenance_workers=4 -c statement_timeout=300000 -c log_min_duration_statement=1000
     restart: always
-    # shm_size must be >= shared_buffers for PostgreSQL shared memory allocation
     shm_size: '10gb'
     volumes:
       - jim-db-volume:/var/lib/postgresql
