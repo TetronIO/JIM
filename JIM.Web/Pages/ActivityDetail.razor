@@ -24,12 +24,12 @@
     <MudPaper Class="pa-5 mt-5" Outlined="true">
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">ID:</MudText>
+                <MudText Typo="Typo.button" Class="mud-text-secondary">ID:</MudText>
                 <MudText Class="mud-text-secondary jim-text-code">@_activity.Id</MudText>
             </MudItem>
 
             <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">Target:</MudText>
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Target:</MudText>
                 <MudText>
                     @switch (_activity.TargetType)
                     {
@@ -68,11 +68,11 @@
             </MudItem>
 
             <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">When:</MudText>
+                <MudText Typo="Typo.button" Class="mud-text-secondary">When:</MudText>
                 <MudText Class="mud-text-secondary" title="@_activity.Created.ToLocalTime().ToFriendlyDate()">@_activity.Created.ToLocalTime().ToRelativeTime()</MudText>
             </MudItem>
-            <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">Initiated By:</MudText>
+            <MudItem xs="12" sm="6" md="4" Class="mt-3">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By:</MudText>
                 @{
                     if (_activity.InitiatedByType == ActivityInitiatorType.User)
                     {
@@ -115,16 +115,16 @@
                     }
                 }
             </MudItem>
-            <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">Status:</MudText><br />
+            <MudItem xs="12" sm="6" md="4" Class="mt-3">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Status:</MudText><br />
                 <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(_activity.Status)" Class="ml-0">@_activity.Status.ToString().SplitOnCapitalLetters()</MudChip>
             </MudItem>
-            <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">Execution Time:</MudText>
+            <MudItem xs="12" sm="6" md="4" Class="mt-3">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Execution Time:</MudText>
                 <MudText Class="mud-text-secondary">@(_activity.ExecutionTime?.ToAbbreviatedString() ?? "-")</MudText>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">Total Activity Time:</MudText>
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Total Activity Time:</MudText>
                 <MudText Class="mud-text-secondary">@(_activity.TotalActivityTime?.ToAbbreviatedString() ?? "-")</MudText>
             </MudItem>
         </MudGrid>
@@ -452,27 +452,27 @@
                 <MudTh Style="width: 1px;"></MudTh>
                 <MudTh>
                     <MudTableSortLabel SortLabel="externalid" T="ActivityRunProfileExecutionItemHeader">
-                        <MudText Typo="Typo.button">External Id</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">External Id</MudText>
                     </MudTableSortLabel>
                 </MudTh>
                 <MudTh>
                     <MudTableSortLabel SortLabel="displayname" T="ActivityRunProfileExecutionItemHeader">
-                        <MudText Typo="Typo.button">Name</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Name</MudText>
                     </MudTableSortLabel>
                 </MudTh>
                 <MudTh>
                     <MudTableSortLabel SortLabel="objecttype" T="ActivityRunProfileExecutionItemHeader">
-                        <MudText Typo="Typo.button">External Object Type</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">External Object Type</MudText>
                     </MudTableSortLabel>
                 </MudTh>
                 <MudTh>
                     <MudTableSortLabel SortLabel="changetype" T="ActivityRunProfileExecutionItemHeader">
-                        <MudText Typo="Typo.button">Change Type</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Change Type</MudText>
                     </MudTableSortLabel>
                 </MudTh>
                 <MudTh>
                     <MudTableSortLabel SortLabel="errortype" T="ActivityRunProfileExecutionItemHeader">
-                        <MudText Typo="Typo.button">Error Type</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Error Type</MudText>
                     </MudTableSortLabel>
                 </MudTh>
             </HeaderContent>
