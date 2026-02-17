@@ -201,7 +201,7 @@
         </MudStack>
     }
 
-    @if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute && _preferencesLoaded)
+    @if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute && _initialisationComplete && _preferencesLoaded)
     {
         @if (_activityRunProfileExecutionStats != null)
         {
@@ -530,6 +530,7 @@
     private bool _loading;
     private int _rowsPerPage = 10;
     private bool _preferencesLoaded;
+    private bool _initialisationComplete;
 
     // Change type filter - when chips are selected, the table reloads with the filter applied
     private IReadOnlyCollection<ObjectChangeType> _selectedChangeTypes = new List<ObjectChangeType>();
@@ -566,6 +567,8 @@
 
         if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute)
             _activityRunProfileExecutionStats = await Jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
+
+        _initialisationComplete = true;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
