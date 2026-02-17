@@ -1,5 +1,6 @@
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Worker.Processors;
@@ -73,6 +74,13 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         Assert.That(mvo!.LastConnectorDisconnectedDate, Is.Null,
             "MVO with DeletionRule=Manual should NOT have LastConnectorDisconnectedDate set, " +
             "even when all CSOs are disconnected");
+
+        // Assert: Delta Sync should produce both a Disconnected RPEI (join broken) and a Deleted RPEI (CSO removed)
+        var rpeis = deltaSyncActivity.RunProfileExecutionItems;
+        Assert.That(rpeis.Count(r => r.ObjectChangeType == ObjectChangeType.Disconnected), Is.EqualTo(1),
+            "Delta Sync should produce a Disconnected RPEI when a joined CSO is obsoleted");
+        Assert.That(rpeis.Count(r => r.ObjectChangeType == ObjectChangeType.Deleted), Is.EqualTo(1),
+            "Delta Sync should produce a Deleted RPEI when an obsolete CSO is removed");
     }
 
     #endregion
@@ -177,6 +185,13 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         var mvo = await DbContext.MetaverseObjects.FindAsync(mvoId);
         Assert.That(mvo, Is.Null,
             "MVO with grace period = 0 should be deleted immediately during sync, not deferred to housekeeping");
+
+        // Assert: Delta Sync should produce both a Disconnected RPEI and a Deleted RPEI
+        var rpeis = deltaSyncActivity.RunProfileExecutionItems;
+        Assert.That(rpeis.Count(r => r.ObjectChangeType == ObjectChangeType.Disconnected), Is.EqualTo(1),
+            "Delta Sync should produce a Disconnected RPEI when a joined CSO is obsoleted");
+        Assert.That(rpeis.Count(r => r.ObjectChangeType == ObjectChangeType.Deleted), Is.EqualTo(1),
+            "Delta Sync should produce a Deleted RPEI when an obsolete CSO is removed");
     }
 
     /// <summary>

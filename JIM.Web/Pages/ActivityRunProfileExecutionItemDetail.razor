@@ -396,8 +396,8 @@
         </MudGrid>
     }
 
-    @* Deletion Impact Section - shown for CSO deletions *@
-    @if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
+    @* Deletion Impact Section - shown for CSO deletions and disconnections (source deletion triggers both) *@
+    @if (_activityRunProfileExecutionItem.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected)
     {
         <MudText Typo="Typo.h6" Class="mb-3">Metaverse Impact</MudText>
         @if (_metaverseObjectType != null)
@@ -789,8 +789,8 @@ else
                 _activityRunProfileExecutionItem.ConnectedSystemObjectId.Value);
         }
 
-        // For deletion items, load the object type to show concrete deletion rule information
-        if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
+        // For deletion/disconnection items, load the object type to show concrete deletion rule information
+        if (_activityRunProfileExecutionItem.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected)
         {
             // Try to get the MVO type from the CSO's linked MetaverseObject, or from sync rules
             int? mvoTypeId = null;
@@ -1034,8 +1034,8 @@ else
                 : "The connected system object was updated with new attribute values.",
             ObjectChangeType.Deleted => IsSyncContext()
                 ? (hasExternalId
-                    ? $"The connected system object ({externalId}) was removed after the source system deletion was confirmed. Join and metaverse deletion rules were evaluated."
-                    : "The connected system object was removed after the source system deletion was confirmed. Join and metaverse deletion rules were evaluated.")
+                    ? $"The connected system object ({externalId}) was removed from staging after the source system deletion was confirmed."
+                    : "The connected system object was removed from staging after the source system deletion was confirmed.")
                 : (hasExternalId
                     ? $"The connected system object ({externalId}) was detected as deleted from the source system and marked for removal."
                     : "The connected system object was detected as deleted from the source system and marked for removal."),
@@ -1048,8 +1048,8 @@ else
                 ? $"Attributes were flowed for the connected system object ({externalId})."
                 : "Attributes were flowed between the connected system object and metaverse.",
             ObjectChangeType.Disconnected => hasExternalId
-                ? $"The connected system object ({externalId}) was disconnected from the metaverse."
-                : "The connected system object was disconnected from the metaverse.",
+                ? $"The connected system object ({externalId}) was disconnected from the metaverse. Join and metaverse deletion rules were evaluated."
+                : "The connected system object was disconnected from the metaverse. Join and metaverse deletion rules were evaluated.",
             // Export operations
             ObjectChangeType.Provisioned => hasExternalId
                 ? $"A new connected system object ({externalId}) was provisioned in the target system."

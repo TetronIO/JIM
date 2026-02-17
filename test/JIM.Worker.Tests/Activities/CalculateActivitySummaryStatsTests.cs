@@ -353,4 +353,61 @@ public class CalculateActivitySummaryStatsTests
     }
 
     #endregion
+
+    #region Source Deletion Scenarios
+
+    [Test]
+    public void CalculateActivitySummaryStats_SourceDeletion_CountsBothDisconnectedAndDeleted()
+    {
+        // Arrange - When a joined CSO is obsoleted during sync, two RPEIs are produced:
+        // 1. Disconnected (CSO-MVO join broken)
+        // 2. Deleted (CSO removed from staging)
+        var activity = CreateActivity();
+        AddRpeisAndCalculate(activity,
+            CreateRpei(ObjectChangeType.Disconnected),
+            CreateRpei(ObjectChangeType.Deleted));
+
+        // Assert - Both stats should be counted
+        Assert.That(activity.TotalDisconnected, Is.EqualTo(1));
+        Assert.That(activity.TotalDeleted, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void CalculateActivitySummaryStats_SourceDeletionWithAttributeRemovals_CountsAbsorbedFlows()
+    {
+        // Arrange - Disconnected RPEI with attribute removals (contributed attributes recalled)
+        var activity = CreateActivity();
+        AddRpeisAndCalculate(activity,
+            CreateRpei(ObjectChangeType.Disconnected, attributeFlowCount: 3),
+            CreateRpei(ObjectChangeType.Deleted));
+
+        // Assert
+        Assert.That(activity.TotalDisconnected, Is.EqualTo(1));
+        Assert.That(activity.TotalDeleted, Is.EqualTo(1));
+        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(3), "Absorbed attribute removals should be counted");
+    }
+
+    [Test]
+    public void CalculateActivitySummaryStats_MultipleSourceDeletions_CountsAllPairs()
+    {
+        // Arrange - Multiple objects deleted from source, each producing Disconnected + Deleted
+        var activity = CreateActivity();
+        AddRpeisAndCalculate(activity,
+            // Object 1 deletion
+            CreateRpei(ObjectChangeType.Disconnected),
+            CreateRpei(ObjectChangeType.Deleted),
+            // Object 2 deletion
+            CreateRpei(ObjectChangeType.Disconnected, attributeFlowCount: 2),
+            CreateRpei(ObjectChangeType.Deleted),
+            // Object 3 deletion
+            CreateRpei(ObjectChangeType.Disconnected),
+            CreateRpei(ObjectChangeType.Deleted));
+
+        // Assert
+        Assert.That(activity.TotalDisconnected, Is.EqualTo(3));
+        Assert.That(activity.TotalDeleted, Is.EqualTo(3));
+        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(2), "Only absorbed flows from one Disconnected RPEI");
+    }
+
+    #endregion
 }

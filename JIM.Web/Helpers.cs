@@ -315,7 +315,7 @@ public static class Helpers
             ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport =>
                 new[] { ObjectChangeType.Added, ObjectChangeType.Updated, ObjectChangeType.Deleted },
             ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation =>
-                new[] { ObjectChangeType.Projected, ObjectChangeType.Joined, ObjectChangeType.AttributeFlow, ObjectChangeType.Disconnected },
+                new[] { ObjectChangeType.Projected, ObjectChangeType.Joined, ObjectChangeType.AttributeFlow, ObjectChangeType.Disconnected, ObjectChangeType.Deleted },
             ConnectedSystemRunType.Export =>
                 new[] { ObjectChangeType.Provisioned, ObjectChangeType.Exported, ObjectChangeType.Deprovisioned },
             _ => Array.Empty<ObjectChangeType>()
