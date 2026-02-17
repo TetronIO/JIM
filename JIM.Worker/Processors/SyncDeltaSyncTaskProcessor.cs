@@ -198,12 +198,8 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             }
         }
 
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Resolving references");
-
-        using (Diagnostics.Sync.StartSpan("ResolveReferences"))
-        {
-            await ResolveReferencesAsync();
-        }
+        // Ensure the activity and any pending db updates are applied after all pages are processed
+        await _jim.Activities.UpdateActivityAsync(_activity);
 
         // Update the watermark to mark this sync as complete
         await UpdateDeltaSyncWatermarkAsync();

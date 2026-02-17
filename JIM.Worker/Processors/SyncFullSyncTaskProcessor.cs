@@ -202,14 +202,8 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             }
         }
 
-        // TODO: work out if CSO changes have been persisted. Is a dedicated db update call needed?
-        // ensure the activity and any pending db updates are applied.
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Resolving references");
-
-        using (Diagnostics.Sync.StartSpan("ResolveReferences"))
-        {
-            await ResolveReferencesAsync();
-        }
+        // Ensure the activity and any pending db updates are applied after all pages are processed
+        await _jim.Activities.UpdateActivityAsync(_activity);
 
         // Update the delta sync watermark to establish baseline for future delta syncs
         await UpdateDeltaSyncWatermarkAsync();

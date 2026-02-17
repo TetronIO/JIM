@@ -129,7 +129,7 @@ public abstract class SyncTaskProcessorBase
         // Track changes to determine if we need to create an execution item.
         // Only create items for CSOs that had actual changes (optimisation to avoid allocations for unchanged objects).
         var changeResult = MetaverseObjectChangeResult.NoChanges();
-        ActivityRunProfileExecutionItem? obsoleteExecutionItem = null;
+        List<ActivityRunProfileExecutionItem> obsoleteExecutionItems = [];
 
         try
         {
@@ -142,7 +142,7 @@ public abstract class SyncTaskProcessorBase
 
             using (Diagnostics.Sync.StartSpan("ProcessObsoleteConnectedSystemObject"))
             {
-                obsoleteExecutionItem = await ProcessObsoleteConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
+                obsoleteExecutionItems = await ProcessObsoleteConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
             }
 
             // if the CSO isn't marked as obsolete (it might just have been), look to see if we need to make any related Metaverse Object changes.
@@ -155,10 +155,12 @@ public abstract class SyncTaskProcessorBase
                 }
             }
 
-            // Add execution item for obsolete CSO (created by ProcessObsoleteConnectedSystemObjectAsync)
-            if (obsoleteExecutionItem != null)
+            // Add execution items for obsolete CSO (created by ProcessObsoleteConnectedSystemObjectAsync)
+            // May include both a Disconnected RPEI and a Deleted RPEI when a joined CSO is obsoleted
+            if (obsoleteExecutionItems.Count > 0)
             {
-                _activity.RunProfileExecutionItems.Add(obsoleteExecutionItem);
+                foreach (var item in obsoleteExecutionItems)
+                    _activity.RunProfileExecutionItems.Add(item);
             }
             // Handle execution item for successful changes (join, projection, attribute flow)
             else if (changeResult.HasChanges)
@@ -384,20 +386,23 @@ public abstract class SyncTaskProcessorBase
     /// Respects the InboundOutOfScopeAction setting on import sync rules to determine whether to disconnect.
     /// Deleting a Metaverse Object can have downstream impacts on other Connected System objects.
     /// CSO deletions are batched for performance - call FlushObsoleteCsoOperationsAsync() at page boundaries.
+    /// When a joined CSO is obsoleted with Disconnect action, two RPEIs are produced:
+    /// 1. Disconnected - records the CSO-MVO join being broken (with any attribute removals)
+    /// 2. Deleted - records the CSO being removed from staging
     /// </summary>
-    /// <returns>The execution item if CSO was obsoleted (for the caller to add to the activity), null otherwise.</returns>
-    protected async Task<ActivityRunProfileExecutionItem?> ProcessObsoleteConnectedSystemObjectAsync(
+    /// <returns>The execution items if CSO was obsoleted (for the caller to add to the activity), empty list otherwise.</returns>
+    protected async Task<List<ActivityRunProfileExecutionItem>> ProcessObsoleteConnectedSystemObjectAsync(
         List<SyncRule> activeSyncRules,
         ConnectedSystemObject connectedSystemObject)
     {
         if (connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
-            return null;
+            return [];
 
-        // Create the execution item for this obsolete CSO
+        // Create the execution item for the CSO deletion
         // Note: RPEI uses Delete (user-facing), CSO status uses Obsolete (internal state)
-        var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
-        runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
-        runProfileExecutionItem.ObjectChangeType = ObjectChangeType.Deleted;
+        var deletionExecutionItem = _activity.PrepareRunProfileExecutionItem();
+        deletionExecutionItem.ConnectedSystemObject = connectedSystemObject;
+        deletionExecutionItem.ObjectChangeType = ObjectChangeType.Deleted;
 
         if (connectedSystemObject.MetaverseObject == null)
         {
@@ -410,12 +415,12 @@ public abstract class SyncTaskProcessorBase
                 _quietCsosToDelete.Add(connectedSystemObject);
                 Log.Debug("ProcessObsoleteConnectedSystemObjectAsync: CSO {CsoId} already disconnected (JoinType=NotJoined), deleting quietly",
                     connectedSystemObject.Id);
-                return null;
+                return [];
             }
 
             // Not joined but has a different JoinType (e.g., Explicit) - this is a regular orphan deletion
-            _obsoleteCsosToDelete.Add((connectedSystemObject, runProfileExecutionItem));
-            return runProfileExecutionItem;
+            _obsoleteCsosToDelete.Add((connectedSystemObject, deletionExecutionItem));
+            return [deletionExecutionItem];
         }
 
         // CSO is joined to an MVO - check InboundOutOfScopeAction to determine behaviour
@@ -430,14 +435,20 @@ public abstract class SyncTaskProcessorBase
 
             // Note: We still delete the CSO as it's obsolete in the source system,
             // but we don't disconnect from MVO or trigger deletion rules
-            _obsoleteCsosToDelete.Add((connectedSystemObject, runProfileExecutionItem));
-            return runProfileExecutionItem;
+            _obsoleteCsosToDelete.Add((connectedSystemObject, deletionExecutionItem));
+            return [deletionExecutionItem];
         }
 
         // InboundOutOfScopeAction = Disconnect (default) - break the join and handle MVO deletion rules
         var mvo = connectedSystemObject.MetaverseObject;
         var connectedSystemId = connectedSystemObject.ConnectedSystemId;
         var mvoId = mvo.Id;
+
+        // Create a separate Disconnected RPEI to record the CSO-MVO join being broken.
+        // This provides granular audit trail: Disconnected = join broken, Deleted = CSO removed.
+        var disconnectedExecutionItem = _activity.PrepareRunProfileExecutionItem();
+        disconnectedExecutionItem.ConnectedSystemObject = connectedSystemObject;
+        disconnectedExecutionItem.ObjectChangeType = ObjectChangeType.Disconnected;
 
         // Query remaining CSO count BEFORE breaking the join so the count includes all current connectors.
         // Then subtract 1 to exclude this CSO which is about to be disconnected.
@@ -467,8 +478,8 @@ public abstract class SyncTaskProcessorBase
                 var changedAttributes = mvo.PendingAttributeValueRemovals.ToList();
                 var removedAttributes = mvo.PendingAttributeValueRemovals.ToHashSet();
 
-                // Track attribute removals on the RPEI so they aren't invisible within the Deleted change type
-                runProfileExecutionItem.AttributeFlowCount = mvo.PendingAttributeValueRemovals.Count;
+                // Track attribute removals on the Disconnected RPEI (these are part of the disconnection, not the deletion)
+                disconnectedExecutionItem.AttributeFlowCount = mvo.PendingAttributeValueRemovals.Count;
 
                 Log.Information("ProcessObsoleteConnectedSystemObjectAsync: Applying {Count} attribute removals to MVO {MvoId} and queueing for export evaluation",
                     changedAttributes.Count, mvo.Id);
@@ -493,12 +504,13 @@ public abstract class SyncTaskProcessorBase
         Log.Verbose($"ProcessObsoleteConnectedSystemObjectAsync: Broke join between CSO {connectedSystemObject.Id} and MVO {mvoId}.");
 
         // Queue the CSO for batch deletion (deletion will happen at end of page processing)
-        _obsoleteCsosToDelete.Add((connectedSystemObject, runProfileExecutionItem));
+        _obsoleteCsosToDelete.Add((connectedSystemObject, deletionExecutionItem));
 
         // Evaluate MVO deletion rule based on type configuration
         await ProcessMvoDeletionRuleAsync(mvo, connectedSystemId, remainingCsoCount);
 
-        return runProfileExecutionItem;
+        // Return both RPEIs: Disconnected first (the join was broken), then Deleted (CSO removed)
+        return [disconnectedExecutionItem, deletionExecutionItem];
     }
 
     /// <summary>
@@ -1524,21 +1536,6 @@ public abstract class SyncTaskProcessorBase
 
         Log.Verbose("ApplyPendingMetaverseObjectAttributeChanges: Applied {AddCount} additions and {RemoveCount} removals to MVO {MvoId}",
             addCount, removeCount, mvo.Id);
-    }
-
-    /// <summary>
-    /// As part of updating or creating reference Metaverse Attribute Values from Connected System Object Attribute Values, references would have been staged
-    /// as unresolved, pointing to the Connected System Object. This converts those CSO unresolved references to MVO references.
-    /// </summary>
-    protected Task ResolveReferencesAsync()
-    {
-        // find all Metaverse Attribute Values with unresolved reference values
-        // get the joined Metaverse Object and add it to the Metaverse Object Attribute Value
-        // remove the unresolved reference value.
-        // update the Metaverse Object Attribute Value.
-
-        // TODO: "Is this still needed? We're assigning MVO references from CSO reference values on sync rule processing."
-        return Task.CompletedTask;
     }
 
     /// <summary>

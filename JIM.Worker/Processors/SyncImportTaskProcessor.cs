@@ -1471,6 +1471,10 @@ public class SyncImportTaskProcessor
         // update the cso
         // create a connected system object change for this
 
+        // Use sync page size for consistent progress persistence across all sync operations
+        var pageSize = await _jim.ServiceSettings.GetSyncPageSizeAsync();
+        var processedCount = 0;
+
         // enumerate just the CSOs with unresolved references, for efficiency
         foreach (var csoToProcess in connectedSystemObjectsToBeCreated.Where(cso => cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))))
         {
@@ -1481,6 +1485,13 @@ public class SyncImportTaskProcessor
             // enumerate just the attribute values for this CSO that are for unresolved references
             foreach (var referenceAttributeValue in csoToProcess.AttributeValues.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
                 await ResolveAttributeValueReferenceAsync(csoToProcess, referenceAttributeValue, externalIdAttributeToUse, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+
+            processedCount++;
+            _activity.ObjectsProcessed = processedCount;
+
+            // persist progress at page boundaries for consistent UI updates
+            if (processedCount % pageSize == 0)
+                await _jim.Activities.UpdateActivityAsync(_activity);
         }
 
         foreach (var csoToProcess in connectedSystemObjectsToBeUpdated.Where(cso => cso.PendingAttributeValueAdditions.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))))
@@ -1492,7 +1503,17 @@ public class SyncImportTaskProcessor
             // enumerate just the attribute values for this CSO that are for unresolved references
             foreach (var referenceAttributeValue in csoToProcess.PendingAttributeValueAdditions.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
                 await ResolveAttributeValueReferenceAsync(csoToProcess, referenceAttributeValue, externalIdAttributeToUse, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+
+            processedCount++;
+            _activity.ObjectsProcessed = processedCount;
+
+            // persist progress at page boundaries for consistent UI updates
+            if (processedCount % pageSize == 0)
+                await _jim.Activities.UpdateActivityAsync(_activity);
         }
+
+        // persist final progress so the UI reflects completion before moving to the next phase
+        await _jim.Activities.UpdateActivityAsync(_activity);
     }
 
     private async Task ResolveAttributeValueReferenceAsync(ConnectedSystemObject csoToProcess, ConnectedSystemObjectAttributeValue referenceAttributeValue, ConnectedSystemObjectTypeAttribute externalIdAttribute, IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
