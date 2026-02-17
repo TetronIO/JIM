@@ -883,6 +883,16 @@ else
         return result;
     }
 
+    /// <summary>
+    /// Returns true if the parent activity is a sync run profile, indicating that
+    /// ObjectChangeType.Deleted means "deletion processed" rather than "deletion detected".
+    /// </summary>
+    private bool IsSyncContext()
+    {
+        return _activity?.ConnectedSystemRunType is ConnectedSystemRunType.FullSynchronisation
+            or ConnectedSystemRunType.DeltaSynchronisation;
+    }
+
     private Color GetStatusColor()
     {
         if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
@@ -928,7 +938,7 @@ else
             // Import operations
             ObjectChangeType.Added => "Object Added to Staging",
             ObjectChangeType.Updated => "Object Updated",
-            ObjectChangeType.Deleted => "Object Deleted from Source",
+            ObjectChangeType.Deleted => IsSyncContext() ? "Source Deletion Processed" : "Source Deletion Detected",
             // Sync operations
             ObjectChangeType.Projected => "Projected New Metaverse Object",
             ObjectChangeType.Joined => "Joined to Metaverse Object",
@@ -1022,9 +1032,13 @@ else
             ObjectChangeType.Updated => hasExternalId
                 ? $"The connected system object ({externalId}) was updated with new attribute values."
                 : "The connected system object was updated with new attribute values.",
-            ObjectChangeType.Deleted => hasExternalId
-                ? $"The connected system object ({externalId}) was deleted from the source system."
-                : "The connected system object was deleted from the source system.",
+            ObjectChangeType.Deleted => IsSyncContext()
+                ? (hasExternalId
+                    ? $"The connected system object ({externalId}) was removed after the source system deletion was confirmed. Join and metaverse deletion rules were evaluated."
+                    : "The connected system object was removed after the source system deletion was confirmed. Join and metaverse deletion rules were evaluated.")
+                : (hasExternalId
+                    ? $"The connected system object ({externalId}) was detected as deleted from the source system and marked for removal."
+                    : "The connected system object was detected as deleted from the source system and marked for removal."),
             // Sync operations
             ObjectChangeType.Projected => "A new metaverse object was created via projection from the connected system object.",
             ObjectChangeType.Joined => hasExternalId
@@ -1089,7 +1103,7 @@ else
             // Import operations - affect Connected System Objects
             ObjectChangeType.Added => "CSO Added",
             ObjectChangeType.Updated => "CSO Updated",
-            ObjectChangeType.Deleted => "CSO Deleted",
+            ObjectChangeType.Deleted => IsSyncContext() ? "Deletion Processed" : "Deletion Detected",
             // Sync operations
             ObjectChangeType.Projected => "Projected",
             ObjectChangeType.Joined => "Joined",

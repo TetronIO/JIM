@@ -226,7 +226,7 @@
                         <MudText Typo="Typo.h4" Color="Color.Info">@_activityRunProfileExecutionStats.TotalCsoUpdates.ToString("N0")</MudText>
                     </MudPaper>
                     <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Red.Default}; min-width: 120px;")">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Deleted</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Deletions Detected</MudText>
                         <MudText Typo="Typo.h4" Color="Color.Error">@_activityRunProfileExecutionStats.TotalCsoDeletes.ToString("N0")</MudText>
                     </MudPaper>
 
@@ -273,6 +273,15 @@
                         <MudText Typo="Typo.button" Class="mud-text-secondary">Disconnected</MudText>
                         <MudText Typo="Typo.h4" Color="Color.Warning">@_activityRunProfileExecutionStats.TotalDisconnections.ToString("N0")</MudText>
                     </MudPaper>
+
+                    @* Deletions Processed - CSOs finalised as deleted during sync *@
+                    @if (_activityRunProfileExecutionStats.TotalCsoDeletes > 0)
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Red.Default}; min-width: 120px;")">
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">Deletions Processed</MudText>
+                            <MudText Typo="Typo.h4" Color="Color.Error">@_activityRunProfileExecutionStats.TotalCsoDeletes.ToString("N0")</MudText>
+                        </MudPaper>
+                    }
 
                     @* Drift Corrections - shown when drift was detected and corrective exports staged *@
                     @if (_activityRunProfileExecutionStats.TotalDriftCorrections > 0)
@@ -355,7 +364,7 @@
                                          Color="@(IsChangeTypeSelected(changeType) ? Color.Default : Helpers.GetRunItemMudBlazorColorForType(changeType))"
                                          Variant="@(IsChangeTypeSelected(changeType) ? Variant.Outlined : Variant.Text)"
                                          SelectedColor="@Helpers.GetRunItemMudBlazorColorForType(changeType)">
-                                    @Helpers.GetChangeTypeDisplayName(changeType)
+                                    @GetContextAwareChangeTypeName(changeType)
                                     @if (GetChangeTypeCount(changeType) is var count && count > 0)
                                     {
                                         <MudText Typo="Typo.caption" Class="ml-1">(@count.ToString("N0"))</MudText>
@@ -901,6 +910,18 @@
             Color.Surface => "surface",
             _ => "default"
         };
+    }
+
+    /// <summary>
+    /// Returns a context-aware display name for a change type.
+    /// For ObjectChangeType.Deleted, differentiates between import (detection) and sync (processing).
+    /// </summary>
+    private string GetContextAwareChangeTypeName(ObjectChangeType changeType)
+    {
+        if (changeType == ObjectChangeType.Deleted)
+            return IsSyncRun() ? "Deletions Processed" : "Deletions Detected";
+
+        return Helpers.GetChangeTypeDisplayName(changeType);
     }
 
     /// <summary>

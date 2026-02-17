@@ -157,7 +157,7 @@
                                 }
                                 @if (context.TotalDeleted > 0)
                                 {
-                                    <MudTooltip Text="Deleted" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="Deletions Detected" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
                                                  Icon="@Icons.Material.Filled.Delete" Class="px-2">
                                             @context.TotalDeleted.ToString("N0")
@@ -205,7 +205,7 @@
                                 }
                                 @if (context.TotalDeleted > 0)
                                 {
-                                    <MudTooltip Text="Deleted" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="Deletions Processed" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
                                                  Icon="@Icons.Material.Filled.Delete" Class="px-2">
                                             @context.TotalDeleted.ToString("N0")
@@ -383,77 +383,77 @@
             @if (_selectedActivity.Status != ActivityStatus.InProgress)
             {
                 <MudPaper Elevation="0" Class="pa-3" Outlined="true">
-                    <MudText Typo="Typo.subtitle2" Class="mb-3" Color="Color.Primary">Statistics</MudText>
+                    <MudText Typo="Typo.subtitle2" Class="mb-2" Color="Color.Primary">Statistics</MudText>
                     @{ var sidebarRunType = GetEffectiveRunType(_selectedActivity.ConnectedSystemRunType, _selectedActivity.TargetName); }
-                    <MudStack Row="true" Spacing="3" Justify="Justify.SpaceEvenly" Class="flex-wrap">
-                        @if (sidebarRunType == "Import")
-                        {
-                            <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Success">@_selectedActivity.TotalAdded.ToString("N0")</MudText>
-                                <MudText Typo="Typo.caption">@(_selectedActivity.TotalAdded == 1 ? "Add" : "Adds")</MudText>
-                            </div>
-                            <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Info">@_selectedActivity.TotalUpdated.ToString("N0")</MudText>
-                                <MudText Typo="Typo.caption">@(_selectedActivity.TotalUpdated == 1 ? "Update" : "Updates")</MudText>
-                            </div>
-                            <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Error">@_selectedActivity.TotalDeleted.ToString("N0")</MudText>
-                                <MudText Typo="Typo.caption">@(_selectedActivity.TotalDeleted == 1 ? "Delete" : "Deletes")</MudText>
-                            </div>
-                        }
-                        else if (sidebarRunType == "Sync")
-                        {
-                            <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Primary">@_selectedActivity.TotalProjected.ToString("N0")</MudText>
-                                <MudText Typo="Typo.caption">@(_selectedActivity.TotalProjected == 1 ? "Projection" : "Projections")</MudText>
-                            </div>
-                            <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Secondary">@_selectedActivity.TotalJoined.ToString("N0")</MudText>
-                                <MudText Typo="Typo.caption">@(_selectedActivity.TotalJoined == 1 ? "Join" : "Joins")</MudText>
-                            </div>
-                            <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Info">@_selectedActivity.TotalAttributeFlows.ToString("N0")</MudText>
-                                <MudText Typo="Typo.caption">@(_selectedActivity.TotalAttributeFlows == 1 ? "Attribute Flow" : "Attribute Flows")</MudText>
-                            </div>
-                            <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Warning">@_selectedActivity.TotalDisconnected.ToString("N0")</MudText>
-                                <MudText Typo="Typo.caption">@(_selectedActivity.TotalDisconnected == 1 ? "Disconnect" : "Disconnects")</MudText>
-                            </div>
-                            <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Error">@_selectedActivity.TotalDeleted.ToString("N0")</MudText>
-                                <MudText Typo="Typo.caption">@(_selectedActivity.TotalDeleted == 1 ? "Delete" : "Deletes")</MudText>
-                            </div>
-                            <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Warning">@_selectedActivity.TotalDriftCorrections.ToString("N0")</MudText>
-                                <MudText Typo="Typo.caption">@(_selectedActivity.TotalDriftCorrections == 1 ? "Drift Correction" : "Drift Corrections")</MudText>
-                            </div>
-                            <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Info">@_selectedActivity.TotalPendingExports.ToString("N0")</MudText>
-                                <MudText Typo="Typo.caption">@(_selectedActivity.TotalPendingExports == 1 ? "Pending Export" : "Pending Exports")</MudText>
-                            </div>
-                        }
-                        else if (sidebarRunType == "Export")
-                        {
-                            <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Success">@_selectedActivity.TotalProvisioned.ToString("N0")</MudText>
-                                <MudText Typo="Typo.caption">@(_selectedActivity.TotalProvisioned == 1 ? "Provision" : "Provisions")</MudText>
-                            </div>
-                            <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Info">@_selectedActivity.TotalExported.ToString("N0")</MudText>
-                                <MudText Typo="Typo.caption">@(_selectedActivity.TotalExported == 1 ? "Export" : "Exports")</MudText>
-                            </div>
-                            <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Error">@_selectedActivity.TotalDeprovisioned.ToString("N0")</MudText>
-                                <MudText Typo="Typo.caption">@(_selectedActivity.TotalDeprovisioned == 1 ? "Deprovision" : "Deprovisions")</MudText>
-                            </div>
-                        }
-                        <div class="text-center">
-                            <MudText Typo="Typo.h5" Color="@(_selectedActivity.TotalErrors > 0 ? Color.Error : Color.Default)">
-                                @_selectedActivity.TotalErrors.ToString("N0")
-                            </MudText>
-                            <MudText Typo="Typo.caption">@(_selectedActivity.TotalErrors == 1 ? "Error" : "Errors")</MudText>
-                        </div>
-                    </MudStack>
+                    <MudSimpleTable Dense="true" Hover="true">
+                        <tbody>
+                            @if (sidebarRunType == "Import")
+                            {
+                                <tr>
+                                    <td><MudText Typo="Typo.body2">Adds</MudText></td>
+                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Success">@_selectedActivity.TotalAdded.ToString("N0")</MudText></td>
+                                </tr>
+                                <tr>
+                                    <td><MudText Typo="Typo.body2">Updates</MudText></td>
+                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Info">@_selectedActivity.TotalUpdated.ToString("N0")</MudText></td>
+                                </tr>
+                                <tr>
+                                    <td><MudText Typo="Typo.body2">Deletions Detected</MudText></td>
+                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Error">@_selectedActivity.TotalDeleted.ToString("N0")</MudText></td>
+                                </tr>
+                            }
+                            else if (sidebarRunType == "Sync")
+                            {
+                                <tr>
+                                    <td><MudText Typo="Typo.body2">Projections</MudText></td>
+                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Primary">@_selectedActivity.TotalProjected.ToString("N0")</MudText></td>
+                                </tr>
+                                <tr>
+                                    <td><MudText Typo="Typo.body2">Joins</MudText></td>
+                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Secondary">@_selectedActivity.TotalJoined.ToString("N0")</MudText></td>
+                                </tr>
+                                <tr>
+                                    <td><MudText Typo="Typo.body2">Attribute Flows</MudText></td>
+                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Info">@_selectedActivity.TotalAttributeFlows.ToString("N0")</MudText></td>
+                                </tr>
+                                <tr>
+                                    <td><MudText Typo="Typo.body2">Disconnects</MudText></td>
+                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Warning">@_selectedActivity.TotalDisconnected.ToString("N0")</MudText></td>
+                                </tr>
+                                <tr>
+                                    <td><MudText Typo="Typo.body2">Deletions Processed</MudText></td>
+                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Error">@_selectedActivity.TotalDeleted.ToString("N0")</MudText></td>
+                                </tr>
+                                <tr>
+                                    <td><MudText Typo="Typo.body2">Drift Corrections</MudText></td>
+                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Warning">@_selectedActivity.TotalDriftCorrections.ToString("N0")</MudText></td>
+                                </tr>
+                                <tr>
+                                    <td><MudText Typo="Typo.body2">Pending Exports</MudText></td>
+                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Info">@_selectedActivity.TotalPendingExports.ToString("N0")</MudText></td>
+                                </tr>
+                            }
+                            else if (sidebarRunType == "Export")
+                            {
+                                <tr>
+                                    <td><MudText Typo="Typo.body2">Provisions</MudText></td>
+                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Success">@_selectedActivity.TotalProvisioned.ToString("N0")</MudText></td>
+                                </tr>
+                                <tr>
+                                    <td><MudText Typo="Typo.body2">Exports</MudText></td>
+                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Info">@_selectedActivity.TotalExported.ToString("N0")</MudText></td>
+                                </tr>
+                                <tr>
+                                    <td><MudText Typo="Typo.body2">Deprovisions</MudText></td>
+                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Error">@_selectedActivity.TotalDeprovisioned.ToString("N0")</MudText></td>
+                                </tr>
+                            }
+                            <tr>
+                                <td><MudText Typo="Typo.body2">Errors</MudText></td>
+                                <td style="text-align: right;"><MudText Typo="Typo.body2" Color="@(_selectedActivity.TotalErrors > 0 ? Color.Error : Color.Default)">@_selectedActivity.TotalErrors.ToString("N0")</MudText></td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
                 </MudPaper>
             }
 

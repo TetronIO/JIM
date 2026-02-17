@@ -125,7 +125,7 @@
                             }
                             @if (context.TotalDeleted > 0)
                             {
-                                <MudTooltip Text="Deleted" Arrow="true" Placement="Placement.Top">
+                                <MudTooltip Text="Deletions Detected" Arrow="true" Placement="Placement.Top">
                                     <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
                                              Icon="@Icons.Material.Filled.Delete" Class="px-2">
                                         @context.TotalDeleted.ToString("N0")
@@ -168,6 +168,15 @@
                                     <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
                                              Icon="@Icons.Material.Filled.LinkOff" Class="px-2">
                                         @context.TotalDisconnected.ToString("N0")
+                                    </MudChip>
+                                </MudTooltip>
+                            }
+                            @if (context.TotalDeleted > 0)
+                            {
+                                <MudTooltip Text="Deletions Processed" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
+                                             Icon="@Icons.Material.Filled.Delete" Class="px-2">
+                                        @context.TotalDeleted.ToString("N0")
                                     </MudChip>
                                 </MudTooltip>
                             }
