@@ -1984,10 +1984,39 @@ See [#196](https://github.com/TetronIO/JIM/issues/196) for implementation detail
 **Automatic Image Building:**
 The `Run-IntegrationTests.ps1` script automatically builds the custom Samba AD image if it doesn't exist locally. This happens on first run and takes ~30 seconds. Subsequent runs use the cached image for fast startup (~10 seconds).
 
-**To manually rebuild pre-built images (required after base image updates):**
-```powershell
-pwsh test/integration/docker/samba-ad-prebuilt/Build-SambaImages.ps1 -Images All
-```
+**To manually rebuild pre-built images (required after base image updates or password changes):**
+
+1. **Rebuild images locally:**
+   ```powershell
+   pwsh test/integration/docker/samba-ad-prebuilt/Build-SambaImages.ps1 -Images All
+   ```
+
+2. **Push to GitHub Container Registry (maintainers only):**
+
+   First, authenticate with GHCR using a Personal Access Token with `write:packages` scope:
+
+   ```bash
+   # Create PAT at: https://github.com/settings/tokens/new
+   # Required scope: write:packages
+   # Then login:
+   echo YOUR_TOKEN | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+   ```
+
+   **Important:** The `gh` CLI token does **not** have the `write:packages` scope and will fail with "permission_denied: The token provided does not match expected scopes." You must create a dedicated PAT.
+
+   After authentication, push the images:
+
+   ```powershell
+   pwsh test/integration/docker/samba-ad-prebuilt/Build-SambaImages.ps1 -Images All -Push
+   ```
+
+   Alternatively, in GitHub Codespaces you can use the `gh` CLI to obtain a token for login:
+
+   ```bash
+   gh auth token | docker login ghcr.io -u YOUR_USERNAME --password-stdin
+   ```
+
+   However, you'll still need to create a PAT with `write:packages` for the push to succeed.
 
 **Baseline Timings:**
 - JIM stack cold start: ~19s
