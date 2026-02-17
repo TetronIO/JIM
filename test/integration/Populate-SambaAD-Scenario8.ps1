@@ -184,78 +184,85 @@ if ($Instance -eq "Target") {
 }
 
 # ============================================================================
-# Step 2: Create Users (Source only)
+# Step 2: Create Users (Source only) via LDIF bulk import
 # ============================================================================
 Write-TestStep "Step 2" "Creating $($groupScale.Users) users"
 
 $createdUsers = @()
+$sortedCompanyKeys = $scenario8CompanyNames.Keys | Sort-Object
+$sortedDepartmentKeys = $scenario8DepartmentNames.Keys | Sort-Object
 
-$userOperation = Start-TimedOperation -Name "Creating users" -TotalSteps $groupScale.Users
+# OPTIMISATION: Generate all user data and LDIF in memory, then bulk import via ldbadd
+# This reduces 1000+ docker exec calls to a single docker cp + ldbadd call
+Write-Host "  Generating user LDIF..." -ForegroundColor Gray
+
+$ldifBuilder = [System.Text.StringBuilder]::new()
 
 for ($i = 0; $i -lt $groupScale.Users; $i++) {
     $user = New-TestUser -Index $i -Domain $domainSuffix
 
     # Override company and department with Scenario 8 consistent values
-    # This ensures membership filtering works correctly in group assignments
-    # Use technical names (keys) for filtering, display names (values) for LDAP attributes
-    $companyTechnicalName = ($scenario8CompanyNames.Keys | Sort-Object)[$i % $scenario8CompanyNames.Count]
-    $departmentTechnicalName = ($scenario8DepartmentNames.Keys | Sort-Object)[$i % $scenario8DepartmentNames.Count]
-
+    $companyTechnicalName = $sortedCompanyKeys[$i % $scenario8CompanyNames.Count]
+    $departmentTechnicalName = $sortedDepartmentKeys[$i % $scenario8DepartmentNames.Count]
     $companyDisplayName = $scenario8CompanyNames[$companyTechnicalName]
     $departmentDisplayName = $scenario8DepartmentNames[$departmentTechnicalName]
 
-    # Create user with samba-tool directly in the Users OU
-    # LDAP stores display names (with spaces)
-    $result = docker exec $container samba-tool user create `
-        $user.SamAccountName `
-        "Password123!" `
-        --userou="OU=Users,OU=Corp" `
-        --given-name="$($user.FirstName)" `
-        --surname="$($user.LastName)" `
-        --mail-address="$($user.Email)" `
-        --department="$departmentDisplayName" `
-        --job-title="$($user.Title)" `
-        --company="$companyDisplayName" 2>&1
+    $dn = "CN=$($user.DisplayName),$usersOU"
 
-    if ($LASTEXITCODE -eq 0) {
-        # Store technical name for filtering, display name for tracking
-        $createdUsers += @{
-            SamAccountName = $user.SamAccountName
-            DisplayName = $user.DisplayName
-            Department = $departmentTechnicalName
-            DepartmentDisplay = $departmentDisplayName
-            Title = $user.Title
-            Company = $companyTechnicalName
-            CompanyDisplay = $companyDisplayName
-            DN = "CN=$($user.DisplayName),$usersOU"
-        }
-    }
-    elseif ($result -match "already exists") {
-        # User already exists - add to list for membership processing
-        $createdUsers += @{
-            SamAccountName = $user.SamAccountName
-            DisplayName = $user.DisplayName
-            Department = $departmentTechnicalName
-            DepartmentDisplay = $departmentDisplayName
-            Title = $user.Title
-            Company = $companyTechnicalName
-            CompanyDisplay = $companyDisplayName
-            DN = "CN=$($user.DisplayName),$usersOU"
-        }
-    }
-    else {
-        Write-Verbose "Failed to create user $($user.SamAccountName): $result"
-    }
+    # Build LDIF entry for this user
+    [void]$ldifBuilder.AppendLine("dn: $dn")
+    [void]$ldifBuilder.AppendLine("objectClass: top")
+    [void]$ldifBuilder.AppendLine("objectClass: person")
+    [void]$ldifBuilder.AppendLine("objectClass: organizationalPerson")
+    [void]$ldifBuilder.AppendLine("objectClass: user")
+    [void]$ldifBuilder.AppendLine("cn: $($user.DisplayName)")
+    [void]$ldifBuilder.AppendLine("sn: $($user.LastName)")
+    [void]$ldifBuilder.AppendLine("givenName: $($user.FirstName)")
+    [void]$ldifBuilder.AppendLine("sAMAccountName: $($user.SamAccountName)")
+    [void]$ldifBuilder.AppendLine("displayName: $($user.DisplayName)")
+    [void]$ldifBuilder.AppendLine("userPrincipalName: $($user.Email)")
+    [void]$ldifBuilder.AppendLine("mail: $($user.Email)")
+    [void]$ldifBuilder.AppendLine("department: $departmentDisplayName")
+    [void]$ldifBuilder.AppendLine("title: $($user.Title)")
+    [void]$ldifBuilder.AppendLine("company: $companyDisplayName")
+    [void]$ldifBuilder.AppendLine("")
 
-    if (($i % 10) -eq 0 -or $i -eq ($groupScale.Users - 1)) {
-        Update-OperationProgress -Operation $userOperation -CurrentStep ($i + 1) -Status "$($i + 1)/$($groupScale.Users) users"
+    # Build tracking data
+    $createdUsers += @{
+        SamAccountName = $user.SamAccountName
+        DisplayName = $user.DisplayName
+        Department = $departmentTechnicalName
+        DepartmentDisplay = $departmentDisplayName
+        Title = $user.Title
+        Company = $companyTechnicalName
+        CompanyDisplay = $companyDisplayName
+        DN = $dn
     }
 }
 
-Complete-TimedOperation -Operation $userOperation -Message "Created $($createdUsers.Count) users"
+# Write LDIF to temp file and bulk import
+$ldifPath = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($ldifPath, $ldifBuilder.ToString())
+
+Write-Host "  Importing $($groupScale.Users) users via ldbadd..." -ForegroundColor Gray
+docker cp $ldifPath "${container}:/tmp/users.ldif" 2>&1 | Out-Null
+$result = docker exec $container ldbadd -H /usr/local/samba/private/sam.ldb /tmp/users.ldif 2>&1
+docker exec $container rm -f /tmp/users.ldif 2>&1 | Out-Null
+Remove-Item $ldifPath -Force -ErrorAction SilentlyContinue
+
+if ($result -match "Added (\d+) records") {
+    $addedCount = [int]$Matches[1]
+    Write-Host "  ✓ Created $addedCount users via LDIF bulk import" -ForegroundColor Green
+}
+elseif ($result -match "already exists") {
+    Write-Host "  ⚠ Some users already exist (idempotent)" -ForegroundColor Yellow
+}
+else {
+    Write-Warning "LDIF import result: $result"
+}
 
 # ============================================================================
-# Step 3: Create Groups (Source only)
+# Step 3: Create Groups (Source only) via LDIF bulk import
 # ============================================================================
 Write-TestStep "Step 3" "Creating $($groupScale.TotalGroups) groups"
 
@@ -263,7 +270,13 @@ Write-TestStep "Step 3" "Creating $($groupScale.TotalGroups) groups"
 $groups = New-Scenario8GroupSet -Template $Template -Domain $domainSuffix
 
 $createdGroups = @()
-$groupOperation = Start-TimedOperation -Name "Creating groups" -TotalSteps $groups.Count
+
+# OPTIMISATION: Generate all group LDIF in memory, then bulk import via ldbadd
+# This replaces 4-7 docker exec calls per group with a single ldbadd + ldbmodify
+Write-Host "  Generating group LDIF..." -ForegroundColor Gray
+
+$groupLdifBuilder = [System.Text.StringBuilder]::new()
+$groupModifyBuilder = [System.Text.StringBuilder]::new()
 
 for ($i = 0; $i -lt $groups.Count; $i++) {
     $group = $groups[$i]
@@ -273,83 +286,65 @@ for ($i = 0; $i -lt $groups.Count; $i++) {
     $description = $group.Description
 
     if ($group.Category -eq "Company") {
-        # Format company group display name with spaces
-        $technicalName = $group.Name -replace "^Company-", ""  # Extract the company name part
-        $displayName = "Company-" + ($scenario8CompanyNames[$technicalName] -replace " ", " ")  # Preserve spaces
+        $technicalName = $group.Name -replace "^Company-", ""
+        $displayName = "Company-" + ($scenario8CompanyNames[$technicalName] -replace " ", " ")
         $description = "Company-wide group for $($scenario8CompanyNames[$technicalName])"
     }
     elseif ($group.Category -eq "Department") {
-        # Format department group display name with spaces
-        $technicalName = $group.Name -replace "^Dept-", ""  # Extract the department name part
-        $displayName = "Dept-" + ($scenario8DepartmentNames[$technicalName] -replace " ", " ")  # Preserve spaces
+        $technicalName = $group.Name -replace "^Dept-", ""
+        $displayName = "Dept-" + ($scenario8DepartmentNames[$technicalName] -replace " ", " ")
         $description = "Department group for $($scenario8DepartmentNames[$technicalName])"
     }
 
-    # Convert scope and type to samba-tool format
-    $scopeArg = Get-ADGroupScopeString -Scope $group.Scope
-    $typeArg = Get-ADGroupTypeString -Type $group.Type
+    $dn = "CN=$($group.CN),$entitlementsOU"
 
-    # Create group with samba-tool directly in Entitlements OU
-    $result = docker exec $container samba-tool group add `
-        $group.SAMAccountName `
-        --description="$description" `
-        --group-scope="$scopeArg" `
-        --group-type="$typeArg" `
-        --groupou="OU=Entitlements,OU=Corp" 2>&1
-
-    if ($LASTEXITCODE -eq 0 -or $result -match "already exists") {
-
-        # Store created group info
-        $createdGroup = @{
-            Name = $group.Name
-            SAMAccountName = $group.SAMAccountName
-            Category = $group.Category
-            Type = $group.Type
-            Scope = $group.Scope
-            MailEnabled = $group.MailEnabled
-            HasManagedBy = $group.HasManagedBy
-            DN = "CN=$($group.CN),$entitlementsOU"
-        }
-        $createdGroups += $createdGroup
-
-        # Set displayName attribute (samba-tool doesn't support this)
-        $displayNameLdif = @"
-dn: CN=$($group.CN),$entitlementsOU
-changetype: modify
-replace: displayName
-displayName: $displayName
-"@
-        $ldifFile = "/tmp/group_displayname_$i.ldif"
-        docker exec $container bash -c "echo '$displayNameLdif' > $ldifFile" 2>&1 | Out-Null
-        docker exec $container ldapmodify -x -H ldap://localhost -D "CN=Administrator,CN=Users,$domainDN" -w "Test@123!" -f $ldifFile 2>&1 | Out-Null
-        docker exec $container rm -f $ldifFile 2>&1 | Out-Null
-
-        # Set mail attributes if mail-enabled
-        if ($group.MailEnabled -and $group.Mail) {
-            # Use ldapmodify to set mail attribute
-            $ldifContent = @"
-dn: CN=$($group.CN),$entitlementsOU
-changetype: modify
-replace: mail
-mail: $($group.Mail)
-"@
-            # Write LDIF to temp file and apply
-            $ldifFile = "/tmp/group_mail_$i.ldif"
-            docker exec $container bash -c "echo '$ldifContent' > $ldifFile" 2>&1 | Out-Null
-            docker exec $container ldapmodify -x -H ldap://localhost -D "CN=Administrator,CN=Users,$domainDN" -w "Test@123!" -f $ldifFile 2>&1 | Out-Null
-            docker exec $container rm -f $ldifFile 2>&1 | Out-Null
-        }
+    # Build LDIF entry for group creation (ldbadd)
+    [void]$groupLdifBuilder.AppendLine("dn: $dn")
+    [void]$groupLdifBuilder.AppendLine("objectClass: top")
+    [void]$groupLdifBuilder.AppendLine("objectClass: group")
+    [void]$groupLdifBuilder.AppendLine("cn: $($group.CN)")
+    [void]$groupLdifBuilder.AppendLine("sAMAccountName: $($group.SAMAccountName)")
+    [void]$groupLdifBuilder.AppendLine("groupType: $($group.GroupType)")
+    [void]$groupLdifBuilder.AppendLine("description: $description")
+    [void]$groupLdifBuilder.AppendLine("displayName: $displayName")
+    if ($group.MailEnabled -and $group.Mail) {
+        [void]$groupLdifBuilder.AppendLine("mail: $($group.Mail)")
     }
-    else {
-        Write-Verbose "Failed to create group $($group.Name): $result"
-    }
+    [void]$groupLdifBuilder.AppendLine("")
 
-    if (($i % 5) -eq 0 -or $i -eq ($groups.Count - 1)) {
-        Update-OperationProgress -Operation $groupOperation -CurrentStep ($i + 1) -Status "$($i + 1)/$($groups.Count) groups"
+    # Store created group info
+    $createdGroups += @{
+        Name = $group.Name
+        SAMAccountName = $group.SAMAccountName
+        Category = $group.Category
+        Type = $group.Type
+        Scope = $group.Scope
+        MailEnabled = $group.MailEnabled
+        HasManagedBy = $group.HasManagedBy
+        DN = $dn
     }
 }
 
-Complete-TimedOperation -Operation $groupOperation -Message "Created $($createdGroups.Count) groups"
+# Write LDIF and bulk import groups
+$groupLdifPath = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($groupLdifPath, $groupLdifBuilder.ToString())
+
+Write-Host "  Importing $($groups.Count) groups via ldbadd..." -ForegroundColor Gray
+docker cp $groupLdifPath "${container}:/tmp/groups.ldif" 2>&1 | Out-Null
+$result = docker exec $container ldbadd -H /usr/local/samba/private/sam.ldb /tmp/groups.ldif 2>&1
+docker exec $container rm -f /tmp/groups.ldif 2>&1 | Out-Null
+Remove-Item $groupLdifPath -Force -ErrorAction SilentlyContinue
+
+if ($result -match "Added (\d+) records") {
+    $addedCount = [int]$Matches[1]
+    Write-Host "  ✓ Created $addedCount groups via LDIF bulk import" -ForegroundColor Green
+}
+elseif ($result -match "already exists") {
+    Write-Host "  ⚠ Some groups already exist (idempotent)" -ForegroundColor Yellow
+}
+else {
+    Write-Warning "Group LDIF import result: $result"
+}
 
 # ============================================================================
 # Step 4: Assign Group Members

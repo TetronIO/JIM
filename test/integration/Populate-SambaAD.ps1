@@ -136,105 +136,146 @@ foreach ($deptOu in $departmentOus) {
     }
 }
 
-# Create users
-Write-TestStep "Step 2" "Creating $($scale.Users) users"
+# Create users via LDIF bulk import (much faster than individual samba-tool calls)
+Write-TestStep "Step 2" "Creating $($scale.Users) users via LDIF bulk import"
 
 $departments = @("IT", "HR", "Sales", "Finance", "Operations", "Marketing", "Legal", "Engineering", "Support", "Admin")
 $titles = @("Manager", "Director", "Analyst", "Specialist", "Coordinator", "Administrator", "Engineer", "Developer", "Consultant", "Associate")
 
 $createdUsers = @()
 $usersWithExpiry = 0
+$usersOU = "OU=TestUsers,$domainDN"
+
+# Windows FILETIME epoch: January 1, 1601 00:00:00 UTC
+$fileTimeEpoch = [DateTime]::new(1601, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)
+
+$ldifBuilder = [System.Text.StringBuilder]::new()
 
 for ($i = 1; $i -lt $scale.Users + 1; $i++) {
     $user = New-TestUser -Index $i -Domain ($domain.ToLower() + ".local")
 
-    $userPrincipalName = "$($user.SamAccountName)@$($domain.ToLower()).local"
+    # Build DN directly in TestUsers OU (no need for create-then-move)
+    $dn = "CN=$($user.DisplayName),$usersOU"
 
-    # Create user with samba-tool
-    $result = docker exec $container samba-tool user create `
-        $user.SamAccountName `
-        "Password123!" `
-        --given-name=$($user.FirstName) `
-        --surname=$($user.LastName) `
-        --mail-address=$($user.Email) `
-        --department=$($user.Department) `
-        --job-title=$($user.Title) 2>&1
+    [void]$ldifBuilder.AppendLine("dn: $dn")
+    [void]$ldifBuilder.AppendLine("objectClass: top")
+    [void]$ldifBuilder.AppendLine("objectClass: person")
+    [void]$ldifBuilder.AppendLine("objectClass: organizationalPerson")
+    [void]$ldifBuilder.AppendLine("objectClass: user")
+    [void]$ldifBuilder.AppendLine("cn: $($user.DisplayName)")
+    [void]$ldifBuilder.AppendLine("sn: $($user.LastName)")
+    [void]$ldifBuilder.AppendLine("givenName: $($user.FirstName)")
+    [void]$ldifBuilder.AppendLine("sAMAccountName: $($user.SamAccountName)")
+    [void]$ldifBuilder.AppendLine("displayName: $($user.DisplayName)")
+    [void]$ldifBuilder.AppendLine("userPrincipalName: $($user.Email)")
+    [void]$ldifBuilder.AppendLine("mail: $($user.Email)")
+    [void]$ldifBuilder.AppendLine("department: $($user.Department)")
+    [void]$ldifBuilder.AppendLine("title: $($user.Title)")
 
-    if ($LASTEXITCODE -eq 0) {
-        $createdUsers += $user
-
-        # Move to TestUsers OU
-        $userDN = "CN=$($user.DisplayName),CN=Users,$domainDN"
-        $targetDN = "OU=TestUsers,$domainDN"
-        docker exec $container samba-tool user move $userDN $targetDN 2>&1 | Out-Null
-
-        # Set account expiry if specified (contractors and some employees with resignations)
-        if ($null -ne $user.AccountExpires) {
-            $expiryDate = $user.AccountExpires.ToString("yyyy-MM-dd")
-            docker exec $container samba-tool user setexpiry $user.SamAccountName --expiry-time="$expiryDate" 2>&1 | Out-Null
-            $usersWithExpiry++
-        }
-
-        if (($i % 100) -eq 0 -or $i -eq $scale.Users) {
-            Write-Host "    Created $i / $($scale.Users) users..." -ForegroundColor Gray
-        }
+    # Set accountExpires directly in LDIF (Windows FILETIME format)
+    if ($null -ne $user.AccountExpires) {
+        $fileTime = ($user.AccountExpires.ToUniversalTime() - $fileTimeEpoch).Ticks
+        [void]$ldifBuilder.AppendLine("accountExpires: $fileTime")
+        $usersWithExpiry++
     }
-    elseif ($result -match "already exists") {
-        # User already exists - add to list anyway for membership processing
-        $createdUsers += $user
-    }
-    else {
-        Write-Host "    Warning: Failed to create user $($user.SamAccountName): $result" -ForegroundColor Yellow
+
+    [void]$ldifBuilder.AppendLine("")
+
+    $createdUsers += $user
+
+    if (($i % 1000) -eq 0) {
+        Write-Host "    Prepared $i / $($scale.Users) users for import..." -ForegroundColor Gray
     }
 }
 
-Write-Host "  ✓ Found or created $($createdUsers.Count) users ($usersWithExpiry with account expiry)" -ForegroundColor Green
+# Write LDIF to temp file and import via ldbadd
+$ldifPath = [System.IO.Path]::GetTempFileName()
+try {
+    [System.IO.File]::WriteAllText($ldifPath, $ldifBuilder.ToString())
+    $ldifSizeKB = [Math]::Round((Get-Item $ldifPath).Length / 1024, 1)
+    Write-Host "    LDIF file: $ldifSizeKB KB for $($scale.Users) users" -ForegroundColor Gray
 
-# Create groups
-Write-TestStep "Step 3" "Creating $($scale.Groups) groups"
+    # Copy LDIF into container and import
+    docker cp $ldifPath "${container}:/tmp/users.ldif" 2>&1 | Out-Null
+    $result = docker exec $container ldbadd -H /usr/local/samba/private/sam.ldb /tmp/users.ldif 2>&1
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "    Warning: LDIF import returned errors: $result" -ForegroundColor Yellow
+        # Check if some users already exist (partial import)
+        if ($result -match "already exists") {
+            Write-Host "    Some users already exist (idempotent)" -ForegroundColor Gray
+        }
+    }
+
+    # Clean up container temp file
+    docker exec $container rm -f /tmp/users.ldif 2>&1 | Out-Null
+}
+finally {
+    Remove-Item $ldifPath -Force -ErrorAction SilentlyContinue
+}
+
+Write-Host "  ✓ Imported $($createdUsers.Count) users ($usersWithExpiry with account expiry)" -ForegroundColor Green
+
+# Create groups via LDIF bulk import
+Write-TestStep "Step 3" "Creating $($scale.Groups) groups via LDIF bulk import"
 
 $createdGroups = @()
+$groupsOU = "OU=TestGroups,$domainDN"
+
+$groupLdifBuilder = [System.Text.StringBuilder]::new()
 
 for ($i = 1; $i -lt $scale.Groups + 1; $i++) {
-    $groupName = "TestGroup$i"
     $description = "Test group $i for integration testing"
 
     # Assign department-based groups
     $dept = $departments[$i % $departments.Length]
     $groupName = "Group-$dept-$i"
 
-    $result = docker exec $container samba-tool group add `
-        $groupName `
-        --description="$description" 2>&1
+    # Build DN directly in TestGroups OU (no need for create-then-move)
+    $dn = "CN=$groupName,$groupsOU"
 
-    if ($LASTEXITCODE -eq 0) {
-        $createdGroups += @{
-            Name = $groupName
-            Department = $dept
-        }
+    # Security Global group type (-2147483646)
+    [void]$groupLdifBuilder.AppendLine("dn: $dn")
+    [void]$groupLdifBuilder.AppendLine("objectClass: top")
+    [void]$groupLdifBuilder.AppendLine("objectClass: group")
+    [void]$groupLdifBuilder.AppendLine("cn: $groupName")
+    [void]$groupLdifBuilder.AppendLine("sAMAccountName: $groupName")
+    [void]$groupLdifBuilder.AppendLine("groupType: -2147483646")
+    [void]$groupLdifBuilder.AppendLine("description: $description")
+    [void]$groupLdifBuilder.AppendLine("")
 
-        # Move to TestGroups OU
-        $groupDN = "CN=$groupName,CN=Users,$domainDN"
-        $targetDN = "OU=TestGroups,$domainDN"
-        docker exec $container samba-tool group move $groupDN $targetDN 2>&1 | Out-Null
-
-        if (($i % 20) -eq 0 -or $i -eq $scale.Groups) {
-            Write-Host "    Created $i / $($scale.Groups) groups..." -ForegroundColor Gray
-        }
-    }
-    elseif ($result -match "already exists") {
-        # Group already exists - add to list anyway for membership processing
-        $createdGroups += @{
-            Name = $groupName
-            Department = $dept
-        }
-    }
-    else {
-        Write-Host "    Warning: Failed to create group $groupName : $result" -ForegroundColor Yellow
+    $createdGroups += @{
+        Name = $groupName
+        Department = $dept
     }
 }
 
-Write-Host "  ✓ Found or created $($createdGroups.Count) groups" -ForegroundColor Green
+# Write LDIF to temp file and import via ldbadd
+$groupLdifPath = [System.IO.Path]::GetTempFileName()
+try {
+    [System.IO.File]::WriteAllText($groupLdifPath, $groupLdifBuilder.ToString())
+    $ldifSizeKB = [Math]::Round((Get-Item $groupLdifPath).Length / 1024, 1)
+    Write-Host "    LDIF file: $ldifSizeKB KB for $($scale.Groups) groups" -ForegroundColor Gray
+
+    # Copy LDIF into container and import
+    docker cp $groupLdifPath "${container}:/tmp/groups.ldif" 2>&1 | Out-Null
+    $result = docker exec $container ldbadd -H /usr/local/samba/private/sam.ldb /tmp/groups.ldif 2>&1
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "    Warning: LDIF import returned errors: $result" -ForegroundColor Yellow
+        if ($result -match "already exists") {
+            Write-Host "    Some groups already exist (idempotent)" -ForegroundColor Gray
+        }
+    }
+
+    # Clean up container temp file
+    docker exec $container rm -f /tmp/groups.ldif 2>&1 | Out-Null
+}
+finally {
+    Remove-Item $groupLdifPath -Force -ErrorAction SilentlyContinue
+}
+
+Write-Host "  ✓ Imported $($createdGroups.Count) groups" -ForegroundColor Green
 
 # Add users to groups
 Write-TestStep "Step 4" "Adding users to groups (avg: $($scale.AvgMemberships) memberships/user)"
