@@ -304,7 +304,7 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     margin: 4px 0 0 10px;
     font-size: 1rem;
     font-weight: 500;
-    vertical-align: middle;
+    vertical-align: sub;
     color: var(--jim-logo-text-color, #ffffff) !important;
 }
 
