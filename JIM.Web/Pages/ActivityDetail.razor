@@ -25,7 +25,7 @@
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">ID:</MudText>
-                <MudText Class="mud-text-secondary jim-text-code">@_activity.Id</MudText>
+                <MudText Class="jim-text-code">@_activity.Id</MudText>
             </MudItem>
 
             <MudItem xs="12" sm="6" md="4">
@@ -69,7 +69,7 @@
 
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">When:</MudText>
-                <MudText Class="mud-text-secondary" title="@_activity.Created.ToLocalTime().ToFriendlyDate()">@_activity.Created.ToLocalTime().ToRelativeTime()</MudText>
+                <MudText title="@_activity.Created.ToLocalTime().ToFriendlyDate()">@_activity.Created.ToLocalTime().ToRelativeTime()</MudText>
             </MudItem>
             <MudItem xs="12" sm="6" md="4" Class="mt-3">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By:</MudText>
@@ -121,11 +121,11 @@
             </MudItem>
             <MudItem xs="12" sm="6" md="4" Class="mt-3">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Execution Time:</MudText>
-                <MudText Class="mud-text-secondary">@(_activity.ExecutionTime?.ToAbbreviatedString() ?? "-")</MudText>
+                <MudText>@(_activity.ExecutionTime?.ToAbbreviatedString() ?? "-")</MudText>
             </MudItem>
-            <MudItem xs="12" sm="6" md="4">
+            <MudItem xs="12" sm="6" md="4" Class="mt-3">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Total Activity Time:</MudText>
-                <MudText Class="mud-text-secondary">@(_activity.TotalActivityTime?.ToAbbreviatedString() ?? "-")</MudText>
+                <MudText>@(_activity.TotalActivityTime?.ToAbbreviatedString() ?? "-")</MudText>
             </MudItem>
         </MudGrid>
     </MudPaper>
