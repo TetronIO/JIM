@@ -28,22 +28,22 @@
     <MudPaper Class="pa-5 mt-3" Outlined="true">
         <MudGrid>
             <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">ID:</MudText>
-                <MudText Class="mud-text-secondary jim-text-code">@_apiKey.Id</MudText>
+                <MudText Typo="Typo.button" Class="mud-text-secondary">ID:</MudText>
+                <MudText Class="jim-text-code">@_apiKey.Id</MudText>
             </MudItem>
 
             <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">Name:</MudText>
-                <MudText Class="mud-text-secondary">@_apiKey.Name</MudText>
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Name:</MudText>
+                <MudText>@_apiKey.Name</MudText>
             </MudItem>
 
             <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">Key Prefix:</MudText>
-                <MudText Class="mud-text-secondary jim-text-code">@_apiKey.KeyPrefix...</MudText>
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Key Prefix:</MudText>
+                <MudText Class="jim-text-code">@_apiKey.KeyPrefix...</MudText>
             </MudItem>
 
-            <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">Status:</MudText><br />
+            <MudItem xs="12" sm="6" md="4" Class="mt-3">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Status:</MudText><br />
                 @if (_apiKey.IsEnabled)
                 {
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Success" Class="ml-0">Enabled</MudChip>
@@ -54,8 +54,8 @@
                 }
             </MudItem>
 
-            <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">Expires:</MudText>
+            <MudItem xs="12" sm="6" md="4" Class="mt-3">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Expires:</MudText>
                 @if (_apiKey.ExpiresAt.HasValue)
                 {
                     @if (_apiKey.ExpiresAt.Value < DateTime.UtcNow)
@@ -64,20 +64,20 @@
                     }
                     else
                     {
-                        <MudText Class="mud-text-secondary">@_apiKey.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()</MudText>
+                        <MudText>@_apiKey.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()</MudText>
                     }
                 }
                 else
                 {
-                    <MudText Class="mud-text-secondary">Never</MudText>
+                    <MudText>Never</MudText>
                 }
             </MudItem>
 
-            <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">Last Used:</MudText>
+            <MudItem xs="12" sm="6" md="4" Class="mt-3">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Last Used:</MudText>
                 @if (_apiKey.LastUsedAt.HasValue)
                 {
-                    <MudText Class="mud-text-secondary">
+                    <MudText>
                         @_apiKey.LastUsedAt.Value.ToLocalTime().ToFriendlyDate()
                         @if (!string.IsNullOrEmpty(_apiKey.LastUsedFromIp))
                         {
@@ -87,12 +87,12 @@
                 }
                 else
                 {
-                    <MudText Class="mud-text-secondary">Never</MudText>
+                    <MudText>Never</MudText>
                 }
             </MudItem>
 
-            <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button">Roles:</MudText><br />
+            <MudItem xs="12" sm="6" md="4" Class="mt-3">
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Roles:</MudText><br />
                 @if (_apiKey.Roles.Count > 0)
                 {
                     @foreach (var role in _apiKey.Roles)
@@ -102,23 +102,23 @@
                 }
                 else
                 {
-                    <MudText Class="mud-text-secondary">No roles assigned</MudText>
+                    <MudText>No roles assigned</MudText>
                 }
             </MudItem>
 
             @if (_apiKey.IsInfrastructureKey)
             {
-                <MudItem xs="12" sm="6" md="4">
-                    <MudText Typo="Typo.button">Type:</MudText><br />
+                <MudItem xs="12" sm="6" md="4" Class="mt-3">
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Type:</MudText><br />
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Icon="@Icons.Material.Filled.Construction">Infrastructure Key</MudChip>
                 </MudItem>
             }
 
             @if (!string.IsNullOrEmpty(_apiKey.Description))
             {
-                <MudItem xs="12">
-                    <MudText Typo="Typo.button">Description:</MudText>
-                    <MudText Class="mud-text-secondary">@_apiKey.Description</MudText>
+                <MudItem xs="12" Class="mt-3">
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Description:</MudText>
+                    <MudText>@_apiKey.Description</MudText>
                 </MudItem>
             }
         </MudGrid>
