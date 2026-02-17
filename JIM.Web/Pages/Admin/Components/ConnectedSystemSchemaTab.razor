@@ -76,7 +76,7 @@
         @if (result.Success)
         {
             <MudText Class="mb-2">
-                Found <strong>@result.TotalObjectTypes</strong> object type(s) with <strong>@result.TotalAttributes</strong> attribute(s).
+                Found <strong>@result.TotalObjectTypes.ToString("N0")</strong> object type(s) with <strong>@result.TotalAttributes.ToString("N0")</strong> attribute(s).
             </MudText>
 
             @if (!result.HasChanges)

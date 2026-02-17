@@ -369,7 +369,7 @@
                                 if (remainingCount > 0)
                                 {
                                     <MudText Class="mud-text-secondary mt-2">
-                                        +@remainingCount more attribute@(remainingCount != 1 ? "s" : "")
+                                        +@remainingCount.ToString("N0") more attribute@(remainingCount != 1 ? "s" : "")
                                     </MudText>
                                 }
                             }
@@ -511,7 +511,7 @@
             <MudText Typo="Typo.h6">
                 Attribute Changes
             </MudText>
-            <MudChip T="string" Color="Color.Primary">@changeCount</MudChip>
+            <MudChip T="string" Color="Color.Primary">@changeCount.ToString("N0")</MudChip>
         </MudStack>
 
         <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
@@ -656,7 +656,7 @@
             @if (_pendingExport.AttributeValueChanges.Count > 0)
             {
                 <MudText Typo="Typo.subtitle1" Class="mb-2">
-                    Pending Attribute Changes (@_pendingExport.AttributeValueChanges.Count)
+                    Pending Attribute Changes (@_pendingExport.AttributeValueChanges.Count.ToString("N0"))
                 </MudText>
                 <MudTable Items="@_pendingExport.AttributeValueChanges" Hover="true" Dense="true" Outlined="true" Elevation="0" Class="mb-5">
                     <HeaderContent>

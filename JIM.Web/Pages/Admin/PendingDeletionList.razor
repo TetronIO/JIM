@@ -22,14 +22,14 @@
     <MudItem xs="12" sm="6" md="3">
         <MudPaper Class="pa-4" Outlined="true">
             <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Total Pending</MudText>
-            <MudText Typo="Typo.h4">@_totalCount</MudText>
+            <MudText Typo="Typo.h4">@_totalCount.ToString("N0")</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="12" sm="6" md="3">
         <MudPaper Class="pa-4" Outlined="true" Style="border-left: 3px solid var(--mud-palette-warning);">
             <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Deprovisioning</MudText>
             <MudTooltip Text="MVOs still connected to other systems, awaiting cascade deletion" Arrow="true" Placement="Placement.Top">
-                <MudText Typo="Typo.h4" Color="@(_deprovisioningCount > 0 ? Color.Warning : Color.Default)">@_deprovisioningCount</MudText>
+                <MudText Typo="Typo.h4" Color="@(_deprovisioningCount > 0 ? Color.Warning : Color.Default)">@_deprovisioningCount.ToString("N0")</MudText>
             </MudTooltip>
         </MudPaper>
     </MudItem>
@@ -37,7 +37,7 @@
         <MudPaper Class="pa-4" Outlined="true" Style="border-left: 3px solid var(--mud-palette-info);">
             <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Awaiting Grace Period</MudText>
             <MudTooltip Text="MVOs fully disconnected, waiting for grace period to expire" Arrow="true" Placement="Placement.Top">
-                <MudText Typo="Typo.h4">@_awaitingGracePeriodCount</MudText>
+                <MudText Typo="Typo.h4">@_awaitingGracePeriodCount.ToString("N0")</MudText>
             </MudTooltip>
         </MudPaper>
     </MudItem>
@@ -45,7 +45,7 @@
         <MudPaper Class="pa-4" Outlined="true" Style="border-left: 3px solid var(--mud-palette-error);">
             <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Ready for Deletion</MudText>
             <MudTooltip Text="MVOs eligible for deletion (grace period expired, no connectors)" Arrow="true" Placement="Placement.Top">
-                <MudText Typo="Typo.h4" Color="@(_readyForDeletionCount > 0 ? Color.Error : Color.Default)">@_readyForDeletionCount</MudText>
+                <MudText Typo="Typo.h4" Color="@(_readyForDeletionCount > 0 ? Color.Error : Color.Default)">@_readyForDeletionCount.ToString("N0")</MudText>
             </MudTooltip>
         </MudPaper>
     </MudItem>

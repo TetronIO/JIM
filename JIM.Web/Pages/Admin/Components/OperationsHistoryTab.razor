@@ -142,7 +142,7 @@
                                     <MudTooltip Text="Added" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Success" Variant="Variant.Text"
                                                  Icon="@Icons.Material.Filled.Add" Class="px-2">
-                                            @context.TotalAdded
+                                            @context.TotalAdded.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
@@ -151,7 +151,7 @@
                                     <MudTooltip Text="Updated" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
                                                  Icon="@Icons.Material.Filled.Sync" Class="px-2">
-                                            @context.TotalUpdated
+                                            @context.TotalUpdated.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
@@ -160,7 +160,7 @@
                                     <MudTooltip Text="Deleted" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
                                                  Icon="@Icons.Material.Filled.Delete" Class="px-2">
-                                            @context.TotalDeleted
+                                            @context.TotalDeleted.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
@@ -172,7 +172,7 @@
                                     <MudTooltip Text="Projected" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"
                                                  Icon="@Icons.Material.Filled.Commit" Class="px-2">
-                                            @context.TotalProjected
+                                            @context.TotalProjected.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
@@ -181,7 +181,7 @@
                                     <MudTooltip Text="Joined" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Secondary" Variant="Variant.Text"
                                                  Icon="@Icons.Material.Filled.Link" Class="px-2">
-                                            @context.TotalJoined
+                                            @context.TotalJoined.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
@@ -190,7 +190,7 @@
                                     <MudTooltip Text="Attribute Flows" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
                                                  Icon="@Icons.Material.Filled.SwapHoriz" Class="px-2">
-                                            @context.TotalAttributeFlows
+                                            @context.TotalAttributeFlows.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
@@ -199,7 +199,7 @@
                                     <MudTooltip Text="Disconnected" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
                                                  Icon="@Icons.Material.Filled.LinkOff" Class="px-2">
-                                            @context.TotalDisconnected
+                                            @context.TotalDisconnected.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
@@ -208,7 +208,7 @@
                                     <MudTooltip Text="Drift Corrections" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
                                                  Icon="@Icons.Material.Filled.Shield" Class="px-2">
-                                            @context.TotalDriftCorrections
+                                            @context.TotalDriftCorrections.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
@@ -217,7 +217,7 @@
                                     <MudTooltip Text="Pending Exports" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
                                                  Icon="@Icons.Material.Filled.Outbox" Class="px-2">
-                                            @context.TotalPendingExports
+                                            @context.TotalPendingExports.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
@@ -229,7 +229,7 @@
                                     <MudTooltip Text="Provisioned" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Success" Variant="Variant.Text"
                                                  Icon="@Icons.Material.Filled.Add" Class="px-2">
-                                            @context.TotalProvisioned
+                                            @context.TotalProvisioned.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
@@ -238,7 +238,7 @@
                                     <MudTooltip Text="Exported" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
                                                  Icon="@Icons.Material.Filled.Sync" Class="px-2">
-                                            @context.TotalExported
+                                            @context.TotalExported.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
@@ -247,7 +247,7 @@
                                     <MudTooltip Text="Deprovisioned" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
                                                  Icon="@Icons.Material.Filled.Delete" Class="px-2">
-                                            @context.TotalDeprovisioned
+                                            @context.TotalDeprovisioned.ToString("N0")
                                         </MudChip>
                                     </MudTooltip>
                                 }
@@ -257,7 +257,7 @@
                                 <MudTooltip Text="Errors" Arrow="true" Placement="Placement.Top">
                                     <MudChip T="string" Color="Color.Error" Variant="Variant.Filled"
                                              Icon="@Icons.Material.Filled.Error" Class="px-2">
-                                        @context.TotalErrors
+                                        @context.TotalErrors.ToString("N0")
                                     </MudChip>
                                 </MudTooltip>
                             }
@@ -380,63 +380,63 @@
                         @if (sidebarRunType == "Import")
                         {
                             <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Success">@_selectedActivity.TotalAdded</MudText>
+                                <MudText Typo="Typo.h5" Color="Color.Success">@_selectedActivity.TotalAdded.ToString("N0")</MudText>
                                 <MudText Typo="Typo.caption">@(_selectedActivity.TotalAdded == 1 ? "Add" : "Adds")</MudText>
                             </div>
                             <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Info">@_selectedActivity.TotalUpdated</MudText>
+                                <MudText Typo="Typo.h5" Color="Color.Info">@_selectedActivity.TotalUpdated.ToString("N0")</MudText>
                                 <MudText Typo="Typo.caption">@(_selectedActivity.TotalUpdated == 1 ? "Update" : "Updates")</MudText>
                             </div>
                             <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Error">@_selectedActivity.TotalDeleted</MudText>
+                                <MudText Typo="Typo.h5" Color="Color.Error">@_selectedActivity.TotalDeleted.ToString("N0")</MudText>
                                 <MudText Typo="Typo.caption">@(_selectedActivity.TotalDeleted == 1 ? "Delete" : "Deletes")</MudText>
                             </div>
                         }
                         else if (sidebarRunType == "Sync")
                         {
                             <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Primary">@_selectedActivity.TotalProjected</MudText>
+                                <MudText Typo="Typo.h5" Color="Color.Primary">@_selectedActivity.TotalProjected.ToString("N0")</MudText>
                                 <MudText Typo="Typo.caption">@(_selectedActivity.TotalProjected == 1 ? "Projection" : "Projections")</MudText>
                             </div>
                             <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Secondary">@_selectedActivity.TotalJoined</MudText>
+                                <MudText Typo="Typo.h5" Color="Color.Secondary">@_selectedActivity.TotalJoined.ToString("N0")</MudText>
                                 <MudText Typo="Typo.caption">@(_selectedActivity.TotalJoined == 1 ? "Join" : "Joins")</MudText>
                             </div>
                             <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Info">@_selectedActivity.TotalAttributeFlows</MudText>
+                                <MudText Typo="Typo.h5" Color="Color.Info">@_selectedActivity.TotalAttributeFlows.ToString("N0")</MudText>
                                 <MudText Typo="Typo.caption">@(_selectedActivity.TotalAttributeFlows == 1 ? "Attribute Flow" : "Attribute Flows")</MudText>
                             </div>
                             <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Warning">@_selectedActivity.TotalDisconnected</MudText>
+                                <MudText Typo="Typo.h5" Color="Color.Warning">@_selectedActivity.TotalDisconnected.ToString("N0")</MudText>
                                 <MudText Typo="Typo.caption">@(_selectedActivity.TotalDisconnected == 1 ? "Disconnect" : "Disconnects")</MudText>
                             </div>
                             <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Warning">@_selectedActivity.TotalDriftCorrections</MudText>
+                                <MudText Typo="Typo.h5" Color="Color.Warning">@_selectedActivity.TotalDriftCorrections.ToString("N0")</MudText>
                                 <MudText Typo="Typo.caption">@(_selectedActivity.TotalDriftCorrections == 1 ? "Drift Correction" : "Drift Corrections")</MudText>
                             </div>
                             <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Info">@_selectedActivity.TotalPendingExports</MudText>
+                                <MudText Typo="Typo.h5" Color="Color.Info">@_selectedActivity.TotalPendingExports.ToString("N0")</MudText>
                                 <MudText Typo="Typo.caption">@(_selectedActivity.TotalPendingExports == 1 ? "Pending Export" : "Pending Exports")</MudText>
                             </div>
                         }
                         else if (sidebarRunType == "Export")
                         {
                             <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Success">@_selectedActivity.TotalProvisioned</MudText>
+                                <MudText Typo="Typo.h5" Color="Color.Success">@_selectedActivity.TotalProvisioned.ToString("N0")</MudText>
                                 <MudText Typo="Typo.caption">@(_selectedActivity.TotalProvisioned == 1 ? "Provision" : "Provisions")</MudText>
                             </div>
                             <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Info">@_selectedActivity.TotalExported</MudText>
+                                <MudText Typo="Typo.h5" Color="Color.Info">@_selectedActivity.TotalExported.ToString("N0")</MudText>
                                 <MudText Typo="Typo.caption">@(_selectedActivity.TotalExported == 1 ? "Export" : "Exports")</MudText>
                             </div>
                             <div class="text-center">
-                                <MudText Typo="Typo.h5" Color="Color.Error">@_selectedActivity.TotalDeprovisioned</MudText>
+                                <MudText Typo="Typo.h5" Color="Color.Error">@_selectedActivity.TotalDeprovisioned.ToString("N0")</MudText>
                                 <MudText Typo="Typo.caption">@(_selectedActivity.TotalDeprovisioned == 1 ? "Deprovision" : "Deprovisions")</MudText>
                             </div>
                         }
                         <div class="text-center">
                             <MudText Typo="Typo.h5" Color="@(_selectedActivity.TotalErrors > 0 ? Color.Error : Color.Default)">
-                                @_selectedActivity.TotalErrors
+                                @_selectedActivity.TotalErrors.ToString("N0")
                             </MudText>
                             <MudText Typo="Typo.caption">@(_selectedActivity.TotalErrors == 1 ? "Error" : "Errors")</MudText>
                         </div>
