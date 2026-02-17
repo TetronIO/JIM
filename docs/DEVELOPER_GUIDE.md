@@ -669,8 +669,31 @@ JIM uses standard OIDC claims (`sub`, `name`, `given_name`, `family_name`, `pref
 
 ### Docker Compose
 - Base: `docker-compose.yml`
-- Overrides: `docker-compose.override.{windows|macos|linux}.yml`
+- Overrides: `docker-compose.override.{windows|macos|linux|codespaces}.yml`
 - Use platform-specific overrides for optimal performance
+
+### PostgreSQL Tuning (Important)
+
+The default PostgreSQL settings in `docker-compose.yml` are tuned for a **64GB Windows / 32GB WSL / 16 core** system. **You must tune these for your environment** or PostgreSQL may crash under load (OOM) or fail to start entirely.
+
+Use [PGTune](https://pgtune.leopard.in.ua/) to generate settings for your host, then override `command` and `shm_size` in a compose override file. The Codespaces override (`docker-compose.override.codespaces.yml`) is a working example for 8GB hosts.
+
+**Key settings to adjust:**
+- `shared_buffers` - typically ~25% of available host RAM
+- `effective_cache_size` - typically ~75% of available host RAM
+- `shm_size` (Docker) - must be >= `shared_buffers` with ~25% headroom
+
+**Sizing reference:**
+
+| Host RAM | `shared_buffers` | `shm_size` |
+|----------|------------------|------------|
+| 8GB      | 256MB            | 512mb      |
+| 16GB     | 2GB              | 3gb        |
+| 32GB     | 4GB              | 5gb        |
+| 64GB     | 8GB              | 10gb       |
+| 128GB    | 16GB             | 20gb       |
+
+> **Warning**: If `shm_size` is smaller than `shared_buffers`, PostgreSQL will crash under load. Docker defaults `shm_size` to only 64MB, which is insufficient for any non-trivial `shared_buffers` value.
 
 ### Building Images
 ```bash
@@ -1077,7 +1100,7 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 
 **Codespaces Issues**:
 - **Port Forwarding**: Ensure ports are set to public if accessing from external browser
-- **PostgreSQL Memory**: If database crashes, memory settings are pre-optimised in `.devcontainer/setup.sh`
+- **PostgreSQL Memory**: If database crashes (OOM), check that `shm_size` and `shared_buffers` are tuned for your host - see [PostgreSQL Tuning](#postgresql-tuning-important) above
 - **Docker Issues**: Restart Codespace or rebuild container if Docker daemon issues occur
 - **Missing Aliases**: Run `source ~/.zshrc` or restart terminal if shell aliases not available
 
