@@ -203,6 +203,15 @@
                                         </MudChip>
                                     </MudTooltip>
                                 }
+                                @if (context.TotalDeleted > 0)
+                                {
+                                    <MudTooltip Text="Deleted" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
+                                                 Icon="@Icons.Material.Filled.Delete" Class="px-2">
+                                            @context.TotalDeleted.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
                                 @if (context.TotalDriftCorrections > 0)
                                 {
                                     <MudTooltip Text="Drift Corrections" Arrow="true" Placement="Placement.Top">
@@ -409,6 +418,10 @@
                             <div class="text-center">
                                 <MudText Typo="Typo.h5" Color="Color.Warning">@_selectedActivity.TotalDisconnected.ToString("N0")</MudText>
                                 <MudText Typo="Typo.caption">@(_selectedActivity.TotalDisconnected == 1 ? "Disconnect" : "Disconnects")</MudText>
+                            </div>
+                            <div class="text-center">
+                                <MudText Typo="Typo.h5" Color="Color.Error">@_selectedActivity.TotalDeleted.ToString("N0")</MudText>
+                                <MudText Typo="Typo.caption">@(_selectedActivity.TotalDeleted == 1 ? "Delete" : "Deletes")</MudText>
                             </div>
                             <div class="text-center">
                                 <MudText Typo="Typo.h5" Color="Color.Warning">@_selectedActivity.TotalDriftCorrections.ToString("N0")</MudText>
