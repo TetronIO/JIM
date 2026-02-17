@@ -142,7 +142,7 @@ else
                 Size="Size.Large" />
             <div>
                 <MudText Typo="Typo.h6">@_selectedChange?.ChangeType</MudText>
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                <MudText Class="mud-text-secondary">
                     @_selectedChange?.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")
                 </MudText>
             </div>
@@ -198,7 +198,7 @@ else
                         {
                             <MudItem xs="12" sm="6" md="4">
                                 <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                                    <MudText Typo="Typo.body2" Class="jim-text-code" Style="min-width: 120px;">
+                                    <MudText Class="jim-text-code" Style="min-width: 120px;">
                                         @summary.AttributeName
                                     </MudText>
                                     @* SVA terminology: Set, Updated, Removed *@
@@ -377,7 +377,7 @@ else
         }
         else
         {
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            <MudText Class="mud-text-secondary">
                 Object was deleted. Final attribute values were not captured.
             </MudText>
         }
