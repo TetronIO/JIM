@@ -142,11 +142,17 @@ function Start-JIMRunProfile {
                 $completed = $false
                 $lastStatus = ''
 
+                $consecutiveAuthFailures = 0
+                $maxAuthFailures = 3
+
                 while (-not $completed -and (-not $hasTimeout -or ((Get-Date) - $startTime).TotalSeconds -lt $Timeout)) {
                     Start-Sleep -Seconds 2
 
                     try {
                         $activity = Invoke-JIMApi -Endpoint "/api/v1/activities/$activityId"
+
+                        # Reset auth failure counter on successful call
+                        $consecutiveAuthFailures = 0
 
                         # Update progress
                         $elapsed = [int]((Get-Date) - $startTime).TotalSeconds
@@ -190,7 +196,25 @@ function Start-JIMRunProfile {
                         }
                     }
                     catch {
-                        Write-Warning "Error checking activity status: $_"
+                        $errorMsg = "$_"
+
+                        # Detect authentication failures and stop polling rather than spamming
+                        if ($errorMsg -match 'Authentication failed|session may have expired|API key may be invalid') {
+                            $consecutiveAuthFailures++
+
+                            if ($consecutiveAuthFailures -ge $maxAuthFailures) {
+                                Write-Progress -Activity "Executing Run Profile" -Completed
+                                throw "Authentication failed while monitoring activity $activityId. The operation was submitted successfully and may still be running on the server. Use Get-JIMActivity -Id $activityId to check its status after re-authenticating with Connect-JIM."
+                            }
+
+                            # Brief warning on first/second failure - Invoke-JIMApi may have already
+                            # refreshed the token transparently, so give it another chance
+                            Write-Warning "Authentication error while checking activity status (attempt $consecutiveAuthFailures of $maxAuthFailures). Retrying..."
+                        }
+                        else {
+                            # Non-auth errors: warn but continue polling
+                            Write-Warning "Error checking activity status: $errorMsg"
+                        }
                     }
                 }
 

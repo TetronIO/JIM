@@ -3,6 +3,7 @@ services:
     container_name: JIM.Database
     image: postgres:18
     restart: always
+    shm_size: '512mb'
     volumes:
       - jim-db-volume:/var/lib/postgresql
     environment:

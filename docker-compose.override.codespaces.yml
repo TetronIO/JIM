@@ -31,6 +31,7 @@ services:
   # statement_timeout=300000 (5 minutes) prevents runaway queries
   # log_min_duration_statement=500 (0.5 seconds) logs slow queries for dev analysis
   jim.database:
+    shm_size: '512mb'
     environment:
       # Override LANG from .env - PostgreSQL doesn't have en_GB.UTF-8 locale installed
       - LANG=C
