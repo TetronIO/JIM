@@ -239,7 +239,9 @@ Write-Host "  ✓ Found or created $($createdGroups.Count) groups" -ForegroundCo
 # Add users to groups
 Write-TestStep "Step 4" "Adding users to groups (avg: $($scale.AvgMemberships) memberships/user)"
 
-$totalMemberships = 0
+# OPTIMISATION: Collect all memberships first, then batch by group
+# This reduces Docker exec calls from O(users × groups) to O(groups)
+$groupMemberships = @{}
 
 foreach ($user in $createdUsers) {
     # Match users to groups by department
@@ -251,22 +253,41 @@ foreach ($user in $createdUsers) {
         $selectedGroups = Get-RandomSubset -Items $deptGroups -Count $numGroups
 
         foreach ($group in $selectedGroups) {
-            $result = docker exec $container samba-tool group addmembers `
-                $group.Name `
-                $user.SamAccountName 2>&1
-
-            if ($LASTEXITCODE -eq 0) {
-                $totalMemberships++
+            if (-not $groupMemberships.ContainsKey($group.Name)) {
+                $groupMemberships[$group.Name] = @()
             }
+            $groupMemberships[$group.Name] += $user.SamAccountName
         }
-    }
-
-    if (($totalMemberships % 500) -eq 0) {
-        Write-Host "    Added $totalMemberships memberships..." -ForegroundColor Gray
     }
 }
 
-Write-Host "  ✓ Added $totalMemberships group memberships" -ForegroundColor Green
+# Now add all members to each group in a single batch operation
+$totalMemberships = 0
+$processedGroups = 0
+
+foreach ($groupName in $groupMemberships.Keys) {
+    $members = $groupMemberships[$groupName]
+    # Build comma-separated member list (samba-tool requires commas, not spaces)
+    $memberList = $members -join ','
+
+    $result = docker exec $container samba-tool group addmembers `
+        $groupName `
+        $memberList 2>&1
+
+    if ($LASTEXITCODE -eq 0 -or $result -match "already a member") {
+        $totalMemberships += $members.Count
+    }
+    else {
+        Write-Warning "Failed to add members to group ${groupName}: $result"
+    }
+
+    $processedGroups++
+    if (($processedGroups % 10) -eq 0) {
+        Write-Host "    Processed $processedGroups groups, $totalMemberships memberships..." -ForegroundColor Gray
+    }
+}
+
+Write-Host "  ✓ Added $totalMemberships group memberships across $($groupMemberships.Count) groups" -ForegroundColor Green
 
 # Summary
 Write-TestSection "Population Summary"

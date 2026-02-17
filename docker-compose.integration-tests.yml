@@ -67,6 +67,17 @@ services:
       retries: 5
       # Pre-built image starts much faster (30s vs 180s)
       start_period: ${SAMBA_START_PERIOD:-30s}
+    # Resource limits for consistent performance
+    # Default: Suitable for Nano/Micro/Small templates (<100 users)
+    # For Medium/Large templates, increase via environment variables
+    deploy:
+      resources:
+        limits:
+          cpus: ${SAMBA_PRIMARY_CPUS:-2.0}
+          memory: ${SAMBA_PRIMARY_MEMORY:-2G}
+        reservations:
+          cpus: ${SAMBA_PRIMARY_CPUS_RESERVED:-0.5}
+          memory: ${SAMBA_PRIMARY_MEMORY_RESERVED:-512M}
 
   # Phase 1 - Scenario 2: Directory to Directory Sync (Source)
   samba-ad-source:
@@ -106,6 +117,15 @@ services:
       timeout: 5s
       retries: 5
       start_period: ${SAMBA_START_PERIOD:-30s}
+    # Resource limits for consistent performance
+    deploy:
+      resources:
+        limits:
+          cpus: ${SAMBA_SOURCE_CPUS:-2.0}
+          memory: ${SAMBA_SOURCE_MEMORY:-2G}
+        reservations:
+          cpus: ${SAMBA_SOURCE_CPUS_RESERVED:-0.5}
+          memory: ${SAMBA_SOURCE_MEMORY_RESERVED:-512M}
 
   # Phase 1 - Scenario 2: Directory to Directory Sync (Target)
   samba-ad-target:
@@ -145,6 +165,15 @@ services:
       timeout: 5s
       retries: 5
       start_period: ${SAMBA_START_PERIOD:-30s}
+    # Resource limits for consistent performance
+    deploy:
+      resources:
+        limits:
+          cpus: ${SAMBA_TARGET_CPUS:-2.0}
+          memory: ${SAMBA_TARGET_MEMORY:-2G}
+        reservations:
+          cpus: ${SAMBA_TARGET_CPUS_RESERVED:-0.5}
+          memory: ${SAMBA_TARGET_MEMORY_RESERVED:-512M}
 
   # Phase 2 - Scenario 4: Multi-Source (SQL Server - HRIS A)
   sqlserver-hris-a:

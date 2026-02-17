@@ -405,14 +405,22 @@ for ($g = 0; $g -lt $createdGroups.Count; $g++) {
 
     # Add selected candidates to the group (deduplicate first)
     $uniqueCandidates = $candidates | Sort-Object -Property SamAccountName -Unique
-    foreach ($user in $uniqueCandidates) {
+
+    # OPTIMISATION: Batch add all members in a single samba-tool call
+    # This reduces Docker exec overhead from O(members) to O(1) per group
+    if ($uniqueCandidates.Count -gt 0) {
+        # Build comma-separated member list (samba-tool requires commas, not spaces)
+        $memberList = ($uniqueCandidates.SamAccountName) -join ','
         $result = docker exec $container samba-tool group addmembers `
             $group.SAMAccountName `
-            $user.SamAccountName 2>&1
+            $memberList 2>&1
 
         if ($LASTEXITCODE -eq 0 -or $result -match "already a member") {
-            $memberCount++
-            $totalMemberships++
+            $memberCount = $uniqueCandidates.Count
+            $totalMemberships += $memberCount
+        }
+        else {
+            Write-Warning "Failed to add members to group $($group.SAMAccountName): $result"
         }
     }
 

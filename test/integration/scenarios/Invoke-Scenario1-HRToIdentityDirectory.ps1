@@ -54,7 +54,7 @@ param(
     [string]$ApiKey,
 
     [Parameter(Mandatory=$false)]
-    [int]$WaitSeconds = 5,
+    [int]$WaitSeconds = 0,
 
     [Parameter(Mandatory=$false)]
     [switch]$ContinueOnError

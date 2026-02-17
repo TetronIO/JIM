@@ -45,7 +45,7 @@ param(
     [string]$ApiKey,
 
     [Parameter(Mandatory=$false)]
-    [int]$WaitSeconds = 20
+    [int]$WaitSeconds = 0
 )
 
 Set-StrictMode -Version Latest

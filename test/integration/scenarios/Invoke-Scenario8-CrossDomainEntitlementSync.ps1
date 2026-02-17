@@ -52,7 +52,7 @@ param(
     [string]$ApiKey,
 
     [Parameter(Mandatory=$false)]
-    [int]$WaitSeconds = 20
+    [int]$WaitSeconds = 0
 )
 
 Set-StrictMode -Version Latest
@@ -101,7 +101,8 @@ try {
     Write-Host "  ✓ Source AD (APAC) healthy" -ForegroundColor Green
     Write-Host "  ✓ Target AD (EMEA) healthy" -ForegroundColor Green
 
-    # Populate test data in Source AD
+    # Populate test data in Source AD, then Target AD
+    # Note: Target population is very fast (OU structure only, no data)
     Write-Host "Populating test data in Source AD..." -ForegroundColor Gray
     & "$PSScriptRoot/../Populate-SambaAD-Scenario8.ps1" -Template $Template -Instance Source
 
