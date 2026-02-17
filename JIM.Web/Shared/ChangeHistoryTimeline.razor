@@ -156,7 +156,7 @@ else
                 <MudGrid Spacing="2">
                     <!-- Initiated By (Who) - the principal that triggered the change -->
                     <MudItem xs="12" sm="4">
-                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Initiated By</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By</MudText>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             @GetModalPrincipalIcon(_selectedChange)
                             @GetModalPrincipalText(_selectedChange)
@@ -165,7 +165,7 @@ else
 
                     <!-- Mechanism (How) - how the change was triggered -->
                     <MudItem xs="12" sm="4">
-                        <MudText Typo="Typo.overline" Class="mud-text-secondary">Mechanism</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Mechanism</MudText>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             @GetModalMechanismIcon(_selectedChange)
                             @GetModalMechanismText(_selectedChange)
@@ -176,7 +176,7 @@ else
                     @if (_selectedChange.ActivityRunProfileExecutionItemId != null)
                     {
                         <MudItem xs="12" sm="4">
-                            <MudText Typo="Typo.overline" Class="mud-text-secondary">Activity</MudText>
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">Activity</MudText>
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                 <MudIcon Icon="@Icons.Material.Filled.PlayCircle"
                                     Class="mud-text-secondary" />
@@ -192,7 +192,7 @@ else
             @if (_selectedChange.AttributeChanges.Count > 1)
             {
                 <MudPaper Class="pa-3 mb-4" Outlined="true" Style="background-color: var(--mud-palette-background-grey);">
-                    <MudText Typo="Typo.overline" Class="mud-text-secondary mb-2">Summary</MudText>
+                    <MudText Typo="Typo.button" Class="mud-text-secondary mb-2">Summary</MudText>
                     <MudGrid Spacing="2">
                         @foreach (var summary in GetAggregatedSummary(_selectedChange))
                         {
