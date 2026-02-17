@@ -82,8 +82,12 @@ public class Worker : BackgroundService
         foreach (var taskToCancel in await mainLoopJim.Tasking.GetWorkerTasksThatNeedCancellingAsync())
             await mainLoopJim.Tasking.CancelWorkerTaskAsync(taskToCancel);
 
-        // DEV: Unsupported scenario:
-        // todo: job is being processed in database but is not in the current tasks, i.e. it's no longer being processed. clear it out
+        // Recover any tasks stuck in Processing status from a previous crash.
+        // At startup, ALL Processing tasks are orphaned (the worker just started, nothing is genuinely processing),
+        // so we use TimeSpan.Zero to recover them all immediately without waiting for the stale timeout.
+        var recoveredCount = await mainLoopJim.Tasking.RecoverStaleWorkerTasksAsync(TimeSpan.Zero);
+        if (recoveredCount > 0)
+            Log.Warning("ExecuteAsync: Recovered {Count} stale worker task(s) from previous crash", recoveredCount);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -95,8 +99,13 @@ public class Worker : BackgroundService
 
             if (CurrentTasks.Count > 0)
             {
+                // Update heartbeats for all tasks we're currently processing so the scheduler
+                // (and future worker restarts) know these tasks are still alive
+                var activeTaskIds = CurrentTasks.Select(t => t.TaskId).ToArray();
+                await mainLoopJim.Tasking.UpdateWorkerTaskHeartbeatsAsync(activeTaskIds);
+
                 // check the database to see if we need to cancel any tasks we're currently processing...
-                var workerTaskIds = CurrentTasks.Select(t => t.TaskId).ToArray();
+                var workerTaskIds = activeTaskIds;
                 var workerTasksToCancel = await mainLoopJim.Tasking.GetWorkerTasksThatNeedCancellingAsync(workerTaskIds);
                 foreach (var workerTaskToCancel in workerTasksToCancel)
                 {

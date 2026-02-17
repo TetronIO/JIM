@@ -250,6 +250,15 @@ public static class Constants
         public const string CredentialEncryptionEnabled = "Security.CredentialEncryptionEnabled";
         public const string EncryptionKeyPath = "Security.EncryptionKeyPath";
 
+        // Worker Settings
+        /// <summary>
+        /// The duration after which a processing task with no heartbeat update is considered stale/abandoned.
+        /// Used by the scheduler as a safety net to recover tasks from crashed workers.
+        /// At worker startup, all processing tasks are recovered immediately regardless of this setting.
+        /// Default: 5 minutes.
+        /// </summary>
+        public const string StaleTaskTimeout = "Worker.StaleTaskTimeout";
+
         // UI Settings
         /// <summary>
         /// The interval at which progress updates are reported and polled for in the UI.

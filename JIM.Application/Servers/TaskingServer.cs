@@ -271,5 +271,58 @@ namespace JIM.Application.Servers
             return await Application.Repository.Tasking.GetFirstDataGenerationTemplateWorkerTaskStatus(templateId);
         }
         #endregion
+
+        #region Crash Recovery
+
+        /// <summary>
+        /// Updates the LastHeartbeat timestamp for all specified worker tasks.
+        /// Called by the worker main loop to signal liveness.
+        /// </summary>
+        public async Task UpdateWorkerTaskHeartbeatsAsync(Guid[] workerTaskIds)
+        {
+            await Application.Repository.Tasking.UpdateWorkerTaskHeartbeatsAsync(workerTaskIds);
+        }
+
+        /// <summary>
+        /// Recovers worker tasks that are stuck in Processing status due to a worker crash or restart.
+        /// Fails the associated activities with a crash-recovery error message and deletes the worker tasks.
+        /// Returns the number of tasks recovered.
+        /// </summary>
+        public async Task<int> RecoverStaleWorkerTasksAsync(TimeSpan staleThreshold)
+        {
+            var staleTasks = await Application.Repository.Tasking.GetStaleProcessingWorkerTasksAsync(staleThreshold);
+            if (staleTasks.Count == 0)
+                return 0;
+
+            foreach (var staleTask in staleTasks)
+            {
+                Log.Warning("RecoverStaleWorkerTasksAsync: Recovering stale worker task {TaskId} (last heartbeat: {LastHeartbeat})",
+                    staleTask.Id, staleTask.LastHeartbeat?.ToString("o") ?? "never");
+
+                // Fail the associated activity so it appears correctly in history
+                if (staleTask.Activity is { Status: ActivityStatus.InProgress })
+                {
+                    try
+                    {
+                        await Application.Activities.FailActivityWithErrorAsync(
+                            staleTask.Activity,
+                            "Task was abandoned due to worker crash or restart. The task was in progress when the worker stopped responding. " +
+                            "This does not indicate a data integrity issue - the next sync run will process from the current state.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "RecoverStaleWorkerTasksAsync: Failed to update activity {ActivityId} for stale task {TaskId}",
+                            staleTask.Activity.Id, staleTask.Id);
+                    }
+                }
+
+                // Delete the worker task to free up the queue
+                await Application.Repository.Tasking.DeleteWorkerTaskAsync(staleTask);
+            }
+
+            return staleTasks.Count;
+        }
+
+        #endregion
     }
 }

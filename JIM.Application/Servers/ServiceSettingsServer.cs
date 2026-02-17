@@ -159,6 +159,25 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
+        /// Gets the stale task timeout (how long before a processing task with no heartbeat is considered abandoned).
+        /// Used by the scheduler as a safety net for crash recovery.
+        /// Default: 5 minutes.
+        /// </summary>
+        public async Task<TimeSpan> GetStaleTaskTimeoutAsync()
+        {
+            var timeout = await GetSettingValueAsync(Constants.SettingKeys.StaleTaskTimeout, TimeSpan.FromMinutes(5));
+
+            // Guard against zero or negative timeout which would immediately mark all processing tasks as stale
+            if (timeout <= TimeSpan.Zero)
+            {
+                Log.Warning("Stale task timeout is {Timeout}, which would immediately recover all processing tasks. Using default of 5 minutes", timeout);
+                return TimeSpan.FromMinutes(5);
+            }
+
+            return timeout;
+        }
+
+        /// <summary>
         /// Updates a service setting value and creates an Activity for audit purposes.
         /// Encrypted string values are automatically encrypted before storage.
         /// </summary>

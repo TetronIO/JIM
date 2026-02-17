@@ -266,15 +266,49 @@ public class TaskingRepository : ITaskingRepository
         foreach (var workerTask in workerTasks)
         {
             workerTask.Status = WorkerTaskStatus.Processing;
+            workerTask.LastHeartbeat = DateTime.UtcNow;
             var dbWorkerTask = await Repository.Database.WorkerTasks.SingleOrDefaultAsync(q => q.Id == workerTask.Id);
-            if (dbWorkerTask == null) 
+            if (dbWorkerTask == null)
                 continue;
-                
+
             dbWorkerTask.Status = WorkerTaskStatus.Processing;
+            dbWorkerTask.LastHeartbeat = DateTime.UtcNow;
             Repository.Database.WorkerTasks.Update(dbWorkerTask);
         }
 
         await Repository.Database.SaveChangesAsync();
     }
     #endregion
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Crash Recovery
+    // -----------------------------------------------------------------------------------------------------------------
+
+    public async Task UpdateWorkerTaskHeartbeatsAsync(Guid[] workerTaskIds)
+    {
+        if (workerTaskIds.Length == 0)
+            return;
+
+        var now = DateTime.UtcNow;
+        var tasks = await Repository.Database.WorkerTasks
+            .Where(q => workerTaskIds.Contains(q.Id))
+            .ToListAsync();
+
+        foreach (var task in tasks)
+        {
+            task.LastHeartbeat = now;
+        }
+
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task<List<WorkerTask>> GetStaleProcessingWorkerTasksAsync(TimeSpan staleThreshold)
+    {
+        var cutoff = DateTime.UtcNow - staleThreshold;
+        return await Repository.Database.WorkerTasks
+            .Include(st => st.Activity)
+            .Where(st => st.Status == WorkerTaskStatus.Processing &&
+                         (st.LastHeartbeat == null || st.LastHeartbeat < cutoff))
+            .ToListAsync();
+    }
 }

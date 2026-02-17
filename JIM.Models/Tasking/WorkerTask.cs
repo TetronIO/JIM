@@ -37,6 +37,14 @@ public abstract class WorkerTask
 	public string? InitiatedByName { get; set; }
 
 	/// <summary>
+	/// Tracks the last time the worker reported progress on this task.
+	/// Used for crash recovery: if the heartbeat is older than the stale task timeout threshold,
+	/// the task is considered abandoned and will be recovered (activity failed, task deleted).
+	/// Set when the task transitions to Processing, updated every main loop iteration.
+	/// </summary>
+	public DateTime? LastHeartbeat { get; set; }
+
+	/// <summary>
 	/// If this worker task has already resulted in an activity being created, then it can be found here, and when the worker task
 	/// is initiated then the execution time must be set, and when complete, the activity must also be completed.
 	/// </summary>

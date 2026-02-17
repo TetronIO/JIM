@@ -83,6 +83,10 @@ public class Scheduler : BackgroundService
                 // Step 3: Monitor active executions and advance them as steps complete
                 await ProcessActiveExecutionsAsync(jim);
 
+                // Step 4: Crash recovery safety net - detect and recover stale worker tasks
+                // that the worker may have abandoned due to a crash or restart
+                await RecoverStaleWorkerTasksAsync(jim);
+
                 Log.Debug("Scheduler polling cycle complete.");
             }
             catch (Exception ex)
@@ -169,6 +173,28 @@ public class Scheduler : BackgroundService
             {
                 Log.Error(ex, "ProcessActiveExecutionsAsync: Error processing execution {ExecutionId}", execution.Id);
             }
+        }
+    }
+
+    /// <summary>
+    /// Safety net for crash recovery: detects worker tasks that have been in Processing status
+    /// longer than the stale task timeout without a heartbeat update. This handles the case where
+    /// the worker crashes and hasn't restarted yet.
+    /// </summary>
+    private static async Task RecoverStaleWorkerTasksAsync(JimApplication jim)
+    {
+        try
+        {
+            var staleTimeout = await jim.ServiceSettings.GetStaleTaskTimeoutAsync();
+            var recoveredCount = await jim.Tasking.RecoverStaleWorkerTasksAsync(staleTimeout);
+            if (recoveredCount > 0)
+            {
+                Log.Warning("RecoverStaleWorkerTasksAsync: Recovered {Count} stale worker task(s) abandoned by worker", recoveredCount);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "RecoverStaleWorkerTasksAsync: Error during stale task recovery");
         }
     }
 

@@ -35,6 +35,22 @@ public interface ITaskingRepository
     public Task DeleteWorkerTaskAsync(WorkerTask serviceTask);
 
     // -----------------------------------------------------------------------------------------------------------------
+    // Crash Recovery
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Updates the LastHeartbeat timestamp for all specified worker tasks to DateTime.UtcNow.
+    /// Called by the worker main loop to signal liveness for tasks being processed.
+    /// </summary>
+    public Task UpdateWorkerTaskHeartbeatsAsync(Guid[] workerTaskIds);
+
+    /// <summary>
+    /// Gets all worker tasks in Processing status whose LastHeartbeat is older than the specified threshold,
+    /// or whose LastHeartbeat is null (pre-heartbeat tasks). Used for crash recovery.
+    /// </summary>
+    public Task<List<WorkerTask>> GetStaleProcessingWorkerTasksAsync(TimeSpan staleThreshold);
+
+    // -----------------------------------------------------------------------------------------------------------------
     // Scheduler Service Queries
     // -----------------------------------------------------------------------------------------------------------------
 
