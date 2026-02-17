@@ -82,7 +82,8 @@ namespace JIM.Application.Servers
                     TargetType = ActivityTargetType.ConnectedSystemRunProfile,
                     TargetOperationType = ActivityTargetOperationType.Execute,
                     ConnectedSystemId = synchronisationWorkerTask.ConnectedSystemId,
-                    ConnectedSystemRunProfileId = runProfile.Id
+                    ConnectedSystemRunProfileId = runProfile.Id,
+                    ConnectedSystemRunType = runProfile.RunType
                 };
                 await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 
