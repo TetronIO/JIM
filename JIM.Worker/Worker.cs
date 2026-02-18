@@ -99,28 +99,35 @@ public class Worker : BackgroundService
 
             if (CurrentTasks.Count > 0)
             {
-                // Update heartbeats for all tasks we're currently processing so the scheduler
-                // (and future worker restarts) know these tasks are still alive
-                var activeTaskIds = CurrentTasks.Select(t => t.TaskId).ToArray();
-                await mainLoopJim.Tasking.UpdateWorkerTaskHeartbeatsAsync(activeTaskIds);
-
-                // check the database to see if we need to cancel any tasks we're currently processing...
-                var workerTaskIds = activeTaskIds;
-                var workerTasksToCancel = await mainLoopJim.Tasking.GetWorkerTasksThatNeedCancellingAsync(workerTaskIds);
-                foreach (var workerTaskToCancel in workerTasksToCancel)
+                try
                 {
-                    var taskTask = CurrentTasks.SingleOrDefault(t => t.TaskId == workerTaskToCancel.Id);
-                    if (taskTask != null)
+                    // Update heartbeats for all tasks we're currently processing so the scheduler
+                    // (and future worker restarts) know these tasks are still alive
+                    var activeTaskIds = CurrentTasks.Select(t => t.TaskId).ToArray();
+                    await mainLoopJim.Tasking.UpdateWorkerTaskHeartbeatsAsync(activeTaskIds);
+
+                    // check the database to see if we need to cancel any tasks we're currently processing...
+                    var workerTaskIds = activeTaskIds;
+                    var workerTasksToCancel = await mainLoopJim.Tasking.GetWorkerTasksThatNeedCancellingAsync(workerTaskIds);
+                    foreach (var workerTaskToCancel in workerTasksToCancel)
                     {
-                        Log.Information($"ExecuteAsync: Cancelling task {workerTaskToCancel.Id}...");
-                        taskTask.CancellationTokenSource.Cancel();
-                        await mainLoopJim.Tasking.CancelWorkerTaskAsync(workerTaskToCancel);
-                        CurrentTasks.Remove(taskTask);
+                        var taskTask = CurrentTasks.SingleOrDefault(t => t.TaskId == workerTaskToCancel.Id);
+                        if (taskTask != null)
+                        {
+                            Log.Information($"ExecuteAsync: Cancelling task {workerTaskToCancel.Id}...");
+                            taskTask.CancellationTokenSource.Cancel();
+                            await mainLoopJim.Tasking.CancelWorkerTaskAsync(workerTaskToCancel);
+                            CurrentTasks.Remove(taskTask);
+                        }
+                        else
+                        {
+                            Log.Debug($"ExecuteAsync: No need to cancel task id {workerTaskToCancel.Id} as it seems to have finished processing.");
+                        }
                     }
-                    else
-                    {
-                        Log.Debug($"ExecuteAsync: No need to cancel task id {workerTaskToCancel.Id} as it seems to have finished processing.");
-                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "ExecuteAsync: Error during heartbeat update or cancellation check. Will retry on next cycle.");
                 }
             }
             else

@@ -355,8 +355,8 @@ public class ExportAttributeChangeStatusTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
-        mockExportConnector.Setup(c => c.Export(It.IsAny<IList<PendingExport>>()))
-            .Returns(new List<ExportResult> { ExportResult.Succeeded() });
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<ExportResult> { ExportResult.Succeeded() });
 
         // Mock update
         MockDbSetPendingExports.Setup(set => set.Update(It.IsAny<PendingExport>()));
@@ -402,8 +402,8 @@ public class ExportAttributeChangeStatusTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
-        mockExportConnector.Setup(c => c.Export(It.IsAny<IList<PendingExport>>()))
-            .Returns(new List<ExportResult> { ExportResult.Succeeded() });
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<ExportResult> { ExportResult.Succeeded() });
 
         MockDbSetPendingExports.Setup(set => set.Update(It.IsAny<PendingExport>()));
 
@@ -466,8 +466,8 @@ public class ExportAttributeChangeStatusTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
-        mockExportConnector.Setup(c => c.Export(It.IsAny<IList<PendingExport>>()))
-            .Returns(new List<ExportResult> { ExportResult.Succeeded() });
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<ExportResult> { ExportResult.Succeeded() });
 
         MockDbSetPendingExports.Setup(set => set.Update(It.IsAny<PendingExport>()));
 

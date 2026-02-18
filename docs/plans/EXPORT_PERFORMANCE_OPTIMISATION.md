@@ -1,6 +1,6 @@
 # Export Performance Optimisation
 
-- **Status**: Planned
+- **Status**: In Progress (Phase 2 complete)
 - **Milestone**: Post-MVP
 - **Related**: `docs/plans/OUTBOUND_SYNC_DESIGN.md` (Q8 - Parallelism Decision)
 - **Last Updated**: 2026-02-18
@@ -61,73 +61,57 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 ## Implementation Phases
 
-### Phase 1: Batch Database Operations (Low Risk, High Impact)
+### Phase 1: Batch Database Operations (Low Risk, High Impact) - COMPLETE
+
+**Status:** Merged in PR #334. Measured ~50% reduction in export time on Scenario 8 MediumLarge.
 
 **Goal:** Eliminate per-object database round-trips after export execution.
 
-**Changes:**
+**Changes implemented:**
 
-1. **Batch CSO updates after successful exports**
-   - File: `ExportExecutionServer.cs` (`ProcessBatchSuccessAsync`)
-   - Currently: Individual `UpdateCsoAfterSuccessfulExportAsync` per CSO with separate `SaveChangesAsync` calls
-   - Proposed: Accumulate all CSO changes in-memory, then issue a single `SaveChangesAsync` for the entire batch
-   - Pre-fetch all required attribute definitions in one query before processing the batch
-
-2. **Bulk reference resolution for deferred exports**
-   - File: `ExportExecutionServer.cs` (`TryResolveReferencesAsync`)
-   - Currently: Individual `GetConnectedSystemObjectByMetaverseObjectIdAsync` per reference (N+1 pattern)
-   - Proposed: Collect all unresolved MVO IDs, fetch all CSO mappings in a single query, then resolve in-memory
-
-3. **Filter pending exports at the database level**
-   - File: `ConnectedSystemRepository.cs` (`GetPendingExportsAsync`)
-   - Currently: Loads all pending exports and filters in-memory
-   - Proposed: Push filters (max retries exceeded, not yet due for retry) into the database query
-
-**Estimated Impact:** 50-70% reduction in database round-trips per batch. Low risk as all changes are within the existing sequential flow.
-
-**Testing Strategy:**
-- Unit tests for batched update logic
-- Integration test comparing export results before and after (same objects, same final state)
-- Performance benchmark with 1,000+ pending exports
+1. **Batch CSO updates after successful exports** - Accumulated all CSO changes in-memory with single `SaveChangesAsync` per batch
+2. **Bulk reference resolution for deferred exports** - Collected all unresolved MVO IDs and fetched CSO mappings in a single query
+3. **Filter pending exports at the database level** - Pushed retry/due filters into the database query
 
 ---
 
-### Phase 2: LDAP Connector Pipelining (Moderate Risk, High Impact)
+### Phase 2: LDAP Connector Pipelining (Moderate Risk, High Impact) - COMPLETE
 
-**Goal:** Send multiple LDAP requests without waiting for each individual response.
+**Status:** Implementation complete, unit tests passing. Awaiting integration testing.
 
-**Changes:**
+**Goal:** Process N LDAP operations concurrently within each batch using configurable concurrency.
 
-1. **Async LDAP operations within a batch**
-   - File: `LdapConnectorExport.cs`
-   - Currently: Synchronous `_connection.SendRequest()` per object in a `foreach` loop
-   - Proposed: Use `_connection.BeginSendRequest()` / async patterns to pipeline multiple LDAP operations
-   - Implement a configurable concurrency limit (e.g., 4-8 concurrent requests) using `SemaphoreSlim`
-   - Each concurrent request uses the same LDAP connection but leverages LDAP's native message-ID-based multiplexing
+**Changes implemented:**
 
-2. **Batch objectGUID retrieval for Create operations**
-   - Currently: Individual `SearchRequest` after each `AddRequest` to fetch the objectGUID
-   - Proposed: After all `AddRequest` operations in a batch complete, issue a single paged search for all newly created objects' GUIDs
-   - Alternative: Use the `AddResponse` controls to extract the GUID if the directory server supports it
+1. **Made export interfaces async (clean break)**
+   - `IConnectorExportUsingCalls`: `Export()` -> `ExportAsync()` with `CancellationToken`
+   - `IConnectorExportUsingFiles`: `Export()` -> `ExportAsync()` with `CancellationToken`
+   - Updated all implementors (MockCallConnector, FileConnector, LdapConnector)
+   - Updated all 3 call sites in `ExportExecutionServer.cs`
 
-3. **Update `IConnectorExportUsingCalls` interface**
-   - Currently: `List<ExportResult> Export(...)` - synchronous signature
-   - Proposed: `Task<List<ExportResult>> ExportAsync(...)` - async signature
-   - Maintain backwards compatibility with a default interface implementation that wraps the sync version
+2. **Async LDAP operations with configurable concurrency**
+   - New `LdapConnectionExtensions.SendRequestAsync()` wrapping APM `BeginSendRequest`/`EndSendRequest`
+   - New `ILdapOperationExecutor` abstraction (LdapConnection is sealed, cannot be mocked)
+   - `LdapConnectorExport` refactored with both sync (concurrency=1) and async (concurrency>1) paths
+   - `SemaphoreSlim`-based concurrency control across exports within a batch
+   - Container creation serialised via dedicated `SemaphoreSlim(1,1)` to prevent race conditions
+   - Multi-step operations (create+GUID, rename+modify, UAC read+write) remain sequential within each export
 
-**Estimated Impact:** 3-8x improvement in LDAP export throughput depending on network latency and target server capacity.
+3. **Per-connector concurrency setting**
+   - New "Export Concurrency" integer setting under Export category
+   - Default: 1 (sequential, safe default). Maximum: 16.
+   - Recommended range 1-8, tuned per target system capacity
 
-**Risk Mitigations:**
-- Configurable concurrency limit (start conservative at 4)
-- Per-connector setting so administrators can tune per target system
-- Error handling must ensure partial batch failures don't corrupt state
-- Rate limiting to avoid overwhelming target LDAP servers
+4. **Skipped batch objectGUID retrieval** - Per-export create+GUID is simpler, concurrent execution already overlaps the GUID fetches
 
-**Testing Strategy:**
-- Unit tests with mock LDAP connection
-- Integration tests against test AD/LDAP instances
-- Verify no data corruption under concurrent writes
-- Stress test with varying concurrency levels
+**Key files:**
+- `LdapConnectionExtensions.cs` (new) - APM async wrapper
+- `ILdapOperationExecutor.cs` (new) - Testability abstraction
+- `LdapOperationExecutor.cs` (new) - Production implementation
+- `LdapConnectorExport.cs` (refactored) - Async + concurrency support
+- `LdapConnectorExportAsyncTests.cs` (new) - 13 unit tests
+
+**Estimated Impact:** 3-8x improvement in LDAP export throughput depending on network latency and concurrency setting.
 
 ---
 

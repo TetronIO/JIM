@@ -58,6 +58,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     // Export settings
     private readonly string _settingDeleteBehaviour = "Delete Behaviour";
     private readonly string _settingDisableAttribute = "Disable Attribute";
+    private readonly string _settingExportConcurrency = "Export Concurrency";
 
     public List<ConnectorSetting> GetSettings()
     {
@@ -94,7 +95,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             // Export settings
             new() { Name = "Export Settings", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingDeleteBehaviour, Required = false, Description = "How to handle object deletions.", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE, LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE }, Category = ConnectedSystemSettingCategory.Export },
-            new() { Name = _settingDisableAttribute, Required = false, Description = "Attribute to set when disabling objects (e.g., userAccountControl for AD). Only used when Delete Behaviour is 'Disable'.", DefaultStringValue = "userAccountControl", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String }
+            new() { Name = _settingDisableAttribute, Required = false, Description = "Attribute to set when disabling objects (e.g., userAccountControl for AD). Only used when Delete Behaviour is 'Disable'.", DefaultStringValue = "userAccountControl", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String },
+            new() { Name = _settingExportConcurrency, Required = false, Description = "Maximum number of concurrent LDAP operations during export. Higher values improve throughput but increase load on the target directory. Default is 1 (sequential). Recommended range: 1-8.", DefaultIntValue = LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer }
         };
     }
 
@@ -342,16 +344,21 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         OpenImportConnection(settings.ToList(), Log.Logger);
     }
 
-    public List<ExportResult> Export(IList<PendingExport> pendingExports)
+    public Task<List<ExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken)
     {
         if (_connection == null)
-            throw new InvalidOperationException("Must call OpenExportConnection() before Export()!");
+            throw new InvalidOperationException("Must call OpenExportConnection() before ExportAsync()!");
 
         if (_exportSettings == null)
             throw new InvalidOperationException("Export settings not available. Call OpenExportConnection() first.");
 
-        _currentExport = new LdapConnectorExport(_connection, _exportSettings, Log.Logger);
-        return _currentExport.Execute(pendingExports);
+        var concurrency = _exportSettings
+            .FirstOrDefault(s => s.Setting.Name == _settingExportConcurrency)?.IntValue
+            ?? LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY;
+
+        var executor = new LdapOperationExecutor(_connection);
+        _currentExport = new LdapConnectorExport(executor, _exportSettings, Log.Logger, concurrency);
+        return _currentExport.ExecuteAsync(pendingExports, cancellationToken);
     }
 
     public void CloseExportConnection()

@@ -1,4 +1,4 @@
-﻿using JIM.Models.Staging;
+using JIM.Models.Staging;
 using JIM.Models.Transactional;
 namespace JIM.Models.Interfaces;
 
@@ -12,8 +12,9 @@ public interface IConnectorExportUsingCalls
     /// For Create operations, the ExportResult should include the system-assigned ExternalId (e.g., objectGUID).
     /// </summary>
     /// <param name="pendingExports">The list of pending exports to process.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the export operation.</param>
     /// <returns>A list of ExportResult objects corresponding to each pending export.</returns>
-    public List<ExportResult> Export(IList<PendingExport> pendingExports);
+    public Task<List<ExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken);
 
     public void CloseExportConnection();
 }
