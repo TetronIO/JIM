@@ -142,13 +142,13 @@ public class ExportConfirmationWorkflowTests
 
         if (success)
         {
-            mockExportConnector.Setup(c => c.Export(It.IsAny<IList<PendingExport>>()))
-                .Returns(new List<ExportResult> { ExportResult.Succeeded() });
+            mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new List<ExportResult> { ExportResult.Succeeded() });
         }
         else
         {
-            mockExportConnector.Setup(c => c.Export(It.IsAny<IList<PendingExport>>()))
-                .Returns(new List<ExportResult> { ExportResult.Failed("Export failed") });
+            mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new List<ExportResult> { ExportResult.Failed("Export failed") });
         }
 
         MockDbSetPendingExports.Setup(set => set.Update(It.IsAny<PendingExport>()));

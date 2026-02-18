@@ -736,8 +736,8 @@ public class ExportExecutionTests
         var mockContainerCreation = mockConnector.As<IConnectorContainerCreation>();
 
         mockConnector.Setup(c => c.Name).Returns("Test Container Creation Connector");
-        mockExportConnector.Setup(c => c.Export(It.IsAny<IList<PendingExport>>()))
-            .Returns(new List<ExportResult> { ExportResult.Succeeded() });
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<ExportResult> { ExportResult.Succeeded() });
 
         // Simulate that the connector created two OUs during export
         var createdContainers = new List<string>
@@ -810,8 +810,8 @@ public class ExportExecutionTests
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
 
         mockConnector.Setup(c => c.Name).Returns("Test Regular Connector");
-        mockExportConnector.Setup(c => c.Export(It.IsAny<IList<PendingExport>>()))
-            .Returns(new List<ExportResult> { ExportResult.Succeeded() });
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<ExportResult> { ExportResult.Succeeded() });
 
         // Act
         var result = await Jim.ExportExecution.ExecuteExportsAsync(
@@ -888,8 +888,8 @@ public class ExportExecutionTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Failing Connector");
-        mockExportConnector.Setup(c => c.Export(It.IsAny<IList<PendingExport>>()))
-            .Returns(new List<ExportResult>
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<ExportResult>
             {
                 ExportResult.Failed("Connection to target system failed")
             });
@@ -1004,8 +1004,8 @@ public class ExportExecutionTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Successful Connector");
-        mockExportConnector.Setup(c => c.Export(It.IsAny<IList<PendingExport>>()))
-            .Returns(new List<ExportResult>
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<ExportResult>
             {
                 ExportResult.Succeeded(generatedObjectGuid.ToString())
             });
@@ -1128,8 +1128,8 @@ public class ExportExecutionTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Failing Connector");
-        mockExportConnector.Setup(c => c.Export(It.IsAny<IList<PendingExport>>()))
-            .Returns(new List<ExportResult>
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<ExportResult>
             {
                 ExportResult.Failed("LDAP error: The object exists. Attribute member already exists")
             });
@@ -1234,8 +1234,8 @@ public class ExportExecutionTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Failing Connector");
-        mockExportConnector.Setup(c => c.Export(It.IsAny<IList<PendingExport>>()))
-            .Returns(new List<ExportResult>
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<ExportResult>
             {
                 ExportResult.Failed("Connection timeout")
             });

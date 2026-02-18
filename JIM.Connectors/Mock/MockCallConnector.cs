@@ -243,7 +243,7 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
         // No-op for mock
     }
 
-    public List<ExportResult> Export(IList<PendingExport> pendingExports)
+    public Task<List<ExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken)
     {
         if (ExportExceptionToThrow != null)
             throw ExportExceptionToThrow;
@@ -252,6 +252,8 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
 
         foreach (var pendingExport in pendingExports)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             _exportedItems.Add(pendingExport);
 
             ExportResult result;
@@ -277,7 +279,7 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
             results.Add(result);
         }
 
-        return results;
+        return Task.FromResult(results);
     }
 
     public void CloseExportConnection()

@@ -326,7 +326,7 @@ public class ExportExecutionServer
                         List<ExportResult> exportResults;
                         using (Diagnostics.Diagnostics.Connector.StartSpan("ExportBatch").SetTag("batchSize", batch.Count))
                         {
-                            exportResults = connector.Export(batch);
+                            exportResults = await connector.ExportAsync(batch, cancellationToken);
                         }
 
                         // Process results with ExportResult data
@@ -409,7 +409,7 @@ public class ExportExecutionServer
                             using (Diagnostics.Diagnostics.Connector.StartSpan("ExportDeferredBatch")
                                 .SetTag("batchSize", batch.Count))
                             {
-                                exportResults = connector.Export(batch);
+                                exportResults = await connector.ExportAsync(batch, cancellationToken);
                             }
 
                             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
@@ -842,7 +842,7 @@ public class ExportExecutionServer
             });
 
             // File-based export - execute all at once (file connectors typically batch internally)
-            var exportResults = connector.Export(connectedSystem.SettingValues, pendingExports);
+            var exportResults = await connector.ExportAsync(connectedSystem.SettingValues, pendingExports, cancellationToken);
 
             // Check if the connector supports auto-confirm and the setting is enabled
             var autoConfirm = false;

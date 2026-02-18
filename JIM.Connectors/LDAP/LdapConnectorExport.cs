@@ -8,12 +8,14 @@ namespace JIM.Connectors.LDAP;
 
 /// <summary>
 /// Handles LDAP export functionality - creating, updating, and deleting objects in LDAP directories.
+/// Supports both sequential and concurrent LDAP operations within a batch.
 /// </summary>
 internal class LdapConnectorExport
 {
-    private readonly LdapConnection _connection;
+    private readonly ILdapOperationExecutor _executor;
     private readonly IList<ConnectedSystemSettingValue> _settings;
     private readonly ILogger _logger;
+    private readonly int _exportConcurrency;
 
     // Setting names
     private const string SettingDeleteBehaviour = "Delete Behaviour";
@@ -63,6 +65,10 @@ internal class LdapConnectorExport
     // Track containers created during this export session (for auto-selection in JIM)
     private readonly List<string> _createdContainerExternalIds = new();
 
+    // Serialises container creation to prevent race conditions when concurrent exports
+    // try to create the same parent OU simultaneously
+    private readonly SemaphoreSlim _containerSemaphore = new(1, 1);
+
     /// <summary>
     /// Gets the list of container external IDs (DNs for LDAP) that were created during this export session.
     /// Used by JIM to auto-select newly created containers in the hierarchy.
@@ -70,14 +76,18 @@ internal class LdapConnectorExport
     internal IReadOnlyList<string> CreatedContainerExternalIds => _createdContainerExternalIds.AsReadOnly();
 
     internal LdapConnectorExport(
-        LdapConnection connection,
+        ILdapOperationExecutor executor,
         IList<ConnectedSystemSettingValue> settings,
-        ILogger logger)
+        ILogger logger,
+        int exportConcurrency = LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY)
     {
-        _connection = connection;
+        _executor = executor;
         _settings = settings;
         _logger = logger;
+        _exportConcurrency = Math.Clamp(exportConcurrency, 1, LdapConnectorConstants.MAX_EXPORT_CONCURRENCY);
     }
+
+    #region Sequential execution (sync path)
 
     internal List<ExportResult> Execute(IList<PendingExport> pendingExports)
     {
@@ -158,48 +168,12 @@ internal class LdapConnectorExport
             EnsureParentContainersExist(dn);
         }
 
-        var addRequest = new AddRequest(dn);
+        var addRequest = BuildAddRequest(pendingExport, dn);
 
-        // Get the object class from the pending export
-        var objectClass = GetObjectClass(pendingExport);
-        if (!string.IsNullOrEmpty(objectClass))
-        {
-            addRequest.Attributes.Add(new DirectoryAttribute("objectClass", objectClass));
-        }
-
-        // Add all attributes from the pending export
-        foreach (var attrChange in pendingExport.AttributeValueChanges)
-        {
-            if (attrChange.Attribute == null)
-                continue;
-
-            var attrName = attrChange.Attribute.Name;
-
-            // Skip distinguished name as it's already handled
-            if (attrName.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            // Skip objectClass if we already added it
-            if (attrName.Equals("objectClass", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var value = GetAttributeValue(attrChange);
-            if (value != null)
-            {
-                addRequest.Attributes.Add(new DirectoryAttribute(attrName, value));
-            }
-        }
-
-        var response = (AddResponse)_connection.SendRequest(addRequest);
+        var response = (AddResponse)_executor.SendRequest(addRequest);
         if (response.ResultCode != ResultCode.Success)
         {
-            // Build a more descriptive error message that includes the DN and attributes being added
-            var attrNames = string.Join(", ", addRequest.Attributes.Cast<DirectoryAttribute>().Select(a => $"'{a.Name}'"));
-            var errorDetail = $"LDAP add failed for DN '{dn}'. " +
-                $"Attributes: {attrNames}. " +
-                $"LDAP error ({(int)response.ResultCode}): {response.ErrorMessage}";
-
-            throw new LdapException((int)response.ResultCode, errorDetail);
+            ThrowAddFailure(addRequest, dn, response);
         }
 
         _logger.Information("LdapConnectorExport.ProcessCreate: Successfully created object at '{Dn}'", dn);
@@ -229,26 +203,8 @@ internal class LdapConnectorExport
                 SearchScope.Base,
                 "objectGUID");
 
-            var searchResponse = (SearchResponse)_connection.SendRequest(searchRequest);
-            if (searchResponse.ResultCode != ResultCode.Success || searchResponse.Entries.Count == 0)
-            {
-                _logger.Warning("LdapConnectorExport.FetchObjectGuid: Failed to fetch objectGUID for '{Dn}'", dn);
-                return null;
-            }
-
-            var entry = searchResponse.Entries[0];
-            if (entry.Attributes.Contains("objectGUID"))
-            {
-                var guidBytes = entry.Attributes["objectGUID"][0] as byte[];
-                if (guidBytes != null && guidBytes.Length == 16)
-                {
-                    // AD objectGUID uses Microsoft GUID byte order (little-endian first 3 components)
-                    var guid = IdentifierParser.FromMicrosoftBytes(guidBytes);
-                    return guid.ToString();
-                }
-            }
-
-            return null;
+            var searchResponse = (SearchResponse)_executor.SendRequest(searchRequest);
+            return ParseObjectGuidFromResponse(searchResponse, dn);
         }
         catch (Exception ex)
         {
@@ -277,33 +233,7 @@ internal class LdapConnectorExport
             wasRenamed = true;
         }
 
-        var modifyRequest = new ModifyRequest(workingDn);
-
-        foreach (var attrChange in pendingExport.AttributeValueChanges)
-        {
-            if (attrChange.Attribute == null)
-                continue;
-
-            var attrName = attrChange.Attribute.Name;
-
-            // Skip RDN (Relative Distinguished Name) attributes - they cannot be modified via LDAP ModifyRequest
-            // These require a ModifyDNRequest (rename operation) instead, which is handled above.
-            // - distinguishedName: The full DN, immutable via MODIFY
-            // - cn: Common Name, the RDN for most object types (users, groups, etc.)
-            // - ou: Organisational Unit name, RDN for OUs
-            // - dc: Domain Component, RDN for domain objects
-            if (attrName.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase) ||
-                attrName.Equals("cn", StringComparison.OrdinalIgnoreCase) ||
-                attrName.Equals("ou", StringComparison.OrdinalIgnoreCase) ||
-                attrName.Equals("dc", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var modification = CreateModification(attrChange);
-            if (modification != null)
-            {
-                modifyRequest.Modifications.Add(modification);
-            }
-        }
+        var modifyRequest = BuildModifyRequest(pendingExport, workingDn);
 
         if (modifyRequest.Modifications.Count == 0)
         {
@@ -312,37 +242,8 @@ internal class LdapConnectorExport
             return wasRenamed ? ExportResult.Succeeded(null, workingDn) : ExportResult.Succeeded();
         }
 
-        var response = (ModifyResponse)_connection.SendRequest(modifyRequest);
-        if (response.ResultCode != ResultCode.Success)
-        {
-            // Handle "attribute or value exists" error gracefully for Add operations.
-            // This can happen when trying to add a member that already exists in a group.
-            // LDAP error code 20 = LDAP_TYPE_OR_VALUE_EXISTS
-            // Since the desired state (member is in group) is already achieved, treat as success.
-            if (response.ResultCode == ResultCode.AttributeOrValueExists)
-            {
-                _logger.Warning("LdapConnectorExport.ProcessUpdate: Some attribute values already exist at '{Dn}'. " +
-                    "This typically means a group member was already present. Treating as success. Error: {Error}",
-                    workingDn, response.ErrorMessage);
-                return wasRenamed ? ExportResult.Succeeded(null, workingDn) : ExportResult.Succeeded();
-            }
-
-            // Build a more descriptive error message that includes the attributes being modified
-            var modifiedAttrs = string.Join(", ", modifyRequest.Modifications
-                .Cast<DirectoryAttributeModification>()
-                .Select(m => $"'{m.Name}' ({m.Operation})"));
-            var errorDetail = $"LDAP modify failed for DN '{workingDn}'. " +
-                $"Modified attributes: {modifiedAttrs}. " +
-                $"LDAP error ({(int)response.ResultCode}): {response.ErrorMessage}";
-
-            throw new LdapException((int)response.ResultCode, errorDetail);
-        }
-
-        _logger.Information("LdapConnectorExport.ProcessUpdate: Successfully updated object at '{Dn}' with {Count} modifications",
-            workingDn, modifyRequest.Modifications.Count);
-
-        // Return the new DN if renamed, so it can be updated on the CSO
-        return wasRenamed ? ExportResult.Succeeded(null, workingDn) : ExportResult.Succeeded();
+        var response = (ModifyResponse)_executor.SendRequest(modifyRequest);
+        return HandleModifyResponse(response, modifyRequest, workingDn, wasRenamed);
     }
 
     /// <summary>
@@ -353,32 +254,9 @@ internal class LdapConnectorExport
     {
         _logger.Debug("LdapConnectorExport.ProcessRename: Renaming object from '{OldDn}' to '{NewDn}'", currentDn, newDn);
 
-        // Parse the new DN to extract the new RDN and new parent DN
-        var (newRdn, newParentDn) = LdapConnectorUtilities.ParseDistinguishedName(newDn);
-        var (_, currentParentDn) = LdapConnectorUtilities.ParseDistinguishedName(currentDn);
+        var modifyDnRequest = BuildModifyDnRequest(currentDn, newDn);
 
-        if (string.IsNullOrEmpty(newRdn))
-        {
-            throw new InvalidOperationException($"Cannot rename object: Unable to parse new RDN from DN '{newDn}'");
-        }
-
-        // Determine if this is just a rename or also a move to a different container
-        var isMove = !string.IsNullOrEmpty(newParentDn) &&
-                     !newParentDn.Equals(currentParentDn, StringComparison.OrdinalIgnoreCase);
-
-        var modifyDnRequest = new ModifyDNRequest(
-            currentDn,
-            newParentDn,  // New parent (null if not moving)
-            newRdn        // New RDN (e.g., "CN=New Name")
-        );
-
-        // deleteOldRdn should be true to remove the old RDN value
-        // This is the default behaviour in most LDAP implementations
-
-        _logger.Debug("LdapConnectorExport.ProcessRename: Executing ModifyDNRequest - NewRdn: '{NewRdn}', NewParent: '{NewParent}', IsMove: {IsMove}",
-            newRdn, newParentDn ?? "(same)", isMove);
-
-        var response = (ModifyDNResponse)_connection.SendRequest(modifyDnRequest);
+        var response = (ModifyDNResponse)_executor.SendRequest(modifyDnRequest);
         if (response.ResultCode != ResultCode.Success)
         {
             throw new LdapException((int)response.ResultCode, response.ErrorMessage);
@@ -388,18 +266,6 @@ internal class LdapConnectorExport
             currentDn, newDn);
 
         return newDn;
-    }
-
-    /// <summary>
-    /// Gets the new distinguished name from the pending export's attribute changes.
-    /// This is used to detect if a rename operation is needed.
-    /// </summary>
-    private static string? GetNewDistinguishedName(PendingExport pendingExport)
-    {
-        var dnAttrChange = pendingExport.AttributeValueChanges
-            .FirstOrDefault(a => a.Attribute?.Name.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase) == true);
-
-        return dnAttrChange?.StringValue;
     }
 
     private void ProcessDelete(PendingExport pendingExport)
@@ -425,7 +291,7 @@ internal class LdapConnectorExport
         _logger.Debug("LdapConnectorExport.ProcessHardDelete: Deleting object at DN '{Dn}'", dn);
 
         var deleteRequest = new DeleteRequest(dn);
-        var response = (DeleteResponse)_connection.SendRequest(deleteRequest);
+        var response = (DeleteResponse)_executor.SendRequest(deleteRequest);
 
         if (response.ResultCode == ResultCode.NoSuchObject)
         {
@@ -463,7 +329,7 @@ internal class LdapConnectorExport
                 disableAttribute,
                 "TRUE");
 
-            var response = (ModifyResponse)_connection.SendRequest(modifyRequest);
+            var response = (ModifyResponse)_executor.SendRequest(modifyRequest);
             if (response.ResultCode != ResultCode.Success)
             {
                 throw new LdapException((int)response.ResultCode, response.ErrorMessage);
@@ -482,13 +348,654 @@ internal class LdapConnectorExport
             SearchScope.Base,
             "userAccountControl");
 
-        var searchResponse = (SearchResponse)_connection.SendRequest(searchRequest);
+        var searchResponse = (SearchResponse)_executor.SendRequest(searchRequest);
         if (searchResponse.ResultCode != ResultCode.Success || searchResponse.Entries.Count == 0)
         {
             throw new LdapException((int)searchResponse.ResultCode,
                 $"Failed to read current userAccountControl value for '{dn}'");
         }
 
+        var newValue = ParseUacAndSetDisableBit(searchResponse);
+
+        var modifyRequest = new ModifyRequest(dn,
+            DirectoryAttributeOperation.Replace,
+            "userAccountControl",
+            newValue.ToString());
+
+        var modifyResponse = (ModifyResponse)_executor.SendRequest(modifyRequest);
+        if (modifyResponse.ResultCode != ResultCode.Success)
+        {
+            throw new LdapException((int)modifyResponse.ResultCode, modifyResponse.ErrorMessage);
+        }
+    }
+
+    private void EnsureParentContainersExist(string objectDn)
+    {
+        var (_, parentDn) = LdapConnectorUtilities.ParseDistinguishedName(objectDn);
+
+        if (string.IsNullOrEmpty(parentDn))
+        {
+            // No parent DN - this is a root-level object, nothing to create
+            return;
+        }
+
+        // Check if we've already verified this container exists in this session
+        if (_verifiedContainers.Contains(parentDn))
+        {
+            return;
+        }
+
+        // Build the chain of parent containers from root to immediate parent
+        var containerChain = BuildContainerChain(parentDn);
+
+        // Process from root downwards, creating any missing containers
+        foreach (var containerDn in containerChain)
+        {
+            if (_verifiedContainers.Contains(containerDn))
+            {
+                continue;
+            }
+
+            if (!ContainerExists(containerDn))
+            {
+                CreateContainer(containerDn);
+            }
+
+            _verifiedContainers.Add(containerDn);
+        }
+    }
+
+    private bool ContainerExists(string containerDn)
+    {
+        try
+        {
+            var searchRequest = new SearchRequest(
+                containerDn,
+                "(objectClass=*)",
+                SearchScope.Base,
+                "objectClass");
+
+            var response = (SearchResponse)_executor.SendRequest(searchRequest);
+            return response.ResultCode == ResultCode.Success && response.Entries.Count > 0;
+        }
+        catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
+        {
+            return false;
+        }
+        catch (LdapException ex) when (ex.ErrorCode == 32) // LDAP_NO_SUCH_OBJECT
+        {
+            return false;
+        }
+    }
+
+    private void CreateContainer(string containerDn)
+    {
+        var addRequest = BuildContainerAddRequest(containerDn);
+
+        var response = (AddResponse)_executor.SendRequest(addRequest);
+        if (response.ResultCode != ResultCode.Success)
+        {
+            throw new LdapException((int)response.ResultCode, $"Failed to create container '{containerDn}': {response.ErrorMessage}");
+        }
+
+        // Track the created container for auto-selection
+        _createdContainerExternalIds.Add(containerDn);
+
+        _logger.Information("LdapConnectorExport.CreateContainer: Successfully created container '{ContainerDn}'", containerDn);
+    }
+
+    #endregion
+
+    #region Concurrent execution (async path)
+
+    /// <summary>
+    /// Executes pending exports asynchronously with configurable concurrency.
+    /// When concurrency is 1, delegates to the sequential <see cref="Execute"/> method.
+    /// When concurrency > 1, processes multiple exports concurrently using SemaphoreSlim
+    /// while maintaining positional ordering of results.
+    /// </summary>
+    internal async Task<List<ExportResult>> ExecuteAsync(
+        IList<PendingExport> pendingExports,
+        CancellationToken cancellationToken)
+    {
+        _logger.Debug("LdapConnectorExport.ExecuteAsync: Starting export of {Count} pending exports (concurrency: {Concurrency})",
+            pendingExports.Count, _exportConcurrency);
+
+        if (pendingExports.Count == 0)
+        {
+            _logger.Information("LdapConnectorExport.ExecuteAsync: No pending exports to process");
+            return new List<ExportResult>();
+        }
+
+        // If concurrency is 1, fall back to synchronous sequential processing
+        // for maximum compatibility and simplicity
+        if (_exportConcurrency <= 1)
+            return Execute(pendingExports);
+
+        // Pre-allocate results array to maintain positional ordering.
+        // Each task writes to its own unique index - no shared mutable state between tasks.
+        var results = new ExportResult[pendingExports.Count];
+        using var semaphore = new SemaphoreSlim(_exportConcurrency);
+
+        var tasks = new Task[pendingExports.Count];
+        for (var i = 0; i < pendingExports.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var index = i; // Capture for closure
+            var pendingExport = pendingExports[i];
+
+            tasks[i] = Task.Run(async () =>
+            {
+                await semaphore.WaitAsync(cancellationToken);
+                try
+                {
+                    results[index] = await ProcessPendingExportAsync(pendingExport);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "LdapConnectorExport.ExecuteAsync: Failed to process pending export {Id} ({ChangeType})",
+                        pendingExport.Id, pendingExport.ChangeType);
+                    results[index] = ExportResult.Failed(ex.Message);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            }, cancellationToken);
+        }
+
+        await Task.WhenAll(tasks);
+
+        _logger.Information("LdapConnectorExport.ExecuteAsync: Completed export processing of {Count} pending exports",
+            pendingExports.Count);
+        return results.ToList();
+    }
+
+    private async Task<ExportResult> ProcessPendingExportAsync(PendingExport pendingExport)
+    {
+        pendingExport.Status = PendingExportStatus.Executing;
+        pendingExport.LastAttemptedAt = DateTime.UtcNow;
+
+        var result = pendingExport.ChangeType switch
+        {
+            PendingExportChangeType.Create => await ProcessCreateAsync(pendingExport),
+            PendingExportChangeType.Update => await ProcessUpdateAsync(pendingExport),
+            PendingExportChangeType.Delete => await ProcessDeleteAsync(pendingExport),
+            _ => throw new InvalidOperationException($"Unknown change type: {pendingExport.ChangeType}")
+        };
+
+        pendingExport.Status = PendingExportStatus.Exported;
+        _logger.Debug("LdapConnectorExport.ProcessPendingExportAsync: Successfully processed {ChangeType} for {Id}",
+            pendingExport.ChangeType, pendingExport.Id);
+        return result;
+    }
+
+    private async Task<ExportResult> ProcessCreateAsync(PendingExport pendingExport)
+    {
+        var dn = GetDistinguishedNameForCreate(pendingExport);
+        if (string.IsNullOrEmpty(dn))
+            throw new InvalidOperationException("Cannot create object: Distinguished Name (DN) could not be determined from attribute changes.");
+
+        _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Creating object at DN '{Dn}'", dn);
+
+        var createContainersAsNeeded = GetSettingBoolValue(SettingCreateContainersAsNeeded) ?? false;
+        if (createContainersAsNeeded)
+        {
+            await EnsureParentContainersExistAsync(dn);
+        }
+
+        var addRequest = BuildAddRequest(pendingExport, dn);
+
+        // Sequential within this export: create must succeed before GUID fetch
+        var response = (AddResponse)await _executor.SendRequestAsync(addRequest);
+        if (response.ResultCode != ResultCode.Success)
+        {
+            ThrowAddFailure(addRequest, dn, response);
+        }
+
+        _logger.Information("LdapConnectorExport.ProcessCreateAsync: Successfully created object at '{Dn}'", dn);
+
+        var objectGuid = await FetchObjectGuidAsync(dn);
+        if (objectGuid != null)
+        {
+            _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Retrieved objectGUID {ObjectGuid} for '{Dn}'", objectGuid, dn);
+            return ExportResult.Succeeded(objectGuid, dn);
+        }
+
+        return ExportResult.Succeeded(null, dn);
+    }
+
+    private async Task<string?> FetchObjectGuidAsync(string dn)
+    {
+        try
+        {
+            var searchRequest = new SearchRequest(
+                dn,
+                "(objectClass=*)",
+                SearchScope.Base,
+                "objectGUID");
+
+            var searchResponse = (SearchResponse)await _executor.SendRequestAsync(searchRequest);
+            return ParseObjectGuidFromResponse(searchResponse, dn);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "LdapConnectorExport.FetchObjectGuidAsync: Error fetching objectGUID for '{Dn}'", dn);
+            return null;
+        }
+    }
+
+    private async Task<ExportResult> ProcessUpdateAsync(PendingExport pendingExport)
+    {
+        var currentDn = GetDistinguishedNameForUpdate(pendingExport);
+        if (string.IsNullOrEmpty(currentDn))
+            throw new InvalidOperationException("Cannot update object: Distinguished Name (DN) could not be determined.");
+
+        _logger.Debug("LdapConnectorExport.ProcessUpdateAsync: Updating object at DN '{Dn}'", currentDn);
+
+        var newDn = GetNewDistinguishedName(pendingExport);
+        var workingDn = currentDn;
+        var wasRenamed = false;
+
+        if (!string.IsNullOrEmpty(newDn) && !newDn.Equals(currentDn, StringComparison.OrdinalIgnoreCase))
+        {
+            // Sequential within this export: rename must complete before modify
+            workingDn = await ProcessRenameAsync(currentDn, newDn);
+            wasRenamed = true;
+        }
+
+        var modifyRequest = BuildModifyRequest(pendingExport, workingDn);
+
+        if (modifyRequest.Modifications.Count == 0)
+        {
+            _logger.Debug("LdapConnectorExport.ProcessUpdateAsync: No attribute modifications to apply for '{Dn}'", workingDn);
+            return wasRenamed ? ExportResult.Succeeded(null, workingDn) : ExportResult.Succeeded();
+        }
+
+        var response = (ModifyResponse)await _executor.SendRequestAsync(modifyRequest);
+        return HandleModifyResponse(response, modifyRequest, workingDn, wasRenamed);
+    }
+
+    private async Task<string> ProcessRenameAsync(string currentDn, string newDn)
+    {
+        _logger.Debug("LdapConnectorExport.ProcessRenameAsync: Renaming object from '{OldDn}' to '{NewDn}'", currentDn, newDn);
+
+        var modifyDnRequest = BuildModifyDnRequest(currentDn, newDn);
+
+        var response = (ModifyDNResponse)await _executor.SendRequestAsync(modifyDnRequest);
+        if (response.ResultCode != ResultCode.Success)
+        {
+            throw new LdapException((int)response.ResultCode, response.ErrorMessage);
+        }
+
+        _logger.Information("LdapConnectorExport.ProcessRenameAsync: Successfully renamed object from '{OldDn}' to '{NewDn}'",
+            currentDn, newDn);
+
+        return newDn;
+    }
+
+    private async Task<ExportResult> ProcessDeleteAsync(PendingExport pendingExport)
+    {
+        var dn = GetDistinguishedNameForUpdate(pendingExport);
+        if (string.IsNullOrEmpty(dn))
+            throw new InvalidOperationException("Cannot delete object: Distinguished Name (DN) could not be determined.");
+
+        var deleteBehaviour = GetSettingValue(SettingDeleteBehaviour) ?? LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE;
+
+        if (deleteBehaviour == LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE)
+        {
+            await ProcessDisableAsync(pendingExport, dn);
+        }
+        else
+        {
+            await ProcessHardDeleteAsync(dn);
+        }
+
+        return ExportResult.Succeeded();
+    }
+
+    private async Task ProcessHardDeleteAsync(string dn)
+    {
+        _logger.Debug("LdapConnectorExport.ProcessHardDeleteAsync: Deleting object at DN '{Dn}'", dn);
+
+        var deleteRequest = new DeleteRequest(dn);
+        var response = (DeleteResponse)await _executor.SendRequestAsync(deleteRequest);
+
+        if (response.ResultCode == ResultCode.NoSuchObject)
+        {
+            _logger.Information("LdapConnectorExport.ProcessHardDeleteAsync: Object at '{Dn}' does not exist (already deleted), treating as success", dn);
+            return;
+        }
+
+        if (response.ResultCode != ResultCode.Success)
+        {
+            throw new LdapException((int)response.ResultCode, response.ErrorMessage);
+        }
+
+        _logger.Information("LdapConnectorExport.ProcessHardDeleteAsync: Successfully deleted object at '{Dn}'", dn);
+    }
+
+    private async Task ProcessDisableAsync(PendingExport pendingExport, string dn)
+    {
+        _logger.Debug("LdapConnectorExport.ProcessDisableAsync: Disabling object at DN '{Dn}'", dn);
+
+        var disableAttribute = GetSettingValue(SettingDisableAttribute) ?? "userAccountControl";
+
+        if (disableAttribute.Equals("userAccountControl", StringComparison.OrdinalIgnoreCase))
+        {
+            await DisableUsingUserAccountControlAsync(dn);
+        }
+        else
+        {
+            var modifyRequest = new ModifyRequest(dn,
+                DirectoryAttributeOperation.Replace,
+                disableAttribute,
+                "TRUE");
+
+            var response = (ModifyResponse)await _executor.SendRequestAsync(modifyRequest);
+            if (response.ResultCode != ResultCode.Success)
+            {
+                throw new LdapException((int)response.ResultCode, response.ErrorMessage);
+            }
+        }
+
+        _logger.Information("LdapConnectorExport.ProcessDisableAsync: Successfully disabled object at '{Dn}'", dn);
+    }
+
+    private async Task DisableUsingUserAccountControlAsync(string dn)
+    {
+        // Sequential within this operation: must read current value before writing
+        var searchRequest = new SearchRequest(
+            dn,
+            "(objectClass=*)",
+            SearchScope.Base,
+            "userAccountControl");
+
+        var searchResponse = (SearchResponse)await _executor.SendRequestAsync(searchRequest);
+        if (searchResponse.ResultCode != ResultCode.Success || searchResponse.Entries.Count == 0)
+        {
+            throw new LdapException((int)searchResponse.ResultCode,
+                $"Failed to read current userAccountControl value for '{dn}'");
+        }
+
+        var newValue = ParseUacAndSetDisableBit(searchResponse);
+
+        var modifyRequest = new ModifyRequest(dn,
+            DirectoryAttributeOperation.Replace,
+            "userAccountControl",
+            newValue.ToString());
+
+        var modifyResponse = (ModifyResponse)await _executor.SendRequestAsync(modifyRequest);
+        if (modifyResponse.ResultCode != ResultCode.Success)
+        {
+            throw new LdapException((int)modifyResponse.ResultCode, modifyResponse.ErrorMessage);
+        }
+    }
+
+    /// <summary>
+    /// Ensures parent containers exist, serialised via semaphore to prevent race conditions
+    /// when concurrent exports try to create the same parent OU simultaneously.
+    /// </summary>
+    private async Task EnsureParentContainersExistAsync(string objectDn)
+    {
+        var (_, parentDn) = LdapConnectorUtilities.ParseDistinguishedName(objectDn);
+
+        if (string.IsNullOrEmpty(parentDn) || _verifiedContainers.Contains(parentDn))
+            return;
+
+        // Serialise container creation to prevent race conditions
+        await _containerSemaphore.WaitAsync();
+        try
+        {
+            // Double-check after acquiring semaphore
+            if (_verifiedContainers.Contains(parentDn))
+                return;
+
+            var containerChain = BuildContainerChain(parentDn);
+
+            foreach (var containerDn in containerChain)
+            {
+                if (_verifiedContainers.Contains(containerDn))
+                    continue;
+
+                if (!await ContainerExistsAsync(containerDn))
+                {
+                    await CreateContainerAsync(containerDn);
+                }
+
+                _verifiedContainers.Add(containerDn);
+            }
+        }
+        finally
+        {
+            _containerSemaphore.Release();
+        }
+    }
+
+    private async Task<bool> ContainerExistsAsync(string containerDn)
+    {
+        try
+        {
+            var searchRequest = new SearchRequest(
+                containerDn,
+                "(objectClass=*)",
+                SearchScope.Base,
+                "objectClass");
+
+            var response = (SearchResponse)await _executor.SendRequestAsync(searchRequest);
+            return response.ResultCode == ResultCode.Success && response.Entries.Count > 0;
+        }
+        catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
+        {
+            return false;
+        }
+        catch (LdapException ex) when (ex.ErrorCode == 32) // LDAP_NO_SUCH_OBJECT
+        {
+            return false;
+        }
+    }
+
+    private async Task CreateContainerAsync(string containerDn)
+    {
+        var addRequest = BuildContainerAddRequest(containerDn);
+
+        var response = (AddResponse)await _executor.SendRequestAsync(addRequest);
+        if (response.ResultCode != ResultCode.Success)
+        {
+            throw new LdapException((int)response.ResultCode, $"Failed to create container '{containerDn}': {response.ErrorMessage}");
+        }
+
+        _createdContainerExternalIds.Add(containerDn);
+
+        _logger.Information("LdapConnectorExport.CreateContainerAsync: Successfully created container '{ContainerDn}'", containerDn);
+    }
+
+    #endregion
+
+    #region Shared helpers (used by both sync and async paths)
+
+    /// <summary>
+    /// Builds an AddRequest for creating a new LDAP object.
+    /// </summary>
+    private AddRequest BuildAddRequest(PendingExport pendingExport, string dn)
+    {
+        var addRequest = new AddRequest(dn);
+
+        // Get the object class from the pending export
+        var objectClass = GetObjectClass(pendingExport);
+        if (!string.IsNullOrEmpty(objectClass))
+        {
+            addRequest.Attributes.Add(new DirectoryAttribute("objectClass", objectClass));
+        }
+
+        // Add all attributes from the pending export
+        foreach (var attrChange in pendingExport.AttributeValueChanges)
+        {
+            if (attrChange.Attribute == null)
+                continue;
+
+            var attrName = attrChange.Attribute.Name;
+
+            // Skip distinguished name as it's already handled
+            if (attrName.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            // Skip objectClass if we already added it
+            if (attrName.Equals("objectClass", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var value = GetAttributeValue(attrChange);
+            if (value != null)
+            {
+                addRequest.Attributes.Add(new DirectoryAttribute(attrName, value));
+            }
+        }
+
+        return addRequest;
+    }
+
+    /// <summary>
+    /// Throws an LdapException with detailed error information for a failed AddRequest.
+    /// </summary>
+    private static void ThrowAddFailure(AddRequest addRequest, string dn, AddResponse response)
+    {
+        var attrNames = string.Join(", ", addRequest.Attributes.Cast<DirectoryAttribute>().Select(a => $"'{a.Name}'"));
+        var errorDetail = $"LDAP add failed for DN '{dn}'. " +
+            $"Attributes: {attrNames}. " +
+            $"LDAP error ({(int)response.ResultCode}): {response.ErrorMessage}";
+
+        throw new LdapException((int)response.ResultCode, errorDetail);
+    }
+
+    /// <summary>
+    /// Parses the objectGUID from a SearchResponse.
+    /// </summary>
+    private string? ParseObjectGuidFromResponse(SearchResponse searchResponse, string dn)
+    {
+        if (searchResponse.ResultCode != ResultCode.Success || searchResponse.Entries.Count == 0)
+        {
+            _logger.Warning("LdapConnectorExport.ParseObjectGuidFromResponse: Failed to fetch objectGUID for '{Dn}'", dn);
+            return null;
+        }
+
+        var entry = searchResponse.Entries[0];
+        if (entry.Attributes.Contains("objectGUID"))
+        {
+            var guidBytes = entry.Attributes["objectGUID"][0] as byte[];
+            if (guidBytes != null && guidBytes.Length == 16)
+            {
+                // AD objectGUID uses Microsoft GUID byte order (little-endian first 3 components)
+                var guid = IdentifierParser.FromMicrosoftBytes(guidBytes);
+                return guid.ToString();
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Builds a ModifyRequest for updating attributes on an existing LDAP object.
+    /// </summary>
+    private ModifyRequest BuildModifyRequest(PendingExport pendingExport, string workingDn)
+    {
+        var modifyRequest = new ModifyRequest(workingDn);
+
+        foreach (var attrChange in pendingExport.AttributeValueChanges)
+        {
+            if (attrChange.Attribute == null)
+                continue;
+
+            var attrName = attrChange.Attribute.Name;
+
+            // Skip RDN (Relative Distinguished Name) attributes - they cannot be modified via LDAP ModifyRequest
+            // These require a ModifyDNRequest (rename operation) instead, which is handled above.
+            // - distinguishedName: The full DN, immutable via MODIFY
+            // - cn: Common Name, the RDN for most object types (users, groups, etc.)
+            // - ou: Organisational Unit name, RDN for OUs
+            // - dc: Domain Component, RDN for domain objects
+            if (attrName.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase) ||
+                attrName.Equals("cn", StringComparison.OrdinalIgnoreCase) ||
+                attrName.Equals("ou", StringComparison.OrdinalIgnoreCase) ||
+                attrName.Equals("dc", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var modification = CreateModification(attrChange);
+            if (modification != null)
+            {
+                modifyRequest.Modifications.Add(modification);
+            }
+        }
+
+        return modifyRequest;
+    }
+
+    /// <summary>
+    /// Handles the response from a ModifyRequest, including the special case for AttributeOrValueExists.
+    /// </summary>
+    private ExportResult HandleModifyResponse(ModifyResponse response, ModifyRequest modifyRequest, string workingDn, bool wasRenamed)
+    {
+        if (response.ResultCode != ResultCode.Success)
+        {
+            // Handle "attribute or value exists" error gracefully for Add operations.
+            // This can happen when trying to add a member that already exists in a group.
+            // LDAP error code 20 = LDAP_TYPE_OR_VALUE_EXISTS
+            // Since the desired state (member is in group) is already achieved, treat as success.
+            if (response.ResultCode == ResultCode.AttributeOrValueExists)
+            {
+                _logger.Warning("LdapConnectorExport.HandleModifyResponse: Some attribute values already exist at '{Dn}'. " +
+                    "This typically means a group member was already present. Treating as success. Error: {Error}",
+                    workingDn, response.ErrorMessage);
+                return wasRenamed ? ExportResult.Succeeded(null, workingDn) : ExportResult.Succeeded();
+            }
+
+            // Build a more descriptive error message that includes the attributes being modified
+            var modifiedAttrs = string.Join(", ", modifyRequest.Modifications
+                .Cast<DirectoryAttributeModification>()
+                .Select(m => $"'{m.Name}' ({m.Operation})"));
+            var errorDetail = $"LDAP modify failed for DN '{workingDn}'. " +
+                $"Modified attributes: {modifiedAttrs}. " +
+                $"LDAP error ({(int)response.ResultCode}): {response.ErrorMessage}";
+
+            throw new LdapException((int)response.ResultCode, errorDetail);
+        }
+
+        _logger.Information("LdapConnectorExport.HandleModifyResponse: Successfully updated object at '{Dn}' with {Count} modifications",
+            workingDn, modifyRequest.Modifications.Count);
+
+        return wasRenamed ? ExportResult.Succeeded(null, workingDn) : ExportResult.Succeeded();
+    }
+
+    /// <summary>
+    /// Builds a ModifyDNRequest for renaming/moving an LDAP object.
+    /// </summary>
+    private ModifyDNRequest BuildModifyDnRequest(string currentDn, string newDn)
+    {
+        var (newRdn, newParentDn) = LdapConnectorUtilities.ParseDistinguishedName(newDn);
+        var (_, currentParentDn) = LdapConnectorUtilities.ParseDistinguishedName(currentDn);
+
+        if (string.IsNullOrEmpty(newRdn))
+        {
+            throw new InvalidOperationException($"Cannot rename object: Unable to parse new RDN from DN '{newDn}'");
+        }
+
+        var isMove = !string.IsNullOrEmpty(newParentDn) &&
+                     !newParentDn.Equals(currentParentDn, StringComparison.OrdinalIgnoreCase);
+
+        _logger.Debug("LdapConnectorExport.BuildModifyDnRequest: NewRdn: '{NewRdn}', NewParent: '{NewParent}', IsMove: {IsMove}",
+            newRdn, newParentDn ?? "(same)", isMove);
+
+        return new ModifyDNRequest(
+            currentDn,
+            newParentDn,  // New parent (null if not moving)
+            newRdn        // New RDN (e.g., "CN=New Name")
+        );
+    }
+
+    /// <summary>
+    /// Parses the current userAccountControl value from a SearchResponse and sets the ACCOUNTDISABLE bit.
+    /// </summary>
+    private static int ParseUacAndSetDisableBit(SearchResponse searchResponse)
+    {
         var currentValue = 0;
         var entry = searchResponse.Entries[0];
         if (entry.Attributes.Contains("userAccountControl"))
@@ -500,19 +1007,62 @@ internal class LdapConnectorExport
             }
         }
 
-        // Set the ACCOUNTDISABLE bit (0x2)
-        var newValue = currentValue | LdapConnectorConstants.UAC_ACCOUNTDISABLE;
+        return currentValue | LdapConnectorConstants.UAC_ACCOUNTDISABLE;
+    }
 
-        var modifyRequest = new ModifyRequest(dn,
-            DirectoryAttributeOperation.Replace,
-            "userAccountControl",
-            newValue.ToString());
+    /// <summary>
+    /// Builds an AddRequest for creating a container (OU or CN).
+    /// </summary>
+    private AddRequest BuildContainerAddRequest(string containerDn)
+    {
+        var (rdn, _) = LdapConnectorUtilities.ParseDistinguishedName(containerDn);
 
-        var modifyResponse = (ModifyResponse)_connection.SendRequest(modifyRequest);
-        if (modifyResponse.ResultCode != ResultCode.Success)
+        if (string.IsNullOrEmpty(rdn))
         {
-            throw new LdapException((int)modifyResponse.ResultCode, modifyResponse.ErrorMessage);
+            throw new InvalidOperationException($"Cannot create container: Unable to parse RDN from DN '{containerDn}'");
         }
+
+        _logger.Information("LdapConnectorExport.BuildContainerAddRequest: Creating missing container '{ContainerDn}'", containerDn);
+
+        var addRequest = new AddRequest(containerDn);
+
+        // Determine object class based on RDN type
+        if (rdn.StartsWith("OU=", StringComparison.OrdinalIgnoreCase))
+        {
+            // Organisational Unit
+            addRequest.Attributes.Add(new DirectoryAttribute("objectClass", "organizationalUnit"));
+
+            // Extract the OU name for the 'ou' attribute (some directories require this)
+            var ouName = rdn.Substring(3); // Remove "OU="
+            addRequest.Attributes.Add(new DirectoryAttribute("ou", ouName));
+        }
+        else if (rdn.StartsWith("CN=", StringComparison.OrdinalIgnoreCase))
+        {
+            // Container - use the generic container objectClass
+            addRequest.Attributes.Add(new DirectoryAttribute("objectClass", "container"));
+
+            // Extract the CN name
+            var cnName = rdn.Substring(3); // Remove "CN="
+            addRequest.Attributes.Add(new DirectoryAttribute("cn", cnName));
+        }
+        else
+        {
+            throw new InvalidOperationException($"Cannot create container with RDN type '{rdn.Split('=')[0]}'. Only OU and CN containers are supported.");
+        }
+
+        return addRequest;
+    }
+
+    /// <summary>
+    /// Gets the new distinguished name from the pending export's attribute changes.
+    /// This is used to detect if a rename operation is needed.
+    /// </summary>
+    private static string? GetNewDistinguishedName(PendingExport pendingExport)
+    {
+        var dnAttrChange = pendingExport.AttributeValueChanges
+            .FirstOrDefault(a => a.Attribute?.Name.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase) == true);
+
+        return dnAttrChange?.StringValue;
     }
 
     private DirectoryAttributeModification? CreateModification(PendingExportAttributeValueChange attrChange)
@@ -748,47 +1298,6 @@ internal class LdapConnectorExport
     }
 
     /// <summary>
-    /// Ensures that all parent containers (OUs) exist in the directory before creating an object.
-    /// This method recursively creates any missing parent OUs starting from the root and working down.
-    /// </summary>
-    /// <param name="objectDn">The DN of the object to be created.</param>
-    private void EnsureParentContainersExist(string objectDn)
-    {
-        var (_, parentDn) = LdapConnectorUtilities.ParseDistinguishedName(objectDn);
-
-        if (string.IsNullOrEmpty(parentDn))
-        {
-            // No parent DN - this is a root-level object, nothing to create
-            return;
-        }
-
-        // Check if we've already verified this container exists in this session
-        if (_verifiedContainers.Contains(parentDn))
-        {
-            return;
-        }
-
-        // Build the chain of parent containers from root to immediate parent
-        var containerChain = BuildContainerChain(parentDn);
-
-        // Process from root downwards, creating any missing containers
-        foreach (var containerDn in containerChain)
-        {
-            if (_verifiedContainers.Contains(containerDn))
-            {
-                continue;
-            }
-
-            if (!ContainerExists(containerDn))
-            {
-                CreateContainer(containerDn);
-            }
-
-            _verifiedContainers.Add(containerDn);
-        }
-    }
-
-    /// <summary>
     /// Builds a list of container DNs from root to the specified container.
     /// For example, for "OU=Engineering,OU=Users,DC=subatomic,DC=local", returns:
     /// ["OU=Users,DC=subatomic,DC=local", "OU=Engineering,OU=Users,DC=subatomic,DC=local"]
@@ -825,81 +1334,5 @@ internal class LdapConnectorExport
         return chain;
     }
 
-    /// <summary>
-    /// Checks if a container (OU) exists in the directory.
-    /// </summary>
-    private bool ContainerExists(string containerDn)
-    {
-        try
-        {
-            var searchRequest = new SearchRequest(
-                containerDn,
-                "(objectClass=*)",
-                SearchScope.Base,
-                "objectClass");
-
-            var response = (SearchResponse)_connection.SendRequest(searchRequest);
-            return response.ResultCode == ResultCode.Success && response.Entries.Count > 0;
-        }
-        catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
-        {
-            return false;
-        }
-        catch (LdapException ex) when (ex.ErrorCode == 32) // LDAP_NO_SUCH_OBJECT
-        {
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Creates an Organisational Unit (OU) container in the directory.
-    /// </summary>
-    private void CreateContainer(string containerDn)
-    {
-        var (rdn, _) = LdapConnectorUtilities.ParseDistinguishedName(containerDn);
-
-        if (string.IsNullOrEmpty(rdn))
-        {
-            throw new InvalidOperationException($"Cannot create container: Unable to parse RDN from DN '{containerDn}'");
-        }
-
-        _logger.Information("LdapConnectorExport.CreateContainer: Creating missing container '{ContainerDn}'", containerDn);
-
-        var addRequest = new AddRequest(containerDn);
-
-        // Determine object class based on RDN type
-        if (rdn.StartsWith("OU=", StringComparison.OrdinalIgnoreCase))
-        {
-            // Organisational Unit
-            addRequest.Attributes.Add(new DirectoryAttribute("objectClass", "organizationalUnit"));
-
-            // Extract the OU name for the 'ou' attribute (some directories require this)
-            var ouName = rdn.Substring(3); // Remove "OU="
-            addRequest.Attributes.Add(new DirectoryAttribute("ou", ouName));
-        }
-        else if (rdn.StartsWith("CN=", StringComparison.OrdinalIgnoreCase))
-        {
-            // Container - use the generic container objectClass
-            addRequest.Attributes.Add(new DirectoryAttribute("objectClass", "container"));
-
-            // Extract the CN name
-            var cnName = rdn.Substring(3); // Remove "CN="
-            addRequest.Attributes.Add(new DirectoryAttribute("cn", cnName));
-        }
-        else
-        {
-            throw new InvalidOperationException($"Cannot create container with RDN type '{rdn.Split('=')[0]}'. Only OU and CN containers are supported.");
-        }
-
-        var response = (AddResponse)_connection.SendRequest(addRequest);
-        if (response.ResultCode != ResultCode.Success)
-        {
-            throw new LdapException((int)response.ResultCode, $"Failed to create container '{containerDn}': {response.ErrorMessage}");
-        }
-
-        // Track the created container for auto-selection
-        _createdContainerExternalIds.Add(containerDn);
-
-        _logger.Information("LdapConnectorExport.CreateContainer: Successfully created container '{ContainerDn}'", containerDn);
-    }
+    #endregion
 }

@@ -290,16 +290,15 @@ public class TaskingRepository : ITaskingRepository
             return;
 
         var now = DateTime.UtcNow;
-        var tasks = await Repository.Database.WorkerTasks
+
+        // Use ExecuteUpdateAsync to run a direct SQL UPDATE, bypassing the change tracker entirely.
+        // This avoids DbUpdateConcurrencyException when a task completes (and is deleted from the
+        // database) on its own DbContext between when the main loop reads CurrentTasks and when
+        // SaveChangesAsync would execute. Tasks that no longer exist are simply not matched by
+        // the WHERE clause - the UPDATE affects 0 rows for those IDs, which is not an error.
+        await Repository.Database.WorkerTasks
             .Where(q => workerTaskIds.Contains(q.Id))
-            .ToListAsync();
-
-        foreach (var task in tasks)
-        {
-            task.LastHeartbeat = now;
-        }
-
-        await Repository.Database.SaveChangesAsync();
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.LastHeartbeat, now));
     }
 
     public async Task<List<WorkerTask>> GetStaleProcessingWorkerTasksAsync(TimeSpan staleThreshold)
