@@ -32,6 +32,15 @@ public interface IConnectedSystemRepository
     public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId);
 
     /// <summary>
+    /// Retrieves pending exports that are ready for execution, filtering at the database level.
+    /// Excludes exports that have exceeded max retries or are not yet due for retry.
+    /// Results are ordered by CreatedAt (oldest first).
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <returns>Pending exports that pass database-level eligibility checks.</returns>
+    public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId);
+
+    /// <summary>
     /// Retrieves the count of how many Pending Export objects there are for a particular Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
@@ -63,6 +72,15 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="pendingExports">The Pending Exports to update.</param>
     public Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
+
+    /// <summary>
+    /// Marks pending exports as Executing using a single raw SQL UPDATE statement.
+    /// Sets Status to Executing and LastAttemptedAt to the current UTC time.
+    /// This bypasses EF Core change tracking for maximum efficiency on simple status updates.
+    /// Also updates the in-memory entity state to keep the objects consistent.
+    /// </summary>
+    /// <param name="pendingExports">The Pending Exports to mark as executing.</param>
+    public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports);
 
     /// <summary>
     /// Creates a new Pending Export object.
@@ -142,6 +160,15 @@ public interface IConnectedSystemRepository
     /// <param name="metaverseObjectId">The MVO ID.</param>
     /// <param name="connectedSystemId">The Connected System ID.</param>
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId);
+
+    /// <summary>
+    /// Batch loads Connected System Objects by multiple Metaverse Object IDs within a single Connected System.
+    /// Used to resolve export references in bulk instead of individual N+1 queries.
+    /// </summary>
+    /// <param name="metaverseObjectIds">The MVO IDs to look up.</param>
+    /// <param name="connectedSystemId">The Connected System ID to search within.</param>
+    /// <returns>A dictionary keyed by MVO ID for O(1) lookup.</returns>
+    public Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(IEnumerable<Guid> metaverseObjectIds, int connectedSystemId);
 
     /// <summary>
     /// Batch loads all Connected System Objects that are joined to Metaverse Objects, grouped by target Connected System.
@@ -419,6 +446,14 @@ public interface IConnectedSystemRepository
     /// This is needed when adding attribute values to a CSO that was loaded without any (e.g., PendingProvisioning).
     /// </summary>
     public Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, List<ConnectedSystemObjectAttributeValue> newAttributeValues);
+
+    /// <summary>
+    /// Batch updates multiple Connected System Objects and their new attribute values in a single SaveChanges call.
+    /// Used after batch export processing to avoid per-CSO database round-trips.
+    /// </summary>
+    /// <param name="updates">A list of tuples containing the CSO to update and any new attribute values to add.</param>
+    public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates);
+
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
     public Task UpdateSyncRuleAsync(SyncRule syncRule);
 
@@ -452,6 +487,14 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="id">The unique identifier of the attribute.</param>
     Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id);
+
+    /// <summary>
+    /// Batch loads Connected System Attributes by multiple IDs in a single query.
+    /// Used to pre-fetch attribute definitions for batch export processing.
+    /// </summary>
+    /// <param name="ids">The attribute IDs to load.</param>
+    /// <returns>A dictionary keyed by attribute ID for O(1) lookup.</returns>
+    Task<Dictionary<int, ConnectedSystemObjectTypeAttribute>> GetAttributesByIdsAsync(IEnumerable<int> ids);
 
     /// <summary>
     /// Updates a Connected System Attribute.
