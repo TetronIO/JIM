@@ -12,8 +12,9 @@ public class ExportExecutionOptions
     public int BatchSize { get; set; } = 100;
 
     /// <summary>
-    /// Maximum number of parallel database operations.
-    /// Default is 4.
+    /// Maximum number of batches to process concurrently.
+    /// Each parallel batch gets its own DbContext and connector instance.
+    /// Default is 1 (sequential processing). Set higher to enable parallel batch export.
     /// </summary>
-    public int MaxParallelism { get; set; } = 4;
+    public int MaxParallelism { get; set; } = 1;
 }

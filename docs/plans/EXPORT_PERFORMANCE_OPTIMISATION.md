@@ -1,6 +1,6 @@
 # Export Performance Optimisation
 
-- **Status**: In Progress (Phase 2 complete)
+- **Status**: In Progress (Phase 3 complete)
 - **Milestone**: Post-MVP
 - **Related**: `docs/plans/OUTBOUND_SYNC_DESIGN.md` (Q8 - Parallelism Decision)
 - **Last Updated**: 2026-02-18
@@ -115,41 +115,47 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 ---
 
-### Phase 3: Wire Up MaxParallelism for Batch Processing (Moderate Risk, Moderate Impact)
+### Phase 3: Wire Up MaxParallelism for Batch Processing (Moderate Risk, Moderate Impact) - COMPLETE
+
+**Status:** Implementation complete, 17 unit tests passing. Awaiting integration testing.
 
 **Goal:** Process multiple export batches concurrently within a single export run profile.
 
-**Changes:**
+**Changes implemented:**
 
-1. **Implement parallel batch processing in ExportExecutionServer**
-   - File: `ExportExecutionServer.cs`
-   - Currently: Batches processed sequentially in a loop
-   - Proposed: Process up to `MaxParallelism` batches concurrently
-   - Each batch gets its own `DbContext` instance (EF Core is not thread-safe)
-   - Each batch gets its own connector instance or uses connection pooling
+1. **Parallel batch processing in ExportExecutionServer**
+   - When `MaxParallelism > 1` and both factories are provided, batches are processed concurrently via `SemaphoreSlim` throttling + `Task.WhenAll`
+   - When `MaxParallelism <= 1` (default), the existing sequential `foreach` loop runs unchanged
+   - When only 1 batch exists, the sequential path is used regardless of `MaxParallelism`
 
-2. **DbContext factory pattern**
-   - Create a scoped `DbContext` per parallel batch to avoid thread-safety issues
-   - Use `IDbContextFactory<JimDbContext>` (EF Core built-in) for creating per-batch contexts
+2. **Per-batch DbContext and connector instances**
+   - Each parallel batch creates its own `IRepository` via a `Func<IRepository>` factory delegate passed from the Worker
+   - Each parallel batch (except batch 0) creates its own connector via a `Func<IConnector>` factory delegate
+   - Batch 0 reuses the already-opened primary connector to avoid wasting the initial connection
+   - Entities are re-loaded by ID from the batch's own context for proper change tracking
 
-3. **Feature flag control**
-   - As designed in OUTBOUND_SYNC_DESIGN.md Q8, introduce behind a feature flag
-   - Default: `MaxParallelism = 1` (sequential, current behaviour)
-   - Configurable per Connected System via admin UI
+3. **Thread-safe result aggregation and progress reporting**
+   - `ExportExecutionResult` counts aggregated under `lock` (low-contention)
+   - Progress callback serialised via `SemaphoreSlim(1,1)` to protect the caller's shared DbContext
+   - `Interlocked.Add` for the shared processed count
+
+4. **MaxParallelism defaults to 1 (sequential)**
+   - Safe default; admin explicitly opts in to parallelism
+   - No `IDbContextFactory` registration needed; Worker creates contexts directly via `new JimDbContext()`
+
+5. **Error isolation**
+   - Each parallel batch wrapped in try/catch; one batch failure doesn't abort others
+   - Cancellation token checked at batch start; `OperationCanceledException` propagated
+
+**Key files:**
+- `ExportExecutionServer.cs` (refactored) - `ProcessBatchesInParallelAsync`, repo-parameterised methods
+- `ExportExecutionOptions.cs` (modified) - `MaxParallelism` default changed from 4 to 1
+- `SyncExportTaskProcessor.cs` (modified) - Passes connector and repository factory delegates
+- `IConnectedSystemRepository.cs` / `ConnectedSystemRepository.cs` - New `GetPendingExportsByIdsAsync`
+- `ExportExecutionParallelBatchTests.cs` (new) - 10 parallel batch tests
+- `ConnectedSystemRepositoryGetPendingExportsByIdsTests.cs` (new) - 7 repository tests
 
 **Estimated Impact:** Linear throughput improvement up to the configured parallelism level, multiplied by Phase 2 gains.
-
-**Risk Mitigations:**
-- Feature flag defaults to sequential (opt-in parallelism)
-- Per-system configuration allows tuning for target system capacity
-- Independent DbContext per batch eliminates EF Core thread-safety concerns
-- Extensive integration testing before enabling
-
-**Testing Strategy:**
-- Unit tests for parallel batch orchestration
-- Integration tests verifying data integrity under parallel execution
-- Deadlock detection tests with concurrent database writes
-- Performance benchmarks at various parallelism levels
 
 ---
 
@@ -244,7 +250,7 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 - No new external packages required for Phases 1, 3, 4, 5
 - Phase 2 depends on `System.DirectoryServices.Protocols` async support (available in .NET 9)
-- Phase 3 requires `IDbContextFactory<JimDbContext>` registration in DI (Microsoft.EntityFrameworkCore built-in)
+- Phase 3 uses simple `new JimDbContext()` factories (no DI registration needed)
 
 ---
 

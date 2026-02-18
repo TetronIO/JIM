@@ -57,7 +57,10 @@ param(
     [int]$WaitSeconds = 0,
 
     [Parameter(Mandatory=$false)]
-    [switch]$ContinueOnError
+    [switch]$ContinueOnError,
+
+    [Parameter(Mandatory=$false)]
+    [int]$ExportConcurrency = 1
 )
 
 Set-StrictMode -Version Latest
@@ -232,7 +235,7 @@ try {
     }
     Write-Host "  ✓ AD cleanup complete ($deletedCount test users deleted)" -ForegroundColor Green
 
-    $config = & "$PSScriptRoot/../Setup-Scenario1.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template
+    $config = & "$PSScriptRoot/../Setup-Scenario1.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template -ExportConcurrency $ExportConcurrency
 
     if (-not $config) {
         throw "Failed to setup Scenario 1 configuration"
