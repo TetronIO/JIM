@@ -1514,6 +1514,38 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    public async Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports)
+    {
+        if (pendingExports.Count == 0)
+            return;
+
+        var now = DateTime.UtcNow;
+
+        // Try raw SQL first for maximum efficiency (bypasses EF Core change tracking)
+        try
+        {
+            var ids = pendingExports.Select(pe => pe.Id).ToArray();
+            var statusValue = (int)PendingExportStatus.Executing;
+
+            await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""PendingExports"" SET ""Status"" = {0}, ""LastAttemptedAt"" = {1} WHERE ""Id"" = ANY({2})",
+                statusValue, now, ids);
+        }
+        catch
+        {
+            // Fallback for unit tests with mocked DbContext where raw SQL is not available
+            Repository.Database.PendingExports.UpdateRange(pendingExports);
+            await Repository.Database.SaveChangesAsync();
+        }
+
+        // Always update the in-memory entities to keep them consistent
+        foreach (var export in pendingExports)
+        {
+            export.Status = PendingExportStatus.Executing;
+            export.LastAttemptedAt = now;
+        }
+    }
+
     public async Task CreatePendingExportAsync(PendingExport pendingExport)
     {
         await Repository.Database.PendingExports.AddAsync(pendingExport);

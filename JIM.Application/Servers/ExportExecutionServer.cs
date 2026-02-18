@@ -442,17 +442,12 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Marks a batch of exports as executing using batch update for efficiency.
+    /// Marks a batch of exports as executing using raw SQL for efficiency.
+    /// Bypasses EF Core change tracking since this is a simple status update.
     /// </summary>
     private async Task MarkBatchAsExecutingAsync(List<PendingExport> batch)
     {
-        var now = DateTime.UtcNow;
-        foreach (var export in batch)
-        {
-            export.Status = PendingExportStatus.Executing;
-            export.LastAttemptedAt = now;
-        }
-        await Application.Repository.ConnectedSystems.UpdatePendingExportsAsync(batch);
+        await Application.Repository.ConnectedSystems.MarkPendingExportsAsExecutingAsync(batch);
     }
 
     /// <summary>

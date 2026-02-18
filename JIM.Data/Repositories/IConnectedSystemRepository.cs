@@ -74,6 +74,15 @@ public interface IConnectedSystemRepository
     public Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
+    /// Marks pending exports as Executing using a single raw SQL UPDATE statement.
+    /// Sets Status to Executing and LastAttemptedAt to the current UTC time.
+    /// This bypasses EF Core change tracking for maximum efficiency on simple status updates.
+    /// Also updates the in-memory entity state to keep the objects consistent.
+    /// </summary>
+    /// <param name="pendingExports">The Pending Exports to mark as executing.</param>
+    public Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports);
+
+    /// <summary>
     /// Creates a new Pending Export object.
     /// </summary>
     /// <param name="pendingExport">The Pending Export to create.</param>
