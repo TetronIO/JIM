@@ -157,34 +157,36 @@ public class ExportExecutionServer
 
     /// <summary>
     /// Gets pending exports that are ready to be executed.
-    /// Filters out exports that are not yet due for retry (Q6 decision).
+    /// Uses database-level filtering for status, retry timing, and max retries (Q6 decision),
+    /// then applies in-memory checks for attribute-level eligibility that can't be expressed in SQL.
     /// </summary>
     private async Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
     {
-        var allPendingExports = await Application.Repository.ConnectedSystems.GetPendingExportsAsync(connectedSystemId);
+        // Database-level filtering handles: status, NextRetryAt, ErrorCount < MaxRetries, ordering
+        var eligibleExports = await Application.Repository.ConnectedSystems.GetExecutableExportsAsync(connectedSystemId);
 
-        return allPendingExports
+        // In-memory filtering for checks that require navigation property evaluation
+        return eligibleExports
             .Where(pe => IsReadyForExecution(pe))
-            .OrderBy(pe => pe.CreatedAt) // Process oldest first
             .ToList();
     }
 
     /// <summary>
     /// Determines if a pending export is ready for execution.
-    /// Considers status and retry timing (Q6 decision), as well as attribute change statuses.
+    /// Applies in-memory checks that require navigation property evaluation and can't be expressed
+    /// in SQL. Database-level checks (status, retry timing, max retries) are already applied by
+    /// GetExecutableExportsAsync.
     /// </summary>
     private static bool IsReadyForExecution(PendingExport pendingExport)
     {
-        // For Delete operations, we don't need attribute changes - just the operation itself
-        // For Create/Update operations, check if there are exportable attribute changes
+        // For Update operations, we need at least one attribute change to export.
+        // This check requires evaluating the AttributeValueChanges navigation property.
         if (pendingExport.ChangeType == PendingExportChangeType.Update)
         {
-            // For Update operations, we need at least one attribute change to export
             var hasExportableAttributeChanges = pendingExport.AttributeValueChanges.Any(ac =>
                 ac.Status == PendingExportAttributeChangeStatus.Pending ||
                 ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed);
 
-            // If there are no attribute changes that need exporting, skip this export
             if (!hasExportableAttributeChanges)
             {
                 return false;
@@ -200,31 +202,6 @@ public class ExportExecutionServer
         // import confirmation, not re-executed (which would fail if the object is already gone).
         if (pendingExport.ChangeType == PendingExportChangeType.Delete &&
             pendingExport.Status == PendingExportStatus.Exported)
-        {
-            return false;
-        }
-
-        // Execute if status is Pending, Exported (for retry), or ExportNotConfirmed
-        // - Pending: New export, not yet processed
-        // - Exported: Was exported, but has attribute changes needing retry (ExportedNotConfirmed)
-        //             (Delete exports excluded above - they don't have attribute-level retries)
-        // - ExportNotConfirmed: Previous export indicated not all values persisted
-        if (pendingExport.Status != PendingExportStatus.Pending &&
-            pendingExport.Status != PendingExportStatus.Exported &&
-            pendingExport.Status != PendingExportStatus.ExportNotConfirmed)
-        {
-            return false;
-        }
-
-        // If it has a next retry time, check if we've passed it
-        if (pendingExport.NextRetryAt.HasValue && pendingExport.NextRetryAt > DateTime.UtcNow)
-        {
-            return false;
-        }
-
-        // If max retries exceeded at the PendingExport level, don't execute
-        // (Individual attribute changes have their own retry limits)
-        if (pendingExport.ErrorCount >= pendingExport.MaxRetries)
         {
             return false;
         }
@@ -369,30 +346,36 @@ public class ExportExecutionServer
                         ProcessedExports = result.SuccessCount,
                         Message = $"Resolving {deferredExports.Count} deferred exports"
                     });
-                }
 
-                foreach (var export in deferredExports)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    // Bulk pre-fetch all referenced CSOs in a single query
+                    var mvoIds = CollectUnresolvedMvoIds(deferredExports);
+                    var csoLookup = mvoIds.Count > 0
+                        ? await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoIds, connectedSystem.Id)
+                        : new Dictionary<Guid, ConnectedSystemObject>();
 
-                    // Try to resolve references
-                    var resolved = await TryResolveReferencesAsync(export, connectedSystem);
-                    if (resolved)
+                    foreach (var export in deferredExports)
                     {
-                        export.HasUnresolvedReferences = false;
-                        export.Status = PendingExportStatus.Executing;
-                        export.LastAttemptedAt = DateTime.UtcNow;
-                        await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
+                        cancellationToken.ThrowIfCancellationRequested();
 
-                        var exportResults = connector.Export(new List<PendingExport> { export });
-                        var exportResult = exportResults.Count > 0 ? exportResults[0] : ExportResult.Succeeded();
-                        await ProcessExportSuccessAsync(export, exportResult, result);
-                    }
-                    else
-                    {
-                        // Still unresolved - mark as deferred
-                        await MarkExportDeferredAsync(export);
-                        result.DeferredCount++;
+                        // Try to resolve references using the pre-fetched lookup
+                        var resolved = TryResolveReferencesFromLookup(export, csoLookup);
+                        if (resolved)
+                        {
+                            export.HasUnresolvedReferences = false;
+                            export.Status = PendingExportStatus.Executing;
+                            export.LastAttemptedAt = DateTime.UtcNow;
+                            await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
+
+                            var exportResults = connector.Export(new List<PendingExport> { export });
+                            var exportResult = exportResults.Count > 0 ? exportResults[0] : ExportResult.Succeeded();
+                            await ProcessExportSuccessAsync(export, exportResult, result);
+                        }
+                        else
+                        {
+                            // Still unresolved - mark as deferred
+                            await MarkExportDeferredAsync(export);
+                            result.DeferredCount++;
+                        }
                     }
                 }
 
@@ -454,7 +437,8 @@ public class ExportExecutionServer
 
     /// <summary>
     /// Processes a batch of exports with their corresponding ExportResult data.
-    /// Uses batch updates for efficiency.
+    /// Uses batch updates for efficiency - pre-fetches attribute definitions and performs
+    /// a single SaveChanges for all CSO updates.
     /// </summary>
     private async Task ProcessBatchSuccessAsync(List<PendingExport> batch, List<ExportResult> exportResults, ExportExecutionResult result)
     {
@@ -520,11 +504,112 @@ public class ExportExecutionServer
             await Application.Repository.ConnectedSystems.UpdatePendingExportsAsync(exportsToUpdate);
         }
 
-        // Update CSOs that need external ID or status changes
-        // These are less frequent (only Create exports and renames), so individual updates are acceptable
+        // Batch update CSOs that need external ID or status changes
+        if (csosToUpdate.Count > 0)
+        {
+            await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate);
+        }
+    }
+
+    /// <summary>
+    /// Batch updates multiple CSOs after successful exports in a single database round-trip.
+    /// Pre-fetches all required attribute definitions in one query, then applies changes
+    /// and saves all CSO updates together.
+    /// </summary>
+    private async Task BatchUpdateCsosAfterSuccessfulExportAsync(List<(ConnectedSystemObject cso, ExportResult exportResult)> csosToUpdate)
+    {
+        // Collect all unique attribute IDs we need to look up (external ID + secondary external ID attributes)
+        var attributeIds = new HashSet<int>();
+        foreach (var (cso, _) in csosToUpdate)
+        {
+            if (cso.ExternalIdAttributeId > 0)
+                attributeIds.Add(cso.ExternalIdAttributeId);
+            if (cso.SecondaryExternalIdAttributeId.HasValue)
+                attributeIds.Add(cso.SecondaryExternalIdAttributeId.Value);
+        }
+
+        // Pre-fetch all attribute definitions in a single query
+        var attributeLookup = attributeIds.Count > 0
+            ? await Application.Repository.ConnectedSystems.GetAttributesByIdsAsync(attributeIds)
+            : new Dictionary<int, ConnectedSystemObjectTypeAttribute>();
+
+        // Apply changes to each CSO in-memory
+        var csoUpdates = new List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)>();
+
         foreach (var (cso, exportResult) in csosToUpdate)
         {
-            await UpdateCsoAfterSuccessfulExportAsync(cso, exportResult);
+            var newAttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+            var needsUpdate = false;
+
+            // Populate external ID attribute if provided in the export result
+            if (!string.IsNullOrEmpty(exportResult.ExternalId) && cso.ExternalIdAttributeId > 0)
+            {
+                attributeLookup.TryGetValue(cso.ExternalIdAttributeId, out var externalIdAttribute);
+
+                var externalIdAttrValue = cso.AttributeValues
+                    .FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
+
+                if (externalIdAttrValue == null)
+                {
+                    externalIdAttrValue = new ConnectedSystemObjectAttributeValue
+                    {
+                        ConnectedSystemObject = cso,
+                        AttributeId = cso.ExternalIdAttributeId
+                    };
+                    cso.AttributeValues.Add(externalIdAttrValue);
+                    newAttributeValues.Add(externalIdAttrValue);
+                }
+
+                if (externalIdAttribute?.Type == AttributeDataType.Guid && Guid.TryParse(exportResult.ExternalId, out var guidValue))
+                {
+                    externalIdAttrValue.GuidValue = guidValue;
+                    externalIdAttrValue.StringValue = null;
+                }
+                else
+                {
+                    externalIdAttrValue.StringValue = exportResult.ExternalId;
+                    externalIdAttrValue.GuidValue = null;
+                }
+
+                needsUpdate = true;
+                Log.Information("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} external ID to {ExternalId} (type: {AttrType})",
+                    cso.Id, exportResult.ExternalId, externalIdAttribute?.Type.ToString() ?? "Unknown");
+            }
+
+            // Update secondary external ID if provided
+            if (!string.IsNullOrEmpty(exportResult.SecondaryExternalId) && cso.SecondaryExternalIdAttributeId.HasValue)
+            {
+                var secondaryExternalIdAttrValue = cso.AttributeValues
+                    .FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId.Value);
+
+                if (secondaryExternalIdAttrValue == null)
+                {
+                    secondaryExternalIdAttrValue = new ConnectedSystemObjectAttributeValue
+                    {
+                        ConnectedSystemObject = cso,
+                        AttributeId = cso.SecondaryExternalIdAttributeId.Value
+                    };
+                    cso.AttributeValues.Add(secondaryExternalIdAttrValue);
+                    newAttributeValues.Add(secondaryExternalIdAttrValue);
+                }
+
+                secondaryExternalIdAttrValue.StringValue = exportResult.SecondaryExternalId;
+                needsUpdate = true;
+                Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} secondary external ID to {SecondaryExternalId}",
+                    cso.Id, exportResult.SecondaryExternalId);
+            }
+
+            if (needsUpdate)
+            {
+                csoUpdates.Add((cso, newAttributeValues));
+            }
+        }
+
+        // Single batch save for all CSO updates
+        if (csoUpdates.Count > 0)
+        {
+            await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(csoUpdates);
+            Log.Information("BatchUpdateCsosAfterSuccessfulExportAsync: Batch updated {Count} CSOs", csoUpdates.Count);
         }
     }
 
@@ -782,10 +867,10 @@ public class ExportExecutionServer
                 await Application.Repository.ConnectedSystems.DeletePendingExportsAsync(exportsToDelete);
             }
 
-            // Update CSOs (typically a small number for Create operations)
-            foreach (var (cso, exportResult) in csosToUpdate)
+            // Batch update CSOs that need external ID or status changes
+            if (csosToUpdate.Count > 0)
             {
-                await UpdateCsoAfterSuccessfulExportAsync(cso, exportResult);
+                await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate);
             }
 
             Log.Information("ExecuteUsingFilesWithBatchingAsync: Exported {Count} changes to file for {SystemName}",
@@ -818,11 +903,32 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Attempts to resolve unresolved reference attributes in a pending export.
+    /// Collects all unresolved MVO IDs from a list of pending exports.
+    /// Used to pre-fetch CSO mappings in bulk before resolving references.
+    /// </summary>
+    private static HashSet<Guid> CollectUnresolvedMvoIds(IEnumerable<PendingExport> exports)
+    {
+        var mvoIds = new HashSet<Guid>();
+        foreach (var export in exports)
+        {
+            foreach (var attrChange in export.AttributeValueChanges)
+            {
+                if (!string.IsNullOrEmpty(attrChange.UnresolvedReferenceValue) &&
+                    Guid.TryParse(attrChange.UnresolvedReferenceValue, out var mvoId))
+                {
+                    mvoIds.Add(mvoId);
+                }
+            }
+        }
+        return mvoIds;
+    }
+
+    /// <summary>
+    /// Attempts to resolve unresolved reference attributes in a pending export using a pre-fetched CSO lookup.
     /// For LDAP systems, references like 'member' need to be resolved to Distinguished Names (DN),
     /// not the primary external ID (objectGUID). We use the secondary external ID when available.
     /// </summary>
-    private async Task<bool> TryResolveReferencesAsync(PendingExport pendingExport, ConnectedSystem targetSystem)
+    private static bool TryResolveReferencesFromLookup(PendingExport pendingExport, Dictionary<Guid, ConnectedSystemObject> csoLookup)
     {
         var allResolved = true;
 
@@ -835,11 +941,8 @@ public class ExportExecutionServer
             if (!Guid.TryParse(attrChange.UnresolvedReferenceValue, out var referencedMvoId))
                 continue;
 
-            // Look up the CSO for this MVO in the target system
-            var referencedCso = await Application.Repository.ConnectedSystems
-                .GetConnectedSystemObjectByMetaverseObjectIdAsync(referencedMvoId, targetSystem.Id);
-
-            if (referencedCso != null)
+            // Look up the CSO from the pre-fetched dictionary
+            if (csoLookup.TryGetValue(referencedMvoId, out var referencedCso))
             {
                 // For reference attributes, prefer the secondary external ID (e.g., DN for LDAP)
                 // as this is what the connected system uses for references.
@@ -884,6 +987,7 @@ public class ExportExecutionServer
 
     /// <summary>
     /// Executes a second pass for deferred references that might now be resolvable.
+    /// Pre-fetches all referenced CSOs in a single query to avoid N+1 lookups.
     /// </summary>
     private async Task ExecuteDeferredReferencesAsync(
         ConnectedSystem connectedSystem,
@@ -901,15 +1005,29 @@ public class ExportExecutionServer
 
         Log.Debug("ExecuteDeferredReferencesAsync: Checking {Count} deferred exports for resolution", unresolvedExports.Count);
 
+        // Bulk pre-fetch all referenced CSOs in a single query
+        var mvoIds = CollectUnresolvedMvoIds(unresolvedExports);
+        var csoLookup = mvoIds.Count > 0
+            ? await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoIds, connectedSystem.Id)
+            : new Dictionary<Guid, ConnectedSystemObject>();
+
+        // Resolve references using the pre-fetched lookup and collect resolved exports for batch update
+        var resolvedExports = new List<PendingExport>();
         foreach (var export in unresolvedExports)
         {
-            var resolved = await TryResolveReferencesAsync(export, connectedSystem);
+            var resolved = TryResolveReferencesFromLookup(export, csoLookup);
             if (resolved)
             {
                 export.HasUnresolvedReferences = false;
-                await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
+                resolvedExports.Add(export);
                 Log.Debug("ExecuteDeferredReferencesAsync: Resolved references for export {ExportId}", export.Id);
             }
+        }
+
+        // Batch update all resolved exports in a single SaveChanges
+        if (resolvedExports.Count > 0)
+        {
+            await Application.Repository.ConnectedSystems.UpdatePendingExportsAsync(resolvedExports);
         }
     }
 

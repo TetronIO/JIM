@@ -271,6 +271,24 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Batch loads Connected System Attributes by multiple IDs in a single query.
+    /// </summary>
+    public async Task<Dictionary<int, ConnectedSystemObjectTypeAttribute>> GetAttributesByIdsAsync(IEnumerable<int> ids)
+    {
+        var idList = ids.ToList();
+        if (idList.Count == 0)
+            return new Dictionary<int, ConnectedSystemObjectTypeAttribute>();
+
+        var attributes = await Repository.Database.ConnectedSystemAttributes
+            .Include(a => a.ConnectedSystemObjectType)
+                .ThenInclude(ot => ot.ConnectedSystem)
+            .Where(a => idList.Contains(a.Id))
+            .ToListAsync();
+
+        return attributes.ToDictionary(a => a.Id);
+    }
+
+    /// <summary>
     /// Updates a Connected System Attribute.
     /// </summary>
     public async Task UpdateAttributeAsync(ConnectedSystemObjectTypeAttribute attribute)
@@ -1138,6 +1156,32 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             newAttributeValues.Count, connectedSystemObject.Id);
     }
 
+    /// <summary>
+    /// Batch updates multiple Connected System Objects and their new attribute values in a single SaveChanges call.
+    /// </summary>
+    public async Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
+    {
+        if (updates.Count == 0)
+            return;
+
+        foreach (var (cso, newAttributeValues) in updates)
+        {
+            foreach (var attrValue in newAttributeValues)
+            {
+                Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Adding new attribute value for CSO {CsoId}, AttributeId={AttrId}, GuidValue={GuidValue}, StringValue='{StringValue}'",
+                    cso.Id, attrValue.AttributeId, attrValue.GuidValue, attrValue.StringValue);
+                Repository.Database.ConnectedSystemObjectAttributeValues.Add(attrValue);
+            }
+
+            Repository.Database.ConnectedSystemObjects.Update(cso);
+        }
+
+        await Repository.Database.SaveChangesAsync();
+
+        Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Batch saved {Count} CSO updates",
+            updates.Count);
+    }
+
     public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
         // Exclude PendingProvisioning CSOs as they don't have external IDs yet (they haven't been created
@@ -1399,6 +1443,34 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.AttributeValues)
             .Where(pe => pe.ConnectedSystemId == connectedSystemId).ToListAsync();
+    }
+
+    /// <summary>
+    /// Retrieves pending exports that are ready for execution, filtering at the database level.
+    /// Excludes exports that have exceeded max retries or are not yet due for retry.
+    /// Results are ordered by CreatedAt (oldest first).
+    /// </summary>
+    public async Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
+    {
+        var now = DateTime.UtcNow;
+
+        return await Repository.Database.PendingExports
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.AttributeValues)
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId)
+            // Filter by eligible statuses
+            .Where(pe => pe.Status == PendingExportStatus.Pending
+                      || pe.Status == PendingExportStatus.Exported
+                      || pe.Status == PendingExportStatus.ExportNotConfirmed)
+            // Exclude exports not yet due for retry
+            .Where(pe => !pe.NextRetryAt.HasValue || pe.NextRetryAt <= now)
+            // Exclude exports that have exceeded max retries
+            .Where(pe => pe.ErrorCount < pe.MaxRetries)
+            .OrderBy(pe => pe.CreatedAt)
+            .ToListAsync();
     }
 
     /// <summary>
@@ -1705,6 +1777,37 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.Attribute)
             .FirstOrDefaultAsync(cso => cso.MetaverseObjectId == metaverseObjectId && cso.ConnectedSystemId == connectedSystemId);
+    }
+
+    /// <summary>
+    /// Batch loads Connected System Objects by multiple Metaverse Object IDs within a single Connected System.
+    /// Uses a single database query instead of N+1 individual lookups.
+    /// </summary>
+    public async Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(IEnumerable<Guid> metaverseObjectIds, int connectedSystemId)
+    {
+        var mvoIds = metaverseObjectIds.ToList();
+        if (mvoIds.Count == 0)
+            return new Dictionary<Guid, ConnectedSystemObject>();
+
+        var csos = await Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+            .Where(cso => cso.MetaverseObjectId.HasValue
+                       && mvoIds.Contains(cso.MetaverseObjectId.Value)
+                       && cso.ConnectedSystemId == connectedSystemId)
+            .ToListAsync();
+
+        // Build dictionary keyed by MVO ID. If there are multiple CSOs for the same MVO
+        // (which shouldn't happen but defensive coding), take the first one.
+        var result = new Dictionary<Guid, ConnectedSystemObject>();
+        foreach (var cso in csos)
+        {
+            if (cso.MetaverseObjectId.HasValue)
+            {
+                result.TryAdd(cso.MetaverseObjectId.Value, cso);
+            }
+        }
+        return result;
     }
 
     /// <summary>

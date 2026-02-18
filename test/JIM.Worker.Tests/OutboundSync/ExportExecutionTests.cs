@@ -1264,4 +1264,220 @@ public class ExportExecutionTests
     }
 
     #endregion
+
+    #region Phase 1 - IsReadyForExecution in-memory filtering
+
+    /// <summary>
+    /// Tests that Update exports with no exportable attribute changes are skipped.
+    /// This check can't be done at the database level as it requires evaluating
+    /// the navigation property status values.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_UpdateWithNoExportableAttributeChanges_SkipsExportAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id
+        };
+        ConnectedSystemObjectsData.Add(cso);
+
+        // Create a pending export with only ExportedPendingConfirmation attribute changes (not exportable)
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            Status = PendingExportStatus.Exported,
+            ChangeType = PendingExportChangeType.Update,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "Test",
+                    Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+
+        var mockConnector = new Mock<IConnector>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewOnly);
+
+        // Assert
+        Assert.That(result.TotalPendingExports, Is.EqualTo(0),
+            "Update export with no exportable attribute changes should be skipped");
+    }
+
+    /// <summary>
+    /// Tests that Delete exports with Exported status are not re-executed.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_DeleteWithExportedStatus_SkipsExportAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id
+        };
+        ConnectedSystemObjectsData.Add(cso);
+
+        // Create a Delete export that was already exported
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            Status = PendingExportStatus.Exported,
+            ChangeType = PendingExportChangeType.Delete,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+        };
+        PendingExportsData.Add(pendingExport);
+
+        var mockConnector = new Mock<IConnector>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewOnly);
+
+        // Assert
+        Assert.That(result.TotalPendingExports, Is.EqualTo(0),
+            "Delete export with Exported status should not be re-executed");
+    }
+
+    /// <summary>
+    /// Tests that Update exports with Pending attribute changes are eligible.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_UpdateWithPendingAttributeChanges_IncludesExportAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id
+        };
+        ConnectedSystemObjectsData.Add(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "Test",
+                    Status = PendingExportAttributeChangeStatus.Pending
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+
+        var mockConnector = new Mock<IConnector>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewOnly);
+
+        // Assert
+        Assert.That(result.TotalPendingExports, Is.EqualTo(1),
+            "Update export with Pending attribute changes should be included");
+    }
+
+    /// <summary>
+    /// Tests that Create exports are eligible even with no attribute changes.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateWithNoAttributeChanges_IncludesExportAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id
+        };
+        ConnectedSystemObjectsData.Add(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Create,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+        };
+        PendingExportsData.Add(pendingExport);
+
+        var mockConnector = new Mock<IConnector>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewOnly);
+
+        // Assert
+        Assert.That(result.TotalPendingExports, Is.EqualTo(1),
+            "Create export should be eligible even without attribute changes");
+    }
+
+    #endregion
 }

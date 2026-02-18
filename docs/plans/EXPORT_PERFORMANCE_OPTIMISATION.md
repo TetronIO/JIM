@@ -1,13 +1,13 @@
 # Export Performance Optimisation
 
-> **Status**: Planned
-> **Milestone**: Post-MVP
-> **Related**: `docs/plans/OUTBOUND_SYNC_DESIGN.md` (Q8 - Parallelism Decision)
-> **Last Updated**: 2026-02-18
+- **Status**: Planned
+- **Milestone**: Post-MVP
+- **Related**: `docs/plans/OUTBOUND_SYNC_DESIGN.md` (Q8 - Parallelism Decision)
+- **Last Updated**: 2026-02-18
 
 ## Overview
 
-Export operations to Connected Systems are significantly slower than they need to be. Profiling of Scenario 8 (MediumLarge cross-domain entitlement sync) shows worker processes consuming minimal CPU and memory while exports take a long time to complete. The root cause is that the export pipeline is entirely I/O-bound - the system spends most of its time waiting for individual LDAP responses and individual database saves, with no pipelining or parallelism.
+Export operations to Connected Systems are significantly slower than they need to be. P rofiling of Scenario 8 (MediumLarge cross-domain entitlement sync) shows worker processes consuming minimal CPU and memory while exports take a long time to complete. The root cause is that the export pipeline is entirely I/O-bound - the system spends most of its time waiting for individual LDAP responses and individual database saves, with no pipelining or parallelism.
 
 This plan addresses the performance bottlenecks identified in the export pipeline, progressing from low-risk quick wins to more complex parallel processing changes.
 
@@ -27,13 +27,13 @@ This plan addresses the performance bottlenecks identified in the export pipelin
 ### Architecture Overview
 
 ```
-+-------------------+     +------------------------+     +------------------+
-|  TaskingRepository |---->| ExportExecutionServer  |---->| LdapConnector    |
-|  (1 task at a time)|     | (batch of 100, serial) |     | (1 call at a time)|
-+-------------------+     +------------------------+     +------------------+
-        |                          |                            |
-   Sequential              Per-CSO DB saves             Synchronous LDAP
-   task queue              after each batch             SendRequest() calls
++---------------------+     +------------------------+     +--------------------+
+|  TaskingRepository  |---->| ExportExecutionServer  |---->| LdapConnector      |
+|  (1 task at a time) |     | (batch of 100, serial) |     | (1 call at a time) |
++---------------------+     +------------------------+     +--------------------+
+           |                            |                            |
+       Sequential               Per-CSO DB saves             Synchronous LDAP
+       task queue               after each batch             SendRequest() calls
 ```
 
 ### Bottlenecks by Severity
