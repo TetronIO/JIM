@@ -366,32 +366,65 @@ public class ExportExecutionServer
                             : new Dictionary<Guid, ConnectedSystemObject>();
                     }
 
+                    // Separate resolved from still-unresolved exports
+                    var resolvedExports = new List<PendingExport>();
+                    var stillUnresolvedExports = new List<PendingExport>();
+
                     foreach (var export in deferredExports)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
 
-                        // Try to resolve references using the pre-fetched lookup
                         var resolved = TryResolveReferencesFromLookup(export, csoLookup);
                         if (resolved)
                         {
                             export.HasUnresolvedReferences = false;
-                            export.Status = PendingExportStatus.Executing;
-                            export.LastAttemptedAt = DateTime.UtcNow;
-                            using (Diagnostics.Diagnostics.Database.StartSpan("UpdateResolvedDeferredExport"))
-                            {
-                                await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
-                            }
-
-                            var exportResults = connector.Export(new List<PendingExport> { export });
-                            var exportResult = exportResults.Count > 0 ? exportResults[0] : ExportResult.Succeeded();
-                            await ProcessExportSuccessAsync(export, exportResult, result);
+                            resolvedExports.Add(export);
                         }
                         else
                         {
-                            // Still unresolved - mark as deferred
-                            await MarkExportDeferredAsync(export);
-                            result.DeferredCount++;
+                            stillUnresolvedExports.Add(export);
                         }
+                    }
+
+                    // Batch-export resolved deferred exports using the same batching as immediate exports
+                    if (resolvedExports.Count > 0)
+                    {
+                        var deferredBatches = resolvedExports
+                            .Select((export, index) => new { export, index })
+                            .GroupBy(x => x.index / options.BatchSize)
+                            .Select(g => g.Select(x => x.export).ToList())
+                            .ToList();
+
+                        foreach (var batch in deferredBatches)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+
+                            using (Diagnostics.Diagnostics.Database.StartSpan("MarkDeferredBatchAsExecuting")
+                                .SetTag("batchSize", batch.Count))
+                            {
+                                await MarkBatchAsExecutingAsync(batch);
+                            }
+
+                            List<ExportResult> exportResults;
+                            using (Diagnostics.Diagnostics.Connector.StartSpan("ExportDeferredBatch")
+                                .SetTag("batchSize", batch.Count))
+                            {
+                                exportResults = connector.Export(batch);
+                            }
+
+                            using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
+                                .SetTag("batchSize", batch.Count))
+                            {
+                                await ProcessBatchSuccessAsync(batch, exportResults, result);
+                            }
+                        }
+                    }
+
+                    // Mark still-unresolved exports as deferred in batch
+                    foreach (var export in stillUnresolvedExports)
+                    {
+                        await MarkExportDeferredAsync(export);
+                        result.DeferredCount++;
                     }
                 }
 
