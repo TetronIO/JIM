@@ -950,6 +950,14 @@ if ($SetupOnly) {
     Write-Host "  ${BLUE}./Run-IntegrationTests.ps1 -Scenario `"$Scenario`" -Template $Template -SkipReset -SkipBuild${NC}"
     Write-Host ""
 
+    # Docker Cleanup (prune build cache and dangling images to prevent disk space accumulation)
+    Write-Step "Pruning Docker build cache and dangling images..."
+    $pruneOutput = docker system prune -f 2>&1
+    $reclaimedMatch = $pruneOutput | Select-String "Total reclaimed space:\s*(.+)"
+    if ($reclaimedMatch) {
+        Write-Success "Reclaimed: $($reclaimedMatch.Matches[0].Groups[1].Value)"
+    }
+
     # Performance Summary
     Write-Section "Performance Summary"
     Write-Host ""
@@ -1281,6 +1289,22 @@ else {
 }
 
 $timings["6. Capture Metrics"] = (Get-Date) - $step6Start
+
+# Step 7: Docker Cleanup
+$step7Start = Get-Date
+Write-Section "Step 7: Docker Cleanup"
+
+Write-Step "Pruning dangling images, build cache, and unused volumes..."
+$pruneOutput = docker system prune -f 2>&1
+$reclaimedMatch = $pruneOutput | Select-String "Total reclaimed space:\s*(.+)"
+if ($reclaimedMatch) {
+    Write-Success "Reclaimed: $($reclaimedMatch.Matches[0].Groups[1].Value)"
+}
+else {
+    Write-Success "Docker cleanup complete (nothing to reclaim)"
+}
+
+$timings["7. Docker Cleanup"] = (Get-Date) - $step7Start
 
 # Summary
 $endTime = Get-Date
