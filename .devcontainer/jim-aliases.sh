@@ -52,7 +52,49 @@ Help:
 # .NET local development
 alias jim-compile='dotnet build JIM.sln'
 alias jim-test='dotnet test JIM.sln'
-alias jim-test-all='dotnet test JIM.sln --settings test/run-all.runsettings && pwsh -NoProfile -Command "Import-Module Pester; \$config = New-PesterConfiguration; \$config.Run.Path = \"./JIM.PowerShell/JIM/Tests\"; \$config.Output.Verbosity = \"Detailed\"; Invoke-Pester -Configuration \$config"'
+jim-test-all() {
+  local dotnet_summary pester_summary dotnet_rc pester_rc
+
+  echo "=== Running .NET tests (including Explicit) ==="
+  dotnet_summary=$(dotnet test JIM.sln --settings test/run-all.runsettings 2>&1 | tee /dev/stderr | grep -E "^(Passed!|Failed!)")
+  dotnet_rc=${PIPESTATUS[0]}
+
+  echo ""
+  echo "=== Running Pester tests ==="
+  pester_summary=$(pwsh -NoProfile -Command "Import-Module Pester; \$config = New-PesterConfiguration; \$config.Run.Path = './JIM.PowerShell/JIM/Tests'; \$config.Output.Verbosity = 'Detailed'; Invoke-Pester -Configuration \$config" 2>&1 | tee /dev/stderr | grep -E "^Tests completed|^(Passed|Failed)")
+  pester_rc=${PIPESTATUS[0]}
+
+  echo ""
+  echo "========================================"
+  echo "         TEST RESULTS SUMMARY"
+  echo "========================================"
+  echo ""
+  echo ".NET Tests (dotnet test):"
+  if [ -n "$dotnet_summary" ]; then
+    echo "$dotnet_summary" | sed 's/^/  /'
+  else
+    echo "  No summary available (exit code: $dotnet_rc)"
+  fi
+  echo ""
+  echo "Pester Tests:"
+  if [ -n "$pester_summary" ]; then
+    echo "$pester_summary" | sed 's/^/  /'
+  else
+    echo "  No summary available (exit code: $pester_rc)"
+  fi
+  echo ""
+  if [ $dotnet_rc -eq 0 ] && [ $pester_rc -eq 0 ]; then
+    echo "Overall: ALL TESTS PASSED"
+  else
+    echo "Overall: SOME TESTS FAILED"
+    [ $dotnet_rc -ne 0 ] && echo "  - .NET tests failed (exit code: $dotnet_rc)"
+    [ $pester_rc -ne 0 ] && echo "  - Pester tests failed (exit code: $pester_rc)"
+  fi
+  echo "========================================"
+
+  [ $dotnet_rc -ne 0 ] || [ $pester_rc -ne 0 ] && return 1
+  return 0
+}
 alias jim-test-ps='pwsh -NoProfile -Command "Import-Module Pester; \$config = New-PesterConfiguration; \$config.Run.Path = \"./JIM.PowerShell/JIM/Tests\"; \$config.Output.Verbosity = \"Detailed\"; Invoke-Pester -Configuration \$config"'
 alias jim-clean='dotnet clean JIM.sln && dotnet build JIM.sln'
 
