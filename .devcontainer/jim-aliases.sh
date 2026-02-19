@@ -67,7 +67,7 @@ jim-test-all() {
   pester_rc=$?
 
   dotnet_summary=$(grep -E "^(Passed!|Failed!)" "$dotnet_log")
-  pester_summary=$(grep -E "^Tests completed|^(Passed|Failed)" "$pester_log")
+  pester_summary=$(sed 's/\x1b\[[0-9;]*m//g' "$pester_log" | grep -E "^Tests completed|^Tests Passed")
   rm -f "$dotnet_log" "$pester_log"
 
   echo ""
