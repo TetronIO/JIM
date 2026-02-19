@@ -501,27 +501,27 @@ Write-Banner "JIM Integration Test Runner"
 $templateRelevant = Test-TemplateRelevant -ScenarioName $Scenario
 
 Write-Host "${GRAY}Configuration:${NC}"
-Write-Host "  Scenario:           ${CYAN}$Scenario${NC}"
+Write-Host "  Scenario:               ${CYAN}$Scenario${NC}"
 if ($templateRelevant) {
-    Write-Host "  Template:           ${CYAN}$Template${NC}"
+    Write-Host "  Template:               ${CYAN}$Template${NC}"
 } else {
-    Write-Host "  Template:           ${GRAY}N/A (scenario uses fixed test data)${NC}"
+    Write-Host "  Template:               ${GRAY}N/A (scenario uses fixed test data)${NC}"
 }
-Write-Host "  Step:               ${CYAN}$Step${NC}"
-Write-Host "  Skip Reset:         ${CYAN}$SkipReset${NC}"
-Write-Host "  Skip Build:         ${CYAN}$SkipBuild${NC}"
-Write-Host "  Setup Only:         ${CYAN}$SetupOnly${NC}"
+Write-Host "  Step:                   ${CYAN}$Step${NC}"
+Write-Host "  Skip Reset:             ${CYAN}$SkipReset${NC}"
+Write-Host "  Skip Build:             ${CYAN}$SkipBuild${NC}"
+Write-Host "  Setup Only:             ${CYAN}$SetupOnly${NC}"
 if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
-    Write-Host "  Export Concurrency: ${CYAN}$ExportConcurrency${NC}"
+    Write-Host "  Export Concurrency:     ${CYAN}$ExportConcurrency${NC}"
 } else {
-    Write-Host "  Export Concurrency: ${GRAY}(JIM default)${NC}"
+    Write-Host "  Export Concurrency:     ${GRAY}(JIM default)${NC}"
 }
 if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
     Write-Host "  Max Export Parallelism: ${CYAN}$MaxExportParallelism${NC}"
 } else {
     Write-Host "  Max Export Parallelism: ${GRAY}(JIM default)${NC}"
 }
-Write-Host "  Service Timeout:    ${CYAN}${TimeoutSeconds}s${NC}"
+Write-Host "  Service Timeout:        ${CYAN}${TimeoutSeconds}s${NC}"
 Write-Host ""
 
 # Change to repository root
