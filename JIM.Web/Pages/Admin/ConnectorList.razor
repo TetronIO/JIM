@@ -27,15 +27,15 @@
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.Name ?? string.Empty)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.Description ?? string.Empty)"><MudText Typo="Typo.button">Description</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.Versions ?? string.Empty)"><MudText Typo="Typo.button">Version(s)</MudText></MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.InUse)"><MudText Typo="Typo.button">In-use?</MudText></MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ConnectorDefinitionHeader, object>(x => x.Versions ?? string.Empty)"><MudText Typo="Typo.button">Version(s)</MudText></MudTableSortLabel></MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="Name"><MudLink Href="@("/admin/connected-systems/connectors/"+context.Id)">@context.Name</MudLink></MudTd>
         <MudTd DataLabel="Description">@context.Description</MudTd>
         <MudTd DataLabel="Built-in?">@(context.BuiltIn ? "Yes" : "No")</MudTd>
-        <MudTd DataLabel="Version(s)">@(!string.IsNullOrEmpty(context.Versions) ? context.Versions :"-")</MudTd>
         <MudTd DataLabel="In-use?">@(context.InUse ? "Yes" : "No")</MudTd>
+        <MudTd DataLabel="Version(s)">@(!string.IsNullOrEmpty(context.Versions) ? context.Versions :"-")</MudTd>
     </RowTemplate>
     <NoRecordsContent>
         There are no connectors
