@@ -241,17 +241,15 @@
             </MudPaper>
         </MudTabPanel>
         <MudTabPanel Text="Change History">
-            <MudPaper Class="pa-5" Outlined="true">
-                @if (CsoChanges == null)
-                {
-                    <MudProgressCircular Indeterminate="true" Class="mr-2" />
-                    <MudText>Loading change history...</MudText>
-                }
-                else
-                {
-                    <ChangeHistoryTimeline Changes="@GetCsoChangeHistory()" />
-                }
-            </MudPaper>
+            @if (CsoChanges == null)
+            {
+                <MudProgressCircular Indeterminate="true" Class="mr-2" />
+                <MudText>Loading change history...</MudText>
+            }
+            else
+            {
+                <ChangeHistoryTimeline Changes="@GetCsoChangeHistory()" />
+            }
         </MudTabPanel>
     </MudTabs>
 }
