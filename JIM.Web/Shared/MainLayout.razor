@@ -37,6 +37,10 @@
                                          Color="@Color.Inherit" ToggledIcon="@Icons.Material.Filled.DarkMode"
                                          ToggledColor="@Color.Inherit" Size="@Size.Small" />
                 </MudTooltip>
+                <MudTooltip Text="See us on GitHub" Arrow="true" Placement="Placement.Top">
+                    <MudIconButton Href="https://github.com/TetronIO/JIM" Target="_blank"
+                                   Icon="@Icons.Custom.Brands.GitHub" Color="@Color.Inherit" Size="@Size.Small" />
+                </MudTooltip>
             </div>
 
 
@@ -48,14 +52,7 @@
 
                 <div class="jim-page-footer">
                     <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5 mud-text-secondary">
-                        &copy; @DateTime.UtcNow.Year Tetron Ltd. All rights reserved. v@(AppVersion)
-                    </MudText>
-
-                    <MudText Align="Align.Center">
-                        <MudLink Href="https://github.com/TetronIO/JIM">
-                            <MudIconButton Icon="@Icons.Custom.Brands.GitHub" aria-label="See us on GitHub"
-                                           Style="color:#515560;" />
-                        </MudLink>
+                        &copy; Tetron Ltd | All rights reserved | v@(AppVersion)
                     </MudText>
                 </div>
 
