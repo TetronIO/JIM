@@ -85,6 +85,12 @@ internal class LdapConnectorExport
         _settings = settings;
         _logger = logger;
         _exportConcurrency = Math.Clamp(exportConcurrency, 1, LdapConnectorConstants.MAX_EXPORT_CONCURRENCY);
+
+        if (exportConcurrency > LdapConnectorConstants.MAX_EXPORT_CONCURRENCY)
+        {
+            _logger.Warning("LdapConnectorExport: Requested export concurrency {Requested} exceeds maximum {Maximum}. Clamped to {Maximum}",
+                exportConcurrency, LdapConnectorConstants.MAX_EXPORT_CONCURRENCY);
+        }
     }
 
     #region Sequential execution (sync path)

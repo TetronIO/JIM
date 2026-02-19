@@ -48,7 +48,10 @@ param(
     [int]$WaitSeconds = 0,
 
     [Parameter(Mandatory=$false)]
-    [int]$ExportConcurrency = 1
+    [int]$ExportConcurrency = 1,
+
+    [Parameter(Mandatory=$false)]
+    [int]$MaxExportParallelism = 1
 )
 
 Set-StrictMode -Version Latest
@@ -135,7 +138,7 @@ try {
 
     # Run Setup-Scenario2 to configure JIM
     Write-Host "Running Scenario 2 setup..." -ForegroundColor Gray
-    & "$PSScriptRoot/../Setup-Scenario2.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template -ExportConcurrency $ExportConcurrency
+    & "$PSScriptRoot/../Setup-Scenario2.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template -ExportConcurrency $ExportConcurrency -MaxExportParallelism $MaxExportParallelism
 
     Write-Host "✓ JIM configured for Scenario 2" -ForegroundColor Green
 

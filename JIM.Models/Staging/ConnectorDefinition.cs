@@ -114,5 +114,12 @@ public class ConnectorDefinition : IAuditable, IConnectorCapabilities
     /// rather than waiting for reconciliation via the next import cycle.
     /// </summary>
     public bool SupportsAutoConfirmExport { get; set; }
+
+    /// <summary>
+    /// Does the Connector support parallel export batch processing? When true, JIM can process
+    /// multiple export batches concurrently using separate DbContext and connector instances.
+    /// Connectors that hold exclusive file locks or write to shared resources should return false.
+    /// </summary>
+    public bool SupportsParallelExport { get; set; }
     #endregion
 }

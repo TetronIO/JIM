@@ -44,7 +44,10 @@ param(
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
-    [int]$ExportConcurrency = 1
+    [int]$ExportConcurrency = 1,
+
+    [Parameter(Mandatory=$false)]
+    [int]$MaxExportParallelism = 1
 )
 
 Set-StrictMode -Version Latest
@@ -244,6 +247,12 @@ try {
         else {
             Write-Host "  ⚠ Export Concurrency setting not found in connector definition" -ForegroundColor Yellow
         }
+    }
+
+    # Configure Max Export Parallelism if non-default
+    if ($MaxExportParallelism -gt 1) {
+        Set-JIMConnectedSystem -Id $targetSystem.id -MaxExportParallelism $MaxExportParallelism | Out-Null
+        Write-Host "  ✓ Configured Target Max Export Parallelism: $MaxExportParallelism" -ForegroundColor Green
     }
 }
 catch {

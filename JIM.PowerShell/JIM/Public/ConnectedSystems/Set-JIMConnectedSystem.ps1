@@ -4,8 +4,8 @@ function Set-JIMConnectedSystem {
         Updates an existing Connected System in JIM.
 
     .DESCRIPTION
-        Updates the name, description, and/or setting values of an existing Connected System.
-        Only the parameters provided will be updated.
+        Updates the name, description, setting values, and/or export parallelism of an existing
+        Connected System. Only the parameters provided will be updated.
 
     .PARAMETER Id
         The unique identifier of the Connected System to update.
@@ -22,6 +22,11 @@ function Set-JIMConnectedSystem {
     .PARAMETER SettingValues
         A hashtable of setting values to update, where keys are setting IDs and values are
         hashtables with stringValue, intValue, or checkboxValue properties.
+
+    .PARAMETER MaxExportParallelism
+        Maximum number of export batches to process concurrently (1-16).
+        Only applicable when the connector supports parallel export.
+        Default is 1 (sequential processing).
 
     .PARAMETER PassThru
         If specified, returns the updated Connected System object.
@@ -54,6 +59,11 @@ function Set-JIMConnectedSystem {
 
         Updates a Connected System from the pipeline.
 
+    .EXAMPLE
+        Set-JIMConnectedSystem -Id 1 -MaxExportParallelism 4
+
+        Enables parallel export batch processing with up to 4 concurrent batches.
+
     .LINK
         Get-JIMConnectedSystem
         New-JIMConnectedSystem
@@ -77,6 +87,10 @@ function Set-JIMConnectedSystem {
 
         [Parameter()]
         [hashtable]$SettingValues,
+
+        [Parameter()]
+        [ValidateRange(1, 16)]
+        [int]$MaxExportParallelism,
 
         [switch]$PassThru
     )
@@ -109,6 +123,10 @@ function Set-JIMConnectedSystem {
                 $stringKeyedSettings[$key.ToString()] = $SettingValues[$key]
             }
             $body.settingValues = $stringKeyedSettings
+        }
+
+        if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
+            $body.maxExportParallelism = $MaxExportParallelism
         }
 
         if ($body.Count -eq 0) {

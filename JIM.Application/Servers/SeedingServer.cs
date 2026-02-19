@@ -903,7 +903,8 @@ internal class SeedingServer
             existingDefinition.SupportsSecondaryExternalId != connectorCapabilities.SupportsSecondaryExternalId ||
             existingDefinition.SupportsUserSelectedExternalId != connectorCapabilities.SupportsUserSelectedExternalId ||
             existingDefinition.SupportsUserSelectedAttributeTypes != connectorCapabilities.SupportsUserSelectedAttributeTypes ||
-            existingDefinition.SupportsAutoConfirmExport != connectorCapabilities.SupportsAutoConfirmExport)
+            existingDefinition.SupportsAutoConfirmExport != connectorCapabilities.SupportsAutoConfirmExport ||
+            existingDefinition.SupportsParallelExport != connectorCapabilities.SupportsParallelExport)
         {
             existingDefinition.SupportsFullImport = connectorCapabilities.SupportsFullImport;
             existingDefinition.SupportsDeltaImport = connectorCapabilities.SupportsDeltaImport;
@@ -914,6 +915,7 @@ internal class SeedingServer
             existingDefinition.SupportsUserSelectedExternalId = connectorCapabilities.SupportsUserSelectedExternalId;
             existingDefinition.SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes;
             existingDefinition.SupportsAutoConfirmExport = connectorCapabilities.SupportsAutoConfirmExport;
+            existingDefinition.SupportsParallelExport = connectorCapabilities.SupportsParallelExport;
             hasChanges = true;
             Log.Information($"SyncConnectorDefinitionAsync: Updated capability flags for '{connector.Name}'");
         }

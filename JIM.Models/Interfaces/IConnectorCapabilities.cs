@@ -60,4 +60,11 @@ public interface IConnectorCapabilities
     /// This is useful for one-way file exports where no feedback mechanism exists.
     /// </summary>
     public bool SupportsAutoConfirmExport { get; }
+
+    /// <summary>
+    /// Does the Connector support parallel export batch processing? When true, JIM can process
+    /// multiple export batches concurrently using separate DbContext and connector instances.
+    /// Connectors that hold exclusive file locks or write to shared resources should return false.
+    /// </summary>
+    public bool SupportsParallelExport { get; }
 }

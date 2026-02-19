@@ -75,6 +75,14 @@ public class ConnectedSystem : IAuditable
     public DateTime? LastDeltaSyncCompletedAt { get; set; }
 
     /// <summary>
+    /// Maximum number of export batches to process concurrently.
+    /// Only applicable when the connector supports parallel export (SupportsParallelExport).
+    /// Null or 1 means sequential processing (default). Higher values enable parallel batch export
+    /// with separate DbContext and connector instances per batch.
+    /// </summary>
+    public int? MaxExportParallelism { get; set; }
+
+    /// <summary>
     /// EF back-link.
     /// </summary>
     public List<Activity>? Activities { get; set; }

@@ -107,7 +107,8 @@ public class SyncExportTaskProcessor
             // Execute exports using the ExportExecutionServer with progress reporting
             var options = new ExportExecutionOptions
             {
-                BatchSize = 100
+                BatchSize = 100,
+                MaxParallelism = _connectedSystem.MaxExportParallelism ?? 1
             };
 
             ExportExecutionResult result;

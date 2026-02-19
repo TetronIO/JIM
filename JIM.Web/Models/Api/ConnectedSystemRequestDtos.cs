@@ -48,6 +48,13 @@ public class UpdateConnectedSystemRequest
     /// Updated setting values as key-value pairs where key is the setting ID.
     /// </summary>
     public Dictionary<int, ConnectedSystemSettingValueUpdate>? SettingValues { get; set; }
+
+    /// <summary>
+    /// Maximum number of export batches to process concurrently.
+    /// Only applicable when the connector supports parallel export.
+    /// </summary>
+    [Range(1, 16)]
+    public int? MaxExportParallelism { get; set; }
 }
 
 /// <summary>

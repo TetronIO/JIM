@@ -133,6 +133,22 @@
         }
     }
 
+    @if (ConnectedSystem.ConnectorDefinition is { SupportsExport: true, SupportsParallelExport: true })
+    {
+        <MudPaper Class="pa-5 mt-5" Outlined="true">
+            <MudText Typo="Typo.h5" Class="mb-2">Export Performance</MudText>
+            <MudText Class="mud-text-secondary mb-5">
+                These settings control how JIM processes exports, independently of connector-specific settings above.
+            </MudText>
+            <MudTextField T="int?"
+                          Label="Max Export Parallelism"
+                          @bind-Value="ConnectedSystem.MaxExportParallelism"
+                          HelperText="Number of export batches to process concurrently (1 = sequential). Each parallel batch uses its own database connection and connector instance."
+                          InputType="InputType.Number"
+                          Variant="Variant.Outlined" />
+        </MudPaper>
+    }
+
     @if (SettingsFormCustomErrors.Count > 0)
     {
         <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-5">

@@ -46,6 +46,12 @@
     Higher values improve throughput but increase load on the target directory.
     Only applies to scenarios with LDAP exports (Scenarios 1, 2, 8).
 
+.PARAMETER MaxExportParallelism
+    Maximum number of parallel export batches for Connected Systems. Controls how many
+    export batches are processed concurrently. Default: 1 (sequential).
+    Higher values improve throughput for large exports.
+    Only applies to scenarios with LDAP exports (Scenarios 1, 2, 8).
+
 .PARAMETER TimeoutSeconds
     Maximum time to wait for services to be ready. Default: 180 seconds.
 
@@ -107,6 +113,9 @@ param(
 
     [Parameter(Mandatory=$false)]
     [int]$ExportConcurrency = 1,
+
+    [Parameter(Mandatory=$false)]
+    [int]$MaxExportParallelism = 1,
 
     [Parameter(Mandatory=$false)]
     [int]$TimeoutSeconds = 180
@@ -506,6 +515,11 @@ if ($ExportConcurrency -gt 1) {
     Write-Host "  Export Concurrency: ${CYAN}$ExportConcurrency${NC}"
 } else {
     Write-Host "  Export Concurrency: ${GRAY}1 (default)${NC}"
+}
+if ($MaxExportParallelism -gt 1) {
+    Write-Host "  Max Export Parallelism: ${CYAN}$MaxExportParallelism${NC}"
+} else {
+    Write-Host "  Max Export Parallelism: ${GRAY}1 (default)${NC}"
 }
 Write-Host "  Service Timeout:    ${CYAN}${TimeoutSeconds}s${NC}"
 Write-Host ""
@@ -927,7 +941,7 @@ if ($SetupOnly) {
 
         # Run the scenario setup script to configure connected systems, sync rules, and run profiles
         Write-Step "Running scenario setup: Setup-Scenario$scenarioNumber.ps1..."
-        $config = & $setupScript -JIMUrl "http://localhost:5200" -ApiKey $apiKey -Template $Template -ExportConcurrency $ExportConcurrency
+        $config = & $setupScript -JIMUrl "http://localhost:5200" -ApiKey $apiKey -Template $Template -ExportConcurrency $ExportConcurrency -MaxExportParallelism $MaxExportParallelism
         if ($config) {
             Write-Success "Scenario configured successfully"
         }
@@ -1015,8 +1029,11 @@ if ($scenarioContent -match 'Write-Host\s+"[\s]*NOT YET IMPLEMENTED[\s]*"') {
     exit 1
 }
 
-if ($ExportConcurrency -gt 1) {
-    Write-Step "Running: Invoke-$Scenario.ps1 -Template $Template -Step $Step -ExportConcurrency $ExportConcurrency"
+if ($ExportConcurrency -gt 1 -or $MaxExportParallelism -gt 1) {
+    $extraParams = @()
+    if ($ExportConcurrency -gt 1) { $extraParams += "-ExportConcurrency $ExportConcurrency" }
+    if ($MaxExportParallelism -gt 1) { $extraParams += "-MaxExportParallelism $MaxExportParallelism" }
+    Write-Step "Running: Invoke-$Scenario.ps1 -Template $Template -Step $Step $($extraParams -join ' ')"
 } else {
     Write-Step "Running: Invoke-$Scenario.ps1 -Template $Template -Step $Step"
 }
@@ -1036,7 +1053,7 @@ $scenarioLogFile = Join-Path $logDir "$Scenario-$Template-$logTimestamp.log"
 
 Start-Transcript -Path $scenarioLogFile -Append | Out-Null
 try {
-    & $scenarioScript -Template $Template -Step $Step -ApiKey $apiKey -ExportConcurrency $ExportConcurrency
+    & $scenarioScript -Template $Template -Step $Step -ApiKey $apiKey -ExportConcurrency $ExportConcurrency -MaxExportParallelism $MaxExportParallelism
     $scenarioExitCode = $LASTEXITCODE
 }
 finally {

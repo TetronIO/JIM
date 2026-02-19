@@ -1,6 +1,6 @@
 # Export Performance Optimisation
 
-- **Status**: In Progress (Phase 3 complete)
+- **Status**: In Progress (Phase 3b complete)
 - **Milestone**: Post-MVP
 - **Related**: `docs/plans/OUTBOUND_SYNC_DESIGN.md` (Q8 - Parallelism Decision)
 - **Last Updated**: 2026-02-18
@@ -156,6 +156,49 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 - `ConnectedSystemRepositoryGetPendingExportsByIdsTests.cs` (new) - 7 repository tests
 
 **Estimated Impact:** Linear throughput improvement up to the configured parallelism level, multiplied by Phase 2 gains.
+
+---
+
+### Phase 3b: MaxExportParallelism as Per-Connected System Setting - COMPLETE
+
+**Status:** Implementation complete. MaxExportParallelism is now configurable per Connected System.
+
+**Goal:** Make parallel batch export opt-in per Connected System, gated by a connector capability flag.
+
+**Changes implemented:**
+
+1. **`SupportsParallelExport` connector capability**
+   - New `bool SupportsParallelExport` property on `IConnectorCapabilities` and `ConnectorDefinition`
+   - LDAP Connector: `true` (supports concurrent connections)
+   - File Connector: `false` (exclusive file locks prevent parallelism)
+   - Capability synced from connector to DB via `SeedingServer` on startup
+
+2. **`MaxExportParallelism` per-Connected System property**
+   - Nullable `int?` on `ConnectedSystem` model (null/1 = sequential, 2-16 = parallel)
+   - EF Core migration adds columns to both `ConnectorDefinitions` and `ConnectedSystems` tables
+
+3. **Full API/PowerShell/UI coverage**
+   - API: `UpdateConnectedSystemRequest.MaxExportParallelism` (Range 1-16), mapped in controller and response DTO
+   - PowerShell: `Set-JIMConnectedSystem -MaxExportParallelism 4`
+   - UI: "Export Performance" section in Settings tab, only visible when connector supports parallel export
+
+4. **Worker wiring**
+   - `SyncExportTaskProcessor` reads `_connectedSystem.MaxExportParallelism ?? 1` into `ExportExecutionOptions.MaxParallelism`
+
+5. **Integration test support**
+   - `-MaxExportParallelism` parameter added to Run-IntegrationTests.ps1 and all scenario scripts
+   - Configured on target LDAP systems via `Set-JIMConnectedSystem` when value > 1
+
+**Key files:**
+- `IConnectorCapabilities.cs`, `ConnectorDefinition.cs` - New capability property
+- `ConnectedSystem.cs` - New `MaxExportParallelism` property
+- `SeedingServer.cs` - Capability sync
+- `SynchronisationController.cs` - API update handler
+- `ConnectedSystemDto.cs`, `ConnectedSystemRequestDtos.cs` - API DTOs
+- `ConnectedSystemSettingsTab.razor` - UI setting
+- `Set-JIMConnectedSystem.ps1` - PowerShell cmdlet
+- `SyncExportTaskProcessor.cs` - Worker wiring
+- `ConnectedSystemParallelExportTests.cs` (new) - 12 unit tests
 
 ---
 

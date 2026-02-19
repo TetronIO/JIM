@@ -299,7 +299,7 @@ public class LdapConnectorExportAsyncTests
     [Test]
     public async Task ExecuteAsync_ConcurrencyExceedsMax_ClampedToMaxAsync()
     {
-        // Concurrency of 100 should be clamped to MAX_EXPORT_CONCURRENCY (16)
+        // Concurrency of 100 should be clamped to MAX_EXPORT_CONCURRENCY (8)
         var pendingExport = CreateUpdatePendingExport("CN=Test,DC=test,DC=local");
 
         SetupAsyncModifyResponse(ResultCode.Success);

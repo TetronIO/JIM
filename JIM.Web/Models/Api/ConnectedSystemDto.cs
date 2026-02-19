@@ -18,6 +18,7 @@ public class ConnectedSystemDetailDto
     public List<ConnectedSystemObjectTypeDto> ObjectTypes { get; set; } = new();
     public int ObjectCount { get; set; }
     public int PendingExportCount { get; set; }
+    public int? MaxExportParallelism { get; set; }
 
     /// <summary>
     /// Creates a detailed DTO from a ConnectedSystem entity.
@@ -33,6 +34,7 @@ public class ConnectedSystemDetailDto
             LastUpdated = entity.LastUpdated,
             Status = entity.Status,
             SettingValuesValid = entity.SettingValuesValid,
+            MaxExportParallelism = entity.MaxExportParallelism,
             Connector = new ConnectorReferenceDto
             {
                 Id = entity.ConnectorDefinition?.Id ?? 0,
