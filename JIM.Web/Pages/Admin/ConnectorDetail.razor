@@ -38,6 +38,10 @@
         <MudCheckBox @bind-Value="@_connector.SupportsFullImport" Disabled="true">Supports full import?</MudCheckBox>
         <MudCheckBox @bind-Value="@_connector.SupportsDeltaImport" Disabled="true">Supports delta import?</MudCheckBox>
         <MudCheckBox @bind-Value="@_connector.SupportsExport" Disabled="true">Supports export?</MudCheckBox>
+        <MudCheckBox @bind-Value="@_connector.SupportsAutoConfirmExport" Disabled="true">Supports auto-confirm export?</MudCheckBox>
+        <MudCheckBox @bind-Value="@_connector.SupportsParallelExport" Disabled="true">Supports parallel export?</MudCheckBox>
+        <MudCheckBox @bind-Value="@_connector.SupportsPartitions" Disabled="true">Supports partitions?</MudCheckBox>
+        <MudCheckBox @bind-Value="@_connector.SupportsPartitionContainers" Disabled="true">Supports partition containers?</MudCheckBox>
         <MudCheckBox @bind-Value="@_connector.SupportsSecondaryExternalId" Disabled="true">Supports secondary external id?</MudCheckBox>
         <MudCheckBox @bind-Value="@_connector.SupportsUserSelectedExternalId" Disabled="true">Supports user selected external id?</MudCheckBox>
         <MudCheckBox @bind-Value="@_connector.SupportsUserSelectedAttributeTypes" Disabled="true">Supports user selected attribute types?</MudCheckBox>
