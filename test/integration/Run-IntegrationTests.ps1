@@ -112,10 +112,10 @@ param(
     [switch]$SetupOnly,
 
     [Parameter(Mandatory=$false)]
-    [int]$ExportConcurrency = 1,
+    [int]$ExportConcurrency,
 
     [Parameter(Mandatory=$false)]
-    [int]$MaxExportParallelism = 1,
+    [int]$MaxExportParallelism,
 
     [Parameter(Mandatory=$false)]
     [int]$TimeoutSeconds = 180
@@ -511,15 +511,15 @@ Write-Host "  Step:               ${CYAN}$Step${NC}"
 Write-Host "  Skip Reset:         ${CYAN}$SkipReset${NC}"
 Write-Host "  Skip Build:         ${CYAN}$SkipBuild${NC}"
 Write-Host "  Setup Only:         ${CYAN}$SetupOnly${NC}"
-if ($ExportConcurrency -gt 1) {
+if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
     Write-Host "  Export Concurrency: ${CYAN}$ExportConcurrency${NC}"
 } else {
-    Write-Host "  Export Concurrency: ${GRAY}1 (default)${NC}"
+    Write-Host "  Export Concurrency: ${GRAY}(JIM default)${NC}"
 }
-if ($MaxExportParallelism -gt 1) {
+if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
     Write-Host "  Max Export Parallelism: ${CYAN}$MaxExportParallelism${NC}"
 } else {
-    Write-Host "  Max Export Parallelism: ${GRAY}1 (default)${NC}"
+    Write-Host "  Max Export Parallelism: ${GRAY}(JIM default)${NC}"
 }
 Write-Host "  Service Timeout:    ${CYAN}${TimeoutSeconds}s${NC}"
 Write-Host ""
@@ -914,13 +914,14 @@ if ($Scenario -like "*Scenario1*") {
 # Step 5: Setup / Run test scenario
 $step5Start = Get-Date
 
+# Extract scenario number from name (e.g., "Scenario1-HRToIdentityDirectory" -> "1")
+$scenarioNumber = if ($Scenario -match 'Scenario(\d+)') { $Matches[1] } else { $null }
+
 if ($SetupOnly) {
     # SetupOnly mode: configure JIM with connected systems and sync rules, then stop
     Write-Section "Step 5: Setting Up Scenario Configuration (SetupOnly)"
 
     # Validate that a setup script exists for this scenario
-    # Extract scenario number from name (e.g., "Scenario1-HRToIdentityDirectory" -> "1")
-    $scenarioNumber = if ($Scenario -match 'Scenario(\d+)') { $Matches[1] } else { $null }
     $setupScript = if ($scenarioNumber) {
         $candidate = Join-Path $scriptRoot "Setup-Scenario$scenarioNumber.ps1"
         if (Test-Path $candidate) { $candidate } else { $null }
@@ -941,7 +942,18 @@ if ($SetupOnly) {
 
         # Run the scenario setup script to configure connected systems, sync rules, and run profiles
         Write-Step "Running scenario setup: Setup-Scenario$scenarioNumber.ps1..."
-        $config = & $setupScript -JIMUrl "http://localhost:5200" -ApiKey $apiKey -Template $Template -ExportConcurrency $ExportConcurrency -MaxExportParallelism $MaxExportParallelism
+        $setupParams = @{
+            JIMUrl = "http://localhost:5200"
+            ApiKey = $apiKey
+            Template = $Template
+        }
+        if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
+            $setupParams.ExportConcurrency = $ExportConcurrency
+        }
+        if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
+            $setupParams.MaxExportParallelism = $MaxExportParallelism
+        }
+        $config = & $setupScript @setupParams
         if ($config) {
             Write-Success "Scenario configured successfully"
         }
@@ -1029,11 +1041,11 @@ if ($scenarioContent -match 'Write-Host\s+"[\s]*NOT YET IMPLEMENTED[\s]*"') {
     exit 1
 }
 
-if ($ExportConcurrency -gt 1 -or $MaxExportParallelism -gt 1) {
-    $extraParams = @()
-    if ($ExportConcurrency -gt 1) { $extraParams += "-ExportConcurrency $ExportConcurrency" }
-    if ($MaxExportParallelism -gt 1) { $extraParams += "-MaxExportParallelism $MaxExportParallelism" }
-    Write-Step "Running: Invoke-$Scenario.ps1 -Template $Template -Step $Step $($extraParams -join ' ')"
+$displayParams = @()
+if ($PSBoundParameters.ContainsKey('ExportConcurrency')) { $displayParams += "-ExportConcurrency $ExportConcurrency" }
+if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) { $displayParams += "-MaxExportParallelism $MaxExportParallelism" }
+if ($displayParams.Count -gt 0) {
+    Write-Step "Running: Invoke-$Scenario.ps1 -Template $Template -Step $Step $($displayParams -join ' ')"
 } else {
     Write-Step "Running: Invoke-$Scenario.ps1 -Template $Template -Step $Step"
 }
@@ -1053,7 +1065,27 @@ $scenarioLogFile = Join-Path $logDir "$Scenario-$Template-$logTimestamp.log"
 
 Start-Transcript -Path $scenarioLogFile -Append | Out-Null
 try {
-    & $scenarioScript -Template $Template -Step $Step -ApiKey $apiKey -ExportConcurrency $ExportConcurrency -MaxExportParallelism $MaxExportParallelism
+    # Build scenario invocation params — only pass export tuning params to scenarios that accept them
+    $scenarioParams = @{
+        Template = $Template
+        Step = $Step
+        ApiKey = $apiKey
+    }
+
+    # Export tuning params only apply to scenarios that accept them and have LDAP exports
+    # Scenarios 1, 2, 8: pass through to their setup scripts
+    # Scenario 6: passes through to its internal Setup-Scenario1 call
+    $scenariosAcceptingExportParams = @("1", "2", "6", "8")
+    if ($scenarioNumber -and $scenariosAcceptingExportParams -contains $scenarioNumber) {
+        if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
+            $scenarioParams.ExportConcurrency = $ExportConcurrency
+        }
+        if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
+            $scenarioParams.MaxExportParallelism = $MaxExportParallelism
+        }
+    }
+
+    & $scenarioScript @scenarioParams
     $scenarioExitCode = $LASTEXITCODE
 }
 finally {

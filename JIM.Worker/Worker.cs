@@ -145,9 +145,25 @@ public class Worker : BackgroundService
                 }
                 else
                 {
+                    // Log parallel execution when multiple tasks are dispatched together
+                    if (newWorkerTasksToProcess.Count > 1)
+                    {
+                        Log.Information("ExecuteAsync: Starting PARALLEL execution of {Count} tasks", newWorkerTasksToProcess.Count);
+                        for (var i = 0; i < newWorkerTasksToProcess.Count; i++)
+                        {
+                            var t = newWorkerTasksToProcess[i];
+                            var taskDescription = t is SynchronisationWorkerTask syncTask
+                                ? $"ConnectedSystem={syncTask.ConnectedSystemId}, RunProfile={syncTask.ConnectedSystemRunProfileId}"
+                                : t.GetType().Name;
+                            Log.Information("ExecuteAsync:   Parallel task {Index}/{Total}: {TaskId} ({Description})",
+                                i + 1, newWorkerTasksToProcess.Count, t.Id, taskDescription);
+                        }
+                    }
+
                     foreach (var mainLoopNewWorkerTask in newWorkerTasksToProcess)
                     {
                         var cancellationTokenSource = new CancellationTokenSource();
+                        var isParallel = newWorkerTasksToProcess.Count > 1;
                         var task = Task.Run(async () =>
                         {
                             // create an instance of JIM, specific to the processing of this task.
@@ -222,8 +238,16 @@ public class Worker : BackgroundService
                                 case SynchronisationWorkerTask syncWorkerTask:
                                 {
                                     var initiatedByDisplay = newWorkerTask.InitiatedByName ?? "Unknown";
-                                    Log.Information("ExecuteAsync: SynchronisationWorkerTask received for run profile id: {RunProfileId}, initiated by: {InitiatedBy}",
-                                        syncWorkerTask.ConnectedSystemRunProfileId, initiatedByDisplay);
+                                    if (isParallel)
+                                    {
+                                        Log.Information("ExecuteAsync: SynchronisationWorkerTask received for run profile id: {RunProfileId}, initiated by: {InitiatedBy} [PARALLEL execution]",
+                                            syncWorkerTask.ConnectedSystemRunProfileId, initiatedByDisplay);
+                                    }
+                                    else
+                                    {
+                                        Log.Information("ExecuteAsync: SynchronisationWorkerTask received for run profile id: {RunProfileId}, initiated by: {InitiatedBy}",
+                                            syncWorkerTask.ConnectedSystemRunProfileId, initiatedByDisplay);
+                                    }
                                     {
                                         var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncWorkerTask.ConnectedSystemId);
                                         if (connectedSystem != null)
@@ -297,7 +321,9 @@ public class Worker : BackgroundService
                                                 finally
                                                 {
                                                     // record how long the sync run took, whether it was successful, or not.
-                                                    Log.Information($"ExecuteAsync: Completed processing of {newWorkerTask.Activity.TargetName} sync run in {newWorkerTask.Activity.ExecutionTime}.");
+                                                    var parallelSuffix = isParallel ? " [PARALLEL]" : "";
+                                                    Log.Information("ExecuteAsync: Completed processing of {TargetName} sync run in {ExecutionTime}{ParallelSuffix}",
+                                                        newWorkerTask.Activity.TargetName, newWorkerTask.Activity.ExecutionTime, parallelSuffix);
                                                 }
                                             }
                                             else

@@ -384,12 +384,19 @@ public class SchedulerServer
     {
         // Get all steps at this index (could be multiple if ParallelWithPrevious)
         var stepsAtIndex = allSteps.Where(s => s.StepIndex == stepIndex).ToList();
+        var isParallelGroup = stepsAtIndex.Count > 1;
+
+        if (isParallelGroup)
+        {
+            Log.Information("QueueStepGroupAsync: Step index {StepIndex} is a parallel group with {Count} steps for execution {ExecutionId}",
+                stepIndex, stepsAtIndex.Count, execution.Id);
+        }
 
         foreach (var step in stepsAtIndex)
         {
             try
             {
-                await QueueStepAsync(execution, step, initiatorType, initiatorId, initiatorName);
+                await QueueStepAsync(execution, step, isParallelGroup, initiatorType, initiatorId, initiatorName);
             }
             catch (Exception ex)
             {
@@ -412,17 +419,18 @@ public class SchedulerServer
     private async Task QueueStepAsync(
         ScheduleExecution execution,
         ScheduleStep step,
+        bool isParallelGroup,
         ActivityInitiatorType initiatorType,
         Guid? initiatorId,
         string? initiatorName)
     {
-        Log.Information("QueueStepAsync: Queueing step {StepId} ({StepName}) type {StepType} for execution {ExecutionId}",
-            step.Id, step.Name, step.StepType, execution.Id);
+        Log.Information("QueueStepAsync: Queueing step {StepId} ({StepName}) type {StepType} mode {ExecutionMode} for execution {ExecutionId}",
+            step.Id, step.Name, step.StepType, isParallelGroup ? "Parallel" : "Sequential", execution.Id);
 
         switch (step.StepType)
         {
             case ScheduleStepType.RunProfile:
-                await QueueRunProfileStepAsync(execution, step, initiatorType, initiatorId, initiatorName);
+                await QueueRunProfileStepAsync(execution, step, isParallelGroup, initiatorType, initiatorId, initiatorName);
                 break;
 
             case ScheduleStepType.PowerShell:
@@ -445,6 +453,7 @@ public class SchedulerServer
     private async Task QueueRunProfileStepAsync(
         ScheduleExecution execution,
         ScheduleStep step,
+        bool isParallelGroup,
         ActivityInitiatorType initiatorType,
         Guid? initiatorId,
         string? initiatorName)
@@ -466,7 +475,7 @@ public class SchedulerServer
             ScheduleExecutionId = execution.Id,
             ScheduleStepIndex = step.StepIndex,
             // Use parallel execution if this step runs with others at the same index
-            ExecutionMode = WorkerTaskExecutionMode.Sequential
+            ExecutionMode = isParallelGroup ? WorkerTaskExecutionMode.Parallel : WorkerTaskExecutionMode.Sequential
         };
 
         var result = await Application.Tasking.CreateWorkerTaskAsync(workerTask);

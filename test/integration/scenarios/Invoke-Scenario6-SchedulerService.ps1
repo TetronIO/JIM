@@ -67,7 +67,13 @@ param(
     [int]$WaitSeconds = 90,
 
     [Parameter(Mandatory=$false)]
-    [switch]$ContinueOnError
+    [switch]$ContinueOnError,
+
+    [Parameter(Mandatory=$false)]
+    [int]$ExportConcurrency,
+
+    [Parameter(Mandatory=$false)]
+    [int]$MaxExportParallelism
 )
 
 Set-StrictMode -Version Latest
@@ -130,7 +136,18 @@ if ($connectedSystems.Count -eq 0) {
         throw "Setup script not found at: $setupScript"
     }
 
-    $config = & $setupScript -JIMUrl $JIMUrl -ApiKey $ApiKey -Template "Micro"
+    $setupParams = @{
+        JIMUrl = $JIMUrl
+        ApiKey = $ApiKey
+        Template = "Micro"
+    }
+    if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
+        $setupParams.ExportConcurrency = $ExportConcurrency
+    }
+    if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
+        $setupParams.MaxExportParallelism = $MaxExportParallelism
+    }
+    $config = & $setupScript @setupParams
     if (-not $config) {
         throw "Failed to run Setup-Scenario1"
     }
@@ -892,6 +909,20 @@ if ($Step -eq "Parallel" -or $Step -eq "All") {
             }
             catch {
                 $testResults.Steps += @{ Name = "Complex Parallel Execution Completed"; Success = $false; Error = $_.Exception.Message }
+                if (-not $ContinueOnError) {
+                    Write-Host ""
+                    Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                    exit 1
+                }
+            }
+
+            # Validate that parallel step groups actually executed concurrently
+            try {
+                Assert-ParallelExecutionTiming -ExecutionId $finalExecution.id -Name "Complex Parallel Execution"
+                $testResults.Steps += @{ Name = "Parallel Steps Executed Concurrently"; Success = $true }
+            }
+            catch {
+                $testResults.Steps += @{ Name = "Parallel Steps Executed Concurrently"; Success = $false; Error = $_.Exception.Message }
                 if (-not $ContinueOnError) {
                     Write-Host ""
                     Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red

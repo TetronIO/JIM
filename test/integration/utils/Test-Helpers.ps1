@@ -1148,5 +1148,134 @@ function Assert-ScheduleExecutionSuccess {
     Write-Host "  ✓ $Name completed successfully (Status: Completed, $validatedCount step activities OK)" -ForegroundColor Green
 }
 
+function Assert-ParallelExecutionTiming {
+    <#
+    .SYNOPSIS
+        Assert that parallel step groups in a schedule execution actually ran concurrently.
+
+    .DESCRIPTION
+        Validates that steps sharing the same StepIndex (parallel groups) have overlapping
+        execution time ranges, proving they ran concurrently rather than sequentially.
+
+        For each parallel group (2+ steps at the same StepIndex):
+        1. All steps must have StartedAt and CompletedAt timestamps
+        2. At least one pair of steps must have overlapping time ranges
+           (step B started before step A completed)
+
+        This catches the case where parallel steps are incorrectly dispatched sequentially,
+        which would otherwise go undetected since the schedule still completes successfully.
+
+    .PARAMETER ExecutionId
+        The Schedule Execution ID (GUID) to validate.
+
+    .PARAMETER Name
+        A friendly name for the execution (used in output messages).
+
+    .EXAMPLE
+        Assert-ParallelExecutionTiming -ExecutionId $execution.id -Name "Complex Parallel Execution"
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ExecutionId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Name
+    )
+
+    $execution = Get-JIMScheduleExecution -Id $ExecutionId
+
+    if (-not $execution) {
+        throw "Schedule execution not found: $ExecutionId for '$Name'"
+    }
+
+    $steps = $execution.steps
+    if (-not $steps -or $steps.Count -eq 0) {
+        throw "No steps found in execution '$Name' (ExecutionId: $ExecutionId)"
+    }
+
+    # Group steps by stepIndex to find parallel groups
+    $stepGroups = @{}
+    foreach ($step in $steps) {
+        $idx = $step.stepIndex
+        if (-not $stepGroups.ContainsKey($idx)) {
+            $stepGroups[$idx] = @()
+        }
+        $stepGroups[$idx] += $step
+    }
+
+    $parallelGroupCount = 0
+    $validatedGroupCount = 0
+
+    foreach ($idx in ($stepGroups.Keys | Sort-Object)) {
+        $group = $stepGroups[$idx]
+
+        # Only validate groups with 2+ steps (parallel groups)
+        if ($group.Count -lt 2) {
+            continue
+        }
+
+        $parallelGroupCount++
+        Write-Host "  Validating parallel timing for step index $idx ($($group.Count) steps)..." -ForegroundColor DarkGray
+
+        # Check all steps have timing data
+        $stepsWithTiming = @()
+        foreach ($s in $group) {
+            $stepName = $s.name ?? "Step $idx"
+            if (-not $s.startedAt -or -not $s.completedAt) {
+                Write-Host "    WARNING: Step '$stepName' (CS=$($s.connectedSystemId)) missing timing data (startedAt=$($s.startedAt), completedAt=$($s.completedAt))" -ForegroundColor Yellow
+                continue
+            }
+            $stepsWithTiming += @{
+                Name = $stepName
+                ConnectedSystemId = $s.connectedSystemId
+                StartedAt = [DateTime]::Parse($s.startedAt)
+                CompletedAt = [DateTime]::Parse($s.completedAt)
+            }
+        }
+
+        if ($stepsWithTiming.Count -lt 2) {
+            Write-Host "    WARNING: Fewer than 2 steps with timing data at index $idx, skipping overlap check" -ForegroundColor Yellow
+            continue
+        }
+
+        # Log timing details
+        foreach ($s in $stepsWithTiming) {
+            $duration = ($s.CompletedAt - $s.StartedAt).TotalSeconds
+            Write-Host "    $($s.Name) (CS=$($s.ConnectedSystemId)): $($s.StartedAt.ToString('HH:mm:ss.fff')) -> $($s.CompletedAt.ToString('HH:mm:ss.fff')) ($([math]::Round($duration, 1))s)" -ForegroundColor DarkGray
+        }
+
+        # Check for any overlapping pair — step B started before step A completed
+        $hasOverlap = $false
+        for ($i = 0; $i -lt $stepsWithTiming.Count; $i++) {
+            for ($j = $i + 1; $j -lt $stepsWithTiming.Count; $j++) {
+                $a = $stepsWithTiming[$i]
+                $b = $stepsWithTiming[$j]
+
+                # Two ranges overlap if A starts before or when B ends AND B starts before or when A ends.
+                # Using -le (<=) handles zero-duration steps that start at the same instant.
+                if ($a.StartedAt -le $b.CompletedAt -and $b.StartedAt -le $a.CompletedAt) {
+                    $hasOverlap = $true
+                    Write-Host "    Overlap confirmed: '$($a.Name)' and '$($b.Name)' ran concurrently" -ForegroundColor DarkGray
+                    break
+                }
+            }
+            if ($hasOverlap) { break }
+        }
+
+        if (-not $hasOverlap) {
+            throw "Parallel step group at index $idx did NOT execute concurrently. Steps ran sequentially despite being in a parallel group. This indicates a bug in the task dispatch pipeline. (ExecutionId: $ExecutionId)"
+        }
+
+        $validatedGroupCount++
+    }
+
+    if ($parallelGroupCount -eq 0) {
+        Write-Host "  No parallel step groups found in execution '$Name' - nothing to validate" -ForegroundColor Yellow
+        return
+    }
+
+    Write-Host "  ✓ $Name parallel execution validated ($validatedGroupCount/$parallelGroupCount parallel groups confirmed concurrent)" -ForegroundColor Green
+}
+
 # Functions are automatically available when dot-sourced
 # No need for Export-ModuleMember
