@@ -154,6 +154,18 @@ public class ScheduleExecutionStepDto
     public ScheduleStepType StepType { get; set; }
 
     /// <summary>
+    /// How this step executes relative to other steps at the same index.
+    /// Sequential means it runs alone; ParallelWithPrevious means it runs concurrently with siblings.
+    /// </summary>
+    public StepExecutionMode ExecutionMode { get; set; }
+
+    /// <summary>
+    /// The connected system ID for RunProfile steps.
+    /// Useful for distinguishing parallel sub-steps at the same StepIndex.
+    /// </summary>
+    public int? ConnectedSystemId { get; set; }
+
+    /// <summary>
     /// The current status of this step.
     /// </summary>
     public string Status { get; set; } = null!;

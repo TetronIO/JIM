@@ -41,6 +41,14 @@ public interface IConnectedSystemRepository
     public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId);
 
     /// <summary>
+    /// Retrieves pending exports by their IDs with all necessary includes for export processing.
+    /// Used by parallel batch processing where each batch re-loads its entities from its own DbContext.
+    /// </summary>
+    /// <param name="pendingExportIds">The IDs of pending exports to load.</param>
+    /// <returns>Pending exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
+    public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds);
+
+    /// <summary>
     /// Retrieves the count of how many Pending Export objects there are for a particular Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>

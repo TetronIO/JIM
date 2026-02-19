@@ -1,5 +1,7 @@
 using JIM.Application.Diagnostics;
 using JIM.Application.Services;
+using JIM.Data;
+using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -12,10 +14,11 @@ namespace JIM.Application.Servers;
 /// Executes pending exports by calling connector export methods.
 /// Implements Q5 (preview mode) and Q6 (retry with backoff) decisions.
 ///
-/// Note on parallelism (Q8 decision): Database operations are executed sequentially
-/// because EF Core DbContext is not thread-safe. Parallel processing may be introduced
-/// in the future behind a feature flag once proper testing has been completed.
-/// See OUTBOUND_SYNC_DESIGN.md for the full parallelism discussion.
+/// Parallelism (Q8 decision): When MaxParallelism > 1, batches are processed concurrently.
+/// Each parallel batch gets its own DbContext (EF Core is not thread-safe) and connector
+/// instance. Progress reporting is serialised via SemaphoreSlim to protect the caller's
+/// shared DbContext. MaxParallelism defaults to 1 (sequential) for safety.
+/// See OUTBOUND_SYNC_DESIGN.md and EXPORT_PERFORMANCE_OPTIMISATION.md for details.
 /// </summary>
 public class ExportExecutionServer
 {
@@ -55,6 +58,8 @@ public class ExportExecutionServer
     /// <param name="options">Optional execution options for batch size and parallelism</param>
     /// <param name="cancellationToken">Cancellation token to stop export processing</param>
     /// <param name="progressCallback">Optional callback for progress reporting</param>
+    /// <param name="connectorFactory">Optional factory to create additional connector instances for parallel batches</param>
+    /// <param name="repositoryFactory">Optional factory to create per-batch IRepository instances for parallel batches</param>
     /// <returns>Export execution result with preview information</returns>
     public async Task<ExportExecutionResult> ExecuteExportsAsync(
         ConnectedSystem connectedSystem,
@@ -62,7 +67,9 @@ public class ExportExecutionServer
         SyncRunMode runMode,
         ExportExecutionOptions? options,
         CancellationToken cancellationToken,
-        Func<ExportProgressInfo, Task>? progressCallback = null)
+        Func<ExportProgressInfo, Task>? progressCallback = null,
+        Func<IConnector>? connectorFactory = null,
+        Func<IRepository>? repositoryFactory = null)
     {
         options ??= new ExportExecutionOptions();
 
@@ -88,8 +95,8 @@ public class ExportExecutionServer
             return result;
         }
 
-        Log.Information("ExecuteExportsAsync: Found {Count} pending exports to execute for system {SystemName} (BatchSize: {BatchSize})",
-            pendingExports.Count, connectedSystem.Name, options.BatchSize);
+        Log.Information("ExecuteExportsAsync: Found {Count} pending exports to execute for system {SystemName} (BatchSize: {BatchSize}, MaxParallelism: {MaxParallelism})",
+            pendingExports.Count, connectedSystem.Name, options.BatchSize, options.MaxParallelism);
 
         // Report initial progress
         await ReportProgressAsync(progressCallback, new ExportProgressInfo
@@ -119,7 +126,8 @@ public class ExportExecutionServer
         }
 
         // Execute exports using the connector with batching
-        await ExecuteExportsViaConnectorAsync(connectedSystem, connector, pendingExports, result, options, cancellationToken, progressCallback);
+        await ExecuteExportsViaConnectorAsync(connectedSystem, connector, pendingExports, result, options,
+            cancellationToken, progressCallback, connectorFactory, repositoryFactory);
 
         // Second pass: retry any exports with deferred references that might now be resolvable
         if (!cancellationToken.IsCancellationRequested)
@@ -219,12 +227,15 @@ public class ExportExecutionServer
         ExportExecutionResult result,
         ExportExecutionOptions options,
         CancellationToken cancellationToken,
-        Func<ExportProgressInfo, Task>? progressCallback)
+        Func<ExportProgressInfo, Task>? progressCallback,
+        Func<IConnector>? connectorFactory,
+        Func<IRepository>? repositoryFactory)
     {
         // Check if connector supports export using calls
         if (connector is IConnectorExportUsingCalls callsConnector)
         {
-            await ExecuteUsingCallsWithBatchingAsync(connectedSystem, callsConnector, pendingExports, result, options, cancellationToken, progressCallback);
+            await ExecuteUsingCallsWithBatchingAsync(connectedSystem, callsConnector, pendingExports, result, options,
+                cancellationToken, progressCallback, connectorFactory, repositoryFactory);
         }
         // Check if connector supports export using files
         else if (connector is IConnectorExportUsingFiles filesConnector)
@@ -247,7 +258,32 @@ public class ExportExecutionServer
     }
 
     /// <summary>
+    /// Prepares a connector instance for export by injecting required services.
+    /// </summary>
+    private void PrepareConnectorForExport(IConnectorExportUsingCalls connector)
+    {
+        // Inject certificate provider for connectors that support it
+        if (connector is IConnectorCertificateAware certificateAwareConnector)
+        {
+            var certificateProvider = new CertificateProviderService(Application);
+            certificateAwareConnector.SetCertificateProvider(certificateProvider);
+        }
+
+        // Inject credential protection for connectors that support it (for password decryption)
+        if (connector is IConnectorCredentialAware credentialAwareConnector)
+        {
+            // Use pre-configured credential protection if available (from DI in JIM.Web),
+            // otherwise create a new instance (for JIM.Worker which doesn't use DI)
+            var credentialProtection = Application.CredentialProtection ??
+                new CredentialProtectionService(DataProtectionHelper.CreateProvider());
+            credentialAwareConnector.SetCredentialProtection(credentialProtection);
+        }
+    }
+
+    /// <summary>
     /// Executes exports using the IConnectorExportUsingCalls interface with batching.
+    /// When MaxParallelism > 1, processes multiple batches concurrently using separate
+    /// DbContext and connector instances per batch.
     /// </summary>
     private async Task ExecuteUsingCallsWithBatchingAsync(
         ConnectedSystem connectedSystem,
@@ -256,28 +292,17 @@ public class ExportExecutionServer
         ExportExecutionResult result,
         ExportExecutionOptions options,
         CancellationToken cancellationToken,
-        Func<ExportProgressInfo, Task>? progressCallback)
+        Func<ExportProgressInfo, Task>? progressCallback,
+        Func<IConnector>? connectorFactory,
+        Func<IRepository>? repositoryFactory)
     {
+        var useParallelBatches = options.MaxParallelism > 1 && connectorFactory != null && repositoryFactory != null;
+
         try
         {
-            // Inject certificate provider for connectors that support it
-            if (connector is IConnectorCertificateAware certificateAwareConnector)
-            {
-                var certificateProvider = new CertificateProviderService(Application);
-                certificateAwareConnector.SetCertificateProvider(certificateProvider);
-            }
+            PrepareConnectorForExport(connector);
 
-            // Inject credential protection for connectors that support it (for password decryption)
-            if (connector is IConnectorCredentialAware credentialAwareConnector)
-            {
-                // Use pre-configured credential protection if available (from DI in JIM.Web),
-                // otherwise create a new instance (for JIM.Worker which doesn't use DI)
-                var credentialProtection = Application.CredentialProtection ??
-                    new CredentialProtectionService(DataProtectionHelper.CreateProvider());
-                credentialAwareConnector.SetCredentialProtection(credentialProtection);
-            }
-
-            // Open connection
+            // Open connection for the primary connector (used for sequential path or as one of the parallel connectors)
             using (Diagnostics.Diagnostics.Connector.StartSpan("OpenExportConnection"))
             {
                 connector.OpenExportConnection(connectedSystem.SettingValues);
@@ -300,43 +325,14 @@ public class ExportExecutionServer
                         .Select(g => g.Select(x => x.export).ToList())
                         .ToList();
 
-                    var processedCount = 0;
-                    foreach (var batch in batches)
+                    if (useParallelBatches && batches.Count > 1)
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
-
-                        // Report progress (simple message without batch details for users)
-                        await ReportProgressAsync(progressCallback, new ExportProgressInfo
-                        {
-                            Phase = ExportPhase.Executing,
-                            TotalExports = result.TotalPendingExports,
-                            ProcessedExports = processedCount,
-                            CurrentBatchSize = batch.Count,
-                            Message = "Exporting"
-                        });
-
-                        // Mark batch as executing
-                        using (Diagnostics.Diagnostics.Database.StartSpan("MarkBatchAsExecuting")
-                            .SetTag("batchSize", batch.Count))
-                        {
-                            await MarkBatchAsExecutingAsync(batch);
-                        }
-
-                        // Execute batch via connector - now returns ExportResult list
-                        List<ExportResult> exportResults;
-                        using (Diagnostics.Diagnostics.Connector.StartSpan("ExportBatch").SetTag("batchSize", batch.Count))
-                        {
-                            exportResults = await connector.ExportAsync(batch, cancellationToken);
-                        }
-
-                        // Process results with ExportResult data
-                        using (Diagnostics.Diagnostics.Database.StartSpan("ProcessBatchSuccess")
-                            .SetTag("batchSize", batch.Count))
-                        {
-                            await ProcessBatchSuccessAsync(batch, exportResults, result);
-                        }
-
-                        processedCount += batch.Count;
+                        await ProcessBatchesInParallelAsync(connectedSystem, connector, batches, result, options,
+                            cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportBatch");
+                    }
+                    else
+                    {
+                        await ProcessBatchesSequentiallyAsync(connector, batches, result, cancellationToken, progressCallback);
                     }
                 }
 
@@ -395,28 +391,14 @@ public class ExportExecutionServer
                             .Select(g => g.Select(x => x.export).ToList())
                             .ToList();
 
-                        foreach (var batch in deferredBatches)
+                        if (useParallelBatches && deferredBatches.Count > 1)
                         {
-                            cancellationToken.ThrowIfCancellationRequested();
-
-                            using (Diagnostics.Diagnostics.Database.StartSpan("MarkDeferredBatchAsExecuting")
-                                .SetTag("batchSize", batch.Count))
-                            {
-                                await MarkBatchAsExecutingAsync(batch);
-                            }
-
-                            List<ExportResult> exportResults;
-                            using (Diagnostics.Diagnostics.Connector.StartSpan("ExportDeferredBatch")
-                                .SetTag("batchSize", batch.Count))
-                            {
-                                exportResults = await connector.ExportAsync(batch, cancellationToken);
-                            }
-
-                            using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
-                                .SetTag("batchSize", batch.Count))
-                            {
-                                await ProcessBatchSuccessAsync(batch, exportResults, result);
-                            }
+                            await ProcessBatchesInParallelAsync(connectedSystem, connector, deferredBatches, result, options,
+                                cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch");
+                        }
+                        else
+                        {
+                            await ProcessDeferredBatchesSequentiallyAsync(connector, deferredBatches, result, cancellationToken);
                         }
                     }
 
@@ -475,20 +457,274 @@ public class ExportExecutionServer
     }
 
     /// <summary>
+    /// Processes batches sequentially using the existing connector and DbContext.
+    /// This is the original code path, preserved unchanged for MaxParallelism=1.
+    /// </summary>
+    private async Task ProcessBatchesSequentiallyAsync(
+        IConnectorExportUsingCalls connector,
+        List<List<PendingExport>> batches,
+        ExportExecutionResult result,
+        CancellationToken cancellationToken,
+        Func<ExportProgressInfo, Task>? progressCallback)
+    {
+        var processedCount = 0;
+        foreach (var batch in batches)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Report progress (simple message without batch details for users)
+            await ReportProgressAsync(progressCallback, new ExportProgressInfo
+            {
+                Phase = ExportPhase.Executing,
+                TotalExports = result.TotalPendingExports,
+                ProcessedExports = processedCount,
+                CurrentBatchSize = batch.Count,
+                Message = "Exporting"
+            });
+
+            // Mark batch as executing
+            using (Diagnostics.Diagnostics.Database.StartSpan("MarkBatchAsExecuting")
+                .SetTag("batchSize", batch.Count))
+            {
+                await MarkBatchAsExecutingAsync(batch, Application.Repository.ConnectedSystems);
+            }
+
+            // Execute batch via connector - now returns ExportResult list
+            List<ExportResult> exportResults;
+            using (Diagnostics.Diagnostics.Connector.StartSpan("ExportBatch").SetTag("batchSize", batch.Count))
+            {
+                exportResults = await connector.ExportAsync(batch, cancellationToken);
+            }
+
+            // Process results with ExportResult data
+            using (Diagnostics.Diagnostics.Database.StartSpan("ProcessBatchSuccess")
+                .SetTag("batchSize", batch.Count))
+            {
+                await ProcessBatchSuccessAsync(batch, exportResults, result, Application.Repository.ConnectedSystems);
+            }
+
+            processedCount += batch.Count;
+        }
+    }
+
+    /// <summary>
+    /// Processes deferred batches sequentially using the existing connector and DbContext.
+    /// </summary>
+    private async Task ProcessDeferredBatchesSequentiallyAsync(
+        IConnectorExportUsingCalls connector,
+        List<List<PendingExport>> batches,
+        ExportExecutionResult result,
+        CancellationToken cancellationToken)
+    {
+        foreach (var batch in batches)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            using (Diagnostics.Diagnostics.Database.StartSpan("MarkDeferredBatchAsExecuting")
+                .SetTag("batchSize", batch.Count))
+            {
+                await MarkBatchAsExecutingAsync(batch, Application.Repository.ConnectedSystems);
+            }
+
+            List<ExportResult> exportResults;
+            using (Diagnostics.Diagnostics.Connector.StartSpan("ExportDeferredBatch")
+                .SetTag("batchSize", batch.Count))
+            {
+                exportResults = await connector.ExportAsync(batch, cancellationToken);
+            }
+
+            using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
+                .SetTag("batchSize", batch.Count))
+            {
+                await ProcessBatchSuccessAsync(batch, exportResults, result, Application.Repository.ConnectedSystems);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Processes multiple batches concurrently using separate DbContext and connector instances per batch.
+    /// Each batch task creates its own IRepository (with its own DbContext) and connector instance.
+    /// The batch's pending exports are re-loaded by ID from the batch's context to ensure proper
+    /// change tracking. Progress reporting is serialised via SemaphoreSlim to protect the caller's
+    /// shared DbContext.
+    /// </summary>
+    private async Task ProcessBatchesInParallelAsync(
+        ConnectedSystem connectedSystem,
+        IConnectorExportUsingCalls primaryConnector,
+        List<List<PendingExport>> batches,
+        ExportExecutionResult result,
+        ExportExecutionOptions options,
+        CancellationToken cancellationToken,
+        Func<ExportProgressInfo, Task>? progressCallback,
+        Func<IConnector> connectorFactory,
+        Func<IRepository> repositoryFactory,
+        string spanName)
+    {
+        Log.Information("ProcessBatchesInParallelAsync: Processing {BatchCount} batches with MaxParallelism={MaxParallelism}",
+            batches.Count, options.MaxParallelism);
+
+        // Collect batch ID lists - each batch task will re-load its entities from its own context
+        var batchIdLists = batches
+            .Select(batch => batch.Select(pe => pe.Id).ToList())
+            .ToList();
+
+        // Serialise progress reporting to protect the caller's shared DbContext
+        using var progressSemaphore = new SemaphoreSlim(1, 1);
+        var processedCount = 0;
+
+        // Lock for thread-safe result aggregation
+        var resultLock = new object();
+
+        using var throttle = new SemaphoreSlim(options.MaxParallelism, options.MaxParallelism);
+
+        var batchTasks = batchIdLists.Select((batchIds, batchIndex) => Task.Run(async () =>
+        {
+            await throttle.WaitAsync(cancellationToken);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // Create per-batch repository with its own DbContext
+                using var batchRepo = repositoryFactory();
+
+                // Re-load this batch's pending exports from the batch's own context
+                var batch = await batchRepo.ConnectedSystems.GetPendingExportsByIdsAsync(batchIds);
+                if (batch.Count == 0)
+                {
+                    Log.Warning("ProcessBatchesInParallelAsync: Batch {BatchIndex} returned 0 exports for {IdCount} IDs",
+                        batchIndex, batchIds.Count);
+                    return;
+                }
+
+                // Create and prepare a connector for this batch
+                IConnectorExportUsingCalls batchConnector;
+                if (batchIndex == 0)
+                {
+                    // First batch uses the already-opened primary connector
+                    batchConnector = primaryConnector;
+                }
+                else
+                {
+                    var newConnector = connectorFactory();
+                    if (newConnector is not IConnectorExportUsingCalls callsConnector)
+                    {
+                        Log.Error("ProcessBatchesInParallelAsync: Connector factory returned non-calls connector for batch {BatchIndex}", batchIndex);
+                        return;
+                    }
+                    batchConnector = callsConnector;
+                    PrepareConnectorForExport(batchConnector);
+                    batchConnector.OpenExportConnection(connectedSystem.SettingValues);
+                }
+
+                try
+                {
+                    // Mark batch as executing (raw SQL - context-independent)
+                    await batchRepo.ConnectedSystems.MarkPendingExportsAsExecutingAsync(batch);
+
+                    // Execute batch via connector
+                    var exportResults = await batchConnector.ExportAsync(batch, cancellationToken);
+
+                    // Process results using the batch's own repository
+                    var batchResult = new ExportExecutionResult();
+                    await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo.ConnectedSystems);
+
+                    // Capture created containers from this batch's connector
+                    List<string>? batchContainerIds = null;
+                    if (batchConnector is IConnectorContainerCreation containerCreator &&
+                        containerCreator.CreatedContainerExternalIds.Count > 0)
+                    {
+                        batchContainerIds = [..containerCreator.CreatedContainerExternalIds];
+                    }
+
+                    // Aggregate results into shared result (thread-safe)
+                    lock (resultLock)
+                    {
+                        result.SuccessCount += batchResult.SuccessCount;
+                        result.FailedCount += batchResult.FailedCount;
+                        result.DeferredCount += batchResult.DeferredCount;
+                        result.ProcessedExportItems.AddRange(batchResult.ProcessedExportItems);
+                        if (batchContainerIds != null)
+                        {
+                            result.CreatedContainerExternalIds.AddRange(batchContainerIds);
+                        }
+                    }
+
+                    // Report progress (serialised to protect caller's DbContext)
+                    var newProcessedCount = Interlocked.Add(ref processedCount, batch.Count);
+                    if (progressCallback != null)
+                    {
+                        await progressSemaphore.WaitAsync(cancellationToken);
+                        try
+                        {
+                            await progressCallback(new ExportProgressInfo
+                            {
+                                Phase = ExportPhase.Executing,
+                                TotalExports = result.TotalPendingExports,
+                                ProcessedExports = newProcessedCount,
+                                CurrentBatchSize = batch.Count,
+                                Message = "Exporting"
+                            });
+                        }
+                        finally
+                        {
+                            progressSemaphore.Release();
+                        }
+                    }
+                }
+                finally
+                {
+                    // Close the batch connector (but not the primary - that's managed by the caller)
+                    if (batchIndex != 0)
+                    {
+                        batchConnector.CloseExportConnection();
+                        (batchConnector as IDisposable)?.Dispose();
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Let cancellation propagate
+                throw;
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "ProcessBatchesInParallelAsync: Batch {BatchIndex} failed", batchIndex);
+
+                // Mark this batch's exports as failed
+                lock (resultLock)
+                {
+                    result.FailedCount += batchIds.Count;
+                }
+            }
+            finally
+            {
+                throttle.Release();
+            }
+        }, cancellationToken)).ToList();
+
+        await Task.WhenAll(batchTasks);
+    }
+
+    /// <summary>
     /// Marks a batch of exports as executing using raw SQL for efficiency.
     /// Bypasses EF Core change tracking since this is a simple status update.
     /// </summary>
-    private async Task MarkBatchAsExecutingAsync(List<PendingExport> batch)
+    private static async Task MarkBatchAsExecutingAsync(List<PendingExport> batch, IConnectedSystemRepository repository)
     {
-        await Application.Repository.ConnectedSystems.MarkPendingExportsAsExecutingAsync(batch);
+        await repository.MarkPendingExportsAsExecutingAsync(batch);
     }
 
     /// <summary>
     /// Processes a batch of exports with their corresponding ExportResult data.
     /// Uses batch updates for efficiency - pre-fetches attribute definitions and performs
     /// a single SaveChanges for all CSO updates.
+    /// Accepts an explicit repository parameter to support both sequential (shared) and parallel (per-batch) paths.
     /// </summary>
-    private async Task ProcessBatchSuccessAsync(List<PendingExport> batch, List<ExportResult> exportResults, ExportExecutionResult result)
+    private async Task ProcessBatchSuccessAsync(
+        List<PendingExport> batch,
+        List<ExportResult> exportResults,
+        ExportExecutionResult result,
+        IConnectedSystemRepository repository)
     {
         var exportsToUpdate = new List<PendingExport>();
         var csosToUpdate = new List<(ConnectedSystemObject cso, ExportResult exportResult)>();
@@ -552,14 +788,14 @@ public class ExportExecutionServer
             using (Diagnostics.Diagnostics.Database.StartSpan("UpdatePendingExports")
                 .SetTag("count", exportsToUpdate.Count))
             {
-                await Application.Repository.ConnectedSystems.UpdatePendingExportsAsync(exportsToUpdate);
+                await repository.UpdatePendingExportsAsync(exportsToUpdate);
             }
         }
 
         // Batch update CSOs that need external ID or status changes
         if (csosToUpdate.Count > 0)
         {
-            await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate);
+            await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, repository);
         }
     }
 
@@ -567,8 +803,11 @@ public class ExportExecutionServer
     /// Batch updates multiple CSOs after successful exports in a single database round-trip.
     /// Pre-fetches all required attribute definitions in one query, then applies changes
     /// and saves all CSO updates together.
+    /// Accepts an explicit repository parameter to support both sequential (shared) and parallel (per-batch) paths.
     /// </summary>
-    private async Task BatchUpdateCsosAfterSuccessfulExportAsync(List<(ConnectedSystemObject cso, ExportResult exportResult)> csosToUpdate)
+    private static async Task BatchUpdateCsosAfterSuccessfulExportAsync(
+        List<(ConnectedSystemObject cso, ExportResult exportResult)> csosToUpdate,
+        IConnectedSystemRepository repository)
     {
         // Collect all unique attribute IDs we need to look up (external ID + secondary external ID attributes)
         var attributeIds = new HashSet<int>();
@@ -586,7 +825,7 @@ public class ExportExecutionServer
             .SetTag("attributeCount", attributeIds.Count))
         {
             attributeLookup = attributeIds.Count > 0
-                ? await Application.Repository.ConnectedSystems.GetAttributesByIdsAsync(attributeIds)
+                ? await repository.GetAttributesByIdsAsync(attributeIds)
                 : new Dictionary<int, ConnectedSystemObjectTypeAttribute>();
         }
 
@@ -668,7 +907,7 @@ public class ExportExecutionServer
             using (Diagnostics.Diagnostics.Database.StartSpan("BatchUpdateCsoAttributeValues")
                 .SetTag("csoCount", csoUpdates.Count))
             {
-                await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(csoUpdates);
+                await repository.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(csoUpdates);
             }
             Log.Information("BatchUpdateCsosAfterSuccessfulExportAsync: Batch updated {Count} CSOs", csoUpdates.Count);
         }
@@ -939,7 +1178,7 @@ public class ExportExecutionServer
             // Batch update CSOs that need external ID or status changes
             if (csosToUpdate.Count > 0)
             {
-                await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate);
+                await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, Application.Repository.ConnectedSystems);
             }
 
             Log.Information("ExecuteUsingFilesWithBatchingAsync: Exported {Count} changes to file for {SystemName}",

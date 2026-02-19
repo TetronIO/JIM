@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Export Performance Optimisation (Post-MVP)
+- Batch database operations for export processing (single `SaveChangesAsync` per batch instead of per-object)
+- Bulk reference resolution for deferred exports (single query instead of N+1)
+- LDAP connector async pipelining with configurable "Export Concurrency" setting (1-16)
+- Parallel batch export processing with per-system `MaxExportParallelism` setting (1-16)
+- `SupportsParallelExport` connector capability flag (LDAP: true, File: false)
+- Parallel schedule step execution (steps at the same index run concurrently via `Task.WhenAll`)
+- Execution detail API returns all parallel sub-steps with `ExecutionMode` and `ConnectedSystemId`
+- Integration test parallel timing validation (`Assert-ParallelExecutionTiming`)
+- `-ExportConcurrency` and `-MaxExportParallelism` integration test runner parameters
+
 #### Scheduler Service (#168)
 - Schedule data model with cron and interval-based trigger support
 - Background scheduler service with 30-second polling cycle

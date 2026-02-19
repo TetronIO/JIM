@@ -48,8 +48,8 @@ internal static class LdapConnectorConstants
     internal const int DEFAULT_RETRY_DELAY_MS = 1000;
 
     // Export concurrency settings
-    internal const int DEFAULT_EXPORT_CONCURRENCY = 1;
-    internal const int MAX_EXPORT_CONCURRENCY = 16;
+    internal const int DEFAULT_EXPORT_CONCURRENCY = 4;
+    internal const int MAX_EXPORT_CONCURRENCY = 8;
 
     /// <summary>
     /// LDAP_SERVER_SHOW_DELETED_OID - Server control that allows searching for deleted (tombstone) objects.

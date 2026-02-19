@@ -29,6 +29,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public bool SupportsUserSelectedExternalId => true;
     public bool SupportsUserSelectedAttributeTypes => true;
     public bool SupportsAutoConfirmExport => true;
+    public bool SupportsParallelExport => false;
     #endregion
 
     #region IConnectorSettings members

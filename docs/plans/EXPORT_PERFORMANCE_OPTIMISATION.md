@@ -1,9 +1,9 @@
 # Export Performance Optimisation
 
-- **Status**: In Progress (Phase 2 complete)
+- **Status**: In Progress (Phase 4 complete, Phase 5 remaining)
 - **Milestone**: Post-MVP
 - **Related**: `docs/plans/OUTBOUND_SYNC_DESIGN.md` (Q8 - Parallelism Decision)
-- **Last Updated**: 2026-02-18
+- **Last Updated**: 2026-02-19
 
 ## Overview
 
@@ -77,7 +77,7 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 ### Phase 2: LDAP Connector Pipelining (Moderate Risk, High Impact) - COMPLETE
 
-**Status:** Implementation complete, unit tests passing. Awaiting integration testing.
+**Status:** Complete. Integration tested via Scenarios 1, 2, 6, and 8.
 
 **Goal:** Process N LDAP operations concurrently within each batch using configurable concurrency.
 
@@ -115,80 +115,139 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 ---
 
-### Phase 3: Wire Up MaxParallelism for Batch Processing (Moderate Risk, Moderate Impact)
+### Phase 3: Wire Up MaxParallelism for Batch Processing (Moderate Risk, Moderate Impact) - COMPLETE
+
+**Status:** Complete. Integration tested via Scenarios 1, 2, 6, and 8.
 
 **Goal:** Process multiple export batches concurrently within a single export run profile.
 
-**Changes:**
+**Changes implemented:**
 
-1. **Implement parallel batch processing in ExportExecutionServer**
-   - File: `ExportExecutionServer.cs`
-   - Currently: Batches processed sequentially in a loop
-   - Proposed: Process up to `MaxParallelism` batches concurrently
-   - Each batch gets its own `DbContext` instance (EF Core is not thread-safe)
-   - Each batch gets its own connector instance or uses connection pooling
+1. **Parallel batch processing in ExportExecutionServer**
+   - When `MaxParallelism > 1` and both factories are provided, batches are processed concurrently via `SemaphoreSlim` throttling + `Task.WhenAll`
+   - When `MaxParallelism <= 1` (default), the existing sequential `foreach` loop runs unchanged
+   - When only 1 batch exists, the sequential path is used regardless of `MaxParallelism`
 
-2. **DbContext factory pattern**
-   - Create a scoped `DbContext` per parallel batch to avoid thread-safety issues
-   - Use `IDbContextFactory<JimDbContext>` (EF Core built-in) for creating per-batch contexts
+2. **Per-batch DbContext and connector instances**
+   - Each parallel batch creates its own `IRepository` via a `Func<IRepository>` factory delegate passed from the Worker
+   - Each parallel batch (except batch 0) creates its own connector via a `Func<IConnector>` factory delegate
+   - Batch 0 reuses the already-opened primary connector to avoid wasting the initial connection
+   - Entities are re-loaded by ID from the batch's own context for proper change tracking
 
-3. **Feature flag control**
-   - As designed in OUTBOUND_SYNC_DESIGN.md Q8, introduce behind a feature flag
-   - Default: `MaxParallelism = 1` (sequential, current behaviour)
-   - Configurable per Connected System via admin UI
+3. **Thread-safe result aggregation and progress reporting**
+   - `ExportExecutionResult` counts aggregated under `lock` (low-contention)
+   - Progress callback serialised via `SemaphoreSlim(1,1)` to protect the caller's shared DbContext
+   - `Interlocked.Add` for the shared processed count
+
+4. **MaxParallelism defaults to 1 (sequential)**
+   - Safe default; admin explicitly opts in to parallelism
+   - No `IDbContextFactory` registration needed; Worker creates contexts directly via `new JimDbContext()`
+
+5. **Error isolation**
+   - Each parallel batch wrapped in try/catch; one batch failure doesn't abort others
+   - Cancellation token checked at batch start; `OperationCanceledException` propagated
+
+**Key files:**
+- `ExportExecutionServer.cs` (refactored) - `ProcessBatchesInParallelAsync`, repo-parameterised methods
+- `ExportExecutionOptions.cs` (modified) - `MaxParallelism` default changed from 4 to 1
+- `SyncExportTaskProcessor.cs` (modified) - Passes connector and repository factory delegates
+- `IConnectedSystemRepository.cs` / `ConnectedSystemRepository.cs` - New `GetPendingExportsByIdsAsync`
+- `ExportExecutionParallelBatchTests.cs` (new) - 10 parallel batch tests
+- `ConnectedSystemRepositoryGetPendingExportsByIdsTests.cs` (new) - 7 repository tests
 
 **Estimated Impact:** Linear throughput improvement up to the configured parallelism level, multiplied by Phase 2 gains.
 
-**Risk Mitigations:**
-- Feature flag defaults to sequential (opt-in parallelism)
-- Per-system configuration allows tuning for target system capacity
-- Independent DbContext per batch eliminates EF Core thread-safety concerns
-- Extensive integration testing before enabling
+---
 
-**Testing Strategy:**
-- Unit tests for parallel batch orchestration
-- Integration tests verifying data integrity under parallel execution
-- Deadlock detection tests with concurrent database writes
-- Performance benchmarks at various parallelism levels
+### Phase 3b: MaxExportParallelism as Per-Connected System Setting - COMPLETE
+
+**Status:** Implementation complete. MaxExportParallelism is now configurable per Connected System.
+
+**Goal:** Make parallel batch export opt-in per Connected System, gated by a connector capability flag.
+
+**Changes implemented:**
+
+1. **`SupportsParallelExport` connector capability**
+   - New `bool SupportsParallelExport` property on `IConnectorCapabilities` and `ConnectorDefinition`
+   - LDAP Connector: `true` (supports concurrent connections)
+   - File Connector: `false` (exclusive file locks prevent parallelism)
+   - Capability synced from connector to DB via `SeedingServer` on startup
+
+2. **`MaxExportParallelism` per-Connected System property**
+   - Nullable `int?` on `ConnectedSystem` model (null/1 = sequential, 2-16 = parallel)
+   - EF Core migration adds columns to both `ConnectorDefinitions` and `ConnectedSystems` tables
+
+3. **Full API/PowerShell/UI coverage**
+   - API: `UpdateConnectedSystemRequest.MaxExportParallelism` (Range 1-16), mapped in controller and response DTO
+   - PowerShell: `Set-JIMConnectedSystem -MaxExportParallelism 4`
+   - UI: "Export Performance" section in Settings tab, only visible when connector supports parallel export
+
+4. **Worker wiring**
+   - `SyncExportTaskProcessor` reads `_connectedSystem.MaxExportParallelism ?? 1` into `ExportExecutionOptions.MaxParallelism`
+
+5. **Integration test support**
+   - `-MaxExportParallelism` parameter added to Run-IntegrationTests.ps1 and all scenario scripts
+   - Configured on target LDAP systems via `Set-JIMConnectedSystem` when value > 1
+
+**Key files:**
+- `IConnectorCapabilities.cs`, `ConnectorDefinition.cs` - New capability property
+- `ConnectedSystem.cs` - New `MaxExportParallelism` property
+- `SeedingServer.cs` - Capability sync
+- `SynchronisationController.cs` - API update handler
+- `ConnectedSystemDto.cs`, `ConnectedSystemRequestDtos.cs` - API DTOs
+- `ConnectedSystemSettingsTab.razor` - UI setting
+- `Set-JIMConnectedSystem.ps1` - PowerShell cmdlet
+- `SyncExportTaskProcessor.cs` - Worker wiring
+- `ConnectedSystemParallelExportTests.cs` (new) - 12 unit tests
 
 ---
 
-### Phase 4: Parallel Task Execution for Independent Systems (Higher Risk, Moderate Impact)
+### Phase 4: Parallel Task Execution for Schedule Steps (Higher Risk, Moderate Impact) - COMPLETE
 
-**Goal:** Allow export tasks to different Connected Systems to run concurrently.
+**Status:** Complete. Integration tested via Scenario 6 (parallel timing validation confirms concurrent execution).
 
-**Changes:**
+**Goal:** Allow schedule steps targeting different Connected Systems to execute concurrently within a parallel step group.
 
-1. **New execution mode for export tasks**
-   - File: `SchedulerServer.cs`
-   - Currently: All sync tasks created with `ExecutionMode = Sequential`
-   - Proposed: Export tasks targeting different Connected Systems use `ExecutionMode = ParallelBySystem` (or similar)
-   - Tasks to the same Connected System remain sequential to avoid conflicts
+**Changes implemented:**
 
-2. **Task queue partitioning**
-   - File: `TaskingRepository.cs` (`GetNextWorkerTasksToProcessAsync`)
-   - Currently: Returns only one task when it encounters a sequential task
-   - Proposed: Return multiple export tasks if they target different Connected Systems
-   - Maintain ordering guarantees within tasks for the same system
+1. **Scheduler parallel group detection and queueing**
+   - `SchedulerServer.QueueStepGroupAsync` detects when a step index contains multiple steps (parallel group)
+   - Passes `isParallelGroup` flag through `QueueStepAsync` to `QueueRunProfileStepAsync`
+   - Worker tasks created with `ExecutionMode = Parallel` for parallel groups, `Sequential` otherwise
+   - Logging: `QueueStepGroupAsync: Step index N is a parallel group with M steps`
 
-3. **Worker concurrency management**
-   - File: `Worker.cs`
-   - Ensure the worker can process multiple tasks concurrently
-   - Each task gets its own DI scope (already the pattern for parallel mode)
+2. **Worker parallel task dispatch**
+   - `Worker.ExecuteAsync` detects parallel task groups via `WorkerTaskExecutionMode.Parallel`
+   - Collects contiguous parallel tasks and dispatches them concurrently via `Task.WhenAll`
+   - Each parallel task gets its own DI scope for isolation
+   - Sequential tasks continue to execute one at a time
+   - Logging: `[PARALLEL execution]` suffix on task start/completion log entries
 
-**Estimated Impact:** Significant for schedules that export to multiple systems. A schedule exporting to 3 systems could complete in roughly 1/3 the time.
+3. **Execution detail API fix for parallel steps**
+   - `ScheduleExecutionsController.GetByIdAsync` now returns all sub-steps per step index (previously only returned first)
+   - Activities and worker tasks matched to sub-steps by `ConnectedSystemId`
+   - `ScheduleExecutionStepDto` extended with `ExecutionMode` and `ConnectedSystemId` fields
+   - `CompletedAt` timestamp bug fixed: uses `activity.Executed + TotalActivityTime` (not `activity.Created`)
 
-**Risk Mitigations:**
-- Only parallelise across systems, never within the same system
-- Maintain strict ordering for tasks targeting the same Connected System
-- Thorough testing of concurrent worker task processing
-- Gradual rollout: start with opt-in per schedule
+4. **Integration test parallel timing validation**
+   - New `Assert-ParallelExecutionTiming` helper in `Test-Helpers.ps1`
+   - Groups steps by stepIndex, identifies parallel groups (2+ steps)
+   - Validates overlapping time ranges to confirm concurrent execution
+   - Scenario 6 Test 6 (Parallel) now validates 3 parallel groups:
+     - Step index 0: 4 concurrent Full Imports (all 4 systems)
+     - Step index 5: 2 concurrent Exports (AD + Cross-Domain)
+     - Step index 6: 2 concurrent Imports (Delta Import AD + Full Import Cross-Domain)
 
-**Testing Strategy:**
-- Unit tests for task partitioning logic
-- Integration tests with concurrent exports to multiple test systems
-- Verify no cross-system data corruption
-- Test scheduler step ordering is maintained
+**Key files:**
+- `SchedulerServer.cs` - Parallel group detection and `ExecutionMode` assignment
+- `Worker.cs` - Parallel task dispatch with `Task.WhenAll`
+- `ScheduleExecutionsController.cs` - Multi-step API response + CompletedAt fix
+- `ScheduleExecutionDtos.cs` - `ExecutionMode` and `ConnectedSystemId` fields
+- `SchedulerServerParallelExecutionTests.cs` (new) - 5 unit tests
+- `Test-Helpers.ps1` - `Assert-ParallelExecutionTiming` function
+- `Invoke-Scenario6-SchedulerService.ps1` - Parallel timing validation
+
+**Estimated Impact:** Significant for schedules with parallel step groups. A 4-way parallel import completes in the time of a single import rather than 4x.
 
 ---
 
@@ -244,7 +303,7 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 - No new external packages required for Phases 1, 3, 4, 5
 - Phase 2 depends on `System.DirectoryServices.Protocols` async support (available in .NET 9)
-- Phase 3 requires `IDbContextFactory<JimDbContext>` registration in DI (Microsoft.EntityFrameworkCore built-in)
+- Phase 3 uses simple `new JimDbContext()` factories (no DI registration needed)
 
 ---
 

@@ -253,9 +253,14 @@ public class MetaverseController : ControllerBase
 
 **Worker Services**:
 - Poll task queue from database
-- Process tasks via specific processors (SyncImportTaskProcessor, etc.)
+- Process tasks via specific processors (SyncImportTaskProcessor, SyncExportTaskProcessor, etc.)
 - Update task status and activity log
 - Handle errors gracefully, log failures
+- Support parallel task execution: schedule steps with `ExecutionMode = Parallel` are dispatched concurrently via `Task.WhenAll`, each with its own DI scope
+
+**Export Parallelism** (two independent axes):
+- **LDAP Connector Pipelining** (`Export Concurrency` connector setting, 1-16): Multiple LDAP operations execute concurrently within a single export batch using `SemaphoreSlim`-based throttling and async APM wrappers (`LdapConnectionExtensions.SendRequestAsync`)
+- **Parallel Batch Processing** (`MaxExportParallelism` per-Connected System, 1-16): Multiple export batches process concurrently with separate `IRepository` and `IConnector` instances per batch. Gated by `SupportsParallelExport` connector capability
 
 **Rule**: All long-running operations should be queued as WorkerTasks, not executed synchronously in web requests.
 
@@ -509,9 +514,15 @@ public interface IConnectorImportUsingCalls : IConnector
 
 public interface IConnectorExportUsingCalls : IConnector
 {
-    Task ExportAsync(ConnectedSystem system, List<ConnectedSystemObject> objects);
+    Task<ConnectorExportResult> ExportAsync(
+        ConnectedSystemObject cso, PendingExport export,
+        CancellationToken cancellationToken = default);
 }
 ```
+
+**Connector Capabilities**: Connectors declare capabilities via `IConnectorCapabilities` properties:
+- `SupportsExport`, `SupportsImport`, `SupportsDeltaImport`, etc.
+- `SupportsParallelExport` — when `true`, the Connected System UI shows the `MaxExportParallelism` setting, enabling parallel batch processing with separate DbContext and connector instances per batch
 
 **Rule**: Keep connectors stateless. Store configuration in `ConnectedSystem.Configuration`.
 
@@ -660,8 +671,8 @@ JIM uses standard OIDC claims (`sub`, `name`, `given_name`, `family_name`, `pref
 
 ### Service Architecture
 - **jim.web**: Blazor Server UI with integrated REST API at `/api/` (port 5200 HTTP / 5201 HTTPS). Swagger available at `/api/swagger` in development.
-- **jim.worker**: Background task processor
-- **jim.scheduler**: Scheduled job execution
+- **jim.worker**: Background task processor. Supports parallel execution of schedule steps targeting different Connected Systems (dispatched concurrently via `Task.WhenAll`). Export tasks support configurable LDAP pipelining and parallel batch processing.
+- **jim.scheduler**: Schedule management service with 30-second polling cycle. Detects parallel step groups (steps sharing the same `StepIndex`) and queues them with `ExecutionMode = Parallel` for concurrent worker dispatch.
 - **jim.database**: PostgreSQL 18
 
 **Database Access**:

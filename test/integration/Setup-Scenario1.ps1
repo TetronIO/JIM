@@ -41,7 +41,13 @@ param(
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
-    [string]$Template = "Small"
+    [string]$Template = "Small",
+
+    [Parameter(Mandatory=$false)]
+    [int]$ExportConcurrency = 1,
+
+    [Parameter(Mandatory=$false)]
+    [int]$MaxExportParallelism = 1
 )
 
 Set-StrictMode -Version Latest
@@ -280,6 +286,27 @@ try {
     if ($ldapSettings.Count -gt 0) {
         Set-JIMConnectedSystem -Id $ldapSystem.id -SettingValues $ldapSettings | Out-Null
         Write-Host "  ✓ Configured LDAP settings (including automatic container creation)" -ForegroundColor Green
+    }
+
+    # Configure Export Concurrency if non-default
+    if ($ExportConcurrency -gt 1) {
+        $exportConcurrencySetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Export Concurrency" }
+        if ($exportConcurrencySetting) {
+            $exportSettings = @{
+                $exportConcurrencySetting.id = @{ intValue = $ExportConcurrency }
+            }
+            Set-JIMConnectedSystem -Id $ldapSystem.id -SettingValues $exportSettings | Out-Null
+            Write-Host "  ✓ Configured LDAP Export Concurrency: $ExportConcurrency" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  ⚠ Export Concurrency setting not found in connector definition" -ForegroundColor Yellow
+        }
+    }
+
+    # Configure Max Export Parallelism if non-default
+    if ($MaxExportParallelism -gt 1) {
+        Set-JIMConnectedSystem -Id $ldapSystem.id -MaxExportParallelism $MaxExportParallelism | Out-Null
+        Write-Host "  ✓ Configured LDAP Max Export Parallelism: $MaxExportParallelism" -ForegroundColor Green
     }
 }
 catch {

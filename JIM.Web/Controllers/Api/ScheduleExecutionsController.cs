@@ -93,35 +93,46 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
         if (execution.Schedule != null)
         {
             var steps = await _application.Scheduler.GetScheduleStepsAsync(execution.ScheduleId);
-            var stepsByIndex = steps.GroupBy(s => s.StepIndex).ToDictionary(g => g.Key, g => g.First());
+            var stepsByIndex = steps.GroupBy(s => s.StepIndex)
+                .ToDictionary(g => g.Key, g => g.OrderBy(s => s.ConnectedSystemId).ToList());
 
-            // Build step status list
-            for (var i = 0; i < execution.TotalSteps; i++)
+            // Get unique step indices in order
+            var uniqueStepIndices = stepsByIndex.Keys.OrderBy(i => i).ToList();
+
+            // Build step status list — one DTO per schedule step (parallel groups produce multiple entries)
+            foreach (var stepIndex in uniqueStepIndices)
             {
-                var step = stepsByIndex.GetValueOrDefault(i);
-                var stepActivities = activitiesByStep.GetValueOrDefault(i);
-                var stepTasks = tasksByStep.GetValueOrDefault(i);
+                var stepsAtIndex = stepsByIndex[stepIndex];
+                var stepActivities = activitiesByStep.GetValueOrDefault(stepIndex);
+                var stepTasks = tasksByStep.GetValueOrDefault(stepIndex);
 
-                // Use the first activity for this step (for single-step cases; parallel steps may have multiple)
-                var activity = stepActivities?.FirstOrDefault();
-                var task = stepTasks?.FirstOrDefault();
-
-                dto.Steps.Add(new ScheduleExecutionStepDto
+                foreach (var step in stepsAtIndex)
                 {
-                    StepIndex = i,
-                    Name = step?.Name ?? $"Step {i + 1}",
-                    StepType = step?.StepType ?? ScheduleStepType.RunProfile,
-                    Status = GetStepStatus(task, activity, i, execution.CurrentStepIndex, execution.Status),
-                    TaskId = task?.Id,
-                    StartedAt = activity?.Executed,
-                    CompletedAt = activity?.Status is ActivityStatus.Complete or ActivityStatus.CompleteWithWarning
-                        or ActivityStatus.CompleteWithError or ActivityStatus.FailedWithError or ActivityStatus.Cancelled
-                        ? activity.Created + (activity.TotalActivityTime ?? TimeSpan.Zero)
-                        : null,
-                    ErrorMessage = activity?.ErrorMessage,
-                    ActivityId = activity?.Id,
-                    ActivityStatus = activity?.Status.ToString()
-                });
+                    // Match activity and task by ConnectedSystemId within this step index
+                    var activity = stepActivities?.FirstOrDefault(a => a.ConnectedSystemId == step.ConnectedSystemId)
+                                   ?? (stepsAtIndex.Count == 1 ? stepActivities?.FirstOrDefault() : null);
+                    var task = stepTasks?.FirstOrDefault(t => t is SynchronisationWorkerTask swt && swt.ConnectedSystemId == step.ConnectedSystemId)
+                               ?? (stepsAtIndex.Count == 1 ? stepTasks?.FirstOrDefault() : null);
+
+                    dto.Steps.Add(new ScheduleExecutionStepDto
+                    {
+                        StepIndex = stepIndex,
+                        Name = step.Name ?? $"Step {stepIndex + 1}",
+                        StepType = step.StepType,
+                        ExecutionMode = step.ExecutionMode,
+                        ConnectedSystemId = step.ConnectedSystemId,
+                        Status = GetStepStatus(task, activity, stepIndex, execution.CurrentStepIndex, execution.Status),
+                        TaskId = task?.Id,
+                        StartedAt = activity?.Executed,
+                        CompletedAt = activity?.Status is ActivityStatus.Complete or ActivityStatus.CompleteWithWarning
+                            or ActivityStatus.CompleteWithError or ActivityStatus.FailedWithError or ActivityStatus.Cancelled
+                            ? activity.Executed + (activity.TotalActivityTime ?? TimeSpan.Zero)
+                            : null,
+                        ErrorMessage = activity?.ErrorMessage,
+                        ActivityId = activity?.Id,
+                        ActivityStatus = activity?.Status.ToString()
+                    });
+                }
             }
         }
 

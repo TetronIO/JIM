@@ -652,6 +652,9 @@ public class SynchronisationController(
         if (request.Description != null)
             connectedSystem.Description = request.Description;
 
+        if (request.MaxExportParallelism.HasValue)
+            connectedSystem.MaxExportParallelism = request.MaxExportParallelism.Value;
+
         // Update setting values if provided
         if (request.SettingValues != null)
         {

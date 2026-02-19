@@ -1,11 +1,16 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
+using JIM.Connectors;
+using JIM.Connectors.File;
+using JIM.Connectors.LDAP;
+using JIM.Data;
 using JIM.Models.Activities;
 using JIM.Models.Enums;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.PostgresData;
 using Serilog;
 
 namespace JIM.Worker.Processors;
@@ -103,7 +108,7 @@ public class SyncExportTaskProcessor
             var options = new ExportExecutionOptions
             {
                 BatchSize = 100,
-                MaxParallelism = 4
+                MaxParallelism = _connectedSystem.MaxExportParallelism ?? 1
             };
 
             ExportExecutionResult result;
@@ -121,7 +126,9 @@ public class SyncExportTaskProcessor
                         _activity.ObjectsProcessed = progressInfo.ProcessedExports;
                         await _jim.Activities.UpdateActivityMessageAsync(_activity, progressInfo.Message);
                         await _jim.Activities.UpdateActivityAsync(_activity);
-                    });
+                    },
+                    connectorFactory: CreateConnectorForParallelBatch,
+                    repositoryFactory: () => new PostgresDataRepository(new JimDbContext()));
             }
 
             exportSpan.SetTag("successCount", result.SuccessCount);
@@ -266,6 +273,22 @@ public class SyncExportTaskProcessor
             Log.Information("ProcessExportResultAsync: Export completed successfully. {Success} succeeded, {Deferred} deferred",
                 result.SuccessCount, result.DeferredCount);
         }
+    }
+
+    /// <summary>
+    /// Creates a new connector instance for use by a parallel export batch.
+    /// Each parallel batch needs its own connector to avoid thread-safety issues
+    /// with shared connection state (e.g., LdapConnection).
+    /// </summary>
+    private IConnector CreateConnectorForParallelBatch()
+    {
+        if (_connectedSystem.ConnectorDefinition.Name == ConnectorConstants.LdapConnectorName)
+            return new LdapConnector();
+        if (_connectedSystem.ConnectorDefinition.Name == ConnectorConstants.FileConnectorName)
+            return new FileConnector();
+
+        throw new NotSupportedException(
+            $"{_connectedSystem.ConnectorDefinition.Name} connector does not support parallel batch export.");
     }
 
     /// <summary>

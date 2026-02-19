@@ -1474,6 +1474,27 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Retrieves pending exports by their IDs with all necessary includes for export processing.
+    /// Uses the same includes as GetExecutableExportsAsync to ensure connectors have access to
+    /// CSO attributes, attribute value changes, and attribute definitions.
+    /// </summary>
+    public async Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+    {
+        if (pendingExportIds.Count == 0)
+            return [];
+
+        return await Repository.Database.PendingExports
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.AttributeValues)
+            .Where(pe => pendingExportIds.Contains(pe.Id))
+            .OrderBy(pe => pe.CreatedAt)
+            .ToListAsync();
+    }
+
+    /// <summary>
     /// Retrieves the count of how many Pending Export objects there are for a particular Connected System.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>

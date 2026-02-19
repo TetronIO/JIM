@@ -201,9 +201,13 @@ Connectors implement capability interfaces:
 IConnector                    // Base interface
 IConnectorImportUsingCalls    // Pull data via API calls
 IConnectorImportUsingFiles    // Read from files
-IConnectorExportUsingCalls    // Push data via API calls
-IConnectorExportUsingFiles    // Write to files
+IConnectorExportUsingCalls    // Push data via API calls (async with CancellationToken)
+IConnectorExportUsingFiles    // Write to files (async with CancellationToken)
 ```
+
+Connectors also declare capability flags via `IConnectorCapabilities`:
+- `SupportsParallelExport` — enables per-system `MaxExportParallelism` setting for parallel batch processing
+- LDAP connectors additionally support configurable "Export Concurrency" (1-16) for async LDAP operation pipelining
 
 ---
 
@@ -339,7 +343,8 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 
 ### Recently Completed
 
-- ✅ **Scheduler Service** (#168) - Full scheduling with cron/interval triggers, multi-step execution, REST API, Blazor UI, PowerShell cmdlets
+- ✅ **Export Performance Optimisation** - Batch DB operations, LDAP async pipelining (Export Concurrency), parallel batch export (MaxExportParallelism), parallel schedule step execution, integration test timing validation
+- ✅ **Scheduler Service** (#168) - Full scheduling with cron/interval triggers, multi-step execution (sequential and parallel), REST API, Blazor UI, PowerShell cmdlets
 - ✅ **Change History/Audit** (#14, #269) - Full change tracking with timeline UI, initiator tracking, deleted objects view
 - ✅ **Progress Indication** (#246) - Real-time progress bars and contextual messages on Operations page
 
