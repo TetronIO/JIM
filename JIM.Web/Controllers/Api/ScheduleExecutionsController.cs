@@ -160,34 +160,13 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
             return NotFound(new ApiErrorResponse { Message = $"Schedule execution not found: {id}" });
         }
 
-        if (execution.Status != ScheduleExecutionStatus.Queued &&
-            execution.Status != ScheduleExecutionStatus.InProgress)
+        var cancelled = await _application.Scheduler.CancelScheduleExecutionAsync(id);
+        if (!cancelled)
         {
             return BadRequest(new ApiErrorResponse
             {
                 Message = $"Cannot cancel execution with status: {execution.Status}"
             });
-        }
-
-        execution.Status = ScheduleExecutionStatus.Cancelled;
-        execution.CompletedAt = DateTime.UtcNow;
-        execution.ErrorMessage = "Cancelled by user";
-
-        await _application.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
-
-        // Request cancellation for any queued or processing worker tasks for this execution
-        var pendingTasks = await _application.Repository.Tasking.GetWorkerTasksByScheduleExecutionAsync(id);
-        foreach (var task in pendingTasks.Where(t => t.Status == WorkerTaskStatus.Queued))
-        {
-            task.Status = WorkerTaskStatus.CancellationRequested;
-            await _application.Repository.Tasking.UpdateWorkerTaskAsync(task);
-        }
-
-        // Clean up WaitingForPreviousStep tasks — they're not being processed so can be deleted directly
-        var deletedWaitingCount = await _application.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(id);
-        if (deletedWaitingCount > 0)
-        {
-            _logger.LogInformation("Cancelled {Count} waiting tasks for execution {ExecutionId}", deletedWaitingCount, id);
         }
 
         _logger.LogInformation("Cancelled schedule execution {ExecutionId}", id);

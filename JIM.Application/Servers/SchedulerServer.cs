@@ -338,6 +338,54 @@ public class SchedulerServer
     }
 
     /// <summary>
+    /// Cancels a running or queued schedule execution.
+    /// Sets the execution status to Cancelled, requests cancellation for active tasks,
+    /// and deletes any WaitingForPreviousStep tasks.
+    /// </summary>
+    /// <returns>True if the execution was cancelled, false if it was not in a cancellable state.</returns>
+    public async Task<bool> CancelScheduleExecutionAsync(Guid executionId)
+    {
+        var execution = await Application.Repository.Scheduling.GetScheduleExecutionAsync(executionId);
+        if (execution == null)
+        {
+            Log.Warning("CancelScheduleExecutionAsync: Execution {ExecutionId} not found", executionId);
+            return false;
+        }
+
+        if (execution.Status != ScheduleExecutionStatus.Queued &&
+            execution.Status != ScheduleExecutionStatus.InProgress)
+        {
+            Log.Warning("CancelScheduleExecutionAsync: Cannot cancel execution {ExecutionId} with status {Status}",
+                executionId, execution.Status);
+            return false;
+        }
+
+        execution.Status = ScheduleExecutionStatus.Cancelled;
+        execution.CompletedAt = DateTime.UtcNow;
+        execution.ErrorMessage = "Cancelled by user";
+        await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
+
+        // Request cancellation for any queued tasks
+        var pendingTasks = await Application.Repository.Tasking.GetWorkerTasksByScheduleExecutionAsync(executionId);
+        foreach (var task in pendingTasks.Where(t => t.Status == WorkerTaskStatus.Queued))
+        {
+            task.Status = WorkerTaskStatus.CancellationRequested;
+            await Application.Repository.Tasking.UpdateWorkerTaskAsync(task);
+        }
+
+        // Delete WaitingForPreviousStep tasks — they're not being processed
+        var deletedWaitingCount = await Application.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(executionId);
+        if (deletedWaitingCount > 0)
+        {
+            Log.Information("CancelScheduleExecutionAsync: Deleted {Count} waiting tasks for execution {ExecutionId}",
+                deletedWaitingCount, executionId);
+        }
+
+        Log.Information("CancelScheduleExecutionAsync: Cancelled execution {ExecutionId}", executionId);
+        return true;
+    }
+
+    /// <summary>
     /// Gets all active (in-progress, queued, or paused) schedule executions.
     /// Used by the scheduler to monitor ongoing executions.
     /// </summary>

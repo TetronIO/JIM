@@ -8,6 +8,7 @@
 @inject JimApplication Jim
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject IWebHostEnvironment Environment
 @implements IDisposable
 
 <MudPaper Outlined="true" Class="pa-4">
@@ -48,6 +49,18 @@
         <MudAlert Class="mt-5" Severity="Severity.Warning">Please create a <MudLink Href="/admin/connected-systems/">Connected System</MudLink> first.</MudAlert>
     }
 </MudPaper>
+
+@if (Environment.IsDevelopment())
+{
+    <MudPaper Outlined="true" Class="mt-3 pa-3 d-flex align-center gap-3">
+        <MudIcon Icon="@Icons.Material.Filled.BugReport" Color="Color.Warning" />
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">Development Mode</MudText>
+        <MudButton Variant="Variant.Outlined" Color="@(_isDemoMode ? Color.Warning : Color.Default)"
+                   OnClick="ToggleDemoMode" Size="Size.Small" StartIcon="@Icons.Material.Filled.ViewCarousel">
+            @(_isDemoMode ? "Exit Demo Mode" : "Demo Mode")
+        </MudButton>
+    </MudPaper>
+}
 
 @if (_workerTaskHeaders.Count == 0)
 {
@@ -179,6 +192,7 @@ else
     private Dictionary<Guid, List<WorkerTaskHeader>> _scheduleGroups = new();
     private List<WorkerTaskHeader> _standaloneTasks = new();
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
+    private bool _isDemoMode;
 
     private void RebuildGroups()
     {
@@ -325,44 +339,14 @@ else
         if (result != true)
             return;
 
-        try
+        var cancelled = await Jim.Scheduler.CancelScheduleExecutionAsync(scheduleExecutionId);
+        if (cancelled)
         {
-            // Use the API cancel endpoint logic through the application layer
-            var execution = await Jim.Repository.Scheduling.GetScheduleExecutionAsync(scheduleExecutionId);
-            if (execution == null)
-            {
-                Snackbar.Add("Schedule execution not found.", Severity.Error);
-                return;
-            }
-
-            if (execution.Status != JIM.Models.Scheduling.ScheduleExecutionStatus.Queued &&
-                execution.Status != JIM.Models.Scheduling.ScheduleExecutionStatus.InProgress)
-            {
-                Snackbar.Add($"Cannot cancel execution with status: {execution.Status}", Severity.Warning);
-                return;
-            }
-
-            execution.Status = JIM.Models.Scheduling.ScheduleExecutionStatus.Cancelled;
-            execution.CompletedAt = DateTime.UtcNow;
-            execution.ErrorMessage = "Cancelled by user";
-            await Jim.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
-
-            // Cancel active tasks
-            var pendingTasks = await Jim.Repository.Tasking.GetWorkerTasksByScheduleExecutionAsync(scheduleExecutionId);
-            foreach (var task in pendingTasks.Where(t => t.Status == WorkerTaskStatus.Queued))
-            {
-                task.Status = WorkerTaskStatus.CancellationRequested;
-                await Jim.Repository.Tasking.UpdateWorkerTaskAsync(task);
-            }
-
-            // Delete waiting tasks
-            await Jim.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(scheduleExecutionId);
-
             Snackbar.Add("Schedule execution cancellation requested.", Severity.Success);
         }
-        catch (Exception ex)
+        else
         {
-            Snackbar.Add($"Error cancelling schedule execution: {ex.Message}", Severity.Error);
+            Snackbar.Add("Could not cancel execution — it may have already completed.", Severity.Warning);
         }
     }
 
@@ -426,6 +410,122 @@ else
             <span>@context.InitiatedByName</span>
         }
     };
+
+    private void ToggleDemoMode()
+    {
+        _isDemoMode = !_isDemoMode;
+
+        if (_isDemoMode)
+        {
+            _pollingCancellationTokenSource.Cancel();
+            _workerTaskHeaders = GenerateDemoData();
+        }
+        else
+        {
+            _workerTaskHeaders = new List<WorkerTaskHeader>();
+        }
+
+        RebuildGroups();
+    }
+
+    private static List<WorkerTaskHeader> GenerateDemoData()
+    {
+        var executionId1 = Guid.NewGuid();
+        var executionId2 = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+
+        return new List<WorkerTaskHeader>
+        {
+            // Schedule 1: "Nightly Full Sync" — 6 steps, currently on step 2 (parallel)
+            new()
+            {
+                Id = Guid.NewGuid(), Name = "HR System - Full Import", Type = "Synchronisation",
+                Status = WorkerTaskStatus.Processing, Timestamp = now.AddMinutes(-5),
+                ScheduleExecutionId = executionId1, ScheduleExecutionName = "Nightly Full Sync",
+                ScheduleStepIndex = 1,
+                ObjectsToProcess = 12500, ObjectsProcessed = 8320,
+                ProgressMessage = "Importing users",
+                InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
+            },
+            new()
+            {
+                Id = Guid.NewGuid(), Name = "AD - Full Import", Type = "Synchronisation",
+                Status = WorkerTaskStatus.Processing, Timestamp = now.AddMinutes(-5),
+                ScheduleExecutionId = executionId1, ScheduleExecutionName = "Nightly Full Sync",
+                ScheduleStepIndex = 1,
+                ObjectsToProcess = 45000, ObjectsProcessed = 31200,
+                ProgressMessage = "Importing objects",
+                InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
+            },
+            new()
+            {
+                Id = Guid.NewGuid(), Name = "HR System - Delta Sync", Type = "Synchronisation",
+                Status = WorkerTaskStatus.WaitingForPreviousStep, Timestamp = now.AddMinutes(-5),
+                ScheduleExecutionId = executionId1, ScheduleExecutionName = "Nightly Full Sync",
+                ScheduleStepIndex = 2,
+                InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
+            },
+            new()
+            {
+                Id = Guid.NewGuid(), Name = "AD - Delta Sync", Type = "Synchronisation",
+                Status = WorkerTaskStatus.WaitingForPreviousStep, Timestamp = now.AddMinutes(-5),
+                ScheduleExecutionId = executionId1, ScheduleExecutionName = "Nightly Full Sync",
+                ScheduleStepIndex = 2,
+                InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
+            },
+            new()
+            {
+                Id = Guid.NewGuid(), Name = "AD - Export", Type = "Synchronisation",
+                Status = WorkerTaskStatus.WaitingForPreviousStep, Timestamp = now.AddMinutes(-5),
+                ScheduleExecutionId = executionId1, ScheduleExecutionName = "Nightly Full Sync",
+                ScheduleStepIndex = 3,
+                InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
+            },
+            new()
+            {
+                Id = Guid.NewGuid(), Name = "AD - Confirming Import", Type = "Synchronisation",
+                Status = WorkerTaskStatus.WaitingForPreviousStep, Timestamp = now.AddMinutes(-5),
+                ScheduleExecutionId = executionId1, ScheduleExecutionName = "Nightly Full Sync",
+                ScheduleStepIndex = 4,
+                InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
+            },
+
+            // Schedule 2: "Cloud Provisioning" — 3 steps, step 0 queued
+            new()
+            {
+                Id = Guid.NewGuid(), Name = "Azure AD - Export", Type = "Synchronisation",
+                Status = WorkerTaskStatus.Queued, Timestamp = now.AddMinutes(-1),
+                ScheduleExecutionId = executionId2, ScheduleExecutionName = "Cloud Provisioning",
+                ScheduleStepIndex = 0,
+                InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
+            },
+            new()
+            {
+                Id = Guid.NewGuid(), Name = "Azure AD - Confirming Import", Type = "Synchronisation",
+                Status = WorkerTaskStatus.WaitingForPreviousStep, Timestamp = now.AddMinutes(-1),
+                ScheduleExecutionId = executionId2, ScheduleExecutionName = "Cloud Provisioning",
+                ScheduleStepIndex = 1,
+                InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
+            },
+            new()
+            {
+                Id = Guid.NewGuid(), Name = "Azure AD - Delta Sync", Type = "Synchronisation",
+                Status = WorkerTaskStatus.WaitingForPreviousStep, Timestamp = now.AddMinutes(-1),
+                ScheduleExecutionId = executionId2, ScheduleExecutionName = "Cloud Provisioning",
+                ScheduleStepIndex = 2,
+                InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.System
+            },
+
+            // Standalone task — manually triggered by user
+            new()
+            {
+                Id = Guid.NewGuid(), Name = "LDAP Directory - Full Import", Type = "Synchronisation",
+                Status = WorkerTaskStatus.Queued, Timestamp = now.AddSeconds(-30),
+                InitiatedByType = JIM.Models.Activities.ActivityInitiatorType.User,
+                InitiatedById = Guid.NewGuid(), InitiatedByName = "Admin User"
+            }
+        };
+    }
 
     private static bool HasWorkerTaskHeaderChanged(WorkerTaskHeader existing, WorkerTaskHeader updated)
     {
