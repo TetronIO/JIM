@@ -195,6 +195,8 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        _connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+
         // In development, ?demo query string activates demo mode with mock data
         if (Environment.IsDevelopment())
         {
@@ -207,8 +209,6 @@ else
                 return;
             }
         }
-
-        _connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
 
         // Get initial data for worker task table rendering
         _workerTaskHeaders = await Jim.Tasking.GetWorkerTaskHeadersAsync();
