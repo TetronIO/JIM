@@ -14,7 +14,8 @@ alias jim='echo "JIM Development Aliases:
 
 .NET Local Development:
   jim-compile        - dotnet build JIM.sln
-  jim-test           - dotnet test JIM.sln
+  jim-test           - Run unit + workflow tests (excludes Explicit)
+  jim-test-all       - Run ALL tests (incl. Explicit + Pester)
   jim-test-ps        - Run PowerShell Pester tests
   jim-clean          - dotnet clean && build
   jim-web            - Run JIM.Web locally (sources .env)
@@ -51,6 +52,7 @@ Help:
 # .NET local development
 alias jim-compile='dotnet build JIM.sln'
 alias jim-test='dotnet test JIM.sln'
+alias jim-test-all='dotnet test JIM.sln --settings test/run-all.runsettings && pwsh -NoProfile -Command "Import-Module Pester; \$config = New-PesterConfiguration; \$config.Run.Path = \"./JIM.PowerShell/JIM/Tests\"; \$config.Output.Verbosity = \"Detailed\"; Invoke-Pester -Configuration \$config"'
 alias jim-test-ps='pwsh -NoProfile -Command "Import-Module Pester; \$config = New-PesterConfiguration; \$config.Run.Path = \"./JIM.PowerShell/JIM/Tests\"; \$config.Output.Verbosity = \"Detailed\"; Invoke-Pester -Configuration \$config"'
 alias jim-clean='dotnet clean JIM.sln && dotnet build JIM.sln'
 

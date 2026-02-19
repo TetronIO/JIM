@@ -99,7 +99,8 @@ Sync operations are the core of JIM. Customers depend on JIM to synchronise thei
 - If aliases don't work, run: `source ~/.zshrc` (or restart terminal)
 - `jim` - List all available jim aliases
 - `jim-compile` - Build entire solution (dotnet build)
-- `jim-test` - Run all tests
+- `jim-test` - Run unit + workflow tests (excludes Explicit)
+- `jim-test-all` - Run ALL tests (incl. Explicit + Pester)
 - `jim-db` - Start PostgreSQL (for local debugging)
 - `jim-db-stop` - Stop PostgreSQL
 - `jim-migrate` - Apply migrations
