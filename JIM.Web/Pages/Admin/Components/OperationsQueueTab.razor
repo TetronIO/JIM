@@ -8,6 +8,7 @@
 @inject JimApplication Jim
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject NavigationManager NavigationManager
 @inject IWebHostEnvironment Environment
 @implements IDisposable
 
@@ -49,18 +50,6 @@
         <MudAlert Class="mt-5" Severity="Severity.Warning">Please create a <MudLink Href="/admin/connected-systems/">Connected System</MudLink> first.</MudAlert>
     }
 </MudPaper>
-
-@if (Environment.IsDevelopment())
-{
-    <MudPaper Outlined="true" Class="mt-3 pa-3 d-flex align-center gap-3">
-        <MudIcon Icon="@Icons.Material.Filled.BugReport" Color="Color.Warning" />
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">Development Mode</MudText>
-        <MudButton Variant="Variant.Outlined" Color="@(_isDemoMode ? Color.Warning : Color.Default)"
-                   OnClick="ToggleDemoMode" Size="Size.Small" StartIcon="@Icons.Material.Filled.ViewCarousel">
-            @(_isDemoMode ? "Exit Demo Mode" : "Demo Mode")
-        </MudButton>
-    </MudPaper>
-}
 
 @if (_workerTaskHeaders.Count == 0)
 {
@@ -192,7 +181,6 @@ else
     private Dictionary<Guid, List<WorkerTaskHeader>> _scheduleGroups = new();
     private List<WorkerTaskHeader> _standaloneTasks = new();
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
-    private bool _isDemoMode;
 
     private void RebuildGroups()
     {
@@ -207,6 +195,19 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        // In development, ?demo query string activates demo mode with mock data
+        if (Environment.IsDevelopment())
+        {
+            var uri = new Uri(NavigationManager.Uri);
+            var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+            if (query.ContainsKey("demo"))
+            {
+                _workerTaskHeaders = GenerateDemoData();
+                RebuildGroups();
+                return;
+            }
+        }
+
         _connectedSystemHeaders = await Jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
 
         // Get initial data for worker task table rendering
@@ -410,23 +411,6 @@ else
             <span>@context.InitiatedByName</span>
         }
     };
-
-    private void ToggleDemoMode()
-    {
-        _isDemoMode = !_isDemoMode;
-
-        if (_isDemoMode)
-        {
-            _pollingCancellationTokenSource.Cancel();
-            _workerTaskHeaders = GenerateDemoData();
-        }
-        else
-        {
-            _workerTaskHeaders = new List<WorkerTaskHeader>();
-        }
-
-        RebuildGroups();
-    }
 
     private static List<WorkerTaskHeader> GenerateDemoData()
     {
