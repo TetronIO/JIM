@@ -69,6 +69,9 @@ This single script handles everything:
 
 # Skip rebuild (use existing Docker images)
 ./test/integration/Run-IntegrationTests.ps1 -SkipReset -SkipBuild
+
+# Run with export performance tuning (Scenarios 1, 2, 6, 8 only)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync" -ExportConcurrency 4 -MaxExportParallelism 2
 ```
 
 **Available Scenarios (`-Scenario` parameter):**
@@ -298,6 +301,11 @@ Each scenario script supports a `-Step` parameter that controls which test case 
 - `-Template <Size>` - Data scale template (Nano, Micro, Small, Medium, Large, XLarge, XXLarge)
 - `-WaitSeconds <N>` - Override default wait time between steps (default: 60)
 - `-TriggerRunProfile` - Automatically trigger JIM Run Profile after data changes
+
+**Export performance parameters** (accepted by Scenarios 1, 2, 6, 8 — scenarios with LDAP exports):
+- `-ExportConcurrency <N>` - LDAP connector pipelining concurrency (1-8, omit for JIM default of 1)
+- `-MaxExportParallelism <N>` - Parallel export batch processing (1-16, omit for JIM default of 1)
+- These are only passed through to scenarios when explicitly provided to the test runner
 
 ---
 
@@ -693,19 +701,24 @@ When two CSV rows with identical external IDs are processed in the same import b
 - The extended Scenario1 setup creates: HR CSV, Training CSV, Samba AD, Cross-Domain CSV
 - Example: `./Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -Step Joiner` then run Scenario6
 
-**Parallel Step Schedule Structure** (10 steps):
+**Parallel Step Schedule Structure** (14 steps across 9 unique step indices):
 ```
-Step 0-1 [PARALLEL]:  Full Import HR + Full Import Training
-Step 2   [SEQUENTIAL]: Full Sync HR
-Step 3   [SEQUENTIAL]: Full Sync Training
-Step 4-5 [PARALLEL]:  Export AD + Export Cross-Domain
-Step 6-7 [PARALLEL]:  Delta Import AD + Delta Import Cross-Domain
-Step 8   [SEQUENTIAL]: Delta Sync Cross-Domain
-Step 9   [SEQUENTIAL]: Delta Sync AD
+Step 0 [PARALLEL x4]: Full Import HR + Full Import Training + Full Import Cross-Domain + Full Import AD
+Step 1 [SEQUENTIAL]:  Full Sync HR
+Step 2 [SEQUENTIAL]:  Full Sync Training
+Step 3 [SEQUENTIAL]:  Full Sync Cross-Domain
+Step 4 [SEQUENTIAL]:  Full Sync AD
+Step 5 [PARALLEL x2]: Export AD + Export Cross-Domain
+Step 6 [PARALLEL x2]: Delta Import AD + Full Import Cross-Domain
+Step 7 [SEQUENTIAL]:  Delta Sync Cross-Domain
+Step 8 [SEQUENTIAL]:  Delta Sync AD
 ```
+
+**Parallel Timing Validation**: Test 6 (Parallel) validates that parallel step groups actually execute concurrently by checking for overlapping time ranges in the execution detail API response. This uses the `Assert-ParallelExecutionTiming` helper function.
 
 **Notes**:
 - This scenario does not use the Template parameter (template-irrelevant)
+- Accepts `-ExportConcurrency` and `-MaxExportParallelism` parameters for export performance tuning
 - The Parallel step test requires all 4 connected systems; skipped if missing
 - The AutoTrigger test is excluded from "All" runs due to timing dependencies; run explicitly with `-Step AutoTrigger`
 

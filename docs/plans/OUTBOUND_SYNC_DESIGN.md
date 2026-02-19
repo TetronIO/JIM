@@ -308,74 +308,36 @@ EF Core's `DbContext` is **not thread-safe**. Using constructs like `Task.WhenAl
 - Deadlocks when multiple threads access the same tables
 - Non-deterministic behaviour that's difficult to debug
 
-**Current Decision: Sequential Operations with Feature Flags for Future Enhancement**
+**Decision: Sequential for MVP, Parallelism Implemented Post-MVP**
 
-All database operations in export evaluation and execution are currently **sequential**. This is intentional:
+The original MVP decision was sequential-only operations. Post-MVP, parallelism has been implemented across multiple axes with safe defaults (all default to sequential/1):
 
-```csharp
-// Sequential - Safe for EF Core DbContext
-foreach (var export in batch)
-{
-    export.Status = PendingExportStatus.Executing;
-    await Repository.ConnectedSystems.UpdatePendingExportAsync(export);
-}
-```
+**Implemented Parallelism (see `docs/plans/EXPORT_PERFORMANCE_OPTIMISATION.md`):**
 
-Not this (unsafe):
-```csharp
-// Parallel - UNSAFE for EF Core DbContext
-await Task.WhenAll(batch.Select(async export =>
-{
-    export.Status = PendingExportStatus.Executing;
-    await Repository.ConnectedSystems.UpdatePendingExportAsync(export);
-}));
-```
+1. **LDAP Connector Pipelining** (Phase 2) — Multiple LDAP operations execute concurrently within a single export batch:
+   - Per-connector "Export Concurrency" setting (1-16, default 1)
+   - `SemaphoreSlim`-based throttling with async APM wrappers (`LdapConnectionExtensions.SendRequestAsync`)
+   - Container creation serialised to prevent race conditions; multi-step operations remain sequential within each export
 
-**Where Parallelism May Be Safe (Future Enhancement):**
+2. **Parallel Batch Export Processing** (Phase 3) — Multiple export batches process concurrently:
+   - Per-Connected System `MaxExportParallelism` setting (1-16, default 1)
+   - Each parallel batch creates its own `IRepository` (via factory delegate) and `IConnector` instance
+   - Gated by `SupportsParallelExport` connector capability (LDAP: true, File: false)
+   - Thread-safe result aggregation under `lock`; progress callback serialised via `SemaphoreSlim(1,1)`
 
-1. **Connector operations** - The actual call to external systems (AD, SCIM endpoints) could potentially run in parallel if:
-   - Each connector instance has its own connection
-   - The target system supports concurrent requests
-   - Proper rate limiting is implemented
+3. **Parallel Schedule Step Execution** (Phase 4) — Schedule steps at the same `StepIndex` execute concurrently:
+   - Scheduler detects parallel groups and queues tasks with `ExecutionMode = Parallel`
+   - Worker dispatches parallel task groups via `Task.WhenAll`, each with its own DI scope
+   - Integration tested with timing overlap validation (Scenario 6)
 
-2. **Export evaluation** - Evaluating export rules against MVOs could be parallel if:
-   - Using separate DbContext instances per thread
-   - Implementing proper transaction isolation
-   - Using read-only operations where possible
+**Safety approach** (unchanged from MVP philosophy):
+- All parallelism defaults to sequential (opt-in via admin configuration)
+- Each parallel unit gets its own `DbContext` — no shared EF Core contexts across threads
+- Per-system configuration rather than global flags (different systems have different capacity)
 
-3. **Multi-system exports** - Exporting to different connected systems in parallel could be safe since they're independent
+**✅ DECISION: Sequential operations for MVP, parallelism implemented post-MVP with safe defaults.**
 
-**Feature Flag Approach:**
-
-Any future parallelism should be introduced behind feature flags:
-
-```csharp
-public class ExportExecutionOptions
-{
-    // All default to false (sequential) until proven safe
-    public bool EnableParallelConnectorCalls { get; set; } = false;
-    public bool EnableParallelExportEvaluation { get; set; } = false;
-    public bool EnableParallelMultiSystemExport { get; set; } = false;
-    public int MaxDegreeOfParallelism { get; set; } = 1;
-}
-```
-
-This allows:
-- Easy A/B testing of performance improvements
-- Quick rollback if issues are discovered
-- Gradual rollout to production environments
-- Clear documentation of what parallelism is enabled
-
-**Why Not Now?**
-
-1. **Correctness over performance** - Get the feature working correctly first
-2. **Unknown bottleneck** - We don't know yet whether schedule-based or event-based sync will be more popular, which affects optimal parallelism strategy
-3. **Complexity cost** - Parallel code is harder to debug and maintain
-4. **Connector responsibility** - High-performance connector operations are the connector's responsibility (post-MVP)
-
-**✅ DECISION: Sequential operations for MVP, parallelism via feature flags post-MVP.**
-
-See code comments referencing "Q8" in `ExportExecutionServer.cs` for implementation details.
+See `docs/plans/EXPORT_PERFORMANCE_OPTIMISATION.md` for full implementation details.
 
 ---
 

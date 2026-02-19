@@ -146,6 +146,8 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - Create object in target system ✓
 - Update object in target system ✓
 - Delete object in target system ✓
+- LDAP connector async pipelining with configurable concurrency (Post-MVP) ✓
+- Parallel batch export processing with per-system MaxExportParallelism (Post-MVP) ✓
 
 ### 4. Scheduling & Automation
 
@@ -153,7 +155,7 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - Scheduled task data model (Schedule, ScheduleStep, ScheduleExecution entities) ✓
 - Scheduler service implementation (background polling service) ✓
 - Cron-style or interval-based scheduling (with user-friendly pattern configuration) ✓
-- Run profile scheduling configuration (multi-step sequential and parallel execution) ✓
+- Run profile scheduling configuration (multi-step sequential and parallel step execution) ✓
 - Scheduler configuration UI (full Blazor management interface) ✓
 - Schedule REST API (CRUD, enable/disable, manual trigger, execution monitoring) ✓
 - Schedule PowerShell cmdlets (11 cmdlets with name-based parameters) ✓

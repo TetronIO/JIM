@@ -1,9 +1,9 @@
 # Export Performance Optimisation
 
-- **Status**: In Progress (Phase 3b complete)
+- **Status**: In Progress (Phase 4 complete, Phase 5 remaining)
 - **Milestone**: Post-MVP
 - **Related**: `docs/plans/OUTBOUND_SYNC_DESIGN.md` (Q8 - Parallelism Decision)
-- **Last Updated**: 2026-02-18
+- **Last Updated**: 2026-02-19
 
 ## Overview
 
@@ -77,7 +77,7 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 ### Phase 2: LDAP Connector Pipelining (Moderate Risk, High Impact) - COMPLETE
 
-**Status:** Implementation complete, unit tests passing. Awaiting integration testing.
+**Status:** Complete. Integration tested via Scenarios 1, 2, 6, and 8.
 
 **Goal:** Process N LDAP operations concurrently within each batch using configurable concurrency.
 
@@ -117,7 +117,7 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 ### Phase 3: Wire Up MaxParallelism for Batch Processing (Moderate Risk, Moderate Impact) - COMPLETE
 
-**Status:** Implementation complete, 17 unit tests passing. Awaiting integration testing.
+**Status:** Complete. Integration tested via Scenarios 1, 2, 6, and 8.
 
 **Goal:** Process multiple export batches concurrently within a single export run profile.
 
@@ -202,42 +202,52 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 ---
 
-### Phase 4: Parallel Task Execution for Independent Systems (Higher Risk, Moderate Impact)
+### Phase 4: Parallel Task Execution for Schedule Steps (Higher Risk, Moderate Impact) - COMPLETE
 
-**Goal:** Allow export tasks to different Connected Systems to run concurrently.
+**Status:** Complete. Integration tested via Scenario 6 (parallel timing validation confirms concurrent execution).
 
-**Changes:**
+**Goal:** Allow schedule steps targeting different Connected Systems to execute concurrently within a parallel step group.
 
-1. **New execution mode for export tasks**
-   - File: `SchedulerServer.cs`
-   - Currently: All sync tasks created with `ExecutionMode = Sequential`
-   - Proposed: Export tasks targeting different Connected Systems use `ExecutionMode = ParallelBySystem` (or similar)
-   - Tasks to the same Connected System remain sequential to avoid conflicts
+**Changes implemented:**
 
-2. **Task queue partitioning**
-   - File: `TaskingRepository.cs` (`GetNextWorkerTasksToProcessAsync`)
-   - Currently: Returns only one task when it encounters a sequential task
-   - Proposed: Return multiple export tasks if they target different Connected Systems
-   - Maintain ordering guarantees within tasks for the same system
+1. **Scheduler parallel group detection and queueing**
+   - `SchedulerServer.QueueStepGroupAsync` detects when a step index contains multiple steps (parallel group)
+   - Passes `isParallelGroup` flag through `QueueStepAsync` to `QueueRunProfileStepAsync`
+   - Worker tasks created with `ExecutionMode = Parallel` for parallel groups, `Sequential` otherwise
+   - Logging: `QueueStepGroupAsync: Step index N is a parallel group with M steps`
 
-3. **Worker concurrency management**
-   - File: `Worker.cs`
-   - Ensure the worker can process multiple tasks concurrently
-   - Each task gets its own DI scope (already the pattern for parallel mode)
+2. **Worker parallel task dispatch**
+   - `Worker.ExecuteAsync` detects parallel task groups via `WorkerTaskExecutionMode.Parallel`
+   - Collects contiguous parallel tasks and dispatches them concurrently via `Task.WhenAll`
+   - Each parallel task gets its own DI scope for isolation
+   - Sequential tasks continue to execute one at a time
+   - Logging: `[PARALLEL execution]` suffix on task start/completion log entries
 
-**Estimated Impact:** Significant for schedules that export to multiple systems. A schedule exporting to 3 systems could complete in roughly 1/3 the time.
+3. **Execution detail API fix for parallel steps**
+   - `ScheduleExecutionsController.GetByIdAsync` now returns all sub-steps per step index (previously only returned first)
+   - Activities and worker tasks matched to sub-steps by `ConnectedSystemId`
+   - `ScheduleExecutionStepDto` extended with `ExecutionMode` and `ConnectedSystemId` fields
+   - `CompletedAt` timestamp bug fixed: uses `activity.Executed + TotalActivityTime` (not `activity.Created`)
 
-**Risk Mitigations:**
-- Only parallelise across systems, never within the same system
-- Maintain strict ordering for tasks targeting the same Connected System
-- Thorough testing of concurrent worker task processing
-- Gradual rollout: start with opt-in per schedule
+4. **Integration test parallel timing validation**
+   - New `Assert-ParallelExecutionTiming` helper in `Test-Helpers.ps1`
+   - Groups steps by stepIndex, identifies parallel groups (2+ steps)
+   - Validates overlapping time ranges to confirm concurrent execution
+   - Scenario 6 Test 6 (Parallel) now validates 3 parallel groups:
+     - Step index 0: 4 concurrent Full Imports (all 4 systems)
+     - Step index 5: 2 concurrent Exports (AD + Cross-Domain)
+     - Step index 6: 2 concurrent Imports (Delta Import AD + Full Import Cross-Domain)
 
-**Testing Strategy:**
-- Unit tests for task partitioning logic
-- Integration tests with concurrent exports to multiple test systems
-- Verify no cross-system data corruption
-- Test scheduler step ordering is maintained
+**Key files:**
+- `SchedulerServer.cs` - Parallel group detection and `ExecutionMode` assignment
+- `Worker.cs` - Parallel task dispatch with `Task.WhenAll`
+- `ScheduleExecutionsController.cs` - Multi-step API response + CompletedAt fix
+- `ScheduleExecutionDtos.cs` - `ExecutionMode` and `ConnectedSystemId` fields
+- `SchedulerServerParallelExecutionTests.cs` (new) - 5 unit tests
+- `Test-Helpers.ps1` - `Assert-ParallelExecutionTiming` function
+- `Invoke-Scenario6-SchedulerService.ps1` - Parallel timing validation
+
+**Estimated Impact:** Significant for schedules with parallel step groups. A 4-way parallel import completes in the time of a single import rather than 4x.
 
 ---
 

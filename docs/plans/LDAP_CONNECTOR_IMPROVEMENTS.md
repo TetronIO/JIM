@@ -314,6 +314,24 @@ Hidden = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags
   - Implemented `ExecuteWithRetry()` with exponential backoff
   - Added `IsTransientError()` to identify retriable LDAP error codes (51, 52, 53, 80, 81, -1)
 
+### Phase 6: Export Performance (Priority: Post-MVP) ✅
+
+- [x] **6.1** Async export interface with `CancellationToken` support
+  - `IConnectorExportUsingCalls.ExportAsync()` now accepts `CancellationToken`
+  - `LdapConnectorExport` refactored with async code paths
+- [x] **6.2** Async LDAP operations via APM wrapper
+  - New `LdapConnectionExtensions.SendRequestAsync()` wrapping `BeginSendRequest`/`EndSendRequest`
+  - New `ILdapOperationExecutor` abstraction for testability (LdapConnection is sealed)
+- [x] **6.3** Configurable export concurrency (LDAP pipelining)
+  - "Export Concurrency" integer setting (1-16, default 1)
+  - `SemaphoreSlim`-based throttling across exports within a batch
+  - Container creation serialised via dedicated `SemaphoreSlim(1,1)` to prevent race conditions
+  - Multi-step operations (create+GUID, rename+modify, UAC read+write) remain sequential per export
+- [x] **6.4** `SupportsParallelExport` capability flag
+  - LDAP connector returns `true` (supports concurrent connections)
+  - Enables per-Connected System `MaxExportParallelism` setting in the UI
+- [x] **6.5** Unit tests (13 async export tests in `LdapConnectorExportAsyncTests.cs`)
+
 ---
 
 ## Detailed Implementation Notes
