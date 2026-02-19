@@ -65,4 +65,12 @@ public abstract class WorkerTask
 	/// Used to track which step this task is executing.
 	/// </summary>
 	public int? ScheduleStepIndex { get; set; }
+
+	/// <summary>
+	/// Whether the schedule should continue if this step fails.
+	/// Copied from ScheduleStep.ContinueOnFailure at queue time so the check works
+	/// even if the schedule is modified mid-execution.
+	/// Only relevant for tasks that are part of a schedule execution.
+	/// </summary>
+	public bool ContinueOnFailure { get; set; }
 }

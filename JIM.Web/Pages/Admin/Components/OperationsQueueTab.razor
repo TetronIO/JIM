@@ -49,79 +49,123 @@
     }
 </MudPaper>
 
-<MudTable T="WorkerTaskHeader" Items="@_workerTaskHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
-    <HeaderContent>
-        <MudTh><MudText Typo="Typo.button">Type</MudText></MudTh>
-        <MudTh><MudText Typo="Typo.button">Name</MudText></MudTh>
-        <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
-        <MudTh Style="min-width: 200px;"><MudText Typo="Typo.button">Progress</MudText></MudTh>
-        <MudTh><MudText Typo="Typo.button">Created</MudText></MudTh>
-        <MudTh><MudText Typo="Typo.button">Initiated By</MudText></MudTh>
-        <MudTh Style="text-align: right;"><MudText Typo="Typo.button">Actions</MudText></MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd DataLabel="Type">@context.Type</MudTd>
-        <MudTd DataLabel="Name">@context.Name</MudTd>
-        <MudTd DataLabel="Status">@context.Status.ToString().SplitOnCapitalLetters()</MudTd>
-        <MudTd DataLabel="Progress">
-            @if (context.Status == WorkerTaskStatus.Processing)
+@if (_workerTaskHeaders.Count == 0)
+{
+    <MudPaper Outlined="true" Class="mt-5 pa-6 d-flex justify-center">
+        <MudText Class="mud-text-secondary">There are no tasks queued.</MudText>
+    </MudPaper>
+}
+else
+{
+    @* Schedule execution groups — collapsible panels *@
+    @if (_scheduleGroups.Count > 0)
+    {
+        <MudExpansionPanels Class="mt-5" MultiExpansion="true">
+            @foreach (var group in _scheduleGroups)
             {
-                @if (context.ObjectsToProcess > 0)
-                {
-                    var percentage = (double)context.ObjectsProcessed!.Value / context.ObjectsToProcess.Value * 100;
-                    <MudProgressLinear Value="@percentage" Color="Color.Primary" Rounded="true" />
-                    <MudText Typo="Typo.caption" Class="mt-2">@context.ObjectsProcessed.Value.ToString("N0") / @context.ObjectsToProcess.Value.ToString("N0")@(!string.IsNullOrEmpty(context.ProgressMessage) ? $" - {context.ProgressMessage}" : "")</MudText>
-                }
-                else
-                {
-                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Rounded="true" />
-                    @if (!string.IsNullOrEmpty(context.ProgressMessage))
-                    {
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.ProgressMessage</MudText>
-                    }
-                }
+                var totalTasks = group.Value.Count;
+                var completedOrProcessing = group.Value.Count(t => t.Status == WorkerTaskStatus.Processing);
+                var queued = group.Value.Count(t => t.Status == WorkerTaskStatus.Queued);
+                var waiting = group.Value.Count(t => t.Status == WorkerTaskStatus.WaitingForPreviousStep);
+                var scheduleName = group.Value.First().ScheduleExecutionName ?? "Schedule";
+                var distinctSteps = group.Value.Select(t => t.ScheduleStepIndex).Distinct().Count();
+                var currentStep = group.Value.Where(t => t.Status == WorkerTaskStatus.Processing || t.Status == WorkerTaskStatus.Queued)
+                    .Select(t => t.ScheduleStepIndex ?? 0).DefaultIfEmpty(0).Min();
+
+                <MudExpansionPanel Expanded="true">
+                    <TitleContent>
+                        <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                            <div class="d-flex align-center gap-3">
+                                <MudIcon Icon="@Icons.Material.Filled.Schedule" />
+                                <div>
+                                    <MudText Typo="Typo.body1"><b>@scheduleName</b></MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @totalTasks tasks across @distinctSteps steps
+                                        @if (completedOrProcessing > 0) { <span> — @completedOrProcessing processing</span> }
+                                        @if (queued > 0) { <span>, @queued queued</span> }
+                                        @if (waiting > 0) { <span>, @waiting waiting</span> }
+                                    </MudText>
+                                </div>
+                            </div>
+                            <MudTooltip Text="Cancel Schedule" Arrow="true" Placement="Placement.Left">
+                                <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error"
+                                               OnClick="() => HandleCancelScheduleExecutionAsync(group.Key)" Size="Size.Small" />
+                            </MudTooltip>
+                        </div>
+                    </TitleContent>
+                    <ChildContent>
+                        <MudTable T="WorkerTaskHeader" Items="@(group.Value.OrderBy(t => t.ScheduleStepIndex).ThenBy(t => t.Timestamp))" Hover="true" Dense="true" Elevation="0">
+                            <HeaderContent>
+                                <MudTh><MudText Typo="Typo.button">Step</MudText></MudTh>
+                                <MudTh><MudText Typo="Typo.button">Type</MudText></MudTh>
+                                <MudTh><MudText Typo="Typo.button">Name</MudText></MudTh>
+                                <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
+                                <MudTh Style="min-width: 200px;"><MudText Typo="Typo.button">Progress</MudText></MudTh>
+                                <MudTh Style="text-align: right;"><MudText Typo="Typo.button">Actions</MudText></MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Step">@((context.ScheduleStepIndex ?? 0) + 1)</MudTd>
+                                <MudTd DataLabel="Type">@context.Type</MudTd>
+                                <MudTd DataLabel="Name">@context.Name</MudTd>
+                                <MudTd DataLabel="Status">
+                                    @GetTaskStatusDisplay(context)
+                                </MudTd>
+                                <MudTd DataLabel="Progress">
+                                    @RenderProgress(context)
+                                </MudTd>
+                                <MudTd DataLabel="Actions" Style="text-align: right;">
+                                    @if (context.Status != WorkerTaskStatus.WaitingForPreviousStep)
+                                    {
+                                        <MudTooltip Text="Cancel" Arrow="true" Placement="Placement.Left">
+                                            <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error" OnClick="() => HandleCancelTaskAsync(context)" Size="Size.Small"/>
+                                        </MudTooltip>
+                                    }
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </ChildContent>
+                </MudExpansionPanel>
             }
-            else if (context.Status == WorkerTaskStatus.Queued)
-            {
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">Waiting...</MudText>
-            }
-        </MudTd>
-        <MudTd DataLabel="Created">
-            <MudTooltip Text="@context.Timestamp.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                @context.Timestamp.ToLocalTime().ToRelativeTime()
-            </MudTooltip>
-        </MudTd>
-        <MudTd DataLabel="Initiated By">
-            @if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.User && context.InitiatedById != null)
-            {
-                <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" Style="vertical-align: middle;" />
-                <span>@context.InitiatedByName</span>
-            }
-            else if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.ApiKey)
-            {
-                <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" Style="vertical-align: middle;" />
-                <span>@context.InitiatedByName</span>
-            }
-            else if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.System)
-            {
-                <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" Style="vertical-align: middle;" />
-                <span>@(context.InitiatedByName ?? "Scheduler")</span>
-            }
-            else if (!string.IsNullOrEmpty(context.InitiatedByName))
-            {
-                <span>@context.InitiatedByName</span>
-            }
-        </MudTd>
-        <MudTd DataLabel="Actions" Style="text-align: right;">
-            <MudTooltip Text="Cancel" Arrow="true" Placement="Placement.Left">
-                <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error" OnClick="() => HandleCancelTaskAsync(context)" Size="Size.Small"/>
-            </MudTooltip>
-        </MudTd>
-    </RowTemplate>
-    <NoRecordsContent>
-        There are no tasks queued.
-    </NoRecordsContent>
-</MudTable>
+        </MudExpansionPanels>
+    }
+
+    @* Standalone tasks (not part of a schedule) — flat table *@
+    @if (_standaloneTasks.Count > 0)
+    {
+        <MudTable T="WorkerTaskHeader" Items="@_standaloneTasks" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
+            <HeaderContent>
+                <MudTh><MudText Typo="Typo.button">Type</MudText></MudTh>
+                <MudTh><MudText Typo="Typo.button">Name</MudText></MudTh>
+                <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
+                <MudTh Style="min-width: 200px;"><MudText Typo="Typo.button">Progress</MudText></MudTh>
+                <MudTh><MudText Typo="Typo.button">Created</MudText></MudTh>
+                <MudTh><MudText Typo="Typo.button">Initiated By</MudText></MudTh>
+                <MudTh Style="text-align: right;"><MudText Typo="Typo.button">Actions</MudText></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Type">@context.Type</MudTd>
+                <MudTd DataLabel="Name">@context.Name</MudTd>
+                <MudTd DataLabel="Status">@GetTaskStatusDisplay(context)</MudTd>
+                <MudTd DataLabel="Progress">
+                    @RenderProgress(context)
+                </MudTd>
+                <MudTd DataLabel="Created">
+                    <MudTooltip Text="@context.Timestamp.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                        @context.Timestamp.ToLocalTime().ToRelativeTime()
+                    </MudTooltip>
+                </MudTd>
+                <MudTd DataLabel="Initiated By">
+                    @RenderInitiatedBy(context)
+                </MudTd>
+                <MudTd DataLabel="Actions" Style="text-align: right;">
+                    <MudTooltip Text="Cancel" Arrow="true" Placement="Placement.Left">
+                        <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error" OnClick="() => HandleCancelTaskAsync(context)" Size="Size.Small"/>
+                    </MudTooltip>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+}
 
 @code {
     [CascadingParameter]
@@ -132,7 +176,20 @@
     private ConnectedSystemHeader? _selectedConnectedSystemHeader;
     private ConnectedSystemRunProfile? _selectedConnectedSystemRunProfile;
     private List<WorkerTaskHeader> _workerTaskHeaders = new();
+    private Dictionary<Guid, List<WorkerTaskHeader>> _scheduleGroups = new();
+    private List<WorkerTaskHeader> _standaloneTasks = new();
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
+
+    private void RebuildGroups()
+    {
+        _scheduleGroups = _workerTaskHeaders
+            .Where(t => t.ScheduleExecutionId.HasValue)
+            .GroupBy(t => t.ScheduleExecutionId!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        _standaloneTasks = _workerTaskHeaders
+            .Where(t => !t.ScheduleExecutionId.HasValue)
+            .ToList();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -140,6 +197,7 @@
 
         // Get initial data for worker task table rendering
         _workerTaskHeaders = await Jim.Tasking.GetWorkerTaskHeadersAsync();
+        RebuildGroups();
 
         // Setup polling for worker task header updates
         var token = _pollingCancellationTokenSource.Token;
@@ -179,7 +237,10 @@
                     }
 
                     if (stateHasChanged)
+                    {
+                        RebuildGroups();
                         await InvokeAsync(StateHasChanged);
+                    }
 
                     // Use a reasonable polling interval (1 second for queue updates)
                     await Task.Delay(TimeSpan.FromSeconds(1), token);
@@ -248,6 +309,123 @@
         await Jim.Tasking.CancelWorkerTaskAsync(workerTaskHeader.Id);
         Snackbar.Add("Worker task cancellation requested.", Severity.Success);
     }
+
+    private async Task HandleCancelScheduleExecutionAsync(Guid scheduleExecutionId)
+    {
+        var scheduleName = _scheduleGroups.TryGetValue(scheduleExecutionId, out var tasks)
+            ? tasks.FirstOrDefault()?.ScheduleExecutionName ?? "this schedule execution"
+            : "this schedule execution";
+
+        var result = await DialogService.ShowMessageBox(
+            "Cancel Schedule Execution",
+            $"Are you sure you want to cancel '{scheduleName}'? All pending and waiting steps will be cancelled.",
+            yesText: "Cancel Execution",
+            cancelText: "Keep Running");
+
+        if (result != true)
+            return;
+
+        try
+        {
+            // Use the API cancel endpoint logic through the application layer
+            var execution = await Jim.Repository.Scheduling.GetScheduleExecutionAsync(scheduleExecutionId);
+            if (execution == null)
+            {
+                Snackbar.Add("Schedule execution not found.", Severity.Error);
+                return;
+            }
+
+            if (execution.Status != JIM.Models.Scheduling.ScheduleExecutionStatus.Queued &&
+                execution.Status != JIM.Models.Scheduling.ScheduleExecutionStatus.InProgress)
+            {
+                Snackbar.Add($"Cannot cancel execution with status: {execution.Status}", Severity.Warning);
+                return;
+            }
+
+            execution.Status = JIM.Models.Scheduling.ScheduleExecutionStatus.Cancelled;
+            execution.CompletedAt = DateTime.UtcNow;
+            execution.ErrorMessage = "Cancelled by user";
+            await Jim.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
+
+            // Cancel active tasks
+            var pendingTasks = await Jim.Repository.Tasking.GetWorkerTasksByScheduleExecutionAsync(scheduleExecutionId);
+            foreach (var task in pendingTasks.Where(t => t.Status == WorkerTaskStatus.Queued))
+            {
+                task.Status = WorkerTaskStatus.CancellationRequested;
+                await Jim.Repository.Tasking.UpdateWorkerTaskAsync(task);
+            }
+
+            // Delete waiting tasks
+            await Jim.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(scheduleExecutionId);
+
+            Snackbar.Add("Schedule execution cancellation requested.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error cancelling schedule execution: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private static string GetTaskStatusDisplay(WorkerTaskHeader task)
+    {
+        return task.Status switch
+        {
+            WorkerTaskStatus.WaitingForPreviousStep => "Waiting",
+            _ => task.Status.ToString().SplitOnCapitalLetters()
+        };
+    }
+
+    private static RenderFragment RenderProgress(WorkerTaskHeader context) => __builder =>
+    {
+        if (context.Status == WorkerTaskStatus.Processing)
+        {
+            if (context.ObjectsToProcess > 0)
+            {
+                var percentage = (double)context.ObjectsProcessed!.Value / context.ObjectsToProcess.Value * 100;
+                <MudProgressLinear Value="@percentage" Color="Color.Primary" Rounded="true" />
+                <MudText Typo="Typo.caption" Class="mt-2">@context.ObjectsProcessed.Value.ToString("N0") / @context.ObjectsToProcess.Value.ToString("N0")@(!string.IsNullOrEmpty(context.ProgressMessage) ? $" - {context.ProgressMessage}" : "")</MudText>
+            }
+            else
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" Rounded="true" />
+                if (!string.IsNullOrEmpty(context.ProgressMessage))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.ProgressMessage</MudText>
+                }
+            }
+        }
+        else if (context.Status == WorkerTaskStatus.Queued)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Waiting...</MudText>
+        }
+        else if (context.Status == WorkerTaskStatus.WaitingForPreviousStep)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Waiting for previous step...</MudText>
+        }
+    };
+
+    private static RenderFragment RenderInitiatedBy(WorkerTaskHeader context) => __builder =>
+    {
+        if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.User && context.InitiatedById != null)
+        {
+            <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-1" Style="vertical-align: middle;" />
+            <span>@context.InitiatedByName</span>
+        }
+        else if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.ApiKey)
+        {
+            <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-1" Style="vertical-align: middle;" />
+            <span>@context.InitiatedByName</span>
+        }
+        else if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.System)
+        {
+            <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" Style="vertical-align: middle;" />
+            <span>@(context.InitiatedByName ?? "Scheduler")</span>
+        }
+        else if (!string.IsNullOrEmpty(context.InitiatedByName))
+        {
+            <span>@context.InitiatedByName</span>
+        }
+    };
 
     private static bool HasWorkerTaskHeaderChanged(WorkerTaskHeader existing, WorkerTaskHeader updated)
     {

@@ -42,4 +42,23 @@ public class WorkerTaskHeader
     /// The current progress message (from the associated Activity).
     /// </summary>
     public string? ProgressMessage { get; set; }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Schedule execution context - for grouping tasks by schedule in the queue UI
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// If this task is part of a schedule execution, the execution ID for UI grouping.
+    /// </summary>
+    public Guid? ScheduleExecutionId { get; set; }
+
+    /// <summary>
+    /// The schedule name at execution time, for display in the queue UI.
+    /// </summary>
+    public string? ScheduleExecutionName { get; set; }
+
+    /// <summary>
+    /// The step index within the schedule, for ordering within the group.
+    /// </summary>
+    public int? ScheduleStepIndex { get; set; }
 }

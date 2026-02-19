@@ -251,28 +251,61 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 ---
 
-### Phase 5: Reduce Worker Polling Latency (Low Risk, Low Impact)
+### Phase 5: Queue-All-Steps-Upfront — Schedule Execution Pipeline (Moderate Risk, High Impact)
 
-**Goal:** Minimise idle time between task transitions.
+**Status:** In Progress.
+
+**Goal:** Eliminate ~15 second per-step polling overhead by having the scheduler queue all steps upfront and having the worker drive step advancement. Aligns with the original design intent: scheduler is a queue manager, worker works through the queue.
+
+**Problem:** The scheduler drip-feeds steps one at a time (queue step 0, poll every 30s to check completion, queue step 1, etc.). For a 9-step schedule, this adds ~120 seconds of pure idle time (~45% of total execution time). This is a production problem, not just a testing concern.
 
 **Changes:**
 
-1. **Adaptive polling interval**
-   - File: `Worker.cs`
-   - Currently: Fixed 2-second delay when no tasks available
-   - Proposed: Use exponential backoff (100ms -> 200ms -> 400ms -> ... -> 2s) when idle, reset to minimum on task completion
-   - When a task completes and more tasks are likely queued, poll immediately
+1. **Scheduler queues all steps at once**
+   - `StartScheduleExecutionAsync` creates WorkerTasks for every step group, not just step 0
+   - Step 0 tasks: `Status = Queued` (run immediately)
+   - Step 1+ tasks: `Status = WaitingForPreviousStep` (visible on queue, blocked until prior step completes)
+   - `ContinueOnFailure` copied from `ScheduleStep` to `WorkerTask` at queue time
 
-2. **Optional: Database notification**
-   - Use PostgreSQL `LISTEN/NOTIFY` to wake the worker when new tasks are queued
-   - Eliminates polling entirely for task transitions
-   - More complex but provides near-zero latency between steps
+2. **New `WaitingForPreviousStep` worker task status**
+   - Added to `WorkerTaskStatus` enum (value 3)
+   - Worker's `GetNextWorkerTasksToProcessAsync` already filters `Status == Queued`, so waiting tasks are naturally excluded
+   - Queue UI shows these as "Waiting" status
 
-**Estimated Impact:** Saves 2-10 seconds per schedule (2s per step transition). Minor but improves perceived responsiveness.
+3. **Worker-driven step advancement**
+   - `CompleteWorkerTaskAsync` calls new `TryAdvanceScheduleExecutionAsync` after deleting the task
+   - Uses `SELECT ... FOR UPDATE` on `ScheduleExecution` row to serialise parallel task completion races
+   - Checks remaining tasks at current step; if last one, transitions next step group to `Queued`
+   - Handles failure: if step failed and `ContinueOnFailure = false`, cancels remaining tasks and fails execution
 
-**Testing Strategy:**
-- Unit tests for backoff logic
-- Integration test measuring step transition latency
+4. **Queue ordering**
+   - `GetNextWorkerTasksToProcessAsync` orders by `ScheduleStepIndex` (nulls last) then `Timestamp`
+   - Ensures correct step ordering even if tasks share the same creation timestamp
+
+5. **Scheduler reduced to safety net**
+   - `ProcessActiveExecutionsAsync` replaced with `RecoverStuckExecutionsAsync`
+   - Only triggers if worker crashed between task deletion and step advancement
+   - 30-second polling cycle retained for crash recovery, overlap prevention, cron next-run-time
+
+6. **Cancellation updates**
+   - `CancelAsync` endpoint handles `WaitingForPreviousStep` tasks (fail activities, delete tasks)
+
+7. **Operations Queue UI**
+   - Tasks grouped by `ScheduleExecutionId` with collapsible schedule headers
+   - Schedule header shows name, progress ("Step 2/9"), Cancel button
+   - Standalone tasks (manual triggers) displayed as flat rows unchanged
+   - `WorkerTaskHeader` extended with `ScheduleExecutionId`, `ScheduleExecutionName`, `ScheduleStepIndex`
+
+**Key files:**
+- `TaskingServer.cs` — New `TryAdvanceScheduleExecutionAsync`, modified `CompleteWorkerTaskAsync`
+- `SchedulerServer.cs` — `StartScheduleExecutionAsync` queues all steps, safety-net recovery
+- `TaskingRepository.cs` — New repository methods, ordering change, header enrichment
+- `Scheduler.cs` — Simplified main loop
+- `ScheduleExecutionsController.cs` — Cancel handles `WaitingForPreviousStep`
+- `OperationsQueueTab.razor` — Grouped/collapsible display
+- `Enums.cs`, `WorkerTask.cs`, `WorkerTaskHeader.cs` — Model changes
+
+**Estimated Impact:** Eliminates ~120 seconds of idle time from a 9-step schedule. Step transitions become near-instant (limited only by worker's 2-second idle poll). Future-compatible with task insertion and schedule pause/resume.
 
 ---
 

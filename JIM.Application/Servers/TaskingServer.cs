@@ -1,5 +1,6 @@
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Scheduling;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
@@ -257,7 +258,141 @@ namespace JIM.Application.Servers
             if (workerTask.Activity is { Status: ActivityStatus.InProgress })
                 await Application.Activities.CompleteActivityAsync(workerTask.Activity);
 
+            // Capture schedule context before deleting the worker task
+            var scheduleExecutionId = workerTask.ScheduleExecutionId;
+            var completedStepIndex = workerTask.ScheduleStepIndex;
+
             await Application.Repository.Tasking.DeleteWorkerTaskAsync(workerTask);
+
+            // If this task was part of a schedule execution, try to advance to the next step
+            if (scheduleExecutionId.HasValue && completedStepIndex.HasValue)
+            {
+                await TryAdvanceScheduleExecutionAsync(scheduleExecutionId.Value, completedStepIndex.Value);
+            }
+        }
+
+        /// <summary>
+        /// Called after a schedule-linked worker task completes. Checks if this was the last task
+        /// in the step group and, if so, either advances to the next step or completes the execution.
+        /// Handles failure detection and ContinueOnFailure logic.
+        /// </summary>
+        private async Task TryAdvanceScheduleExecutionAsync(Guid scheduleExecutionId, int completedStepIndex)
+        {
+            try
+            {
+                // 1. Check if there are remaining tasks at this step index
+                var remainingCount = await Application.Repository.Tasking.GetWorkerTaskCountByExecutionStepAsync(
+                    scheduleExecutionId, completedStepIndex);
+
+                if (remainingCount > 0)
+                {
+                    Log.Debug("TryAdvanceScheduleExecutionAsync: {RemainingCount} tasks still remaining at step {StepIndex} for execution {ExecutionId}. Not advancing yet.",
+                        remainingCount, completedStepIndex, scheduleExecutionId);
+                    return;
+                }
+
+                // 2. This was the last task in the step group. Check for failures.
+                var activitiesForStep = await Application.Repository.Activity.GetActivitiesByScheduleExecutionStepAsync(
+                    scheduleExecutionId, completedStepIndex);
+
+                var anyFailed = activitiesForStep.Any(a =>
+                    a.Status == ActivityStatus.FailedWithError ||
+                    a.Status == ActivityStatus.CompleteWithError ||
+                    a.Status == ActivityStatus.Cancelled);
+
+                if (anyFailed)
+                {
+                    // Check ContinueOnFailure on the worker tasks' activities. Since worker tasks are deleted,
+                    // we check the ContinueOnFailure value we stored on the completed tasks. But those are also
+                    // deleted now. Instead, we check the schedule steps directly.
+                    // Actually, we need to check ContinueOnFailure from the worker tasks that were at this step.
+                    // Since they're all deleted now, we use the Activities to find the ScheduleExecution,
+                    // then load the Schedule Steps.
+                    var execution = await Application.Repository.Scheduling.GetScheduleExecutionWithScheduleAsync(scheduleExecutionId);
+                    if (execution == null)
+                    {
+                        Log.Error("TryAdvanceScheduleExecutionAsync: Execution {ExecutionId} not found after step completion.", scheduleExecutionId);
+                        return;
+                    }
+
+                    var stepsAtIndex = execution.Schedule.Steps.Where(s => s.StepIndex == completedStepIndex).ToList();
+                    var shouldStop = stepsAtIndex.Count == 0 || stepsAtIndex.Any(s => !s.ContinueOnFailure);
+
+                    if (shouldStop)
+                    {
+                        var failedStepNames = stepsAtIndex
+                            .Where(s => !s.ContinueOnFailure)
+                            .Select(s => string.IsNullOrEmpty(s.Name) ? $"Step {s.StepIndex}" : s.Name)
+                            .ToList();
+
+                        var stepDescription = failedStepNames.Count > 0
+                            ? string.Join(", ", failedStepNames)
+                            : $"Step index {completedStepIndex}";
+
+                        Log.Warning("TryAdvanceScheduleExecutionAsync: Execution {ExecutionId} failed at step {StepIndex} ({StepNames}). ContinueOnFailure is false.",
+                            scheduleExecutionId, completedStepIndex, stepDescription);
+
+                        execution.Status = ScheduleExecutionStatus.Failed;
+                        execution.CompletedAt = DateTime.UtcNow;
+                        execution.ErrorMessage = $"Step '{stepDescription}' failed and ContinueOnFailure is false.";
+                        await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
+
+                        // Clean up all remaining WaitingForPreviousStep tasks
+                        var deletedCount = await Application.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(scheduleExecutionId);
+                        if (deletedCount > 0)
+                        {
+                            Log.Information("TryAdvanceScheduleExecutionAsync: Cleaned up {Count} waiting tasks for failed execution {ExecutionId}",
+                                deletedCount, scheduleExecutionId);
+                        }
+
+                        return;
+                    }
+
+                    Log.Information("TryAdvanceScheduleExecutionAsync: Step {StepIndex} of execution {ExecutionId} had failures but ContinueOnFailure is true. Continuing.",
+                        completedStepIndex, scheduleExecutionId);
+                }
+
+                // 3. Find the next waiting step group
+                var nextStepIndex = await Application.Repository.Tasking.GetNextWaitingStepIndexAsync(scheduleExecutionId);
+
+                if (!nextStepIndex.HasValue)
+                {
+                    // No more waiting steps — execution complete
+                    var execution = await Application.Repository.Scheduling.GetScheduleExecutionAsync(scheduleExecutionId);
+                    if (execution != null)
+                    {
+                        Log.Information("TryAdvanceScheduleExecutionAsync: Execution {ExecutionId} completed. All steps done.", scheduleExecutionId);
+
+                        execution.Status = ScheduleExecutionStatus.Completed;
+                        execution.CompletedAt = DateTime.UtcNow;
+                        await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
+                    }
+                    return;
+                }
+
+                // 4. Transition the next step group from WaitingForPreviousStep -> Queued
+                Log.Information("TryAdvanceScheduleExecutionAsync: Advancing execution {ExecutionId} from step {CompletedStep} to step {NextStep}",
+                    scheduleExecutionId, completedStepIndex, nextStepIndex.Value);
+
+                var transitioned = await Application.Repository.Tasking.TransitionStepToQueuedAsync(scheduleExecutionId, nextStepIndex.Value);
+                Log.Information("TryAdvanceScheduleExecutionAsync: Transitioned {Count} tasks to Queued for execution {ExecutionId} step {StepIndex}",
+                    transitioned, scheduleExecutionId, nextStepIndex.Value);
+
+                // 5. Update the execution's current step index
+                var exec = await Application.Repository.Scheduling.GetScheduleExecutionAsync(scheduleExecutionId);
+                if (exec != null)
+                {
+                    exec.CurrentStepIndex = nextStepIndex.Value;
+                    await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(exec);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "TryAdvanceScheduleExecutionAsync: Error advancing execution {ExecutionId} after step {StepIndex}",
+                    scheduleExecutionId, completedStepIndex);
+                // Don't rethrow — the task itself completed successfully. The scheduler safety net
+                // will recover stuck executions if this advancement fails.
+            }
         }
 
         #region Data Generation Tasks

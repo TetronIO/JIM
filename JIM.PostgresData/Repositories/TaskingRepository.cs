@@ -63,6 +63,7 @@ public class TaskingRepository : ITaskingRepository
         var workerTasks = await Repository.Database.WorkerTasks
             .AsNoTracking()
             .Include(st => st.Activity)
+            .Include(st => st.ScheduleExecution)
             .OrderByDescending(q => q.Timestamp)
             .ToListAsync();
 
@@ -80,7 +81,10 @@ public class TaskingRepository : ITaskingRepository
                 InitiatedByName = workerTask.InitiatedByName,
                 ObjectsToProcess = workerTask.Activity?.ObjectsToProcess,
                 ObjectsProcessed = workerTask.Activity?.ObjectsProcessed,
-                ProgressMessage = workerTask.Activity?.Message
+                ProgressMessage = workerTask.Activity?.Message,
+                ScheduleExecutionId = workerTask.ScheduleExecutionId,
+                ScheduleExecutionName = workerTask.ScheduleExecution?.ScheduleName,
+                ScheduleStepIndex = workerTask.ScheduleStepIndex
             });
         }
         return workerTaskHeaders;
@@ -101,7 +105,8 @@ public class TaskingRepository : ITaskingRepository
         foreach (var task in await Repository.Database.WorkerTasks
                      .Include(st => st.Activity)
                      .Where(st => st.Status == WorkerTaskStatus.Queued)
-                     .OrderBy(st => st.Timestamp)
+                     .OrderBy(st => st.ScheduleStepIndex ?? int.MaxValue)
+                     .ThenBy(st => st.Timestamp)
                      .ToListAsync())
         {
             if (task.ExecutionMode == WorkerTaskExecutionMode.Sequential)
@@ -216,6 +221,64 @@ public class TaskingRepository : ITaskingRepository
             .Where(st => st.ScheduleExecutionId == scheduleExecutionId && st.ScheduleStepIndex == stepIndex)
             .OrderBy(st => st.Timestamp)
             .ToListAsync();
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Schedule Step Advancement (Worker-driven)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    public async Task<int> GetWorkerTaskCountByExecutionStepAsync(Guid scheduleExecutionId, int stepIndex)
+    {
+        return await Repository.Database.WorkerTasks
+            .CountAsync(st => st.ScheduleExecutionId == scheduleExecutionId && st.ScheduleStepIndex == stepIndex);
+    }
+
+    public async Task<int> TransitionStepToQueuedAsync(Guid scheduleExecutionId, int stepIndex)
+    {
+        return await Repository.Database.WorkerTasks
+            .Where(st => st.ScheduleExecutionId == scheduleExecutionId
+                         && st.ScheduleStepIndex == stepIndex
+                         && st.Status == WorkerTaskStatus.WaitingForPreviousStep)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.Status, WorkerTaskStatus.Queued));
+    }
+
+    public async Task<int> DeleteWaitingTasksForExecutionAsync(Guid scheduleExecutionId)
+    {
+        // Fail the activities for all waiting tasks before deleting them
+        var waitingTasks = await Repository.Database.WorkerTasks
+            .Include(st => st.Activity)
+            .Where(st => st.ScheduleExecutionId == scheduleExecutionId
+                         && st.Status == WorkerTaskStatus.WaitingForPreviousStep)
+            .ToListAsync();
+
+        foreach (var task in waitingTasks)
+        {
+            if (task.Activity != null)
+            {
+                task.Activity.Status = Models.Activities.ActivityStatus.Cancelled;
+                task.Activity.TotalActivityTime = DateTime.UtcNow - task.Activity.Created;
+                task.Activity.Message = "Cancelled: previous step failed or execution was cancelled.";
+            }
+        }
+
+        if (waitingTasks.Count > 0)
+            await Repository.Database.SaveChangesAsync();
+
+        // Now delete the worker tasks
+        var deletedCount = await Repository.Database.WorkerTasks
+            .Where(st => st.ScheduleExecutionId == scheduleExecutionId
+                         && st.Status == WorkerTaskStatus.WaitingForPreviousStep)
+            .ExecuteDeleteAsync();
+
+        return deletedCount;
+    }
+
+    public async Task<int?> GetNextWaitingStepIndexAsync(Guid scheduleExecutionId)
+    {
+        return await Repository.Database.WorkerTasks
+            .Where(st => st.ScheduleExecutionId == scheduleExecutionId
+                         && st.Status == WorkerTaskStatus.WaitingForPreviousStep)
+            .MinAsync(st => (int?)st.ScheduleStepIndex);
     }
 
     #region private methods

@@ -175,12 +175,19 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
 
         await _application.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
 
-        // Request cancellation for any queued worker tasks for this execution
+        // Request cancellation for any queued or processing worker tasks for this execution
         var pendingTasks = await _application.Repository.Tasking.GetWorkerTasksByScheduleExecutionAsync(id);
         foreach (var task in pendingTasks.Where(t => t.Status == WorkerTaskStatus.Queued))
         {
             task.Status = WorkerTaskStatus.CancellationRequested;
             await _application.Repository.Tasking.UpdateWorkerTaskAsync(task);
+        }
+
+        // Clean up WaitingForPreviousStep tasks — they're not being processed so can be deleted directly
+        var deletedWaitingCount = await _application.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(id);
+        if (deletedWaitingCount > 0)
+        {
+            _logger.LogInformation("Cancelled {Count} waiting tasks for execution {ExecutionId}", deletedWaitingCount, id);
         }
 
         _logger.LogInformation("Cancelled schedule execution {ExecutionId}", id);
@@ -227,6 +234,7 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
                 WorkerTaskStatus.Queued => "Queued",
                 WorkerTaskStatus.Processing => "Processing",
                 WorkerTaskStatus.CancellationRequested => "Cancelling",
+                WorkerTaskStatus.WaitingForPreviousStep => "Waiting",
                 _ => "Unknown"
             };
         }

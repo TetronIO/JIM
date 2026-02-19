@@ -115,7 +115,10 @@ public class SchedulerServer
     }
 
     /// <summary>
-    /// Starts execution of a schedule. Creates a ScheduleExecution record and queues the first step(s).
+    /// Starts execution of a schedule. Creates a ScheduleExecution record and queues ALL steps upfront.
+    /// Step 0 tasks are set to Queued (ready to run). All subsequent step tasks are set to
+    /// WaitingForPreviousStep (visible on the queue but blocked until the worker advances them).
+    /// The worker drives step advancement via TryAdvanceScheduleExecutionAsync.
     /// </summary>
     /// <param name="schedule">The schedule to execute (must include Steps).</param>
     /// <param name="initiatorType">The type of principal initiating the execution.</param>
@@ -135,8 +138,15 @@ public class SchedulerServer
             return null;
         }
 
-        Log.Information("StartScheduleExecutionAsync: Starting execution of schedule {ScheduleId} ({ScheduleName}) with {StepCount} steps.",
-            schedule.Id, schedule.Name, schedule.Steps.Count);
+        // Get the distinct step indices so we know which is step 0 and which are subsequent
+        var distinctStepIndices = schedule.Steps
+            .Select(s => s.StepIndex)
+            .Distinct()
+            .OrderBy(i => i)
+            .ToList();
+
+        Log.Information("StartScheduleExecutionAsync: Starting execution of schedule {ScheduleId} ({ScheduleName}) with {StepCount} steps across {GroupCount} step groups. Queueing all steps upfront.",
+            schedule.Id, schedule.Name, schedule.Steps.Count, distinctStepIndices.Count);
 
         // Create the execution record
         var execution = new ScheduleExecution
@@ -157,8 +167,20 @@ public class SchedulerServer
         schedule.LastRunTime = DateTime.UtcNow;
         await Application.Repository.Scheduling.UpdateScheduleAsync(schedule);
 
-        // Queue the first step group (all steps at index 0)
-        await QueueStepGroupAsync(execution, schedule.Steps, 0, initiatorType, initiatorId, initiatorName);
+        // Queue ALL step groups upfront
+        var firstStepIndex = distinctStepIndices[0];
+        foreach (var stepIndex in distinctStepIndices)
+        {
+            // First step group is Queued (ready to run), all others are WaitingForPreviousStep
+            var initialStatus = stepIndex == firstStepIndex
+                ? WorkerTaskStatus.Queued
+                : WorkerTaskStatus.WaitingForPreviousStep;
+
+            await QueueStepGroupAsync(execution, schedule.Steps, stepIndex, initialStatus, initiatorType, initiatorId, initiatorName);
+        }
+
+        Log.Information("StartScheduleExecutionAsync: All {StepCount} steps queued for execution {ExecutionId}. Step group 0 is Queued, remaining groups are WaitingForPreviousStep.",
+            schedule.Steps.Count, execution.Id);
 
         return execution;
     }
@@ -274,17 +296,25 @@ public class SchedulerServer
                 freshExecution.CompletedAt = DateTime.UtcNow;
                 freshExecution.ErrorMessage = $"Step '{stepDescription}' failed and ContinueOnFailure is false.";
                 await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(freshExecution);
+
+                // Clean up remaining WaitingForPreviousStep tasks
+                var deletedCount = await Application.Repository.Tasking.DeleteWaitingTasksForExecutionAsync(execution.Id);
+                if (deletedCount > 0)
+                {
+                    Log.Information("CheckAndAdvanceExecutionAsync: Cleaned up {Count} waiting tasks for failed execution {ExecutionId}",
+                        deletedCount, execution.Id);
+                }
+
                 return false;
             }
         }
 
-        // Find the next distinct step index
-        var orderedSteps = freshExecution.Schedule.Steps.OrderBy(s => s.StepIndex).ToList();
-        var nextStep = orderedSteps.FirstOrDefault(s => s.StepIndex > currentStepIndex);
+        // Find the next waiting step group (all steps are queued upfront as WaitingForPreviousStep)
+        var nextStepIndex = await Application.Repository.Tasking.GetNextWaitingStepIndexAsync(execution.Id);
 
-        if (nextStep == null)
+        if (!nextStepIndex.HasValue)
         {
-            // No more steps - execution complete
+            // No more waiting steps - execution complete
             Log.Information("CheckAndAdvanceExecutionAsync: Execution {ExecutionId} completed successfully.", execution.Id);
 
             freshExecution.Status = ScheduleExecutionStatus.Completed;
@@ -293,18 +323,16 @@ public class SchedulerServer
             return false;
         }
 
-        // Advance to next step group
-        freshExecution.CurrentStepIndex = nextStep.StepIndex;
+        // Advance to next step group by transitioning WaitingForPreviousStep -> Queued
+        Log.Information("CheckAndAdvanceExecutionAsync: Safety net advancing execution {ExecutionId} to step {StepIndex}",
+            execution.Id, nextStepIndex.Value);
+
+        freshExecution.CurrentStepIndex = nextStepIndex.Value;
         await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(freshExecution);
 
-        // Queue the next step group
-        await QueueStepGroupAsync(
-            freshExecution,
-            freshExecution.Schedule.Steps,
-            nextStep.StepIndex,
-            freshExecution.InitiatedByType,
-            freshExecution.InitiatedById,
-            freshExecution.InitiatedByName);
+        var transitioned = await Application.Repository.Tasking.TransitionStepToQueuedAsync(execution.Id, nextStepIndex.Value);
+        Log.Information("CheckAndAdvanceExecutionAsync: Transitioned {Count} tasks to Queued for execution {ExecutionId} step {StepIndex}",
+            transitioned, execution.Id, nextStepIndex.Value);
 
         return true;
     }
@@ -378,6 +406,7 @@ public class SchedulerServer
         ScheduleExecution execution,
         List<ScheduleStep> allSteps,
         int stepIndex,
+        WorkerTaskStatus initialStatus,
         ActivityInitiatorType initiatorType,
         Guid? initiatorId,
         string? initiatorName)
@@ -388,15 +417,15 @@ public class SchedulerServer
 
         if (isParallelGroup)
         {
-            Log.Information("QueueStepGroupAsync: Step index {StepIndex} is a parallel group with {Count} steps for execution {ExecutionId}",
-                stepIndex, stepsAtIndex.Count, execution.Id);
+            Log.Information("QueueStepGroupAsync: Step index {StepIndex} is a parallel group with {Count} steps for execution {ExecutionId} (status: {InitialStatus})",
+                stepIndex, stepsAtIndex.Count, execution.Id, initialStatus);
         }
 
         foreach (var step in stepsAtIndex)
         {
             try
             {
-                await QueueStepAsync(execution, step, isParallelGroup, initiatorType, initiatorId, initiatorName);
+                await QueueStepAsync(execution, step, isParallelGroup, initialStatus, initiatorType, initiatorId, initiatorName);
             }
             catch (Exception ex)
             {
@@ -420,17 +449,18 @@ public class SchedulerServer
         ScheduleExecution execution,
         ScheduleStep step,
         bool isParallelGroup,
+        WorkerTaskStatus initialStatus,
         ActivityInitiatorType initiatorType,
         Guid? initiatorId,
         string? initiatorName)
     {
-        Log.Information("QueueStepAsync: Queueing step {StepId} ({StepName}) type {StepType} mode {ExecutionMode} for execution {ExecutionId}",
-            step.Id, step.Name, step.StepType, isParallelGroup ? "Parallel" : "Sequential", execution.Id);
+        Log.Information("QueueStepAsync: Queueing step {StepId} ({StepName}) type {StepType} mode {ExecutionMode} status {InitialStatus} for execution {ExecutionId}",
+            step.Id, step.Name, step.StepType, isParallelGroup ? "Parallel" : "Sequential", initialStatus, execution.Id);
 
         switch (step.StepType)
         {
             case ScheduleStepType.RunProfile:
-                await QueueRunProfileStepAsync(execution, step, isParallelGroup, initiatorType, initiatorId, initiatorName);
+                await QueueRunProfileStepAsync(execution, step, isParallelGroup, initialStatus, initiatorType, initiatorId, initiatorName);
                 break;
 
             case ScheduleStepType.PowerShell:
@@ -454,6 +484,7 @@ public class SchedulerServer
         ScheduleExecution execution,
         ScheduleStep step,
         bool isParallelGroup,
+        WorkerTaskStatus initialStatus,
         ActivityInitiatorType initiatorType,
         Guid? initiatorId,
         string? initiatorName)
@@ -469,11 +500,13 @@ public class SchedulerServer
         {
             ConnectedSystemId = step.ConnectedSystemId.Value,
             ConnectedSystemRunProfileId = step.RunProfileId.Value,
+            Status = initialStatus,
             InitiatedByType = initiatorType,
             InitiatedById = initiatorId,
             InitiatedByName = initiatorName,
             ScheduleExecutionId = execution.Id,
             ScheduleStepIndex = step.StepIndex,
+            ContinueOnFailure = step.ContinueOnFailure,
             // Use parallel execution if this step runs with others at the same index
             ExecutionMode = isParallelGroup ? WorkerTaskExecutionMode.Parallel : WorkerTaskExecutionMode.Sequential
         };
@@ -484,6 +517,7 @@ public class SchedulerServer
             throw new InvalidOperationException($"Failed to create worker task for step {step.Id}: {result.ErrorMessage}");
         }
 
-        Log.Debug("QueueRunProfileStepAsync: Created worker task {TaskId} for step {StepId}", result.WorkerTaskId, step.Id);
+        Log.Debug("QueueRunProfileStepAsync: Created worker task {TaskId} for step {StepId} with status {Status}",
+            result.WorkerTaskId, step.Id, initialStatus);
     }
 }
