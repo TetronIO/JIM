@@ -60,8 +60,8 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
             connectors = container "Connectors" "External system integration adapters" "JIM.Connectors" {
                 ldapConnector = component "LDAP Connector" "Active Directory, OpenLDAP, AD-LDS - schema discovery, LDAPS, partitions, delta import" "IConnector Implementation"
                 fileConnector = component "File Connector" "CSV import/export, configurable delimiters, schema discovery" "IConnector Implementation"
-                databaseConnector = component "Database Connector" "PostgreSQL, MySQL, Oracle, SQL Server - SQL queries, stored procedures" "IConnector Implementation,Planned"
-                scimConnector = component "SCIM 2.0 Connector" "Cloud application provisioning via SCIM protocol" "IConnector Implementation,Planned"
+                databaseConnector = component "Database Connector" "PostgreSQL, MySQL, Oracle, SQL Server - SQL queries, stored procedures" "IConnector Implementation" "Planned"
+                scimConnector = component "SCIM 2.0 Connector" "Cloud application provisioning via SCIM protocol" "IConnector Implementation" "Planned"
             }
 
             scheduler = container "Scheduler Service" "Evaluates schedule due times, triggers synchronisation jobs, and recovers stuck executions" ".NET 9.0 Background Service" {
@@ -222,6 +222,7 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
             element "External" {
                 background #999999
                 color #ffffff
+                shape RoundedBox
             }
             element "Person" {
                 background #08427b
@@ -231,6 +232,7 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
             element "Container" {
                 background #438dd5
                 color #ffffff
+                shape RoundedBox
             }
             element "Web Browser" {
                 shape WebBrowser
@@ -241,6 +243,7 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
             element "Component" {
                 background #85bbf0
                 color #000000
+                shape RoundedBox
                 width 550
             }
             element "Planned" {
@@ -248,6 +251,7 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
                 color #666666
                 border dashed
                 opacity 50
+                shape RoundedBox
             }
             relationship "Relationship" {
                 dashed false
@@ -257,8 +261,6 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
                 color #999999
             }
         }
-
-        theme default
     }
 
 }
