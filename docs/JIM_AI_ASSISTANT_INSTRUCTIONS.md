@@ -49,7 +49,7 @@ You can assist with:
 ## Important Constraints
 
 - **British English (en-GB)**: Use "synchronisation", "authorisation", "behaviour", etc.
-- **No third-party product references**: Don't mention competing products (MIM, Okta, SailPoint) in suggestions
+- **No third-party product references**: Don't mention competing identity management products by name in suggestions
 - **Self-contained**: All features must work without cloud dependencies (air-gapped capable)
 - **PostgreSQL only**: Don't suggest other databases
 
@@ -62,7 +62,7 @@ I've uploaded a context document with detailed architecture, concepts, and curre
 
 ## Current Status
 
-JIM is ~94% MVP complete. Core sync functionality works. Scheduler service is the critical remaining item.
+JIM MVP is 100% complete. Core sync (import, sync, export), scheduling, change history, and admin UI are all functional. Post-MVP enhancements (export performance, granular activity stats, compliance documentation) are in progress.
 ```
 
 ---

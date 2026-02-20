@@ -4,7 +4,7 @@
 >
 > **Repository**: https://github.com/TetronIO/JIM
 >
-> **Last Updated**: 2026-01-31
+> **Last Updated**: 2026-02-20
 >
 > **Note**: This is a snapshot. For current implementation details, check the repository or ask the user to provide updated code/docs.
 
@@ -54,7 +54,7 @@ JIM is a self-hosted, on-premises identity management platform that synchronises
 
 ```
 +-------------------+      +----------------+      +-------------------+
-|   Source Systems  |      |    Metaverse   |      |    Target Systems |
+|   Source Systems  |      |   Metaverse    |      |   Target Systems  |
 |                   |----->|                |----->|                   |
 |  - HR System      |      |  - Identity    |      |  - Active Dir     |
 |  - Badge System   |      |    Objects     |      |  - ServiceNow     |
@@ -172,6 +172,7 @@ Flows can include transformations using expressions.
 |------|-----------|
 | Manual | Admin must manually delete MVO |
 | WhenLastConnectorDisconnected | Delete MVO when no CSOs remain connected |
+| WhenAuthoritativeSourceDisconnected | Delete MVO when the authoritative source CSO disconnects |
 
 Grace periods allow time before actual deletion (e.g., 30 days).
 
@@ -179,19 +180,21 @@ Grace periods allow time before actual deletion (e.g., 30 days).
 
 ## 4. Connectors
 
-### Available Connectors (MVP)
+### Available Connectors
 
 | Connector | Import | Export | Notes |
 |-----------|--------|--------|-------|
-| **LDAP/Active Directory** | ✓ | ✓ | Full CRUD, includes Samba AD |
-| **File (CSV/Text)** | ✓ | ✓ | Configurable delimiters |
-| **SQL Server** | ✓ | Planned | Read via queries |
-| **PostgreSQL** | ✓ | Planned | Read via queries |
-| **MySQL** | ✓ | Planned | Read via queries |
-| **Oracle** | ✓ | Planned | Read via queries |
-| **SCIM 2.0** | Planned | Planned | Standard protocol |
-| **PowerShell** | Planned | Planned | Custom scripts |
-| **Web Services/REST** | Planned | Planned | OAuth2/API key auth |
+| **LDAP/Active Directory** | ✓ | ✓ | Full CRUD, includes Samba AD, SSL/TLS, container creation |
+| **File (CSV/Text)** | ✓ | ✓ | Configurable delimiters, auto-confirm export |
+
+### Planned Connectors (Post-MVP)
+
+| Connector | Notes |
+|-----------|-------|
+| **SCIM 2.0** | Standard protocol (design doc exists) |
+| **SQL** | Database connector (SQL Server, PostgreSQL, MySQL, Oracle) |
+| **PowerShell** | Custom scripts |
+| **Web Services/REST** | OAuth2/API key auth |
 
 ### Connector Capabilities
 
@@ -268,17 +271,26 @@ FormatDateTime(hireDate, "yyyy-MM-dd")
 
 ### Key Endpoints (v1)
 
+14 API controllers with 80+ endpoints. Key examples:
+
 | Endpoint | Purpose |
 |----------|---------|
 | `GET /api/v1/metaverse/objects` | Query MVOs |
-| `GET /api/v1/connected-systems` | List connected systems |
-| `POST /api/v1/run-profiles/{id}/execute` | Trigger sync |
+| `GET /api/v1/metaverse/object-types` | List/manage MVO types and attributes |
+| `GET /api/v1/synchronisation/connected-systems` | List connected systems |
+| `POST /api/v1/synchronisation/connected-systems/{csId}/run-profiles/{rpId}/execute` | Trigger sync |
 | `GET /api/v1/activities` | Monitor operations |
-| `GET /api/v1/pending-exports` | View pending changes |
+| `GET /api/v1/schedules` | Manage schedules |
+| `GET /api/v1/schedule-executions` | Monitor schedule runs |
+| `GET /api/v1/health` | Health/readiness/liveness probes |
+| `GET /api/v1/certificates` | Manage trusted certificates |
+| `GET /api/v1/history/deleted-objects/mvo` | View deleted objects |
+
+Full Swagger documentation available at `/api/swagger`.
 
 ### PowerShell Module
 
-35 cmdlets for automation:
+75 cmdlets for automation:
 
 ```powershell
 # Connect interactively (opens browser for SSO)
@@ -308,7 +320,7 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 
 - **SSO/OIDC Required**: No local accounts
 - **PKCE Flow**: Enhanced security for web auth
-- **IdP Agnostic**: Works with Entra ID, Okta, Keycloak, etc.
+- **IdP Agnostic**: Works with any OIDC-compliant identity provider
 
 ### Authorisation
 
@@ -325,28 +337,33 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 
 ## 8. Current Status (MVP)
 
-### Complete (~94%)
+### MVP Complete (100%)
 
-- ✅ All 10 connectors (import)
+- ✅ Connector framework with LDAP and File connectors (import and export)
 - ✅ Full inbound sync (join, project, attribute flow)
 - ✅ Full outbound sync (provisioning, export)
-- ✅ LDAP/AD export (create, update, delete)
+- ✅ LDAP/AD export (create, update, delete, container creation)
 - ✅ File connector export
 - ✅ MVO deletion rules with grace periods
 - ✅ Background processing (Worker service)
+- ✅ Scheduler service with cron/interval triggers and multi-step execution
 - ✅ Admin UI (operations, config, monitoring)
-- ✅ API with JWT and API key auth
-- ✅ PowerShell module (35 cmdlets)
+- ✅ API with JWT and API key auth (14 controllers, 80+ endpoints)
+- ✅ PowerShell module (75 cmdlets)
 - ✅ Docker deployment with air-gapped bundles
-- ✅ Integration testing framework (5 scenarios)
+- ✅ Integration testing framework (6 scenarios)
 - ✅ Credential encryption
+- ✅ Change history/audit with timeline UI and deleted objects view
+- ✅ Real-time progress indication on Operations page
 
-### Recently Completed
+### Recently Completed (Post-MVP Enhancements)
 
-- ✅ **Export Performance Optimisation** - Batch DB operations, LDAP async pipelining (Export Concurrency), parallel batch export (MaxExportParallelism), parallel schedule step execution, integration test timing validation
-- ✅ **Scheduler Service** (#168) - Full scheduling with cron/interval triggers, multi-step execution (sequential and parallel), REST API, Blazor UI, PowerShell cmdlets
-- ✅ **Change History/Audit** (#14, #269) - Full change tracking with timeline UI, initiator tracking, deleted objects view
-- ✅ **Progress Indication** (#246) - Real-time progress bars and contextual messages on Operations page
+- ✅ **Export Performance Optimisation** - Batch DB operations, LDAP async pipelining (Export Concurrency 1-16), parallel batch export (MaxExportParallelism), parallel schedule step execution, integration test timing validation
+- ✅ **Granular Activity Stats** (#332) - 16 per-change-type stat fields, run-type-aware display, scheduler step failure detection, OperationalException hierarchy
+- ✅ **Attribute Type Compatibility Validation** (#308) - Application-layer validation for sync rule attribute flow mappings
+- ✅ **GUID/UUID Centralised Handling** (#300) - IdentifierParser utility for consistent GUID/UUID parsing
+- ✅ **Interactive PowerShell Auth** (#296) - Browser-based SSO authentication for PowerShell module
+- ✅ **Security Compliance Documentation** - NCSC, CISA, OWASP ASVS compliance mapping
 
 ### Post-MVP (Nice to Have)
 
@@ -354,6 +371,8 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - Unique value generation (#242)
 - Full RBAC (#21)
 - Sync preview / what-if analysis (#288)
+- Worker database performance optimisation (#338)
+- SCIM server connector
 
 ---
 
