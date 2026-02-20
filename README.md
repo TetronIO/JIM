@@ -1,15 +1,19 @@
 # Junctional Identity Manager (JIM)
 
-![JIM logo](https://tetron.io/images/jim/jim-logo.png "JIM logo")
+<p align="center">
+  <img src="https://tetron.io/images/jim/jim-logo.png" alt="JIM"/>
+</p>
 
 [![.NET Build & Test](https://github.com/TetronIO/JIM/actions/workflows/dotnet-build-and-test.yml/badge.svg?branch=main)](https://github.com/TetronIO/JIM/actions/workflows/dotnet-build-and-test.yml)
-&nbsp;&nbsp;
+&nbsp;
 [![.NET 9.0](https://img.shields.io/badge/.NET-9.0-512BD4)](https://dotnet.microsoft.com/)
+&nbsp;
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791)](https://www.postgresql.org/)
-&nbsp;&nbsp;
+&nbsp;
 [![PowerShell Gallery](https://img.shields.io/powershellgallery/v/JIM?label=PSGallery&color=blue)](https://www.powershellgallery.com/packages/JIM/)
-&nbsp;&nbsp;
+&nbsp;
 [![License](https://img.shields.io/badge/License-Source_Available-orange)](https://tetron.io/jim/#licensing)
+&nbsp;
 [![Documentation](https://img.shields.io/badge/Docs-docs%2F-green)](https://github.com/TetronIO/JIM/tree/main/docs)
 
 JIM is a modern Identity Management system designed for organisations with complex identity synchronisation requirements. It is self-hosted, container-deployable, and works in both connected and air-gapped networks. Features include:
@@ -89,13 +93,11 @@ Each release includes a downloadable bundle containing pre-built Docker images, 
 Custom connectors can be developed for bespoke scenarios.
 
 ## Authentication
-
 JIM uses OpenID Connect (OIDC) for Single Sign-On authentication. It is IdP-agnostic and works with any OIDC-compliant Identity Provider, including Microsoft Entra ID, Okta, Auth0, Keycloak, and AD FS. PKCE is used for enhanced security.
 
 For API access, JIM supports both JWT Bearer tokens and API keys for automation and CI/CD scenarios.
 
 ## Getting Started
-
 For development setup using GitHub Codespaces or local installation, see the [Developer Guide](docs/DEVELOPER_GUIDE.md).
 
 For SSO configuration with your Identity Provider, see the [SSO Setup Guide](docs/SSO_SETUP_GUIDE.md).
@@ -103,7 +105,6 @@ For SSO configuration with your Identity Provider, see the [SSO Setup Guide](doc
 If you don't have any connected systems available, you can use the Example Data feature to populate JIM with sample users and groups for testing.
 
 ## State of Development
-
 JIM has reached MVP completion (100%). The core identity lifecycle is fully functional:
 
 - **Import** identities from source systems (LDAP, CSV)
