@@ -1,6 +1,6 @@
 # Export Performance Optimisation
 
-- **Status**: In Progress (Phase 4 complete, Phase 5 remaining)
+- **Status**: Complete (All 5 phases implemented)
 - **Milestone**: Post-MVP
 - **Related**: `docs/plans/OUTBOUND_SYNC_DESIGN.md` (Q8 - Parallelism Decision)
 - **Last Updated**: 2026-02-19
@@ -251,9 +251,9 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 ---
 
-### Phase 5: Queue-All-Steps-Upfront — Schedule Execution Pipeline (Moderate Risk, High Impact)
+### Phase 5: Queue-All-Steps-Upfront — Schedule Execution Pipeline (Moderate Risk, High Impact) - COMPLETE
 
-**Status:** In Progress.
+**Status:** Complete.
 
 **Goal:** Eliminate ~15 second per-step polling overhead by having the scheduler queue all steps upfront and having the worker drive step advancement. Aligns with the original design intent: scheduler is a queue manager, worker works through the queue.
 
