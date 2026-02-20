@@ -50,17 +50,9 @@
         </MudItem>
     </MudGrid>
     <div class="d-flex align-center gap-3 mt-4">
-        <MudButton OnClick="LoadLogsAsync" StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Filled"
+        <MudButton OnClick="LoadLogsAsync" StartIcon="@(_loading ? Icons.Material.Filled.HourglassEmpty : Icons.Material.Filled.Refresh)" Variant="Variant.Filled"
             Color="Color.Primary" DropShadow="false" Disabled="@_loading">
-            @if (_loading)
-            {
-                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                <span class="ms-2">Loading</span>
-            }
-            else
-            {
-                <text>Refresh</text>
-            }
+            @(_loading ? "Loading" : "Refresh")
         </MudButton>
         <MudSwitch T="bool" Value="_autoRefresh" ValueChanged="OnAutoRefreshChanged" Color="Color.Primary" Label="Auto-refresh (5s)" />
         <MudSpacer />
