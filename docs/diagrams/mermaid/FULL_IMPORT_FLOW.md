@@ -120,8 +120,6 @@ flowchart TD
     SkipLog --> Loop
     CheckProcessed -->|No| Obsolete[Set CSO Status = Obsolete<br/>Set LastUpdated = UtcNow<br/>RPEI: Deleted<br/>Add to update list]
     Obsolete --> Loop
-
-    style Start fill:#f9f,stroke:#333
 ```
 
 **Safety rule**: If zero objects were imported, deletion detection is skipped entirely. This prevents accidental mass-deletion when the connected system returns no data due to connectivity issues.
