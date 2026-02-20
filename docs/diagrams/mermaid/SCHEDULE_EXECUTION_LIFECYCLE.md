@@ -1,5 +1,7 @@
 # Schedule Execution Lifecycle
 
+> Generated against JIM v0.2.0 (`5a4788e9`). If the codebase has changed significantly since then, these diagrams may be out of date.
+
 This diagram shows how schedules are triggered, how step groups are queued and advanced, and how the scheduler and worker collaborate to drive multi-step execution to completion.
 
 ## Three-Service Collaboration
