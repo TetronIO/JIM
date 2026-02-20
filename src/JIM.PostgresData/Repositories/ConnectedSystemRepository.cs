@@ -1070,16 +1070,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         // Use case-insensitive matching consistent with the single-value method
         var lowerValues = values.Select(v => v.ToLowerInvariant()).ToList();
+        // Lightweight query: only include AttributeValues with Attribute for key extraction.
+        // No Type/Attributes or deep ReferenceValue chains needed — the CSO entity itself is
+        // sufficient for reference resolution (EF Core sets ReferenceValueId FK automatically).
         var csos = await Repository.Database.ConnectedSystemObjects
-            .AsSplitQuery()
-            .Include(cso => cso.Type)
-            .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
-            .Include(cso => cso.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(refCso => refCso!.AttributeValues)
-            .ThenInclude(refAv => refAv.Attribute)
             .Where(cso =>
                 cso.ConnectedSystem.Id == connectedSystemId &&
                 cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.StringValue != null && lowerValues.Contains(av.StringValue.ToLower())))
@@ -1112,16 +1108,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         // Use case-insensitive matching consistent with the single-value method
         var lowerValues = values.Select(v => v.ToLowerInvariant()).ToList();
+        // Lightweight query: only include AttributeValues for key extraction (using scalar FK AttributeId).
+        // No Attribute navigation, Type/Attributes or deep ReferenceValue chains needed — the CSO entity
+        // itself is sufficient for reference resolution (EF Core sets ReferenceValueId FK automatically).
         var csos = await Repository.Database.ConnectedSystemObjects
-            .AsSplitQuery()
-            .Include(cso => cso.Type)
-            .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(cso => cso.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(refCso => refCso!.AttributeValues)
-            .ThenInclude(refAv => refAv.Attribute)
             .Where(cso =>
                 cso.ConnectedSystemId == connectedSystemId &&
                 cso.SecondaryExternalIdAttributeId != null &&
