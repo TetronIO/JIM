@@ -173,35 +173,32 @@ stateDiagram-v2
 
 A typical schedule with sequential and parallel steps:
 
-```
-Schedule: "Nightly HR Sync"
-+-------+-----------------------------------------------+---------------------+
-| Index | Steps                                         | Execution           |
-+-------+-----------------------------------------------+---------------------+
-|   0   | HR System - Full Import                       | Sequential          |
-|   1   | HR System - Full Sync                         | Sequential          |
-|   2   | AD - Export  |  LDAP - Export                  | Parallel (2 tasks)  |
-|   3   | AD - Confirming Import  |  LDAP - Conf Import | Parallel (2 tasks)  |
-+-------+-----------------------------------------------+---------------------+
+**Schedule: "Nightly HR Sync"**
 
-Timeline:
+| Index | Steps | Execution |
+|-------|-------|-----------|
+| 0 | HR System - Full Import | Sequential |
+| 1 | HR System - Full Sync | Sequential |
+| 2 | AD - Export, LDAP - Export | Parallel (2 tasks) |
+| 3 | AD - Confirming Import, LDAP - Confirming Import | Parallel (2 tasks) |
+
+**Timeline:**
+
 1. Scheduler creates execution, queues ALL 6 tasks
    - Index 0: 1 task as Queued
    - Index 1: 1 task as WaitingForPreviousStep
    - Index 2: 2 tasks as WaitingForPreviousStep
    - Index 3: 2 tasks as WaitingForPreviousStep
-
 2. Worker picks up index 0 task, executes Full Import
-3. Worker completes --> TryAdvance --> transitions index 1 to Queued
+3. Worker completes → TryAdvance → transitions index 1 to Queued
 4. Worker picks up index 1 task, executes Full Sync
-5. Worker completes --> TryAdvance --> transitions index 2 (2 tasks) to Queued
+5. Worker completes → TryAdvance → transitions index 2 (2 tasks) to Queued
 6. Worker dispatches BOTH index 2 tasks in parallel (AD Export + LDAP Export)
-7. First export completes --> TryAdvance --> remaining count > 0, wait
-8. Second export completes --> TryAdvance --> transitions index 3 to Queued
+7. First export completes → TryAdvance → remaining count > 0, wait
+8. Second export completes → TryAdvance → transitions index 3 to Queued
 9. Worker dispatches BOTH index 3 tasks in parallel
-10. Both confirming imports complete --> TryAdvance --> no more steps
+10. Both confirming imports complete → TryAdvance → no more steps
 11. Execution marked Completed
-```
 
 ## Key Design Decisions
 
