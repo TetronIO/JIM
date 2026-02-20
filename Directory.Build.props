@@ -2,7 +2,7 @@
   <PropertyGroup>
     <!-- Version configuration - read from VERSION file or CI environment -->
     <VersionPrefix>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)VERSION').Trim())</VersionPrefix>
-    <VersionSuffix Condition="'$(VersionSuffix)' == '' AND '$(Configuration)' == 'Debug'">dev</VersionSuffix>
+    <VersionSuffix Condition="'$(VersionSuffix)' == '' AND '$(Configuration)' == 'Debug'">dev.$([System.DateTime]::UtcNow.ToString('yyyyMMdd.HHmm'))</VersionSuffix>
     <Version Condition="'$(VersionSuffix)' != ''">$(VersionPrefix)-$(VersionSuffix)</Version>
     <Version Condition="'$(VersionSuffix)' == ''">$(VersionPrefix)</Version>
     <AssemblyVersion>$(VersionPrefix).0</AssemblyVersion>
