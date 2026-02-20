@@ -58,6 +58,7 @@
     private string _currentUrl = string.Empty;
     private bool _previousDrawerOpen;
     private bool _preferencesLoaded;
+    private CancellationTokenSource? _restoreCts;
 
     // Track expanded state for each nav group
     private bool _usersExpanded;
@@ -124,13 +125,21 @@
         {
             _previousDrawerOpen = DrawerOpen;
 
+            // Cancel any in-flight restore operation to prevent it from
+            // re-expanding groups after the drawer has already closed
+            _restoreCts?.Cancel();
+            _restoreCts?.Dispose();
+
             if (DrawerOpen)
             {
                 // Drawer just opened - restore saved preferences asynchronously
-                _ = RestoreSavedGroupStatesAsync();
+                _restoreCts = new CancellationTokenSource();
+                _ = RestoreSavedGroupStatesAsync(_restoreCts.Token);
             }
             else
             {
+                _restoreCts = null;
+
                 // Drawer just closed - collapse all
                 _usersExpanded = false;
                 _groupsExpanded = false;
@@ -141,13 +150,17 @@
         }
     }
 
-    private async Task RestoreSavedGroupStatesAsync()
+    private async Task RestoreSavedGroupStatesAsync(CancellationToken cancellationToken)
     {
         var savedUsers = await PreferenceService.GetNavGroupExpandedAsync("users");
         var savedGroups = await PreferenceService.GetNavGroupExpandedAsync("groups");
         var savedDashboard = await PreferenceService.GetNavGroupExpandedAsync("dashboard");
         var savedAdmin = await PreferenceService.GetNavGroupExpandedAsync("admin");
         var savedActivity = await PreferenceService.GetNavGroupExpandedAsync("activity");
+
+        // If the drawer was closed while we were fetching, discard results
+        if (cancellationToken.IsCancellationRequested)
+            return;
 
         // Apply saved preferences, also ensuring the active group is always expanded
         _usersExpanded = savedUsers || IsGroupActive("users");
@@ -198,8 +211,15 @@
                 break;
         }
 
-        // Persist to browser localStorage
-        await PreferenceService.SetNavGroupExpandedAsync(groupName, expanded);
+        // Only persist to localStorage when the drawer is open - this means
+        // the change was a deliberate user action (clicking the expand/collapse arrow).
+        // When the drawer closes, we programmatically set all groups to false,
+        // which fires ExpandedChanged - but that's not a user preference change
+        // and should not overwrite their saved expanded states.
+        if (DrawerOpen)
+        {
+            await PreferenceService.SetNavGroupExpandedAsync(groupName, expanded);
+        }
     }
 
     private bool IsGroupActive(string groupKey)
@@ -218,5 +238,7 @@
     public void Dispose()
     {
         NavigationManager.LocationChanged -= OnLocationChanged;
+        _restoreCts?.Cancel();
+        _restoreCts?.Dispose();
     }
 }
