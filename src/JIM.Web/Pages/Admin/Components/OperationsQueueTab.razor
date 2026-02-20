@@ -403,7 +403,7 @@ else
 
         var result = await DialogService.ShowMessageBox(
             "Cancel Schedule Execution",
-            $"Are you sure you want to cancel '{scheduleName}'? All pending and waiting steps will be cancelled.",
+            $"Are you sure you want to cancel '{scheduleName}'? All tasks will be cancelled immediately, including any that are currently processing.",
             yesText: "Cancel Execution",
             cancelText: "Keep Running");
 
@@ -413,7 +413,7 @@ else
         var cancelled = await Jim.Scheduler.CancelScheduleExecutionAsync(scheduleExecutionId);
         if (cancelled)
         {
-            Snackbar.Add("Schedule execution cancellation requested.", Severity.Success);
+            Snackbar.Add("Schedule execution cancelled.", Severity.Success);
         }
         else
         {

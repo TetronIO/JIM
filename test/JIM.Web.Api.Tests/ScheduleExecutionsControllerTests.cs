@@ -706,7 +706,7 @@ public class ScheduleExecutionsControllerTests
     }
 
     [Test]
-    public async Task CancelAsync_CancelsQueuedWorkerTasksAsync()
+    public async Task CancelAsync_DeletesAllWorkerTasksAsync()
     {
         var id = Guid.NewGuid();
         var scheduleId = Guid.NewGuid();
@@ -724,23 +724,19 @@ public class ScheduleExecutionsControllerTests
             Status = WorkerTaskStatus.Queued
         };
 
-        WorkerTask? updatedTask = null;
         _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionAsync(id))
             .ReturnsAsync(execution);
         _mockSchedulingRepository.Setup(r => r.UpdateScheduleExecutionAsync(It.IsAny<ScheduleExecution>()))
             .Returns(Task.CompletedTask);
         _mockTaskingRepository.Setup(r => r.GetWorkerTasksByScheduleExecutionAsync(id))
             .ReturnsAsync(new List<WorkerTask> { queuedTask });
-        _mockTaskingRepository.Setup(r => r.UpdateWorkerTaskAsync(It.IsAny<WorkerTask>()))
-            .Callback<WorkerTask>(t => updatedTask = t)
-            .Returns(Task.CompletedTask);
         _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionWithScheduleAsync(id))
             .ReturnsAsync(new ScheduleExecution { Id = id, ScheduleId = scheduleId, Status = ScheduleExecutionStatus.Cancelled, Schedule = new Schedule { Name = "Test" } });
 
         await _controller.CancelAsync(id);
 
-        Assert.That(updatedTask, Is.Not.Null);
-        Assert.That(updatedTask!.Status, Is.EqualTo(WorkerTaskStatus.CancellationRequested));
+        // Assert: Task was deleted (aggressive cancellation)
+        _mockTaskingRepository.Verify(r => r.DeleteWorkerTaskAsync(queuedTask), Times.Once);
     }
 
     #endregion

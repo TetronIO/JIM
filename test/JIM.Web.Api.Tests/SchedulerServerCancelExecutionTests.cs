@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Scheduling;
 using JIM.Models.Tasking;
 using Moq;
@@ -13,8 +14,8 @@ using NUnit.Framework;
 namespace JIM.Web.Api.Tests;
 
 /// <summary>
-/// Tests that CancelScheduleExecutionAsync correctly cancels active tasks,
-/// deletes waiting tasks, and updates the execution status.
+/// Tests that CancelScheduleExecutionAsync correctly cancels all tasks,
+/// cancels their activities, and updates the execution status.
 /// </summary>
 [TestFixture]
 public class SchedulerServerCancelExecutionTests
@@ -67,8 +68,6 @@ public class SchedulerServerCancelExecutionTests
             .ReturnsAsync(execution);
         _mockTaskingRepository.Setup(r => r.GetWorkerTasksByScheduleExecutionAsync(executionId))
             .ReturnsAsync(new List<WorkerTask>());
-        _mockTaskingRepository.Setup(r => r.DeleteWaitingTasksForExecutionAsync(executionId))
-            .ReturnsAsync(0);
 
         // Act
         var result = await _application.Scheduler.CancelScheduleExecutionAsync(executionId);
@@ -95,8 +94,6 @@ public class SchedulerServerCancelExecutionTests
             .ReturnsAsync(execution);
         _mockTaskingRepository.Setup(r => r.GetWorkerTasksByScheduleExecutionAsync(executionId))
             .ReturnsAsync(new List<WorkerTask>());
-        _mockTaskingRepository.Setup(r => r.DeleteWaitingTasksForExecutionAsync(executionId))
-            .ReturnsAsync(0);
 
         // Act
         var result = await _application.Scheduler.CancelScheduleExecutionAsync(executionId);
@@ -144,7 +141,7 @@ public class SchedulerServerCancelExecutionTests
     }
 
     [Test]
-    public async Task CancelScheduleExecution_QueuedTasks_SetToCancellationRequestedAsync()
+    public async Task CancelScheduleExecution_AllTasks_DeletedRegardlessOfStatusAsync()
     {
         // Arrange
         var executionId = Guid.NewGuid();
@@ -154,6 +151,13 @@ public class SchedulerServerCancelExecutionTests
             Status = ScheduleExecutionStatus.InProgress
         };
 
+        var processingTask = new SynchronisationWorkerTask
+        {
+            Id = Guid.NewGuid(),
+            Status = WorkerTaskStatus.Processing,
+            ScheduleExecutionId = executionId,
+            Activity = new Activity { Id = Guid.NewGuid(), Status = ActivityStatus.InProgress }
+        };
         var queuedTask = new SynchronisationWorkerTask
         {
             Id = Guid.NewGuid(),
@@ -170,24 +174,25 @@ public class SchedulerServerCancelExecutionTests
         _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionAsync(executionId))
             .ReturnsAsync(execution);
         _mockTaskingRepository.Setup(r => r.GetWorkerTasksByScheduleExecutionAsync(executionId))
-            .ReturnsAsync(new List<WorkerTask> { queuedTask, waitingTask });
-        _mockTaskingRepository.Setup(r => r.DeleteWaitingTasksForExecutionAsync(executionId))
-            .ReturnsAsync(1);
+            .ReturnsAsync(new List<WorkerTask> { processingTask, queuedTask, waitingTask });
 
         // Act
         await _application.Scheduler.CancelScheduleExecutionAsync(executionId);
 
-        // Assert: Queued task set to CancellationRequested
-        Assert.That(queuedTask.Status, Is.EqualTo(WorkerTaskStatus.CancellationRequested));
+        // Assert: All tasks deleted
+        _mockTaskingRepository.Verify(r => r.DeleteWorkerTaskAsync(processingTask), Times.Once);
+        _mockTaskingRepository.Verify(r => r.DeleteWorkerTaskAsync(queuedTask), Times.Once);
+        _mockTaskingRepository.Verify(r => r.DeleteWorkerTaskAsync(waitingTask), Times.Once);
 
-        // Assert: Waiting tasks deleted via repository
-        _mockTaskingRepository.Verify(r => r.DeleteWaitingTasksForExecutionAsync(executionId), Times.Once);
+        // Assert: Processing task's activity was cancelled
+        Assert.That(processingTask.Activity!.Status, Is.EqualTo(ActivityStatus.Cancelled));
+        _mockActivityRepository.Verify(r => r.UpdateActivityAsync(processingTask.Activity), Times.Once);
     }
 
     [Test]
-    public async Task CancelScheduleExecution_ProcessingTasks_NotCancelledAsync()
+    public async Task CancelScheduleExecution_TaskWithActivity_ActivityCancelledAsync()
     {
-        // Arrange: Processing tasks should NOT be cancelled (worker handles them)
+        // Arrange
         var executionId = Guid.NewGuid();
         var execution = new ScheduleExecution
         {
@@ -195,24 +200,66 @@ public class SchedulerServerCancelExecutionTests
             Status = ScheduleExecutionStatus.InProgress
         };
 
-        var processingTask = new SynchronisationWorkerTask
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            Status = ActivityStatus.InProgress,
+            Executed = DateTime.UtcNow.AddMinutes(-5),
+            Created = DateTime.UtcNow.AddMinutes(-6)
+        };
+
+        var taskWithActivity = new SynchronisationWorkerTask
         {
             Id = Guid.NewGuid(),
             Status = WorkerTaskStatus.Processing,
-            ScheduleExecutionId = executionId
+            ScheduleExecutionId = executionId,
+            Activity = activity
         };
 
         _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionAsync(executionId))
             .ReturnsAsync(execution);
         _mockTaskingRepository.Setup(r => r.GetWorkerTasksByScheduleExecutionAsync(executionId))
-            .ReturnsAsync(new List<WorkerTask> { processingTask });
-        _mockTaskingRepository.Setup(r => r.DeleteWaitingTasksForExecutionAsync(executionId))
-            .ReturnsAsync(0);
+            .ReturnsAsync(new List<WorkerTask> { taskWithActivity });
 
         // Act
         await _application.Scheduler.CancelScheduleExecutionAsync(executionId);
 
-        // Assert: Processing task status unchanged (worker manages it)
-        Assert.That(processingTask.Status, Is.EqualTo(WorkerTaskStatus.Processing));
+        // Assert: Activity cancelled with timing info
+        Assert.That(activity.Status, Is.EqualTo(ActivityStatus.Cancelled));
+        Assert.That(activity.ExecutionTime, Is.Not.Null);
+        Assert.That(activity.TotalActivityTime, Is.Not.Null);
+        _mockActivityRepository.Verify(r => r.UpdateActivityAsync(activity), Times.Once);
+    }
+
+    [Test]
+    public async Task CancelScheduleExecution_TaskWithoutActivity_DeletedWithoutErrorAsync()
+    {
+        // Arrange: Queued tasks may not have an Activity yet
+        var executionId = Guid.NewGuid();
+        var execution = new ScheduleExecution
+        {
+            Id = executionId,
+            Status = ScheduleExecutionStatus.InProgress
+        };
+
+        var taskWithoutActivity = new SynchronisationWorkerTask
+        {
+            Id = Guid.NewGuid(),
+            Status = WorkerTaskStatus.Queued,
+            ScheduleExecutionId = executionId,
+            Activity = null!
+        };
+
+        _mockSchedulingRepository.Setup(r => r.GetScheduleExecutionAsync(executionId))
+            .ReturnsAsync(execution);
+        _mockTaskingRepository.Setup(r => r.GetWorkerTasksByScheduleExecutionAsync(executionId))
+            .ReturnsAsync(new List<WorkerTask> { taskWithoutActivity });
+
+        // Act
+        await _application.Scheduler.CancelScheduleExecutionAsync(executionId);
+
+        // Assert: Task deleted, no activity update attempted
+        _mockTaskingRepository.Verify(r => r.DeleteWorkerTaskAsync(taskWithoutActivity), Times.Once);
+        _mockActivityRepository.Verify(r => r.UpdateActivityAsync(It.IsAny<Activity>()), Times.Never);
     }
 }
