@@ -180,6 +180,12 @@ html[lang] .mud-table-outlined {
     font-size: 0 !important;
 }
 
+/* Operations Queue: visible separator before standalone tasks to delineate from schedule groups */
+.jim-queue-standalone-separator {
+    height: 3px !important;
+    background-color: var(--mud-palette-lines-default);
+}
+
 /* Operations Queue: remove bottom border radius when worker activity bar connects */
 .jim-queue-table-active.mud-table-outlined {
     border-bottom-left-radius: 0 !important;
@@ -190,7 +196,7 @@ html[lang] .mud-table-outlined {
 /* Worker activity indicator bar — shown below queue table when tasks are processing */
 .jim-worker-activity-bar {
     position: relative;
-    height: 32px;
+    height: 40px;
     border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
     border-top: none;
     border-radius: 0 0 4px 4px;
