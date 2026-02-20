@@ -8,7 +8,8 @@
     <MudExpansionPanels MultiExpansion="true" Elevation="0" Class="mt-3 jim-expansion-panel">
         @foreach (var category in _categoryGroups)
         {
-            <MudExpansionPanel Expanded="true">
+            <MudExpansionPanel Expanded="@GetCategoryExpanded(category.CategoryName)"
+                               ExpandedChanged="@(expanded => OnCategoryExpandedChangedAsync(category.CategoryName, expanded))">
                 <TitleContent>
                     <div class="d-flex align-center">
                         <MudIcon Icon="@category.Icon" Class="me-2" />
@@ -265,6 +266,13 @@
     public MetaverseObject MetaverseObject { get; set; } = null!;
 
     /// <summary>
+    /// The metaverse object type ID, used as a stable key for persisting per-type
+    /// category expanded preferences (survives type renames).
+    /// </summary>
+    [Parameter]
+    public int ObjectTypeId { get; set; }
+
+    /// <summary>
     /// Whether attributes are editable. Currently always false.
     /// Future: This will evolve to per-attribute editability via RBAC, where some attributes
     /// may be editable while others remain read-only for the same user on the same page.
@@ -275,6 +283,12 @@
     public bool IsEditable { get; set; } = false;
 
     private List<CategoryGroup> _categoryGroups = new();
+
+    /// <summary>
+    /// Per-category expanded state loaded from browser localStorage.
+    /// True = expanded, false = collapsed. Missing = default (expanded).
+    /// </summary>
+    private readonly Dictionary<string, bool> _categoryExpandedStates = new();
 
     /// <summary>
     /// Per-attribute user view mode overrides loaded from browser localStorage.
@@ -292,6 +306,13 @@
             return;
 
         _categoryGroups = BuildCategoryGroups();
+
+        // Pre-load category expanded preferences for this object type
+        foreach (var category in _categoryGroups)
+        {
+            var expanded = await UserPreferences.GetCategoryExpandedAsync(ObjectTypeId, category.CategoryName);
+            _categoryExpandedStates[category.CategoryName] = expanded ?? true; // default expanded
+        }
 
         // Pre-load user view mode preferences for all MVAs
         var mvaAttributeNames = MetaverseObject.AttributeValues
@@ -475,6 +496,19 @@
         _viewModeOverrides[attributeName] = viewMode;
         await UserPreferences.SetMvaViewModeAsync(attributeName, viewMode);
         StateHasChanged();
+    }
+
+    // ========================== Category Expanded State ==========================
+
+    private bool GetCategoryExpanded(string categoryName)
+    {
+        return _categoryExpandedStates.GetValueOrDefault(categoryName, true);
+    }
+
+    private async Task OnCategoryExpandedChangedAsync(string categoryName, bool expanded)
+    {
+        _categoryExpandedStates[categoryName] = expanded;
+        await UserPreferences.SetCategoryExpandedAsync(ObjectTypeId, categoryName, expanded);
     }
 
     // ========================== Table Search ==========================

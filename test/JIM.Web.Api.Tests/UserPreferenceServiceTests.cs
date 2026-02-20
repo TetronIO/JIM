@@ -599,6 +599,223 @@ public class UserPreferenceServiceTests
 
     #endregion
 
+    #region GetCategoryExpandedAsync tests
+
+    [Test]
+    public async Task GetCategoryExpandedAsync_WhenNoValueStored_ReturnsNullAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync((string?)null);
+
+        // Act
+        var result = await _service.GetCategoryExpandedAsync(1, "Identity");
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetCategoryExpandedAsync_WhenTrueStored_ReturnsTrueAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync("true");
+
+        // Act
+        var result = await _service.GetCategoryExpandedAsync(1, "Identity");
+
+        // Assert
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task GetCategoryExpandedAsync_WhenFalseStored_ReturnsFalseAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync("false");
+
+        // Act
+        var result = await _service.GetCategoryExpandedAsync(1, "Contact");
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    [TestCase("")]
+    [TestCase("invalid")]
+    [TestCase("yes")]
+    [TestCase("1")]
+    public async Task GetCategoryExpandedAsync_WhenInvalidValueStored_ReturnsNullAsync(string invalidValue)
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync(invalidValue);
+
+        // Act
+        var result = await _service.GetCategoryExpandedAsync(1, "Identity");
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetCategoryExpandedAsync_WhenNullCategoryName_ReturnsNullAsync()
+    {
+        // Act
+        var result = await _service.GetCategoryExpandedAsync(1, null!);
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetCategoryExpandedAsync_WhenEmptyCategoryName_ReturnsNullAsync()
+    {
+        // Act
+        var result = await _service.GetCategoryExpandedAsync(1, "");
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetCategoryExpandedAsync_WhenJsDisconnected_ReturnsNullAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
+
+        // Act
+        var result = await _service.GetCategoryExpandedAsync(1, "Identity");
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetCategoryExpandedAsync_WhenJsNotAvailable_ReturnsNullAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ThrowsAsync(new InvalidOperationException("JS interop not available"));
+
+        // Act
+        var result = await _service.GetCategoryExpandedAsync(1, "Identity");
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetCategoryExpandedAsync_UsesCorrectKeyWithObjectTypeIdAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync("true");
+
+        // Act
+        await _service.GetCategoryExpandedAsync(42, "Organisation");
+
+        // Assert - verify the correct key format includes object type ID
+        _mockJsRuntime.Verify(x => x.InvokeAsync<string?>(
+            "jimPreferences.get",
+            It.Is<object[]>(args => args.Length == 1 && (string)args[0] == "categoryExpanded_42_Organisation")),
+            Times.Once);
+    }
+
+    #endregion
+
+    #region SetCategoryExpandedAsync tests
+
+    [Test]
+    [TestCase(true, "true")]
+    [TestCase(false, "false")]
+    public async Task SetCategoryExpandedAsync_StoresCorrectValueAsync(bool expanded, string expectedValue)
+    {
+        // Arrange
+        object[]? capturedArgs = null;
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "jimPreferences.set",
+                It.IsAny<object[]>()))
+            .Callback<string, object[]>((_, args) => capturedArgs = args)
+            .ReturnsAsync(Mock.Of<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
+
+        // Act
+        await _service.SetCategoryExpandedAsync(5, "Group", expanded);
+
+        // Assert
+        Assert.That(capturedArgs, Is.Not.Null);
+        Assert.That(capturedArgs![0], Is.EqualTo("categoryExpanded_5_Group"));
+        Assert.That(capturedArgs[1], Is.EqualTo(expectedValue));
+    }
+
+    [Test]
+    public async Task SetCategoryExpandedAsync_WithNullCategoryName_DoesNotStoreAsync()
+    {
+        // Act
+        await _service.SetCategoryExpandedAsync(1, null!, true);
+
+        // Assert - verify no JS call was made
+        _mockJsRuntime.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+            It.IsAny<string>(),
+            It.IsAny<object[]>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task SetCategoryExpandedAsync_WithEmptyCategoryName_DoesNotStoreAsync()
+    {
+        // Act
+        await _service.SetCategoryExpandedAsync(1, "", true);
+
+        // Assert - verify no JS call was made
+        _mockJsRuntime.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+            It.IsAny<string>(),
+            It.IsAny<object[]>()),
+            Times.Never);
+    }
+
+    [Test]
+    public void SetCategoryExpandedAsync_WhenJsDisconnected_DoesNotThrow()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "jimPreferences.set",
+                It.IsAny<object[]>()))
+            .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
+
+        // Act & Assert - should not throw
+        Assert.DoesNotThrowAsync(async () => await _service.SetCategoryExpandedAsync(1, "Identity", true));
+    }
+
+    [Test]
+    public void SetCategoryExpandedAsync_WhenJsNotAvailable_DoesNotThrow()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "jimPreferences.set",
+                It.IsAny<object[]>()))
+            .ThrowsAsync(new InvalidOperationException("JS interop not available"));
+
+        // Act & Assert - should not throw
+        Assert.DoesNotThrowAsync(async () => await _service.SetCategoryExpandedAsync(1, "Contact", false));
+    }
+
+    #endregion
+
     #region Constructor tests
 
     [Test]

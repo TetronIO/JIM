@@ -58,6 +58,22 @@ public interface IUserPreferenceService
     /// <param name="attributeName">The attribute name.</param>
     /// <param name="viewMode">"table", "chipset", or "list".</param>
     Task SetMvaViewModeAsync(string attributeName, string viewMode);
+
+    /// <summary>
+    /// Gets the expanded state for an attribute category panel on the MVO detail page.
+    /// </summary>
+    /// <param name="objectTypeId">The metaverse object type ID (stable across renames).</param>
+    /// <param name="categoryName">The category name (e.g., "Identity", "Contact").</param>
+    /// <returns>True if expanded, false if collapsed, null if no preference (default to expanded).</returns>
+    Task<bool?> GetCategoryExpandedAsync(int objectTypeId, string categoryName);
+
+    /// <summary>
+    /// Sets the expanded state for an attribute category panel on the MVO detail page.
+    /// </summary>
+    /// <param name="objectTypeId">The metaverse object type ID (stable across renames).</param>
+    /// <param name="categoryName">The category name (e.g., "Identity", "Contact").</param>
+    /// <param name="expanded">Whether the category panel is expanded.</param>
+    Task SetCategoryExpandedAsync(int objectTypeId, string categoryName, bool expanded);
 }
 
 /// <summary>
@@ -253,6 +269,56 @@ public class UserPreferenceService : IUserPreferenceService
         {
             var key = $"mvaViewMode_{attributeName}";
             await _jsRuntime.InvokeVoidAsync("jimPreferences.set", key, viewMode);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, ignore
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), ignore
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool?> GetCategoryExpandedAsync(int objectTypeId, string categoryName)
+    {
+        if (string.IsNullOrEmpty(categoryName))
+            return null;
+
+        try
+        {
+            var key = $"categoryExpanded_{objectTypeId}_{categoryName}";
+            var value = await _jsRuntime.InvokeAsync<string?>("jimPreferences.get", key);
+            return value switch
+            {
+                "true" => true,
+                "false" => false,
+                _ => null
+            };
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, return default
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), return default
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc />
+    public async Task SetCategoryExpandedAsync(int objectTypeId, string categoryName, bool expanded)
+    {
+        if (string.IsNullOrEmpty(categoryName))
+            return;
+
+        try
+        {
+            var key = $"categoryExpanded_{objectTypeId}_{categoryName}";
+            await _jsRuntime.InvokeVoidAsync("jimPreferences.set", key, expanded ? "true" : "false");
         }
         catch (JSDisconnectedException)
         {
