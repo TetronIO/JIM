@@ -169,6 +169,11 @@ html[lang] a.mud-link.mud-primary-text:visited {
     color: #00b4ff !important;
 }
 
+/* Table group header rows — deeper purple-navy for schedule/category emphasis */
+html[lang] .mud-table-cell-custom-group {
+    background-color: #1f1f3a !important;
+}
+
 /* Nested table footer, pager, and no-records rows use page background
    to contrast against the shaded header row (inner-surface). */
 html[lang] .mud-paper .mud-table .mud-table-pagination-toolbar,

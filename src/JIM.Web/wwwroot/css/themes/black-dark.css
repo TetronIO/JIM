@@ -168,6 +168,11 @@ html[lang] a.mud-link.mud-primary-text:visited {
     color: #42a5f5 !important;
 }
 
+/* Table group header rows — subtle emphasis for schedule/category headers */
+html[lang] .mud-table-cell-custom-group {
+    background-color: #222328 !important;
+}
+
 /* Nested table footer, pager, and no-records rows use page background
    to contrast against the shaded header row (inner-surface). */
 html[lang] .mud-paper .mud-table .mud-table-pagination-toolbar,
