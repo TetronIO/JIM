@@ -18,15 +18,15 @@ JIM uses three services that collaborate on scheduled execution:
 
 ```mermaid
 flowchart TD
-    Start([Scheduler Polling Cycle]) --> WaitDb[Wait for database to be ready\nRetry every 2 seconds]
-    WaitDb --> PollLoop{Shutdown\nrequested?}
+    Start([Scheduler Polling Cycle]) --> WaitDb[Wait for database to be ready<br/>Retry every 2 seconds]
+    WaitDb --> PollLoop{Shutdown<br/>requested?}
 
     PollLoop -->|Yes| End([Scheduler Stopped])
-    PollLoop -->|No| Step1[Step 1: Update cron next-run-times\nParse cron expressions\nSet NextRunTime on schedules]
+    PollLoop -->|No| Step1[Step 1: Update cron next-run-times<br/>Parse cron expressions<br/>Set NextRunTime on schedules]
 
-    Step1 --> Step2[Step 2: Process due schedules\nSee Due Schedule Processing below]
-    Step2 --> Step3[Step 3: Recover stuck executions\nSafety net for worker crashes\nSee Recovery section below]
-    Step3 --> Step4[Step 4: Recover stale worker tasks\nHeartbeat-based crash detection]
+    Step1 --> Step2[Step 2: Process due schedules<br/>See Due Schedule Processing below]
+    Step2 --> Step3[Step 3: Recover stuck executions<br/>Safety net for worker crashes<br/>See Recovery section below]
+    Step3 --> Step4[Step 4: Recover stale worker tasks<br/>Heartbeat-based crash detection]
     Step4 --> Sleep[Sleep 30 seconds]
     Sleep --> PollLoop
 ```
@@ -35,27 +35,27 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    GetDue[Get schedules where\nNextRunTime <= UtcNow] --> Loop{More due\nschedules?}
+    GetDue[Get schedules where<br/>NextRunTime <= UtcNow] --> Loop{More due<br/>schedules?}
     Loop -->|No| Done([Done])
-    Loop -->|Yes| CheckOverlap{Active execution\nalready exists?}
+    Loop -->|Yes| CheckOverlap{Active execution<br/>already exists?}
 
-    CheckOverlap -->|Yes| SkipLog[Log warning: schedule\nalready running, skip]
+    CheckOverlap -->|Yes| SkipLog[Log warning: schedule<br/>already running, skip]
     SkipLog --> Loop
 
     CheckOverlap -->|No| StartExec[StartScheduleExecutionAsync]
-    StartExec --> CreateExec[Create ScheduleExecution\nStatus = InProgress\nCurrentStepIndex = 0]
+    StartExec --> CreateExec[Create ScheduleExecution<br/>Status = InProgress<br/>CurrentStepIndex = 0]
     CreateExec --> UpdateLastRun[Update Schedule.LastRunTime]
 
     UpdateLastRun --> QueueAll[Queue ALL step groups upfront]
-    QueueAll --> StepLoop{More step\nindices?}
+    QueueAll --> StepLoop{More step<br/>indices?}
 
-    StepLoop -->|Yes| IsFirst{First step\nindex?}
-    IsFirst -->|Yes| QueueQueued[Queue tasks with\nStatus = Queued\nReady to run immediately]
-    IsFirst -->|No| QueueWaiting[Queue tasks with\nStatus = WaitingForPreviousStep\nVisible on queue but blocked]
+    StepLoop -->|Yes| IsFirst{First step<br/>index?}
+    IsFirst -->|Yes| QueueQueued[Queue tasks with<br/>Status = Queued<br/>Ready to run immediately]
+    IsFirst -->|No| QueueWaiting[Queue tasks with<br/>Status = WaitingForPreviousStep<br/>Visible on queue but blocked]
     QueueQueued --> StepLoop
     QueueWaiting --> StepLoop
 
-    StepLoop -->|No| CalcNext[Calculate and set\nnext cron run time]
+    StepLoop -->|No| CalcNext[Calculate and set<br/>next cron run time]
     CalcNext --> Loop
 ```
 
@@ -65,21 +65,21 @@ Steps with the same `StepIndex` form a parallel group and execute concurrently.
 
 ```mermaid
 flowchart TD
-    QueueGroup([Queue Step Group\nat StepIndex N]) --> GetSteps[Get all steps at this index\nMay be 1 sequential or many parallel]
-    GetSteps --> IsParallel{Multiple steps\nat same index?}
-    IsParallel -->|Yes| LogParallel[Log parallel group\nwith step count]
+    QueueGroup([Queue Step Group<br/>at StepIndex N]) --> GetSteps[Get all steps at this index<br/>May be 1 sequential or many parallel]
+    GetSteps --> IsParallel{Multiple steps<br/>at same index?}
+    IsParallel -->|Yes| LogParallel[Log parallel group<br/>with step count]
     IsParallel -->|No| QueueStep
 
-    LogParallel --> ForEach{More steps\nat index?}
+    LogParallel --> ForEach{More steps<br/>at index?}
     QueueStep --> ForEach
 
     ForEach -->|No| Done([Done])
-    ForEach -->|Yes| CheckType{Step\ntype?}
+    ForEach -->|Yes| CheckType{Step<br/>type?}
 
-    CheckType -->|RunProfile| CreateSyncTask[Create SynchronisationWorkerTask\nSet ConnectedSystemId + RunProfileId\nSet ExecutionMode: Parallel/Sequential\nSet ContinueOnFailure from step\nLink to ScheduleExecution]
-    CheckType -->|PowerShell\nExecutable\nSqlScript| NotImpl[Log warning:\nnot yet implemented\nSkip step]
+    CheckType -->|RunProfile| CreateSyncTask[Create SynchronisationWorkerTask<br/>Set ConnectedSystemId + RunProfileId<br/>Set ExecutionMode: Parallel/Sequential<br/>Set ContinueOnFailure from step<br/>Link to ScheduleExecution]
+    CheckType -->|PowerShell<br/>Executable<br/>SqlScript| NotImpl[Log warning:<br/>not yet implemented<br/>Skip step]
 
-    CreateSyncTask --> CreateActivity[TaskingServer.CreateWorkerTaskAsync\nCreates Activity with initiator triad\nAssociates Activity with WorkerTask]
+    CreateSyncTask --> CreateActivity[TaskingServer.CreateWorkerTaskAsync<br/>Creates Activity with initiator triad<br/>Associates Activity with WorkerTask]
     CreateActivity --> ForEach
     NotImpl --> ForEach
 ```
@@ -90,34 +90,34 @@ After the worker completes a task, it drives schedule advancement via `TryAdvanc
 
 ```mermaid
 flowchart TD
-    TaskDone([Worker task completes]) --> DeleteTask[Delete WorkerTask from database\nActivity persists as audit record]
-    DeleteTask --> IsScheduled{Task linked to\nScheduleExecution?}
+    TaskDone([Worker task completes]) --> DeleteTask[Delete WorkerTask from database<br/>Activity persists as audit record]
+    DeleteTask --> IsScheduled{Task linked to<br/>ScheduleExecution?}
     IsScheduled -->|No| Done([Done])
-    IsScheduled -->|Yes| CheckRemaining[Count remaining tasks\nat this step index]
+    IsScheduled -->|Yes| CheckRemaining[Count remaining tasks<br/>at this step index]
 
-    CheckRemaining --> StillActive{Remaining\ntasks > 0?}
-    StillActive -->|Yes| Wait([Wait for other\nparallel tasks to finish])
+    CheckRemaining --> StillActive{Remaining<br/>tasks > 0?}
+    StillActive -->|Yes| Wait([Wait for other<br/>parallel tasks to finish])
 
-    StillActive -->|No| LastTask[This was the last task\nin the step group]
-    LastTask --> CheckFailures[Query Activities for this step\nCheck for FailedWithError\nCompleteWithError or Cancelled]
+    StillActive -->|No| LastTask[This was the last task<br/>in the step group]
+    LastTask --> CheckFailures[Query Activities for this step<br/>Check for FailedWithError<br/>CompleteWithError or Cancelled]
 
-    CheckFailures --> AnyFailed{Any activities\nfailed?}
+    CheckFailures --> AnyFailed{Any activities<br/>failed?}
 
     %% --- Happy path ---
-    AnyFailed -->|No| FindNext[Find next WaitingForPreviousStep\nstep index]
-    FindNext --> HasNext{Next step\nexists?}
-    HasNext -->|No| ExecComplete[Execution complete\nStatus = Completed\nCompletedAt = UtcNow]
+    AnyFailed -->|No| FindNext[Find next WaitingForPreviousStep<br/>step index]
+    FindNext --> HasNext{Next step<br/>exists?}
+    HasNext -->|No| ExecComplete[Execution complete<br/>Status = Completed<br/>CompletedAt = UtcNow]
     ExecComplete --> Done
 
-    HasNext -->|Yes| Advance[Transition next step group:\nWaitingForPreviousStep --> Queued\nUpdate CurrentStepIndex]
-    Advance --> WorkerPicksUp([Worker picks up\nnewly queued tasks\non next poll cycle])
+    HasNext -->|Yes| Advance[Transition next step group:<br/>WaitingForPreviousStep --> Queued<br/>Update CurrentStepIndex]
+    Advance --> WorkerPicksUp([Worker picks up<br/>newly queued tasks<br/>on next poll cycle])
 
     %% --- Failure path ---
-    AnyFailed -->|Yes| LoadSteps[Load Schedule Steps\nat this index]
-    LoadSteps --> CheckContinue{Any step has\nContinueOnFailure\n= false?}
+    AnyFailed -->|Yes| LoadSteps[Load Schedule Steps<br/>at this index]
+    LoadSteps --> CheckContinue{Any step has<br/>ContinueOnFailure<br/>= false?}
     CheckContinue -->|No| FindNext
-    CheckContinue -->|Yes| FailExec[Execution failed\nStatus = Failed\nErrorMessage = step name + reason]
-    FailExec --> Cleanup[Delete all remaining\nWaitingForPreviousStep tasks]
+    CheckContinue -->|Yes| FailExec[Execution failed<br/>Status = Failed<br/>ErrorMessage = step name + reason]
+    FailExec --> Cleanup[Delete all remaining<br/>WaitingForPreviousStep tasks]
     Cleanup --> Done
 ```
 
@@ -128,25 +128,25 @@ Three safety nets ensure schedules complete even when services crash.
 ```mermaid
 flowchart TD
     subgraph "1. Worker Startup Recovery"
-        WS([Worker starts]) --> RecoverAll[RecoverStaleWorkerTasksAsync\nTimeSpan.Zero\nALL Processing tasks are\northaned at startup]
-        RecoverAll --> ReQueue1[Re-queue as Queued\nFail associated Activities]
+        WS([Worker starts]) --> RecoverAll[RecoverStaleWorkerTasksAsync<br/>TimeSpan.Zero<br/>ALL Processing tasks are<br/>orthaned at startup]
+        RecoverAll --> ReQueue1[Re-queue as Queued<br/>Fail associated Activities]
     end
 
     subgraph "2. Scheduler: Stuck Execution Recovery"
         SE([Every 30 seconds]) --> GetActive[Get InProgress executions]
-        GetActive --> ForEach{For each\nexecution}
-        ForEach --> CheckTasks{Has Queued or\nProcessing tasks?}
-        CheckTasks -->|Yes| Normal([Normal operation\nWorker is handling it])
-        CheckTasks -->|No| HasWaiting{Has Waiting\ntasks?}
-        HasWaiting -->|Yes| SafetyNet[Worker likely crashed after\ncompleting a step\nRun CheckAndAdvanceExecutionAsync\nto advance to next step]
-        HasWaiting -->|No, zero tasks| Complete[No tasks at all\nMark execution complete]
+        GetActive --> ForEach{For each<br/>execution}
+        ForEach --> CheckTasks{Has Queued or<br/>Processing tasks?}
+        CheckTasks -->|Yes| Normal([Normal operation<br/>Worker is handling it])
+        CheckTasks -->|No| HasWaiting{Has Waiting<br/>tasks?}
+        HasWaiting -->|Yes| SafetyNet[Worker likely crashed after<br/>completing a step<br/>Run CheckAndAdvanceExecutionAsync<br/>to advance to next step]
+        HasWaiting -->|No, zero tasks| Complete[No tasks at all<br/>Mark execution complete]
     end
 
     subgraph "3. Scheduler: Stale Task Recovery"
-        ST([Every 30 seconds]) --> FindStale[Find Processing tasks where\nHeartbeat older than\nstale threshold]
-        FindStale --> HasStale{Stale tasks\nfound?}
+        ST([Every 30 seconds]) --> FindStale[Find Processing tasks where<br/>Heartbeat older than<br/>stale threshold]
+        FindStale --> HasStale{Stale tasks<br/>found?}
         HasStale -->|No| Skip([Skip])
-        HasStale -->|Yes| ReQueue2[Re-queue stale tasks\nFail associated Activities\nWorker will pick up\non next poll]
+        HasStale -->|Yes| ReQueue2[Re-queue stale tasks<br/>Fail associated Activities<br/>Worker will pick up<br/>on next poll]
     end
 ```
 
@@ -154,15 +154,15 @@ flowchart TD
 
 ```mermaid
 stateDiagram-v2
-    [*] --> InProgress: Scheduler creates execution\nQueues all step groups
+    [*] --> InProgress: Scheduler creates execution<br/>Queues all step groups
 
-    InProgress --> InProgress: Worker completes step\nAdvances to next step group
+    InProgress --> InProgress: Worker completes step<br/>Advances to next step group
 
-    InProgress --> Completed: Last step group completes\nNo more waiting tasks
+    InProgress --> Completed: Last step group completes<br/>No more waiting tasks
 
-    InProgress --> Failed: Step group has failures\nContinueOnFailure = false
+    InProgress --> Failed: Step group has failures<br/>ContinueOnFailure = false
 
-    InProgress --> Cancelled: User cancels execution\nAll tasks deleted
+    InProgress --> Cancelled: User cancels execution<br/>All tasks deleted
 
     Completed --> [*]
     Failed --> [*]

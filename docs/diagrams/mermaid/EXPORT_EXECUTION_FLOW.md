@@ -8,24 +8,24 @@ This diagram shows how pending exports are executed against connected systems vi
 
 ```mermaid
 flowchart TD
-    Start([PerformExportAsync]) --> CountPE[Count pending exports\nfor connected system]
-    CountPE --> HasExports{Pending exports\n> 0?}
-    HasExports -->|No| NoWork[Update activity:\nNo exports to process]
+    Start([PerformExportAsync]) --> CountPE[Count pending exports<br/>for connected system]
+    CountPE --> HasExports{Pending exports<br/>> 0?}
+    HasExports -->|No| NoWork[Update activity:<br/>No exports to process]
     NoWork --> Done([Return])
 
-    HasExports -->|Yes| CheckConnector{Connector supports\nexport?}
-    CheckConnector -->|No| FailActivity[FailActivityWithErrorAsync:\nConnector does not support export]
+    HasExports -->|Yes| CheckConnector{Connector supports<br/>export?}
+    CheckConnector -->|No| FailActivity[FailActivityWithErrorAsync:<br/>Connector does not support export]
     FailActivity --> Done
 
-    CheckConnector -->|Yes| CheckCancel{Cancellation\nrequested?}
-    CheckCancel -->|Yes| CancelMsg[Update activity:\nCancelled before export]
+    CheckConnector -->|Yes| CheckCancel{Cancellation<br/>requested?}
+    CheckCancel -->|Yes| CancelMsg[Update activity:<br/>Cancelled before export]
     CancelMsg --> Done
 
-    CheckCancel -->|No| Execute[ExportExecutionServer.ExecuteExportsAsync\nSee Export Execution below]
-    Execute --> ProcessResult[ProcessExportResultAsync\nCreate RPEIs for each export:\n- Create --> Provisioned\n- Update --> Exported\n- Delete --> Deprovisioned\n- Failed --> UnhandledError with retry count]
+    CheckCancel -->|No| Execute[ExportExecutionServer.ExecuteExportsAsync<br/>See Export Execution below]
+    Execute --> ProcessResult[ProcessExportResultAsync<br/>Create RPEIs for each export:<br/>- Create --> Provisioned<br/>- Update --> Exported<br/>- Delete --> Deprovisioned<br/>- Failed --> UnhandledError with retry count]
 
-    ProcessResult --> CheckContainers{New containers\ncreated during export?}
-    CheckContainers -->|Yes| AutoSelect[Auto-select new containers\nRefresh and select containers\nby created external IDs\nEnsures they appear in future imports]
+    ProcessResult --> CheckContainers{New containers<br/>created during export?}
+    CheckContainers -->|Yes| AutoSelect[Auto-select new containers<br/>Refresh and select containers<br/>by created external IDs<br/>Ensures they appear in future imports]
     CheckContainers -->|No| Done
     AutoSelect --> Done
 ```
@@ -34,49 +34,49 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Start([ExecuteExportsAsync]) --> GetExecutable[Get executable pending exports\nDatabase filter: Status, NextRetryAt, ErrorCount\nIn-memory filter: has exportable attribute changes\nDelete exports already exported are skipped]
-    GetExecutable --> HasExports{Exports\nfound?}
+    Start([ExecuteExportsAsync]) --> GetExecutable[Get executable pending exports<br/>Database filter: Status, NextRetryAt, ErrorCount<br/>In-memory filter: has exportable attribute changes<br/>Delete exports already exported are skipped]
+    GetExecutable --> HasExports{Exports<br/>found?}
     HasExports -->|No| EmptyResult([Return empty result])
 
-    HasExports -->|Yes| CheckPreview{Run mode =\nPreviewOnly?}
-    CheckPreview -->|Yes| PreviewResult[Return export IDs\nwithout executing]
+    HasExports -->|Yes| CheckPreview{Run mode =<br/>PreviewOnly?}
+    CheckPreview -->|Yes| PreviewResult[Return export IDs<br/>without executing]
     PreviewResult --> Done([Return result])
 
-    CheckPreview -->|No| ConnectorType{Connector\nexport type?}
+    CheckPreview -->|No| ConnectorType{Connector<br/>export type?}
 
-    ConnectorType -->|IConnectorExportUsingCalls| PrepareConnector[Inject CertificateProvider\nand CredentialProtection]
-    PrepareConnector --> OpenExport[OpenExportConnection\nwith system settings]
-    OpenExport --> SplitExports[Split into:\n- Immediate exports: no unresolved references\n- Deferred exports: have unresolved references]
+    ConnectorType -->|IConnectorExportUsingCalls| PrepareConnector[Inject CertificateProvider<br/>and CredentialProtection]
+    PrepareConnector --> OpenExport[OpenExportConnection<br/>with system settings]
+    OpenExport --> SplitExports[Split into:<br/>- Immediate exports: no unresolved references<br/>- Deferred exports: have unresolved references]
 
     %% --- Immediate exports ---
-    SplitExports --> HasImmediate{Immediate\nexports?}
-    HasImmediate -->|Yes| BatchImmediate[Create batches\nof configurable size]
-    BatchImmediate --> ParallelCheck{MaxParallelism > 1\nand factories provided?}
-    ParallelCheck -->|Yes| ParallelBatch[Process batches in parallel\nEach batch gets own:\n- DbContext\n- Connector instance\nProgress serialised via SemaphoreSlim]
-    ParallelCheck -->|No| SequentialBatch[Process batches sequentially\nUsing existing connector + DbContext]
+    SplitExports --> HasImmediate{Immediate<br/>exports?}
+    HasImmediate -->|Yes| BatchImmediate[Create batches<br/>of configurable size]
+    BatchImmediate --> ParallelCheck{MaxParallelism > 1<br/>and factories provided?}
+    ParallelCheck -->|Yes| ParallelBatch[Process batches in parallel<br/>Each batch gets own:<br/>- DbContext<br/>- Connector instance<br/>Progress serialised via SemaphoreSlim]
+    ParallelCheck -->|No| SequentialBatch[Process batches sequentially<br/>Using existing connector + DbContext]
 
     ParallelBatch --> HasDeferred
     SequentialBatch --> HasDeferred
 
-    HasImmediate -->|No| HasDeferred{Deferred\nexports?}
+    HasImmediate -->|No| HasDeferred{Deferred<br/>exports?}
 
     %% --- Deferred exports ---
-    HasDeferred -->|Yes| BulkFetchRefs[Bulk pre-fetch all\nreferenced CSOs by MVO IDs\nin single query]
-    BulkFetchRefs --> ResolveRefs[For each deferred export:\nTry to resolve MVO references\nto target system CSO external IDs]
-    ResolveRefs --> Resolved{References\nresolved?}
-    Resolved -->|Yes| ExportResolved[Batch export resolved\nexports same as immediate]
-    Resolved -->|No| MarkDeferred[Mark as deferred\nWill be retried next run]
+    HasDeferred -->|Yes| BulkFetchRefs[Bulk pre-fetch all<br/>referenced CSOs by MVO IDs<br/>in single query]
+    BulkFetchRefs --> ResolveRefs[For each deferred export:<br/>Try to resolve MVO references<br/>to target system CSO external IDs]
+    ResolveRefs --> Resolved{References<br/>resolved?}
+    Resolved -->|Yes| ExportResolved[Batch export resolved<br/>exports same as immediate]
+    Resolved -->|No| MarkDeferred[Mark as deferred<br/>Will be retried next run]
 
     HasDeferred -->|No| CaptureContainers
     ExportResolved --> CaptureContainers
     MarkDeferred --> CaptureContainers
 
-    CaptureContainers[Capture created container\nexternal IDs from connector]
+    CaptureContainers[Capture created container<br/>external IDs from connector]
     CaptureContainers --> CloseExport[CloseExportConnection]
-    CloseExport --> SecondPass[Second pass: retry deferred\nreferences that may now\nbe resolvable]
+    CloseExport --> SecondPass[Second pass: retry deferred<br/>references that may now<br/>be resolvable]
     SecondPass --> Done
 
-    ConnectorType -->|IConnectorExportUsingFiles| FileExport[File-based export\nwith batching]
+    ConnectorType -->|IConnectorExportUsingFiles| FileExport[File-based export<br/>with batching]
     FileExport --> Done
 ```
 
@@ -86,27 +86,27 @@ Each batch follows this sequence, whether processed sequentially or in parallel:
 
 ```mermaid
 flowchart TD
-    Start([Process batch]) --> MarkExecuting[Mark all exports in batch\nas Status = Executing]
-    MarkExecuting --> CallConnector[connector.ExportAsync\nSend batch to connector\nReturns List of ExportResult]
+    Start([Process batch]) --> MarkExecuting[Mark all exports in batch<br/>as Status = Executing]
+    MarkExecuting --> CallConnector[connector.ExportAsync<br/>Send batch to connector<br/>Returns List of ExportResult]
     CallConnector --> ProcessResults[For each export + result pair]
-    ProcessResults --> CheckResult{Export\nsucceeded?}
+    ProcessResults --> CheckResult{Export<br/>succeeded?}
 
-    CheckResult -->|Yes, Create| HandleCreate[Record Provisioned\nCapture new external ID\nfrom ExportResult\nSet Status = Exported]
-    CheckResult -->|Yes, Update| HandleUpdate[Record Exported\nSet Status = Exported]
-    CheckResult -->|Yes, Delete| HandleDelete[Record Deprovisioned\nDelete pending export\nDelete CSO]
-    CheckResult -->|Failed| HandleFail[Increment ErrorCount\nSet error message\nCalculate NextRetryAt\nwith exponential backoff]
+    CheckResult -->|Yes, Create| HandleCreate[Record Provisioned<br/>Capture new external ID<br/>from ExportResult<br/>Set Status = Exported]
+    CheckResult -->|Yes, Update| HandleUpdate[Record Exported<br/>Set Status = Exported]
+    CheckResult -->|Yes, Delete| HandleDelete[Record Deprovisioned<br/>Delete pending export<br/>Delete CSO]
+    CheckResult -->|Failed| HandleFail[Increment ErrorCount<br/>Set error message<br/>Calculate NextRetryAt<br/>with exponential backoff]
 
     HandleCreate --> Persist
     HandleUpdate --> Persist
     HandleDelete --> Persist
-    HandleFail --> CheckMaxRetries{ErrorCount >=\nMaxRetries?}
-    CheckMaxRetries -->|Yes| MarkFailed[Set Status = Failed\nPermanent failure\nRequires manual intervention]
-    CheckMaxRetries -->|No| SetRetry[Set Status = ExportNotConfirmed\nSet NextRetryAt = backoff time]
+    HandleFail --> CheckMaxRetries{ErrorCount >=<br/>MaxRetries?}
+    CheckMaxRetries -->|Yes| MarkFailed[Set Status = Failed<br/>Permanent failure<br/>Requires manual intervention]
+    CheckMaxRetries -->|No| SetRetry[Set Status = ExportNotConfirmed<br/>Set NextRetryAt = backoff time]
     MarkFailed --> Persist
     SetRetry --> Persist
 
-    Persist[Batch persist\nall export status updates]
-    Persist --> CaptureItems[Capture ProcessedExportItems\nfor RPEI creation by caller]
+    Persist[Batch persist<br/>all export status updates]
+    Persist --> CaptureItems[Capture ProcessedExportItems<br/>for RPEI creation by caller]
     CaptureItems --> Done([Batch complete])
 ```
 

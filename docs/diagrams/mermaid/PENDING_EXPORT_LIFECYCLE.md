@@ -8,31 +8,31 @@ This diagram shows the full lifecycle of a Pending Export from creation during s
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Pending: Created during Sync\n(export evaluation)
+    [*] --> Pending: Created during Sync<br/>(export evaluation)
 
-    Pending --> Executing: Export run starts\nbatch marked executing
+    Pending --> Executing: Export run starts<br/>batch marked executing
 
-    Executing --> Exported: Connector reports\nsuccess
+    Executing --> Exported: Connector reports<br/>success
 
-    Executing --> ExportNotConfirmed: Connector reports\nfailure (retryable)
+    Executing --> ExportNotConfirmed: Connector reports<br/>failure (retryable)
     Executing --> Failed: ErrorCount >= MaxRetries
 
-    Exported --> [*]: Confirming import confirms\nall attribute values match\n(PE deleted)
+    Exported --> [*]: Confirming import confirms<br/>all attribute values match<br/>(PE deleted)
 
-    Exported --> ExportNotConfirmed: Confirming import finds\nattribute values don't match
+    Exported --> ExportNotConfirmed: Confirming import finds<br/>attribute values don't match
 
-    ExportNotConfirmed --> Executing: Next export run\n(after NextRetryAt backoff)
+    ExportNotConfirmed --> Executing: Next export run<br/>(after NextRetryAt backoff)
 
-    ExportNotConfirmed --> Pending: Sync re-evaluates\nand reasserts changes
+    ExportNotConfirmed --> Pending: Sync re-evaluates<br/>and reasserts changes
 
-    ExportNotConfirmed --> Failed: ErrorCount >= MaxRetries\n(permanent failure)
+    ExportNotConfirmed --> Failed: ErrorCount >= MaxRetries<br/>(permanent failure)
 
-    Failed --> [*]: Manual intervention\nor PE deleted
+    Failed --> [*]: Manual intervention<br/>or PE deleted
 
-    note right of Pending: Initial state.\nCreated by EvaluateExportRules\nduring Full/Delta Sync.
-    note right of Exported: Awaiting confirmation.\nConfirming import checks if\nCSO attributes match expected values.
-    note left of ExportNotConfirmed: Retryable failure.\nWill be re-exported after\nexponential backoff delay.
-    note left of Failed: Permanent failure.\nRequires manual intervention.\nRPEI: ExportConfirmationFailed
+    note right of Pending: Initial state.<br/>Created by EvaluateExportRules<br/>during Full/Delta Sync.
+    note right of Exported: Awaiting confirmation.<br/>Confirming import checks if<br/>CSO attributes match expected values.
+    note left of ExportNotConfirmed: Retryable failure.<br/>Will be re-exported after<br/>exponential backoff delay.
+    note left of Failed: Permanent failure.<br/>Requires manual intervention.<br/>RPEI: ExportConfirmationFailed
 ```
 
 ## Full Lifecycle Across Operations
@@ -42,33 +42,33 @@ A Pending Export's journey typically spans three separate run profile executions
 ```mermaid
 flowchart LR
     subgraph "1. Sync (Full or Delta)"
-        SyncStart[MVO attribute changes\nduring inbound flow] --> EvalExport[EvaluateExportRules:\nFind export sync rules\nfor MVO type]
-        EvalExport --> InScope{MVO in scope\nfor export rule?}
-        InScope -->|No| EvalDeprov[Evaluate deprovisioning:\nCreate Delete PE if CSO exists]
-        InScope -->|Yes| MapAttrs[Map MVO attributes\nto CSO attributes\nvia export sync rule mappings]
-        MapAttrs --> NetChange{No-net-change\ndetection}
-        NetChange -->|CSO already current| Skip[Skip - no PE created\nTarget already has correct values]
-        NetChange -->|Changes needed| CheckExisting{Existing CSO\nin target system?}
-        CheckExisting -->|Yes| CreateUpdatePE[Create PE:\nChangeType = Update\nStatus = Pending]
-        CheckExisting -->|No| CreateCreatePE[Create PE:\nChangeType = Create\nStatus = Pending\nProvision new CSO]
+        SyncStart[MVO attribute changes<br/>during inbound flow] --> EvalExport[EvaluateExportRules:<br/>Find export sync rules<br/>for MVO type]
+        EvalExport --> InScope{MVO in scope<br/>for export rule?}
+        InScope -->|No| EvalDeprov[Evaluate deprovisioning:<br/>Create Delete PE if CSO exists]
+        InScope -->|Yes| MapAttrs[Map MVO attributes<br/>to CSO attributes<br/>via export sync rule mappings]
+        MapAttrs --> NetChange{No-net-change<br/>detection}
+        NetChange -->|CSO already current| Skip[Skip - no PE created<br/>Target already has correct values]
+        NetChange -->|Changes needed| CheckExisting{Existing CSO<br/>in target system?}
+        CheckExisting -->|Yes| CreateUpdatePE[Create PE:<br/>ChangeType = Update<br/>Status = Pending]
+        CheckExisting -->|No| CreateCreatePE[Create PE:<br/>ChangeType = Create<br/>Status = Pending<br/>Provision new CSO]
     end
 
     subgraph "2. Export"
-        GetExecutable[Get executable PEs:\nStatus = Pending or\nExportNotConfirmed\nNextRetryAt <= now] --> MarkExec[Mark batch:\nStatus = Executing]
-        MarkExec --> ConnExport[Connector executes\nexport operations]
+        GetExecutable[Get executable PEs:<br/>Status = Pending or<br/>ExportNotConfirmed<br/>NextRetryAt <= now] --> MarkExec[Mark batch:<br/>Status = Executing]
+        MarkExec --> ConnExport[Connector executes<br/>export operations]
         ConnExport --> Success{Success?}
-        Success -->|Yes, Create| ProvResult[Status = Exported\nCapture new external ID\nRPEI: Provisioned]
-        Success -->|Yes, Update| ExpResult[Status = Exported\nRPEI: Exported]
-        Success -->|Yes, Delete| DeprovResult[Delete PE + CSO\nRPEI: Deprovisioned]
-        Success -->|No| FailResult[Increment ErrorCount\nSet NextRetryAt\nStatus = ExportNotConfirmed]
+        Success -->|Yes, Create| ProvResult[Status = Exported<br/>Capture new external ID<br/>RPEI: Provisioned]
+        Success -->|Yes, Update| ExpResult[Status = Exported<br/>RPEI: Exported]
+        Success -->|Yes, Delete| DeprovResult[Delete PE + CSO<br/>RPEI: Deprovisioned]
+        Success -->|No| FailResult[Increment ErrorCount<br/>Set NextRetryAt<br/>Status = ExportNotConfirmed]
     end
 
     subgraph "3. Confirming Import"
-        ImportData[Import fresh data\nfrom target system] --> Reconcile[PendingExportReconciliationService:\nCompare each PE attribute\nagainst imported CSO values]
-        Reconcile --> AllMatch{All attributes\nconfirmed?}
-        AllMatch -->|Yes| DeletePE[Delete PE\nExport confirmed\nPE lifecycle complete]
-        AllMatch -->|Partial| PartialConfirm[Remove confirmed attributes\nKeep unconfirmed\nChange Create to Update\nStatus = ExportNotConfirmed]
-        AllMatch -->|None| NoneConfirm[Keep all attributes\nIncrement error count\nStatus = ExportNotConfirmed]
+        ImportData[Import fresh data<br/>from target system] --> Reconcile[PendingExportReconciliationService:<br/>Compare each PE attribute<br/>against imported CSO values]
+        Reconcile --> AllMatch{All attributes<br/>confirmed?}
+        AllMatch -->|Yes| DeletePE[Delete PE<br/>Export confirmed<br/>PE lifecycle complete]
+        AllMatch -->|Partial| PartialConfirm[Remove confirmed attributes<br/>Keep unconfirmed<br/>Change Create to Update<br/>Status = ExportNotConfirmed]
+        AllMatch -->|None| NoneConfirm[Keep all attributes<br/>Increment error count<br/>Status = ExportNotConfirmed]
     end
 
     CreateUpdatePE --> GetExecutable
@@ -76,7 +76,7 @@ flowchart LR
     EvalDeprov --> GetExecutable
     ProvResult --> ImportData
     ExpResult --> ImportData
-    FailResult -.->|Next export run\nafter backoff| GetExecutable
+    FailResult -.->|Next export run<br/>after backoff| GetExecutable
     PartialConfirm -.->|Next export run| GetExecutable
     NoneConfirm -.->|Next export run| GetExecutable
 ```
@@ -87,19 +87,19 @@ During Full/Delta Sync, pending exports are also checked for confirmation (separ
 
 ```mermaid
 flowchart TD
-    Start([ProcessPendingExport\nfor each CSO]) --> LookupPE[Lookup pending exports\nfor this CSO from\npre-loaded dictionary]
-    LookupPE --> HasPE{PE exists\nfor CSO?}
+    Start([ProcessPendingExport<br/>for each CSO]) --> LookupPE[Lookup pending exports<br/>for this CSO from<br/>pre-loaded dictionary]
+    LookupPE --> HasPE{PE exists<br/>for CSO?}
     HasPE -->|No| Done([Skip])
 
-    HasPE -->|Yes| CheckStatus{PE\nstatus?}
-    CheckStatus -->|Pending| SkipPending[Skip - not yet exported\nNothing to confirm]
-    CheckStatus -->|Exported| SkipExported[Skip - awaiting\nconfirmation via import\nreconciliation service]
-    CheckStatus -->|ExportNotConfirmed| CompareAttrs[For each attribute change:\nCompare expected value\nagainst CSO current value]
+    HasPE -->|Yes| CheckStatus{PE<br/>status?}
+    CheckStatus -->|Pending| SkipPending[Skip - not yet exported<br/>Nothing to confirm]
+    CheckStatus -->|Exported| SkipExported[Skip - awaiting<br/>confirmation via import<br/>reconciliation service]
+    CheckStatus -->|ExportNotConfirmed| CompareAttrs[For each attribute change:<br/>Compare expected value<br/>against CSO current value]
 
-    CompareAttrs --> MatchResult{All attributes\nconfirmed?}
-    MatchResult -->|All confirmed| QueueDelete[Queue PE for\nbatch deletion]
-    MatchResult -->|Some confirmed| QueuePartialUpdate[Remove confirmed attributes\nIf Create, change to Update\nIncrement error count\nQueue for batch update]
-    MatchResult -->|None confirmed| QueueFullUpdate[Increment error count\nQueue for batch update]
+    CompareAttrs --> MatchResult{All attributes<br/>confirmed?}
+    MatchResult -->|All confirmed| QueueDelete[Queue PE for<br/>batch deletion]
+    MatchResult -->|Some confirmed| QueuePartialUpdate[Remove confirmed attributes<br/>If Create, change to Update<br/>Increment error count<br/>Queue for batch update]
+    MatchResult -->|None confirmed| QueueFullUpdate[Increment error count<br/>Queue for batch update]
 
     QueueDelete --> Done
     QueuePartialUpdate --> Done
@@ -114,13 +114,13 @@ Each attribute change within a Pending Export has its own status, enabling parti
 stateDiagram-v2
     [*] --> Pending: Attribute change created
 
-    Pending --> ExportedPendingConfirmation: Export run executes\nsuccessfully
+    Pending --> ExportedPendingConfirmation: Export run executes<br/>successfully
 
-    ExportedPendingConfirmation --> [*]: Confirming import\nconfirms value matches\n(attribute change removed from PE)
+    ExportedPendingConfirmation --> [*]: Confirming import<br/>confirms value matches<br/>(attribute change removed from PE)
 
-    ExportedPendingConfirmation --> ExportedNotConfirmed: Confirming import\nfinds value mismatch
+    ExportedPendingConfirmation --> ExportedNotConfirmed: Confirming import<br/>finds value mismatch
 
-    ExportedNotConfirmed --> Pending: Reasserted on\nnext export run
+    ExportedNotConfirmed --> Pending: Reasserted on<br/>next export run
 
     ExportedNotConfirmed --> Failed: Max retries exceeded
 
@@ -154,12 +154,12 @@ During sync, drift detection can also create Pending Exports:
 
 ```mermaid
 flowchart TD
-    DriftCheck[EvaluateDriftAndEnforceState\nduring sync CSO processing] --> CompareCSO[Compare CSO attribute values\nagainst expected MVO values\nusing EnforceState export rules]
-    CompareCSO --> Drifted{CSO value\ndiffers from\nexpected?}
+    DriftCheck[EvaluateDriftAndEnforceState<br/>during sync CSO processing] --> CompareCSO[Compare CSO attribute values<br/>against expected MVO values<br/>using EnforceState export rules]
+    CompareCSO --> Drifted{CSO value<br/>differs from<br/>expected?}
     Drifted -->|No| NoDrift([No action])
-    Drifted -->|Yes| CheckContributor{Is this system\na legitimate contributor\nfor this attribute?}
-    CheckContributor -->|Yes| LegitChange([Skip - legitimate import\nfrom authoritative source])
-    CheckContributor -->|No| CreateCorrective[Create corrective PE:\nChangeType = Update\nStatus = Pending\nRPEI: DriftCorrection]
+    Drifted -->|Yes| CheckContributor{Is this system<br/>a legitimate contributor<br/>for this attribute?}
+    CheckContributor -->|Yes| LegitChange([Skip - legitimate import<br/>from authoritative source])
+    CheckContributor -->|No| CreateCorrective[Create corrective PE:<br/>ChangeType = Update<br/>Status = Pending<br/>RPEI: DriftCorrection]
 ```
 
 ## Key Design Decisions

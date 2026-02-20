@@ -8,52 +8,52 @@ This diagram shows how objects are imported from a connected system into JIM's c
 
 ```mermaid
 flowchart TD
-    Start([PerformFullImportAsync]) --> ConnType{Connector\ntype?}
+    Start([PerformFullImportAsync]) --> ConnType{Connector<br/>type?}
 
     %% --- Call-based connector (e.g., LDAP) ---
-    ConnType -->|IConnectorImportUsingCalls| InjectServices[Inject CertificateProvider\nand CredentialProtection\nif connector supports them]
-    InjectServices --> OpenConn[OpenImportConnection\nwith system settings]
-    OpenConn --> InitPage[initialPage = true\npaginationTokens = empty\nCapture original PersistedConnectorData]
+    ConnType -->|IConnectorImportUsingCalls| InjectServices[Inject CertificateProvider<br/>and CredentialProtection<br/>if connector supports them]
+    InjectServices --> OpenConn[OpenImportConnection<br/>with system settings]
+    OpenConn --> InitPage[initialPage = true<br/>paginationTokens = empty<br/>Capture original PersistedConnectorData]
 
-    InitPage --> PageLoop{More pages?\ninitialPage OR\ntokens present}
-    PageLoop -->|Yes| Import[connector.ImportAsync\nPass original persisted data\nto ensure consistent watermark]
-    Import --> UpdateProgress[Update activity progress\nImported N objects page M]
-    UpdateProgress --> CollectExtIds[Add external IDs from this page\nto externalIdsImported collection]
-    CollectExtIds --> CaptureWatermark{First page with\nnew persisted data?}
-    CaptureWatermark -->|Yes| SaveWatermark[Capture new watermark\nDon't save yet - save after all pages]
+    InitPage --> PageLoop{More pages?<br/>initialPage OR<br/>tokens present}
+    PageLoop -->|Yes| Import[connector.ImportAsync<br/>Pass original persisted data<br/>to ensure consistent watermark]
+    Import --> UpdateProgress[Update activity progress<br/>Imported N objects page M]
+    UpdateProgress --> CollectExtIds[Add external IDs from this page<br/>to externalIdsImported collection]
+    CollectExtIds --> CaptureWatermark{First page with<br/>new persisted data?}
+    CaptureWatermark -->|Yes| SaveWatermark[Capture new watermark<br/>Don't save yet - save after all pages]
     CaptureWatermark -->|No| ProcessPage
-    SaveWatermark --> ProcessPage[ProcessImportObjectsAsync\nSee Per-Object Processing below]
-    ProcessPage --> PassTokens[Pass pagination tokens\nfor next page]
+    SaveWatermark --> ProcessPage[ProcessImportObjectsAsync<br/>See Per-Object Processing below]
+    ProcessPage --> PassTokens[Pass pagination tokens<br/>for next page]
     PassTokens --> PageLoop
 
-    PageLoop -->|No| UpdatePersistedData{New watermark\ncaptured?}
-    UpdatePersistedData -->|Yes| PersistWatermark[Update ConnectedSystem\nPersistedConnectorData]
+    PageLoop -->|No| UpdatePersistedData{New watermark<br/>captured?}
+    UpdatePersistedData -->|Yes| PersistWatermark[Update ConnectedSystem<br/>PersistedConnectorData]
     UpdatePersistedData -->|No| CloseConn
     PersistWatermark --> CloseConn[CloseImportConnection]
 
     %% --- File-based connector ---
-    ConnType -->|IConnectorImportUsingFiles| FileImport[connector.ImportAsync\nReturns all objects at once]
-    FileImport --> FileProgress[Update activity:\nProcessing N objects]
-    FileProgress --> FileCollect[Add external IDs\nto collection]
+    ConnType -->|IConnectorImportUsingFiles| FileImport[connector.ImportAsync<br/>Returns all objects at once]
+    FileImport --> FileProgress[Update activity:<br/>Processing N objects]
+    FileProgress --> FileCollect[Add external IDs<br/>to collection]
     FileCollect --> FileProcess[ProcessImportObjectsAsync]
     FileProcess --> PostImport
 
-    CloseConn --> PostImport{Full Import\nand objects > 0?}
+    CloseConn --> PostImport{Full Import<br/>and objects > 0?}
 
     %% --- Deletion detection ---
-    PostImport -->|Yes| DeletionDetection[Deletion Detection\nFor each selected object type:\nCompare imported ext IDs\nagainst existing CSO ext IDs\nMark missing CSOs as Obsolete]
-    PostImport -->|No, Delta Import\nor 0 objects| RefResolution
+    PostImport -->|Yes| DeletionDetection[Deletion Detection<br/>For each selected object type:<br/>Compare imported ext IDs<br/>against existing CSO ext IDs<br/>Mark missing CSOs as Obsolete]
+    PostImport -->|No, Delta Import<br/>or 0 objects| RefResolution
 
-    DeletionDetection --> RefResolution[Reference Resolution\nResolve unresolved reference strings\ninto CSO links by external ID]
+    DeletionDetection --> RefResolution[Reference Resolution<br/>Resolve unresolved reference strings<br/>into CSO links by external ID]
 
     %% --- Persist ---
-    RefResolution --> PersistCreate[Batch create new CSOs\nwith change objects]
-    PersistCreate --> PersistUpdate[Batch update existing CSOs\nwith change objects]
+    RefResolution --> PersistCreate[Batch create new CSOs<br/>with change objects]
+    PersistCreate --> PersistUpdate[Batch update existing CSOs<br/>with change objects]
 
     %% --- Reconciliation ---
-    PersistUpdate --> Reconcile[Reconcile Pending Exports\nSee Confirming Import below]
-    Reconcile --> ValidateRpeis[Validate RPEIs\nDetect orphaned create RPEIs\nwith no CSO assigned]
-    ValidateRpeis --> PersistRpeis[Add RPEIs to Activity\nand persist]
+    PersistUpdate --> Reconcile[Reconcile Pending Exports<br/>See Confirming Import below]
+    Reconcile --> ValidateRpeis[Validate RPEIs<br/>Detect orphaned create RPEIs<br/>with no CSO assigned]
+    ValidateRpeis --> PersistRpeis[Add RPEIs to Activity<br/>and persist]
     PersistRpeis --> End([Import Complete])
 ```
 
@@ -63,44 +63,44 @@ For each object in an import page, within `ProcessImportObjectsAsync`:
 
 ```mermaid
 flowchart TD
-    Entry([For each import object]) --> DupAttrs{Duplicate\nattribute names?}
-    DupAttrs -->|Yes| DupAttrErr[RPEI: DuplicateImportedAttributes\nSkip object]
+    Entry([For each import object]) --> DupAttrs{Duplicate<br/>attribute names?}
+    DupAttrs -->|Yes| DupAttrErr[RPEI: DuplicateImportedAttributes<br/>Skip object]
 
-    DupAttrs -->|No| MatchType[Match string object type\nto schema ObjectType]
-    MatchType --> TypeFound{Object type\nfound in schema?}
-    TypeFound -->|No| TypeErr[RPEI: CouldNotMatchObjectType\nSkip object]
+    DupAttrs -->|No| MatchType[Match string object type<br/>to schema ObjectType]
+    MatchType --> TypeFound{Object type<br/>found in schema?}
+    TypeFound -->|No| TypeErr[RPEI: CouldNotMatchObjectType<br/>Skip object]
 
-    TypeFound -->|Yes| ExtractExtId[Extract external ID value\nfrom import attributes]
-    ExtractExtId --> CrossPageDup{Cross-page\nduplicate?}
-    CrossPageDup -->|Yes| CrossPageErr[RPEI: DuplicateObject\nCross-page duplicate detected\nSkip object]
+    TypeFound -->|Yes| ExtractExtId[Extract external ID value<br/>from import attributes]
+    ExtractExtId --> CrossPageDup{Cross-page<br/>duplicate?}
+    CrossPageDup -->|Yes| CrossPageErr[RPEI: DuplicateObject<br/>Cross-page duplicate detected<br/>Skip object]
 
-    CrossPageDup -->|No| SameBatchDup{Same-batch\nduplicate?}
-    SameBatchDup -->|3rd+ occurrence| ThirdDupErr[RPEI: DuplicateObject\nSkip object]
-    SameBatchDup -->|2nd occurrence| BothDupErr[Error BOTH objects:\nMark current as DuplicateObject\nGo back and mark first as DuplicateObject\nRemove first CSO from create list\nNo random winner]
+    CrossPageDup -->|No| SameBatchDup{Same-batch<br/>duplicate?}
+    SameBatchDup -->|3rd+ occurrence| ThirdDupErr[RPEI: DuplicateObject<br/>Skip object]
+    SameBatchDup -->|2nd occurrence| BothDupErr[Error BOTH objects:<br/>Mark current as DuplicateObject<br/>Go back and mark first as DuplicateObject<br/>Remove first CSO from create list<br/>No random winner]
 
-    SameBatchDup -->|First occurrence| TrackExtId[Track external ID\nin seenExternalIds]
-    TrackExtId --> CheckDelete{Connector says\nDelete?}
+    SameBatchDup -->|First occurrence| TrackExtId[Track external ID<br/>in seenExternalIds]
+    TrackExtId --> CheckDelete{Connector says<br/>Delete?}
 
     %% --- Delete path ---
-    CheckDelete -->|Yes| FindExisting[Find existing CSO\nby external ID]
-    FindExisting --> ExistsDel{CSO\nexists?}
-    ExistsDel -->|Yes| MarkObsolete[Set Status = Obsolete\nRPEI: Deleted\nAdd to update list]
-    ExistsDel -->|No| IgnoreDel[No CSO to delete\nRemove RPEI, skip]
+    CheckDelete -->|Yes| FindExisting[Find existing CSO<br/>by external ID]
+    FindExisting --> ExistsDel{CSO<br/>exists?}
+    ExistsDel -->|Yes| MarkObsolete[Set Status = Obsolete<br/>RPEI: Deleted<br/>Add to update list]
+    ExistsDel -->|No| IgnoreDel[No CSO to delete<br/>Remove RPEI, skip]
 
     %% --- Create/Update path ---
-    CheckDelete -->|No| FindCso[Find existing CSO\nby external ID]
-    FindCso --> CsoExists{CSO\nexists?}
+    CheckDelete -->|No| FindCso[Find existing CSO<br/>by external ID]
+    FindCso --> CsoExists{CSO<br/>exists?}
 
-    CsoExists -->|No| CreateCso[Create new CSO\nMap all import attributes\nto CSO attribute values\nRPEI: Added]
-    CreateCso --> AddToCreate[Add to create list\nUpdate seenExternalIds\nwith CSO reference]
+    CsoExists -->|No| CreateCso[Create new CSO<br/>Map all import attributes<br/>to CSO attribute values<br/>RPEI: Added]
+    CreateCso --> AddToCreate[Add to create list<br/>Update seenExternalIds<br/>with CSO reference]
 
-    CsoExists -->|Yes| CheckProvisioning{CSO status =\nPendingProvisioning?}
-    CheckProvisioning -->|Yes| TransitionNormal[Transition to Normal status\nObject confirmed in target system]
+    CsoExists -->|Yes| CheckProvisioning{CSO status =<br/>PendingProvisioning?}
+    CheckProvisioning -->|Yes| TransitionNormal[Transition to Normal status<br/>Object confirmed in target system]
     CheckProvisioning -->|No| UpdateCso
-    TransitionNormal --> UpdateCso[Update CSO attributes\nCompare each import attribute\nagainst existing CSO values\nOnly stage actual changes]
-    UpdateCso --> HasChanges{Attribute\nchanges?}
+    TransitionNormal --> UpdateCso[Update CSO attributes<br/>Compare each import attribute<br/>against existing CSO values<br/>Only stage actual changes]
+    UpdateCso --> HasChanges{Attribute<br/>changes?}
     HasChanges -->|Yes| RpeiUpdated[RPEI: Updated]
-    HasChanges -->|No| RpeiNoChange[No RPEI created\nCSO still added to update list\nfor reference resolution]
+    HasChanges -->|No| RpeiNoChange[No RPEI created<br/>CSO still added to update list<br/>for reference resolution]
     RpeiUpdated --> AddToUpdate[Add to update list]
     RpeiNoChange --> AddToUpdate
 ```
@@ -109,16 +109,16 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Start([For each selected object type]) --> GetExisting[Get all existing CSO external IDs\nfor this object type from database]
-    GetExisting --> GetImported[Get all imported external IDs\nfor this object type from collection]
-    GetImported --> Compare[Except: find CSO external IDs\nnot in imported set]
-    Compare --> Loop{More missing\nexternal IDs?}
+    Start([For each selected object type]) --> GetExisting[Get all existing CSO external IDs<br/>for this object type from database]
+    GetExisting --> GetImported[Get all imported external IDs<br/>for this object type from collection]
+    GetImported --> Compare[Except: find CSO external IDs<br/>not in imported set]
+    Compare --> Loop{More missing<br/>external IDs?}
     Loop -->|No| Done([Next object type])
-    Loop -->|Yes| FindCso[Find CSO by external ID\nand attribute ID]
-    FindCso --> CheckProcessed{CSO already processed\nin this import run?}
-    CheckProcessed -->|Yes| SkipLog[Skip - ext ID may have\nbeen updated during import]
+    Loop -->|Yes| FindCso[Find CSO by external ID<br/>and attribute ID]
+    FindCso --> CheckProcessed{CSO already processed<br/>in this import run?}
+    CheckProcessed -->|Yes| SkipLog[Skip - ext ID may have<br/>been updated during import]
     SkipLog --> Loop
-    CheckProcessed -->|No| Obsolete[Set CSO Status = Obsolete\nSet LastUpdated = UtcNow\nRPEI: Deleted\nAdd to update list]
+    CheckProcessed -->|No| Obsolete[Set CSO Status = Obsolete<br/>Set LastUpdated = UtcNow<br/>RPEI: Deleted<br/>Add to update list]
     Obsolete --> Loop
 
     style Start fill:#f9f,stroke:#333
@@ -134,18 +134,18 @@ After CSOs are persisted, the import processor reconciles previously exported ch
 
 ```mermaid
 flowchart TD
-    Start([ReconcilePendingExportsAsync]) --> LoadPE[Bulk fetch pending exports\nfor updated CSOs\nStatus = Exported]
-    LoadPE --> Loop{More CSOs\nwith pending exports?}
-    Loop -->|No| Summary[Log reconciliation summary:\nConfirmed / Retry / Failed]
+    Start([ReconcilePendingExportsAsync]) --> LoadPE[Bulk fetch pending exports<br/>for updated CSOs<br/>Status = Exported]
+    LoadPE --> Loop{More CSOs<br/>with pending exports?}
+    Loop -->|No| Summary[Log reconciliation summary:<br/>Confirmed / Retry / Failed]
     Summary --> Done([Done])
 
-    Loop -->|Yes| Compare[For each attribute change\nin pending export:\nCompare expected value\nagainst CSO current value]
-    Compare --> Result{All attributes\nconfirmed?}
+    Loop -->|Yes| Compare[For each attribute change<br/>in pending export:<br/>Compare expected value<br/>against CSO current value]
+    Compare --> Result{All attributes<br/>confirmed?}
 
-    Result -->|All confirmed| Delete[Queue pending export\nfor batch deletion\nExport successfully applied]
-    Result -->|Some confirmed| Partial[Remove confirmed attributes\nKeep unconfirmed attributes\nIf was Create, change to Update\nIncrement error count\nQueue for batch update]
-    Result -->|None confirmed| AllFailed[Increment error count\nQueue for batch update]
-    Result -->|Max retries exceeded| PermanentFail[RPEI: ExportConfirmationFailed\nManual intervention required]
+    Result -->|All confirmed| Delete[Queue pending export<br/>for batch deletion<br/>Export successfully applied]
+    Result -->|Some confirmed| Partial[Remove confirmed attributes<br/>Keep unconfirmed attributes<br/>If was Create, change to Update<br/>Increment error count<br/>Queue for batch update]
+    Result -->|None confirmed| AllFailed[Increment error count<br/>Queue for batch update]
+    Result -->|Max retries exceeded| PermanentFail[RPEI: ExportConfirmationFailed<br/>Manual intervention required]
 
     Delete --> Loop
     Partial --> Loop

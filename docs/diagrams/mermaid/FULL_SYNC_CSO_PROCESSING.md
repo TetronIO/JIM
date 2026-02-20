@@ -12,29 +12,29 @@ Both Full Sync and Delta Sync use identical processing logic per-CSO. The only d
 
 ```mermaid
 flowchart TD
-    Start([Start Sync]) --> Prepare[Prepare: count CSOs + pending exports\nLoad sync rules, object types\nBuild drift detection cache\nBuild export evaluation cache\nPre-load pending exports into dictionary]
-    Prepare --> PageLoop{More CSO\npages?}
+    Start([Start Sync]) --> Prepare[Prepare: count CSOs + pending exports<br/>Load sync rules, object types<br/>Build drift detection cache<br/>Build export evaluation cache<br/>Pre-load pending exports into dictionary]
+    Prepare --> PageLoop{More CSO<br/>pages?}
 
-    PageLoop -->|Yes| LoadPage[Load page of CSOs\nwithout attributes for performance]
-    LoadPage --> CsoLoop{More CSOs\nin page?}
+    PageLoop -->|Yes| LoadPage[Load page of CSOs<br/>without attributes for performance]
+    LoadPage --> CsoLoop{More CSOs<br/>in page?}
 
-    CsoLoop -->|Yes| CheckCancel{Cancellation\nrequested?}
-    CheckCancel -->|Yes| Return([Return - activity\nfinalised by caller])
-    CheckCancel -->|No| ProcessCso[ProcessConnectedSystemObjectAsync\nSee Per-CSO Processing below]
+    CsoLoop -->|Yes| CheckCancel{Cancellation<br/>requested?}
+    CheckCancel -->|Yes| Return([Return - activity<br/>finalised by caller])
+    CheckCancel -->|No| ProcessCso[ProcessConnectedSystemObjectAsync<br/>See Per-CSO Processing below]
     ProcessCso --> IncrProgress[Increment ObjectsProcessed]
     IncrProgress --> CsoLoop
 
-    CsoLoop -->|No| DeferredRef[Process deferred reference attributes\nSecond pass: resolve MVO references\nthat depend on other CSOs in page]
+    CsoLoop -->|No| DeferredRef[Process deferred reference attributes<br/>Second pass: resolve MVO references<br/>that depend on other CSOs in page]
     DeferredRef --> PersistMvo[Batch persist MVO creates + updates]
-    PersistMvo --> MvoChanges[Create MVO change objects\nfor audit trail]
-    MvoChanges --> EvalExports[Batch evaluate outbound exports\nCreate pending exports for target systems]
-    EvalExports --> FlushPE[Flush pending export\ncreate/delete/update operations]
+    PersistMvo --> MvoChanges[Create MVO change objects<br/>for audit trail]
+    MvoChanges --> EvalExports[Batch evaluate outbound exports<br/>Create pending exports for target systems]
+    EvalExports --> FlushPE[Flush pending export<br/>create/delete/update operations]
     FlushPE --> FlushCSO[Flush obsolete CSO deletions]
-    FlushCSO --> FlushMVO[Flush pending MVO deletions\n0-grace-period only]
-    FlushMVO --> UpdateProgress[Update activity progress\nin database]
+    FlushCSO --> FlushMVO[Flush pending MVO deletions<br/>0-grace-period only]
+    FlushMVO --> UpdateProgress[Update activity progress<br/>in database]
     UpdateProgress --> PageLoop
 
-    PageLoop -->|No| Watermark[Update delta sync watermark\nLastDeltaSyncCompletedAt = UtcNow]
+    PageLoop -->|No| Watermark[Update delta sync watermark<br/>LastDeltaSyncCompletedAt = UtcNow]
     Watermark --> End([Sync Complete])
 ```
 
@@ -44,78 +44,78 @@ This is the decision tree within `ProcessConnectedSystemObjectAsync` for a singl
 
 ```mermaid
 flowchart TD
-    Entry([ProcessConnectedSystemObjectAsync]) --> ConfirmPE[Confirm pending exports\nCheck if previously exported values\nnow match CSO attributes]
-    ConfirmPE --> CheckObsolete{CSO status\n= Obsolete?}
+    Entry([ProcessConnectedSystemObjectAsync]) --> ConfirmPE[Confirm pending exports<br/>Check if previously exported values<br/>now match CSO attributes]
+    ConfirmPE --> CheckObsolete{CSO status<br/>= Obsolete?}
 
     %% --- Obsolete CSO path ---
-    CheckObsolete -->|Yes| CheckJoined{CSO joined\nto MVO?}
-    CheckJoined -->|No, NotJoined| QuietDelete[Delete CSO quietly\nAlready disconnected]
-    CheckJoined -->|No, other JoinType| DeleteOrphan[Create Deleted RPEI\nQueue CSO for deletion]
-    CheckJoined -->|Yes| CheckOosAction{InboundOutOfScope\nAction?}
+    CheckObsolete -->|Yes| CheckJoined{CSO joined<br/>to MVO?}
+    CheckJoined -->|No, NotJoined| QuietDelete[Delete CSO quietly<br/>Already disconnected]
+    CheckJoined -->|No, other JoinType| DeleteOrphan[Create Deleted RPEI<br/>Queue CSO for deletion]
+    CheckJoined -->|Yes| CheckOosAction{InboundOutOfScope<br/>Action?}
 
-    CheckOosAction -->|RemainJoined| KeepJoin[Delete CSO but preserve\nMVO join state\nOnce managed always managed]
-    CheckOosAction -->|Disconnect| RemoveAttrs{Remove contributed\nattributes setting?}
+    CheckOosAction -->|RemainJoined| KeepJoin[Delete CSO but preserve<br/>MVO join state<br/>Once managed always managed]
+    CheckOosAction -->|Disconnect| RemoveAttrs{Remove contributed<br/>attributes setting?}
 
-    RemoveAttrs -->|Yes| RecallAttrs[Remove contributed attributes\nfrom MVO\nQueue MVO for export evaluation]
+    RemoveAttrs -->|Yes| RecallAttrs[Remove contributed attributes<br/>from MVO<br/>Queue MVO for export evaluation]
     RemoveAttrs -->|No| BreakJoin
-    RecallAttrs --> BreakJoin[Break CSO-MVO join\nSet JoinType = NotJoined]
+    RecallAttrs --> BreakJoin[Break CSO-MVO join<br/>Set JoinType = NotJoined]
     BreakJoin --> EvalDeletion[Evaluate MVO deletion rule]
-    EvalDeletion --> DeletionRule{MVO deletion\nrule?}
+    EvalDeletion --> DeletionRule{MVO deletion<br/>rule?}
 
-    DeletionRule -->|Manual| NoDelete[No automatic deletion\nMVO remains]
-    DeletionRule -->|WhenLastConnector\nDisconnected| CheckRemaining{Remaining\nCSOs > 0?}
+    DeletionRule -->|Manual| NoDelete[No automatic deletion<br/>MVO remains]
+    DeletionRule -->|WhenLastConnector<br/>Disconnected| CheckRemaining{Remaining<br/>CSOs > 0?}
     CheckRemaining -->|Yes| NoDelete
-    CheckRemaining -->|No| CheckGrace{Grace\nperiod?}
+    CheckRemaining -->|No| CheckGrace{Grace<br/>period?}
 
-    DeletionRule -->|WhenAuthoritative\nSourceDisconnected| CheckAuth{Disconnecting system\nis authoritative?}
+    DeletionRule -->|WhenAuthoritative<br/>SourceDisconnected| CheckAuth{Disconnecting system<br/>is authoritative?}
     CheckAuth -->|No| NoDelete
     CheckAuth -->|Yes| CheckGrace
 
-    CheckGrace -->|0 or unset| ImmediateDelete[Queue MVO for\nimmediate deletion\nat page flush]
-    CheckGrace -->|> 0| DeferDelete[Mark MVO with\nLastConnectorDisconnectedDate\nHousekeeping deletes later]
+    CheckGrace -->|0 or unset| ImmediateDelete[Queue MVO for<br/>immediate deletion<br/>at page flush]
+    CheckGrace -->|> 0| DeferDelete[Mark MVO with<br/>LastConnectorDisconnectedDate<br/>Housekeeping deletes later]
 
     %% --- Non-obsolete CSO path ---
-    CheckObsolete -->|No| CheckSyncRules{Active sync\nrules exist?}
+    CheckObsolete -->|No| CheckSyncRules{Active sync<br/>rules exist?}
     CheckSyncRules -->|No| Done([No changes])
 
-    CheckSyncRules -->|Yes| CheckScope[Evaluate scoping criteria\nOR between groups, AND within group]
-    CheckScope --> InScope{CSO in scope\nfor any import rule?}
+    CheckSyncRules -->|Yes| CheckScope[Evaluate scoping criteria<br/>OR between groups, AND within group]
+    CheckScope --> InScope{CSO in scope<br/>for any import rule?}
 
     InScope -->|No, rules have scoping| HandleOOS[Handle out of scope]
-    HandleOOS --> OosJoined{CSO joined\nto MVO?}
+    HandleOOS --> OosJoined{CSO joined<br/>to MVO?}
     OosJoined -->|No| Done
-    OosJoined -->|Yes| OosAction{InboundOutOfScope\nAction?}
-    OosAction -->|RemainJoined| RetainJoin[OutOfScopeRetainJoin\nNo attribute flow, preserve join]
-    OosAction -->|Disconnect| DisconnectOOS[DisconnectedOutOfScope\nRemove contributed attributes\nBreak join, evaluate deletion]
+    OosJoined -->|Yes| OosAction{InboundOutOfScope<br/>Action?}
+    OosAction -->|RemainJoined| RetainJoin[OutOfScopeRetainJoin<br/>No attribute flow, preserve join]
+    OosAction -->|Disconnect| DisconnectOOS[DisconnectedOutOfScope<br/>Remove contributed attributes<br/>Break join, evaluate deletion]
 
-    InScope -->|Yes| CheckMvo{CSO joined\nto MVO?}
+    InScope -->|Yes| CheckMvo{CSO joined<br/>to MVO?}
 
     %% --- Join/Project path ---
-    CheckMvo -->|No| AttemptJoin[Attempt Join\nFor each import sync rule:\nFind matching MVO by join criteria]
-    AttemptJoin --> JoinResult{Match\nfound?}
+    CheckMvo -->|No| AttemptJoin[Attempt Join<br/>For each import sync rule:<br/>Find matching MVO by join criteria]
+    AttemptJoin --> JoinResult{Match<br/>found?}
 
-    JoinResult -->|No match| AttemptProject{Sync rule has\nProjectToMetaverse\n= true?}
-    AttemptProject -->|Yes| Project[Create new MVO\nSet type from sync rule\nLink CSO to new MVO]
+    JoinResult -->|No match| AttemptProject{Sync rule has<br/>ProjectToMetaverse<br/>= true?}
+    AttemptProject -->|Yes| Project[Create new MVO<br/>Set type from sync rule<br/>Link CSO to new MVO]
     AttemptProject -->|No| Done
 
-    JoinResult -->|Single match| EstablishJoin[Establish join\nCSO.MetaverseObject = MVO\nSet JoinType + DateJoined]
-    JoinResult -->|Multiple matches| AmbiguousError[AmbiguousMatch error\nRPEI with error]
-    JoinResult -->|Match already joined| ExistingJoinError[CouldNotJoinDueToExistingJoin\nerror RPEI]
+    JoinResult -->|Single match| EstablishJoin[Establish join<br/>CSO.MetaverseObject = MVO<br/>Set JoinType + DateJoined]
+    JoinResult -->|Multiple matches| AmbiguousError[AmbiguousMatch error<br/>RPEI with error]
+    JoinResult -->|Match already joined| ExistingJoinError[CouldNotJoinDueToExistingJoin<br/>error RPEI]
 
     %% --- Attribute Flow path ---
     EstablishJoin --> AttrFlow
     Project --> AttrFlow
-    CheckMvo -->|Yes| AttrFlow[Inbound Attribute Flow\nPass 1: scalar attributes only\nFor each sync rule mapping:\n- Direct: CSO attr --> MVO attr\n- Expression: evaluate --> MVO attr\nSkip reference attributes]
+    CheckMvo -->|Yes| AttrFlow[Inbound Attribute Flow<br/>Pass 1: scalar attributes only<br/>For each sync rule mapping:<br/>- Direct: CSO attr --> MVO attr<br/>- Expression: evaluate --> MVO attr<br/>Skip reference attributes]
 
-    AttrFlow --> QueueRef[Queue CSO for deferred\nreference attribute processing\nPass 2 at end of page]
-    QueueRef --> ApplyChanges[Apply pending attribute\nadditions and removals to MVO]
-    ApplyChanges --> QueueMvo[Queue MVO for batch\npersist and export evaluation]
-    QueueMvo --> DriftDetect[Drift Detection\nCompare CSO values against\nexpected MVO state\nCreate corrective pending exports\nfor EnforceState export rules]
-    DriftDetect --> Result([Return change result:\nProjected / Joined / AttributeFlow / NoChanges])
+    AttrFlow --> QueueRef[Queue CSO for deferred<br/>reference attribute processing<br/>Pass 2 at end of page]
+    QueueRef --> ApplyChanges[Apply pending attribute<br/>additions and removals to MVO]
+    ApplyChanges --> QueueMvo[Queue MVO for batch<br/>persist and export evaluation]
+    QueueMvo --> DriftDetect[Drift Detection<br/>Compare CSO values against<br/>expected MVO state<br/>Create corrective pending exports<br/>for EnforceState export rules]
+    DriftDetect --> Result([Return change result:<br/>Projected / Joined / AttributeFlow / NoChanges])
 
     %% --- Error handling ---
-    Entry -.->|SyncJoinException| JoinError[RPEI with specific error type\nAmbiguousMatch, ExistingJoin, etc.]
-    Entry -.->|Unhandled Exception| UnhandledError[RPEI with UnhandledError\n+ stack trace\nProcessing continues to next CSO]
+    Entry -.->|SyncJoinException| JoinError[RPEI with specific error type<br/>AmbiguousMatch, ExistingJoin, etc.]
+    Entry -.->|Unhandled Exception| UnhandledError[RPEI with UnhandledError<br/>+ stack trace<br/>Processing continues to next CSO]
 ```
 
 ## Key Design Decisions
