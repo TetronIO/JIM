@@ -138,6 +138,15 @@ jim-diagrams() {
   container_name="jim-structurizr-export"
   port=8085
 
+  # Install Chromium OS dependencies if needed (one-time)
+  if ! ldconfig -p 2>/dev/null | grep -q libglib-2.0; then
+    echo "Installing Chromium dependencies (one-time)..."
+    sudo apt-get update -qq && sudo apt-get install -y -qq \
+      libglib2.0-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+      libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libpango-1.0-0 \
+      libcairo2 libasound2 libxshmfence1 libxfixes3 > /dev/null 2>&1
+  fi
+
   # Install npm dependencies if needed
   if [ ! -d "${structurizr_dir}/node_modules" ]; then
     echo "Installing Puppeteer dependencies..."

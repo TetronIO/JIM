@@ -3,11 +3,41 @@ const fs = require('fs');
 const path = require('path');
 
 const FILE_PREFIX = 'jim-structurizr-1-';
-const SVG_FORMAT = 'svg';
 const IMAGE_VIEW_TYPE = 'Image';
 
 const url = process.argv[2] || 'http://localhost:8085/workspace/diagrams';
 const outputDir = process.argv[3] || path.resolve(__dirname, '../images');
+
+// Read JIM version from VERSION file
+const versionFile = path.resolve(__dirname, '../../../VERSION');
+const jimVersion = fs.existsSync(versionFile)
+  ? fs.readFileSync(versionFile, 'utf8').trim()
+  : null;
+
+/**
+ * Injects a "JIM v{version}" label into the SVG metadata area.
+ * Structurizr renders three metadata lines at the bottom-left:
+ *   - Title (font-size 36px, highest y position)
+ *   - Description (font-size 24px)
+ *   - Timestamp (font-size 24px, lowest y position)
+ * We insert the version between the description and timestamp.
+ */
+function injectVersion(svg, version) {
+  // Find the timestamp element (last metadata line, contains date/time text)
+  const timestampPattern = /<g\s+id="j_\d+"\s+transform="translate\((\d+),(\d+)\)"><g id="v-\d+"><text[^>]*font-size="24px"[^>]*><tspan[^>]*>[A-Z][a-z]+day,\s/;
+  const match = svg.match(timestampPattern);
+  if (!match) return svg;
+
+  const timestampX = parseInt(match[1]);
+  const timestampY = parseInt(match[2]);
+
+  // Place version line below the timestamp (34px lower, matching 24px font spacing)
+  const versionY = timestampY + 34;
+  const versionElement = `<g transform="translate(${timestampX},${versionY})"><g><text font-size="24px" xml:space="preserve" y="0.8em" font-weight="normal" text-anchor="start" fill="#444444" pointer-events="none" display="block" font-family="Open Sans, Tahoma, Arial"><tspan dy="0" display="block">JIM v${version}</tspan></text></g></g>`;
+
+  // Insert before the closing </g></g></svg>
+  return svg.replace(/<\/g><\/g><\/svg>$/, `${versionElement}</g></g></svg>`);
+}
 
 let expectedNumberOfExports = 0;
 let actualNumberOfExports = 0;
@@ -71,7 +101,8 @@ let actualNumberOfExports = 0;
       return structurizr.scripting.exportCurrentDiagramToSVG({ includeMetadata: true });
     });
 
-    fs.writeFileSync(diagramPath, svgForDiagram);
+    const finalDiagram = jimVersion ? injectVersion(svgForDiagram, jimVersion) : svgForDiagram;
+    fs.writeFileSync(diagramPath, finalDiagram);
     console.log(`  + ${diagramFilename}`);
     actualNumberOfExports++;
 
