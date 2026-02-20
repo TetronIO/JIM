@@ -1100,6 +1100,14 @@ Write-Step "Scenario log saved to: results/logs/$Scenario-$Template-$logTimestam
 $step6Start = Get-Date
 Write-Section "Step 6: Capturing Performance Metrics"
 
+# Skip detailed metrics capture for large templates - parsing the worker logs becomes
+# prohibitively expensive (CPU and memory) due to the volume of DiagnosticListener lines.
+$metricsSkippedTemplates = @("MediumLarge", "Large", "XLarge", "XXLarge")
+if ($Template -in $metricsSkippedTemplates) {
+    Write-Warning "Skipping detailed performance metrics for '$Template' template (log volume too large for efficient parsing)"
+    Write-Step "Use 'Medium' or smaller templates for detailed performance metrics capture"
+}
+else {
 Write-Step "Extracting diagnostic timing from worker logs..."
 
 # Capture worker logs with diagnostic output
@@ -1354,6 +1362,7 @@ else {
         Write-Host "${GRAY}This is the first performance capture for $Scenario-$Template on $hostname${NC}"
     }
 }
+} # end else (metrics not skipped)
 
 $timings["6. Capture Metrics"] = (Get-Date) - $step6Start
 
