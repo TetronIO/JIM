@@ -213,7 +213,7 @@ html[lang] .mud-table-outlined {
     );
     opacity: 0.08;
     background-size: 200% 100%;
-    animation: jim-worker-shimmer 2s ease-in-out infinite;
+    animation: jim-worker-shimmer 3s ease-in-out infinite;
 }
 
 @keyframes jim-worker-shimmer {
@@ -237,6 +237,16 @@ html[lang] .mud-table-outlined {
 .jim-worker-activity-text .mud-icon-root {
     font-size: 1rem;
     color: var(--mud-palette-primary);
+    animation: jim-worker-icon-tick 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes jim-worker-icon-tick {
+    0%   { transform: rotate(0deg); }
+    15%  { transform: rotate(0deg); }
+    25%  { transform: rotate(90deg); }
+    65%  { transform: rotate(90deg); }
+    75%  { transform: rotate(180deg); }
+    100% { transform: rotate(180deg); }
 }
 
 /* Nested containers: tables and tab panels inside papers use a deeper surface colour
