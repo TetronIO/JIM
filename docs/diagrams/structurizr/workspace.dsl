@@ -177,40 +177,40 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
         # Level 1: System Context
         systemContext jim "SystemContext" "System Context diagram for JIM" {
             include *
-            autoLayout tb
+            autoLayout tb 300 300
         }
 
         # Level 2: Container Diagram
         container jim "Containers" "Container diagram for JIM" {
             include *
-            autoLayout tb
+            autoLayout tb 300 300
         }
 
         # Level 3: Component Diagrams
 
         component jim.webApp "WebAppComponents" "Component diagram for JIM Web Application" {
             include *
-            autoLayout tb
+            autoLayout tb 300 300
         }
 
         component jim.appLayer "AppLayerComponents" "Component diagram for JIM Application Layer" {
             include *
-            autoLayout tb
+            autoLayout tb 300 300
         }
 
         component jim.worker "WorkerComponents" "Component diagram for JIM Worker Service" {
             include *
-            autoLayout tb
+            autoLayout tb 300 300
         }
 
         component jim.connectors "ConnectorComponents" "Component diagram for JIM Connectors" {
             include *
-            autoLayout tb
+            autoLayout tb 500 300
         }
 
         component jim.scheduler "SchedulerComponents" "Component diagram for JIM Scheduler Service" {
             include *
-            autoLayout tb
+            autoLayout tb 300 300
         }
 
         styles {
