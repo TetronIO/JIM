@@ -7,7 +7,7 @@ This diagram shows how connectors are resolved, configured, opened, used, and cl
 ## Connector Interface Hierarchy
 
 ```mermaid
-flowchart TD
+flowchart LR
     IConnector[IConnector<br/>Name, Description, Url] --> ICap[IConnectorCapabilities<br/>What the connector supports]
     IConnector --> ISettings[IConnectorSettings<br/>Configuration definitions<br/>+ validation]
     IConnector --> ISchema[IConnectorSchema<br/>Schema discovery]
