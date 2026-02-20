@@ -114,35 +114,21 @@ flowchart TD
 
 When `MaxParallelism > 1`, batches are distributed across concurrent tasks. Each task is fully isolated to avoid EF Core thread-safety issues.
 
-```
-                    +-------------------+
-                    |  Export Processor  |
-                    |  (caller context) |
-                    +---------+---------+
-                              |
-                    +---------+---------+
-                    |  SemaphoreSlim    |
-                    |  (MaxParallelism) |
-                    +---------+---------+
-                              |
-              +---------------+---------------+
-              |               |               |
-     +--------+------+ +-----+-------+ +-----+-------+
-     |   Batch 1     | |   Batch 2   | |   Batch 3   |
-     | Own DbContext  | | Own DbCtx   | | Own DbCtx   |
-     | Own Connector  | | Own Conn    | | Own Conn     |
-     | Re-loads PEs   | | Re-loads    | | Re-loads     |
-     | by ID from own | | PEs by ID   | | PEs by ID   |
-     | context        | |             | |              |
-     +-------+--------+ +------+------+ +------+------+
-             |                 |                |
-             +--------+--------+--------+-------+
-                      |                 |
-              +-------+------+  +-------+-------+
-              | Result Lock  |  | Progress      |
-              | (aggregation)|  | Semaphore     |
-              | thread-safe  |  | (serialised)  |
-              +--------------+  +---------------+
+```mermaid
+flowchart TD
+    Caller[Export Processor<br/>caller context] --> Semaphore[SemaphoreSlim<br/>MaxParallelism]
+
+    Semaphore --> B1[Batch 1<br/>Own DbContext<br/>Own Connector<br/>Re-loads PEs by ID]
+    Semaphore --> B2[Batch 2<br/>Own DbContext<br/>Own Connector<br/>Re-loads PEs by ID]
+    Semaphore --> B3[Batch N<br/>Own DbContext<br/>Own Connector<br/>Re-loads PEs by ID]
+
+    B1 --> ResultLock[Result Lock<br/>thread-safe aggregation]
+    B2 --> ResultLock
+    B3 --> ResultLock
+
+    B1 --> ProgressSem[Progress Semaphore<br/>serialised via SemaphoreSlim 1,1<br/>protects caller DbContext]
+    B2 --> ProgressSem
+    B3 --> ProgressSem
 ```
 
 - **Batch IDs are captured** before dispatching - each parallel task re-loads its exports from its own DbContext by ID
