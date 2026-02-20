@@ -5,7 +5,7 @@ This guide provides step-by-step instructions for manually testing the MVO Delet
 ## Prerequisites
 
 - JIM instance running with Docker stack (`jim-stack`)
-- PowerShell module loaded: `Import-Module JIM.PowerShell/JIM/JIM.psd1`
+- PowerShell module loaded: `Import-Module src/JIM.PowerShell/JIM/JIM.psd1`
 - API key configured: `Connect-JIM -Url http://localhost:5200 -ApiKey "your-key"`
 - At least one connected system configured (e.g., CSV + LDAP)
 

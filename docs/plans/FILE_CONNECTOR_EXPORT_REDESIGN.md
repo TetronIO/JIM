@@ -26,7 +26,7 @@ FileConnector export is fundamentally broken for its primary use case. Four rela
 
 ### Phase 1a: Rewrite FileConnectorExport.cs - COMPLETE
 
-**File:** `JIM.Connectors/File/FileConnectorExport.cs`
+**File:** `src/JIM.Connectors/File/FileConnectorExport.cs`
 
 Rewrote `Execute()` to:
 
@@ -38,7 +38,7 @@ Rewrote `Execute()` to:
 
 ### Phase 1b: Remove Include Full State Setting - COMPLETE
 
-**File:** `JIM.Connectors/File/FileConnector.cs`
+**File:** `src/JIM.Connectors/File/FileConnector.cs`
 
 - Removed `SettingIncludeFullState` constant
 - Removed the setting definition from `GetSettings()` list
@@ -47,7 +47,7 @@ Rewrote `Execute()` to:
 
 ## Phase 2: Fix Duplicate Pending Exports - COMPLETE
 
-**File:** `JIM.Application/Servers/ExportEvaluationServer.cs`
+**File:** `src/JIM.Application/Servers/ExportEvaluationServer.cs`
 
 In `CreateOrUpdatePendingExportWithNoNetChangeAsync`:
 
@@ -61,13 +61,13 @@ In `CreateOrUpdatePendingExportWithNoNetChangeAsync`:
 
 ### Phase 3a: ExportExecutionServer CSO Update Ordering - COMPLETE (No Change Needed)
 
-**File:** `JIM.Application/Servers/ExportExecutionServer.cs`
+**File:** `src/JIM.Application/Servers/ExportExecutionServer.cs`
 
 Analysis confirmed that since `ProcessedExportItem.ConnectedSystemObject` holds a **reference** to the CSO object, and `UpdateCsoAfterSuccessfulExportAsync` modifies the same object in-memory before `ProcessExportResultAsync` runs in `SyncExportTaskProcessor`, the External ID is visible when `ExternalIdSnapshot` is captured. No code change required.
 
 ### Phase 3b: Populate RPEI External ID Snapshot - COMPLETE
 
-**File:** `JIM.Worker/Processors/SyncExportTaskProcessor.cs`
+**File:** `src/JIM.Worker/Processors/SyncExportTaskProcessor.cs`
 
 In `ProcessExportResultAsync`:
 
@@ -113,10 +113,10 @@ All steps complete. Verified with Scenario 1 integration test (Small template).
 
 | File | Change | Status |
 |------|--------|--------|
-| `JIM.Connectors/File/FileConnectorExport.cs` | Full rewrite of Execute() | COMPLETE |
-| `JIM.Connectors/File/FileConnector.cs` | Remove Include Full State setting | COMPLETE |
-| `JIM.Application/Servers/ExportEvaluationServer.cs` | Fix duplicate PE dedup for Creates | COMPLETE |
-| `JIM.Worker/Processors/SyncExportTaskProcessor.cs` | Populate RPEI External ID snapshot | COMPLETE |
+| `src/JIM.Connectors/File/FileConnectorExport.cs` | Full rewrite of Execute() | COMPLETE |
+| `src/JIM.Connectors/File/FileConnector.cs` | Remove Include Full State setting | COMPLETE |
+| `src/JIM.Application/Servers/ExportEvaluationServer.cs` | Fix duplicate PE dedup for Creates | COMPLETE |
+| `src/JIM.Worker/Processors/SyncExportTaskProcessor.cs` | Populate RPEI External ID snapshot | COMPLETE |
 | `test/JIM.Worker.Tests/Connectors/FileConnectorExportTests.cs` | Full test suite | COMPLETE |
 
 ## Verification

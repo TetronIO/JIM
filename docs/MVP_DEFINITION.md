@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Version** | 1.15 |
-| **Last Updated** | 2026-01-31 |
-| **Status** | MVP Complete (100%) |
+| **Version** | 1.16 |
+| **Last Updated** | 2026-02-20 |
+| **Status** | MVP Complete (100%) — Post-MVP enhancements in progress |
 
 ---
 
@@ -24,15 +24,84 @@
 | Release | `██████████` | 9 | 9 | 100% |
 | **Overall** | `██████████` | **105** | **105** | **100%** |
 
-### Priority Order for Remaining Work
+### Future Roadmap
 
-**Nice to Have (Can follow MVP):**
+**Planned:**
+- Worker database performance optimisation (see `docs/plans/WORKER_DATABASE_PERFORMANCE_OPTIMISATION.md`)
+- SCIM server connector (see `docs/plans/SCIM_SERVER_DESIGN.md`)
+
+**Nice to Have:**
 - Sync preview / what-if analysis (#288)
 - Dashboard admin home page (#169)
 - Unique value generation (#242)
 - Full RBAC (#21) and Synchronisation Readers role (#9)
 
-### Recently Completed ✓
+---
+
+## Post-MVP Progress (since 2026-01-31)
+
+Since MVP completion, development has focused on performance optimisation, scheduler reliability, UI polish, and operational resilience. 129 commits have been merged.
+
+### Export Performance Optimisation (Phases 1-4 Complete, Phase 5 In Progress)
+
+Full plan: `docs/plans/EXPORT_PERFORMANCE_OPTIMISATION.md`
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| Phase 1 | Batch database operations — eliminated per-object DB round-trips | Complete (PR #334) |
+| Phase 2 | LDAP connector async pipelining with configurable concurrency | Complete (PR #335) |
+| Phase 3 | Parallel batch export with per-system MaxExportParallelism | Complete (PR #337) |
+| Phase 3b | MaxExportParallelism as per-Connected System setting with UI/API/PowerShell | Complete (PR #337) |
+| Phase 4 | Parallel schedule step execution for concurrent multi-system operations | Complete |
+| Phase 5 | Queue-all-steps-upfront — eliminate ~120s of scheduler polling overhead | In Progress |
+
+**Key outcomes:**
+- ~50% reduction in export time from Phase 1 alone
+- 3-8x LDAP export throughput improvement from connector pipelining
+- Linear throughput scaling with configurable parallelism (1-16x per system)
+- Parallel step groups confirmed via integration test timing validation
+
+### Scheduler Improvements
+
+- **Step failure detection (#332)** — Scheduler now correctly detects step failures and respects ContinueOnFailure setting (previously showed false success)
+- **Granular activity statistics** — Replaced aggregate stats with per-change-type fields (creates, updates, deletes, renames)
+- **Queue-all-steps-upfront** (Phase 5, in progress) — Near-instant step transitions by pre-queuing all schedule steps with `WaitingForPreviousStep` status
+
+### Operational Resilience
+
+- **Worker crash recovery** — Heartbeat-based stale task detection automatically recovers from worker crashes
+- **OAuth token refresh** — Transparent 401 retry with token refresh, preventing database OOM from expired tokens
+- **Progress tracking** — Added progress tracking for import Resolving References phase
+- **Disconnected RPEI** — Records separate Run Profile Execution Item when processing source deletions
+- **Operational vs unhandled errors** — Differentiated operational errors from unhandled exceptions in activity reporting
+
+### UI/UX Improvements
+
+- **Theme system** — 5 navy-series themes (navy-o2 through navy-o5) with refined light and dark mode support
+- **Operations Queue** — Grouped queue table with collapsible schedule headers, step progress, worker status chips, animated worker processing bar
+- **Text normalisation** — Consistent text sizing across Activity Detail, API Key Detail, Change History modal, and Activity Item Details pages
+- **Thousand separators** — Culture-aware number formatting across all statistics displays
+- **Table standardisation** — Outlined dense search boxes, toolbar-integrated create buttons, nested table styling
+- **Connected System detail** — Decomposed into 7 child components for maintainability
+- **Schema pages** — Consolidated to MudTabs navigation
+- **Application version** — Displayed in page footer
+- **Demo mode** — Query-string-activated demo mode for Operations Queue
+
+### Repository Restructure
+
+- **Source projects moved to `src/`** — All 10 source projects relocated from repo root to `src/` directory for cleaner repository layout
+- **Docker build context** updated to use repo root so VERSION file is included
+
+### Documentation & Tooling
+
+- **Security documentation** — Added `docs/COMPLIANCE_MAPPING.md` and security development guidelines
+- **PostgreSQL tuning** — Added tuning section to Developer Guide with shared memory scaling guidance
+- **CLAUDE.md restructured** — Slimmed from 49k to 22k characters with subdirectory files
+- **`jim-test-all` alias** — Comprehensive test runner for unit + workflow + Pester tests with summary output
+- **Dependabot review skill** — Claude Code skill for reviewing dependency PRs against supply chain security requirements
+- **Integration test performance** — 10x faster integration tests with automatic Docker cleanup
+
+### Recently Completed (MVP) ✓
 - ~~Scheduler Service (#168)~~ - Full scheduling system with cron/interval triggers, multi-step execution, REST API, Blazor UI, PowerShell cmdlets, and integration tests
 - ~~CSO/MVO Change Tracking (#14, #269)~~ - Full change history with timeline UI, initiator/mechanism tracking, deleted objects view, retention cleanup
 - ~~Progress Indication (#246)~~ - Real-time progress bars, percentage tracking, and contextual messages on Operations page
@@ -160,6 +229,8 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - Schedule REST API (CRUD, enable/disable, manual trigger, execution monitoring) ✓
 - Schedule PowerShell cmdlets (11 cmdlets with name-based parameters) ✓
 - Scheduler integration tests (Scenario 6 - auto-trigger, manual trigger, overlap prevention) ✓
+- Step failure detection with ContinueOnFailure support (#332, Post-MVP) ✓
+- Granular per-change-type activity statistics (Post-MVP) ✓
 
 #### 4.2 Background Processing
 - Worker service for task execution ✓
@@ -167,6 +238,8 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 - Cancellation support ✓
 - Activity tracking and logging ✓
 - Background job for scheduled MVO deletions (#120) ✓
+- Worker crash recovery with heartbeat-based stale task detection (Post-MVP) ✓
+- Parallel worker task dispatch for concurrent schedule step execution (Post-MVP) ✓
 
 ### 5. Administration UI
 
@@ -242,6 +315,8 @@ For JIM to be considered MVP-complete, it must support a complete identity lifec
 #### 9.2 Testing Framework (#173)
 - End-to-end integration tests with real connected systems ✓
 - Automated test scenarios (Scenarios 1, 2, 4, 5, 6, 8 complete; 7 deferred pending Internal MVO design) ✓
+- Parallel execution timing validation in integration tests (Post-MVP) ✓
+- 10x integration test performance optimisation (Post-MVP) ✓
 
 ### 10. Release & Deployment (#188)
 
@@ -280,7 +355,7 @@ JIM MVP is complete when:
 The following are explicitly out of scope for MVP:
 
 - ~~Delta/incremental sync~~ (implemented: delta import and delta sync processors)
-- Multiple connector types beyond LDAP and File
+- Multiple connector types beyond LDAP and File (SCIM server connector planned post-MVP)
 - ~~Authoritative source deletion rules~~ (implemented: WhenAuthoritativeSourceDisconnected #115)
 - Conditional deletion rules
 - Soft delete / recycle bin

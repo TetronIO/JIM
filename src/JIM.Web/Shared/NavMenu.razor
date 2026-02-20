@@ -1,0 +1,244 @@
+@inject NavigationManager NavigationManager
+@inject IUserPreferenceService PreferenceService
+@implements IDisposable
+
+<MudNavMenu Color="Color.Primary" Class="pt-3 pb-3 jim-nav-menu">
+    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home" Class="jim-nav-top-level">Home</MudNavLink>
+
+    <MudNavGroup Title="Users" Expanded="_usersExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "users"))" Icon="@Icons.Material.Filled.Person" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
+        <MudNavLink Href="/t/users" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">All Users</MudNavLink>
+        <MudNavLink Href="/t/users/s/people" Match="NavLinkMatch.Prefix" Class="jim-nav-child">People</MudNavLink>
+        <MudNavLink Href="/t/users/s/service-principals" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Service Principals</MudNavLink>
+    </MudNavGroup>
+
+    <MudNavGroup Title="Groups" Expanded="_groupsExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "groups"))" Icon="@Icons.Material.Filled.Groups" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
+        <MudNavLink Href="/t/groups" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">All Groups</MudNavLink>
+        <MudNavLink Href="/t/groups/s/security-groups" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Security Groups</MudNavLink>
+        <MudNavLink Href="/t/groups/s/distribution-groups" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Distribution Groups</MudNavLink>
+    </MudNavGroup>
+
+    @* Dashboard - Hidden until implemented
+    <AuthorizeView Roles="Administrator">
+        <MudNavGroup Title="Dashboard" Expanded="_dashboardExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "dashboard"))" Icon="@Icons.Material.Filled.Dashboard" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
+            <MudNavLink Href="/dashboard/daily" Match="NavLinkMatch.All" Class="jim-nav-child">Daily</MudNavLink>
+            <MudNavLink Href="/dashboard/weekly" Match="NavLinkMatch.All" Class="jim-nav-child">Weekly</MudNavLink>
+            <MudNavLink Href="/dashboard/weekly" Match="NavLinkMatch.All" Class="jim-nav-child">Monthly</MudNavLink>
+            <MudNavLink Href="/dashboard/weekly" Match="NavLinkMatch.All" Class="jim-nav-child">Annually</MudNavLink>
+        </MudNavGroup>
+    </AuthorizeView>
+    *@
+
+    <MudNavGroup Title="Activity" Expanded="_activityExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "activity"))" Icon="@Icons.Material.Filled.DynamicFeed" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
+        <MudNavLink Href="/activity" Match="NavLinkMatch.Prefix" Class="jim-nav-child">Activity</MudNavLink>
+        <MudNavLink Href="/activity/mine" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">My Activity</MudNavLink>
+    </MudNavGroup>
+
+    <AuthorizeView Roles="Administrator">
+        <MudNavGroup Title="Admin" Expanded="_adminExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "admin"))" Icon="@Icons.Material.Filled.Settings" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
+            <MudNavLink Href="/admin/operations" Match="NavLinkMatch.Prefix" Class="jim-nav-child">Operations</MudNavLink>
+            <MudNavLink Href="/admin/connected-systems" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Connected Systems</MudNavLink>
+            <MudNavLink Href="/admin/sync-rules" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Synchronisation Rules</MudNavLink>
+            <MudNavLink Href="/admin/schema" Match="NavLinkMatch.Prefix" Class="jim-nav-child">Schema</MudNavLink>
+            <MudNavLink Href="/admin/predefined-searches" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Predefined Searches</MudNavLink>
+            <MudNavLink Href="/admin/example-data" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Example Data</MudNavLink>
+            <MudNavLink Href="/admin/certificates" Match="NavLinkMatch.Prefix" Class="jim-nav-child">Certificates</MudNavLink>
+            <MudNavLink Href="/admin/apikeys" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">API Keys</MudNavLink>
+            <MudNavLink Href="/admin/deleted-objects" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Deleted Objects</MudNavLink>
+            <MudNavLink Href="/admin/logs" Match="NavLinkMatch.Prefix" Class="jim-nav-child">Logs</MudNavLink>
+            <MudNavLink Href="/admin/settings" Match="NavLinkMatch.Prefix" Class="jim-nav-child">Settings</MudNavLink>
+        </MudNavGroup>
+    </AuthorizeView>
+</MudNavMenu>
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public bool DrawerOpen { get; set; }
+
+    private string _currentUrl = string.Empty;
+    private bool _previousDrawerOpen;
+    private bool _preferencesLoaded;
+    private CancellationTokenSource? _restoreCts;
+
+    // Track expanded state for each nav group
+    private bool _usersExpanded;
+    private bool _groupsExpanded;
+    private bool _activityExpanded;
+    private bool _dashboardExpanded;
+    private bool _adminExpanded;
+
+    protected override void OnInitialized()
+    {
+        _currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri).ToLowerInvariant();
+        NavigationManager.LocationChanged += OnLocationChanged;
+
+        // Initialize expanded states based on current URL if drawer starts open
+        // Saved preferences will be loaded in OnAfterRenderAsync when JS interop is available
+        if (DrawerOpen)
+        {
+            _usersExpanded = IsGroupActive("users");
+            _groupsExpanded = IsGroupActive("groups");
+            _dashboardExpanded = IsGroupActive("dashboard");
+            _adminExpanded = IsGroupActive("admin");
+
+            // Activity is expanded by default, or when on an activity page
+            _activityExpanded = IsGroupActive("activity") ||
+                (!_usersExpanded && !_groupsExpanded && !_dashboardExpanded && !_adminExpanded);
+        }
+
+        _previousDrawerOpen = DrawerOpen;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_preferencesLoaded)
+        {
+            _preferencesLoaded = true;
+
+            // Load saved expanded states from browser localStorage
+            var savedUsers = await PreferenceService.GetNavGroupExpandedAsync("users");
+            var savedGroups = await PreferenceService.GetNavGroupExpandedAsync("groups");
+            var savedDashboard = await PreferenceService.GetNavGroupExpandedAsync("dashboard");
+            var savedAdmin = await PreferenceService.GetNavGroupExpandedAsync("admin");
+            var savedActivity = await PreferenceService.GetNavGroupExpandedAsync("activity");
+
+            // Apply saved preferences - expand if saved as expanded OR if currently active
+            // This ensures navigating to a page still opens its group even if previously collapsed
+            if (DrawerOpen)
+            {
+                _usersExpanded = savedUsers || IsGroupActive("users");
+                _groupsExpanded = savedGroups || IsGroupActive("groups");
+                _dashboardExpanded = savedDashboard || IsGroupActive("dashboard");
+                _adminExpanded = savedAdmin || IsGroupActive("admin");
+                _activityExpanded = savedActivity || IsGroupActive("activity");
+            }
+
+            StateHasChanged();
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        // When drawer closes, collapse all groups
+        // When drawer opens, restore saved preferences
+        if (DrawerOpen != _previousDrawerOpen)
+        {
+            _previousDrawerOpen = DrawerOpen;
+
+            // Cancel any in-flight restore operation to prevent it from
+            // re-expanding groups after the drawer has already closed
+            _restoreCts?.Cancel();
+            _restoreCts?.Dispose();
+
+            if (DrawerOpen)
+            {
+                // Drawer just opened - restore saved preferences asynchronously
+                _restoreCts = new CancellationTokenSource();
+                _ = RestoreSavedGroupStatesAsync(_restoreCts.Token);
+            }
+            else
+            {
+                _restoreCts = null;
+
+                // Drawer just closed - collapse all
+                _usersExpanded = false;
+                _groupsExpanded = false;
+                _activityExpanded = false;
+                _dashboardExpanded = false;
+                _adminExpanded = false;
+            }
+        }
+    }
+
+    private async Task RestoreSavedGroupStatesAsync(CancellationToken cancellationToken)
+    {
+        var savedUsers = await PreferenceService.GetNavGroupExpandedAsync("users");
+        var savedGroups = await PreferenceService.GetNavGroupExpandedAsync("groups");
+        var savedDashboard = await PreferenceService.GetNavGroupExpandedAsync("dashboard");
+        var savedAdmin = await PreferenceService.GetNavGroupExpandedAsync("admin");
+        var savedActivity = await PreferenceService.GetNavGroupExpandedAsync("activity");
+
+        // If the drawer was closed while we were fetching, discard results
+        if (cancellationToken.IsCancellationRequested)
+            return;
+
+        // Apply saved preferences, also ensuring the active group is always expanded
+        _usersExpanded = savedUsers || IsGroupActive("users");
+        _groupsExpanded = savedGroups || IsGroupActive("groups");
+        _dashboardExpanded = savedDashboard || IsGroupActive("dashboard");
+        _adminExpanded = savedAdmin || IsGroupActive("admin");
+        _activityExpanded = savedActivity || IsGroupActive("activity");
+
+        StateHasChanged();
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        _currentUrl = NavigationManager.ToBaseRelativePath(e.Location).ToLowerInvariant();
+
+        // When navigating, ensure the active group is expanded (but preserve other manually expanded groups)
+        if (DrawerOpen)
+        {
+            _usersExpanded |= IsGroupActive("users");
+            _groupsExpanded |= IsGroupActive("groups");
+            _activityExpanded |= IsGroupActive("activity");
+            _dashboardExpanded |= IsGroupActive("dashboard");
+            _adminExpanded |= IsGroupActive("admin");
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task OnGroupExpandedChangedAsync(bool expanded, string groupName)
+    {
+        // Update local state
+        switch (groupName)
+        {
+            case "users":
+                _usersExpanded = expanded;
+                break;
+            case "groups":
+                _groupsExpanded = expanded;
+                break;
+            case "dashboard":
+                _dashboardExpanded = expanded;
+                break;
+            case "admin":
+                _adminExpanded = expanded;
+                break;
+            case "activity":
+                _activityExpanded = expanded;
+                break;
+        }
+
+        // Only persist to localStorage when the drawer is open - this means
+        // the change was a deliberate user action (clicking the expand/collapse arrow).
+        // When the drawer closes, we programmatically set all groups to false,
+        // which fires ExpandedChanged - but that's not a user preference change
+        // and should not overwrite their saved expanded states.
+        if (DrawerOpen)
+        {
+            await PreferenceService.SetNavGroupExpandedAsync(groupName, expanded);
+        }
+    }
+
+    private bool IsGroupActive(string groupKey)
+    {
+        return groupKey switch
+        {
+            "users" => _currentUrl.StartsWith("t/users"),
+            "groups" => _currentUrl.StartsWith("t/groups"),
+            "activity" => _currentUrl.StartsWith("activity"),
+            "dashboard" => _currentUrl.StartsWith("dashboard"),
+            "admin" => _currentUrl.StartsWith("admin"),
+            _ => false
+        };
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+        _restoreCts?.Cancel();
+        _restoreCts?.Dispose();
+    }
+}

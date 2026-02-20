@@ -5,10 +5,6 @@
 # Unset GITHUB_TOKEN to allow gh CLI to use its own authentication with project scopes
 unset GITHUB_TOKEN
 
-# Compose file variables for cleaner aliases
-JIM_COMPOSE="docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db"
-JIM_COMPOSE_DEV="docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml -f docker-compose.dev-tools.yml --profile with-db"
-
 # Help - list all jim aliases
 alias jim='echo "JIM Development Aliases:
 
@@ -45,6 +41,9 @@ Reset:
   jim-reset          - Full reset (containers, images, volumes)
   jim-wipe           - Wipe JIM data (reset CSOs/MVOs/config, keep schema)
 
+Diagrams:
+  jim-diagrams       - Export Structurizr C4 diagrams as SVG
+
 Help:
   jim                - Show this help message
 "'
@@ -63,7 +62,7 @@ jim-test-all() {
 
   echo ""
   echo "=== Running Pester tests ==="
-  pwsh -NoProfile -Command "Import-Module Pester; \$config = New-PesterConfiguration; \$config.Run.Path = './JIM.PowerShell/JIM/Tests'; \$config.Output.Verbosity = 'Detailed'; Invoke-Pester -Configuration \$config" 2>&1 | tee "$pester_log"
+  pwsh -NoProfile -Command "Import-Module Pester; \$config = New-PesterConfiguration; \$config.Run.Path = './src/JIM.PowerShell/JIM/Tests'; \$config.Output.Verbosity = 'Detailed'; Invoke-Pester -Configuration \$config" 2>&1 | tee "$pester_log"
   pester_rc=$?
 
   dotnet_summary=$(grep -E "^(Passed!|Failed!)" "$dotnet_log")
@@ -101,35 +100,111 @@ jim-test-all() {
   [ "$dotnet_rc" -ne 0 ] || [ "$pester_rc" -ne 0 ] && return 1
   return 0
 }
-alias jim-test-ps='pwsh -NoProfile -Command "Import-Module Pester; \$config = New-PesterConfiguration; \$config.Run.Path = \"./JIM.PowerShell/JIM/Tests\"; \$config.Output.Verbosity = \"Detailed\"; Invoke-Pester -Configuration \$config"'
+alias jim-test-ps='pwsh -NoProfile -Command "Import-Module Pester; \$config = New-PesterConfiguration; \$config.Run.Path = \"./src/JIM.PowerShell/JIM/Tests\"; \$config.Output.Verbosity = \"Detailed\"; Invoke-Pester -Configuration \$config"'
 alias jim-clean='dotnet clean JIM.sln && dotnet build JIM.sln'
 
 # Local run aliases - source .env and override DB hostname for local access
-alias jim-web='(set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project JIM.Web)'
-alias jim-worker='(set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project JIM.Worker)'
-alias jim-scheduler='(set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project JIM.Scheduler)'
+alias jim-web='(set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Web)'
+alias jim-worker='(set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Worker)'
+alias jim-scheduler='(set -a && source .env && export JIM_DB_HOSTNAME=localhost && dotnet run --project src/JIM.Scheduler)'
 
 # Database management
-alias jim-migrate='dotnet ef database update --project JIM.PostgresData'
-alias jim-migration='dotnet ef migrations add --project JIM.PostgresData'
+alias jim-migrate='dotnet ef database update --project src/JIM.PostgresData'
+alias jim-migration='dotnet ef migrations add --project src/JIM.PostgresData'
 alias jim-db='docker compose -f db.yml up -d'
 alias jim-db-stop='docker compose -f db.yml down'
 alias jim-db-logs='docker compose -f db.yml logs -f'
 
 # Docker stack management
-alias jim-stack='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d'
-alias jim-stack-logs='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db logs -f'
-alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down && docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --remove-orphans 2>/dev/null || true && docker rm -f samba-ad-primary samba-ad-source samba-ad-target 2>/dev/null || true'
-alias jim-restart='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --force-recreate'
+alias jim-stack='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d'
+alias jim-stack-logs='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db logs -f'
+alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down && docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --remove-orphans 2>/dev/null || true && docker rm -f samba-ad-primary samba-ad-source samba-ad-target 2>/dev/null || true'
+alias jim-restart='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d --force-recreate'
 
 # Docker builds (rebuild and start services)
-alias jim-build='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d --build'
-alias jim-build-web='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db build jim.web && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d jim.web'
-alias jim-build-worker='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db build jim.worker && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d jim.worker'
-alias jim-build-scheduler='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db build jim.scheduler && docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d jim.scheduler'
+alias jim-build='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d --build'
+alias jim-build-web='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db build jim.web && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d jim.web'
+alias jim-build-worker='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db build jim.worker && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d jim.worker'
+alias jim-build-scheduler='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db build jim.scheduler && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d jim.scheduler'
 
 # Reset
-alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down --rmi local --volumes && docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --rmi local --volumes --remove-orphans 2>/dev/null || true && docker rm -f samba-ad-primary samba-ad-source samba-ad-target sqlserver-hris-a oracle-hris-b postgres-target openldap-test mysql-test 2>/dev/null || true && docker volume ls --format "{{.Name}}" | grep jim-integration | xargs -r docker volume rm 2>/dev/null || true && docker volume rm -f jim-db-volume jim-logs-volume 2>/dev/null || true && echo "JIM reset complete. All containers, images, and volumes removed. Run jim-build to rebuild."'
+alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down --rmi local --volumes && docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --rmi local --volumes --remove-orphans 2>/dev/null || true && docker rm -f samba-ad-primary samba-ad-source samba-ad-target sqlserver-hris-a oracle-hris-b postgres-target openldap-test mysql-test 2>/dev/null || true && docker volume ls --format "{{.Name}}" | grep jim-integration | xargs -r docker volume rm 2>/dev/null || true && docker volume rm -f jim-db-volume jim-logs-volume 2>/dev/null || true && echo "JIM reset complete. All containers, images, and volumes removed. Run jim-build to rebuild."'
+
+# Structurizr diagram export
+jim-diagrams() {
+  local repo_root structurizr_dir container_name port
+  repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo '/workspaces/JIM')"
+  structurizr_dir="${repo_root}/docs/diagrams/structurizr"
+  container_name="jim-structurizr-export"
+  port=8085
+
+  # Install Chromium OS dependencies if needed (one-time)
+  if ! ldconfig -p 2>/dev/null | grep -q libglib-2.0; then
+    echo "Installing Chromium dependencies (one-time)..."
+    sudo apt-get update -qq && sudo apt-get install -y -qq \
+      libglib2.0-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+      libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libpango-1.0-0 \
+      libcairo2 libasound2 libxshmfence1 libxfixes3 > /dev/null 2>&1
+  fi
+
+  # Install npm dependencies if needed
+  if [ ! -d "${structurizr_dir}/node_modules" ]; then
+    echo "Installing Puppeteer dependencies..."
+    (cd "${structurizr_dir}" && npm install --silent)
+  fi
+
+  # Remove any stale container
+  docker rm -f "${container_name}" 2>/dev/null
+
+  # Start Structurizr Lite (adrs mount resolves the symlink inside the container)
+  echo "Starting Structurizr Lite on port ${port}..."
+  docker run -d --name "${container_name}" \
+    -p "${port}:8080" \
+    -v "${structurizr_dir}:/usr/local/structurizr" \
+    -v "${repo_root}/docs/adrs:/usr/local/structurizr/adrs" \
+    structurizr/lite > /dev/null
+
+  # Wait for Structurizr Lite to be ready
+  echo "Waiting for Structurizr Lite to start..."
+  local attempts=0
+  while [ $attempts -lt 30 ]; do
+    if curl -sf "http://localhost:${port}/workspace/diagrams" > /dev/null 2>&1; then
+      break
+    fi
+    attempts=$((attempts + 1))
+    sleep 2
+  done
+
+  if [ $attempts -ge 30 ]; then
+    echo "ERROR: Structurizr Lite failed to start within 60 seconds."
+    docker rm -f "${container_name}" > /dev/null 2>&1
+    return 1
+  fi
+
+  echo "Structurizr Lite is ready."
+
+  # Remove old images
+  rm -f "${repo_root}/docs/diagrams/images"/jim-structurizr-1-*.svg
+
+  # Export diagrams
+  node "${structurizr_dir}/export-diagrams.js" \
+    "http://localhost:${port}/workspace/diagrams" \
+    "${repo_root}/docs/diagrams/images"
+  local export_rc=$?
+
+  # Cleanup
+  echo "Stopping Structurizr Lite..."
+  docker rm -f "${container_name}" > /dev/null 2>&1
+
+  if [ $export_rc -eq 0 ]; then
+    echo ""
+    echo "Diagrams exported to docs/diagrams/images/"
+    ls -1 "${repo_root}/docs/diagrams/images"/jim-structurizr-1-*.svg 2>/dev/null | sed 's|.*/||' | sed 's/^/  /'
+  else
+    echo "ERROR: Diagram export failed."
+    return 1
+  fi
+}
 
 # Wipe JIM data (reset to initial state without destroying database)
 # Note: Preserves MetaverseObjects with Administrator role assignments

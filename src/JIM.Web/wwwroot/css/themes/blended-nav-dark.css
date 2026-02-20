@@ -1,0 +1,187 @@
+/*
+ * JIM Colour Theme: Blended Nav Dark
+ *
+ * The dark counterpart to blended-nav-light. The navigation sidebar
+ * shares the same background as the page, creating a seamless layout
+ * with no visual border between nav and content. Very dark palette
+ * with blue primary accent.
+ *
+ * Depth model:
+ *   Page background:    #121314
+ *   Container surface:  #171819
+ *   Nested containers:  #2a2b2e
+ *
+ * We use html[lang] instead of :root so that these declarations have
+ * higher specificity (0,1,1) than MudBlazor's injected :root (0,1,0)
+ * styles, ensuring our theme values always win.
+ */
+
+html[lang] {
+    /* === Primary Palette === */
+    --mud-palette-primary: #4488ff;
+    --mud-palette-primary-rgb: 68,136,255;
+    --mud-palette-primary-darken: #3070ee;
+    --mud-palette-primary-lighten: #66a0ff;
+    --mud-palette-primary-text: #ffffffff;
+
+    /* === Secondary Palette === */
+    --mud-palette-secondary: #4488ff;
+    --mud-palette-secondary-rgb: 68,136,255;
+    --mud-palette-secondary-darken: #3070ee;
+    --mud-palette-secondary-lighten: #66a0ff;
+    --mud-palette-secondary-text: #ffffffff;
+
+    /* === Tertiary Palette === */
+    --mud-palette-tertiary: #00796B;
+    --mud-palette-tertiary-rgb: 0,121,107;
+    --mud-palette-tertiary-darken: #00695c;
+    --mud-palette-tertiary-lighten: #26a69a;
+    --mud-palette-tertiary-text: #ffffffff;
+
+    /* === Semantic Colours (brighter shades for dark backgrounds) === */
+    --mud-palette-success: #1b7d3e;
+    --mud-palette-success-rgb: 27,125,62;
+    --mud-palette-success-text: #ffffffff;
+    --mud-palette-warning: #ffb74d;
+    --mud-palette-warning-rgb: 255,183,77;
+    --mud-palette-warning-text: #000000dd;
+    --mud-palette-info: #64b5f6;
+    --mud-palette-info-rgb: 100,181,246;
+    --mud-palette-info-text: #000000dd;
+    --mud-palette-error: #ff8a80;
+    --mud-palette-error-rgb: 255,138,128;
+    --mud-palette-error-text: #000000dd;
+
+    /* === Background & Surface === */
+    --mud-palette-background: #121314;
+    --mud-palette-surface: #171819;
+    --mud-palette-background-grey: rgba(255, 255, 255, 0.03);
+
+    /* === Inner Surface (nested containers) === */
+    --jim-inner-surface: #2a2b2e;
+    --jim-inner-border-color: #2e2f32;
+
+    /* === Drawer (same as page background — the blended effect) === */
+    --mud-palette-drawer-background: #121314;
+    --mud-palette-drawer-text: #b0b2b8;
+    --mud-palette-drawer-icon: #6a6c74;
+
+    /* === Text === */
+    --mud-palette-text-primary: #e4e4e8;
+    --mud-palette-text-secondary: #9a9aa4;
+    --mud-palette-text-disabled: #55555e;
+
+    /* === Action === */
+    --mud-palette-action-default: #b0b2b8;
+    --mud-palette-action-default-hover: rgba(102, 136, 255, 0.25);
+    --mud-palette-action-disabled: rgba(255, 255, 255, 0.38);
+    --mud-palette-action-disabled-background: rgba(255, 255, 255, 0.10);
+
+    /* === Lines & Dividers === */
+    --mud-palette-lines-default: #2e2f32;
+    --mud-palette-lines-inputs: #3e3f44;
+    --mud-palette-divider: #2e2f32;
+    --mud-palette-divider-light: rgba(255, 255, 255, 0.06);
+
+    /* === Table === */
+    --mud-palette-table-lines: #2e2f32;
+    --mud-palette-table-striped: rgba(255, 255, 255, 0.02);
+    --mud-palette-table-hover: #222325;
+
+    /* === JIM Custom: Attribute table name column === */
+    --jim-attr-name-bg: #1a1b1d;
+
+    /* === JIM Custom: JSON Syntax Highlighting === */
+    --jim-json-key: #b8a0e8;
+    --jim-json-string: #a5d6a7;
+    --jim-json-number: #ffb74d;
+    --jim-json-boolean: #64b5f6;
+    --jim-json-null: #ff8a80;
+
+    /* === JIM Custom: Navigation === */
+    --jim-nav-top-level-color: #b0b2b8;
+    --jim-nav-child-color: #808490;
+    --jim-nav-hover-color: #f0f0f4;
+    --jim-nav-active-color: #f0f0f4;
+
+    /* === JIM Custom: Drawer border (transparent — no separator) === */
+    --jim-drawer-border-color: transparent;
+
+    /* === JIM Custom: Paper border === */
+    --jim-paper-border-color: #2e2f32;
+
+    /* === JIM Custom: Dialog surfaces (stepped elevation from surface) === */
+    --jim-dialog-surface: #181919;
+    --jim-dialog-inner-surface: #1e1f20;
+
+    /* === JIM Custom: Content Links === */
+    --jim-link-color: #4488ff;
+    --jim-link-visited-color: #4488ff;
+    --jim-link-hover-color: #f0f0f4;
+
+    /* === JIM Custom: Logo text === */
+    --jim-logo-text-color: #ffffff;
+}
+
+/* Uncomment to lighten outlined/text primary button text for readability */
+/*
+html[lang] .mud-button-outlined.mud-button-outlined-primary:not(:disabled),
+html[lang] .mud-button-text.mud-button-text-primary:not(:disabled) {
+    color: <lightened-primary>;
+}
+*/
+
+/* Uncomment to match outlined primary button border to the lightened text colour (solo buttons only) */
+/*
+html[lang] .mud-button-outlined.mud-button-outlined-primary:not(:disabled) {
+    border-color: <lightened-primary>;
+}
+*/
+
+/* Uncomment to revert outlined border to primary within button groups */
+/*
+html[lang] .mud-button-group-root .mud-button-outlined.mud-button-outlined-primary:not(:disabled) {
+    border-color: var(--mud-palette-primary);
+}
+*/
+
+/* Default filled button — slightly lighter grey for contrast on dark backgrounds */
+html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled) {
+    background-color: #2a2c2e;
+}
+
+html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled):hover {
+    background-color: #383a3e;
+}
+
+/* Improve Dark button visibility on dark backgrounds */
+html[lang] .mud-button-filled.mud-button-filled-dark:not(:disabled) {
+    background-color: #000000;
+}
+
+html[lang] .mud-button-outlined.mud-button-outlined-dark:not(:disabled) {
+    border-color: #505458;
+    color: #505458;
+}
+
+html[lang] .mud-button-text.mud-button-text-dark:not(:disabled) {
+    color: #505458;
+}
+
+/* Visited link colour (hardcoded — browsers block var() in :visited for privacy) */
+html[lang] a.mud-link.mud-primary-text:visited {
+    color: #4488ff !important;
+}
+
+/* Table group header rows — subtle emphasis for schedule/category headers */
+html[lang] .mud-table-cell-custom-group {
+    background-color: #1e1f22 !important;
+}
+
+/* Nested table footer, pager, and no-records rows use page background
+   to contrast against the shaded header row (inner-surface). */
+html[lang] .mud-paper .mud-table .mud-table-pagination-toolbar,
+html[lang] .mud-paper .mud-table .mud-table-foot .mud-table-cell,
+html[lang] .mud-paper .mud-table .mud-table-empty-row {
+    background-color: #121314 !important;
+}

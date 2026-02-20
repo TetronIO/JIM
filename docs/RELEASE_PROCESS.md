@@ -29,12 +29,12 @@ The `VERSION` file in the repository root is the single source of truth for the 
 
 All .NET projects automatically read this version via `Directory.Build.props`, so you only need to update one file.
 
-> **Note:** The PowerShell module manifest (`JIM.PowerShell/JIM/JIM.psd1`) must be updated manually when changing versions. The `ModuleVersion` field in the manifest is not automatically synchronised with the VERSION file. This is a known gap - future work could automate this via a pre-release script or GitHub Action.
+> **Note:** The PowerShell module manifest (`src/JIM.PowerShell/JIM/JIM.psd1`) must be updated manually when changing versions. The `ModuleVersion` field in the manifest is not automatically synchronised with the VERSION file. This is a known gap - future work could automate this via a pre-release script or GitHub Action.
 
 ### Updating the Version
 
 1. Edit the `VERSION` file with the new version number
-2. Update the PowerShell manifest (`JIM.PowerShell/JIM/JIM.psd1`) - change `ModuleVersion`
+2. Update the PowerShell manifest (`src/JIM.PowerShell/JIM/JIM.psd1`) - change `ModuleVersion`
 3. Update `CHANGELOG.md` with the release notes
 4. Commit all changes
 5. Create and push a tag matching the version
@@ -44,12 +44,12 @@ All .NET projects automatically read this version via `Directory.Build.props`, s
 echo "0.3.0" > VERSION
 
 # Update PowerShell manifest (manually edit ModuleVersion in JIM.psd1)
-# JIM.PowerShell/JIM/JIM.psd1: ModuleVersion = '0.3.0'
+# src/JIM.PowerShell/JIM/JIM.psd1: ModuleVersion = '0.3.0'
 
 # Update CHANGELOG.md (move Unreleased items to new version section)
 
 # Commit
-git add VERSION CHANGELOG.md JIM.PowerShell/JIM/JIM.psd1
+git add VERSION CHANGELOG.md src/JIM.PowerShell/JIM/JIM.psd1
 git commit -m "Bump version to 0.3.0"
 
 # Create and push tag

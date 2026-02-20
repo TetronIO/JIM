@@ -1,0 +1,214 @@
+﻿@inherits LayoutComponentBase
+@inject IJSRuntime JSRuntime
+@inject IUserPreferenceService PreferenceService
+@inject JIM.Web.Models.ThemeSettings ThemeSettings
+<MudThemeProvider @bind-IsDarkMode="@IsDarkMode" Theme="_theme" @ref="@_mudThemeProvider" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<PageTitle>JIM</PageTitle>
+
+<MudLayout>
+
+    <MudDrawerContainer Class="mud-height-full">
+        <MudDrawer @bind-Open="@IsDrawerOpen" Elevation="0" Variant="@DrawerVariant.Mini" Overlay="false"
+                   Class="jim-drawer" @onmouseenter="@OnDrawerMouseEnter" @onmouseleave="@OnDrawerMouseLeave">
+
+            <div class="jim-drawer-logo">
+                <MudImage Src="/images/jim-logo.png" Width="28" Class="mt-4 ms-4 mb-3" Alt="JIM Logo"></MudImage>
+                @if (IsDrawerOpen)
+                {
+                    <MudText Inline="true">JIM</MudText>
+                }
+            </div>
+
+            <NavMenu DrawerOpen="@IsDrawerOpen" />
+
+            <div class="jim-drawer-footer mud-text-secondary @(IsDrawerOpen ? "jim-drawer-footer-expanded" : "")">
+                <MudTooltip Text="@(IsDrawerPinned? UnpinMenuText : PinMenuText)" Arrow="true"
+                            Placement="Placement.Top">
+                    <MudToggleIconButton Toggled="@IsDrawerPinned" ToggledChanged="@(_ => ToggleDrawerPinned())"
+                                         Icon="@Icons.Material.Outlined.PushPin" Color="@Color.Inherit"
+                                         ToggledIcon="@Icons.Material.Filled.PushPin" ToggledColor="@Color.Inherit" Size="@Size.Small" />
+                </MudTooltip>
+                <MudTooltip Text="@(IsDarkMode? LightModeText : DarkModeText)" Arrow="true" Placement="Placement.Top">
+                    <MudToggleIconButton @bind-Toggled="@IsDarkMode" Icon="@Icons.Material.Filled.WbSunny"
+                                         Color="@Color.Inherit" ToggledIcon="@Icons.Material.Filled.DarkMode"
+                                         ToggledColor="@Color.Inherit" Size="@Size.Small" />
+                </MudTooltip>
+                <MudTooltip Text="See us on GitHub" Arrow="true" Placement="Placement.Top">
+                    <MudIconButton Href="https://github.com/TetronIO/JIM" Target="_blank"
+                                   Icon="@Icons.Custom.Brands.GitHub" Color="@Color.Inherit" Size="@Size.Small" />
+                </MudTooltip>
+            </div>
+
+
+        </MudDrawer>
+
+        <MudMainContent>
+            <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-5 pb-5">
+                @Body
+
+                <div class="jim-page-footer">
+                    <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5 mud-text-secondary">
+                        &copy; Tetron Ltd | All rights reserved | v@(AppVersion)
+                    </MudText>
+                </div>
+
+            </MudContainer>
+        </MudMainContent>
+
+    </MudDrawerContainer>
+
+</MudLayout>
+
+@code
+{
+    // Colour palettes are defined in CSS theme files (wwwroot/css/themes/).
+    // To experiment with colours, edit or create new theme CSS files.
+    private readonly MudTheme _theme = new()
+    {
+        Typography = new Typography()
+        {
+            Default = new DefaultTypography()
+            {
+                FontFamily =
+                [
+                    "-apple-system",
+                    "Segoe UI Variable Display",
+                    "Roboto",
+                    "Helvetica Neue",
+                    "Arial"
+                ],
+                FontWeight = "400",
+                FontSize = "16px"
+            }
+        },
+        LayoutProperties = new LayoutProperties()
+        {
+            DefaultBorderRadius = "4px"
+        }
+    };
+
+    private static readonly string AppVersion = GetCleanVersion();
+
+    private static string GetCleanVersion()
+    {
+        var version = (System.Reflection.CustomAttributeExtensions
+            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(MainLayout).Assembly))
+            ?.InformationalVersion ?? "unknown";
+        // Strip the source link commit hash suffix (e.g. "+6444a6934e...")
+        var plusIndex = version.IndexOf('+');
+        return plusIndex >= 0 ? version[..plusIndex] : version;
+    }
+
+    private MudThemeProvider? _mudThemeProvider;
+    private const string LightModeText = "Switch to light mode";
+    private const string DarkModeText = "Switch to dark mode";
+    private const string PinMenuText = "Pin menu open";
+    private const string UnpinMenuText = "Unpin menu";
+    // Minimum viewport width (in pixels) to have drawer open by default
+    // 1400px is a common breakpoint for "large" screens
+    private const int LargeScreenBreakpoint = 1400;
+    // Default to closed/unpinned - will be set based on screen size in OnAfterRenderAsync
+    private bool IsDrawerOpen { get; set; }
+    private bool IsDrawerPinned { get; set; }
+    private bool _isDarkMode;
+    private bool _darkModeInitialised;
+    private bool IsDarkMode
+    {
+        get => _isDarkMode;
+        set
+        {
+            if (_isDarkMode != value)
+            {
+                _isDarkMode = value;
+                _ = UpdateDarkModeClassAsync(value);
+                // Persist the user's explicit choice (skip during initial load)
+                if (_darkModeInitialised)
+                {
+                    _ = PreferenceService.SetDarkModeAsync(value);
+                }
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Check for a saved dark mode preference first, fall back to system setting
+            var savedDarkMode = await PreferenceService.GetDarkModeAsync();
+            if (savedDarkMode.HasValue)
+            {
+                _isDarkMode = savedDarkMode.Value;
+            }
+            else if (_mudThemeProvider != null)
+            {
+                _isDarkMode = await _mudThemeProvider.GetSystemDarkModeAsync();
+            }
+            await UpdateDarkModeClassAsync(_isDarkMode);
+            _darkModeInitialised = true;
+
+            // Detect screen width and set drawer state accordingly
+            var windowWidth = await JSRuntime.InvokeAsync<int>("eval", "window.innerWidth");
+            var isLargeScreen = windowWidth >= LargeScreenBreakpoint;
+
+            IsDrawerOpen = isLargeScreen;
+            IsDrawerPinned = isLargeScreen;
+
+            StateHasChanged();
+        }
+    }
+
+    private string LightThemePath => ThemeSettings.LightThemePath;
+    private string DarkThemePath => ThemeSettings.DarkThemePath;
+
+    private async Task UpdateDarkModeClassAsync(bool isDark)
+    {
+        try
+        {
+            var themePath = isDark ? DarkThemePath : LightThemePath;
+
+            // Swap the theme CSS file
+            await JSRuntime.InvokeVoidAsync("eval",
+                $"document.getElementById('jim-theme').setAttribute('href', '{themePath}')");
+
+            // Maintain body class for any custom CSS selectors
+            if (isDark)
+                await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('jim-dark-mode')");
+            else
+                await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.remove('jim-dark-mode')");
+        }
+        catch (JSDisconnectedException)
+        {
+            // Ignore - circuit is disconnected
+        }
+    }
+
+    private void ToggleDrawerPinned()
+    {
+        IsDrawerPinned = !IsDrawerPinned;
+        // When pinning, ensure drawer stays open. When unpinning, close it.
+        IsDrawerOpen = IsDrawerPinned;
+    }
+
+    private void OnDrawerMouseEnter()
+    {
+        // Only respond to hover if not pinned
+        if (!IsDrawerPinned)
+        {
+            IsDrawerOpen = true;
+        }
+    }
+
+    private void OnDrawerMouseLeave()
+    {
+        // Only respond to hover if not pinned
+        if (!IsDrawerPinned)
+        {
+            IsDrawerOpen = false;
+        }
+    }
+}

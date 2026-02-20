@@ -144,11 +144,10 @@ public class SchedulerServerParallelExecutionTests
     }
 
     [Test]
-    public async Task StartScheduleExecution_MixedSequentialAndParallel_OnlyFirstGroupQueuedAsync()
+    public async Task StartScheduleExecution_MixedSequentialAndParallel_AllStepsQueuedUpfrontAsync()
     {
         // Arrange: StepIndex 0 = single (sequential), StepIndex 1 = two parallel steps
-        // StartScheduleExecution only queues the FIRST step group (index 0).
-        // The scheduler advances to index 1 later via CheckAndAdvanceExecutionAsync.
+        // All steps are queued upfront: step 0 as Queued, step 1 as WaitingForPreviousStep.
         var schedule = CreateScheduleWithSteps(
             new StepConfig(StepIndex: 0, ConnectedSystemId: 1, RunProfileId: 100),
             new StepConfig(StepIndex: 1, ConnectedSystemId: 2, RunProfileId: 200),
@@ -158,11 +157,19 @@ public class SchedulerServerParallelExecutionTests
         await _application.Scheduler.StartScheduleExecutionAsync(
             schedule, ActivityInitiatorType.System, null, "Test");
 
-        // Assert: Only step index 0 is queued initially
-        Assert.That(_capturedTasks, Has.Count.EqualTo(1));
-        var task = (SynchronisationWorkerTask)_capturedTasks[0];
-        Assert.That(task.ExecutionMode, Is.EqualTo(WorkerTaskExecutionMode.Sequential));
-        Assert.That(task.ConnectedSystemId, Is.EqualTo(1));
+        // Assert: All 3 tasks are created
+        Assert.That(_capturedTasks, Has.Count.EqualTo(3));
+
+        // Step 0: Sequential, Queued
+        var step0Task = (SynchronisationWorkerTask)_capturedTasks.Single(t => ((SynchronisationWorkerTask)t).ConnectedSystemId == 1);
+        Assert.That(step0Task.ExecutionMode, Is.EqualTo(WorkerTaskExecutionMode.Sequential));
+        Assert.That(step0Task.Status, Is.EqualTo(WorkerTaskStatus.Queued));
+
+        // Step 1: Parallel, WaitingForPreviousStep
+        var step1Tasks = _capturedTasks.Where(t => t.ScheduleStepIndex == 1).Cast<SynchronisationWorkerTask>().ToList();
+        Assert.That(step1Tasks, Has.Count.EqualTo(2));
+        Assert.That(step1Tasks.All(t => t.ExecutionMode == WorkerTaskExecutionMode.Parallel), Is.True);
+        Assert.That(step1Tasks.All(t => t.Status == WorkerTaskStatus.WaitingForPreviousStep), Is.True);
     }
 
     [Test]

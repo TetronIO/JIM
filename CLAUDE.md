@@ -43,7 +43,7 @@
 **Test project locations:**
 - API tests: `test/JIM.Web.Api.Tests/`
 - Model tests: `test/JIM.Models.Tests/`
-- Worker/business logic tests: `JIM.Worker.Tests/`
+- Worker/business logic tests: `test/JIM.Worker.Tests/`
 
 **Failure to build and test wastes CI/CD resources and delays the project.**
 
@@ -71,7 +71,7 @@ Sync operations are the core of JIM. Customers depend on JIM to synchronise thei
 - Log summary statistics at the end of every batch operation
 - Never silently skip objects due to exceptions
 
-> **Full detailed requirements (7 sections):** See `JIM.Application/CLAUDE.md`
+> **Full detailed requirements (7 sections):** See `src/JIM.Application/CLAUDE.md`
 
 ## Scripting
 
@@ -90,8 +90,8 @@ Sync operations are the core of JIM. Customers depend on JIM to synchronise thei
 - `dotnet clean && dotnet build` - Clean build
 
 **Database:**
-- `dotnet ef migrations add [Name] --project JIM.PostgresData` - Add migration
-- `dotnet ef database update --project JIM.PostgresData` - Apply migrations
+- `dotnet ef migrations add [Name] --project src/JIM.PostgresData` - Add migration
+- `dotnet ef database update --project src/JIM.PostgresData` - Apply migrations
 - `docker compose exec jim.web dotnet ef database update` - Apply migrations in Docker
 
 **Shell Aliases (Recommended):**
@@ -119,6 +119,9 @@ Sync operations are the core of JIM. Customers depend on JIM to synchronise thei
 
 **Reset:**
 - `jim-reset` - Reset JIM (delete database & logs volumes)
+
+**Diagrams:**
+- `jim-diagrams` - Export Structurizr C4 diagrams as SVG (requires Docker)
 
 **Docker (Manual Commands):**
 - `docker compose -f db.yml up -d` - Start database (same as jim-db)
@@ -158,18 +161,18 @@ All dependency updates from Dependabot require human review before merging - the
 ## Key Project Locations
 
 **Where to add:**
-- API endpoints: `JIM.Web/Controllers/Api/`
-- API models/DTOs: `JIM.Web/Models/Api/`
-- API extensions: `JIM.Web/Extensions/Api/`
-- API middleware: `JIM.Web/Middleware/Api/`
-- UI pages: `JIM.Web/Pages/`
-- Blazor components: `JIM.Web/Shared/`
-- Business logic: `JIM.Application/Servers/`
-- Performance diagnostics: `JIM.Application/Diagnostics/`
-- Domain models: `JIM.Models/Core/` or `JIM.Models/Staging/`
-- Database repositories: `JIM.PostgresData/`
-- Connectors: `JIM.Connectors/` or new connector project
-- Tests: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `JIM.Worker.Tests/`
+- API endpoints: `src/JIM.Web/Controllers/Api/`
+- API models/DTOs: `src/JIM.Web/Models/Api/`
+- API extensions: `src/JIM.Web/Extensions/Api/`
+- API middleware: `src/JIM.Web/Middleware/Api/`
+- UI pages: `src/JIM.Web/Pages/`
+- Blazor components: `src/JIM.Web/Shared/`
+- Business logic: `src/JIM.Application/Servers/`
+- Performance diagnostics: `src/JIM.Application/Diagnostics/`
+- Domain models: `src/JIM.Models/Core/` or `src/JIM.Models/Staging/`
+- Database repositories: `src/JIM.PostgresData/`
+- Connectors: `src/JIM.Connectors/` or new connector project
+- Tests: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `test/JIM.Worker.Tests/`
 
 ## ASCII Diagrams
 
@@ -364,22 +367,31 @@ var schedule = await Jim.Scheduler.GetScheduleAsync(id);
 
 **Adding a Connector:**
 1. Implement `IConnector` and capability interfaces
-2. Add to `JIM.Connectors/` or create new project
+2. Add to `src/JIM.Connectors/` or create new project
 3. Register in DI container
 4. Add tests
 
 **Adding API Endpoint:**
-1. Add method to controller in `JIM.Web/Controllers/Api/`
-2. Use DTOs for request/response (in `JIM.Web/Models/Api/`)
+1. Add method to controller in `src/JIM.Web/Controllers/Api/`
+2. Use DTOs for request/response (in `src/JIM.Web/Models/Api/`)
 3. Add XML comments for Swagger
 4. Test via Swagger UI at `/api/swagger`
 
 **Modifying Database Schema:**
-1. Update entity in `JIM.Models/`
-2. Create migration: `dotnet ef migrations add [Name] --project JIM.PostgresData`
+1. Update entity in `src/JIM.Models/`
+2. Create migration: `dotnet ef migrations add [Name] --project src/JIM.PostgresData`
 3. Review generated migration
-4. Test: `dotnet ef database update --project JIM.PostgresData`
+4. Test: `dotnet ef database update --project src/JIM.PostgresData`
 5. Commit migration files
+
+**Updating Architecture Diagrams:**
+
+When making architectural changes (new containers, components, connectors, or significant restructuring):
+1. Update `docs/diagrams/structurizr/workspace.dsl` to reflect the change
+2. Regenerate SVGs: `jim-diagrams` (requires Docker)
+3. Commit both the DSL changes and regenerated SVG files together
+
+> **DSL syntax and diagram details:** See `docs/diagrams/structurizr/README.md`
 
 ## Development Workflows
 
@@ -471,6 +483,41 @@ Use `./test/integration/Run-IntegrationTests.ps1` (PowerShell) - never invoke sc
 6. **ONLY AFTER** build and tests pass: Commit with clear message
 7. **ONLY AFTER** successful commit: Push and create PR
 8. **NEVER** create a PR with failing tests or build errors
+
+## Release Process
+
+**CRITICAL: NEVER modify the `VERSION` file without explicit user instruction to create a release.**
+
+The `VERSION` file is the single source of truth for JIM's version number. It feeds into:
+- All .NET assembly versions (via `Directory.Build.props`)
+- Docker image tags (via release workflow)
+- PowerShell module version (updated at release time)
+- Diagram metadata (via `export-diagrams.js`)
+
+**Versioning scheme:** [Semantic Versioning](https://semver.org/) — `X.Y.Z` with optional prerelease suffix (e.g., `0.3.0-alpha`).
+
+**What triggers a version bump:**
+- New feature releases
+- Breaking changes
+- Significant bug fix batches
+- User explicitly requesting a release
+
+**What does NOT trigger a version bump:**
+- Documentation changes
+- Diagram regeneration
+- CI/CD improvements
+- Development tooling changes
+- Refactoring without user-facing changes
+
+**Release checklist (all steps require user approval):**
+1. Update `VERSION` file with new version
+2. Move `[Unreleased]` items in `CHANGELOG.md` to a new version section
+3. Update `src/JIM.PowerShell/JIM/JIM.psd1` — `ModuleVersion` field
+4. Commit: `git commit -m "Release vX.Y.Z"`
+5. Tag: `git tag vX.Y.Z`
+6. Push: `git push origin main --tags`
+
+> **Full release process, air-gapped deployment, and Docker image details:** See `docs/RELEASE_PROCESS.md`
 
 ## Resources
 

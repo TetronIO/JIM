@@ -9,7 +9,7 @@ JIM uses PostgreSQL 18 with environment-specific tuning:
 | Environment | File | Purpose |
 |-------------|------|---------|
 | Full Stack | `docker-compose.yml` | Production-like deployment with PGTune settings |
-| Codespaces | `docker-compose.override.codespaces.yml` | Reduced settings for ~8GB environments |
+| Codespaces | `docker-compose.override.yml` | Reduced settings for ~8GB environments |
 | Local Migrations | `db.yml` | Simple DB for EF migrations (not for production) |
 
 ---
@@ -55,7 +55,7 @@ max_parallel_maintenance_workers=4
 
 #### 1. No Explicit Connection Pooling Configuration (LOW)
 
-**Location:** `JIM.PostgresData/JimDbContext.cs` line 91
+**Location:** `src/JIM.PostgresData/JimDbContext.cs` line 91
 
 **Current:** Connection string uses Npgsql defaults (Min=0, Max=100 per pool)
 
@@ -72,7 +72,7 @@ _connectionString += ";Minimum Pool Size=5;Maximum Pool Size=50;Connection Idle 
 
 #### 2. Limited Custom Indexes (MEDIUM)
 
-**Location:** `JIM.PostgresData/JimDbContext.cs` lines 202-209
+**Location:** `src/JIM.PostgresData/JimDbContext.cs` lines 202-209
 
 **Current:** Only 2 explicit indexes defined:
 - `DeferredReference (TargetMvoId, TargetSystemId)` - composite

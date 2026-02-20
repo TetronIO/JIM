@@ -84,7 +84,7 @@ $ConfirmPreference = 'None'
 . "$PSScriptRoot/../utils/Test-Helpers.ps1"
 
 # Import JIM PowerShell module
-$modulePath = "$PSScriptRoot/../../../JIM.PowerShell/JIM/JIM.psd1"
+$modulePath = "$PSScriptRoot/../../../src/JIM.PowerShell/JIM/JIM.psd1"
 Import-Module $modulePath -Force -ErrorAction Stop
 
 Write-TestSection "Scenario 6: Scheduler Service"

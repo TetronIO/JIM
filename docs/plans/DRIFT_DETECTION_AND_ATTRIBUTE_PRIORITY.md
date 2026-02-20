@@ -176,10 +176,10 @@ With `EnforceState` flag:
 ### Current State
 
 **Existing Infrastructure:**
-- `ContributedBySystem` property already exists on `MetaverseObjectAttributeValue` ([MetaverseObjectAttributeValue.cs:45](../JIM.Models/Core/MetaverseObjectAttributeValue.cs#L45)) - tracks which connected system contributed each attribute value
+- `ContributedBySystem` property already exists on `MetaverseObjectAttributeValue` ([MetaverseObjectAttributeValue.cs:45](../src/JIM.Models/Core/MetaverseObjectAttributeValue.cs#L45)) - tracks which connected system contributed each attribute value
 
 **Current Behaviour (Temporary):**
-As noted in [SyncRuleMappingProcessor.cs:56](../JIM.Worker/Processors/SyncRuleMappingProcessor.cs#L56):
+As noted in [SyncRuleMappingProcessor.cs:56](../src/JIM.Worker/Processors/SyncRuleMappingProcessor.cs#L56):
 > *"NOTE: attribute priority has not been implemented yet and will come in a later effort. For now, all mappings will be applied, meaning if there are multiple mappings to a MVO attribute, the last to be processed will win."*
 
 This "last-writer-wins" behaviour is intentionally temporary and will be replaced by proper priority resolution.
@@ -598,18 +598,18 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 #### Phase 1: Schema and Model Changes ✅
 
 - [x] **1.1** Add `EnforceState` property to `SyncRule` model (default: true)
-  - Added to [SyncRule.cs](../../JIM.Models/Logic/SyncRule.cs)
-  - Added to [SyncRuleHeader.cs](../../JIM.Models/Logic/DTOs/SyncRuleHeader.cs)
+  - Added to [SyncRule.cs](../../src/JIM.Models/Logic/SyncRule.cs)
+  - Added to [SyncRuleHeader.cs](../../src/JIM.Models/Logic/DTOs/SyncRuleHeader.cs)
 - [x] **1.2** Create database migration
-  - Created [20260117121840_AddEnforceStateToSyncRule.cs](../../JIM.PostgresData/Migrations/20260117121840_AddEnforceStateToSyncRule.cs)
+  - Created [20260117121840_AddEnforceStateToSyncRule.cs](../../src/JIM.PostgresData/Migrations/20260117121840_AddEnforceStateToSyncRule.cs)
 - [x] **1.3** Update API DTOs for sync rule configuration
-  - Updated [SyncRuleRequestDtos.cs](../../JIM.Web/Models/Api/SyncRuleRequestDtos.cs)
-  - Updated [SynchronisationController.cs](../../JIM.Web/Controllers/Api/SynchronisationController.cs)
+  - Updated [SyncRuleRequestDtos.cs](../../src/JIM.Web/Models/Api/SyncRuleRequestDtos.cs)
+  - Updated [SynchronisationController.cs](../../src/JIM.Web/Controllers/Api/SynchronisationController.cs)
 
 #### Phase 2: Drift Detection Logic ✅
 
-- [x] **2.1** Create `DriftDetectionService` in `JIM.Application/Services/`
-  - Created [DriftDetectionService.cs](../../JIM.Application/Services/DriftDetectionService.cs)
+- [x] **2.1** Create `DriftDetectionService` in `src/JIM.Application/Services/`
+  - Created [DriftDetectionService.cs](../../src/JIM.Application/Services/DriftDetectionService.cs)
   - `EvaluateDriftAsync(cso, mvo, exportRules, importMappingCache)`
   - `HasImportRuleForAttribute(connectedSystemId, mvoAttributeId, cache)`
   - `BuildImportMappingCache(syncRules)` static helper
@@ -618,8 +618,8 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
   - Added `BuildDriftDetectionCache()` method
   - Added `EvaluateDriftAndEnforceStateAsync()` method
   - Integrated into `ProcessMetaverseObjectChangesAsync()`
-  - Updated [SyncFullSyncTaskProcessor.cs](../../JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs)
-  - Updated [SyncDeltaSyncTaskProcessor.cs](../../JIM.Worker/Processors/SyncDeltaSyncTaskProcessor.cs)
+  - Updated [SyncFullSyncTaskProcessor.cs](../../src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs)
+  - Updated [SyncDeltaSyncTaskProcessor.cs](../../src/JIM.Worker/Processors/SyncDeltaSyncTaskProcessor.cs)
 
 - [x] **2.3** Add performance optimisations
   - Cache import mapping lookups per sync run (`_importMappingCache`)
@@ -629,7 +629,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 #### Phase 3: UI Updates ✅
 
 - [x] **3.1** Add "Advanced Options" expandable section to export sync rule configuration page
-  - Updated [SyncRuleDetail.razor](../../JIM.Web/Pages/Admin/SyncRuleDetail.razor)
+  - Updated [SyncRuleDetail.razor](../../src/JIM.Web/Pages/Admin/SyncRuleDetail.razor)
 - [x] **3.2** Add `EnforceState` checkbox inside "Advanced Options" section with appropriate help text
   - Displayed only for Export direction rules
   - Includes tooltip and explanatory alert text
@@ -670,7 +670,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 
 #### Future Phase 2: Attribute Priority Logic
 
-- [ ] Create `AttributePriorityService` in `JIM.Application/Services/`
+- [ ] Create `AttributePriorityService` in `src/JIM.Application/Services/`
 - [ ] Integrate into inbound sync processing (`SyncRuleMappingProcessor`)
 - [ ] Auto-assign priority on new import mapping creation
 

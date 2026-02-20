@@ -418,18 +418,21 @@ Ask the user to provide:
 
 ```
 JIM/
-+-- JIM.Web/              # Blazor UI + REST API
-+-- JIM.Application/      # Business logic (Servers)
-+-- JIM.Models/           # Domain entities
-+-- JIM.PostgresData/     # EF Core data access
-+-- JIM.Connectors/       # Connector implementations
-+-- JIM.Worker/           # Background processor
-+-- JIM.Scheduler/        # Scheduled tasks
-+-- JIM.PowerShell/       # PowerShell module
-+-- test/                 # Unit, workflow, integration tests
-+-- docs/                 # Documentation
-|   +-- plans/            # Feature design documents
-+-- .devcontainer/        # GitHub Codespaces config
++-- src/                     # Source projects
+|   +-- JIM.Web/             # Blazor UI + REST API
+|   +-- JIM.Application/     # Business logic (Servers)
+|   +-- JIM.Models/          # Domain entities
+|   +-- JIM.Data/            # Repository interfaces
+|   +-- JIM.PostgresData/    # EF Core data access
+|   +-- JIM.Connectors/      # Connector implementations
+|   +-- JIM.Utilities/       # Shared utilities
+|   +-- JIM.Worker/          # Background processor
+|   +-- JIM.Scheduler/       # Scheduled tasks
+|   +-- JIM.PowerShell/      # PowerShell module
++-- test/                    # Unit, workflow, integration tests
++-- docs/                    # Documentation
+|   +-- plans/               # Feature design documents
++-- .devcontainer/           # GitHub Codespaces config
 ```
 
 ---

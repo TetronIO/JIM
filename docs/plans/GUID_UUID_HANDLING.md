@@ -89,18 +89,18 @@ However, planned connectors introduce systems that use RFC 4122 byte order or no
 
 | Component | File | Key Lines |
 |-----------|------|-----------|
-| GUID from LDAP binary (multi-value) | `JIM.Connectors/LDAP/LdapConnectorUtilities.cs` | 49 |
-| GUID from LDAP binary (single-value) | `JIM.Connectors/LDAP/LdapConnectorUtilities.cs` | 76 |
-| GUID from LDAP after create | `JIM.Connectors/LDAP/LdapConnectorExport.cs` | 244 |
-| GUID to LDAP binary for export | `JIM.Connectors/LDAP/LdapConnectorExport.cs` | 608 |
-| objectGUID schema override | `JIM.Connectors/LDAP/LdapConnectorSchema.cs` | 203-205 |
-| CSV GUID import (multi-value) | `JIM.Connectors/File/FileConnectorImport.cs` | 196 |
-| CSV GUID import (single-value) | `JIM.Connectors/File/FileConnectorImport.cs` | 204 |
-| CSV GUID export | `JIM.Connectors/File/FileConnectorExport.cs` | 194 |
-| CSV schema inference | `JIM.Connectors/File/FileConnector.cs` | 354 |
-| Directory type detection | `JIM.Connectors/LDAP/LdapConnectorImport.cs` | 298-312 |
-| Claims GUID parsing | `JIM.Utilities/IdentityUtilities.cs` | 16, 32 |
-| API query filtering | `JIM.Web/Extensions/Api/QueryableExtensions.cs` | 161 |
+| GUID from LDAP binary (multi-value) | `src/JIM.Connectors/LDAP/LdapConnectorUtilities.cs` | 49 |
+| GUID from LDAP binary (single-value) | `src/JIM.Connectors/LDAP/LdapConnectorUtilities.cs` | 76 |
+| GUID from LDAP after create | `src/JIM.Connectors/LDAP/LdapConnectorExport.cs` | 244 |
+| GUID to LDAP binary for export | `src/JIM.Connectors/LDAP/LdapConnectorExport.cs` | 608 |
+| objectGUID schema override | `src/JIM.Connectors/LDAP/LdapConnectorSchema.cs` | 203-205 |
+| CSV GUID import (multi-value) | `src/JIM.Connectors/File/FileConnectorImport.cs` | 196 |
+| CSV GUID import (single-value) | `src/JIM.Connectors/File/FileConnectorImport.cs` | 204 |
+| CSV GUID export | `src/JIM.Connectors/File/FileConnectorExport.cs` | 194 |
+| CSV schema inference | `src/JIM.Connectors/File/FileConnector.cs` | 354 |
+| Directory type detection | `src/JIM.Connectors/LDAP/LdapConnectorImport.cs` | 298-312 |
+| Claims GUID parsing | `src/JIM.Utilities/IdentityUtilities.cs` | 16, 32 |
+| API query filtering | `src/JIM.Web/Extensions/Api/QueryableExtensions.cs` | 161 |
 
 ---
 
@@ -135,19 +135,19 @@ Add byte order documentation to existing code. No functional changes.
 
 **1.1 Add XML doc remarks to LDAP utility methods**
 
-File: `JIM.Connectors/LDAP/LdapConnectorUtilities.cs`
+File: `src/JIM.Connectors/LDAP/LdapConnectorUtilities.cs`
 
 Add `<remarks>` to `GetEntryAttributeGuidValue()` and `GetEntryAttributeGuidValues()` documenting that they assume Microsoft GUID byte order (little-endian first 3 components) and are safe for Active Directory and Samba AD only.
 
 **1.2 Add comment to LDAP export GUID conversion**
 
-File: `JIM.Connectors/LDAP/LdapConnectorExport.cs`
+File: `src/JIM.Connectors/LDAP/LdapConnectorExport.cs`
 
 Add comment at line 608 noting that `ToByteArray()` produces Microsoft byte order, correct for AD/Samba targets.
 
 **1.3 Add comment to LDAP export objectGUID fetch**
 
-File: `JIM.Connectors/LDAP/LdapConnectorExport.cs`
+File: `src/JIM.Connectors/LDAP/LdapConnectorExport.cs`
 
 Add comment at line 244 noting that `new Guid(guidBytes)` expects Microsoft byte order from AD.
 
@@ -159,7 +159,7 @@ Create a shared utility class that all connectors use for GUID/UUID operations.
 
 **2.1 Create `IdentifierParser` utility class**
 
-File: `JIM.Utilities/IdentifierParser.cs`
+File: `src/JIM.Utilities/IdentifierParser.cs`
 
 Methods:
 

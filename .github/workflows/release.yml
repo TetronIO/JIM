@@ -53,7 +53,7 @@ jobs:
         run: |
           Install-Module -Name Pester -MinimumVersion 5.0 -Force -Scope CurrentUser
           $config = New-PesterConfiguration
-          $config.Run.Path = './JIM.PowerShell/JIM/Tests'
+          $config.Run.Path = './src/JIM.PowerShell/JIM/Tests'
           $config.Run.Exit = $true
           $config.Output.Verbosity = 'Detailed'
           Invoke-Pester -Configuration $config
@@ -68,11 +68,11 @@ jobs:
       matrix:
         include:
           - image: jim-web
-            dockerfile: JIM.Web/Dockerfile
+            dockerfile: src/JIM.Web/Dockerfile
           - image: jim-worker
-            dockerfile: JIM.Worker/Dockerfile
+            dockerfile: src/JIM.Worker/Dockerfile
           - image: jim-scheduler
-            dockerfile: JIM.Scheduler/Dockerfile
+            dockerfile: src/JIM.Scheduler/Dockerfile
 
     steps:
       - name: Checkout
@@ -136,7 +136,7 @@ jobs:
       - name: Update module version
         shell: pwsh
         run: |
-          $manifestPath = './JIM.PowerShell/JIM/JIM.psd1'
+          $manifestPath = './src/JIM.PowerShell/JIM/JIM.psd1'
           $version = '${{ steps.version.outputs.VERSION }}'
 
           # Read the manifest content
@@ -160,7 +160,7 @@ jobs:
             exit 0
           }
 
-          $modulePath = './JIM.PowerShell/JIM'
+          $modulePath = './src/JIM.PowerShell/JIM'
 
           # Test the module can be imported
           Import-Module $modulePath -Force

@@ -501,27 +501,27 @@ Write-Banner "JIM Integration Test Runner"
 $templateRelevant = Test-TemplateRelevant -ScenarioName $Scenario
 
 Write-Host "${GRAY}Configuration:${NC}"
-Write-Host "  Scenario:           ${CYAN}$Scenario${NC}"
+Write-Host "  Scenario:               ${CYAN}$Scenario${NC}"
 if ($templateRelevant) {
-    Write-Host "  Template:           ${CYAN}$Template${NC}"
+    Write-Host "  Template:               ${CYAN}$Template${NC}"
 } else {
-    Write-Host "  Template:           ${GRAY}N/A (scenario uses fixed test data)${NC}"
+    Write-Host "  Template:               ${GRAY}N/A (scenario uses fixed test data)${NC}"
 }
-Write-Host "  Step:               ${CYAN}$Step${NC}"
-Write-Host "  Skip Reset:         ${CYAN}$SkipReset${NC}"
-Write-Host "  Skip Build:         ${CYAN}$SkipBuild${NC}"
-Write-Host "  Setup Only:         ${CYAN}$SetupOnly${NC}"
+Write-Host "  Step:                   ${CYAN}$Step${NC}"
+Write-Host "  Skip Reset:             ${CYAN}$SkipReset${NC}"
+Write-Host "  Skip Build:             ${CYAN}$SkipBuild${NC}"
+Write-Host "  Setup Only:             ${CYAN}$SetupOnly${NC}"
 if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
-    Write-Host "  Export Concurrency: ${CYAN}$ExportConcurrency${NC}"
+    Write-Host "  Export Concurrency:     ${CYAN}$ExportConcurrency${NC}"
 } else {
-    Write-Host "  Export Concurrency: ${GRAY}(JIM default)${NC}"
+    Write-Host "  Export Concurrency:     ${GRAY}(JIM default)${NC}"
 }
 if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
     Write-Host "  Max Export Parallelism: ${CYAN}$MaxExportParallelism${NC}"
 } else {
     Write-Host "  Max Export Parallelism: ${GRAY}(JIM default)${NC}"
 }
-Write-Host "  Service Timeout:    ${CYAN}${TimeoutSeconds}s${NC}"
+Write-Host "  Service Timeout:        ${CYAN}${TimeoutSeconds}s${NC}"
 Write-Host ""
 
 # Change to repository root
@@ -619,7 +619,7 @@ if (-not $SkipReset) {
     Write-Section "Step 1: Resetting JIM Environment"
 
     Write-Step "Stopping all containers and removing volumes..."
-    docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down -v 2>&1 | Out-Null
+    docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down -v 2>&1 | Out-Null
     # Use --profile to stop containers from all scenarios (scenario2, scenario8, etc.)
     # Without specifying profiles, containers started with profiles won't be stopped
     docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down -v --remove-orphans 2>&1 | Out-Null
@@ -658,7 +658,7 @@ if (-not $SkipBuild -and -not $SkipReset) {
     Write-Section "Step 2: Building Docker Images"
 
     Write-Step "Building JIM stack..."
-    $buildOutput = docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml build 2>&1
+    $buildOutput = docker compose -f docker-compose.yml -f docker-compose.override.yml build 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to build JIM stack"
         Write-Host "${GRAY}$buildOutput${NC}"
@@ -713,7 +713,7 @@ $step3Start = Get-Date
 Write-Section "Step 3: Starting Services"
 
 Write-Step "Starting JIM stack..."
-$jimResult = docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d 2>&1
+$jimResult = docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Failure "Failed to start JIM stack"
     Write-Host "${GRAY}$jimResult${NC}"

@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\JIM.Utilities\JIM.Utilities.csproj" />
+    <ProjectReference Include="..\..\src\JIM.Utilities\JIM.Utilities.csproj" />
   </ItemGroup>
 
   <ItemGroup>

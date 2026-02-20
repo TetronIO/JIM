@@ -375,7 +375,7 @@ public ConnectedSystemStatus Status { get; set; } = ConnectedSystemStatus.Active
 ```
 
 ```csharp
-// Create new enum file: JIM.Models/Staging/ConnectedSystemStatus.cs
+// Create new enum file: src/JIM.Models/Staging/ConnectedSystemStatus.cs
 public enum ConnectedSystemStatus
 {
     /// <summary>

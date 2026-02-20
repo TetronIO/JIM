@@ -438,7 +438,7 @@ try {
     Write-Host "  LDAP System ID: $($config.LDAPSystemId)" -ForegroundColor Gray
 
     # Re-import module to ensure we have connection
-    $modulePath = "$PSScriptRoot/../../../JIM.PowerShell/JIM/JIM.psd1"
+    $modulePath = "$PSScriptRoot/../../../src/JIM.PowerShell/JIM/JIM.psd1"
     Import-Module $modulePath -Force -ErrorAction Stop
     Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 

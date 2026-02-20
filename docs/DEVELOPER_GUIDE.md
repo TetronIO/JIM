@@ -44,8 +44,10 @@ JIM's architecture is documented using C4 model diagrams (System Context, Contai
 
 **Available Diagrams**:
 - **System Context**: JIM's interactions with external systems and users
-- **Container**: Internal deployable units (Web App, Worker, Scheduler, Connectors, Database)
+- **Container**: Internal deployable units (Web App, Worker, Scheduler, Connectors, Database, PowerShell Module)
 - **Component**: Detailed views of Web Application, Application Layer, Worker Service, Connectors, and Scheduler
+
+**Keeping Diagrams Up to Date**: When making architectural changes (new containers, components, connectors, or significant restructuring), update `docs/diagrams/structurizr/workspace.dsl` and regenerate the SVG images by running `jim-diagrams` from the repository root. Commit both the DSL changes and the regenerated SVGs together.
 
 ## Technology Stack
 
@@ -84,14 +86,14 @@ JIM's architecture is documented using C4 model diagrams (System Context, Contai
 
 ### 1. Project Organisation
 When adding functionality:
-- **Domain models**: Add to `JIM.Models/Models/`
+- **Domain models**: Add to `src/JIM.Models/Models/`
 - **DTOs**: Add to appropriate `DTOs/` subdirectories
-- **Business logic**: Add to `JIM.Application/Servers/` or extend existing servers
-- **Data access**: Add to `JIM.PostgresData/` repository classes
-- **API endpoints**: Add to `JIM.Web/Controllers/Api/`
-- **API models/DTOs**: Add to `JIM.Web/Models/Api/`
-- **UI pages**: Add to `JIM.Web/Pages/`
-- **Connectors**: Create new project or extend `JIM.Connectors/`
+- **Business logic**: Add to `src/JIM.Application/Servers/` or extend existing servers
+- **Data access**: Add to `src/JIM.PostgresData/` repository classes
+- **API endpoints**: Add to `src/JIM.Web/Controllers/Api/`
+- **API models/DTOs**: Add to `src/JIM.Web/Models/Api/`
+- **UI pages**: Add to `src/JIM.Web/Pages/`
+- **Connectors**: Create new project or extend `src/JIM.Connectors/`
 
 ### 2. Coding Conventions
 Use the en-GB region for spellings and formats.
@@ -268,7 +270,7 @@ public class MetaverseController : ControllerBase
 
 JIM includes a built-in performance diagnostics infrastructure for measuring operation timings during sync operations. This uses `System.Diagnostics.ActivitySource` under the hood (the .NET OpenTelemetry-compatible API) but wraps it with JIM-specific terminology to avoid confusion with JIM's `Activity` class (used for audit/task tracking).
 
-**Key Components** (in `JIM.Application/Diagnostics/`):
+**Key Components** (in `src/JIM.Application/Diagnostics/`):
 
 | Class | Purpose |
 |-------|---------|
@@ -314,7 +316,7 @@ span.SetSuccess();
 **Enabling Diagnostics**:
 
 Diagnostics are enabled automatically in:
-- **Worker Service** (`JIM.Worker/Worker.cs`) - 100ms slow operation threshold
+- **Worker Service** (`src/JIM.Worker/Worker.cs`) - 100ms slow operation threshold
 - **Unit Tests** (`GlobalTestSetup.cs` in test projects) - 50ms slow operation threshold
 
 To enable manually:
@@ -384,7 +386,7 @@ Workflow tests sit between unit tests and integration tests - they test multi-st
 **Key Components** (in `test/JIM.Workflow.Tests/`):
 - `WorkflowTestHarness`: Orchestrates multi-step test execution
 - `WorkflowStateSnapshot`: Captures MVO, CSO, and PendingExport state after each step
-- `MockCallConnector`: Call-based mock connector in `JIM.Connectors/Mock/`
+- `MockCallConnector`: Call-based mock connector in `src/JIM.Connectors/Mock/`
 
 **Benefits**:
 - Fast execution (seconds vs minutes for integration tests)
@@ -627,7 +629,7 @@ Notes:
 **Technical Details**:
 - PostgreSQL memory settings automatically optimised for Codespaces constraints
 - Port forwarding configured for Web + API (5200)
-- Custom docker-compose override: `docker-compose.override.codespaces.yml`
+- Custom docker-compose override: `docker-compose.override.yml`
 - Use VS Code database extensions (e.g., PostgreSQL) to connect to the database on port 5432
 
 ## Environment Configuration
@@ -680,14 +682,14 @@ JIM uses standard OIDC claims (`sub`, `name`, `given_name`, `family_name`, `pref
 
 ### Docker Compose
 - Base: `docker-compose.yml`
-- Overrides: `docker-compose.override.{windows|macos|linux|codespaces}.yml`
+- Overrides: `docker-compose.override.{windows|macos|linux}.yml`, `docker-compose.override.yml`
 - Use platform-specific overrides for optimal performance
 
 ### PostgreSQL Tuning (Important)
 
 The default PostgreSQL settings in `docker-compose.yml` are tuned for a **64GB Windows / 32GB WSL / 16 core** system. **You must tune these for your environment** or PostgreSQL may crash under load (OOM) or fail to start entirely.
 
-Use [PGTune](https://pgtune.leopard.in.ua/) to generate settings for your host, then override `command` and `shm_size` in a compose override file. The Codespaces override (`docker-compose.override.codespaces.yml`) is a working example for 8GB hosts.
+Use [PGTune](https://pgtune.leopard.in.ua/) to generate settings for your host, then override `command` and `shm_size` in a compose override file. The Codespaces override (`docker-compose.override.yml`) is a working example for 8GB hosts.
 
 **Key settings to adjust:**
 - `shared_buffers` - typically ~25% of available host RAM
@@ -864,12 +866,12 @@ For production deployments, consider using Docker volume drivers or bind mounts 
 
 ## PowerShell Module Development
 
-The JIM PowerShell module (`JIM.PowerShell/JIM/`) provides cmdlets for scripting and automation. It's designed to work with the JIM API.
+The JIM PowerShell module (`src/JIM.PowerShell/JIM/`) provides cmdlets for scripting and automation. It's designed to work with the JIM API.
 
 ### Module Structure
 
 ```
-JIM.PowerShell/
+src/JIM.PowerShell/
 +-- JIM/
     +-- JIM.psd1              # Module manifest
     +-- JIM.psm1              # Module loader
@@ -893,7 +895,7 @@ The module is automatically available. Import it with:
 
 ```powershell
 # Import from the repository
-Import-Module ./JIM.PowerShell/JIM -Force
+Import-Module ./src/JIM.PowerShell/JIM -Force
 
 # Verify it loaded
 Get-Module JIM
@@ -1002,7 +1004,7 @@ jim-test-ps
 
 4. **Test the cmdlet**:
    ```powershell
-   Import-Module ./JIM.PowerShell/JIM -Force
+   Import-Module ./src/JIM.PowerShell/JIM -Force
    # Start JIM stack first: jim-stack
    Connect-JIM -BaseUrl "http://localhost:5200" -ApiKey "your-api-key"
    Verb-JIMNoun -RequiredParam "value"
@@ -1057,11 +1059,11 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 
 ### Adding a New Connector
 1. Create class implementing `IConnector` (and capability interfaces)
-2. Add to `JIM.Connectors` project or create new project
+2. Add to `src/JIM.Connectors` project or create new project
 3. Register in DI container
 4. Add `ConnectorDefinition` entry in database seeding
 5. Create configuration UI in JIM.Web
-6. Add tests in `JIM.Connectors.Tests`
+6. Add tests in `test/JIM.Connectors.Tests`
 
 ### Adding a New Metaverse Object Type
 1. Add enum value to `MetaverseObjectType`
@@ -1071,18 +1073,18 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 5. Update sync rules to support new type
 
 ### Adding a New API Endpoint
-1. Add method to appropriate controller in `JIM.Web/Controllers/Api/`
-2. Use DTOs for request/response (in `JIM.Web/Models/Api/`)
+1. Add method to appropriate controller in `src/JIM.Web/Controllers/Api/`
+2. Use DTOs for request/response (in `src/JIM.Web/Models/Api/`)
 3. Add XML comments for Swagger
 4. Add authorisation attributes if needed
 5. Test via Swagger UI at `/api/swagger`
 
 ### Modifying Database Schema
-1. Update entity classes in `JIM.Models/Models/`
+1. Update entity classes in `src/JIM.Models/Models/`
 2. Update `JimDbContext` if needed (Fluent API)
-3. Create migration: `dotnet ef migrations add MigrationName --project JIM.PostgresData`
+3. Create migration: `dotnet ef migrations add MigrationName --project src/JIM.PostgresData`
 4. Review generated migration
-5. Test migration: `dotnet ef database update --project JIM.PostgresData`
+5. Test migration: `dotnet ef database update --project src/JIM.PostgresData`
 6. Commit migration files
 
 ## Troubleshooting

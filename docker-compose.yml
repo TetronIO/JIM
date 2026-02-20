@@ -19,7 +19,7 @@ services:
       - SYS_ADMIN
     build:
       context: .
-      dockerfile: JIM.Web/Dockerfile
+      dockerfile: src/JIM.Web/Dockerfile
     depends_on:
       jim.database:
         condition: service_healthy
@@ -50,7 +50,7 @@ services:
       - jim-keys-volume:/data/keys
     build:
       context: .
-      dockerfile: JIM.Worker/Dockerfile
+      dockerfile: src/JIM.Worker/Dockerfile
     depends_on:
       jim.database:
         condition: service_healthy
@@ -71,7 +71,7 @@ services:
       - jim-logs-volume:/var/log/jim
     build:
       context: .
-      dockerfile: JIM.Scheduler/Dockerfile
+      dockerfile: src/JIM.Scheduler/Dockerfile
     depends_on:
       jim.database:
         condition: service_healthy
@@ -89,7 +89,7 @@ services:
     # PostgreSQL tuning - customise for your environment using https://pgtune.leopard.in.ua/
     # The default values below are for a 64GB Windows / 32GB WSL / 16 core / SSD system.
     # For other host sizes, override 'command' and 'shm_size' in a compose override file
-    # (see docker-compose.override.codespaces.yml for an example with 8GB hosts).
+    # (see docker-compose.override.yml for an example with 8GB hosts).
     # IMPORTANT: shm_size must be >= shared_buffers (with ~25% headroom recommended):
     #   shared_buffers=2GB  -> shm_size: '3gb'    (e.g. 16GB host)
     #   shared_buffers=4GB  -> shm_size: '5gb'    (e.g. 32GB host)

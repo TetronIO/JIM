@@ -18,11 +18,23 @@ Shows JIM's internal deployable units.
 
 ### Level 3: Component
 
+#### Web Application Components
+
+Blazor Pages, API Controllers, and Authentication Middleware.
+
+![Web Application Components](../images/jim-structurizr-1-WebAppComponents.svg)
+
 #### Application Layer Components
 
 The business logic and domain services.
 
 ![Application Layer Components](../images/jim-structurizr-1-AppLayerComponents.svg)
+
+#### Worker Components
+
+Import, sync, and export task processors.
+
+![Worker Components](../images/jim-structurizr-1-WorkerComponents.svg)
 
 #### Connector Components
 
@@ -32,9 +44,30 @@ External system integration adapters.
 
 #### Scheduler Components
 
-Scheduled job execution.
+Schedule evaluation and execution triggering.
 
 ![Scheduler Components](../images/jim-structurizr-1-SchedulerComponents.svg)
+
+## Exporting Diagrams
+
+### Automated Export (Recommended)
+
+Run the `jim-diagrams` alias from the repository root:
+
+```bash
+jim-diagrams
+```
+
+This starts Structurizr Lite in Docker, exports all diagrams as SVG using headless Chromium, saves them to `docs/diagrams/images/`, and cleans up automatically.
+
+Prerequisites: Node.js, Docker. Dependencies are installed automatically on first run.
+
+### Manual Export
+
+From Structurizr Lite, you can export diagrams as:
+- PNG images (click the export button on each diagram)
+- SVG for documentation
+- PlantUML for alternative rendering
 
 ## Viewing Interactive Diagrams
 
@@ -76,8 +109,8 @@ The workspace contains C4 diagrams at three levels:
 - **WebAppComponents** - Blazor Pages, API Controllers, Authentication Middleware
 - **AppLayerComponents** - JimApplication Facade and domain services
 - **WorkerComponents** - Worker Host and task processors
-- **ConnectorComponents** - Connector Registry and connector implementations
-- **SchedulerComponents** - Scheduler Host and Schedule Evaluator
+- **ConnectorComponents** - LDAP and File connector implementations
+- **SchedulerComponents** - Scheduler Host
 
 ## Files
 
@@ -85,17 +118,12 @@ The workspace contains C4 diagrams at three levels:
 |------|-------------|
 | `workspace.dsl` | Structurizr DSL model defining all diagrams |
 | `docs/01-overview.md` | System overview documentation (shown in Structurizr) |
-| `adrs/0001-metaverse-pattern.md` | Architecture Decision Record for metaverse pattern |
+| `adrs/` | Symlink to `docs/adrs/` - Architecture Decision Records (shown in Structurizr via `!adrs`) |
+| `export-diagrams.js` | Puppeteer script for automated SVG export |
+| `package.json` | Node.js dependencies for the export script |
 
 ## Editing the Diagrams
 
 1. Edit `workspace.dsl` using any text editor
 2. Refresh Structurizr Lite in your browser to see changes
 3. The DSL syntax is documented at https://docs.structurizr.com/dsl/language
-
-## Exporting Diagrams
-
-From Structurizr Lite, you can export diagrams as:
-- PNG images (click the export button on each diagram)
-- SVG for documentation
-- PlantUML for alternative rendering

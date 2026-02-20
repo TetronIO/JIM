@@ -66,7 +66,7 @@ When user clicks "(+1 more)" or the expand icon:
 
 ### Phase 1: Core Table Structure
 
-**File:** `JIM.Web/Pages/Admin/ConnectedSystemObjectDetail.razor`
+**File:** `src/JIM.Web/Pages/Admin/ConnectedSystemObjectDetail.razor`
 
 Replace the grouped MudTable (lines 159-211) with:
 
@@ -120,7 +120,7 @@ Replace the grouped MudTable (lines 159-211) with:
 
 ### Phase 2: Reusable Attribute Value Component
 
-**New File:** `JIM.Web/Shared/CsoAttributeValue.razor`
+**New File:** `src/JIM.Web/Shared/CsoAttributeValue.razor`
 
 ```razor
 @using JIM.Models.Staging
@@ -180,7 +180,7 @@ else
 
 ### Phase 3: CSS Styling
 
-**File:** `JIM.Web/wwwroot/css/site.css`
+**File:** `src/JIM.Web/wwwroot/css/site.css`
 
 Add new styles:
 
@@ -232,7 +232,7 @@ Add new styles:
 
 ### Phase 4: Code-Behind Logic
 
-**File:** `JIM.Web/Pages/Admin/ConnectedSystemObjectDetail.razor` (code section)
+**File:** `src/JIM.Web/Pages/Admin/ConnectedSystemObjectDetail.razor` (code section)
 
 Add helper methods:
 

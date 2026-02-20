@@ -127,7 +127,7 @@ try {
     Write-Host "Reconfiguring CSV external ID for Scenario 5..." -ForegroundColor Gray
 
     # Re-import module and connect
-    $modulePath = "$PSScriptRoot/../../../JIM.PowerShell/JIM/JIM.psd1"
+    $modulePath = "$PSScriptRoot/../../../src/JIM.PowerShell/JIM/JIM.psd1"
     Import-Module $modulePath -Force -ErrorAction Stop
     Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 

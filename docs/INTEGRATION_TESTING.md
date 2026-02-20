@@ -1843,12 +1843,12 @@ docker logs jim.web --tail 100
 - `test/JIM.Web.Api.Tests/SynchronisationControllerMappingTests.cs` - 11 tests
 
 **Bug Fixes:**
-- `JIM.Application/Servers/ConnectedSystemServer.cs` - Activity.ConnectedSystemId for UPDATE operations
-- `JIM.Web/Controllers/Api/MetaverseController.cs` - Collection initialisation, eager loading for updates
-- `JIM.Models/Staging/ConnectedSystemObject.cs` - DisplayNameOrId FirstOrDefault fix
-- `JIM.Data/Repositories/IMetaverseRepository.cs` - Added GetMetaverseAttributeWithObjectTypesAsync
-- `JIM.PostgresData/Repositories/MetaverseRepository.cs` - Implemented GetMetaverseAttributeWithObjectTypesAsync
-- `JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` - Added .Include() for AttributeValues in CSO retrieval methods
+- `src/JIM.Application/Servers/ConnectedSystemServer.cs` - Activity.ConnectedSystemId for UPDATE operations
+- `src/JIM.Web/Controllers/Api/MetaverseController.cs` - Collection initialisation, eager loading for updates
+- `src/JIM.Models/Staging/ConnectedSystemObject.cs` - DisplayNameOrId FirstOrDefault fix
+- `src/JIM.Data/Repositories/IMetaverseRepository.cs` - Added GetMetaverseAttributeWithObjectTypesAsync
+- `src/JIM.PostgresData/Repositories/MetaverseRepository.cs` - Implemented GetMetaverseAttributeWithObjectTypesAsync
+- `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` - Added .Include() for AttributeValues in CSO retrieval methods
 
 **Integration Test Improvements:**
 - `test/integration/Setup-Scenario1.ps1` - Fixed API response property names (metaverseObjectTypes)
@@ -1915,7 +1915,7 @@ docker logs jim.web --tail 100
 
 **Root Cause**: Repository methods that retrieve CSOs for comparison were missing `.Include()` calls for navigation properties. When the sync engine compared incoming attribute values with existing CSO values, the existing values were null because they weren't eagerly loaded.
 
-**Fix Applied**: Added `.Include(cso => cso.AttributeValues).ThenInclude(av => av.Attribute)` to these methods in `JIM.PostgresData/Repositories/ConnectedSystemRepository.cs`:
+**Fix Applied**: Added `.Include(cso => cso.AttributeValues).ThenInclude(av => av.Attribute)` to these methods in `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs`:
 - `GetConnectedSystemObjectByAnchorAsync`
 - `GetConnectedSystemObjectByDnAsync`
 - `FindExistingConnectedSystemObjectAsync`

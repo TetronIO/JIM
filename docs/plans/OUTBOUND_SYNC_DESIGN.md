@@ -949,21 +949,21 @@ Based on the design decisions above, this is the implementation plan for outboun
 - [x] **1.5 Update DbContext and create migration**
   - Add `DbSet<DeferredReference>`
   - Update PendingExport entity configuration
-  - Run: `dotnet ef migrations add AddOutboundSyncModels --project JIM.PostgresData`
+  - Run: `dotnet ef migrations add AddOutboundSyncModels --project src/JIM.PostgresData`
 
 ### Phase 2: Export Evaluation
 
 **Goal**: Implement Q1 decision - create PendingExports immediately when MVO changes.
 
-- [x] **2.1 Create `ExportEvaluationServer.cs`** (new service in `JIM.Application/Servers/`)
+- [x] **2.1 Create `ExportEvaluationServer.cs`** (new service in `src/JIM.Application/Servers/`)
   - `EvaluateExportRulesAsync(mvo, changedAttributes)` - main entry point
   - `IsMvoInScopeForExportRule(mvo, exportRule)` - scope checking (via `ScopingEvaluationServer`)
   - `EvaluateAttributeForExport(...)` - implements Q3 circular sync prevention
   - `EvaluateMvoDeletionAsync(mvo)` - implements Q4 (only Provisioned CSOs)
   - `CreateProvisioningExport(...)` - implements Q2 (sets JoinType.Provisioned)
 
-- [x] **2.2 Create `ScopingCriteriaEvaluator.cs`** (utility in `JIM.Worker/Processors/`)
-  - Implemented as `ScopingEvaluationServer.cs` in `JIM.Application/Servers/`
+- [x] **2.2 Create `ScopingCriteriaEvaluator.cs`** (utility in `src/JIM.Worker/Processors/`)
+  - Implemented as `ScopingEvaluationServer.cs` in `src/JIM.Application/Servers/`
   - Evaluate if MVO matches sync rule scoping criteria groups
   - Handle AND/OR logic for criteria groups
 
@@ -979,13 +979,13 @@ Based on the design decisions above, this is the implementation plan for outboun
 
 **Goal**: Process PendingExports via connectors using two-pass approach.
 
-- [x] **3.1 Create `ExportExecutionServer.cs`** (new service in `JIM.Application/Servers/`)
+- [x] **3.1 Create `ExportExecutionServer.cs`** (new service in `src/JIM.Application/Servers/`)
   - `ExecuteExportsAsync(targetSystem, connector, runMode)` - main entry point
   - Two-pass approach: immediate exports first, then deferred references
   - `TryResolveReferencesAsync(...)` - MVO ID -> target system ID resolution
   - Reference resolution prefers secondary external ID (DN) for LDAP systems
 
-- [x] **3.2 Create `SyncExportTaskProcessor.cs`** (new processor in `JIM.Worker/Processors/`)
+- [x] **3.2 Create `SyncExportTaskProcessor.cs`** (new processor in `src/JIM.Worker/Processors/`)
   - Process Export run profile type
   - Supports SyncRunMode (PreviewOnly, PreviewAndSync)
   - Call connector export methods
@@ -1058,14 +1058,14 @@ Phase 4         Phase 5                              Phase 6
 
 | File | Location | Purpose | Status |
 |------|----------|---------|--------|
-| `ExportEvaluationServer.cs` | `JIM.Application/Servers/` | Evaluates export rules, creates PendingExports | ✅ Implemented |
-| `ExportExecutionServer.cs` | `JIM.Application/Servers/` | Executes exports via connectors (includes retry logic) | ✅ Implemented |
-| `SyncPreviewServer.cs` | `JIM.Application/Servers/` | Generates full sync previews (CSO->MVO->exports) | ❌ Not implemented (Issue #288) |
-| `SyncExportTaskProcessor.cs` | `JIM.Worker/Processors/` | Processes Export run profile | ✅ Implemented |
-| `ScopingEvaluationServer.cs` | `JIM.Application/Servers/` | Evaluates scoping criteria (AND/OR logic) | ✅ Implemented |
-| `DeferredReference.cs` | `JIM.Models/Transactional/` | Tracks unresolved references | ✅ Implemented |
-| `SyncPreviewResult.cs` | `JIM.Models/Transactional/` | Full sync preview results container | ❌ Not implemented (Issue #288) |
-| `ExportExecutionResult.cs` | `JIM.Models/Transactional/` | Export execution result with stats | ✅ Implemented |
+| `ExportEvaluationServer.cs` | `src/JIM.Application/Servers/` | Evaluates export rules, creates PendingExports | ✅ Implemented |
+| `ExportExecutionServer.cs` | `src/JIM.Application/Servers/` | Executes exports via connectors (includes retry logic) | ✅ Implemented |
+| `SyncPreviewServer.cs` | `src/JIM.Application/Servers/` | Generates full sync previews (CSO->MVO->exports) | ❌ Not implemented (Issue #288) |
+| `SyncExportTaskProcessor.cs` | `src/JIM.Worker/Processors/` | Processes Export run profile | ✅ Implemented |
+| `ScopingEvaluationServer.cs` | `src/JIM.Application/Servers/` | Evaluates scoping criteria (AND/OR logic) | ✅ Implemented |
+| `DeferredReference.cs` | `src/JIM.Models/Transactional/` | Tracks unresolved references | ✅ Implemented |
+| `SyncPreviewResult.cs` | `src/JIM.Models/Transactional/` | Full sync preview results container | ❌ Not implemented (Issue #288) |
+| `ExportExecutionResult.cs` | `src/JIM.Models/Transactional/` | Export execution result with stats | ✅ Implemented |
 
 ---
 

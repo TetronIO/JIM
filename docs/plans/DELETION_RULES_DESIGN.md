@@ -511,9 +511,9 @@ When choosing which deletion features to prioritise, consider:
 
 ## References
 
-- `JIM.Models/Core/MetaverseObjectType.cs` - Deletion rule configuration
-- `JIM.Models/Core/MetaverseObject.cs` - MVO deletion state properties
-- `JIM.Worker/Processors/SyncTaskProcessorBase.cs` - `ProcessMvoDeletionRuleAsync()`
-- `JIM.Worker/Worker.cs` - `PerformHousekeepingAsync()`
-- `JIM.Application/Servers/ExportEvaluationServer.cs` - `EvaluateMvoDeletionAsync()`
-- `JIM.PostgresData/Repositories/MetaverseRepository.cs` - `GetMetaverseObjectsEligibleForDeletionAsync()`
+- `src/JIM.Models/Core/MetaverseObjectType.cs` - Deletion rule configuration
+- `src/JIM.Models/Core/MetaverseObject.cs` - MVO deletion state properties
+- `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs` - `ProcessMvoDeletionRuleAsync()`
+- `src/JIM.Worker/Worker.cs` - `PerformHousekeepingAsync()`
+- `src/JIM.Application/Servers/ExportEvaluationServer.cs` - `EvaluateMvoDeletionAsync()`
+- `src/JIM.PostgresData/Repositories/MetaverseRepository.cs` - `GetMetaverseObjectsEligibleForDeletionAsync()`

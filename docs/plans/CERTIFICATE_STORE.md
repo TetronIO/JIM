@@ -400,7 +400,7 @@ When a user enables LDAPS (or other secure connections) and no certificates are 
 ## Implementation Plan
 
 ### Phase 1: Foundation
-- [ ] Create `TrustedCertificate` entity in `JIM.Models/Core/`
+- [ ] Create `TrustedCertificate` entity in `src/JIM.Models/Core/`
 - [ ] Create `CertificateSourceType` enum
 - [ ] Add DbSet to `JimDbContext`
 - [ ] Create database migration
@@ -408,15 +408,15 @@ When a user enables LDAPS (or other secure connections) and no certificates are 
 - [ ] Implement repository in `JIM.PostgresData`
 
 ### Phase 2: Application Service
-- [ ] Create `ICertificateService` interface in `JIM.Models/Interfaces/`
-- [ ] Create `CertificateService` in `JIM.Application/Services/`
+- [ ] Create `ICertificateService` interface in `src/JIM.Models/Interfaces/`
+- [ ] Create `CertificateService` in `src/JIM.Application/Services/`
 - [ ] Implement certificate parsing (PEM, DER, CRT)
 - [ ] Implement certificate validation
 - [ ] Implement file path certificate loading
 - [ ] Add to `JimApplication` facade
 
 ### Phase 3: API Layer
-- [ ] Create DTOs in `JIM.Web/Models/Api/`
+- [ ] Create DTOs in `src/JIM.Web/Models/Api/`
 - [ ] Create `CertificatesController`
 - [ ] Implement all CRUD endpoints
 - [ ] Add file upload handling

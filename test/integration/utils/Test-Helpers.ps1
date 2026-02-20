@@ -319,7 +319,7 @@ function New-TestUser {
     $lastNames = $nameData.LastNames
     $totalCombinations = $nameData.TotalCombinations
 
-    # Match the departments from JIM.Application/Resources/Departments.en.txt
+    # Match the departments from src/JIM.Application/Resources/Departments.en.txt
     $departments = @("Marketing", "Operations", "Finance", "Sales", "Human Resources", "Procurement",
                      "Information Technology", "Research & Development", "Executive", "Legal", "Facilities", "Catering")
     $titles = @("Manager", "Director", "Analyst", "Specialist", "Coordinator", "Administrator", "Engineer", "Developer", "Consultant", "Associate")

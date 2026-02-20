@@ -71,7 +71,7 @@ $scriptRoot = $PSScriptRoot
 $repoRoot = (Resolve-Path "$scriptRoot/../..").Path
 $integrationCompose = Join-Path $repoRoot "docker-compose.integration-tests.yml"
 $jimCompose = Join-Path $repoRoot "docker-compose.yml"
-$jimComposeOverride = Join-Path $repoRoot "docker-compose.override.codespaces.yml"
+$jimComposeOverride = Join-Path $repoRoot "docker-compose.override.yml"
 
 # Import helpers
 . "$scriptRoot/utils/Test-Helpers.ps1"

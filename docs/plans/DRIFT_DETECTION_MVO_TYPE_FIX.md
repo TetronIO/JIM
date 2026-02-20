@@ -87,7 +87,7 @@ public async Task DeltaSync_WithDriftedGroupMembership_CreatesCorrectivePendingE
 
 ### Phase 3: Repository Fix (GREEN)
 
-**File:** `JIM.PostgresData/Repositories/ConnectedSystemRepository.cs`
+**File:** `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs`
 
 Add the missing Include for MVO Type in `GetConnectedSystemObjectsModifiedSinceAsync()`:
 
@@ -113,7 +113,7 @@ var query = Repository.Database.ConnectedSystemObjects
 
 ### Phase 4: Defensive Code Improvement (GREEN)
 
-**File:** `JIM.Application/Services/DriftDetectionService.cs`
+**File:** `src/JIM.Application/Services/DriftDetectionService.cs`
 
 Add logging when MVO Type is null to aid future debugging:
 
@@ -202,8 +202,8 @@ After implementing the fix, verify:
 
 ## Files to Modify
 
-1. `JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` - Add MVO Type include
-2. `JIM.Application/Services/DriftDetectionService.cs` - Add defensive null check with logging
+1. `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` - Add MVO Type include
+2. `src/JIM.Application/Services/DriftDetectionService.cs` - Add defensive null check with logging
 3. `test/JIM.Worker.Tests/OutboundSync/DriftDetectionTests.cs` - Add unit tests
 4. `test/JIM.Workflow.Tests/Scenarios/Sync/DriftDetectionWorkflowTests.cs` - Add workflow tests
 

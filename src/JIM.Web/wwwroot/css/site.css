@@ -1,0 +1,1201 @@
+/* reference: https://github.com/MudBlazor/MudBlazor/blob/ff672a8b988fdfb1f5ab9f556813823d885118d4/src/MudBlazor.UnitTests/Components/ThemeProviderTests.cs#L92 */
+
+/* MUDBLAZOR CUSTOMISATIONS */
+/* Note: Colour palettes are defined in css/themes/ files, not here. */
+
+.mud-simple-table table * tr>th {
+    font-weight: 500;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02857em;
+}
+
+/* Table header row background — uses jim-inner-surface when defined by theme */
+.mud-simple-table thead tr,
+.mud-table-root .mud-table-head {
+    background-color: var(--jim-inner-surface, transparent);
+}
+
+/* Border between MudTable toolbar and header row */
+.mud-table-outlined>.mud-table-toolbar {
+    border-bottom: 1px solid var(--mud-palette-table-lines, var(--mud-palette-lines-default));
+}
+
+.mud-table-root .mud-table-head .mud-table-cell {
+    font-weight: 500;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02857em;
+}
+
+/* Content/data links use --jim-link-color (softer than UI primary).
+   Transition on the base state so colour animates smoothly both ways. */
+a.mud-link.mud-primary-text {
+    color: var(--jim-link-color) !important;
+    transition: color 0.25s ease !important;
+}
+
+/* Visited link styling is handled per-theme via a hardcoded a:visited rule
+   (browsers block var() in :visited for privacy). Each theme defines
+   --jim-link-visited-color as documentation and a matching literal rule.
+   IMPORTANT: avoid wrapping MudLink inside mud-text-secondary containers,
+   as the inherited secondary colour can bleed into the visited state. */
+
+a.mud-link.mud-primary-text:hover {
+    color: var(--jim-link-hover-color) !important;
+}
+
+.mud-link-underline-hover:hover {
+    text-decoration: none !important;
+    color: var(--jim-link-hover-color) !important;
+    transition: color 0.25s ease !important;
+}
+
+/* Text-variant chips: increase background opacity for better visibility on dark themes.
+   MudBlazor uses ~5% opacity by default which is too subtle on purple backgrounds. */
+.mud-chip.mud-chip-text.mud-chip-color-primary {
+    background-color: color-mix(in srgb, var(--mud-palette-primary) 15%, transparent) !important;
+}
+
+.mud-chip.mud-chip-text.mud-chip-color-secondary {
+    background-color: color-mix(in srgb, var(--mud-palette-secondary) 15%, transparent) !important;
+}
+
+.mud-chip.mud-chip-text.mud-chip-color-info {
+    background-color: color-mix(in srgb, var(--mud-palette-info) 15%, transparent) !important;
+}
+
+.mud-chip.mud-chip-text.mud-chip-color-success {
+    background-color: color-mix(in srgb, var(--mud-palette-success) 15%, transparent) !important;
+}
+
+.mud-chip.mud-chip-text.mud-chip-color-warning {
+    background-color: color-mix(in srgb, var(--mud-palette-warning) 15%, transparent) !important;
+}
+
+.mud-chip.mud-chip-text.mud-chip-color-error {
+    background-color: color-mix(in srgb, var(--mud-palette-error) 15%, transparent) !important;
+}
+
+.mud-main-content {
+    padding-top: 0;
+}
+
+.mud-table-empty-row {
+    font-weight: normal;
+    color: var(--mud-palette-text-primary) !important;
+    background-color: inherit !important;
+}
+
+/* Normalize MudTable text size to match body text */
+.mud-table-root .mud-table-body .mud-table-cell {
+    font-size: 1rem;
+}
+
+.mud-table-root .mud-table-pagination-toolbar {
+    font-size: 1rem;
+}
+
+.mud-table-root .mud-table-pagination-toolbar * {
+    font-size: 1rem;
+}
+
+.mud-table-root .mud-table-pagination-select {
+    font-size: 1rem;
+}
+
+.mud-table-root .mud-table-pagination-caption {
+    font-size: 1rem;
+}
+
+.mud-table-root .mud-table-pagination-display {
+    font-size: 1rem;
+}
+
+.mud-table-root .mud-table-pagination-information {
+    font-size: 1rem;
+}
+
+/* Consistent 8px border radius for container elements (papers, tables, alerts, expansion panels).
+   Applied directly rather than via --mud-default-borderradius to avoid affecting
+   buttons, inputs, and other interactive controls that should keep their default radius. */
+.mud-paper,
+.mud-paper-outlined,
+.mud-table,
+.mud-alert {
+    border-radius: 8px !important;
+}
+
+/* Links inside alerts: inherit the alert's text colour with bold + underline for emphasis.
+   Overrides the global --jim-link-color so links don't appear as clashing blue/purple
+   inside coloured alert boxes (e.g., yellow warning, green success). */
+.mud-alert .mud-alert-message a.mud-link {
+    color: inherit !important;
+    font-weight: 600 !important;
+    text-decoration: underline !important;
+    transition: opacity 0.2s ease !important;
+}
+
+/* Hover: reduce opacity to provide visual feedback while keeping the inherited colour */
+.mud-alert .mud-alert-message a.mud-link:hover {
+    color: inherit !important;
+    opacity: 0.7 !important;
+    text-decoration: underline !important;
+}
+
+/* Clip table content to respect rounded corners (prevents hover highlight overflow) */
+.mud-table {
+    overflow: hidden;
+}
+
+/* Give container elements a subtle border for better definition against the background.
+   Use html[lang] parent for higher specificity (0,2,1) to beat MudBlazor's (0,1,0) rules. */
+html[lang] .mud-paper,
+html[lang] .mud-paper-outlined,
+html[lang] .mud-table-outlined {
+    border: 1px solid var(--jim-paper-border-color, transparent) !important;
+}
+
+/* JIM styled expansion panels - use .jim-expansion-panel class on MudExpansionPanels */
+.jim-expansion-panel {
+    border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
+    border-radius: 8px !important;
+    overflow: hidden;
+}
+
+.jim-expansion-panel .mud-expand-panel {
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+}
+
+.jim-expansion-panel .mud-expand-panel::before {
+    box-shadow: none !important;
+    border: none !important;
+}
+
+/* Thin separator between adjacent panels — skips the first to avoid
+   doubling with the container's top border */
+.jim-expansion-panel .mud-expand-panel + .mud-expand-panel {
+    border-top: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
+}
+
+/* Panel header row uses inner-surface background for visual distinction,
+   matching nested table header styling */
+.jim-expansion-panel .mud-expand-panel-header {
+    background-color: var(--jim-inner-surface, transparent);
+}
+
+/* Space between header and content — matches the default 24px gutters on
+   left/right/bottom so spacing is uniform on all sides */
+.jim-expansion-panel .mud-expand-panel-content {
+    padding-top: 24px !important;
+}
+
+/* Nested containers inside expansion panels — mirrors the .mud-paper nesting
+   rules so tables/papers inside panels get jim-inner-surface treatment.
+   MudExpansionPanels does not output mud-paper, so we duplicate the selectors. */
+html[lang] .jim-expansion-panel .mud-table,
+html[lang] .jim-expansion-panel .mud-simple-table {
+    background-color: var(--jim-inner-surface, transparent);
+}
+
+html[lang] .jim-expansion-panel .mud-simple-table thead tr,
+html[lang] .jim-expansion-panel .mud-table .mud-table-head,
+html[lang] .jim-expansion-panel .mud-table .mud-table-head .mud-table-cell {
+    background-color: var(--jim-inner-surface, transparent);
+}
+
+html[lang] .jim-expansion-panel .mud-simple-table tbody td,
+html[lang] .jim-expansion-panel .mud-table .mud-table-body .mud-table-cell {
+    background-color: var(--mud-palette-surface, #ffffff);
+}
+
+html[lang] .jim-expansion-panel .mud-table-outlined,
+html[lang] .jim-expansion-panel .mud-simple-table-outlined {
+    border-color: var(--jim-inner-border-color, var(--jim-paper-border-color, transparent)) !important;
+}
+
+html[lang] .jim-expansion-panel .mud-paper {
+    background-color: var(--jim-inner-surface, var(--mud-palette-surface));
+}
+
+html[lang] .jim-expansion-panel .mud-paper-outlined {
+    border-color: var(--jim-inner-border-color, var(--jim-paper-border-color, transparent)) !important;
+}
+
+/* Operations Queue: hide task rows when their schedule group is collapsed */
+.jim-queue-collapsed-row {
+    display: none !important;
+}
+
+/* Operations Queue: collapse empty group header rows for standalone tasks */
+.jim-queue-standalone-group {
+    padding: 0 !important;
+    height: 0 !important;
+    border: none !important;
+    line-height: 0 !important;
+    font-size: 0 !important;
+}
+
+/* Operations Queue: visible separator before standalone tasks to delineate from schedule groups */
+.jim-queue-standalone-separator {
+    height: 3px !important;
+    background-color: var(--mud-palette-lines-default);
+}
+
+/* Operations Queue: remove top border radius when worker activity bar connects */
+.jim-queue-table-active.mud-table-outlined {
+    border-top-left-radius: 0 !important;
+    border-top-right-radius: 0 !important;
+    border-top: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
+}
+
+/* Worker activity indicator bar — shown above queue table when tasks are processing */
+.jim-worker-activity-bar {
+    position: relative;
+    height: 40px;
+    border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+    border-bottom: none;
+    border-radius: 4px 4px 0 0;
+    overflow: hidden;
+    background-color: var(--mud-palette-surface);
+}
+
+.jim-worker-activity-shimmer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        var(--mud-palette-primary) 40%,
+        var(--mud-palette-primary) 60%,
+        transparent 100%
+    );
+    opacity: 0.08;
+    background-size: 200% 100%;
+    animation: jim-worker-shimmer 3s ease-in-out infinite;
+}
+
+@keyframes jim-worker-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.jim-worker-activity-text {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 100%;
+    font-size: 0.8125rem;
+    color: var(--mud-palette-text-secondary);
+    letter-spacing: 0.02em;
+}
+
+.jim-worker-activity-text .mud-icon-root {
+    font-size: 1rem;
+    color: var(--mud-palette-primary);
+    animation: jim-worker-icon-tick 6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes jim-worker-icon-tick {
+    0%   { transform: rotate(0deg); }
+    8%   { transform: rotate(0deg); }
+    13%  { transform: rotate(90deg); }
+    50%  { transform: rotate(90deg); }
+    55%  { transform: rotate(180deg); }
+    100% { transform: rotate(180deg); }
+}
+
+/* Nested containers: tables and tab panels inside papers use a deeper surface colour
+   when the theme defines --jim-inner-surface (mid-contrast themes). Falls back to
+   transparent so other themes are unaffected. */
+html[lang] .mud-paper .mud-table,
+html[lang] .mud-paper .mud-simple-table {
+    background-color: var(--jim-inner-surface, transparent);
+}
+
+/* Data cells in nested tables use the paper surface so they contrast against
+   the shaded header row (table-level background bleeds through transparent rows). */
+html[lang] .mud-paper .mud-simple-table tbody td,
+html[lang] .mud-paper .mud-table .mud-table-body .mud-table-cell {
+    background-color: var(--mud-palette-surface, #ffffff);
+}
+
+html[lang] .mud-paper .mud-table-outlined,
+html[lang] .mud-paper .mud-simple-table-outlined {
+    border-color: var(--jim-inner-border-color, var(--jim-paper-border-color, transparent)) !important;
+}
+
+html[lang] .mud-paper .mud-tabs-tabbar {
+    background-color: var(--jim-inner-surface, transparent);
+}
+
+html[lang] .mud-paper .mud-tabs-panels {
+    background-color: var(--jim-inner-surface, transparent);
+    border-radius: 0 0 8px 8px;
+}
+
+html[lang] .mud-paper .mud-paper {
+    background-color: var(--jim-inner-surface, var(--mud-palette-surface));
+}
+
+html[lang] .mud-paper .mud-paper-outlined {
+    border-color: var(--jim-inner-border-color, var(--jim-paper-border-color, transparent)) !important;
+}
+
+html[lang] .mud-paper .mud-card {
+    background-color: var(--jim-inner-surface, var(--mud-palette-surface));
+}
+
+html[lang] .mud-paper .mud-card-outlined {
+    border-color: var(--jim-inner-border-color, var(--jim-paper-border-color, transparent)) !important;
+}
+
+/* Timeline arrow triangle: fill with inner surface colour so it matches the card background */
+html[lang] .mud-paper .mud-card::after {
+    border-right-color: var(--jim-inner-surface, var(--mud-palette-surface)) !important;
+}
+
+/* Match the tabs container radius to our 8px standard and clip child content so
+   the first/last tab's active highlight doesn't overflow the rounded corners. */
+.mud-tabs-rounded {
+    border-radius: 8px !important;
+}
+
+/* Ensure the rounded outlined tabbar uses our 8px radius on all corners and clips
+   child content so tab highlights respect the rounded shape. */
+html[lang] .mud-tabs-tabbar.mud-tabs-rounded.mud-paper-outlined {
+    border-radius: 8px !important;
+    overflow: hidden;
+}
+
+html[lang] .mud-tabs-tabbar.mud-tabs-rounded .mud-tabs-tabbar-inner,
+html[lang] .mud-tabs-tabbar.mud-tabs-rounded .mud-tabs-tabbar-content,
+html[lang] .mud-tabs-tabbar.mud-tabs-rounded .mud-tabs-tabbar-wrapper {
+    border-radius: inherit;
+}
+
+/* Strengthen tab bar separator line to match container borders */
+html[lang] .mud-tabs-tabbar.mud-tabs-border-bottom {
+    border-top-color: var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
+}
+
+html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
+    border-bottom-color: var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
+}
+
+/* JIM CUSTOM */
+
+/* Title segments wrap as complete units instead of breaking mid-phrase */
+.jim-title-segment {
+    white-space: nowrap;
+}
+
+/* Title accent colour for entity/target names in page headings */
+.jim-title-accent {
+    color: var(--mud-palette-tertiary);
+}
+
+.jim-header-title {
+    font-weight: 300;
+}
+
+.jim-text-code {
+    font-family: "Lucida Console", "Courier New", monospace;
+    font-size: 0.9em !important;
+}
+
+/* Inline code styling - similar to markdown code blocks */
+.jim-code-inline {
+    font-family: "Lucida Console", "Courier New", monospace;
+    font-size: 0.9em;
+    padding: 8px 6px;
+    border-radius: 5px;
+    background-color: var(--jim-code-inline-bg, rgba(175, 184, 193, 0.2));
+}
+
+/* Dark mode support for inline code */
+@media (prefers-color-scheme: dark) {
+    .jim-code-inline {
+        background-color: var(--jim-code-inline-bg, rgba(110, 118, 129, 0.4));
+    }
+}
+
+.jim-drawer {
+    border-right: 1px solid var(--jim-drawer-border-color);
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+.jim-drawer-logo img {
+    vertical-align: middle;
+}
+
+.jim-drawer-logo p,
+.jim-drawer-logo span {
+    margin: 4px 0 0 10px;
+    font-size: 1rem;
+    font-weight: 500;
+    vertical-align: sub;
+    color: var(--jim-logo-text-color, #ffffff) !important;
+}
+
+.jim-drawer-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    margin: 0 6px;
+    border-top-style: solid;
+    border-top-width: 1px;
+    border-top-color: var(--jim-drawer-border-color);
+    padding: 8px 0;
+    color: var(--mud-palette-drawer-icon) !important;
+}
+
+/* Ensure drawer footer icons use drawer colours, not content area colours */
+.jim-drawer-footer .mud-icon-root {
+    color: var(--mud-palette-drawer-icon) !important;
+}
+
+/* When drawer is expanded, show buttons horizontally */
+.jim-drawer-footer.jim-drawer-footer-expanded {
+    flex-direction: row;
+    justify-content: center;
+}
+
+.jim-nowrap {
+    white-space: nowrap;
+}
+
+/* Navigation menu styling - top-level items */
+.jim-nav-menu>.jim-nav-top-level .mud-nav-link-text,
+.jim-nav-menu>.jim-nav-top-level>button>.mud-nav-link-text {
+    font-weight: 600;
+    color: var(--jim-nav-top-level-color);
+}
+
+/* Ensure icon colour matches for top-level items */
+.jim-nav-menu>.jim-nav-top-level .mud-nav-link-icon,
+.jim-nav-menu>.jim-nav-top-level>button>.mud-icon-root {
+    color: var(--jim-nav-top-level-color);
+}
+
+/* Active/selected nav item - stronger colour to stand out */
+.jim-nav-menu .mud-nav-link.active .mud-nav-link-text {
+    color: var(--jim-nav-active-color) !important;
+}
+
+.jim-nav-menu .mud-nav-link.active .mud-nav-link-icon {
+    color: var(--jim-nav-active-color) !important;
+}
+
+/* Nav group expand/collapse chevron icons - MudBlazor uses color for
+   collapsed state and fill for expanded (.mud-transform) state */
+.jim-nav-menu .mud-nav-link-expand-icon {
+    color: var(--jim-nav-top-level-color) !important;
+}
+
+.jim-nav-menu .mud-nav-link-expand-icon.mud-transform {
+    color: var(--jim-nav-top-level-color) !important;
+    fill: var(--jim-nav-top-level-color) !important;
+}
+
+/* Nav item hover - brighten text and icon when hovering (uses --jim-nav-hover-color
+   if the theme defines it, otherwise falls back to --jim-nav-active-color) */
+.jim-nav-menu .mud-nav-link:hover .mud-nav-link-text {
+    color: var(--jim-nav-hover-color, var(--jim-nav-active-color)) !important;
+}
+
+.jim-nav-menu .mud-nav-link:hover .mud-nav-link-icon {
+    color: var(--jim-nav-hover-color, var(--jim-nav-active-color)) !important;
+}
+
+/* Child nav items - dimmed colour and lighter weight for visual hierarchy */
+.jim-nav-child .mud-nav-link-text {
+    font-weight: 400 !important;
+    color: var(--jim-nav-child-color) !important;
+}
+
+/* Align child nav item text with parent text.
+   MudBlazor sets padding-left/padding-inline-start: 36px on nested nav links.
+   Increase to 38px to align child text with parent text (after icon).
+   Note: jim-nav-child is on the parent div.mud-nav-item, not the anchor. */
+.jim-nav-child .mud-nav-link {
+    padding-left: 38px !important;
+    padding-inline-start: 38px !important;
+}
+
+/* Danger zone tab header - red text, icon and underline only when active */
+#danger-zone.mud-tab-active,
+#danger-zone.mud-tab.mud-tab-active,
+.mud-tab.mud-tab-active#danger-zone {
+    color: #f44336 !important;
+}
+
+#danger-zone.mud-tab-active .mud-icon-root,
+#danger-zone.mud-tab.mud-tab-active .mud-icon-root,
+.mud-tab.mud-tab-active#danger-zone .mud-icon-root {
+    color: #f44336 !important;
+}
+
+/* Active indicator line - try both ::after and child element approaches */
+#danger-zone.mud-tab-active::after,
+.mud-tab.mud-tab-active#danger-zone::after {
+    background-color: #f44336 !important;
+}
+
+#danger-zone.mud-tab-active .mud-tab-indicator,
+.mud-tab.mud-tab-active#danger-zone .mud-tab-indicator {
+    background-color: #f44336 !important;
+}
+
+/* Filled accent cards for summary/metric displays.
+   Background uses the semantic colour; all text is forced to white for contrast. */
+html[lang] .mud-paper.jim-card-accent-success,
+html[lang] .mud-paper.jim-card-accent-warning,
+html[lang] .mud-paper.jim-card-accent-error,
+html[lang] .mud-paper.jim-card-accent-info {
+    border: none !important;
+    color: #ffffff;
+}
+
+html[lang] .mud-paper.jim-card-accent-success .mud-text-secondary,
+html[lang] .mud-paper.jim-card-accent-warning .mud-text-secondary,
+html[lang] .mud-paper.jim-card-accent-error .mud-text-secondary,
+html[lang] .mud-paper.jim-card-accent-info .mud-text-secondary {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+html[lang] .mud-paper.jim-card-accent-success .mud-typography,
+html[lang] .mud-paper.jim-card-accent-warning .mud-typography,
+html[lang] .mud-paper.jim-card-accent-error .mud-typography,
+html[lang] .mud-paper.jim-card-accent-info .mud-typography {
+    color: #ffffff !important;
+}
+
+html[lang] .mud-paper.jim-card-accent-success {
+    background-color: #02a425 !important;
+}
+
+html[lang] .mud-paper.jim-card-accent-warning {
+    background-color: #ff8400 !important;
+}
+
+html[lang] .mud-paper.jim-card-accent-error {
+    background-color: #e50808 !important;
+}
+
+html[lang] .mud-paper.jim-card-accent-info {
+    background-color: #0076d3 !important;
+}
+
+/* Danger zone styling for high-risk actions */
+html[lang] .jim-paper-danger-zone {
+    border: 2px solid #f44336 !important;
+    background-color: rgba(183, 28, 28, 0.09);
+    box-shadow: none !important;
+}
+
+/* Error alert styling - accessible alternative to filled red backgrounds */
+/* Uses standard text colours for WCAG compliance with red border for visual emphasis */
+.jim-alert-error {
+    border: 2px solid #f44336 !important;
+    /* MudBlazor red/default */
+    background-color: rgba(183, 28, 28, 0.05) !important;
+    /* Very subtle red tint */
+}
+
+/* Use standard palette text colours for accessibility (dark text in light mode, light text in dark mode) */
+.jim-alert-error .mud-alert-message {
+    color: var(--mud-palette-text-primary) !important;
+}
+
+/* Error alert icon should be red for visual emphasis */
+.jim-alert-error .mud-icon-root {
+    color: #f44336 !important;
+}
+
+/* Dark mode adjustments for error alert */
+.mud-theme-dark .jim-alert-error {
+    background-color: rgba(244, 67, 54, 0.08) !important;
+    /* Very subtle red tint in dark mode */
+}
+
+/* Improve contrast for form labels and helper text (WCAG AA compliance) */
+
+/* Input labels - ensure high contrast for readability */
+.mud-input-label,
+.mud-input-label-outlined,
+.mud-input-label-filled {
+    color: var(--mud-palette-text-primary) !important;
+    opacity: 1 !important;
+    font-weight: 500;
+}
+
+/* Helper text below inputs - needs adequate contrast */
+.mud-input-helper-text {
+    color: var(--mud-palette-text-primary) !important;
+    opacity: 0.8 !important;
+}
+
+/* Switch/checkbox label text */
+.mud-switch .mud-switch-label,
+.mud-checkbox .mud-checkbox-label {
+    color: var(--mud-palette-text-primary) !important;
+    opacity: 1 !important;
+}
+
+/* Description text below switches/checkboxes */
+.mud-text-secondary {
+    opacity: 0.8 !important;
+}
+
+/* Dialog actions padding - ensure consistent padding with dialog content */
+.mud-dialog-actions {
+    padding: 24px !important;
+}
+
+/* Dialog/Modal background - use lighter surface colour where defined for better elevation */
+html[lang] .mud-dialog {
+    background-color: var(--jim-dialog-surface, var(--mud-palette-surface)) !important;
+    border-radius: 8px !important;
+}
+
+/* Dialog inner elements - slightly lighter backgrounds for nested content */
+html[lang] .mud-dialog .mud-tabs-tabbar {
+    background-color: var(--jim-dialog-inner-surface, transparent) !important;
+}
+
+html[lang] .mud-dialog .jim-step-item-in-block {
+    background-color: var(--jim-dialog-inner-surface, transparent) !important;
+}
+
+/* Outlined papers inside dialogs use lighter inner surface */
+html[lang] .mud-dialog .mud-paper-outlined {
+    background-color: var(--jim-dialog-inner-surface, transparent) !important;
+}
+
+/* Remove drop shadows from all MudBlazor buttons */
+.mud-button-root {
+    box-shadow: none !important;
+}
+
+.mud-button-filled {
+    box-shadow: none !important;
+}
+
+.mud-button-group .mud-button-root {
+    box-shadow: none !important;
+}
+
+.mud-button-group-override-styles {
+    box-shadow: none !important;
+}
+
+/* Schema refresh results alert - position close icon in top right */
+.jim-alert-schema-refresh {
+    position: relative;
+}
+
+.jim-alert-schema-refresh .mud-alert-close-button {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    margin: 0 !important;
+}
+
+/* Table group header rows - subtle background tint for category emphasis */
+.mud-table-cell-custom-group {
+    background-color: var(--mud-palette-background-grey) !important;
+}
+
+/* Read-only table rows styling - visual distinction for disabled settings */
+.jim-readonly-row {
+    opacity: 0.65;
+    color: var(--mud-palette-text-disabled);
+}
+
+/* Hide page footer on pages that need maximum vertical space */
+.jim-hide-footer .jim-page-footer {
+    display: none;
+}
+
+/* Log detail slide-out panel */
+.jim-log-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 700px;
+    max-width: 90vw;
+    height: 100vh;
+    background: var(--mud-palette-surface);
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.2);
+    transform: translateX(100%);
+    transition: transform 0.25s ease-in-out;
+    z-index: 1300;
+    overflow: hidden;
+}
+
+.jim-log-panel-open {
+    transform: translateX(0);
+}
+
+/* Log panel expansion panels - remove extra margins and shadows to match Message box width */
+.jim-log-panel .mud-expand-panels {
+    margin: 0 !important;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 8px;
+}
+
+.jim-log-panel .mud-expand-panel {
+    margin: 0 !important;
+    box-shadow: none !important;
+}
+
+.jim-log-panel .mud-expand-panel::before {
+    box-shadow: none !important;
+}
+
+/* Remove default gutters (24px padding) from expansion panel content */
+.jim-log-panel .mud-expand-panel-content.mud-expand-panel-gutters {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+}
+
+/* Remove shadow from tables inside the log panel */
+.jim-log-panel .mud-table,
+.jim-log-panel .mud-simple-table {
+    box-shadow: none !important;
+}
+
+/* Activity detail slide-out panel (Operations History) */
+.jim-activity-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 500px;
+    max-width: 90vw;
+    height: 100vh;
+    background: var(--mud-palette-surface);
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.2);
+    transform: translateX(100%);
+    transition: transform 0.25s ease-in-out;
+    z-index: 1300;
+    overflow: hidden;
+}
+
+.jim-activity-panel-open {
+    transform: translateX(0);
+}
+
+/* Activity panel expansion panels - remove extra margins and shadows */
+.jim-activity-panel .mud-expand-panels {
+    margin: 0 !important;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 8px;
+}
+
+.jim-activity-panel .mud-expand-panel {
+    margin: 0 !important;
+    box-shadow: none !important;
+}
+
+.jim-activity-panel .mud-expand-panel::before {
+    box-shadow: none !important;
+}
+
+/* Remove default gutters from expansion panel content */
+.jim-activity-panel .mud-expand-panel-content.mud-expand-panel-gutters {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+}
+
+/* Remove shadow from tables inside the activity panel */
+.jim-activity-panel .mud-table,
+.jim-activity-panel .mud-simple-table {
+    box-shadow: none !important;
+}
+
+/* JSON syntax highlighting colours are defined in css/themes/ files */
+
+.jim-json-syntax {
+    font-family: "Lucida Console", "Courier New", monospace;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    margin: 0;
+    padding: 12px;
+    background: var(--jim-inner-surface, var(--mud-palette-background));
+    border-radius: 8px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.jim-json-key {
+    color: var(--jim-json-key);
+}
+
+.jim-json-string {
+    color: var(--jim-json-string);
+}
+
+.jim-json-number {
+    color: var(--jim-json-number);
+}
+
+.jim-json-boolean {
+    color: var(--jim-json-boolean);
+}
+
+.jim-json-null {
+    color: var(--jim-json-null);
+}
+
+.jim-json-punctuation {
+    color: var(--mud-palette-text-primary);
+}
+
+/* CSO Attribute Table Styles */
+.jim-attribute-table {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.jim-attribute-table thead tr th {
+    background-color: var(--jim-inner-surface, var(--mud-palette-background-grey));
+    font-weight: 500;
+    font-size: 0.875rem;
+    padding: 12px 16px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.02857em;
+}
+
+.jim-attr-header-name {
+    width: 180px;
+    min-width: 140px;
+}
+
+.jim-attr-header-type {
+    width: 100px;
+}
+
+.jim-attr-header-plurality {
+    width: 80px;
+}
+
+.jim-attr-header-extid {
+    width: 140px;
+}
+
+.jim-attr-header-value {
+    width: auto;
+}
+
+.jim-attribute-table tbody tr td {
+    padding: 12px 16px !important;
+    vertical-align: middle;
+}
+
+.jim-attr-name {
+    background-color: var(--jim-attr-name-bg, var(--mud-palette-background-grey));
+    white-space: nowrap;
+}
+
+.jim-attr-type {
+    white-space: nowrap;
+}
+
+.jim-attr-plurality {
+    white-space: nowrap;
+}
+
+.jim-attr-value {
+    word-break: break-word;
+}
+
+.jim-attr-reference {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.jim-attr-unresolved {
+    display: inline-flex;
+    align-items: center;
+    color: var(--mud-palette-warning);
+}
+
+.jim-attr-multivalue {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.jim-attr-expand-btn {
+    padding: 2px 8px !important;
+    min-width: auto !important;
+    font-size: 0.75rem;
+    text-transform: none !important;
+}
+
+.jim-attr-expanded {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.jim-attr-expanded-item {
+    padding: 2px 0;
+}
+
+.jim-attr-collapse-btn {
+    margin-top: 8px;
+    padding: 2px 8px !important;
+    min-width: auto !important;
+    font-size: 0.75rem;
+    text-transform: none !important;
+}
+
+/* Blazor Server Reconnection UI */
+#components-reconnect-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10000;
+    background-color: rgba(0, 0, 0, 0.5);
+    justify-content: center;
+    align-items: center;
+}
+
+#components-reconnect-modal.components-reconnect-show,
+#components-reconnect-modal.components-reconnect-failed,
+#components-reconnect-modal.components-reconnect-rejected {
+    display: flex;
+}
+
+.jim-reconnect-content {
+    background-color: var(--mud-palette-surface);
+    color: var(--mud-palette-text-primary);
+    border-radius: 8px;
+    padding: 32px 48px;
+    text-align: center;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    max-width: 400px;
+}
+
+.jim-reconnect-spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid var(--mud-palette-lines-default);
+    border-top-color: var(--mud-palette-primary);
+    border-radius: 50%;
+    margin: 0 auto 16px;
+    animation: jim-spin 1s linear infinite;
+}
+
+@keyframes jim-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.jim-reconnect-message {
+    font-size: 1rem;
+    margin: 0 0 8px;
+    color: var(--mud-palette-text-primary);
+}
+
+.jim-reconnect-retry {
+    font-size: 0.875rem;
+    margin: 0;
+    color: var(--mud-palette-text-secondary);
+}
+
+/* Failed state */
+#components-reconnect-modal.components-reconnect-failed .jim-reconnect-spinner,
+#components-reconnect-modal.components-reconnect-rejected .jim-reconnect-spinner {
+    border-top-color: var(--mud-palette-error);
+    animation: none;
+}
+
+#components-reconnect-modal.components-reconnect-failed .jim-reconnect-message::after,
+#components-reconnect-modal.components-reconnect-rejected .jim-reconnect-message::after {
+    content: " Reload the page to try again.";
+}
+
+/* Audit info chips - compact label that expands on hover */
+.jim-audit-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 16px;
+    font-size: 0.8125rem;
+    white-space: nowrap;
+    cursor: default;
+    background-color: var(--mud-palette-surface);
+    border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+    color: var(--mud-palette-text-primary);
+    transition: background-color 0.2s ease;
+}
+
+.jim-audit-chip:hover {
+    background-color: var(--mud-palette-background-gray);
+}
+
+.jim-audit-chip .mud-icon-root {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.jim-audit-chip-detail {
+    display: inline-flex;
+    align-items: center;
+    max-width: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-width 0.4s ease, opacity 0.3s ease 0.05s;
+}
+
+.jim-audit-chip:hover .jim-audit-chip-detail {
+    max-width: 500px;
+    opacity: 1;
+}
+
+.jim-audit-chip-label {
+    flex-shrink: 0;
+}
+
+/* Schedule Step Drag and Drop Styles */
+.jim-step-drop-zone {
+    min-height: 50px;
+    transition: background-color 0.2s ease;
+}
+
+.jim-step-drop-zone.mud-drop-zone-drag {
+    background-color: var(--mud-palette-action-default-hover);
+    border-radius: 4px;
+}
+
+/* Drop indicator line - shows where item will be placed */
+.jim-step-drop-zone .mud-drop-item-preview {
+    position: relative;
+    height: 4px;
+    background-color: var(--mud-palette-primary);
+    border-radius: 2px;
+    margin: 4px 0;
+    opacity: 0.8;
+}
+
+/* Step item being dragged */
+.jim-step-item {
+    transition: transform 0.1s ease, box-shadow 0.2s ease;
+    cursor: grab;
+}
+
+.jim-step-item:active {
+    cursor: grabbing;
+}
+
+.jim-step-item.mud-drop-item-dragging {
+    opacity: 0.6;
+    transform: scale(0.98);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Drag handle visual feedback */
+.jim-drag-handle {
+    cursor: grab;
+    opacity: 0.5;
+    transition: opacity 0.2s ease;
+}
+
+.jim-drag-handle:hover {
+    opacity: 1;
+}
+
+.jim-step-item:active .jim-drag-handle {
+    cursor: grabbing;
+}
+
+/* Schedule Step Block Styles */
+.jim-step-block {
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.jim-step-block-header {
+    background-color: var(--mud-palette-background-grey);
+    padding: 4px 12px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.jim-step-block-content {
+    padding: 0;
+}
+
+.jim-step-item-in-block {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+    transition: background-color 0.15s ease;
+}
+
+.jim-step-item-in-block:last-child {
+    border-bottom: none;
+}
+
+.jim-step-item-in-block:hover {
+    background-color: var(--mud-palette-action-default-hover);
+}
+
+/* Subtle text emphasis - semi-bold for visual hierarchy without colour change */
+.jim-text-emphasis {
+    font-weight: 500;
+}
+
+/* Run profile name in schedule step display - uses teal/cyan for contrast */
+.jim-step-run-profile {
+    color: var(--jim-json-boolean);
+}
+
+/* Interval configuration controls - constrain widths */
+/* Target both the outer container and inner MudBlazor elements */
+.jim-interval-number,
+.jim-interval-number.mud-input-control {
+    width: 80px !important;
+    min-width: 80px !important;
+    max-width: 80px !important;
+    flex: 0 0 80px !important;
+}
+
+.jim-interval-unit,
+.jim-interval-unit.mud-select {
+    width: 120px !important;
+    min-width: 120px !important;
+    max-width: 120px !important;
+    flex: 0 0 120px !important;
+}
+
+/* Also target the inner input container */
+.jim-interval-unit .mud-input-control {
+    width: 100% !important;
+    min-width: unset !important;
+}

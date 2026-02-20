@@ -8,7 +8,7 @@
       "type": "process",
       "args": [
         "build",
-        "${workspaceFolder}/JIM.Web/JIM.Web.csproj",
+        "${workspaceFolder}/src/JIM.Web/JIM.Web.csproj",
         "/property:GenerateFullPaths=true",
         "/consoleloggerparameters:NoSummary"
       ],
@@ -21,7 +21,7 @@
       "type": "process",
       "args": [
         "build",
-        "${workspaceFolder}/JIM.Worker/JIM.Worker.csproj",
+        "${workspaceFolder}/src/JIM.Worker/JIM.Worker.csproj",
         "/property:GenerateFullPaths=true",
         "/consoleloggerparameters:NoSummary"
       ],
@@ -34,7 +34,7 @@
       "type": "process",
       "args": [
         "build",
-        "${workspaceFolder}/JIM.Scheduler/JIM.Scheduler.csproj",
+        "${workspaceFolder}/src/JIM.Scheduler/JIM.Scheduler.csproj",
         "/property:GenerateFullPaths=true",
         "/consoleloggerparameters:NoSummary"
       ],
@@ -118,7 +118,7 @@
       "type": "process",
       "args": [
         "test",
-        "${workspaceFolder}/JIM.Worker.Tests/JIM.Worker.Tests.csproj",
+        "${workspaceFolder}/test/JIM.Worker.Tests/JIM.Worker.Tests.csproj",
         "--verbosity",
         "normal"
       ],
@@ -149,7 +149,7 @@
         "database",
         "update",
         "--project",
-        "${workspaceFolder}/JIM.PostgresData"
+        "${workspaceFolder}/src/JIM.PostgresData"
       ],
       "problemMatcher": "$msCompile"
     },
@@ -163,7 +163,7 @@
         "add",
         "${input:migrationName}",
         "--project",
-        "${workspaceFolder}/JIM.PostgresData"
+        "${workspaceFolder}/src/JIM.PostgresData"
       ],
       "problemMatcher": "$msCompile"
     },
@@ -176,7 +176,7 @@
         "migrations",
         "remove",
         "--project",
-        "${workspaceFolder}/JIM.PostgresData"
+        "${workspaceFolder}/src/JIM.PostgresData"
       ],
       "problemMatcher": "$msCompile"
     },
