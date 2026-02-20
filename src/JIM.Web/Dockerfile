@@ -46,7 +46,8 @@ WORKDIR "/src/JIM.Web"
 
 # Publish stage - optimised for production
 FROM build AS publish
-RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=false
+ARG VERSION_SUFFIX=
+RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=false /p:VersionSuffix="${VERSION_SUFFIX}"
 
 # Final stage - use published output
 FROM base AS final

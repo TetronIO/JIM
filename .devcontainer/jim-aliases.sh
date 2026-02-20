@@ -122,10 +122,11 @@ alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.ove
 alias jim-restart='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d --force-recreate'
 
 # Docker builds (rebuild and start services)
-alias jim-build='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d --build'
-alias jim-build-web='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db build jim.web && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d jim.web'
-alias jim-build-worker='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db build jim.worker && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d jim.worker'
-alias jim-build-scheduler='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db build jim.scheduler && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d jim.scheduler'
+# VERSION_SUFFIX is generated at build time so each Docker build gets a unique dev version
+alias jim-build='VERSION_SUFFIX="dev.$(date -u +%Y%m%d.%H%M)" docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d --build'
+alias jim-build-web='VERSION_SUFFIX="dev.$(date -u +%Y%m%d.%H%M)" docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db build jim.web && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d jim.web'
+alias jim-build-worker='VERSION_SUFFIX="dev.$(date -u +%Y%m%d.%H%M)" docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db build jim.worker && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d jim.worker'
+alias jim-build-scheduler='VERSION_SUFFIX="dev.$(date -u +%Y%m%d.%H%M)" docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db build jim.scheduler && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d jim.scheduler'
 
 # Reset
 alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down --rmi local --volumes && docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --rmi local --volumes --remove-orphans 2>/dev/null || true && docker rm -f samba-ad-primary samba-ad-source samba-ad-target sqlserver-hris-a oracle-hris-b postgres-target openldap-test mysql-test 2>/dev/null || true && docker volume ls --format "{{.Name}}" | grep jim-integration | xargs -r docker volume rm 2>/dev/null || true && docker volume rm -f jim-db-volume jim-logs-volume 2>/dev/null || true && echo "JIM reset complete. All containers, images, and volumes removed. Run jim-build to rebuild."'

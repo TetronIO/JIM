@@ -40,7 +40,8 @@ WORKDIR "/src/JIM.Worker"
 
 # Publish stage - optimised for production
 FROM build AS publish
-RUN dotnet publish "JIM.Worker.csproj" -c Release -o /app/publish
+ARG VERSION_SUFFIX=
+RUN dotnet publish "JIM.Worker.csproj" -c Release -o /app/publish /p:VersionSuffix="${VERSION_SUFFIX}"
 
 # Final stage - use published output
 FROM base AS final
