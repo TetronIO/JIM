@@ -1874,10 +1874,11 @@ public class SyncImportTaskProcessor
         {
             var pageCsos = csoList.Skip(page * pageSize).Take(pageSize).ToList();
 
-            // Batch collections for deferred database operations (per page)
-            var pendingExportsToDelete = new List<JIM.Models.Transactional.PendingExport>();
-            var pendingExportsToUpdate = new List<JIM.Models.Transactional.PendingExport>();
-            var confirmedAttrChangesToDelete = new List<JIM.Models.Transactional.PendingExportAttributeValueChange>();
+            // Thread-safe batch collections for deferred database operations (per page)
+            var pendingExportsToDelete = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExport>();
+            var pendingExportsToUpdate = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExport>();
+            var confirmedAttrChangesToDelete = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExportAttributeValueChange>();
+            var pageExecutionItems = new System.Collections.Concurrent.ConcurrentBag<ActivityRunProfileExecutionItem>();
 
             // Lightweight fetch: AsNoTracking + only AttributeValueChanges with Attribute.
             // Avoids loading ConnectedSystemObject/ConnectedSystem/SourceMetaverseObject (not needed for reconciliation)
@@ -1892,14 +1893,17 @@ public class SyncImportTaskProcessor
             Log.Verbose("ReconcilePendingExportsAsync: Page {Page}/{TotalPages}: Loaded {PendingExportCount} pending exports for {CsoCount} CSOs",
                 page + 1, totalPages, pendingExportsByCsoId.Count, pageCsos.Count);
 
-            // Process each CSO in this page against its pre-loaded pending export
+            // Process CSOs in parallel - reconciliation is pure in-memory comparison.
+            // Thread safety:
+            // - pendingExportsByCsoId: read-only dictionary (concurrent reads are safe)
+            // - Each CSO gets its own PendingExportReconciliationResult (no sharing)
+            // - Each pending export is unique per CSO (no cross-CSO contention)
+            // - reconciliationService.ReconcileCsoAgainstPendingExport uses only static helper methods
+            // - Shared collections use ConcurrentBag, counters use Interlocked
             using (Diagnostics.Sync.StartSpan("ProcessReconciliation").SetTag("csoCount", pageCsos.Count))
             {
-                foreach (var cso in pageCsos)
+                Parallel.ForEach(pageCsos, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, cso =>
                 {
-                    processedCount++;
-                    _activity.ObjectsProcessed = processedCount;
-
                     try
                     {
                         // Get the pre-loaded pending export for this CSO (if any)
@@ -1911,15 +1915,15 @@ public class SyncImportTaskProcessor
 
                         if (result.HasChanges)
                         {
-                            totalConfirmed += result.ConfirmedChanges.Count;
-                            totalRetry += result.RetryChanges.Count;
-                            totalFailed += result.FailedChanges.Count;
+                            Interlocked.Add(ref totalConfirmed, result.ConfirmedChanges.Count);
+                            Interlocked.Add(ref totalRetry, result.RetryChanges.Count);
+                            Interlocked.Add(ref totalFailed, result.FailedChanges.Count);
 
                             // Collect pending exports for batch operations
                             if (result.PendingExportToDelete != null)
                             {
                                 pendingExportsToDelete.Add(result.PendingExportToDelete);
-                                exportsDeleted++;
+                                Interlocked.Increment(ref exportsDeleted);
                             }
                             else if (result.PendingExportToUpdate != null)
                             {
@@ -1927,8 +1931,8 @@ public class SyncImportTaskProcessor
 
                                 // With AsNoTracking, EF Core won't detect collection removals.
                                 // Explicitly collect confirmed attribute changes for batch deletion.
-                                if (result.ConfirmedChanges.Count > 0)
-                                    confirmedAttrChangesToDelete.AddRange(result.ConfirmedChanges);
+                                foreach (var confirmedChange in result.ConfirmedChanges)
+                                    confirmedAttrChangesToDelete.Add(confirmedChange);
                             }
 
                             // Create execution items for failed exports (permanent failures)
@@ -1946,7 +1950,7 @@ public class SyncImportTaskProcessor
                                     ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.",
                                     DataSnapshot = $"Failed attributes: {failedAttrNames}"
                                 };
-                                _activityRunProfileExecutionItems.Add(executionItem);
+                                pageExecutionItems.Add(executionItem);
                             }
 
                             // Create execution items for retry exports (temporary failures that will be retried)
@@ -1964,15 +1968,25 @@ public class SyncImportTaskProcessor
                                     ErrorMessage = $"We exported a change, but did not get confirmation of it when a confirming import was performed. Details: {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will attempt to reassert the change on the next export run.",
                                     DataSnapshot = $"Unconfirmed attributes: {retryAttrNames}"
                                 };
-                                _activityRunProfileExecutionItems.Add(executionItem);
+                                pageExecutionItems.Add(executionItem);
                             }
                         }
+
+                        Interlocked.Increment(ref processedCount);
                     }
                     catch (Exception ex)
                     {
                         Log.Error(ex, "ReconcilePendingExportsAsync: Error reconciling pending exports for CSO {CsoId}", cso.Id);
+                        Interlocked.Increment(ref processedCount);
                     }
-                }
+                });
+
+                // Update progress after parallel processing completes
+                _activity.ObjectsProcessed = processedCount;
+
+                // Transfer execution items from thread-safe collection to main list
+                foreach (var item in pageExecutionItems)
+                    _activityRunProfileExecutionItems.Add(item);
             }
 
             // Batch persist pending export changes for this page
