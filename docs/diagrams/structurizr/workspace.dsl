@@ -13,7 +13,6 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
 
         # External Systems
         idp = softwareSystem "Identity Provider" "OIDC/SSO provider (Keycloak, Entra ID, Auth0, AD FS)" "External"
-        pwsh = softwareSystem "JIM PowerShell Module" "Cross-platform module with 35+ cmdlets for automation and scripting" "External"
         ad = softwareSystem "Active Directory / LDAP" "Enterprise directory services for users and groups" "External"
         hr = softwareSystem "HR Systems" "Authoritative source for employee identity data" "External"
         files = softwareSystem "File Systems" "CSV file-based bulk import/export" "External"
@@ -70,16 +69,15 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
 
             database = container "PostgreSQL Database" "Stores configuration, metaverse objects, staging area, sync rules, activity history, task queue" "PostgreSQL 18" "Database"
 
+            pwsh = container "PowerShell Module" "Cross-platform module with 64 cmdlets for automation and scripting" "PowerShell 7" "Client Library"
+
             !docs docs
             !adrs adrs
         }
 
         # ===== System Context Relationships =====
-        admin -> jim "Manages via" "Blazor Web UI"
-        admin -> pwsh "Scripts with" "PowerShell cmdlets"
-        automation -> pwsh "Automates via" "PowerShell scripts"
-        automation -> jim "Calls" "REST API"
-        pwsh -> jim "Calls" "REST API /api/v1/"
+        admin -> jim "Manages via" "Blazor Web UI, PowerShell"
+        automation -> jim "Automates via" "REST API, PowerShell"
         idp -> jim "Authenticates" "OIDC/OpenID Connect"
         jim -> ad "Synchronises" "LDAP/LDAPS"
         jim -> hr "Imports from" "CSV"
@@ -89,8 +87,10 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
 
         # ===== Container Relationships =====
         admin -> jim.webApp "Uses" "HTTPS"
+        admin -> jim.pwsh "Scripts with" "PowerShell cmdlets"
         automation -> jim.webApp "Calls" "REST API"
-        pwsh -> jim.webApp "Calls" "REST API /api/v1/"
+        automation -> jim.pwsh "Automates via" "PowerShell scripts"
+        jim.pwsh -> jim.webApp "Calls" "REST API /api/v1/"
         idp -> jim.webApp "Authenticates" "OIDC"
 
         jim.webApp -> jim.appLayer "Uses" "Method calls"
@@ -111,7 +111,7 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
         # ===== Web Application Component Relationships =====
         admin -> jim.webApp.blazorPages "Uses" "HTTPS"
         automation -> jim.webApp.apiControllers "Calls" "REST/JSON"
-        pwsh -> jim.webApp.apiControllers "Calls" "REST/JSON"
+        jim.pwsh -> jim.webApp.apiControllers "Calls" "REST/JSON"
         jim.webApp.authMiddleware -> idp "Authenticates via" "OIDC"
         jim.webApp.authMiddleware -> jim.webApp.blazorPages "Validates requests" "ASP.NET Pipeline"
         jim.webApp.authMiddleware -> jim.webApp.apiControllers "Validates requests" "ASP.NET Pipeline"
@@ -245,6 +245,11 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
                 color #000000
                 shape RoundedBox
                 width 550
+            }
+            element "Client Library" {
+                shape RoundedBox
+                background #5fa8d3
+                color #ffffff
             }
             element "Planned" {
                 background #e0e0e0
