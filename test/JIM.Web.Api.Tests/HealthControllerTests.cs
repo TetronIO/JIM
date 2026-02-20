@@ -169,4 +169,51 @@ public class HealthControllerTests
     }
 
     #endregion
+
+    #region Version tests
+
+    [Test]
+    public void Version_ReturnsOkResult()
+    {
+        var mockRepository = new Mock<IRepository>();
+        var application = new JimApplication(mockRepository.Object);
+        var controller = new HealthController(application);
+
+        var result = controller.Version();
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+    }
+
+    [Test]
+    public void Version_ReturnsVersionString()
+    {
+        var mockRepository = new Mock<IRepository>();
+        var application = new JimApplication(mockRepository.Object);
+        var controller = new HealthController(application);
+
+        var result = controller.Version() as OkObjectResult;
+        var value = result?.Value;
+
+        Assert.That(value, Is.Not.Null);
+        var versionProperty = value!.GetType().GetProperty("version");
+        var version = versionProperty?.GetValue(value) as string;
+        Assert.That(version, Is.Not.Null.And.Not.Empty);
+    }
+
+    [Test]
+    public void Version_ReturnsProductName()
+    {
+        var mockRepository = new Mock<IRepository>();
+        var application = new JimApplication(mockRepository.Object);
+        var controller = new HealthController(application);
+
+        var result = controller.Version() as OkObjectResult;
+        var value = result?.Value;
+
+        Assert.That(value, Is.Not.Null);
+        var productProperty = value!.GetType().GetProperty("product");
+        Assert.That(productProperty?.GetValue(value), Is.EqualTo("JIM"));
+    }
+
+    #endregion
 }

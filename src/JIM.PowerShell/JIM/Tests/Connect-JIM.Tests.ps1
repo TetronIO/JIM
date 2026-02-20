@@ -209,6 +209,11 @@ Describe 'Test-JIMConnection' {
             $result.PSObject.Properties.Name | Should -Contain 'AuthMethod'
         }
 
+        It 'Should include ServerVersion property' {
+            $result = Test-JIMConnection
+            $result.PSObject.Properties.Name | Should -Contain 'ServerVersion'
+        }
+
         It 'Should include TokenExpiresAt property' {
             $result = Test-JIMConnection
             $result.PSObject.Properties.Name | Should -Contain 'TokenExpiresAt'
@@ -217,6 +222,11 @@ Describe 'Test-JIMConnection' {
         It 'Should have null AuthMethod when not connected' {
             $result = Test-JIMConnection
             $result.AuthMethod | Should -BeNullOrEmpty
+        }
+
+        It 'Should have null ServerVersion when not connected' {
+            $result = Test-JIMConnection
+            $result.ServerVersion | Should -BeNullOrEmpty
         }
     }
 
