@@ -200,6 +200,11 @@ html[lang] .mud-alert-outlined-error {
     background-color: rgba(var(--mud-palette-error-rgb), 0.06) !important;
 }
 
+/* Table group header rows — deeper navy for schedule/category emphasis */
+html[lang] .mud-table-cell-custom-group {
+    background-color: #212a3e !important;
+}
+
 /* Nested table footer, pager, and no-records rows use page background
    to contrast against the shaded header row (inner-surface). */
 html[lang] .mud-paper .mud-table .mud-table-pagination-toolbar,
