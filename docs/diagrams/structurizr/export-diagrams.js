@@ -72,6 +72,11 @@ async function openDiagramsPage(browser, isDarkMode) {
   return page;
 }
 
+// Structurizr uses #111111 for dark mode backgrounds. Replace with GitHub's
+// dark mode background (#0e1117) so diagrams blend seamlessly.
+const STRUCTURIZR_DARK_BG = '#111111';
+const GITHUB_DARK_BG = '#0e1117';
+
 /**
  * Exports all views from a Structurizr page to SVG files.
  */
@@ -100,9 +105,13 @@ async function exportViews(page, views, targetDir, isDarkMode) {
     const diagramFilename = `${FILE_PREFIX}${view.key}.svg`;
     const diagramPath = path.join(targetDir, diagramFilename);
 
-    const svgForDiagram = await page.evaluate(() => {
+    let svgForDiagram = await page.evaluate(() => {
       return structurizr.scripting.exportCurrentDiagramToSVG({ includeMetadata: true });
     });
+
+    if (isDarkMode) {
+      svgForDiagram = svgForDiagram.replaceAll(STRUCTURIZR_DARK_BG, GITHUB_DARK_BG);
+    }
 
     const finalDiagram = jimVersion ? injectVersion(svgForDiagram, jimVersion, versionFill) : svgForDiagram;
     fs.writeFileSync(diagramPath, finalDiagram);
@@ -114,9 +123,13 @@ async function exportViews(page, views, targetDir, isDarkMode) {
       const keyFilename = `${FILE_PREFIX}${view.key}-key.svg`;
       const keyPath = path.join(targetDir, keyFilename);
 
-      const svgForKey = await page.evaluate(() => {
+      let svgForKey = await page.evaluate(() => {
         return structurizr.scripting.exportCurrentDiagramKeyToSVG();
       });
+
+      if (isDarkMode) {
+        svgForKey = svgForKey.replaceAll(STRUCTURIZR_DARK_BG, GITHUB_DARK_BG);
+      }
 
       fs.writeFileSync(keyPath, svgForKey);
       console.log(`    + ${keyFilename}`);
