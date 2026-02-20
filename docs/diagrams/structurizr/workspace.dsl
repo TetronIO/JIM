@@ -18,6 +18,10 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
         hr = softwareSystem "HR Systems" "Authoritative source for employee identity data" "External"
         files = softwareSystem "File Systems" "CSV file-based bulk import/export" "External"
 
+        # Planned External Systems
+        databases = softwareSystem "Enterprise Databases" "PostgreSQL, MySQL, Oracle, SQL Server with identity data" "External,Planned"
+        scim = softwareSystem "SCIM 2.0 Systems" "Cloud applications supporting SCIM provisioning" "External,Planned"
+
         # JIM System
         jim = softwareSystem "JIM" "Central identity hub implementing the metaverse pattern. Synchronises identities across enterprise systems with bidirectional data flow and transformation" {
 
@@ -56,6 +60,8 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
             connectors = container "Connectors" "External system integration adapters" "JIM.Connectors" {
                 ldapConnector = component "LDAP Connector" "Active Directory, OpenLDAP, AD-LDS - schema discovery, LDAPS, partitions, delta import" "IConnector Implementation"
                 fileConnector = component "File Connector" "CSV import/export, configurable delimiters, schema discovery" "IConnector Implementation"
+                databaseConnector = component "Database Connector" "PostgreSQL, MySQL, Oracle, SQL Server - SQL queries, stored procedures" "IConnector Implementation,Planned"
+                scimConnector = component "SCIM 2.0 Connector" "Cloud application provisioning via SCIM protocol" "IConnector Implementation,Planned"
             }
 
             scheduler = container "Scheduler Service" "Evaluates schedule due times, triggers synchronisation jobs, and recovers stuck executions" ".NET 9.0 Background Service" {
@@ -78,6 +84,8 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
         jim -> ad "Synchronises" "LDAP/LDAPS"
         jim -> hr "Imports from" "CSV"
         jim -> files "Imports/Exports" "CSV files"
+        jim -> databases "Synchronises" "SQL" "Planned"
+        jim -> scim "Provisions to" "SCIM 2.0" "Planned"
 
         # ===== Container Relationships =====
         admin -> jim.webApp "Uses" "HTTPS"
@@ -97,6 +105,8 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
         jim.connectors -> ad "Connects to" "LDAP/LDAPS"
         jim.connectors -> hr "Imports from" "CSV"
         jim.connectors -> files "Reads/Writes" "File I/O"
+        jim.connectors -> databases "Connects to" "SQL" "Planned"
+        jim.connectors -> scim "Provisions to" "HTTPS" "Planned"
 
         # ===== Web Application Component Relationships =====
         admin -> jim.webApp.blazorPages "Uses" "HTTPS"
@@ -159,6 +169,8 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
         jim.connectors.ldapConnector -> ad "Connects to" "LDAP/LDAPS"
         jim.connectors.fileConnector -> files "Reads/Writes" "File I/O"
         jim.connectors.fileConnector -> hr "Imports from" "CSV"
+        jim.connectors.databaseConnector -> databases "Connects to" "SQL" "Planned"
+        jim.connectors.scimConnector -> scim "Provisions to" "HTTPS" "Planned"
     }
 
     views {
@@ -230,8 +242,18 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
                 background #85bbf0
                 color #000000
             }
+            element "Planned" {
+                background #e0e0e0
+                color #666666
+                border dashed
+                opacity 50
+            }
             relationship "Relationship" {
                 dashed false
+            }
+            relationship "Planned" {
+                dashed true
+                color #999999
             }
         }
 
