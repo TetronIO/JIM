@@ -1989,7 +1989,9 @@ public class SyncImportTaskProcessor
                     _activityRunProfileExecutionItems.Add(item);
             }
 
-            // Batch persist pending export changes for this page
+            // Batch persist pending export changes for this page.
+            // Uses ID-based and tracker-aware methods to avoid conflicts with entities
+            // already tracked from the per-CSO processing phase (AsNoTracking loads separate instances).
             using (Diagnostics.Sync.StartSpan("FlushPendingExportChanges")
                 .SetTag("deleteCount", pendingExportsToDelete.Count)
                 .SetTag("updateCount", pendingExportsToUpdate.Count)
@@ -1997,20 +1999,22 @@ public class SyncImportTaskProcessor
             {
                 if (pendingExportsToDelete.Count > 0)
                 {
-                    await _jim.Repository.ConnectedSystems.DeletePendingExportsAsync(pendingExportsToDelete);
+                    await _jim.Repository.ConnectedSystems.DeletePendingExportsByIdsAsync(
+                        pendingExportsToDelete.Select(pe => pe.Id));
                     Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch deleted {Count} confirmed pending exports", page + 1, pendingExportsToDelete.Count);
                 }
 
                 // Delete confirmed attribute changes before updating (AsNoTracking requires explicit child deletion)
                 if (confirmedAttrChangesToDelete.Count > 0)
                 {
-                    await _jim.Repository.ConnectedSystems.DeletePendingExportAttributeValueChangesAsync(confirmedAttrChangesToDelete);
+                    await _jim.Repository.ConnectedSystems.DeletePendingExportAttributeValueChangesByIdsAsync(
+                        confirmedAttrChangesToDelete.Select(avc => avc.Id));
                     Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch deleted {Count} confirmed attribute value changes", page + 1, confirmedAttrChangesToDelete.Count);
                 }
 
                 if (pendingExportsToUpdate.Count > 0)
                 {
-                    await _jim.Repository.ConnectedSystems.UpdatePendingExportsAsync(pendingExportsToUpdate);
+                    await _jim.Repository.ConnectedSystems.UpdateUntrackedPendingExportsAsync(pendingExportsToUpdate);
                     Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch updated {Count} pending exports", page + 1, pendingExportsToUpdate.Count);
                 }
             }

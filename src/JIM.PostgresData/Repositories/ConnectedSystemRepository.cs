@@ -1931,13 +1931,132 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return result;
     }
 
-    public async Task DeletePendingExportAttributeValueChangesAsync(IEnumerable<PendingExportAttributeValueChange> attributeValueChanges)
+    public async Task DeletePendingExportsByIdsAsync(IEnumerable<Guid> pendingExportIds)
     {
-        var changeList = attributeValueChanges.ToList();
-        if (changeList.Count == 0)
+        var idList = pendingExportIds.ToHashSet();
+        if (idList.Count == 0)
             return;
 
-        Repository.Database.PendingExportAttributeValueChanges.RemoveRange(changeList);
+        // Find or load the entities, handling change tracker conflicts gracefully.
+        // Some may already be tracked (from per-CSO processing), others may not.
+        var entitiesToDelete = new List<PendingExport>();
+
+        foreach (var id in idList)
+        {
+            var trackedEntry = Repository.Database.ChangeTracker.Entries<PendingExport>()
+                .FirstOrDefault(e => e.Entity.Id == id);
+
+            if (trackedEntry != null)
+            {
+                entitiesToDelete.Add(trackedEntry.Entity);
+            }
+            else
+            {
+                // Create a stub entity for deletion
+                var stub = new PendingExport { Id = id };
+                Repository.Database.PendingExports.Attach(stub);
+                entitiesToDelete.Add(stub);
+            }
+        }
+
+        // Remove child attribute value changes first (tracked ones)
+        foreach (var pe in entitiesToDelete)
+        {
+            var trackedChildren = Repository.Database.ChangeTracker.Entries<PendingExportAttributeValueChange>()
+                .Where(e => pe.AttributeValueChanges.Any(avc => avc.Id == e.Entity.Id))
+                .Select(e => e.Entity)
+                .ToList();
+
+            if (trackedChildren.Count > 0)
+                Repository.Database.PendingExportAttributeValueChanges.RemoveRange(trackedChildren);
+        }
+
+        Repository.Database.PendingExports.RemoveRange(entitiesToDelete);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task UpdateUntrackedPendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+    {
+        var exportList = pendingExports.ToList();
+        if (exportList.Count == 0)
+            return;
+
+        foreach (var untrackedExport in exportList)
+        {
+            // Find the tracked instance if one exists, otherwise attach the untracked entity
+            var trackedEntry = Repository.Database.ChangeTracker.Entries<PendingExport>()
+                .FirstOrDefault(e => e.Entity.Id == untrackedExport.Id);
+
+            if (trackedEntry != null)
+            {
+                // Copy scalar properties from the untracked entity to the tracked one
+                trackedEntry.Entity.Status = untrackedExport.Status;
+                trackedEntry.Entity.ChangeType = untrackedExport.ChangeType;
+                trackedEntry.Entity.ErrorCount = untrackedExport.ErrorCount;
+                trackedEntry.Entity.MaxRetries = untrackedExport.MaxRetries;
+                trackedEntry.Entity.LastAttemptedAt = untrackedExport.LastAttemptedAt;
+                trackedEntry.Entity.NextRetryAt = untrackedExport.NextRetryAt;
+                trackedEntry.Entity.LastErrorMessage = untrackedExport.LastErrorMessage;
+                trackedEntry.Entity.LastErrorStackTrace = untrackedExport.LastErrorStackTrace;
+                trackedEntry.Entity.HasUnresolvedReferences = untrackedExport.HasUnresolvedReferences;
+                trackedEntry.State = EntityState.Modified;
+            }
+            else
+            {
+                Repository.Database.PendingExports.Update(untrackedExport);
+            }
+
+            // Update attribute value changes that remain (those not deleted)
+            foreach (var attrChange in untrackedExport.AttributeValueChanges)
+            {
+                var trackedAttrEntry = Repository.Database.ChangeTracker.Entries<PendingExportAttributeValueChange>()
+                    .FirstOrDefault(e => e.Entity.Id == attrChange.Id);
+
+                if (trackedAttrEntry != null)
+                {
+                    trackedAttrEntry.Entity.Status = attrChange.Status;
+                    trackedAttrEntry.Entity.LastImportedValue = attrChange.LastImportedValue;
+                    trackedAttrEntry.Entity.ExportAttemptCount = attrChange.ExportAttemptCount;
+                    trackedAttrEntry.Entity.LastExportedAt = attrChange.LastExportedAt;
+                    trackedAttrEntry.State = EntityState.Modified;
+                }
+                else
+                {
+                    Repository.Database.PendingExportAttributeValueChanges.Update(attrChange);
+                }
+            }
+        }
+
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task DeletePendingExportAttributeValueChangesByIdsAsync(IEnumerable<Guid> attributeValueChangeIds)
+    {
+        var idList = attributeValueChangeIds.ToHashSet();
+        if (idList.Count == 0)
+            return;
+
+        // Find tracked or create stub entities for deletion
+        var entitiesToDelete = new List<PendingExportAttributeValueChange>();
+
+        foreach (var id in idList)
+        {
+            var trackedEntry = Repository.Database.ChangeTracker.Entries<PendingExportAttributeValueChange>()
+                .FirstOrDefault(e => e.Entity.Id == id);
+
+            if (trackedEntry != null)
+            {
+                entitiesToDelete.Add(trackedEntry.Entity);
+            }
+            else
+            {
+                var stub = new PendingExportAttributeValueChange { Id = id };
+                Repository.Database.PendingExportAttributeValueChanges.Attach(stub);
+                entitiesToDelete.Add(stub);
+            }
+        }
+
+        Repository.Database.PendingExportAttributeValueChanges.RemoveRange(entitiesToDelete);
         await Repository.Database.SaveChangesAsync();
     }
 

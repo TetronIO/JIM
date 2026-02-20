@@ -188,11 +188,26 @@ public interface IConnectedSystemRepository
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
     /// <summary>
-    /// Deletes specific PendingExportAttributeValueChange records.
-    /// Used when working with untracked entities where EF Core cannot detect collection removals automatically.
+    /// Deletes pending exports by their IDs using a query-based approach that avoids
+    /// change tracker conflicts when the same entities are already tracked.
+    /// Also deletes associated PendingExportAttributeValueChange records.
     /// </summary>
-    /// <param name="attributeValueChanges">The attribute value changes to delete.</param>
-    public Task DeletePendingExportAttributeValueChangesAsync(IEnumerable<PendingExportAttributeValueChange> attributeValueChanges);
+    /// <param name="pendingExportIds">The IDs of the pending exports to delete.</param>
+    public Task DeletePendingExportsByIdsAsync(IEnumerable<Guid> pendingExportIds);
+
+    /// <summary>
+    /// Updates pending exports from untracked entities by finding the tracked instance (or attaching)
+    /// and copying property values. Avoids change tracker conflicts when using AsNoTracking queries.
+    /// </summary>
+    /// <param name="pendingExports">The untracked pending export entities with updated property values.</param>
+    public Task UpdateUntrackedPendingExportsAsync(IEnumerable<PendingExport> pendingExports);
+
+    /// <summary>
+    /// Deletes specific PendingExportAttributeValueChange records by their IDs using a query-based
+    /// approach that avoids change tracker conflicts.
+    /// </summary>
+    /// <param name="attributeValueChangeIds">The IDs of the attribute value changes to delete.</param>
+    public Task DeletePendingExportAttributeValueChangesByIdsAsync(IEnumerable<Guid> attributeValueChangeIds);
 
     /// <summary>
     /// Lightweight query that returns only the CSO IDs from the given set that have pending exports.
