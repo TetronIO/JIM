@@ -237,15 +237,15 @@ html[lang] .mud-table-outlined {
 .jim-worker-activity-text .mud-icon-root {
     font-size: 1rem;
     color: var(--mud-palette-primary);
-    animation: jim-worker-icon-tick 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    animation: jim-worker-icon-tick 6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
 @keyframes jim-worker-icon-tick {
     0%   { transform: rotate(0deg); }
-    15%  { transform: rotate(0deg); }
-    25%  { transform: rotate(90deg); }
-    65%  { transform: rotate(90deg); }
-    75%  { transform: rotate(180deg); }
+    8%   { transform: rotate(0deg); }
+    13%  { transform: rotate(90deg); }
+    50%  { transform: rotate(90deg); }
+    55%  { transform: rotate(180deg); }
     100% { transform: rotate(180deg); }
 }
 
