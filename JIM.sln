@@ -3,27 +3,27 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.0.11222.15
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Models", "JIM.Models\JIM.Models.csproj", "{21C9BE9D-070C-4ACD-B679-F0DC654BBF7A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Models", "src\JIM.Models\JIM.Models.csproj", "{21C9BE9D-070C-4ACD-B679-F0DC654BBF7A}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Worker", "JIM.Worker\JIM.Worker.csproj", "{F5068ED9-AA55-4FF7-BC2A-F9497C806C97}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Worker", "src\JIM.Worker\JIM.Worker.csproj", "{F5068ED9-AA55-4FF7-BC2A-F9497C806C97}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Scheduler", "JIM.Scheduler\JIM.Scheduler.csproj", "{2B8193D6-077C-48C8-AAE2-5503B8971AF9}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Scheduler", "src\JIM.Scheduler\JIM.Scheduler.csproj", "{2B8193D6-077C-48C8-AAE2-5503B8971AF9}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Application", "JIM.Application\JIM.Application.csproj", "{2F590D60-4888-4285-9D1F-F98FB78AEDBD}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Application", "src\JIM.Application\JIM.Application.csproj", "{2F590D60-4888-4285-9D1F-F98FB78AEDBD}"
 EndProject
 Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose", "docker-compose.dcproj", "{AAD33768-51E5-4689-A365-C3B292162318}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Data", "JIM.Data\JIM.Data.csproj", "{582C7F59-B72F-4270-877F-8D372628E7A4}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Data", "src\JIM.Data\JIM.Data.csproj", "{582C7F59-B72F-4270-877F-8D372628E7A4}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.PostgresData", "JIM.PostgresData\JIM.PostgresData.csproj", "{6E4CF1BC-B9AA-4764-9521-50AF5EC14B0D}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.PostgresData", "src\JIM.PostgresData\JIM.PostgresData.csproj", "{6E4CF1BC-B9AA-4764-9521-50AF5EC14B0D}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Models.Tests", "test\JIM.Models.Tests\JIM.Models.Tests.csproj", "{79322EA9-C367-424D-967D-BC4574D78C31}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Web", "JIM.Web\JIM.Web.csproj", "{2DA16574-F030-4866-95EF-11EF777C1C19}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Web", "src\JIM.Web\JIM.Web.csproj", "{2DA16574-F030-4866-95EF-11EF777C1C19}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Connectors", "JIM.Connectors\JIM.Connectors.csproj", "{0A5B45F2-8224-4EA3-A847-4F8AC3C79139}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JIM.Connectors", "src\JIM.Connectors\JIM.Connectors.csproj", "{0A5B45F2-8224-4EA3-A847-4F8AC3C79139}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JIM.Utilities", "JIM.Utilities\JIM.Utilities.csproj", "{BAE5E1EB-9581-49C8-878E-68095834D9CE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JIM.Utilities", "src\JIM.Utilities\JIM.Utilities.csproj", "{BAE5E1EB-9581-49C8-878E-68095834D9CE}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JIM.Worker.Tests", "test\JIM.Worker.Tests\JIM.Worker.Tests.csproj", "{F517B8D9-552B-477C-882D-91B0AFC2C617}"
 EndProject

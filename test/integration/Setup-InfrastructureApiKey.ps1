@@ -107,7 +107,7 @@ else {
 Write-Host ""
 Write-Host "Recreating JIM.Web to apply changes..." -ForegroundColor Gray
 
-$composeOverridePath = "/workspaces/JIM/docker-compose.override.codespaces.yml"
+$composeOverridePath = "/workspaces/JIM/docker-compose.override.yml"
 docker compose -f /workspaces/JIM/docker-compose.yml -f $composeOverridePath --profile with-db up -d --force-recreate jim.web 2>&1 | Out-Null
 
 if ($LASTEXITCODE -ne 0) {

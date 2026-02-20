@@ -45,14 +45,14 @@ Complete the implementation of change object tracking and lifecycle management f
 
 | Purpose | File | Lines |
 |---------|------|-------|
-| CSO change creation | `JIM.Application/Servers/ConnectedSystemServer.cs` | 2109 (delete), 2162 (batch delete), 2475 (create), 2512 (update) |
-| CSO change model | `JIM.Models/Staging/ConnectedSystemObjectChange.cs` | 1-57 |
-| MVO change model | `JIM.Models/Core/MetaverseObjectChange.cs` | 1-41 |
-| RPEI detail display | `JIM.Web/Pages/ActivityRunProfileExecutionItemDetail.razor` | 490-554 (attribute changes table) |
-| CSO detail page | `JIM.Web/Pages/Admin/ConnectedSystemObjectDetail.razor` | (no change history section yet) |
-| MVO detail page | `JIM.Web/Pages/Types/View.razor` | (minimal implementation) |
-| Service settings | `JIM.Application/Servers/ServiceSettingsServer.cs` | 1-252 |
-| History retention setting | `JIM.Models/Core/Constants.cs` | Line 218 |
+| CSO change creation | `src/JIM.Application/Servers/ConnectedSystemServer.cs` | 2109 (delete), 2162 (batch delete), 2475 (create), 2512 (update) |
+| CSO change model | `src/JIM.Models/Staging/ConnectedSystemObjectChange.cs` | 1-57 |
+| MVO change model | `src/JIM.Models/Core/MetaverseObjectChange.cs` | 1-41 |
+| RPEI detail display | `src/JIM.Web/Pages/ActivityRunProfileExecutionItemDetail.razor` | 490-554 (attribute changes table) |
+| CSO detail page | `src/JIM.Web/Pages/Admin/ConnectedSystemObjectDetail.razor` | (no change history section yet) |
+| MVO detail page | `src/JIM.Web/Pages/Types/View.razor` | (minimal implementation) |
+| Service settings | `src/JIM.Application/Servers/ServiceSettingsServer.cs` | 1-252 |
+| History retention setting | `src/JIM.Models/Core/Constants.cs` | Line 218 |
 
 **Note on CSO Change Creation:** CSOs use a "pending changes" pattern during sync - `PendingAttributeValueAdditions` and `PendingAttributeValueRemovals` (in-memory, not persisted) are populated during sync processing, then converted to `ConnectedSystemObjectChange` entities at persistence time in ConnectedSystemServer.
 
@@ -218,7 +218,7 @@ Type "DELETE" to confirm: [________]
 ### Background Job Infrastructure
 
 #### JIM.Worker Housekeeping (Short-Term Approach)
-Leverage existing housekeeping infrastructure in `JIM.Worker/Worker.cs` (lines 383-436):
+Leverage existing housekeeping infrastructure in `src/JIM.Worker/Worker.cs` (lines 383-436):
 
 ```csharp
 // Add to PerformHousekeepingAsync() method:
@@ -397,12 +397,12 @@ DELETE /api/connected-systems/{id}
 7. Add unit tests for change object creation and feature flag behaviour
 
 **Files to modify:**
-- `JIM.Models/Core/Constants.cs` - Add new setting keys
-- `JIM.Application/Servers/ServiceSettingsServer.cs` - Add methods for feature flag access
-- `JIM.Application/Servers/ConnectedSystemServer.cs` - Add feature flag check before CSO change creation
-- `JIM.Application/Servers/MetaverseServer.cs` - Add change tracking to update methods
-- `JIM.Worker/Processors/SyncTaskProcessorBase.cs` - Create MVO changes during sync
-- `JIM.PostgresData/Repositories/MetaverseRepository.cs` - Add change persistence
+- `src/JIM.Models/Core/Constants.cs` - Add new setting keys
+- `src/JIM.Application/Servers/ServiceSettingsServer.cs` - Add methods for feature flag access
+- `src/JIM.Application/Servers/ConnectedSystemServer.cs` - Add feature flag check before CSO change creation
+- `src/JIM.Application/Servers/MetaverseServer.cs` - Add change tracking to update methods
+- `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs` - Create MVO changes during sync
+- `src/JIM.PostgresData/Repositories/MetaverseRepository.cs` - Add change persistence
 
 ### Phase 2: Change History Timeline UI
 **Deliverables:**
@@ -412,9 +412,9 @@ DELETE /api/connected-systems/{id}
 4. Implement search and filtering
 
 **Files to modify/create:**
-- `JIM.Web/Shared/ChangeHistoryTimeline.razor` (new)
-- `JIM.Web/Pages/Admin/ConnectedSystemObjectDetail.razor`
-- `JIM.Web/Pages/Types/View.razor`
+- `src/JIM.Web/Shared/ChangeHistoryTimeline.razor` (new)
+- `src/JIM.Web/Pages/Admin/ConnectedSystemObjectDetail.razor`
+- `src/JIM.Web/Pages/Types/View.razor`
 
 ### Phase 3: Deleted Objects Browser
 **Deliverables:**
@@ -424,10 +424,10 @@ DELETE /api/connected-systems/{id}
 4. Add database migration for new fields
 
 **Files to modify/create:**
-- `JIM.Models/Staging/ConnectedSystemObjectChange.cs` - Add DeletedObjectDisplayName
-- `JIM.Models/Core/MetaverseObjectChange.cs` - Add deleted object fields
-- `JIM.Web/Pages/Admin/DeletedObjects.razor` (new)
-- `JIM.PostgresData/Migrations/` - New migration
+- `src/JIM.Models/Staging/ConnectedSystemObjectChange.cs` - Add DeletedObjectDisplayName
+- `src/JIM.Models/Core/MetaverseObjectChange.cs` - Add deleted object fields
+- `src/JIM.Web/Pages/Admin/DeletedObjects.razor` (new)
+- `src/JIM.PostgresData/Migrations/` - New migration
 
 ### Phase 4: Lifecycle Management (JIM.Worker Housekeeping)
 **Deliverables:**
@@ -446,18 +446,18 @@ DELETE /api/connected-systems/{id}
 13. Add `deleteChangeHistory` query parameter to CS clear/delete API endpoints
 
 **Files to modify/create:**
-- `JIM.Models/Core/Constants.cs` - Add retention setting keys
-- `JIM.Models/Activities/Activity.cs` - Add `DeletedRecordCount`, `DeletedRecordsFromDate`, `DeletedRecordsToDate`
-- `JIM.Models/Activities/ActivityTargetType.cs` - Add cleanup target types
-- `JIM.Application/Servers/ChangeHistoryServer.cs` (new) - Cleanup business logic + Activity creation
-- `JIM.Application/Servers/ConnectedSystemServer.cs` - Add deleteChangeHistory parameter handling
-- `JIM.PostgresData/Repositories/ChangeHistoryRepository.cs` (new) - Cleanup queries + stats
-- `JIM.Worker/Worker.cs` - Add `PerformChangeObjectCleanupAsync()` to housekeeping
-- `JIM.Web/Pages/Admin/ServiceSettings.razor` - Add retention UI + danger zone section
-- `JIM.Web/Pages/Admin/ConnectedSystemDetail.razor` - Update clear/delete dialogs
-- `JIM.Web/Controllers/Api/ChangeHistoryController.cs` - Add danger zone endpoints
-- `JIM.Web/Controllers/Api/ConnectedSystemsController.cs` - Add deleteChangeHistory parameter
-- `JIM.PostgresData/Migrations/` - New migration for Activity fields
+- `src/JIM.Models/Core/Constants.cs` - Add retention setting keys
+- `src/JIM.Models/Activities/Activity.cs` - Add `DeletedRecordCount`, `DeletedRecordsFromDate`, `DeletedRecordsToDate`
+- `src/JIM.Models/Activities/ActivityTargetType.cs` - Add cleanup target types
+- `src/JIM.Application/Servers/ChangeHistoryServer.cs` (new) - Cleanup business logic + Activity creation
+- `src/JIM.Application/Servers/ConnectedSystemServer.cs` - Add deleteChangeHistory parameter handling
+- `src/JIM.PostgresData/Repositories/ChangeHistoryRepository.cs` (new) - Cleanup queries + stats
+- `src/JIM.Worker/Worker.cs` - Add `PerformChangeObjectCleanupAsync()` to housekeeping
+- `src/JIM.Web/Pages/Admin/ServiceSettings.razor` - Add retention UI + danger zone section
+- `src/JIM.Web/Pages/Admin/ConnectedSystemDetail.razor` - Update clear/delete dialogs
+- `src/JIM.Web/Controllers/Api/ChangeHistoryController.cs` - Add danger zone endpoints
+- `src/JIM.Web/Controllers/Api/ConnectedSystemsController.cs` - Add deleteChangeHistory parameter
+- `src/JIM.PostgresData/Migrations/` - New migration for Activity fields
 
 **Note:** Uses existing JIM.Worker housekeeping pattern. Future migration to JIM.Scheduler when that infrastructure is complete.
 
@@ -470,8 +470,8 @@ DELETE /api/connected-systems/{id}
 5. OpenAPI documentation
 
 **Files to create:**
-- `JIM.Web/Controllers/Api/ChangeHistoryController.cs` (new)
-- `JIM.Web/Controllers/Api/DeletedObjectsController.cs` (new)
+- `src/JIM.Web/Controllers/Api/ChangeHistoryController.cs` (new)
+- `src/JIM.Web/Controllers/Api/DeletedObjectsController.cs` (new)
 
 ## Design Decisions
 
@@ -633,7 +633,7 @@ Type "DELETE" to confirm: [________]
 ### Remove Unnecessary Child Activity from Sync Import
 The `SyncImportTaskProcessor.UpdateConnectedSystemWithInitiatorAsync()` creates a child activity (via `ConnectedSystemServer.UpdateConnectedSystemAsync`) when updating `LastDeltaSyncCompletedAt`. This is an internal operational detail that does not need to be surfaced to the user as an Activity. Remove the child activity creation from this code path.
 
-**Files:** `JIM.Worker/Processors/SyncImportTaskProcessor.cs` (lines 1812-1820), `JIM.Application/Servers/ConnectedSystemServer.cs`
+**Files:** `src/JIM.Worker/Processors/SyncImportTaskProcessor.cs` (lines 1812-1820), `src/JIM.Application/Servers/ConnectedSystemServer.cs`
 
 ### Child Activity Rendering in Activity Detail (Post-MVP)
 The sync export processor creates a valid child activity when containers are auto-created during export (`RefreshAndAutoSelectContainersAsync`). This is a legitimate scenario as it represents a configuration change visible in the admin pages. The Activity Detail view should render child activities recursively so users can see these. Tracked in GitHub issue (Post-MVP milestone).

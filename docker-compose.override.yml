@@ -29,10 +29,12 @@ services:
       # Override JIM_DB_HOSTNAME from .env to use bundled database container
       - JIM_DB_HOSTNAME=jim.database
 
-  # Codespaces has limited memory (~8GB total), so use much smaller PostgreSQL settings
+  # Development PostgreSQL settings - sized for dev environments (~8-16GB RAM)
+  # shm_size must be >= shared_buffers (256MB + headroom) - see docker-compose.yml for production guidance
   # statement_timeout=300000 (5 minutes) prevents runaway queries
   # log_min_duration_statement=500 (0.5 seconds) logs slow queries for dev analysis
   jim.database:
+    shm_size: '512mb'
     environment:
       # Override LANG from .env - PostgreSQL doesn't have en_GB.UTF-8 locale installed
       - LANG=C

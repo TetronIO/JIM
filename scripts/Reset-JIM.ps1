@@ -63,7 +63,7 @@ $ErrorActionPreference = "Stop"
 # Resolve paths relative to this script's location (script is in scripts/ folder)
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $jimCompose = Join-Path $repoRoot "docker-compose.yml"
-$jimComposeOverride = Join-Path $repoRoot "docker-compose.override.codespaces.yml"
+$jimComposeOverride = Join-Path $repoRoot "docker-compose.override.yml"
 $integrationCompose = Join-Path $repoRoot "docker-compose.integration-tests.yml"
 
 Write-Host ""

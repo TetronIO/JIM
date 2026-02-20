@@ -18,7 +18,7 @@ This guide walks through testing the interactive browser-based authentication fo
 
 ```powershell
 # Import the module from the local development path
-Import-Module ./JIM.PowerShell/JIM -Force
+Import-Module ./src/JIM.PowerShell/JIM -Force
 
 # Verify the module loaded
 Get-Module JIM

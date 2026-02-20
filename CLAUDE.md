@@ -43,7 +43,7 @@
 **Test project locations:**
 - API tests: `test/JIM.Web.Api.Tests/`
 - Model tests: `test/JIM.Models.Tests/`
-- Worker/business logic tests: `JIM.Worker.Tests/`
+- Worker/business logic tests: `test/JIM.Worker.Tests/`
 
 **Failure to build and test wastes CI/CD resources and delays the project.**
 
@@ -71,7 +71,7 @@ Sync operations are the core of JIM. Customers depend on JIM to synchronise thei
 - Log summary statistics at the end of every batch operation
 - Never silently skip objects due to exceptions
 
-> **Full detailed requirements (7 sections):** See `JIM.Application/CLAUDE.md`
+> **Full detailed requirements (7 sections):** See `src/JIM.Application/CLAUDE.md`
 
 ## Scripting
 
@@ -90,8 +90,8 @@ Sync operations are the core of JIM. Customers depend on JIM to synchronise thei
 - `dotnet clean && dotnet build` - Clean build
 
 **Database:**
-- `dotnet ef migrations add [Name] --project JIM.PostgresData` - Add migration
-- `dotnet ef database update --project JIM.PostgresData` - Apply migrations
+- `dotnet ef migrations add [Name] --project src/JIM.PostgresData` - Add migration
+- `dotnet ef database update --project src/JIM.PostgresData` - Apply migrations
 - `docker compose exec jim.web dotnet ef database update` - Apply migrations in Docker
 
 **Shell Aliases (Recommended):**
@@ -158,18 +158,18 @@ All dependency updates from Dependabot require human review before merging - the
 ## Key Project Locations
 
 **Where to add:**
-- API endpoints: `JIM.Web/Controllers/Api/`
-- API models/DTOs: `JIM.Web/Models/Api/`
-- API extensions: `JIM.Web/Extensions/Api/`
-- API middleware: `JIM.Web/Middleware/Api/`
-- UI pages: `JIM.Web/Pages/`
-- Blazor components: `JIM.Web/Shared/`
-- Business logic: `JIM.Application/Servers/`
-- Performance diagnostics: `JIM.Application/Diagnostics/`
-- Domain models: `JIM.Models/Core/` or `JIM.Models/Staging/`
-- Database repositories: `JIM.PostgresData/`
-- Connectors: `JIM.Connectors/` or new connector project
-- Tests: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `JIM.Worker.Tests/`
+- API endpoints: `src/JIM.Web/Controllers/Api/`
+- API models/DTOs: `src/JIM.Web/Models/Api/`
+- API extensions: `src/JIM.Web/Extensions/Api/`
+- API middleware: `src/JIM.Web/Middleware/Api/`
+- UI pages: `src/JIM.Web/Pages/`
+- Blazor components: `src/JIM.Web/Shared/`
+- Business logic: `src/JIM.Application/Servers/`
+- Performance diagnostics: `src/JIM.Application/Diagnostics/`
+- Domain models: `src/JIM.Models/Core/` or `src/JIM.Models/Staging/`
+- Database repositories: `src/JIM.PostgresData/`
+- Connectors: `src/JIM.Connectors/` or new connector project
+- Tests: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `test/JIM.Worker.Tests/`
 
 ## ASCII Diagrams
 
@@ -364,21 +364,21 @@ var schedule = await Jim.Scheduler.GetScheduleAsync(id);
 
 **Adding a Connector:**
 1. Implement `IConnector` and capability interfaces
-2. Add to `JIM.Connectors/` or create new project
+2. Add to `src/JIM.Connectors/` or create new project
 3. Register in DI container
 4. Add tests
 
 **Adding API Endpoint:**
-1. Add method to controller in `JIM.Web/Controllers/Api/`
-2. Use DTOs for request/response (in `JIM.Web/Models/Api/`)
+1. Add method to controller in `src/JIM.Web/Controllers/Api/`
+2. Use DTOs for request/response (in `src/JIM.Web/Models/Api/`)
 3. Add XML comments for Swagger
 4. Test via Swagger UI at `/api/swagger`
 
 **Modifying Database Schema:**
-1. Update entity in `JIM.Models/`
-2. Create migration: `dotnet ef migrations add [Name] --project JIM.PostgresData`
+1. Update entity in `src/JIM.Models/`
+2. Create migration: `dotnet ef migrations add [Name] --project src/JIM.PostgresData`
 3. Review generated migration
-4. Test: `dotnet ef database update --project JIM.PostgresData`
+4. Test: `dotnet ef database update --project src/JIM.PostgresData`
 5. Commit migration files
 
 ## Development Workflows

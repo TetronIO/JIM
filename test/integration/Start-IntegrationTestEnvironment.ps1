@@ -81,10 +81,10 @@ Write-Host "${BLUE}  Step 1: Starting JIM stack${NC}"
 Write-Host "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 Write-Host ""
 
-Write-Host "${GRAY}Running: docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d${NC}"
+Write-Host "${GRAY}Running: docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d${NC}"
 Write-Host ""
 
-$jimResult = docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d 2>&1
+$jimResult = docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d 2>&1
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "${RED}✗ Failed to start JIM stack${NC}"

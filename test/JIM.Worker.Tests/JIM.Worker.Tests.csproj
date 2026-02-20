@@ -28,10 +28,10 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\JIM.Application\JIM.Application.csproj" />
-      <ProjectReference Include="..\..\JIM.Connectors\JIM.Connectors.csproj" />
-      <ProjectReference Include="..\..\JIM.PostgresData\JIM.PostgresData.csproj" />
-      <ProjectReference Include="..\..\JIM.Worker\JIM.Worker.csproj" />
+      <ProjectReference Include="..\..\src\JIM.Application\JIM.Application.csproj" />
+      <ProjectReference Include="..\..\src\JIM.Connectors\JIM.Connectors.csproj" />
+      <ProjectReference Include="..\..\src\JIM.PostgresData\JIM.PostgresData.csproj" />
+      <ProjectReference Include="..\..\src\JIM.Worker\JIM.Worker.csproj" />
     </ItemGroup>
 
     <ItemGroup>

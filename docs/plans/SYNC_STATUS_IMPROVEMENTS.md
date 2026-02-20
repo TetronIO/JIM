@@ -29,7 +29,7 @@ The `ObjectChangeType` enum uses the same values across different run types with
 
 ### Issue 2: Unnecessary RPEI Creation During Import
 
-**Location:** `JIM.Worker/Processors/SyncImportTaskProcessor.cs:499`
+**Location:** `src/JIM.Worker/Processors/SyncImportTaskProcessor.cs:499`
 
 During import, an RPEI is created for **every** import object, even when the CSO already exists with identical attributes. This:
 - Creates false "Update" entries in the UI
@@ -48,7 +48,7 @@ Users cannot filter the RPEI list by change type. For a sync with 10,000 objects
 
 ### Phase 1: Extend ObjectChangeType Enum
 
-Update `JIM.Models/Enums/ObjectChangeType.cs`:
+Update `src/JIM.Models/Enums/ObjectChangeType.cs`:
 
 ```csharp
 public enum ObjectChangeType
@@ -85,7 +85,7 @@ public enum ObjectChangeType
 
 #### 2.1 Import Processor Changes
 
-**File:** `JIM.Worker/Processors/SyncImportTaskProcessor.cs`
+**File:** `src/JIM.Worker/Processors/SyncImportTaskProcessor.cs`
 
 1. Rename all `ObjectChangeType.Create` assignments to `ObjectChangeType.Add`
 2. Change all `ObjectChangeType.Obsolete` assignments to `ObjectChangeType.Delete` for RPEIs
@@ -115,7 +115,7 @@ if (hasChanges || isNewCso || isDeleted || hasError)
 
 #### 2.2 Sync Processor Changes
 
-**File:** `JIM.Worker/Processors/SyncTaskProcessorBase.cs`
+**File:** `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs`
 
 1. Update `MetaverseObjectChangeResult` to use new enum values:
    - `Projected()` returns `ObjectChangeType.Projected`
@@ -124,7 +124,7 @@ if (hasChanges || isNewCso || isDeleted || hasError)
 
 2. Handle CSO disconnection (out of scope) with `ObjectChangeType.Disconnected`
 
-**File:** `JIM.Worker/Models/MetaverseObjectChangeResult.cs`
+**File:** `src/JIM.Worker/Models/MetaverseObjectChangeResult.cs`
 
 ```csharp
 public static MetaverseObjectChangeResult Projected(int attributesAdded) => new()
@@ -159,7 +159,7 @@ public static MetaverseObjectChangeResult Disconnected() => new()
 
 #### 2.3 Export Processor Changes
 
-**File:** `JIM.Worker/Processors/SyncExportTaskProcessor.cs`
+**File:** `src/JIM.Worker/Processors/SyncExportTaskProcessor.cs`
 
 Update the mapping at line 195-200:
 ```csharp
@@ -174,7 +174,7 @@ ObjectChangeType = exportItem.ChangeType switch
 
 ### Phase 3: Update Activity Statistics
 
-**File:** `JIM.Application/Servers/ActivityServer.cs`
+**File:** `src/JIM.Application/Servers/ActivityServer.cs`
 
 Update `GetActivityRunProfileExecutionStatsAsync()` to return granular statistics:
 
@@ -213,7 +213,7 @@ public class ActivityRunProfileExecutionStats
 
 ### Phase 4: Update Activity Detail UI
 
-**File:** `JIM.Web/Pages/ActivityDetail.razor`
+**File:** `src/JIM.Web/Pages/ActivityDetail.razor`
 
 #### 4.1 Add Change Type Filter Chips
 
@@ -273,7 +273,7 @@ Show context-appropriate statistics based on run type:
 
 #### 4.3 Update Server Query
 
-**File:** `JIM.Application/Servers/ActivityServer.cs`
+**File:** `src/JIM.Application/Servers/ActivityServer.cs`
 
 Update `GetActivityRunProfileExecutionItemHeadersAsync()` to accept an optional list of change types for filtering:
 
@@ -292,7 +292,7 @@ When `changeTypeFilter` is null or empty, return all items. When populated, filt
 
 ### Phase 5: Update UI Helper Methods
 
-**File:** `JIM.Web/Helpers.cs`
+**File:** `src/JIM.Web/Helpers.cs`
 
 Update `GetRunItemMudBlazorColorForType()` to handle new change types:
 
@@ -302,7 +302,7 @@ Update `GetRunItemMudBlazorColorForType()` to handle new change types:
 
 **Solution:** Add chip-based status filtering to the CSO list view (consistent with Activity detail filtering).
 
-**File:** `JIM.Web/Pages/Admin/ConnectedSystems/ConnectedSystemObjects.razor` (or equivalent)
+**File:** `src/JIM.Web/Pages/Admin/ConnectedSystems/ConnectedSystemObjects.razor` (or equivalent)
 
 #### 6.1 Add Status Filter Chips
 
@@ -359,7 +359,7 @@ private IReadOnlyCollection<ConnectedSystemObjectStatus> _selectedStatuses = new
 
 #### 6.3 Update Server Query
 
-**File:** `JIM.Application/Servers/ConnectedSystemServer.cs`
+**File:** `src/JIM.Application/Servers/ConnectedSystemServer.cs`
 
 Update `GetConnectedSystemObjectsAsync()` to accept an optional status filter:
 
@@ -485,16 +485,16 @@ No database migration required. The `ObjectChangeType` is stored as an integer, 
 
 | File | Changes |
 |------|---------|
-| `JIM.Models/Enums/ObjectChangeType.cs` | Add new enum values, rename Create->Add, remove Obsolete |
-| `JIM.Worker/Models/MetaverseObjectChangeResult.cs` | Update factory methods |
-| `JIM.Worker/Processors/SyncImportTaskProcessor.cs` | Rename Create->Add, use Delete for deletions, add change detection |
-| `JIM.Worker/Processors/SyncTaskProcessorBase.cs` | Use new sync change types, use Delete for obsolete CSOs |
-| `JIM.Worker/Processors/SyncExportTaskProcessor.cs` | Use new export change types |
-| `JIM.Application/Servers/ActivityServer.cs` | Update stats model and query, add change type filter |
-| `JIM.Application/Servers/ConnectedSystemServer.cs` | Add status filter to CSO query |
-| `JIM.Web/Pages/ActivityDetail.razor` | Add filter, update stats display |
-| `JIM.Web/Pages/Admin/ConnectedSystems/ConnectedSystemObjects.razor` | Add status filter, default hide Obsolete |
-| `JIM.Web/Helpers.cs` | Update colour mapping for new types |
+| `src/JIM.Models/Enums/ObjectChangeType.cs` | Add new enum values, rename Create->Add, remove Obsolete |
+| `src/JIM.Worker/Models/MetaverseObjectChangeResult.cs` | Update factory methods |
+| `src/JIM.Worker/Processors/SyncImportTaskProcessor.cs` | Rename Create->Add, use Delete for deletions, add change detection |
+| `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs` | Use new sync change types, use Delete for obsolete CSOs |
+| `src/JIM.Worker/Processors/SyncExportTaskProcessor.cs` | Use new export change types |
+| `src/JIM.Application/Servers/ActivityServer.cs` | Update stats model and query, add change type filter |
+| `src/JIM.Application/Servers/ConnectedSystemServer.cs` | Add status filter to CSO query |
+| `src/JIM.Web/Pages/ActivityDetail.razor` | Add filter, update stats display |
+| `src/JIM.Web/Pages/Admin/ConnectedSystems/ConnectedSystemObjects.razor` | Add status filter, default hide Obsolete |
+| `src/JIM.Web/Helpers.cs` | Update colour mapping for new types |
 | `test/JIM.Worker.Tests/...` | Add/update unit tests |
 
 ## Risks and Mitigations

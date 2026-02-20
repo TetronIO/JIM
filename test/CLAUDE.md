@@ -66,7 +66,7 @@ The SQL script at `test/data/seed-change-history.sql` generates realistic change
 
 2. **How to regenerate:**
    - Read the current `test/data/seed-change-history.sql` to understand the data scenario
-   - Review recent migrations in `JIM.PostgresData/Migrations/` to understand schema changes
+   - Review recent migrations in `src/JIM.PostgresData/Migrations/` to understand schema changes
    - Rewrite the SQL script to match the new schema while preserving the same realistic test scenario:
      - Alice (Person): 5-7 changes including promotions, department moves, email updates, salary changes
      - Bob (Person): 7-9 changes including manager reference changes (add/remove/re-add Alice as manager)

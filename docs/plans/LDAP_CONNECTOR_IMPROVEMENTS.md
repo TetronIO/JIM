@@ -4,7 +4,7 @@
 
 ## Executive Summary
 
-The LDAP Connector (`JIM.Connectors/LDAP/`) is a well-structured connector for importing from LDAP/Active Directory directories with ~750 lines across 7 files. It implements full schema discovery, partition/container enumeration, and paged imports. However, it has **no test coverage**, **resource disposal issues**, and several code quality concerns.
+The LDAP Connector (`src/JIM.Connectors/LDAP/`) is a well-structured connector for importing from LDAP/Active Directory directories with ~750 lines across 7 files. It implements full schema discovery, partition/container enumeration, and paged imports. However, it has **no test coverage**, **resource disposal issues**, and several code quality concerns.
 
 ---
 
@@ -36,7 +36,7 @@ The connector is cleanly separated into:
 
 ### 1. Missing IDisposable Implementation (HIGH SEVERITY)
 
-**Location:** `JIM.Connectors/LDAP/LdapConnector.cs` line 11
+**Location:** `src/JIM.Connectors/LDAP/LdapConnector.cs` line 11
 
 **Problem:** The connector holds a disposable `LdapConnection` but doesn't implement `IDisposable`. If an exception occurs between `OpenImportConnection()` and `CloseImportConnection()`, the connection leaks.
 
@@ -259,11 +259,11 @@ Hidden = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags
 
 ### Phase 2: Test Coverage (Priority: High) ✅
 
-- [x] **2.1** Create `JIM.Worker.Tests/Connectors/LdapConnectorUtilitiesTests.cs`
+- [x] **2.1** Create `test/JIM.Worker.Tests/Connectors/LdapConnectorUtilitiesTests.cs`
 - [x] **2.2** Add tests for all `GetEntryAttribute*` helper methods - Skipped (requires mocking LDAP SearchResultEntry)
 - [x] **2.3** Add tests for `GetLdapAttributeDataType()` including edge cases (19 tests)
 - [x] **2.4** Add tests for `GetPaginationTokenName()` (3 tests)
-- [x] **2.5** Create `JIM.Worker.Tests/Connectors/LdapConnectorTests.cs`
+- [x] **2.5** Create `test/JIM.Worker.Tests/Connectors/LdapConnectorTests.cs`
 - [x] **2.6** Add test for `GetSettings()` returns expected settings (10 tests)
 - [x] **2.7** Add test for `ValidateSettingValues()` with missing values - Covered by settings structure tests
 
@@ -338,7 +338,7 @@ Hidden = LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "systemflags
 
 ### Phase 1.1: IDisposable Implementation
 
-**File:** `JIM.Connectors/LDAP/LdapConnector.cs`
+**File:** `src/JIM.Connectors/LDAP/LdapConnector.cs`
 
 ```csharp
 public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings,
@@ -398,7 +398,7 @@ Apply same pattern to `LdapConnectorPartitions.cs`.
 
 ### Phase 2.1: Utility Tests Structure
 
-**File:** `JIM.Worker.Tests/Connectors/LdapConnectorUtilitiesTests.cs`
+**File:** `test/JIM.Worker.Tests/Connectors/LdapConnectorUtilitiesTests.cs`
 
 ```csharp
 using NUnit.Framework;
@@ -467,15 +467,15 @@ new()
 
 | File | Changes |
 |------|---------|
-| `JIM.Connectors/LDAP/LdapConnector.cs` | Add IDisposable, IConnectorExportUsingCalls, export settings, pass logger to helpers |
-| `JIM.Connectors/LDAP/LdapConnectorSchema.cs` | Accept logger, replace Console.WriteLine |
-| `JIM.Connectors/LDAP/LdapConnectorPartitions.cs` | Accept logger, replace Console.WriteLine |
-| `JIM.Connectors/LDAP/LdapConnectorImport.cs` | Replace static Log, add null checks, configurable search timeout |
-| `JIM.Connectors/LDAP/LdapConnectorUtilities.cs` | Add missing omSyntax case 4 (Binary) |
-| `JIM.Connectors/LDAP/LdapConnectorConstants.cs` | Add systemFlags, delete behaviour, UAC constants |
-| `JIM.Connectors/LDAP/LdapConnectorExport.cs` | New file - export functionality |
-| `JIM.Worker.Tests/Connectors/LdapConnectorUtilitiesTests.cs` | New file |
-| `JIM.Worker.Tests/Connectors/LdapConnectorTests.cs` | New file with export tests |
+| `src/JIM.Connectors/LDAP/LdapConnector.cs` | Add IDisposable, IConnectorExportUsingCalls, export settings, pass logger to helpers |
+| `src/JIM.Connectors/LDAP/LdapConnectorSchema.cs` | Accept logger, replace Console.WriteLine |
+| `src/JIM.Connectors/LDAP/LdapConnectorPartitions.cs` | Accept logger, replace Console.WriteLine |
+| `src/JIM.Connectors/LDAP/LdapConnectorImport.cs` | Replace static Log, add null checks, configurable search timeout |
+| `src/JIM.Connectors/LDAP/LdapConnectorUtilities.cs` | Add missing omSyntax case 4 (Binary) |
+| `src/JIM.Connectors/LDAP/LdapConnectorConstants.cs` | Add systemFlags, delete behaviour, UAC constants |
+| `src/JIM.Connectors/LDAP/LdapConnectorExport.cs` | New file - export functionality |
+| `test/JIM.Worker.Tests/Connectors/LdapConnectorUtilitiesTests.cs` | New file |
+| `test/JIM.Worker.Tests/Connectors/LdapConnectorTests.cs` | New file with export tests |
 
 ---
 
@@ -518,10 +518,10 @@ new()
 
 ## References
 
-- [LdapConnector.cs](../JIM.Connectors/LDAP/LdapConnector.cs)
-- [LdapConnectorImport.cs](../JIM.Connectors/LDAP/LdapConnectorImport.cs)
-- [LdapConnectorSchema.cs](../JIM.Connectors/LDAP/LdapConnectorSchema.cs)
-- [LdapConnectorPartitions.cs](../JIM.Connectors/LDAP/LdapConnectorPartitions.cs)
-- [LdapConnectorUtilities.cs](../JIM.Connectors/LDAP/LdapConnectorUtilities.cs)
+- [LdapConnector.cs](../src/JIM.Connectors/LDAP/LdapConnector.cs)
+- [LdapConnectorImport.cs](../src/JIM.Connectors/LDAP/LdapConnectorImport.cs)
+- [LdapConnectorSchema.cs](../src/JIM.Connectors/LDAP/LdapConnectorSchema.cs)
+- [LdapConnectorPartitions.cs](../src/JIM.Connectors/LDAP/LdapConnectorPartitions.cs)
+- [LdapConnectorUtilities.cs](../src/JIM.Connectors/LDAP/LdapConnectorUtilities.cs)
 - [MVP Definition](./MVP_DEFINITION.md) - See "LDAP/Active Directory Connector - Export"
 - [System.DirectoryServices.Protocols Documentation](https://learn.microsoft.com/en-us/dotnet/api/system.directoryservices.protocols)

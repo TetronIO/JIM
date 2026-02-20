@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\JIM.Web\JIM.Web.csproj" />
+    <ProjectReference Include="..\..\src\JIM.Web\JIM.Web.csproj" />
   </ItemGroup>
 
 </Project>

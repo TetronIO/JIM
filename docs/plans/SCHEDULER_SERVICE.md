@@ -125,12 +125,12 @@ Legend: Y = Completed, * = Processing, o = Waiting (not yet queued)
 - Implemented in Phase 4
 
 ### Files to Modify
-- `JIM.Web/Pages/Admin/Operations.razor` - Add MudTabs, hierarchical queue view
-- `JIM.Web/wwwroot/css/site.css` - Add panel styles
+- `src/JIM.Web/Pages/Admin/Operations.razor` - Add MudTabs, hierarchical queue view
+- `src/JIM.Web/wwwroot/css/site.css` - Add panel styles
 
 ### Files to Create
-- `JIM.Web/Pages/Admin/Components/OperationsQueueTab.razor`
-- `JIM.Web/Pages/Admin/Components/OperationsHistoryTab.razor`
+- `src/JIM.Web/Pages/Admin/Components/OperationsQueueTab.razor`
+- `src/JIM.Web/Pages/Admin/Components/OperationsHistoryTab.razor`
 
 ---
 
@@ -273,12 +273,12 @@ public class WorkerTask  // Existing, enhanced
 - Add `ScheduleExecutionId` and `ScheduleStepIndex` columns to `WorkerTasks`
 
 ### Files to Create
-- `JIM.Models/Scheduling/Schedule.cs`
-- `JIM.Models/Scheduling/ScheduleStep.cs`
-- `JIM.Models/Scheduling/ScheduleExecution.cs`
-- `JIM.Models/Scheduling/SchedulingEnums.cs`
-- `JIM.Data/Repositories/ISchedulingRepository.cs`
-- `JIM.PostgresData/Repositories/SchedulingRepository.cs`
+- `src/JIM.Models/Scheduling/Schedule.cs`
+- `src/JIM.Models/Scheduling/ScheduleStep.cs`
+- `src/JIM.Models/Scheduling/ScheduleExecution.cs`
+- `src/JIM.Models/Scheduling/SchedulingEnums.cs`
+- `src/JIM.Data/Repositories/ISchedulingRepository.cs`
+- `src/JIM.PostgresData/Repositories/SchedulingRepository.cs`
 
 ---
 
@@ -389,15 +389,15 @@ All parallel steps share a logical "step group" - progression happens when ALL t
 - Resilient to service restarts
 
 **Files Created:**
-- `JIM.Application/Servers/SchedulerServer.cs` - Core scheduling logic
-- `JIM.Scheduler/Scheduler.cs` - BackgroundService implementation
+- `src/JIM.Application/Servers/SchedulerServer.cs` - Core scheduling logic
+- `src/JIM.Scheduler/Scheduler.cs` - BackgroundService implementation
 
 **Files Modified:**
-- `JIM.Scheduler/JIM.Scheduler.csproj` - Updated to use Worker SDK pattern
-- `JIM.Scheduler/Program.cs` - Generic Host setup
-- `JIM.Application/JimApplication.cs` - Added SchedulerServer
-- `JIM.Data/Repositories/ITaskingRepository.cs` - Added scheduler queries
-- `JIM.PostgresData/Repositories/TaskingRepository.cs` - Implemented scheduler queries
+- `src/JIM.Scheduler/JIM.Scheduler.csproj` - Updated to use Worker SDK pattern
+- `src/JIM.Scheduler/Program.cs` - Generic Host setup
+- `src/JIM.Application/JimApplication.cs` - Added SchedulerServer
+- `src/JIM.Data/Repositories/ITaskingRepository.cs` - Added scheduler queries
+- `src/JIM.PostgresData/Repositories/TaskingRepository.cs` - Implemented scheduler queries
 
 **Dependencies Added:**
 - `NCrontab 3.4.0` - Cron expression parsing (by Atif Aziz, Microsoft, Apache 2.0 license)
@@ -451,11 +451,11 @@ Multi-step wizard or tabbed dialog:
 - **Executable**: Program path, arguments, working directory
 
 ### Files Created
-- `JIM.Web/Pages/Admin/Components/OperationsSchedulesTab.razor` - Schedule list with actions
-- `JIM.Web/Pages/Admin/Components/ScheduleEditorDialog.razor` - Schedule editor with inline step editing
+- `src/JIM.Web/Pages/Admin/Components/OperationsSchedulesTab.razor` - Schedule list with actions
+- `src/JIM.Web/Pages/Admin/Components/ScheduleEditorDialog.razor` - Schedule editor with inline step editing
 
 ### Files Modified
-- `JIM.Web/Pages/Admin/Operations.razor` - Enabled Schedules tab
+- `src/JIM.Web/Pages/Admin/Operations.razor` - Enabled Schedules tab
 
 ### Implementation Notes
 - User-friendly scheduling UI with frequency selection (daily, weekdays, weekends, weekly, hourly, every N minutes)
@@ -491,11 +491,11 @@ POST   /api/v1/schedule-executions/{id}/cancel - Cancel running execution
 ```
 
 ### Files Created
-- `JIM.Web/Controllers/Api/SchedulesController.cs` - Full CRUD + enable/disable/run
-- `JIM.Web/Controllers/Api/ScheduleExecutionsController.cs` - List, detail, cancel, active
-- `JIM.Web/Models/Api/ScheduleDtos.cs` - ScheduleDto, ScheduleDetailDto, ScheduleStepDto
-- `JIM.Web/Models/Api/ScheduleRequestDtos.cs` - CreateScheduleRequest, UpdateScheduleRequest, ScheduleStepRequest
-- `JIM.Web/Models/Api/ScheduleExecutionDtos.cs` - ScheduleExecutionDto, ScheduleExecutionDetailDto, ScheduleExecutionStepDto
+- `src/JIM.Web/Controllers/Api/SchedulesController.cs` - Full CRUD + enable/disable/run
+- `src/JIM.Web/Controllers/Api/ScheduleExecutionsController.cs` - List, detail, cancel, active
+- `src/JIM.Web/Models/Api/ScheduleDtos.cs` - ScheduleDto, ScheduleDetailDto, ScheduleStepDto
+- `src/JIM.Web/Models/Api/ScheduleRequestDtos.cs` - CreateScheduleRequest, UpdateScheduleRequest, ScheduleStepRequest
+- `src/JIM.Web/Models/Api/ScheduleExecutionDtos.cs` - ScheduleExecutionDto, ScheduleExecutionDetailDto, ScheduleExecutionStepDto
 
 ### Data Model Change
 - Migrated from JSON `Configuration` column to typed polymorphic properties on `ScheduleStep`
@@ -562,20 +562,20 @@ Enable-JimSchedule -Id $schedule.Id
 ```
 
 ### Files Created
-- `JIM.PowerShell/JIM/Public/Schedules/Get-JIMSchedule.ps1`
-- `JIM.PowerShell/JIM/Public/Schedules/New-JIMSchedule.ps1`
-- `JIM.PowerShell/JIM/Public/Schedules/Set-JIMSchedule.ps1`
-- `JIM.PowerShell/JIM/Public/Schedules/Remove-JIMSchedule.ps1`
-- `JIM.PowerShell/JIM/Public/Schedules/Enable-JIMSchedule.ps1`
-- `JIM.PowerShell/JIM/Public/Schedules/Disable-JIMSchedule.ps1`
-- `JIM.PowerShell/JIM/Public/Schedules/Start-JIMSchedule.ps1`
-- `JIM.PowerShell/JIM/Public/Schedules/Add-JIMScheduleStep.ps1`
-- `JIM.PowerShell/JIM/Public/Schedules/Remove-JIMScheduleStep.ps1`
-- `JIM.PowerShell/JIM/Public/Schedules/Get-JIMScheduleExecution.ps1`
-- `JIM.PowerShell/JIM/Public/Schedules/Stop-JIMScheduleExecution.ps1`
+- `src/JIM.PowerShell/JIM/Public/Schedules/Get-JIMSchedule.ps1`
+- `src/JIM.PowerShell/JIM/Public/Schedules/New-JIMSchedule.ps1`
+- `src/JIM.PowerShell/JIM/Public/Schedules/Set-JIMSchedule.ps1`
+- `src/JIM.PowerShell/JIM/Public/Schedules/Remove-JIMSchedule.ps1`
+- `src/JIM.PowerShell/JIM/Public/Schedules/Enable-JIMSchedule.ps1`
+- `src/JIM.PowerShell/JIM/Public/Schedules/Disable-JIMSchedule.ps1`
+- `src/JIM.PowerShell/JIM/Public/Schedules/Start-JIMSchedule.ps1`
+- `src/JIM.PowerShell/JIM/Public/Schedules/Add-JIMScheduleStep.ps1`
+- `src/JIM.PowerShell/JIM/Public/Schedules/Remove-JIMScheduleStep.ps1`
+- `src/JIM.PowerShell/JIM/Public/Schedules/Get-JIMScheduleExecution.ps1`
+- `src/JIM.PowerShell/JIM/Public/Schedules/Stop-JIMScheduleExecution.ps1`
 
 ### Files Modified
-- `JIM.PowerShell/JIM/JIM.psd1` - Added 11 new cmdlets to FunctionsToExport
+- `src/JIM.PowerShell/JIM/JIM.psd1` - Added 11 new cmdlets to FunctionsToExport
 
 ---
 

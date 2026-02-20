@@ -619,7 +619,7 @@ if (-not $SkipReset) {
     Write-Section "Step 1: Resetting JIM Environment"
 
     Write-Step "Stopping all containers and removing volumes..."
-    docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db down -v 2>&1 | Out-Null
+    docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down -v 2>&1 | Out-Null
     # Use --profile to stop containers from all scenarios (scenario2, scenario8, etc.)
     # Without specifying profiles, containers started with profiles won't be stopped
     docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down -v --remove-orphans 2>&1 | Out-Null
@@ -658,7 +658,7 @@ if (-not $SkipBuild -and -not $SkipReset) {
     Write-Section "Step 2: Building Docker Images"
 
     Write-Step "Building JIM stack..."
-    $buildOutput = docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml build 2>&1
+    $buildOutput = docker compose -f docker-compose.yml -f docker-compose.override.yml build 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to build JIM stack"
         Write-Host "${GRAY}$buildOutput${NC}"
@@ -713,7 +713,7 @@ $step3Start = Get-Date
 Write-Section "Step 3: Starting Services"
 
 Write-Step "Starting JIM stack..."
-$jimResult = docker compose -f docker-compose.yml -f docker-compose.override.codespaces.yml --profile with-db up -d 2>&1
+$jimResult = docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Failure "Failed to start JIM stack"
     Write-Host "${GRAY}$jimResult${NC}"

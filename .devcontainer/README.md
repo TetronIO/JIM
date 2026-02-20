@@ -223,7 +223,7 @@ JIM supports two different development workflows. Choose the one that fits your 
 - Database: Internal (container network)
 - JIM Web + API: `http://localhost:5200` (API at `/api/`, Swagger at `/api/swagger`)
 
-**Note:** In GitHub Codespaces, the docker stack uses optimized PostgreSQL memory settings automatically via `docker-compose.override.codespaces.yml`.
+**Note:** In GitHub Codespaces, the docker stack uses optimized PostgreSQL memory settings automatically via `docker-compose.override.yml`.
 
 ## 🐛 Debugging
 
@@ -316,7 +316,7 @@ jim-stack
 jim-stack-logs
 ```
 
-If you see memory allocation errors in Codespaces, the PostgreSQL settings are automatically optimized via `docker-compose.override.codespaces.yml`. If issues persist:
+If you see memory allocation errors in Codespaces, the PostgreSQL settings are automatically optimized via `docker-compose.override.yml`. If issues persist:
 ```bash
 # Clean restart
 docker compose -f db.yml down -v
@@ -330,7 +330,7 @@ jim-db
 docker compose -f db.yml ps
 
 # Apply migrations manually
-dotnet ef database update --project JIM.PostgresData
+dotnet ef database update --project src/JIM.PostgresData
 ```
 
 ### Build Errors

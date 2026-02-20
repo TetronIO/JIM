@@ -94,9 +94,9 @@ try {
 
     # Define Docker images
     $jimImages = @(
-        @{ Name = "jim-web"; Dockerfile = "JIM.Web/Dockerfile"; Context = "." }
-        @{ Name = "jim-worker"; Dockerfile = "JIM.Worker/Dockerfile"; Context = "." }
-        @{ Name = "jim-scheduler"; Dockerfile = "JIM.Scheduler/Dockerfile"; Context = "." }
+        @{ Name = "jim-web"; Dockerfile = "src/JIM.Web/Dockerfile"; Context = "." }
+        @{ Name = "jim-worker"; Dockerfile = "src/JIM.Worker/Dockerfile"; Context = "." }
+        @{ Name = "jim-scheduler"; Dockerfile = "src/JIM.Scheduler/Dockerfile"; Context = "." }
     )
 
     if (-not $SkipImageExport) {
@@ -142,7 +142,7 @@ try {
 
     $composeFiles = @(
         "docker-compose.yml"
-        "docker-compose.override.codespaces.yml"
+        "docker-compose.override.yml"
         ".env.example"
     )
 
@@ -183,7 +183,7 @@ services:
 
     # Copy PowerShell module
     Write-Host "`nCopying PowerShell module..." -ForegroundColor Cyan
-    $psModuleSrc = Join-Path $RepoRoot "JIM.PowerShell/JIM"
+    $psModuleSrc = Join-Path $RepoRoot "src/JIM.PowerShell/JIM"
     $psModuleDst = Join-Path $bundlePath "powershell/JIM"
 
     if (Test-Path $psModuleSrc) {

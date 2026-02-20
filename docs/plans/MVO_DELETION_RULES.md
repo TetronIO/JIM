@@ -179,15 +179,15 @@ API and PowerShell support:
 
 ## Critical Files
 
-- `/workspaces/JIM/JIM.Models/Core/CoreEnums.cs`
-- `/workspaces/JIM/JIM.Models/Core/MetaverseObject.cs`
-- `/workspaces/JIM/JIM.Models/Core/MetaverseObjectType.cs`
-- `/workspaces/JIM/JIM.Models/Logic/SyncRule.cs`
-- `/workspaces/JIM/JIM.Application/JimApplication.cs`
-- `/workspaces/JIM/JIM.Web/Controllers/Api/MetaverseController.cs`
-- `/workspaces/JIM/JIM.PowerShell/JIM/Public/Metaverse/Set-JIMMetaverseObjectType.ps1`
-- `/workspaces/JIM/JIM.Worker/Worker.cs`
-- `/workspaces/JIM/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs`
+- `/workspaces/JIM/src/JIM.Models/Core/CoreEnums.cs`
+- `/workspaces/JIM/src/JIM.Models/Core/MetaverseObject.cs`
+- `/workspaces/JIM/src/JIM.Models/Core/MetaverseObjectType.cs`
+- `/workspaces/JIM/src/JIM.Models/Logic/SyncRule.cs`
+- `/workspaces/JIM/src/JIM.Application/JimApplication.cs`
+- `/workspaces/JIM/src/JIM.Web/Controllers/Api/MetaverseController.cs`
+- `/workspaces/JIM/src/JIM.PowerShell/JIM/Public/Metaverse/Set-JIMMetaverseObjectType.ps1`
+- `/workspaces/JIM/src/JIM.Worker/Worker.cs`
+- `/workspaces/JIM/src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs`
 - `/workspaces/JIM/test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1`
 
 ## Success Criteria

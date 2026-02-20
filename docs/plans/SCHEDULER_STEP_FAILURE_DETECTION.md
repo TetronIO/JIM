@@ -52,30 +52,30 @@ Activities are already the source of truth for operation outcomes (status, timin
 
 #### Model Layer
 
-- **`JIM.Models/Activities/Activity.cs`** -- Added `ScheduleExecutionId` (Guid?) and `ScheduleStepIndex` (int?) properties
-- **`JIM.PostgresData/Migrations/AddScheduleContextToActivity`** -- EF migration for the two new nullable columns
+- **`src/JIM.Models/Activities/Activity.cs`** -- Added `ScheduleExecutionId` (Guid?) and `ScheduleStepIndex` (int?) properties
+- **`src/JIM.PostgresData/Migrations/AddScheduleContextToActivity`** -- EF migration for the two new nullable columns
 
 #### Data Layer
 
-- **`JIM.Data/Repositories/IActivityRepository.cs`** -- Added `GetActivitiesByScheduleExecutionAsync` and `GetActivitiesByScheduleExecutionStepAsync`
-- **`JIM.PostgresData/Repositories/ActivitiesRepository.cs`** -- Implemented the two new query methods
+- **`src/JIM.Data/Repositories/IActivityRepository.cs`** -- Added `GetActivitiesByScheduleExecutionAsync` and `GetActivitiesByScheduleExecutionStepAsync`
+- **`src/JIM.PostgresData/Repositories/ActivitiesRepository.cs`** -- Implemented the two new query methods
 
 #### Application Layer
 
-- **`JIM.Application/Servers/TaskingServer.cs`** -- `CreateActivityFromWorkerTaskAsync` now copies `ScheduleExecutionId` and `ScheduleStepIndex` from the WorkerTask to the Activity before persisting
-- **`JIM.Application/Servers/SchedulerServer.cs`** -- `CheckAndAdvanceExecutionAsync` rewritten:
+- **`src/JIM.Application/Servers/TaskingServer.cs`** -- `CreateActivityFromWorkerTaskAsync` now copies `ScheduleExecutionId` and `ScheduleStepIndex` from the WorkerTask to the Activity before persisting
+- **`src/JIM.Application/Servers/SchedulerServer.cs`** -- `CheckAndAdvanceExecutionAsync` rewritten:
   1. Check for active worker tasks first (Queued/Processing = still running)
   2. Query Activities for step outcomes (survives worker task deletion)
   3. Check ALL parallel steps at an index for `ContinueOnFailure` (not just `FirstOrDefault`)
 
 #### API Layer
 
-- **`JIM.Web/Controllers/Api/ScheduleExecutionsController.cs`** -- `GetByIdAsync` queries Activities for step status, with worker tasks as secondary source for in-progress steps. `GetStepStatus` updated to prefer Activity status over inferred position-based status.
-- **`JIM.Web/Models/Api/ScheduleExecutionDtos.cs`** -- Added `ActivityId` and `ActivityStatus` to `ScheduleExecutionStepDto`
+- **`src/JIM.Web/Controllers/Api/ScheduleExecutionsController.cs`** -- `GetByIdAsync` queries Activities for step status, with worker tasks as secondary source for in-progress steps. `GetStepStatus` updated to prefer Activity status over inferred position-based status.
+- **`src/JIM.Web/Models/Api/ScheduleExecutionDtos.cs`** -- Added `ActivityId` and `ActivityStatus` to `ScheduleExecutionStepDto`
 
 #### Integration Tests
 
-- **`JIM.PowerShell/JIM/Public/RunProfiles/Start-JIMRunProfile.ps1`** -- Changed `Write-Error` to `throw` for fail-fast error propagation
+- **`src/JIM.PowerShell/JIM/Public/RunProfiles/Start-JIMRunProfile.ps1`** -- Changed `Write-Error` to `throw` for fail-fast error propagation
 - **`test/integration/utils/Test-Helpers.ps1`** -- Added `Assert-ScheduleExecutionSuccess` function that validates both overall execution status AND each step's activity status
 - **`test/integration/scenarios/Invoke-Scenario6-SchedulerService.ps1`** -- Uses `Assert-ScheduleExecutionSuccess` at 3 validation points (manual trigger, multi-step, parallel)
 

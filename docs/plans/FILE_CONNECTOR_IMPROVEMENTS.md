@@ -4,7 +4,7 @@
 
 ## Executive Summary
 
-The File Connector (`JIM.Connectors/File/`) is a CSV-based import connector with ~460 lines across 4 files. While well-structured with proper async/await patterns, it has **one critical bug** (type conversion crash), **zero direct test coverage**, and several unimplemented features.
+The File Connector (`src/JIM.Connectors/File/`) is a CSV-based import connector with ~460 lines across 4 files. While well-structured with proper async/await patterns, it has **one critical bug** (type conversion crash), **zero direct test coverage**, and several unimplemented features.
 
 ---
 
@@ -12,7 +12,7 @@ The File Connector (`JIM.Connectors/File/`) is a CSV-based import connector with
 
 ### 1. Type Conversion Error Handling (HIGH SEVERITY)
 
-**Location:** `JIM.Connectors/File/FileConnectorImport.cs` lines 107-119
+**Location:** `src/JIM.Connectors/File/FileConnectorImport.cs` lines 107-119
 
 **Problem:** Typed field access (`GetField<int>`, `GetField<DateTime>`, etc.) has no try-catch. Invalid CSV data will crash the entire import.
 
@@ -35,7 +35,7 @@ case AttributeDataType.DateTime:
 
 ### 2. XML Documentation Error (LOW SEVERITY)
 
-**Location:** `JIM.Connectors/File/FileConnector.cs` line 53
+**Location:** `src/JIM.Connectors/File/FileConnector.cs` line 53
 
 **Problem:** Copy-paste error from LDAP Connector.
 
@@ -91,7 +91,7 @@ These are documented limitations, not bugs:
 
 ### Phase 2: Test Coverage (Priority: High) ✅
 
-- [x] **2.1** Create `JIM.Worker.Tests/Connectors/FileConnectorTests.cs`
+- [x] **2.1** Create `test/JIM.Worker.Tests/Connectors/FileConnectorTests.cs`
 - [x] **2.2** Add test: `GetSchemaAsync_WithValidCsv_ReturnsCorrectAttributes`
 - [x] **2.3** Add test: `GetSchemaAsync_InfersCorrectDataTypes`
 - [x] **2.4** Add test: `ImportAsync_WithValidData_CreatesObjects`
@@ -235,11 +235,11 @@ This approach:
 
 | File | Changes |
 |------|---------|
-| `JIM.Models/Interfaces/IConnectorCapabilities.cs` | Add `SupportsAutoConfirmExport` property |
-| `JIM.Worker/Servers/ExportExecutionServer.cs` | Check capability and setting after export |
-| `JIM.Connectors/File/FileConnector.cs` | Add export settings, implement interface, set capabilities |
-| `JIM.Connectors/File/FileConnectorExport.cs` | New file - export logic |
-| `JIM.Worker.Tests/Connectors/FileConnectorExportTests.cs` | New file - export tests |
+| `src/JIM.Models/Interfaces/IConnectorCapabilities.cs` | Add `SupportsAutoConfirmExport` property |
+| `src/JIM.Worker/Servers/ExportExecutionServer.cs` | Check capability and setting after export |
+| `src/JIM.Connectors/File/FileConnector.cs` | Add export settings, implement interface, set capabilities |
+| `src/JIM.Connectors/File/FileConnectorExport.cs` | New file - export logic |
+| `test/JIM.Worker.Tests/Connectors/FileConnectorExportTests.cs` | New file - export tests |
 
 ---
 
@@ -247,7 +247,7 @@ This approach:
 
 ### Phase 1.1: Type Conversion Error Handling
 
-**File:** `JIM.Connectors/File/FileConnectorImport.cs`
+**File:** `src/JIM.Connectors/File/FileConnectorImport.cs`
 
 Replace lines 105-130 with:
 
@@ -278,7 +278,7 @@ Apply same pattern for DateTime, Boolean, and Guid cases.
 
 ### Phase 2.1: Test File Structure
 
-**File:** `JIM.Worker.Tests/Connectors/FileConnectorTests.cs`
+**File:** `test/JIM.Worker.Tests/Connectors/FileConnectorTests.cs`
 
 ```csharp
 using NUnit.Framework;
@@ -305,9 +305,9 @@ public class FileConnectorTests
 ```
 
 **Test Data Files Needed:**
-- `JIM.Worker.Tests/TestData/Csv/valid_users.csv`
-- `JIM.Worker.Tests/TestData/Csv/invalid_numbers.csv`
-- `JIM.Worker.Tests/TestData/Csv/custom_delimiter.csv`
+- `test/JIM.Worker.Tests/TestData/Csv/valid_users.csv`
+- `test/JIM.Worker.Tests/TestData/Csv/invalid_numbers.csv`
+- `test/JIM.Worker.Tests/TestData/Csv/custom_delimiter.csv`
 
 ---
 
@@ -315,10 +315,10 @@ public class FileConnectorTests
 
 | File | Changes |
 |------|---------|
-| `JIM.Connectors/File/FileConnector.cs` | Fix XML docs (line 53) |
-| `JIM.Connectors/File/FileConnectorImport.cs` | Add error handling (lines 105-130) |
-| `JIM.Worker.Tests/Connectors/FileConnectorTests.cs` | New file |
-| `JIM.Worker.Tests/TestData/Csv/*.csv` | New test data files |
+| `src/JIM.Connectors/File/FileConnector.cs` | Fix XML docs (line 53) |
+| `src/JIM.Connectors/File/FileConnectorImport.cs` | Add error handling (lines 105-130) |
+| `test/JIM.Worker.Tests/Connectors/FileConnectorTests.cs` | New file |
+| `test/JIM.Worker.Tests/TestData/Csv/*.csv` | New test data files |
 
 ---
 
@@ -344,8 +344,8 @@ public class FileConnectorTests
 
 ## References
 
-- [FileConnector.cs](../JIM.Connectors/File/FileConnector.cs)
-- [FileConnectorImport.cs](../JIM.Connectors/File/FileConnectorImport.cs)
-- [FileConnectorReader.cs](../JIM.Connectors/File/FileConnectorReader.cs)
-- [FileConnectorObjectTypeInfo.cs](../JIM.Connectors/File/FileConnectorObjectTypeInfo.cs)
-- [MockFileConnector.cs](../JIM.Connectors/Mock/MockFileConnector.cs) - Reference for test patterns
+- [FileConnector.cs](../src/JIM.Connectors/File/FileConnector.cs)
+- [FileConnectorImport.cs](../src/JIM.Connectors/File/FileConnectorImport.cs)
+- [FileConnectorReader.cs](../src/JIM.Connectors/File/FileConnectorReader.cs)
+- [FileConnectorObjectTypeInfo.cs](../src/JIM.Connectors/File/FileConnectorObjectTypeInfo.cs)
+- [MockFileConnector.cs](../src/JIM.Connectors/Mock/MockFileConnector.cs) - Reference for test patterns
