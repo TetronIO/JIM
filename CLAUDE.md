@@ -384,6 +384,15 @@ var schedule = await Jim.Scheduler.GetScheduleAsync(id);
 4. Test: `dotnet ef database update --project src/JIM.PostgresData`
 5. Commit migration files
 
+**Updating Architecture Diagrams:**
+
+When making architectural changes (new containers, components, connectors, or significant restructuring):
+1. Update `docs/diagrams/structurizr/workspace.dsl` to reflect the change
+2. Regenerate SVGs: `jim-diagrams` (requires Docker)
+3. Commit both the DSL changes and regenerated SVG files together
+
+> **DSL syntax and diagram details:** See `docs/diagrams/structurizr/README.md`
+
 ## Development Workflows
 
 **Choose one of two workflows:**

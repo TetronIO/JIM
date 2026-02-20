@@ -44,8 +44,10 @@ JIM's architecture is documented using C4 model diagrams (System Context, Contai
 
 **Available Diagrams**:
 - **System Context**: JIM's interactions with external systems and users
-- **Container**: Internal deployable units (Web App, Worker, Scheduler, Connectors, Database)
+- **Container**: Internal deployable units (Web App, Worker, Scheduler, Connectors, Database, PowerShell Module)
 - **Component**: Detailed views of Web Application, Application Layer, Worker Service, Connectors, and Scheduler
+
+**Keeping Diagrams Up to Date**: When making architectural changes (new containers, components, connectors, or significant restructuring), update `docs/diagrams/structurizr/workspace.dsl` and regenerate the SVG images by running `jim-diagrams` from the repository root. Commit both the DSL changes and the regenerated SVGs together.
 
 ## Technology Stack
 

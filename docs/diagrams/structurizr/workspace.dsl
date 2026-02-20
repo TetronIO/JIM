@@ -46,6 +46,7 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
                 serviceSettingsServer = component "ServiceSettingsServer" "Global service configuration management" "C# Service"
                 activityServer = component "ActivityServer" "Activity logging, audit trail, execution statistics" "C# Service"
                 taskingServer = component "TaskingServer" "Worker task queue management" "C# Service"
+                repository = component "IJimRepository" "Data access abstraction - interfaces defined in JIM.Data, implemented by JIM.PostgresData (EF Core)" "Repository Interface"
             }
 
             worker = container "Worker Service" "Processes queued synchronisation tasks - import, sync, export operations" ".NET 9.0 Background Service" {
@@ -139,16 +140,18 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
         jim.appLayer.exportExecutionServer -> jim.appLayer.metaverseServer "Uses" "Method calls"
         jim.appLayer.exportExecutionServer -> jim.appLayer.connectedSystemServer "Uses" "Method calls"
 
-        jim.appLayer.metaverseServer -> jim.database "Reads/Writes" "EF Core"
-        jim.appLayer.connectedSystemServer -> jim.database "Reads/Writes" "EF Core"
-        jim.appLayer.schedulerServer -> jim.database "Reads/Writes" "EF Core"
-        jim.appLayer.searchServer -> jim.database "Reads/Writes" "EF Core"
-        jim.appLayer.securityServer -> jim.database "Reads/Writes" "EF Core"
-        jim.appLayer.changeHistoryServer -> jim.database "Reads/Writes" "EF Core"
-        jim.appLayer.certificateServer -> jim.database "Reads/Writes" "EF Core"
-        jim.appLayer.serviceSettingsServer -> jim.database "Reads/Writes" "EF Core"
-        jim.appLayer.activityServer -> jim.database "Reads/Writes" "EF Core"
-        jim.appLayer.taskingServer -> jim.database "Reads/Writes" "EF Core"
+        jim.appLayer.metaverseServer -> jim.appLayer.repository "Uses" "IJimRepository"
+        jim.appLayer.connectedSystemServer -> jim.appLayer.repository "Uses" "IJimRepository"
+        jim.appLayer.schedulerServer -> jim.appLayer.repository "Uses" "IJimRepository"
+        jim.appLayer.searchServer -> jim.appLayer.repository "Uses" "IJimRepository"
+        jim.appLayer.securityServer -> jim.appLayer.repository "Uses" "IJimRepository"
+        jim.appLayer.changeHistoryServer -> jim.appLayer.repository "Uses" "IJimRepository"
+        jim.appLayer.certificateServer -> jim.appLayer.repository "Uses" "IJimRepository"
+        jim.appLayer.serviceSettingsServer -> jim.appLayer.repository "Uses" "IJimRepository"
+        jim.appLayer.activityServer -> jim.appLayer.repository "Uses" "IJimRepository"
+        jim.appLayer.taskingServer -> jim.appLayer.repository "Uses" "IJimRepository"
+
+        jim.appLayer.repository -> jim.database "Reads/Writes" "EF Core (JIM.PostgresData)"
 
         # ===== Worker Component Relationships =====
         jim.worker.workerHost -> jim.appLayer.jimApplication "Polls for tasks" "Method calls"
