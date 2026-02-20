@@ -175,10 +175,10 @@ html[lang] .mud-table-outlined {
     border: none !important;
 }
 
-/* Thin separator between adjacent panels — skips the first to avoid
-   doubling with the container's top border */
+/* Thicker separator between adjacent panels for visual distinction when expanded.
+   Skips the first to avoid doubling with the container's top border. */
 .jim-expansion-panel .mud-expand-panel + .mud-expand-panel {
-    border-top: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
+    border-top: 3px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
 }
 
 /* Nested containers inside expansion panels — mirrors the .mud-paper nesting
