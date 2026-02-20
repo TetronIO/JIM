@@ -35,8 +35,14 @@ function injectVersion(svg, version) {
   const versionY = timestampY + 34;
   const versionElement = `<g transform="translate(${timestampX},${versionY})"><g><text font-size="24px" xml:space="preserve" y="0.8em" font-weight="normal" text-anchor="start" fill="#444444" pointer-events="none" display="block" font-family="Open Sans, Tahoma, Arial"><tspan dy="0" display="block">JIM v${version}</tspan></text></g></g>`;
 
+  // Expand the viewBox height to fit the version line (need ~60px extra)
+  let result = svg.replace(/viewBox="(\d+) (\d+) (\d+) (\d+)"/, (m, x, y, w, h) => {
+    // Only expand the first (main) viewBox, not icon viewBoxes
+    return `viewBox="${x} ${y} ${w} ${parseInt(h) + 60}"`;
+  });
+
   // Insert before the closing </g></g></svg>
-  return svg.replace(/<\/g><\/g><\/svg>$/, `${versionElement}</g></g></svg>`);
+  return result.replace(/<\/g><\/g><\/svg>$/, `${versionElement}</g></g></svg>`);
 }
 
 let expectedNumberOfExports = 0;
