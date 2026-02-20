@@ -171,6 +171,74 @@ html[lang] .mud-table-outlined {
     box-shadow: none !important;
 }
 
+/* Operations Queue: collapse empty group header rows for standalone tasks */
+.jim-queue-standalone-group {
+    padding: 0 !important;
+    height: 0 !important;
+    border: none !important;
+    line-height: 0 !important;
+    font-size: 0 !important;
+}
+
+/* Operations Queue: remove bottom border radius when worker activity bar connects */
+.jim-queue-table-active.mud-table-outlined {
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    border-bottom: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
+}
+
+/* Worker activity indicator bar — shown below queue table when tasks are processing */
+.jim-worker-activity-bar {
+    position: relative;
+    height: 32px;
+    border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    overflow: hidden;
+    background-color: var(--mud-palette-surface);
+}
+
+.jim-worker-activity-shimmer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        var(--mud-palette-primary) 40%,
+        var(--mud-palette-primary) 60%,
+        transparent 100%
+    );
+    opacity: 0.08;
+    background-size: 200% 100%;
+    animation: jim-worker-shimmer 2s ease-in-out infinite;
+}
+
+@keyframes jim-worker-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.jim-worker-activity-text {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 100%;
+    font-size: 0.8125rem;
+    color: var(--mud-palette-text-secondary);
+    letter-spacing: 0.02em;
+}
+
+.jim-worker-activity-text .mud-icon-root {
+    font-size: 1rem;
+    color: var(--mud-palette-primary);
+}
+
 /* Nested containers: tables and tab panels inside papers use a deeper surface colour
    when the theme defines --jim-inner-surface (mid-contrast themes). Falls back to
    transparent so other themes are unaffected. */

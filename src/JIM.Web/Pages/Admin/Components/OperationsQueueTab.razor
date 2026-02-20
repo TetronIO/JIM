@@ -59,19 +59,37 @@
 }
 else
 {
-    @* Schedule execution groups — each in its own outlined collapsible panel *@
-    @foreach (var group in _scheduleGroups)
-    {
-        var totalTasks = group.Value.Count;
-        var completedOrProcessing = group.Value.Count(t => t.Status == WorkerTaskStatus.Processing);
-        var queued = group.Value.Count(t => t.Status == WorkerTaskStatus.Queued);
-        var waiting = group.Value.Count(t => t.Status == WorkerTaskStatus.WaitingForPreviousStep);
-        var scheduleName = group.Value.First().ScheduleExecutionName ?? "Schedule";
-        var distinctSteps = group.Value.Select(t => t.ScheduleStepIndex).Distinct().Count();
+    <div class="d-flex align-center gap-1 mt-5 mb-1">
+        <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small" Class="mud-text-secondary" />
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">Queue processes from top to bottom</MudText>
+    </div>
 
-        <MudExpansionPanels Class="mt-5 jim-expansion-panel" Elevation="0">
-            <MudExpansionPanel Expanded="true">
-                <TitleContent>
+    <MudTable T="WorkerTaskHeader" Items="@GetSortedQueueItems()" Hover="true" Breakpoint="Breakpoint.Sm"
+              Outlined="true" Elevation="0" Dense="true" GroupBy="@_groupDefinition"
+              Class="@(_hasProcessingTasks ? "jim-queue-table-active" : "")">
+        <HeaderContent>
+            <MudTh><MudText Typo="Typo.button">Name</MudText></MudTh>
+            <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
+            <MudTh Style="min-width: 200px;"><MudText Typo="Typo.button">Progress</MudText></MudTh>
+            <MudTh><MudText Typo="Typo.button">Initiated By</MudText></MudTh>
+            <MudTh Style="text-align: right;"><MudText Typo="Typo.button">Actions</MudText></MudTh>
+        </HeaderContent>
+        <GroupHeaderTemplate>
+            @{
+                var groupTasks = context.Items.ToList();
+                var isScheduleGroup = groupTasks.First().ScheduleExecutionId.HasValue;
+            }
+            @if (isScheduleGroup)
+            {
+                var scheduleName = groupTasks.First().ScheduleExecutionName ?? "Schedule";
+                var totalTasks = groupTasks.Count;
+                var processing = groupTasks.Count(t => t.Status == WorkerTaskStatus.Processing);
+                var queued = groupTasks.Count(t => t.Status == WorkerTaskStatus.Queued);
+                var waiting = groupTasks.Count(t => t.Status == WorkerTaskStatus.WaitingForPreviousStep);
+                var distinctSteps = groupTasks.Select(t => t.ScheduleStepIndex).Distinct().Count();
+                var executionId = groupTasks.First().ScheduleExecutionId!.Value;
+
+                <MudTh Class="mud-table-cell-custom-group" colspan="5">
                     <div class="d-flex align-center justify-space-between" style="width: 100%;">
                         <div class="d-flex align-center gap-3">
                             <MudIcon Icon="@Icons.Material.Filled.Schedule" />
@@ -79,7 +97,7 @@ else
                                 <MudText Typo="Typo.body1"><b>@scheduleName</b></MudText>
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
                                     @totalTasks tasks across @distinctSteps steps
-                                    @if (completedOrProcessing > 0) { <span> — @completedOrProcessing processing</span> }
+                                    @if (processing > 0) { <span> — @processing processing</span> }
                                     @if (queued > 0) { <span>, @queued queued</span> }
                                     @if (waiting > 0) { <span>, @waiting waiting</span> }
                                 </MudText>
@@ -87,80 +105,53 @@ else
                         </div>
                         <MudTooltip Text="Cancel Schedule" Arrow="true" Placement="Placement.Left">
                             <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error"
-                                           OnClick="() => HandleCancelScheduleExecutionAsync(group.Key)" Size="Size.Small" />
+                                           OnClick="() => HandleCancelScheduleExecutionAsync(executionId)" Size="Size.Small" />
                         </MudTooltip>
                     </div>
-                </TitleContent>
-                <ChildContent>
-                    <MudTable T="WorkerTaskHeader" Items="@(group.Value.OrderBy(t => t.ScheduleStepIndex).ThenBy(t => t.Timestamp))" Hover="true" Dense="true" Elevation="0">
-                        <HeaderContent>
-                            <MudTh><MudText Typo="Typo.button">Step</MudText></MudTh>
-                            <MudTh><MudText Typo="Typo.button">Type</MudText></MudTh>
-                            <MudTh><MudText Typo="Typo.button">Name</MudText></MudTh>
-                            <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
-                            <MudTh Style="min-width: 200px;"><MudText Typo="Typo.button">Progress</MudText></MudTh>
-                            <MudTh Style="text-align: right;"><MudText Typo="Typo.button">Actions</MudText></MudTh>
-                        </HeaderContent>
-                        <RowTemplate>
-                            <MudTd DataLabel="Step">@((context.ScheduleStepIndex ?? 0) + 1)</MudTd>
-                            <MudTd DataLabel="Type">@context.Type</MudTd>
-                            <MudTd DataLabel="Name">@context.Name</MudTd>
-                            <MudTd DataLabel="Status">
-                                @GetTaskStatusDisplay(context)
-                            </MudTd>
-                            <MudTd DataLabel="Progress">
-                                @RenderProgress(context)
-                            </MudTd>
-                            <MudTd DataLabel="Actions" Style="text-align: right;">
-                                @if (context.Status != WorkerTaskStatus.WaitingForPreviousStep)
-                                {
-                                    <MudTooltip Text="Cancel" Arrow="true" Placement="Placement.Left">
-                                        <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error" OnClick="() => HandleCancelTaskAsync(context)" Size="Size.Small"/>
-                                    </MudTooltip>
-                                }
-                            </MudTd>
-                        </RowTemplate>
-                    </MudTable>
-                </ChildContent>
-            </MudExpansionPanel>
-        </MudExpansionPanels>
-    }
-
-    @* Standalone tasks (not part of a schedule) — flat table *@
-    @if (_standaloneTasks.Count > 0)
-    {
-        <MudTable T="WorkerTaskHeader" Items="@_standaloneTasks" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-5" Outlined="true" Elevation="0">
-            <HeaderContent>
-                <MudTh><MudText Typo="Typo.button">Type</MudText></MudTh>
-                <MudTh><MudText Typo="Typo.button">Name</MudText></MudTh>
-                <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
-                <MudTh Style="min-width: 200px;"><MudText Typo="Typo.button">Progress</MudText></MudTh>
-                <MudTh><MudText Typo="Typo.button">Created</MudText></MudTh>
-                <MudTh><MudText Typo="Typo.button">Initiated By</MudText></MudTh>
-                <MudTh Style="text-align: right;"><MudText Typo="Typo.button">Actions</MudText></MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Type">@context.Type</MudTd>
-                <MudTd DataLabel="Name">@context.Name</MudTd>
-                <MudTd DataLabel="Status">@GetTaskStatusDisplay(context)</MudTd>
-                <MudTd DataLabel="Progress">
-                    @RenderProgress(context)
-                </MudTd>
-                <MudTd DataLabel="Created">
-                    <MudTooltip Text="@context.Timestamp.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                        @context.Timestamp.ToLocalTime().ToRelativeTime()
-                    </MudTooltip>
-                </MudTd>
-                <MudTd DataLabel="Initiated By">
-                    @RenderInitiatedBy(context)
-                </MudTd>
-                <MudTd DataLabel="Actions" Style="text-align: right;">
+                </MudTh>
+            }
+            else
+            {
+                <MudTh Class="jim-queue-standalone-group" colspan="5"></MudTh>
+            }
+        </GroupHeaderTemplate>
+        <RowTemplate>
+            <MudTd DataLabel="Name">
+                @if (context.ScheduleExecutionId.HasValue)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="display: inline;">Step @((context.ScheduleStepIndex ?? 0) + 1) — </MudText>
+                }
+                @context.Name
+            </MudTd>
+            <MudTd DataLabel="Status">
+                @GetTaskStatusDisplay(context)
+            </MudTd>
+            <MudTd DataLabel="Progress">
+                @RenderProgress(context)
+            </MudTd>
+            <MudTd DataLabel="Initiated By">
+                @RenderInitiatedBy(context)
+            </MudTd>
+            <MudTd DataLabel="Actions" Style="text-align: right;">
+                @if (context.Status != WorkerTaskStatus.WaitingForPreviousStep)
+                {
                     <MudTooltip Text="Cancel" Arrow="true" Placement="Placement.Left">
                         <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error" OnClick="() => HandleCancelTaskAsync(context)" Size="Size.Small"/>
                     </MudTooltip>
-                </MudTd>
-            </RowTemplate>
-        </MudTable>
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+
+    @if (_hasProcessingTasks)
+    {
+        <div class="jim-worker-activity-bar">
+            <div class="jim-worker-activity-shimmer"></div>
+            <div class="jim-worker-activity-text">
+                <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Small" />
+                <span>Worker processing</span>
+            </div>
+        </div>
     }
 }
 
@@ -173,20 +164,31 @@ else
     private ConnectedSystemHeader? _selectedConnectedSystemHeader;
     private ConnectedSystemRunProfile? _selectedConnectedSystemRunProfile;
     private List<WorkerTaskHeader> _workerTaskHeaders = new();
-    private Dictionary<Guid, List<WorkerTaskHeader>> _scheduleGroups = new();
-    private List<WorkerTaskHeader> _standaloneTasks = new();
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
+    private bool _hasProcessingTasks;
 
-    private void RebuildGroups()
+    private readonly TableGroupDefinition<WorkerTaskHeader> _groupDefinition = new()
     {
-        _scheduleGroups = _workerTaskHeaders
-            .Where(t => t.ScheduleExecutionId.HasValue)
-            .GroupBy(t => t.ScheduleExecutionId!.Value)
-            .ToDictionary(g => g.Key, g => g.ToList());
-        _standaloneTasks = _workerTaskHeaders
-            .Where(t => !t.ScheduleExecutionId.HasValue)
-            .ToList();
+        GroupName = "Queue Group",
+        Selector = t => t.ScheduleExecutionId?.ToString() ?? $"standalone-{t.Id}"
+    };
+
+    private IEnumerable<WorkerTaskHeader> GetSortedQueueItems()
+    {
+        return _workerTaskHeaders
+            .OrderBy(t => GetStatusSortOrder(t.Status))
+            .ThenBy(t => t.ScheduleStepIndex ?? 0)
+            .ThenBy(t => t.Timestamp);
     }
+
+    private static int GetStatusSortOrder(WorkerTaskStatus status) => status switch
+    {
+        WorkerTaskStatus.Processing => 0,
+        WorkerTaskStatus.CancellationRequested => 1,
+        WorkerTaskStatus.Queued => 2,
+        WorkerTaskStatus.WaitingForPreviousStep => 3,
+        _ => 4
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -200,14 +202,14 @@ else
             if (query.ContainsKey("demo"))
             {
                 _workerTaskHeaders = GenerateDemoData();
-                RebuildGroups();
+                _hasProcessingTasks = _workerTaskHeaders.Any(t => t.Status == WorkerTaskStatus.Processing);
                 return;
             }
         }
 
         // Get initial data for worker task table rendering
         _workerTaskHeaders = await Jim.Tasking.GetWorkerTaskHeadersAsync();
-        RebuildGroups();
+        _hasProcessingTasks = _workerTaskHeaders.Any(t => t.Status == WorkerTaskStatus.Processing);
 
         // Setup polling for worker task header updates
         var token = _pollingCancellationTokenSource.Token;
@@ -248,7 +250,7 @@ else
 
                     if (stateHasChanged)
                     {
-                        RebuildGroups();
+                        _hasProcessingTasks = _workerTaskHeaders.Any(t => t.Status == WorkerTaskStatus.Processing);
                         await InvokeAsync(StateHasChanged);
                     }
 
@@ -322,9 +324,10 @@ else
 
     private async Task HandleCancelScheduleExecutionAsync(Guid scheduleExecutionId)
     {
-        var scheduleName = _scheduleGroups.TryGetValue(scheduleExecutionId, out var tasks)
-            ? tasks.FirstOrDefault()?.ScheduleExecutionName ?? "this schedule execution"
-            : "this schedule execution";
+        var scheduleName = _workerTaskHeaders
+            .Where(t => t.ScheduleExecutionId == scheduleExecutionId)
+            .Select(t => t.ScheduleExecutionName)
+            .FirstOrDefault() ?? "this schedule execution";
 
         var result = await DialogService.ShowMessageBox(
             "Cancel Schedule Execution",
