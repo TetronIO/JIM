@@ -475,6 +475,41 @@ Use `./test/integration/Run-IntegrationTests.ps1` (PowerShell) - never invoke sc
 7. **ONLY AFTER** successful commit: Push and create PR
 8. **NEVER** create a PR with failing tests or build errors
 
+## Release Process
+
+**CRITICAL: NEVER modify the `VERSION` file without explicit user instruction to create a release.**
+
+The `VERSION` file is the single source of truth for JIM's version number. It feeds into:
+- All .NET assembly versions (via `Directory.Build.props`)
+- Docker image tags (via release workflow)
+- PowerShell module version (updated at release time)
+- Diagram metadata (via `export-diagrams.js`)
+
+**Versioning scheme:** [Semantic Versioning](https://semver.org/) — `X.Y.Z` with optional prerelease suffix (e.g., `0.3.0-alpha`).
+
+**What triggers a version bump:**
+- New feature releases
+- Breaking changes
+- Significant bug fix batches
+- User explicitly requesting a release
+
+**What does NOT trigger a version bump:**
+- Documentation changes
+- Diagram regeneration
+- CI/CD improvements
+- Development tooling changes
+- Refactoring without user-facing changes
+
+**Release checklist (all steps require user approval):**
+1. Update `VERSION` file with new version
+2. Move `[Unreleased]` items in `CHANGELOG.md` to a new version section
+3. Update `src/JIM.PowerShell/JIM/JIM.psd1` — `ModuleVersion` field
+4. Commit: `git commit -m "Release vX.Y.Z"`
+5. Tag: `git tag vX.Y.Z`
+6. Push: `git push origin main --tags`
+
+> **Full release process, air-gapped deployment, and Docker image details:** See `docs/RELEASE_PROCESS.md`
+
 ## Resources
 
 - **Full Architecture Guide**: `docs/DEVELOPER_GUIDE.md`
