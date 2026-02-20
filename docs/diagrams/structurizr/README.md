@@ -85,7 +85,7 @@ The workspace contains C4 diagrams at three levels:
 |------|-------------|
 | `workspace.dsl` | Structurizr DSL model defining all diagrams |
 | `docs/01-overview.md` | System overview documentation (shown in Structurizr) |
-| `adrs/0001-metaverse-pattern.md` | Architecture Decision Record for metaverse pattern |
+| `adrs/` | Symlink to `docs/adrs/` - Architecture Decision Records (shown in Structurizr via `!adrs`) |
 
 ## Editing the Diagrams
 
