@@ -183,10 +183,12 @@ jim-diagrams() {
 
   echo "Structurizr Lite is ready."
 
-  # Remove old images
+  # Remove old images (light, dark, and legacy root-level)
   rm -f "${repo_root}/docs/diagrams/images"/jim-structurizr-1-*.svg
+  rm -f "${repo_root}/docs/diagrams/images/light"/jim-structurizr-1-*.svg
+  rm -f "${repo_root}/docs/diagrams/images/dark"/jim-structurizr-1-*.svg
 
-  # Export diagrams
+  # Export diagrams (light + dark)
   node "${structurizr_dir}/export-diagrams.js" \
     "http://localhost:${port}/workspace/diagrams" \
     "${repo_root}/docs/diagrams/images"
@@ -198,8 +200,11 @@ jim-diagrams() {
 
   if [ $export_rc -eq 0 ]; then
     echo ""
-    echo "Diagrams exported to docs/diagrams/images/"
-    ls -1 "${repo_root}/docs/diagrams/images"/jim-structurizr-1-*.svg 2>/dev/null | sed 's|.*/||' | sed 's/^/  /'
+    echo "Diagrams exported:"
+    echo "  Light mode (docs/diagrams/images/light/):"
+    ls -1 "${repo_root}/docs/diagrams/images/light"/jim-structurizr-1-*.svg 2>/dev/null | sed 's|.*/||' | sed 's/^/    /'
+    echo "  Dark mode (docs/diagrams/images/dark/):"
+    ls -1 "${repo_root}/docs/diagrams/images/dark"/jim-structurizr-1-*.svg 2>/dev/null | sed 's|.*/||' | sed 's/^/    /'
   else
     echo "ERROR: Diagram export failed."
     return 1

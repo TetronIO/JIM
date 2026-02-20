@@ -268,6 +268,43 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
                 dashed true
                 color #999999
             }
+
+            dark {
+                element "Software System" {
+                    background #2b8ee6
+                    color #ffffff
+                }
+                element "External" {
+                    background #777777
+                    color #ffffff
+                }
+                element "Person" {
+                    background #1a6fbf
+                    color #ffffff
+                }
+                element "Container" {
+                    background #5aa5eb
+                    color #ffffff
+                }
+                element "Component" {
+                    background #4a90d9
+                    color #ffffff
+                }
+                element "Client Library" {
+                    background #6dbce8
+                    color #ffffff
+                }
+                element "Planned" {
+                    background #333333
+                    color #999999
+                }
+                relationship "Relationship" {
+                    color #cccccc
+                }
+                relationship "Planned" {
+                    color #666666
+                }
+            }
         }
     }
 

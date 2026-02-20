@@ -8,13 +8,19 @@ This folder contains the C4 model architecture diagrams for JIM, defined using [
 
 Shows JIM's interactions with external systems and users.
 
-![System Context](../images/jim-structurizr-1-SystemContext.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-SystemContext.svg">
+  <img alt="System Context" src="../images/light/jim-structurizr-1-SystemContext.svg">
+</picture>
 
 ### Level 2: Container
 
 Shows JIM's internal deployable units.
 
-![Containers](../images/jim-structurizr-1-Containers.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-Containers.svg">
+  <img alt="Containers" src="../images/light/jim-structurizr-1-Containers.svg">
+</picture>
 
 ### Level 3: Component
 
@@ -22,31 +28,46 @@ Shows JIM's internal deployable units.
 
 Blazor Pages, API Controllers, and Authentication Middleware.
 
-![Web Application Components](../images/jim-structurizr-1-WebAppComponents.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-WebAppComponents.svg">
+  <img alt="Web Application Components" src="../images/light/jim-structurizr-1-WebAppComponents.svg">
+</picture>
 
 #### Application Layer Components
 
 The business logic and domain services.
 
-![Application Layer Components](../images/jim-structurizr-1-AppLayerComponents.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-AppLayerComponents.svg">
+  <img alt="Application Layer Components" src="../images/light/jim-structurizr-1-AppLayerComponents.svg">
+</picture>
 
 #### Worker Components
 
 Import, sync, and export task processors.
 
-![Worker Components](../images/jim-structurizr-1-WorkerComponents.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-WorkerComponents.svg">
+  <img alt="Worker Components" src="../images/light/jim-structurizr-1-WorkerComponents.svg">
+</picture>
 
 #### Connector Components
 
 External system integration adapters.
 
-![Connector Components](../images/jim-structurizr-1-ConnectorComponents.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-ConnectorComponents.svg">
+  <img alt="Connector Components" src="../images/light/jim-structurizr-1-ConnectorComponents.svg">
+</picture>
 
 #### Scheduler Components
 
 Schedule evaluation and execution triggering.
 
-![Scheduler Components](../images/jim-structurizr-1-SchedulerComponents.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-SchedulerComponents.svg">
+  <img alt="Scheduler Components" src="../images/light/jim-structurizr-1-SchedulerComponents.svg">
+</picture>
 
 ## Exporting Diagrams
 
@@ -58,7 +79,12 @@ Run the `jim-diagrams` alias from the repository root:
 jim-diagrams
 ```
 
-This starts Structurizr Lite in Docker, exports all diagrams as SVG using headless Chromium, saves them to `docs/diagrams/images/`, and cleans up automatically.
+This starts Structurizr Lite in Docker, exports all diagrams as SVG using headless Chromium, and cleans up automatically. Both light and dark mode variants are exported:
+
+- Light mode SVGs: `docs/diagrams/images/light/`
+- Dark mode SVGs: `docs/diagrams/images/dark/`
+
+GitHub automatically shows the appropriate variant based on the reader's theme preference using the `<picture>` element.
 
 Prerequisites: Node.js, Docker. Dependencies are installed automatically on first run.
 
