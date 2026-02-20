@@ -1486,21 +1486,25 @@ public class SyncImportTaskProcessor
         // Build external ID lookup dictionaries for O(1) in-memory resolution instead of O(N) linear scans per reference
         var externalIdLookups = BuildExternalIdLookups(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
 
-        // enumerate just the CSOs with unresolved references, for efficiency
+        // Phase 1: Resolve from in-memory dictionaries and collect still-unresolved references for batch DB query
+        var unresolvedItems = new List<(ConnectedSystemObject Cso, ConnectedSystemObjectAttributeValue AttrValue, ConnectedSystemObjectTypeAttribute ExternalIdAttribute)>();
+
         foreach (var csoToProcess in connectedSystemObjectsToBeCreated.Where(cso => cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))))
         {
             var externalIdAttribute = csoToProcess.Type.Attributes.Single(a => a.IsExternalId);
             var secondaryExternalIdAttribute = csoToProcess.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
             var externalIdAttributeToUse = secondaryExternalIdAttribute ?? externalIdAttribute;
 
-            // enumerate just the attribute values for this CSO that are for unresolved references
             foreach (var referenceAttributeValue in csoToProcess.AttributeValues.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
-                await ResolveAttributeValueReferenceAsync(csoToProcess, referenceAttributeValue, externalIdAttributeToUse, externalIdLookups, rpeiLookup);
+            {
+                var resolved = ResolveAttributeValueFromLookups(referenceAttributeValue, externalIdAttributeToUse, externalIdLookups);
+                if (!resolved)
+                    unresolvedItems.Add((csoToProcess, referenceAttributeValue, externalIdAttributeToUse));
+            }
 
             processedCount++;
             _activity.ObjectsProcessed = processedCount;
 
-            // persist progress at page boundaries for consistent UI updates
             if (processedCount % pageSize == 0)
                 await _jim.Activities.UpdateActivityAsync(_activity);
         }
@@ -1511,35 +1515,116 @@ public class SyncImportTaskProcessor
             var secondaryExternalIdAttribute = csoToProcess.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
             var externalIdAttributeToUse = secondaryExternalIdAttribute ?? externalIdAttribute;
 
-            // enumerate just the attribute values for this CSO that are for unresolved references
             foreach (var referenceAttributeValue in csoToProcess.PendingAttributeValueAdditions.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
-                await ResolveAttributeValueReferenceAsync(csoToProcess, referenceAttributeValue, externalIdAttributeToUse, externalIdLookups, rpeiLookup);
+            {
+                var resolved = ResolveAttributeValueFromLookups(referenceAttributeValue, externalIdAttributeToUse, externalIdLookups);
+                if (!resolved)
+                    unresolvedItems.Add((csoToProcess, referenceAttributeValue, externalIdAttributeToUse));
+            }
 
             processedCount++;
             _activity.ObjectsProcessed = processedCount;
 
-            // persist progress at page boundaries for consistent UI updates
             if (processedCount % pageSize == 0)
                 await _jim.Activities.UpdateActivityAsync(_activity);
+        }
+
+        // Phase 2: Batch DB query for remaining unresolved references (eliminates N+1 individual queries)
+        if (unresolvedItems.Count > 0)
+        {
+            // Collect unresolved values grouped by lookup type
+            var unresolvedPrimaryValues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var unresolvedSecondaryValues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int? primaryAttributeId = null;
+
+            foreach (var (_, attrValue, externalIdAttribute) in unresolvedItems)
+            {
+                if (externalIdAttribute.IsSecondaryExternalId && externalIdAttribute.Type == AttributeDataType.Text)
+                    unresolvedSecondaryValues.Add(attrValue.UnresolvedReferenceValue!);
+                else
+                {
+                    unresolvedPrimaryValues.Add(attrValue.UnresolvedReferenceValue!);
+                    primaryAttributeId ??= externalIdAttribute.Id;
+                }
+            }
+
+            // Batch query the database in pages using the configurable sync page size
+            var dbPrimaryResults = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+            var dbSecondaryResults = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+
+            if (unresolvedPrimaryValues.Count > 0 && primaryAttributeId.HasValue)
+            {
+                var primaryValuesList = unresolvedPrimaryValues.ToList();
+                for (var i = 0; i < primaryValuesList.Count; i += pageSize)
+                {
+                    var batch = primaryValuesList.Skip(i).Take(pageSize);
+                    var batchResults = await _jim.ConnectedSystems.GetConnectedSystemObjectsByAttributeValuesAsync(
+                        _connectedSystem.Id, primaryAttributeId.Value, batch);
+                    foreach (var kvp in batchResults)
+                        dbPrimaryResults.TryAdd(kvp.Key, kvp.Value);
+                }
+            }
+
+            if (unresolvedSecondaryValues.Count > 0)
+            {
+                var secondaryValuesList = unresolvedSecondaryValues.ToList();
+                for (var i = 0; i < secondaryValuesList.Count; i += pageSize)
+                {
+                    var batch = secondaryValuesList.Skip(i).Take(pageSize);
+                    var batchResults = await _jim.ConnectedSystems.GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(
+                        _connectedSystem.Id, batch);
+                    foreach (var kvp in batchResults)
+                        dbSecondaryResults.TryAdd(kvp.Key, kvp.Value);
+                }
+            }
+
+            // Phase 3: Apply DB results and report errors for truly unresolvable references
+            foreach (var (cso, attrValue, externalIdAttribute) in unresolvedItems)
+            {
+                ConnectedSystemObject? referencedCso = null;
+                if (externalIdAttribute.IsSecondaryExternalId && externalIdAttribute.Type == AttributeDataType.Text)
+                    dbSecondaryResults.TryGetValue(attrValue.UnresolvedReferenceValue!, out referencedCso);
+                else
+                    dbPrimaryResults.TryGetValue(attrValue.UnresolvedReferenceValue!, out referencedCso);
+
+                if (referencedCso != null)
+                {
+                    Log.Debug($"ResolveReferencesAsync: Matched an unresolved reference ({attrValue.UnresolvedReferenceValue}) to CSO: {referencedCso.Id} (from database batch query)");
+                    attrValue.ReferenceValue = referencedCso;
+                }
+                else
+                {
+                    // reference not found. referenced object probably out of container scope!
+                    // todo: make it a per-connected system setting whether to raise an error, or ignore. sometimes this is desirable.
+                    rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem);
+                    if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
+                    {
+                        activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {attrValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
+                        activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
+                    }
+                    else
+                    {
+                        Log.Warning($"ResolveReferencesAsync: Couldn't find an ActivityRunProfileExecutionItem for cso: {cso.Id}, unresolved reference: {attrValue.UnresolvedReferenceValue}");
+                    }
+
+                    Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {attrValue.UnresolvedReferenceValue}");
+                }
+            }
         }
 
         // persist final progress so the UI reflects completion before moving to the next phase
         await _jim.Activities.UpdateActivityAsync(_activity);
     }
 
-    private async Task ResolveAttributeValueReferenceAsync(ConnectedSystemObject csoToProcess, ConnectedSystemObjectAttributeValue referenceAttributeValue, ConnectedSystemObjectTypeAttribute externalIdAttribute, ExternalIdLookups lookups, Dictionary<ConnectedSystemObject, ActivityRunProfileExecutionItem> rpeiLookup)
+    /// <summary>
+    /// Attempts to resolve an attribute value's unresolved reference using the pre-built in-memory lookup dictionaries.
+    /// Returns true if the reference was resolved, false if it needs to be resolved via database fallback.
+    /// </summary>
+    private static bool ResolveAttributeValueFromLookups(ConnectedSystemObjectAttributeValue referenceAttributeValue, ConnectedSystemObjectTypeAttribute externalIdAttribute, ExternalIdLookups lookups)
     {
-        // try and find a cso in the in-memory lookup dictionaries, or in the database, that has an identifier
-        // matching the UnresolvedReferenceValue property.
-        // - use O(1) dictionary lookups for in-memory resolution (built from both created and updated CSO lists)
-        // - fall back to database query if not found in-memory
-        // - assign the cso in the reference property
-
-        // vs linting issue. it doesn't know how to interpret the loop query and thinks UnresolvedReferenceValue may be null.
         if (string.IsNullOrEmpty(referenceAttributeValue.UnresolvedReferenceValue))
-            return;
+            return true; // nothing to resolve
 
-        // try and find the referenced object using O(1) dictionary lookups
         ConnectedSystemObject? referencedConnectedSystemObject = null;
 
         if (externalIdAttribute.IsExternalId)
@@ -1617,55 +1702,12 @@ public class SyncImportTaskProcessor
             throw new InvalidDataException("externalIdAttributeToUse wasn't external or secondary external id");
         }
 
-        // no match in-memory, try and find a matching CSO in the database
-        // IMPORTANT: For secondary external IDs, we must search across ALL object types because
-        // references can point to objects of different types (e.g., a group's member reference
-        // points to users, other groups, etc.). Each object type has its own attribute schema
-        // with different attribute IDs, so we can't use the source object's attribute ID.
         if (referencedConnectedSystemObject == null)
-        {
-            if (externalIdAttribute.IsSecondaryExternalId && externalIdAttribute.Type == AttributeDataType.Text)
-            {
-                // Secondary external ID lookup needs to search across all object types
-                referencedConnectedSystemObject = await _jim.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(
-                    _connectedSystem.Id,
-                    referenceAttributeValue.UnresolvedReferenceValue);
-            }
-            else
-            {
-                // Primary external ID lookup can use the attribute ID (though it may also have cross-type issues)
-                referencedConnectedSystemObject = await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(
-                    _connectedSystem.Id,
-                    externalIdAttribute.Id,
-                    referenceAttributeValue.UnresolvedReferenceValue);
-            }
-        }
+            return false;
 
-        if (referencedConnectedSystemObject != null)
-        {
-            // referenced cso found! set the ReferenceValue property, and leave the UnresolvedReferenceValue in place, as we'll use that for looking for updates to existing references on import.
-            Log.Debug($"ResolveReferencesAsync: Matched an unresolved reference ({referenceAttributeValue.UnresolvedReferenceValue}) to CSO: {referencedConnectedSystemObject.Id}");
-            referenceAttributeValue.ReferenceValue = referencedConnectedSystemObject;
-        }
-        else
-        {
-            // reference not found. referenced object probably out of container scope!
-            // todo: make it a per-connected system setting whether to raise an error, or ignore. sometimes this is desirable.
-            rpeiLookup.TryGetValue(csoToProcess, out var activityRunProfileExecutionItem);
-            if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
-            {
-                activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {referenceAttributeValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
-                activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
-            }
-            else
-            {
-                // CSO may not have been persisted yet or ActivityRunProfileExecutionItem wasn't created
-                // Log a warning but don't throw - this can happen with references to objects outside container scope
-                Log.Warning($"ResolveReferencesAsync: Couldn't find an ActivityRunProfileExecutionItem for cso: {csoToProcess.Id}, unresolved reference: {referenceAttributeValue.UnresolvedReferenceValue}");
-            }
-
-            Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {referenceAttributeValue.UnresolvedReferenceValue}");
-        }
+        Log.Debug($"ResolveReferencesAsync: Matched an unresolved reference ({referenceAttributeValue.UnresolvedReferenceValue}) to CSO: {referencedConnectedSystemObject.Id}");
+        referenceAttributeValue.ReferenceValue = referencedConnectedSystemObject;
+        return true;
     }
 
     /// <summary>

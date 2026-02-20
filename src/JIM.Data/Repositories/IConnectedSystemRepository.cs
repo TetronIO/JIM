@@ -19,6 +19,28 @@ public interface IConnectedSystemRepository
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue);
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, long attributeValue);
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
+
+    /// <summary>
+    /// Batch loads Connected System Objects by multiple primary external ID string values in a single query.
+    /// Used for reference resolution to eliminate N+1 individual lookups.
+    /// Uses case-insensitive matching for string comparison.
+    /// </summary>
+    /// <param name="connectedSystemId">The connected system to search within.</param>
+    /// <param name="attributeId">The external ID attribute to match against.</param>
+    /// <param name="attributeValues">The string values to search for.</param>
+    /// <returns>A dictionary keyed by lowercase attribute value for O(1) lookup.</returns>
+    public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(int connectedSystemId, int attributeId, IEnumerable<string> attributeValues);
+
+    /// <summary>
+    /// Batch loads Connected System Objects by multiple secondary external ID string values across ALL object types.
+    /// Used for reference resolution where referenced objects can be of any type (e.g. LDAP group members).
+    /// Uses case-insensitive matching for string comparison.
+    /// </summary>
+    /// <param name="connectedSystemId">The connected system to search within.</param>
+    /// <param name="secondaryExternalIdValues">The secondary external ID values to search for (e.g. LDAP DNs).</param>
+    /// <returns>A dictionary keyed by lowercase attribute value for O(1) lookup.</returns>
+    public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues);
+
     public Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId);
     public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id);
     public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name);

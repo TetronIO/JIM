@@ -1062,6 +1062,97 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.StringValue.ToLower() == lowerValue));
     }
 
+    public async Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
+    {
+        var values = attributeValues.ToList();
+        if (values.Count == 0)
+            return new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+
+        // Use case-insensitive matching consistent with the single-value method
+        var lowerValues = values.Select(v => v.ToLowerInvariant()).ToList();
+        var csos = await Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
+            .Include(cso => cso.Type)
+            .ThenInclude(t => t.Attributes)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.ReferenceValue)
+            .ThenInclude(refCso => refCso!.AttributeValues)
+            .ThenInclude(refAv => refAv.Attribute)
+            .Where(cso =>
+                cso.ConnectedSystem.Id == connectedSystemId &&
+                cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.StringValue != null && lowerValues.Contains(av.StringValue.ToLower())))
+            .ToListAsync();
+
+        // Build dictionary keyed by lowercase attribute value for case-insensitive lookup.
+        // Use TryAdd for duplicates — first match wins (matching single-value method semantics).
+        var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+        foreach (var cso in csos)
+        {
+            var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.StringValue != null);
+            if (matchingAttrValue?.StringValue != null)
+            {
+                if (!result.TryAdd(matchingAttrValue.StringValue, cso))
+                {
+                    Log.Warning("GetConnectedSystemObjectsByAttributeValuesAsync: Found duplicate Connected System Objects for external ID '{ExternalId}' in connected system {ConnectedSystemId}. Returning first match.",
+                        matchingAttrValue.StringValue, connectedSystemId);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public async Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues)
+    {
+        var values = secondaryExternalIdValues.ToList();
+        if (values.Count == 0)
+            return new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+
+        // Use case-insensitive matching consistent with the single-value method
+        var lowerValues = values.Select(v => v.ToLowerInvariant()).ToList();
+        var csos = await Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
+            .Include(cso => cso.Type)
+            .ThenInclude(t => t.Attributes)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.ReferenceValue)
+            .ThenInclude(refCso => refCso!.AttributeValues)
+            .ThenInclude(refAv => refAv.Attribute)
+            .Where(cso =>
+                cso.ConnectedSystemId == connectedSystemId &&
+                cso.SecondaryExternalIdAttributeId != null &&
+                cso.AttributeValues.Any(av =>
+                    av.AttributeId == cso.SecondaryExternalIdAttributeId &&
+                    av.StringValue != null &&
+                    lowerValues.Contains(av.StringValue.ToLower())))
+            .ToListAsync();
+
+        // Build dictionary keyed by the secondary external ID value for case-insensitive lookup.
+        var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+        foreach (var cso in csos)
+        {
+            if (!cso.SecondaryExternalIdAttributeId.HasValue)
+                continue;
+
+            var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av =>
+                av.AttributeId == cso.SecondaryExternalIdAttributeId && av.StringValue != null);
+            if (matchingAttrValue?.StringValue != null)
+            {
+                if (!result.TryAdd(matchingAttrValue.StringValue, cso))
+                {
+                    Log.Warning("GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync: Found duplicate Connected System Objects for secondary external ID '{SecondaryExternalId}' in connected system {ConnectedSystemId}. Returning first match.",
+                        matchingAttrValue.StringValue, connectedSystemId);
+                }
+            }
+        }
+
+        return result;
+    }
+
     public async Task<int> GetConnectedSystemObjectCountAsync()
     {
         return await Repository.Database.ConnectedSystemObjects.CountAsync();
