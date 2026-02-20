@@ -51,7 +51,9 @@
         "humao.rest-client",
         "eamodio.gitlens",
         // CSV viewing and editing
-        "mechatroner.rainbow-csv"
+        "mechatroner.rainbow-csv",
+        // Mermaid diagrams
+        "MermaidChart.vscode-mermaid-chart"
       ],
       // VS Code settings
       "settings": {
