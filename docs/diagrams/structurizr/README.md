@@ -18,11 +18,23 @@ Shows JIM's internal deployable units.
 
 ### Level 3: Component
 
+#### Web Application Components
+
+Blazor Pages, API Controllers, and Authentication Middleware.
+
+![Web Application Components](../images/jim-structurizr-1-WebAppComponents.svg)
+
 #### Application Layer Components
 
 The business logic and domain services.
 
 ![Application Layer Components](../images/jim-structurizr-1-AppLayerComponents.svg)
+
+#### Worker Components
+
+Import, sync, and export task processors.
+
+![Worker Components](../images/jim-structurizr-1-WorkerComponents.svg)
 
 #### Connector Components
 
@@ -32,7 +44,7 @@ External system integration adapters.
 
 #### Scheduler Components
 
-Scheduled job execution.
+Schedule evaluation and execution triggering.
 
 ![Scheduler Components](../images/jim-structurizr-1-SchedulerComponents.svg)
 
@@ -76,8 +88,8 @@ The workspace contains C4 diagrams at three levels:
 - **WebAppComponents** - Blazor Pages, API Controllers, Authentication Middleware
 - **AppLayerComponents** - JimApplication Facade and domain services
 - **WorkerComponents** - Worker Host and task processors
-- **ConnectorComponents** - Connector Registry and connector implementations
-- **SchedulerComponents** - Scheduler Host and Schedule Evaluator
+- **ConnectorComponents** - LDAP and File connector implementations
+- **SchedulerComponents** - Scheduler Host
 
 ## Files
 
