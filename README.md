@@ -49,10 +49,12 @@ Why choose JIM?
 ## Architecture
 JIM is a container-based distributed application implementing the metaverse pattern for centralised identity governance.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
-  <img alt="JIM System Context" src="docs/diagrams/images/light/jim-structurizr-1-SystemContext.svg">
-</picture>
+<a href="docs/diagrams/images/light/jim-structurizr-1-SystemContext.svg">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
+    <img alt="JIM System Context" src="docs/diagrams/images/light/jim-structurizr-1-SystemContext.svg">
+  </picture>
+</a>
 
 **Components:**
 - **JIM.Web** - A website with integrated REST API, built using [ASP.NET](https://asp.net/) Blazor Server. The API is available at `/api/` with Swagger documentation at `/api/swagger`.
@@ -61,10 +63,12 @@ JIM is a container-based distributed application implementing the metaverse patt
 - **JIM.PowerShell** - A cross-platform PowerShell module (Windows, macOS, Linux) for full configuration and automation of JIM, enabling Identity as Code (IDaC)
 - A database - PostgreSQL
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/images/dark/jim-structurizr-1-Containers.svg">
-  <img alt="JIM Containers" src="docs/diagrams/images/light/jim-structurizr-1-Containers.svg">
-</picture>
+<a href="docs/diagrams/images/light/jim-structurizr-1-Containers.svg">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/images/dark/jim-structurizr-1-Containers.svg">
+    <img alt="JIM Containers" src="docs/diagrams/images/light/jim-structurizr-1-Containers.svg">
+  </picture>
+</a>
 
 For detailed architecture diagrams (Component level), see the [Architecture Diagrams](docs/diagrams/structurizr/README.md).
 

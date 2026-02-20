@@ -8,19 +8,23 @@ This folder contains the C4 model architecture diagrams for JIM, defined using [
 
 Shows JIM's interactions with external systems and users.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-SystemContext.svg">
-  <img alt="System Context" src="../images/light/jim-structurizr-1-SystemContext.svg">
-</picture>
+<a href="../images/light/jim-structurizr-1-SystemContext.svg">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-SystemContext.svg">
+    <img alt="System Context" src="../images/light/jim-structurizr-1-SystemContext.svg">
+  </picture>
+</a>
 
 ### Level 2: Container
 
 Shows JIM's internal deployable units.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-Containers.svg">
-  <img alt="Containers" src="../images/light/jim-structurizr-1-Containers.svg">
-</picture>
+<a href="../images/light/jim-structurizr-1-Containers.svg">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-Containers.svg">
+    <img alt="Containers" src="../images/light/jim-structurizr-1-Containers.svg">
+  </picture>
+</a>
 
 ### Level 3: Component
 
@@ -28,46 +32,56 @@ Shows JIM's internal deployable units.
 
 Blazor Pages, API Controllers, and Authentication Middleware.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-WebAppComponents.svg">
-  <img alt="Web Application Components" src="../images/light/jim-structurizr-1-WebAppComponents.svg">
-</picture>
+<a href="../images/light/jim-structurizr-1-WebAppComponents.svg">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-WebAppComponents.svg">
+    <img alt="Web Application Components" src="../images/light/jim-structurizr-1-WebAppComponents.svg">
+  </picture>
+</a>
 
 #### Application Layer Components
 
 The business logic and domain services.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-AppLayerComponents.svg">
-  <img alt="Application Layer Components" src="../images/light/jim-structurizr-1-AppLayerComponents.svg">
-</picture>
+<a href="../images/light/jim-structurizr-1-AppLayerComponents.svg">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-AppLayerComponents.svg">
+    <img alt="Application Layer Components" src="../images/light/jim-structurizr-1-AppLayerComponents.svg">
+  </picture>
+</a>
 
 #### Worker Components
 
 Import, sync, and export task processors.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-WorkerComponents.svg">
-  <img alt="Worker Components" src="../images/light/jim-structurizr-1-WorkerComponents.svg">
-</picture>
+<a href="../images/light/jim-structurizr-1-WorkerComponents.svg">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-WorkerComponents.svg">
+    <img alt="Worker Components" src="../images/light/jim-structurizr-1-WorkerComponents.svg">
+  </picture>
+</a>
 
 #### Connector Components
 
 External system integration adapters.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-ConnectorComponents.svg">
-  <img alt="Connector Components" src="../images/light/jim-structurizr-1-ConnectorComponents.svg">
-</picture>
+<a href="../images/light/jim-structurizr-1-ConnectorComponents.svg">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-ConnectorComponents.svg">
+    <img alt="Connector Components" src="../images/light/jim-structurizr-1-ConnectorComponents.svg">
+  </picture>
+</a>
 
 #### Scheduler Components
 
 Schedule evaluation and execution triggering.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-SchedulerComponents.svg">
-  <img alt="Scheduler Components" src="../images/light/jim-structurizr-1-SchedulerComponents.svg">
-</picture>
+<a href="../images/light/jim-structurizr-1-SchedulerComponents.svg">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-SchedulerComponents.svg">
+    <img alt="Scheduler Components" src="../images/light/jim-structurizr-1-SchedulerComponents.svg">
+  </picture>
+</a>
 
 ## Exporting Diagrams
 
