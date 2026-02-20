@@ -48,6 +48,27 @@ Schedule evaluation and execution triggering.
 
 ![Scheduler Components](../images/jim-structurizr-1-SchedulerComponents.svg)
 
+## Exporting Diagrams
+
+### Automated Export (Recommended)
+
+Run the `jim-diagrams` alias from the repository root:
+
+```bash
+jim-diagrams
+```
+
+This starts Structurizr Lite in Docker, exports all diagrams as SVG using headless Chromium, saves them to `docs/diagrams/images/`, and cleans up automatically.
+
+Prerequisites: Node.js, Docker. Dependencies are installed automatically on first run.
+
+### Manual Export
+
+From Structurizr Lite, you can export diagrams as:
+- PNG images (click the export button on each diagram)
+- SVG for documentation
+- PlantUML for alternative rendering
+
 ## Viewing Interactive Diagrams
 
 ### Using Structurizr Lite (Local Docker)
@@ -106,24 +127,3 @@ The workspace contains C4 diagrams at three levels:
 1. Edit `workspace.dsl` using any text editor
 2. Refresh Structurizr Lite in your browser to see changes
 3. The DSL syntax is documented at https://docs.structurizr.com/dsl/language
-
-## Exporting Diagrams
-
-### Automated Export (Recommended)
-
-Run the `jim-diagrams` alias from the repository root:
-
-```bash
-jim-diagrams
-```
-
-This starts Structurizr Lite in Docker, exports all diagrams as SVG using headless Chromium, saves them to `docs/diagrams/images/`, and cleans up automatically.
-
-Prerequisites: Node.js, Docker. Dependencies are installed automatically on first run.
-
-### Manual Export
-
-From Structurizr Lite, you can export diagrams as:
-- PNG images (click the export button on each diagram)
-- SVG for documentation
-- PlantUML for alternative rendering
