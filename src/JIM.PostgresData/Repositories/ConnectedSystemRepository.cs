@@ -1891,6 +1891,56 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return result;
     }
 
+    public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        var csoIdList = connectedSystemObjectIds.ToList();
+        if (csoIdList.Count == 0)
+            return new Dictionary<Guid, PendingExport>();
+
+        // Lightweight query: only load AttributeValueChanges with Attribute (needed for reconciliation comparison).
+        // Skip ConnectedSystemObject (caller already has CSOs in memory), ConnectedSystem, and SourceMetaverseObject.
+        // AsNoTracking avoids identity resolution overhead against the large tracked entity graph from the import phase.
+        var pendingExports = await Repository.Database.PendingExports
+            .AsNoTracking()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Where(pe => pe.ConnectedSystemObjectId != null && csoIdList.Contains(pe.ConnectedSystemObjectId.Value))
+            .ToListAsync();
+
+        // Build dictionary mapping CSO ID to pending export using the FK property (no navigation needed)
+        var result = new Dictionary<Guid, PendingExport>();
+
+        foreach (var pe in pendingExports.Where(pe => pe.ConnectedSystemObjectId != null))
+        {
+            var csoId = pe.ConnectedSystemObjectId!.Value;
+            if (result.ContainsKey(csoId))
+            {
+                Log.Error("GetPendingExportsLightweightByConnectedSystemObjectIdsAsync: DUPLICATE PENDING EXPORT detected for CSO {CsoId}. " +
+                    "Existing PE: {ExistingPeId}, Duplicate PE: {DuplicatePeId}. " +
+                    "This is a data integrity violation - failing the operation.",
+                    csoId, result[csoId].Id, pe.Id);
+
+                throw new DuplicatePendingExportException(
+                    $"Duplicate pending exports detected for Connected System Object {csoId}. " +
+                    $"Pending Export IDs: {result[csoId].Id} and {pe.Id}. " +
+                    $"This indicates a data integrity issue that must be investigated before sync can continue.");
+            }
+            result[csoId] = pe;
+        }
+
+        return result;
+    }
+
+    public async Task DeletePendingExportAttributeValueChangesAsync(IEnumerable<PendingExportAttributeValueChange> attributeValueChanges)
+    {
+        var changeList = attributeValueChanges.ToList();
+        if (changeList.Count == 0)
+            return;
+
+        Repository.Database.PendingExportAttributeValueChanges.RemoveRange(changeList);
+        await Repository.Database.SaveChangesAsync();
+    }
+
     public async Task<HashSet<Guid>> GetCsoIdsWithPendingExportsAsync(IEnumerable<Guid> connectedSystemObjectIds)
     {
         var csoIdList = connectedSystemObjectIds.ToList();

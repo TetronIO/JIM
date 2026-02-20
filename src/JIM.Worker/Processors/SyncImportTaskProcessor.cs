@@ -1877,13 +1877,16 @@ public class SyncImportTaskProcessor
             // Batch collections for deferred database operations (per page)
             var pendingExportsToDelete = new List<JIM.Models.Transactional.PendingExport>();
             var pendingExportsToUpdate = new List<JIM.Models.Transactional.PendingExport>();
+            var confirmedAttrChangesToDelete = new List<JIM.Models.Transactional.PendingExportAttributeValueChange>();
 
-            // Bulk fetch pending exports for this page's CSOs in a single query
+            // Lightweight fetch: AsNoTracking + only AttributeValueChanges with Attribute.
+            // Avoids loading ConnectedSystemObject/ConnectedSystem/SourceMetaverseObject (not needed for reconciliation)
+            // and eliminates EF Core identity resolution overhead against the import phase's tracked entity graph.
             Dictionary<Guid, JIM.Models.Transactional.PendingExport> pendingExportsByCsoId;
             using (Diagnostics.Sync.StartSpan("LoadPendingExports").SetTag("csoCount", pageCsos.Count))
             {
                 pendingExportsByCsoId = await _jim.Repository.ConnectedSystems
-                    .GetPendingExportsByConnectedSystemObjectIdsAsync(pageCsos.Select(c => c.Id));
+                    .GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(pageCsos.Select(c => c.Id));
             }
 
             Log.Verbose("ReconcilePendingExportsAsync: Page {Page}/{TotalPages}: Loaded {PendingExportCount} pending exports for {CsoCount} CSOs",
@@ -1921,6 +1924,11 @@ public class SyncImportTaskProcessor
                             else if (result.PendingExportToUpdate != null)
                             {
                                 pendingExportsToUpdate.Add(result.PendingExportToUpdate);
+
+                                // With AsNoTracking, EF Core won't detect collection removals.
+                                // Explicitly collect confirmed attribute changes for batch deletion.
+                                if (result.ConfirmedChanges.Count > 0)
+                                    confirmedAttrChangesToDelete.AddRange(result.ConfirmedChanges);
                             }
 
                             // Create execution items for failed exports (permanent failures)
@@ -1970,12 +1978,20 @@ public class SyncImportTaskProcessor
             // Batch persist pending export changes for this page
             using (Diagnostics.Sync.StartSpan("FlushPendingExportChanges")
                 .SetTag("deleteCount", pendingExportsToDelete.Count)
-                .SetTag("updateCount", pendingExportsToUpdate.Count))
+                .SetTag("updateCount", pendingExportsToUpdate.Count)
+                .SetTag("confirmedAttrChangeDeleteCount", confirmedAttrChangesToDelete.Count))
             {
                 if (pendingExportsToDelete.Count > 0)
                 {
                     await _jim.Repository.ConnectedSystems.DeletePendingExportsAsync(pendingExportsToDelete);
                     Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch deleted {Count} confirmed pending exports", page + 1, pendingExportsToDelete.Count);
+                }
+
+                // Delete confirmed attribute changes before updating (AsNoTracking requires explicit child deletion)
+                if (confirmedAttrChangesToDelete.Count > 0)
+                {
+                    await _jim.Repository.ConnectedSystems.DeletePendingExportAttributeValueChangesAsync(confirmedAttrChangesToDelete);
+                    Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch deleted {Count} confirmed attribute value changes", page + 1, confirmedAttrChangesToDelete.Count);
                 }
 
                 if (pendingExportsToUpdate.Count > 0)

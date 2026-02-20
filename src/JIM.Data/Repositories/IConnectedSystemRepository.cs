@@ -170,6 +170,31 @@ public interface IConnectedSystemRepository
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
     /// <summary>
+    /// Lightweight version of GetPendingExportsByConnectedSystemObjectIdsAsync for reconciliation.
+    /// Uses AsNoTracking and only loads AttributeValueChanges (with Attribute), avoiding the heavy
+    /// Include chains for ConnectedSystemObject, ConnectedSystem, and SourceMetaverseObject.
+    /// Uses the ConnectedSystemObjectId FK property for the dictionary key instead of loading the full CSO.
+    /// </summary>
+    /// <remarks>
+    /// Because entities are untracked, callers must explicitly handle child entity deletions
+    /// (e.g. confirmed PendingExportAttributeValueChange records) rather than relying on
+    /// EF Core change tracking to detect collection removals.
+    /// </remarks>
+    /// <param name="connectedSystemObjectIds">The CSO IDs to retrieve pending exports for.</param>
+    /// <returns>A dictionary mapping CSO ID to its pending export (if any).</returns>
+    /// <exception cref="JIM.Models.Exceptions.DuplicatePendingExportException">
+    /// Thrown when duplicate pending exports are found for the same CSO, indicating a data integrity violation.
+    /// </exception>
+    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// Deletes specific PendingExportAttributeValueChange records.
+    /// Used when working with untracked entities where EF Core cannot detect collection removals automatically.
+    /// </summary>
+    /// <param name="attributeValueChanges">The attribute value changes to delete.</param>
+    public Task DeletePendingExportAttributeValueChangesAsync(IEnumerable<PendingExportAttributeValueChange> attributeValueChanges);
+
+    /// <summary>
     /// Lightweight query that returns only the CSO IDs from the given set that have pending exports.
     /// Used to filter the CSO list before performing full pending export reconciliation,
     /// avoiding unnecessary iteration over CSOs that have no pending exports.
