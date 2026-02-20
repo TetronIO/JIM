@@ -1,6 +1,6 @@
 # Worker Database Performance Optimisation
 
-- **Status**: Proposed
+- **Status**: Planned
 - **Milestone**: Post-MVP
 - **Related**: `docs/plans/EXPORT_PERFORMANCE_OPTIMISATION.md`
 - **Created**: 2026-02-20

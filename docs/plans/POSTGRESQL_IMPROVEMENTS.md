@@ -126,7 +126,7 @@ jim.database:
 
 ## Improvement Plan
 
-### Phase 1: Index Optimisation (Priority: Medium) - COMPLETED
+### Phase 1: Index Optimisation (Priority: Medium) - IMPLEMENTED
 
 - [x] **1.1** Analyse slow query patterns using `pg_stat_statements`
 - [x] **1.2** Add composite index on `ConnectedSystemObject (ConnectedSystemId, TypeId)`
@@ -137,14 +137,14 @@ jim.database:
 - [x] **1.7** Add database connectivity check to health endpoint (`/api/v1/health/ready`)
 - [x] **1.8** Add unit tests for health controller
 
-### Phase 2: Operational Improvements (Priority: Low) - COMPLETED
+### Phase 2: Operational Improvements (Priority: Low) - IMPLEMENTED
 
 - [x] **2.1** Add `statement_timeout` (5 minutes) to prevent runaway queries
 - [x] **2.2** Add container health checks using `pg_isready`
 - [x] **2.3** Add `log_min_duration_statement` (1s prod, 0.5s dev) for slow query logging
 - [x] **2.4** Document backup/restore procedures (see below)
 
-### Phase 3: Connection Management (Priority: Low) - COMPLETED
+### Phase 3: Connection Management (Priority: Low) - IMPLEMENTED
 
 - [x] **3.1** Add explicit connection pooling parameters to connection string
 - [x] **3.2** Document connection pool settings (monitoring is via Npgsql logging)

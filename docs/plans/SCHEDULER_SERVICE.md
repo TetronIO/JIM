@@ -1,6 +1,6 @@
 # Plan: Implement Scheduler Service (Issue #168)
 
-- **Status:** Complete
+- **Status:** Implemented
 - **Milestone:** MVP
 - **GitHub Issue:** [#168](https://github.com/TetronIO/JIM/issues/168)
 

@@ -4,7 +4,7 @@
 
 Implement comprehensive deletion rule and deprovisioning functionality for JIM's identity lifecycle management. This addresses critical gaps preventing proper user deprovisioning when employees leave organisations or fall out of sync rule scope.
 
-**Status**: In Progress
+**Status**: Implemented
 **Milestone**: MVP
 **Related Issues**: #120 (scheduled deletion cleanup), #173 (integration testing), #203 (main tracking issue)
 
@@ -120,7 +120,7 @@ Tactical solution: Worker checks during idle time for MVOs with expired grace pe
 
 ## Implementation Phases
 
-### Phase 1: Data Model ✅ COMPLETE
+### Phase 1: Data Model ✅ IMPLEMENTED
 - [x] Add new enums to `CoreEnums.cs` (`MetaverseObjectOrigin`, `OutboundDeprovisionAction`, `InboundOutOfScopeAction`)
 - [x] Update `MetaverseObject` with new properties (`LastConnectorDisconnectedDate`, `Origin`, `IsPendingDeletion`, `DeletionEligibleDate`)
 - [x] Update `MetaverseObjectType` with trigger list (`DeletionTriggerConnectedSystemIds`)
@@ -128,18 +128,18 @@ Tactical solution: Worker checks during idle time for MVOs with expired grace pe
 - [x] Set admin MVO Origin to Internal in `JimApplication.InitialiseSsoAsync`
 - [x] Create database migration
 
-### Phase 2: API and PowerShell ✅ COMPLETE
+### Phase 2: API and PowerShell ✅ IMPLEMENTED
 - [x] Add PUT endpoint for `MetaverseObjectType` deletion rules
 - [x] Create `Set-JIMMetaverseObjectType` PowerShell cmdlet
 - [x] Unit tests for API endpoint
 
-### Phase 3: Out-of-Scope Deprovisioning ✅ COMPLETE
+### Phase 3: Out-of-Scope Deprovisioning ✅ IMPLEMENTED
 - [x] Implement outbound scope evaluation in `ExportEvaluationServer`
 - [x] Implement inbound scope evaluation in `SyncFullSyncTaskProcessor`
 - [x] Remove TODO comment at `SyncRule.cs:86-87`
 - [x] Unit tests for scope evaluation
 
-### Phase 4: Scheduled Cleanup ✅ COMPLETE
+### Phase 4: Scheduled Cleanup ✅ IMPLEMENTED
 - [x] Update `ProcessMvoDeletionRuleAsync` to use new fields (deferred deletion - sets `LastConnectorDisconnectedDate` only)
 - [x] Add reconnection logic to clear disconnection date
 - [x] Add cleanup loop in Worker idle time (`PerformHousekeepingAsync`)
@@ -158,7 +158,7 @@ Tactical solution: Worker checks during idle time for MVOs with expired grace pe
 - [x] Outbound scope filter test (Test 6) - validates ObjectScopingCriteriaGroups API (create/get/delete)
 - [x] **All tests use PowerShell cmdlets, NOT direct API calls**
 
-### Phase 6: Scope Filter API Support ✅ COMPLETED (MVP Required)
+### Phase 6: Scope Filter API Support ✅ IMPLEMENTEDD (MVP Required)
 **Note:** Scope filtering is fully implemented in the sync engine and UI. REST API now supports
 `ObjectScopingCriteriaGroups` management via dedicated endpoints.
 
@@ -249,7 +249,7 @@ Integration tests needed for Object Matching Rules to validate all permutations:
 - JIM.Scheduler for configurable cleanup intervals
 - `Disable` and `MoveToArchiveOU` deprovisioning actions (Post-MVP)
 
-## Completed Enhancements
+## Implemented Enhancements
 
 ### Pending Deletions UI and API (December 2024)
 - **UI Page**: `/admin/pending-deletions` - Displays all MVOs in the deletion pipeline

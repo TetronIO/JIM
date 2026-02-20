@@ -1,6 +1,6 @@
 # Drift Detection and Attribute Priority Design Document
 
-> **Status**: Drift Detection approved for implementation; Attribute Priority design approved but implementation deferred
+> **Status**: Drift Detection implemented; Attribute Priority design approved but implementation deferred
 > **Last Updated**: 2026-01-17
 
 ## Overview
@@ -591,7 +591,7 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 
 ## Implementation Plan
 
-> **Status**: Drift detection implementation is complete (Phases 1-4). Documentation (Phase 5) is pending.
+> **Status**: Drift detection implemented (Phases 1-4). Documentation (Phase 5) is pending.
 
 ### Drift Detection Implementation (Current Phase)
 

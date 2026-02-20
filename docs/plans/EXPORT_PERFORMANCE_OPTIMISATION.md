@@ -1,6 +1,6 @@
 # Export Performance Optimisation
 
-- **Status**: Complete (All 5 phases implemented)
+- **Status**: Implemented (All 5 phases)
 - **Milestone**: Post-MVP
 - **Related**: `docs/plans/OUTBOUND_SYNC_DESIGN.md` (Q8 - Parallelism Decision)
 - **Last Updated**: 2026-02-19
@@ -61,9 +61,9 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 ## Implementation Phases
 
-### Phase 1: Batch Database Operations (Low Risk, High Impact) - COMPLETE
+### Phase 1: Batch Database Operations (Low Risk, High Impact) - IMPLEMENTED
 
-**Status:** Merged in PR #334. Measured ~50% reduction in export time on Scenario 8 MediumLarge.
+**Status:** Implemented. Merged in PR #334. Measured ~50% reduction in export time on Scenario 8 MediumLarge.
 
 **Goal:** Eliminate per-object database round-trips after export execution.
 
@@ -75,9 +75,9 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 ---
 
-### Phase 2: LDAP Connector Pipelining (Moderate Risk, High Impact) - COMPLETE
+### Phase 2: LDAP Connector Pipelining (Moderate Risk, High Impact) - IMPLEMENTED
 
-**Status:** Complete. Integration tested via Scenarios 1, 2, 6, and 8.
+**Status:** Implemented. Integration tested via Scenarios 1, 2, 6, and 8.
 
 **Goal:** Process N LDAP operations concurrently within each batch using configurable concurrency.
 
@@ -115,9 +115,9 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 ---
 
-### Phase 3: Wire Up MaxParallelism for Batch Processing (Moderate Risk, Moderate Impact) - COMPLETE
+### Phase 3: Wire Up MaxParallelism for Batch Processing (Moderate Risk, Moderate Impact) - IMPLEMENTED
 
-**Status:** Complete. Integration tested via Scenarios 1, 2, 6, and 8.
+**Status:** Implemented. Integration tested via Scenarios 1, 2, 6, and 8.
 
 **Goal:** Process multiple export batches concurrently within a single export run profile.
 
@@ -159,9 +159,9 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 ---
 
-### Phase 3b: MaxExportParallelism as Per-Connected System Setting - COMPLETE
+### Phase 3b: MaxExportParallelism as Per-Connected System Setting - IMPLEMENTED
 
-**Status:** Implementation complete. MaxExportParallelism is now configurable per Connected System.
+**Status:** Implemented. MaxExportParallelism is now configurable per Connected System.
 
 **Goal:** Make parallel batch export opt-in per Connected System, gated by a connector capability flag.
 
@@ -202,9 +202,9 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 ---
 
-### Phase 4: Parallel Task Execution for Schedule Steps (Higher Risk, Moderate Impact) - COMPLETE
+### Phase 4: Parallel Task Execution for Schedule Steps (Higher Risk, Moderate Impact) - IMPLEMENTED
 
-**Status:** Complete. Integration tested via Scenario 6 (parallel timing validation confirms concurrent execution).
+**Status:** Implemented. Integration tested via Scenario 6 (parallel timing validation confirms concurrent execution).
 
 **Goal:** Allow schedule steps targeting different Connected Systems to execute concurrently within a parallel step group.
 
@@ -251,9 +251,9 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 
 ---
 
-### Phase 5: Queue-All-Steps-Upfront — Schedule Execution Pipeline (Moderate Risk, High Impact) - COMPLETE
+### Phase 5: Queue-All-Steps-Upfront — Schedule Execution Pipeline (Moderate Risk, High Impact) - IMPLEMENTED
 
-**Status:** Complete.
+**Status:** Implemented.
 
 **Goal:** Eliminate ~15 second per-step polling overhead by having the scheduler queue all steps upfront and having the worker drive step advancement. Aligns with the original design intent: scheduler is a queue manager, worker works through the queue.
 

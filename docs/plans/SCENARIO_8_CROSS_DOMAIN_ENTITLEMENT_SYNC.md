@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Complete** |
+| **Status** | **Implemented** |
 | **Milestone** | MVP |
 | **Related Issue** | [#173](https://github.com/TetronIO/JIM/issues/173) |
 | **Dependencies** | Source/Target AD containers (samba-ad-source, samba-ad-target) |
@@ -11,9 +11,9 @@
 
 ## Implementation Progress
 
-### Completed ✅
+### Implemented ✅
 
-- **Phase 1: Test Data Infrastructure** - Complete
+- **Phase 1: Test Data Infrastructure** - Implemented
   - `Populate-SambaAD-Scenario8.ps1` - Populates users and groups in Source AD
   - `Setup-Scenario8.ps1` - Configures JIM with Connected Systems, sync rules, and attribute mappings
   - `Invoke-Scenario8-CrossDomainEntitlementSync.ps1` - Test scenario runner
@@ -21,7 +21,7 @@
   - OU structure creation for both Source (Corp) and Target (CorpManaged)
   - Support for Nano through XXLarge templates
 
-- **Phase 2: JIM Configuration** - Complete
+- **Phase 2: JIM Configuration** - Implemented
   - Source LDAP Connected System (Quantum Dynamics APAC)
   - Target LDAP Connected System (Quantum Dynamics EMEA)
   - User and Group object type selection with required attributes
@@ -30,12 +30,12 @@
   - Matching rules (sAMAccountName -> Account Name)
   - Run profiles (Full Import, Full Sync, Export)
 
-- **Phase 3: ImportToMV Step** - Complete
+- **Phase 3: ImportToMV Step** - Implemented
   - Successfully imports users and groups from Source AD
   - Projects objects to Metaverse
   - Users and Groups visible in Metaverse with correct attributes
 
-- **Phase 4: InitialSync Step** - Complete
+- **Phase 4: InitialSync Step** - Implemented
   - Fixed reference attribute resolution (member attribute now resolves to DN instead of MVO GUID)
   - Exports with reference attributes are now properly deferred until referenced objects exist
   - Users and groups successfully provisioned to Target AD
@@ -45,7 +45,7 @@
     - `PendingExportReconciliationService`: Process `ExportNotConfirmed` status and `ExportedNotConfirmed` attribute changes during confirming import
   - Related: Created issue #287 for pending export visibility improvements
 
-- **Phase 5: ForwardSync Step** - Complete
+- **Phase 5: ForwardSync Step** - Implemented
   - Test script implemented in `Invoke-Scenario8-CrossDomainEntitlementSync.ps1`
   - **Uses Delta operations** (Delta Import, Delta Sync) for efficiency and to test delta functionality
   - Adds users to a test group in Source AD
@@ -55,32 +55,32 @@
   - Validates removed user no longer in Target AD group
   - Validates member count matches between Source and Target
 
-- **Run Profile Updates** - Complete
+- **Run Profile Updates** - Implemented
   - Added Delta Import and Delta Sync profiles to Setup-Scenario8.ps1
   - InitialSync uses Full Import/Sync (first-time population)
   - ForwardSync uses Delta Import/Sync (incremental changes)
 
-- **Phase 6: DetectDrift Step** - Complete
+- **Phase 6: DetectDrift Step** - Implemented
   - Test script implemented in `Invoke-Scenario8-CrossDomainEntitlementSync.ps1`
   - Makes unauthorised changes directly in Target AD (bypassing JIM)
   - Adds a user to one group, removes a user from another group
   - Runs Delta Import on Target AD to detect the drift
   - Validates drift is visible in Target AD and JIM has imported the changes
 
-- **Phase 7: ReassertState Step** - Complete
+- **Phase 7: ReassertState Step** - Implemented
   - Test script implemented in `Invoke-Scenario8-CrossDomainEntitlementSync.ps1`
   - Runs Delta Forward Sync to reassert authoritative Source state
   - Validates unauthorised additions are removed from Target AD
   - Validates unauthorised removals are restored in Target AD
   - Confirms member counts match between Source and Target
 
-- **Phase 8: NewGroup Step** - Complete
+- **Phase 8: NewGroup Step** - Implemented
   - Test script implemented in `Invoke-Scenario8-CrossDomainEntitlementSync.ps1`
   - Creates a new group `Project-Scenario8Test` in Source AD with members
   - Runs Delta Forward Sync to provision the new group to Target AD
   - Validates group exists in Target AD with correct members
 
-- **Phase 9: DeleteGroup Step** - Complete
+- **Phase 9: DeleteGroup Step** - Implemented
   - Test script implemented in `Invoke-Scenario8-CrossDomainEntitlementSync.ps1`
   - Deletes the test group from Source AD
   - Runs Delta Forward Sync to propagate deletion
@@ -88,7 +88,7 @@
   - With `DeletionGracePeriodDays = 0`, MVO is deleted **synchronously during sync** (not deferred to housekeeping)
   - Delete pending exports are created for target CSOs and executed in the subsequent export
 
-- **Phase 10: Synchronous MVO Deletion** - Complete (2026-01-20)
+- **Phase 10: Synchronous MVO Deletion** - Implemented (2026-01-20)
   - Implemented synchronous MVO deletion for 0-grace-period objects
   - Before: All MVO deletions were deferred to HousekeepingWorker (up to 60 second delay)
   - After: 0-grace-period MVOs are deleted immediately during sync
