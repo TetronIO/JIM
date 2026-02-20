@@ -53,8 +53,8 @@ JIM is a container-based distributed application implementing the metaverse patt
 
 **Components:**
 - **JIM.Web** - A website with integrated REST API, built using [ASP.NET](https://asp.net/) Blazor Server. The API is available at `/api/` with Swagger documentation at `/api/swagger`.
-- **JIM.Scheduler** - A console app, built using .NET
-- **JIM.Worker** - A console app, built using .NET
+- **JIM.Scheduler** - A background service that triggers synchronisation runs using cron or interval-based schedules, with multi-step sequential and parallel execution
+- **JIM.Worker** - A background service that processes import, sync, and export tasks with crash recovery and parallel execution support
 - **JIM.PowerShell** - A PowerShell module for scripting and automation
 - A database - PostgreSQL
 
