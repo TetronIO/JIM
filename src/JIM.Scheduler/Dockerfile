@@ -15,11 +15,13 @@ WORKDIR /app
 
 FROM mcr.microsoft.com/dotnet/sdk:9.0@sha256:03a7d87512a743b3d53416adae79eb89d2a7163de78bb58e7bc7b7e262e25750 AS build
 WORKDIR /src
-COPY ["JIM.Scheduler/JIM.Scheduler.csproj", "JIM.Scheduler/"]
+COPY ["Directory.Build.props", "./"]
+COPY ["VERSION", "./"]
+COPY ["src/JIM.Scheduler/JIM.Scheduler.csproj", "JIM.Scheduler/"]
 
 RUN dotnet restore "./JIM.Scheduler/JIM.Scheduler.csproj"
 
-COPY . .
+COPY src/ .
 WORKDIR "/src/JIM.Scheduler"
 
 # Publish stage - optimised for production

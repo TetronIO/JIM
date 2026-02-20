@@ -29,17 +29,19 @@ RUN apt-get update \
 
 FROM mcr.microsoft.com/dotnet/sdk:9.0@sha256:03a7d87512a743b3d53416adae79eb89d2a7163de78bb58e7bc7b7e262e25750 AS build
 WORKDIR /src
-COPY ["JIM.Web/JIM.Web.csproj", "JIM.Web/"]
-COPY ["JIM.Models/JIM.Models.csproj", "JIM.Models/"]
-COPY ["JIM.Application/JIM.Application.csproj", "JIM.Application/"]
-COPY ["JIM.PostgresData/JIM.PostgresData.csproj", "JIM.PostgresData/"]
-COPY ["JIM.Utilities/JIM.Utilities.csproj", "JIM.Utilities/"]
-COPY ["JIM.Connectors/JIM.Connectors.csproj", "JIM.Connectors/"]
-COPY ["JIM.Data/JIM.Data.csproj", "JIM.Data/"]
+COPY ["Directory.Build.props", "./"]
+COPY ["VERSION", "./"]
+COPY ["src/JIM.Web/JIM.Web.csproj", "JIM.Web/"]
+COPY ["src/JIM.Models/JIM.Models.csproj", "JIM.Models/"]
+COPY ["src/JIM.Application/JIM.Application.csproj", "JIM.Application/"]
+COPY ["src/JIM.PostgresData/JIM.PostgresData.csproj", "JIM.PostgresData/"]
+COPY ["src/JIM.Utilities/JIM.Utilities.csproj", "JIM.Utilities/"]
+COPY ["src/JIM.Connectors/JIM.Connectors.csproj", "JIM.Connectors/"]
+COPY ["src/JIM.Data/JIM.Data.csproj", "JIM.Data/"]
 
 RUN dotnet restore "./JIM.Web/JIM.Web.csproj"
 
-COPY . .
+COPY src/ .
 WORKDIR "/src/JIM.Web"
 
 # Publish stage - optimised for production

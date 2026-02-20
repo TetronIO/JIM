@@ -18,8 +18,8 @@ services:
       - DAC_READ_SEARCH
       - SYS_ADMIN
     build:
-      context: src/
-      dockerfile: JIM.Web/Dockerfile
+      context: .
+      dockerfile: src/JIM.Web/Dockerfile
     depends_on:
       jim.database:
         condition: service_healthy
@@ -49,8 +49,8 @@ services:
       - jim-logs-volume:/var/log/jim
       - jim-keys-volume:/data/keys
     build:
-      context: src/
-      dockerfile: JIM.Worker/Dockerfile
+      context: .
+      dockerfile: src/JIM.Worker/Dockerfile
     depends_on:
       jim.database:
         condition: service_healthy
@@ -70,8 +70,8 @@ services:
     volumes:
       - jim-logs-volume:/var/log/jim
     build:
-      context: src/
-      dockerfile: JIM.Scheduler/Dockerfile
+      context: .
+      dockerfile: src/JIM.Scheduler/Dockerfile
     depends_on:
       jim.database:
         condition: service_healthy
