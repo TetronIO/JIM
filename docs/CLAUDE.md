@@ -9,13 +9,13 @@
 1. **Create a plan document in `docs/plans/`:**
    - Use uppercase filename with underscores: e.g., `PROGRESS_REPORTING.md`, `SCIM_SERVER_DESIGN.md`
    - Include comprehensive details: Overview, Architecture, Implementation Phases, Success Criteria, Benefits
-   - Mark status (Planned/In Progress/Completed) and milestone (MVP/Post-MVP)
+   - Mark status (Planned/In Progress/Completed)
    - Keep plan focused but detailed enough for implementation
 
 2. **Create a GitHub issue:**
    - Brief description of the feature/change
    - Link to the plan document in `docs/plans/` for full details
-   - Assign to appropriate milestone (MVP, Post-MVP, etc.)
+   - Assign to appropriate milestone
    - Add relevant labels (enhancement, bug, documentation, etc.)
    - Example: "See full implementation plan: [`docs/plans/PROGRESS_REPORTING.md`](docs/plans/PROGRESS_REPORTING.md)"
 
@@ -36,7 +36,7 @@
   - COMPLIANCE_MAPPING.md - Security framework and standards compliance mapping
   - DEVELOPER_GUIDE.md - Comprehensive development guide
   - INTEGRATION_TESTING.md - Integration testing guide
-  - MVP_DEFINITION.md - MVP scope and criteria
+  - MVP_DEFINITION.md - MVP completion record and future roadmap
   - RELEASE_PROCESS.md - Release and deployment procedures
   - SSO_SETUP_GUIDE.md - SSO configuration instructions
 
@@ -47,7 +47,7 @@ JIM has context documents for use with AI assistant platforms (Claude Desktop, C
 - `docs/JIM_AI_ASSISTANT_CONTEXT.md` - Comprehensive context document to upload
 
 **Keep these updated when:**
-- MVP status changes significantly (update Section 8 - Current Status)
+- Project status changes significantly (update Section 8 - Current Status)
 - New connectors are added (update Section 4 - Connectors)
 - Architecture changes materially (update Section 2 - Architecture)
 - Key terminology or concepts change (update Section 11 - Glossary)

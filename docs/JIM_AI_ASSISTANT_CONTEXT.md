@@ -22,7 +22,7 @@
 | **Auth** | OpenID Connect (OIDC) with PKCE |
 | **Deployment** | Docker containers, air-gapped capable |
 | **License** | Source-available (free non-production, commercial for production) |
-| **Status** | MVP Complete (100%) |
+| **Status** | Post-MVP — active development |
 | **Language** | British English (en-GB) for all text |
 
 ---
@@ -335,9 +335,9 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 
 ---
 
-## 8. Current Status (MVP)
+## 8. Current Status
 
-### MVP Complete (100%)
+### Core Platform (Complete)
 
 - ✅ Connector framework with LDAP and File connectors (import and export)
 - ✅ Full inbound sync (join, project, attribute flow)
@@ -356,7 +356,7 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ Change history/audit with timeline UI and deleted objects view
 - ✅ Real-time progress indication on Operations page
 
-### Recently Completed (Post-MVP Enhancements)
+### Recent Enhancements
 
 - ✅ **Export Performance Optimisation** - Batch DB operations, LDAP async pipelining (Export Concurrency 1-16), parallel batch export (MaxExportParallelism), parallel schedule step execution, integration test timing validation
 - ✅ **Granular Activity Stats** (#332) - 16 per-change-type stat fields, run-type-aware display, scheduler step failure detection, OperationalException hierarchy
@@ -365,7 +365,7 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ **Interactive PowerShell Auth** (#296) - Browser-based SSO authentication for PowerShell module
 - ✅ **Security Compliance Documentation** - NCSC, CISA, OWASP ASVS compliance mapping
 
-### Post-MVP (Nice to Have)
+### Roadmap
 
 - Dashboard home page (#169)
 - Unique value generation (#242)

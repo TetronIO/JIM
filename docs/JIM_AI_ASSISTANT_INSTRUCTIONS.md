@@ -62,7 +62,7 @@ I've uploaded a context document with detailed architecture, concepts, and curre
 
 ## Current Status
 
-JIM MVP is 100% complete. Core sync (import, sync, export), scheduling, change history, and admin UI are all functional. Post-MVP enhancements (export performance, granular activity stats, compliance documentation) are in progress.
+JIM's core platform is complete and in active post-MVP development. Core sync (import, sync, export), scheduling, change history, and admin UI are all functional. Recent enhancements include export performance optimisation, granular activity stats, and compliance documentation.
 ```
 
 ---
@@ -85,7 +85,7 @@ JIM MVP is 100% complete. Core sync (import, sync, export), scheduling, change h
 | Major feature lands | Update the "Current Status" section in the context doc |
 | Architecture changes | Update Section 2 (Architecture) in context doc |
 | New connectors added | Update Section 4 (Connectors) in context doc |
-| MVP milestones | Update Section 8 (Current Status) in context doc |
+| Status changes | Update Section 8 (Current Status) in context doc |
 
 You can either:
 - Re-upload the updated context file
