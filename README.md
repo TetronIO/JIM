@@ -49,7 +49,7 @@ Why choose JIM?
 ## Architecture
 JIM is a container-based distributed application implementing the metaverse pattern for centralised identity governance.
 
-<a href="docs/diagrams/images/light/jim-structurizr-1-SystemContext.svg">
+<a href="docs/diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
     <img alt="JIM System Context" src="docs/diagrams/images/light/jim-structurizr-1-SystemContext.svg">
@@ -63,7 +63,7 @@ JIM is a container-based distributed application implementing the metaverse patt
 - **JIM.PowerShell** - A cross-platform PowerShell module (Windows, macOS, Linux) for full configuration and automation of JIM, enabling Identity as Code (IDaC)
 - A database - PostgreSQL
 
-<a href="docs/diagrams/images/light/jim-structurizr-1-Containers.svg">
+<a href="docs/diagrams/images/dark/jim-structurizr-1-Containers.svg">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/images/dark/jim-structurizr-1-Containers.svg">
     <img alt="JIM Containers" src="docs/diagrams/images/light/jim-structurizr-1-Containers.svg">

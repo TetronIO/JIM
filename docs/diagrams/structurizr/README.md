@@ -8,7 +8,7 @@ This folder contains the C4 model architecture diagrams for JIM, defined using [
 
 Shows JIM's interactions with external systems and users.
 
-<a href="../images/light/jim-structurizr-1-SystemContext.svg">
+<a href="../images/dark/jim-structurizr-1-SystemContext.svg">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-SystemContext.svg">
     <img alt="System Context" src="../images/light/jim-structurizr-1-SystemContext.svg">
@@ -19,7 +19,7 @@ Shows JIM's interactions with external systems and users.
 
 Shows JIM's internal deployable units.
 
-<a href="../images/light/jim-structurizr-1-Containers.svg">
+<a href="../images/dark/jim-structurizr-1-Containers.svg">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-Containers.svg">
     <img alt="Containers" src="../images/light/jim-structurizr-1-Containers.svg">
@@ -32,7 +32,7 @@ Shows JIM's internal deployable units.
 
 Blazor Pages, API Controllers, and Authentication Middleware.
 
-<a href="../images/light/jim-structurizr-1-WebAppComponents.svg">
+<a href="../images/dark/jim-structurizr-1-WebAppComponents.svg">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-WebAppComponents.svg">
     <img alt="Web Application Components" src="../images/light/jim-structurizr-1-WebAppComponents.svg">
@@ -43,7 +43,7 @@ Blazor Pages, API Controllers, and Authentication Middleware.
 
 The business logic and domain services.
 
-<a href="../images/light/jim-structurizr-1-AppLayerComponents.svg">
+<a href="../images/dark/jim-structurizr-1-AppLayerComponents.svg">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-AppLayerComponents.svg">
     <img alt="Application Layer Components" src="../images/light/jim-structurizr-1-AppLayerComponents.svg">
@@ -54,7 +54,7 @@ The business logic and domain services.
 
 Import, sync, and export task processors.
 
-<a href="../images/light/jim-structurizr-1-WorkerComponents.svg">
+<a href="../images/dark/jim-structurizr-1-WorkerComponents.svg">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-WorkerComponents.svg">
     <img alt="Worker Components" src="../images/light/jim-structurizr-1-WorkerComponents.svg">
@@ -65,7 +65,7 @@ Import, sync, and export task processors.
 
 External system integration adapters.
 
-<a href="../images/light/jim-structurizr-1-ConnectorComponents.svg">
+<a href="../images/dark/jim-structurizr-1-ConnectorComponents.svg">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-ConnectorComponents.svg">
     <img alt="Connector Components" src="../images/light/jim-structurizr-1-ConnectorComponents.svg">
@@ -76,7 +76,7 @@ External system integration adapters.
 
 Schedule evaluation and execution triggering.
 
-<a href="../images/light/jim-structurizr-1-SchedulerComponents.svg">
+<a href="../images/dark/jim-structurizr-1-SchedulerComponents.svg">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="../images/dark/jim-structurizr-1-SchedulerComponents.svg">
     <img alt="Scheduler Components" src="../images/light/jim-structurizr-1-SchedulerComponents.svg">
