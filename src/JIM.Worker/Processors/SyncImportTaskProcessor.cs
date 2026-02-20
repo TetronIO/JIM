@@ -1838,6 +1838,23 @@ public class SyncImportTaskProcessor
         if (updatedCsos.Count == 0)
             return;
 
+        // Filter to only CSOs that actually have pending exports - avoids iterating thousands of CSOs
+        // that have no pending exports (e.g. on a first import before any exports have occurred)
+        var csoIdsWithExports = await _jim.Repository.ConnectedSystems
+            .GetCsoIdsWithPendingExportsAsync(updatedCsos.Select(c => c.Id));
+
+        if (csoIdsWithExports.Count == 0)
+        {
+            Log.Debug("ReconcilePendingExportsAsync: No pending exports found for any of the {CsoCount} updated CSOs. Skipping reconciliation",
+                updatedCsos.Count);
+            return;
+        }
+
+        var csoList = updatedCsos.Where(c => csoIdsWithExports.Contains(c.Id)).ToList();
+
+        Log.Debug("ReconcilePendingExportsAsync: {FilteredCount} of {TotalCount} CSOs have pending exports",
+            csoList.Count, updatedCsos.Count);
+
         var reconciliationService = new PendingExportReconciliationService(_jim);
         var totalConfirmed = 0;
         var totalRetry = 0;
@@ -1846,7 +1863,6 @@ public class SyncImportTaskProcessor
 
         // Use sync page size for consistent batching across all sync operations
         var pageSize = await _jim.ServiceSettings.GetSyncPageSizeAsync();
-        var csoList = updatedCsos.ToList();
         var totalPages = (int)Math.Ceiling((double)csoList.Count / pageSize);
 
         Log.Debug("ReconcilePendingExportsAsync: Processing {CsoCount} CSOs in {PageCount} pages of {PageSize}",

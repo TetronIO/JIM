@@ -1891,6 +1891,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return result;
     }
 
+    public async Task<HashSet<Guid>> GetCsoIdsWithPendingExportsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        var csoIdList = connectedSystemObjectIds.ToList();
+        if (csoIdList.Count == 0)
+            return new HashSet<Guid>();
+
+        var csoIdsWithExports = await Repository.Database.PendingExports
+            .AsNoTracking()
+            .Where(pe => pe.ConnectedSystemObject != null && csoIdList.Contains(pe.ConnectedSystemObject.Id))
+            .Select(pe => pe.ConnectedSystemObject!.Id)
+            .Distinct()
+            .ToListAsync();
+
+        return csoIdsWithExports.ToHashSet();
+    }
+
     public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)
     {
         return await Repository.Database.ConnectedSystemObjects
