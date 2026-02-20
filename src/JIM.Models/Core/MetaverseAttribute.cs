@@ -56,6 +56,14 @@ public class MetaverseAttribute : IAuditable
 
     public bool BuiltIn { get; set; }
 
+    /// <summary>
+    /// Provides a hint to the UI on how to render this attribute's values.
+    /// Drives the display shape (Table, ChipSet, List); CRUD mode (read-only vs editable)
+    /// is determined separately by user permissions at runtime.
+    /// Only meaningful for multi-valued attributes; ignored for single-valued attributes.
+    /// </summary>
+    public AttributeRenderingHint RenderingHint { get; set; } = AttributeRenderingHint.Default;
+
     public List<MetaverseObjectType> MetaverseObjectTypes { get; set; } = null!;
 
     public List<PredefinedSearchAttribute> PredefinedSearchAttributes { get; set; } = null!;

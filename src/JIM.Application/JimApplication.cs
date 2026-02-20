@@ -69,6 +69,7 @@ public class JimApplication : IDisposable
         await Repository.InitialiseDatabaseAsync();
         await Seeding.SeedAsync();
         await Seeding.SyncBuiltInConnectorDefinitionsAsync();
+        await Seeding.SyncBuiltInAttributeRenderingHintsAsync();
         await Seeding.SyncServiceSettingsAsync();
         await Repository.InitialisationCompleteAsync();
     }

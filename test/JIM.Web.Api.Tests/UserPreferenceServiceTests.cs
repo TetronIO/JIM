@@ -377,6 +377,228 @@ public class UserPreferenceServiceTests
 
     #endregion
 
+    #region GetMvaViewModeAsync tests
+
+    [Test]
+    public async Task GetMvaViewModeAsync_WhenNoValueStored_ReturnsNullAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync((string?)null);
+
+        // Act
+        var result = await _service.GetMvaViewModeAsync("Static Members");
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    [TestCase("table")]
+    [TestCase("chipset")]
+    [TestCase("list")]
+    public async Task GetMvaViewModeAsync_WhenValidValueStored_ReturnsStoredValueAsync(string storedValue)
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync(storedValue);
+
+        // Act
+        var result = await _service.GetMvaViewModeAsync("Static Members");
+
+        // Assert
+        Assert.That(result, Is.EqualTo(storedValue));
+    }
+
+    [Test]
+    [TestCase("")]
+    [TestCase("invalid")]
+    [TestCase("grid")]
+    [TestCase("cards")]
+    public async Task GetMvaViewModeAsync_WhenInvalidValueStored_ReturnsNullAsync(string invalidValue)
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync(invalidValue);
+
+        // Act
+        var result = await _service.GetMvaViewModeAsync("Static Members");
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetMvaViewModeAsync_WhenNullAttributeName_ReturnsNullAsync()
+    {
+        // Act
+        var result = await _service.GetMvaViewModeAsync(null!);
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetMvaViewModeAsync_WhenEmptyAttributeName_ReturnsNullAsync()
+    {
+        // Act
+        var result = await _service.GetMvaViewModeAsync("");
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetMvaViewModeAsync_WhenJsDisconnected_ReturnsNullAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
+
+        // Act
+        var result = await _service.GetMvaViewModeAsync("Static Members");
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetMvaViewModeAsync_WhenJsNotAvailable_ReturnsNullAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ThrowsAsync(new InvalidOperationException("JS interop not available"));
+
+        // Act
+        var result = await _service.GetMvaViewModeAsync("Static Members");
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetMvaViewModeAsync_UsesCorrectKeyAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync("table");
+
+        // Act
+        await _service.GetMvaViewModeAsync("Static Members");
+
+        // Assert - verify the correct key was used
+        _mockJsRuntime.Verify(x => x.InvokeAsync<string?>(
+            "jimPreferences.get",
+            It.Is<object[]>(args => args.Length == 1 && (string)args[0] == "mvaViewMode_Static Members")),
+            Times.Once);
+    }
+
+    #endregion
+
+    #region SetMvaViewModeAsync tests
+
+    [Test]
+    [TestCase("table")]
+    [TestCase("chipset")]
+    [TestCase("list")]
+    public async Task SetMvaViewModeAsync_WithValidValue_StoresValueAsync(string viewMode)
+    {
+        // Arrange
+        object[]? capturedArgs = null;
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "jimPreferences.set",
+                It.IsAny<object[]>()))
+            .Callback<string, object[]>((_, args) => capturedArgs = args)
+            .ReturnsAsync(Mock.Of<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
+
+        // Act
+        await _service.SetMvaViewModeAsync("Proxy Addresses", viewMode);
+
+        // Assert
+        Assert.That(capturedArgs, Is.Not.Null);
+        Assert.That(capturedArgs![0], Is.EqualTo("mvaViewMode_Proxy Addresses"));
+        Assert.That(capturedArgs[1], Is.EqualTo(viewMode));
+    }
+
+    [Test]
+    [TestCase("invalid")]
+    [TestCase("grid")]
+    [TestCase("")]
+    public async Task SetMvaViewModeAsync_WithInvalidValue_DoesNotStoreAsync(string invalidValue)
+    {
+        // Act
+        await _service.SetMvaViewModeAsync("Static Members", invalidValue);
+
+        // Assert - verify no JS call was made
+        _mockJsRuntime.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+            It.IsAny<string>(),
+            It.IsAny<object[]>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task SetMvaViewModeAsync_WithNullAttributeName_DoesNotStoreAsync()
+    {
+        // Act
+        await _service.SetMvaViewModeAsync(null!, "table");
+
+        // Assert - verify no JS call was made
+        _mockJsRuntime.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+            It.IsAny<string>(),
+            It.IsAny<object[]>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task SetMvaViewModeAsync_WithEmptyAttributeName_DoesNotStoreAsync()
+    {
+        // Act
+        await _service.SetMvaViewModeAsync("", "table");
+
+        // Assert - verify no JS call was made
+        _mockJsRuntime.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+            It.IsAny<string>(),
+            It.IsAny<object[]>()),
+            Times.Never);
+    }
+
+    [Test]
+    public void SetMvaViewModeAsync_WhenJsDisconnected_DoesNotThrow()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "jimPreferences.set",
+                It.IsAny<object[]>()))
+            .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
+
+        // Act & Assert - should not throw
+        Assert.DoesNotThrowAsync(async () => await _service.SetMvaViewModeAsync("Static Members", "table"));
+    }
+
+    [Test]
+    public void SetMvaViewModeAsync_WhenJsNotAvailable_DoesNotThrow()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "jimPreferences.set",
+                It.IsAny<object[]>()))
+            .ThrowsAsync(new InvalidOperationException("JS interop not available"));
+
+        // Act & Assert - should not throw
+        Assert.DoesNotThrowAsync(async () => await _service.SetMvaViewModeAsync("Owners", "chipset"));
+    }
+
+    #endregion
+
     #region Constructor tests
 
     [Test]

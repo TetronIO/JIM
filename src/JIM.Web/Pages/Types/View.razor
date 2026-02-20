@@ -17,52 +17,18 @@
 {
     <MudTabs @bind-ActivePanelIndex="_activeTabIndex" Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" Class="mt-5" PanelClass="pa-0">
         <MudTabPanel Text="Details" Icon="@Icons.Material.Filled.Info">
-            <MudPaper Class="pa-5 mt-3" Outlined="true">
-                <MudGrid>
-                    @foreach (var attributeValue in MetaverseObject.AttributeValues)
-                    {
-                        <MudItem xs="12" sm="6" md="4">
-                            <MudField Label="@attributeValue.Attribute.Name" Variant="Variant.Outlined">
-                                @if (attributeValue.Attribute.Type == AttributeDataType.Text)
-                                {
-                                    if (attributeValue.Attribute.Name == Constants.BuiltInAttributes.Email && !string.IsNullOrEmpty(attributeValue.StringValue))
-                                    {
-                                        <MudLink Href="@($"mailto:{attributeValue.StringValue}")">@attributeValue.StringValue</MudLink>
-                                    }
-                                    else
-                                    {
-                                        @attributeValue.StringValue
-                                    }
-                                }
-                                else if (attributeValue.Attribute.Type == AttributeDataType.Number)
-                                {
-                                    @attributeValue.IntValue
-                                }
-                                else if (attributeValue.Attribute.Type == AttributeDataType.LongNumber)
-                                {
-                                    @attributeValue.LongValue
-                                }
-                                else if (attributeValue.Attribute.Type == AttributeDataType.DateTime)
-                                {
-                                    @attributeValue.DateTimeValue
-                                }
-                                else if (attributeValue.Attribute.Type == AttributeDataType.Guid)
-                                {
-                                    @attributeValue.GuidValue.ToString()
-                                }
-                                else if (attributeValue.Attribute.Type == AttributeDataType.Boolean && attributeValue.BoolValue.HasValue)
-                                {
-                                    @(attributeValue.BoolValue.Value ? "true" : "false")
-                                }
-                                else if (attributeValue.Attribute.Type == AttributeDataType.Reference && attributeValue.ReferenceValue != null)
-                                {
-                                    <MudLink Href="@Utilities.GetMetaverseObjectHref(attributeValue.ReferenceValue)">@(attributeValue.ReferenceValue.DisplayName ?? attributeValue.ReferenceValue.Id.ToString())</MudLink>
-                                }
-                            </MudField>
-                        </MudItem>
-                    }
-                </MudGrid>
-            </MudPaper>
+            @if (_viewMode == "columns")
+            {
+                @* Future: MvoDetailsColumns component for two-column SVA/MVA split layout *@
+                <MudAlert Severity="Severity.Info" Class="mt-3" Dense="true">
+                    Two-column layout is not yet implemented. Showing default panel view.
+                </MudAlert>
+                <MvoDetailsPanel MetaverseObject="MetaverseObject" />
+            }
+            else
+            {
+                <MvoDetailsPanel MetaverseObject="MetaverseObject" />
+            }
         </MudTabPanel>
 
         <MudTabPanel Text="Changes" Icon="@Icons.Material.Filled.History" BadgeData="@GetChangeCount()" BadgeColor="Color.Primary">
@@ -82,10 +48,18 @@
     private MetaverseObjectType? MetaverseObjectType { get; set; }
     private string? _displayName;
     private int _activeTabIndex = 0;
+    private string _viewMode = "panels";
     private List<BreadcrumbItem> _breadcrumbs = null!;
 
     protected override async Task OnParametersSetAsync()
     {
+        // Detect ?view= query parameter for A/B testing different detail layouts
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        var viewParam = query["view"];
+        if (viewParam is "columns")
+            _viewMode = "columns";
+
         var pluralName = Helpers.ConvertFromUrlParam(TypeNameUrlParam);
         MetaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(pluralName, false);
         if (MetaverseObjectType == null)

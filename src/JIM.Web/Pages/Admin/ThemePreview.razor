@@ -430,7 +430,27 @@
     <MudItem xs="12">
         <MudText Typo="Typo.h6" Class="mb-3">Nested Table</MudText>
         <MudPaper Class="pa-4" Outlined="true" Elevation="0">
-            <MudText Class="mb-3">Table inside a paper — header uses jim-inner-surface, data rows use paper surface.</MudText>
+            <MudText Class="mb-3">Tables inside a paper — header uses jim-inner-surface, data rows use paper surface.</MudText>
+            <MudText Typo="Typo.subtitle2" Class="mb-2">MudTable (with toolbar)</MudText>
+            <MudTable Items="@_nestedTableData" Hover="true" Outlined="true" Elevation="0" Dense="true">
+                <ToolBarContent>
+                    <MudText Typo="Typo.subtitle2">Attributes</MudText>
+                    <MudSpacer />
+                    <MudTextField T="string" Placeholder="Search..." Variant="Variant.Outlined" Margin="Margin.Dense"
+                        Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" />
+                </ToolBarContent>
+                <HeaderContent>
+                    <MudTh>Attribute</MudTh>
+                    <MudTh>Type</MudTh>
+                    <MudTh>Value</MudTh>
+                </HeaderContent>
+                <RowTemplate Context="row">
+                    <MudTd DataLabel="Attribute">@row.Name</MudTd>
+                    <MudTd DataLabel="Type">@row.Type</MudTd>
+                    <MudTd DataLabel="Value">@row.Value</MudTd>
+                </RowTemplate>
+            </MudTable>
+            <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">MudSimpleTable</MudText>
             <MudSimpleTable Outlined="true" Hover="true">
                 <thead>
                     <tr>
@@ -844,4 +864,14 @@
         row.Status.Contains(_tableSearchString, StringComparison.OrdinalIgnoreCase);
 
     private record SampleRow(string Name, string Department, string Status, DateTime Created);
+
+    // Nested table data
+    private readonly List<NestedTableRow> _nestedTableData = new()
+    {
+        new("displayName", "String", "Alice Johnson"),
+        new("department", "String", "Engineering"),
+        new("isActive", "Boolean", "True"),
+    };
+
+    private record NestedTableRow(string Name, string Type, string Value);
 }

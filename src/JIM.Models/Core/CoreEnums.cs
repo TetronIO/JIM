@@ -221,3 +221,37 @@ public enum PartitionValidationMode
     /// </summary>
     Warning = 1
 }
+
+/// <summary>
+/// Provides a hint to the UI on how to render a metaverse attribute's values.
+/// This is a schema-level hint stored on <see cref="MetaverseAttribute"/>, not on individual values.
+/// The hint drives the display shape (table, chips, list); the CRUD mode (read-only vs editable)
+/// is determined separately at runtime by the user's permissions.
+/// </summary>
+public enum AttributeRenderingHint
+{
+    /// <summary>
+    /// Default rendering. Single-valued attributes use a labelled field display.
+    /// Multi-valued attributes auto-decide based on value count: 10 or fewer renders as
+    /// a chip set, more than 10 renders as a table.
+    /// </summary>
+    Default = 0,
+
+    /// <summary>
+    /// Always render as a searchable, paginated table.
+    /// Suitable for large reference-type multi-valued attributes like Static Members and Owners.
+    /// </summary>
+    Table = 1,
+
+    /// <summary>
+    /// Always render as a horizontal chip set.
+    /// Suitable for short-value multi-valued attributes like phone numbers.
+    /// </summary>
+    ChipSet = 2,
+
+    /// <summary>
+    /// Always render as a vertical list.
+    /// Suitable for long or variable-length multi-valued attributes like Proxy Addresses and URLs.
+    /// </summary>
+    List = 3
+}

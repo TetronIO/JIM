@@ -44,6 +44,20 @@ public interface IUserPreferenceService
     /// </summary>
     /// <param name="isDarkMode">Whether dark mode is enabled.</param>
     Task SetDarkModeAsync(bool isDarkMode);
+
+    /// <summary>
+    /// Gets the user's preferred MVA (multi-valued attribute) view mode for a specific attribute.
+    /// </summary>
+    /// <param name="attributeName">The attribute name (e.g., "Static Members").</param>
+    /// <returns>"table", "chipset", or "list"; null if no preference (use rendering hint default).</returns>
+    Task<string?> GetMvaViewModeAsync(string attributeName);
+
+    /// <summary>
+    /// Sets the user's preferred MVA view mode for a specific attribute.
+    /// </summary>
+    /// <param name="attributeName">The attribute name.</param>
+    /// <param name="viewMode">"table", "chipset", or "list".</param>
+    Task SetMvaViewModeAsync(string attributeName, string viewMode);
 }
 
 /// <summary>
@@ -185,6 +199,60 @@ public class UserPreferenceService : IUserPreferenceService
         try
         {
             await _jsRuntime.InvokeVoidAsync("jimPreferences.set", DarkModeKey, isDarkMode ? "true" : "false");
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, ignore
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), ignore
+        }
+    }
+
+    /// <summary>
+    /// Valid MVA view mode values.
+    /// </summary>
+    private static readonly string[] ValidMvaViewModes = ["table", "chipset", "list"];
+
+    /// <inheritdoc />
+    public async Task<string?> GetMvaViewModeAsync(string attributeName)
+    {
+        if (string.IsNullOrEmpty(attributeName))
+            return null;
+
+        try
+        {
+            var key = $"mvaViewMode_{attributeName}";
+            var value = await _jsRuntime.InvokeAsync<string?>("jimPreferences.get", key);
+            if (value != null && ValidMvaViewModes.Contains(value))
+                return value;
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, return default
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), return default
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc />
+    public async Task SetMvaViewModeAsync(string attributeName, string viewMode)
+    {
+        if (string.IsNullOrEmpty(attributeName))
+            return;
+
+        if (!ValidMvaViewModes.Contains(viewMode))
+            return;
+
+        try
+        {
+            var key = $"mvaViewMode_{attributeName}";
+            await _jsRuntime.InvokeVoidAsync("jimPreferences.set", key, viewMode);
         }
         catch (JSDisconnectedException)
         {

@@ -83,7 +83,7 @@ internal class SeedingServer
 
         // user-specific attributes
         var accountExpiresAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.AccountExpires, AttributePlurality.SingleValued, AttributeDataType.DateTime, attributesToCreate);
-        var altSecurityIdentitiesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.AltSecurityIdentities, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate);
+        var altSecurityIdentitiesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.AltSecurityIdentities, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.List);
         var commonNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.CommonName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var companyAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Company, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var countryAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Country, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
@@ -111,29 +111,29 @@ internal class SeedingServer
         var subjectIdentifierAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.SubjectIdentifier, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var officeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Office, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var organisationAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Organisation, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var otherFacsimileTelephoneNumbersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherFacsimileTelephoneNumbers, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate);
-        var otherIpPhonesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherIpPhones, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate);
-        var otherMobilesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherMobiles, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate);
-        var otherPagersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherPagers, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate);
-        var otherTelephonesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherTelephones, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate);
+        var otherFacsimileTelephoneNumbersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherFacsimileTelephoneNumbers, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.ChipSet);
+        var otherIpPhonesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherIpPhones, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.ChipSet);
+        var otherMobilesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherMobiles, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.ChipSet);
+        var otherPagersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherPagers, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.ChipSet);
+        var otherTelephonesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.OtherTelephones, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.ChipSet);
         var pagerAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Pager, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var photoAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Photo, AttributePlurality.SingleValued, AttributeDataType.Binary, attributesToCreate);
         var physicalDeliveryOfficeNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.PhysicalDeliveryOfficeName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var postOfficeBoxesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.PostOfficeBoxes, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate);
-        var postalAddressesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.PostalAddresses, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate);
+        var postOfficeBoxesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.PostOfficeBoxes, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.ChipSet);
+        var postalAddressesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.PostalAddresses, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.List);
         var postalCodeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.PostalCode, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var pronounsAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Pronouns, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var proxyAddressesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ProxyAddresses, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate);
+        var proxyAddressesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ProxyAddresses, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.List);
         var scriptPathAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ScriptPath, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var sidHistoryAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.SidHistory, AttributePlurality.MultiValued, AttributeDataType.Binary, attributesToCreate);
+        var sidHistoryAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.SidHistory, AttributePlurality.MultiValued, AttributeDataType.Binary, attributesToCreate, AttributeRenderingHint.List);
         var stateOrProvinceAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.StateOrProvince, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var statusAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Status, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var streetAddressAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.StreetAddress, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var teamAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Team, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var telephoneNumberAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.TelephoneNumber, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
-        var urlsAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Urls, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate);
+        var urlsAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Urls, AttributePlurality.MultiValued, AttributeDataType.Text, attributesToCreate, AttributeRenderingHint.List);
         var userAccountControlAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.UserAccountControl, AttributePlurality.SingleValued, AttributeDataType.Number, attributesToCreate);
-        var userCertificatesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.UserCertificates, AttributePlurality.MultiValued, AttributeDataType.Binary, attributesToCreate);
+        var userCertificatesAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.UserCertificates, AttributePlurality.MultiValued, AttributeDataType.Binary, attributesToCreate, AttributeRenderingHint.List);
         var userPrincipalNameAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.UserPrincipalName, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var userSharedFolderAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.UserSharedFolder, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var webPageAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.WebPage, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
@@ -143,8 +143,8 @@ internal class SeedingServer
         var groupTypeAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.GroupType, AttributePlurality.SingleValued, AttributeDataType.Text, attributesToCreate);
         var groupTypeFlagsAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.GroupTypeFlags, AttributePlurality.SingleValued, AttributeDataType.Number, attributesToCreate);
         var managedByAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.ManagedBy, AttributePlurality.SingleValued, AttributeDataType.Reference, attributesToCreate);
-        var ownersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Owners, AttributePlurality.MultiValued, AttributeDataType.Reference, attributesToCreate);
-        var staticMembersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.StaticMembers, AttributePlurality.MultiValued, AttributeDataType.Reference, attributesToCreate);
+        var ownersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.Owners, AttributePlurality.MultiValued, AttributeDataType.Reference, attributesToCreate, AttributeRenderingHint.Table);
+        var staticMembersAttribute = await GetOrPrepareMetaverseAttributeAsync(Constants.BuiltInAttributes.StaticMembers, AttributePlurality.MultiValued, AttributeDataType.Reference, attributesToCreate, AttributeRenderingHint.Table);
         #endregion
 
         #region MetaverseObjectTypes
@@ -604,6 +604,59 @@ internal class SeedingServer
     }
 
     /// <summary>
+    /// Synchronises rendering hints for built-in metaverse attributes.
+    /// This should be called on every application startup to ensure existing deployments
+    /// get rendering hints set correctly without requiring a fresh seed.
+    /// Uses the repository directly to avoid creating audit Activities for system-level changes.
+    /// </summary>
+    internal async Task SyncBuiltInAttributeRenderingHintsAsync()
+    {
+        var stopwatch = new Stopwatch();
+        stopwatch.Start();
+        Log.Information("SyncBuiltInAttributeRenderingHintsAsync: Starting...");
+
+        var renderingHints = new Dictionary<string, AttributeRenderingHint>
+        {
+            // Table: large reference MVAs needing columns/search/pagination
+            { Constants.BuiltInAttributes.StaticMembers, AttributeRenderingHint.Table },
+            { Constants.BuiltInAttributes.Owners, AttributeRenderingHint.Table },
+
+            // ChipSet: short text values that display well as horizontal chips
+            { Constants.BuiltInAttributes.OtherTelephones, AttributeRenderingHint.ChipSet },
+            { Constants.BuiltInAttributes.OtherMobiles, AttributeRenderingHint.ChipSet },
+            { Constants.BuiltInAttributes.OtherIpPhones, AttributeRenderingHint.ChipSet },
+            { Constants.BuiltInAttributes.OtherPagers, AttributeRenderingHint.ChipSet },
+            { Constants.BuiltInAttributes.OtherFacsimileTelephoneNumbers, AttributeRenderingHint.ChipSet },
+            { Constants.BuiltInAttributes.PostOfficeBoxes, AttributeRenderingHint.ChipSet },
+
+            // List: long/variable-length values that need vertical stacking
+            { Constants.BuiltInAttributes.ProxyAddresses, AttributeRenderingHint.List },
+            { Constants.BuiltInAttributes.AltSecurityIdentities, AttributeRenderingHint.List },
+            { Constants.BuiltInAttributes.PostalAddresses, AttributeRenderingHint.List },
+            { Constants.BuiltInAttributes.Urls, AttributeRenderingHint.List },
+            { Constants.BuiltInAttributes.SidHistory, AttributeRenderingHint.List },
+            { Constants.BuiltInAttributes.UserCertificates, AttributeRenderingHint.List },
+        };
+
+        var updatedCount = 0;
+        foreach (var (name, hint) in renderingHints)
+        {
+            var attribute = await Application.Metaverse.GetMetaverseAttributeAsync(name);
+            if (attribute != null && attribute.RenderingHint != hint)
+            {
+                attribute.RenderingHint = hint;
+                await Application.Repository.Metaverse.UpdateMetaverseAttributeAsync(attribute);
+                updatedCount++;
+                Log.Debug("SyncBuiltInAttributeRenderingHintsAsync: Set {Name} to {Hint}", name, hint);
+            }
+        }
+
+        stopwatch.Stop();
+        Log.Information("SyncBuiltInAttributeRenderingHintsAsync: Completed in {Elapsed}. Updated {Count} attributes.",
+            stopwatch.Elapsed, updatedCount);
+    }
+
+    /// <summary>
     /// Seeds and synchronises service settings from environment variables.
     /// This should be called on every application startup to ensure settings are available.
     /// Read-only settings (from environment) are updated; user-modified settings are preserved.
@@ -990,7 +1043,7 @@ internal class SeedingServer
     }
 
     #region private methods
-    private async Task<MetaverseAttribute> GetOrPrepareMetaverseAttributeAsync(string name, AttributePlurality attributePlurality, AttributeDataType attributeDataType, List<MetaverseAttribute> attributeList)
+    private async Task<MetaverseAttribute> GetOrPrepareMetaverseAttributeAsync(string name, AttributePlurality attributePlurality, AttributeDataType attributeDataType, List<MetaverseAttribute> attributeList, AttributeRenderingHint renderingHint = AttributeRenderingHint.Default)
     {
         var attribute = await Application.Metaverse.GetMetaverseAttributeAsync(name);
         if (attribute == null)
@@ -1000,7 +1053,8 @@ internal class SeedingServer
                 Name = name,
                 AttributePlurality = attributePlurality,
                 Type = attributeDataType,
-                BuiltIn = true
+                BuiltIn = true,
+                RenderingHint = renderingHint
             };
             AuditHelper.SetCreatedBySystem(attribute);
             attributeList.Add(attribute);

@@ -1,0 +1,536 @@
+@using JIM.Models.Core
+@using JIM.Web.Services
+@using Utilities
+@inject IUserPreferenceService UserPreferences
+
+@if (MetaverseObject != null)
+{
+    <MudExpansionPanels MultiExpansion="true" Elevation="0" Class="mt-3 jim-expansion-panel">
+        @foreach (var category in _categoryGroups)
+        {
+            <MudExpansionPanel Expanded="true">
+                <TitleContent>
+                    <div class="d-flex align-center">
+                        <MudIcon Icon="@category.Icon" Class="me-2" />
+                        <MudText Typo="Typo.subtitle1">@category.CategoryName</MudText>
+                    </div>
+                </TitleContent>
+                <ChildContent>
+                    @* Single-valued attributes in a responsive grid *@
+                    @{ var svaGroups = category.AttributeGroups.Where(g => !g.IsMultiValued).ToList(); }
+                    @if (svaGroups.Any())
+                    {
+                        <MudGrid>
+                            @foreach (var group in svaGroups)
+                            {
+                                <MudItem xs="12" sm="6" md="4">
+                                    @* TODO: When IsEditable (future: per-attribute editability via RBAC),
+                                       render MudTextField/MudDatePicker/etc. instead of MudField *@
+                                    <MudField Label="@group.AttributeName" Variant="Variant.Outlined">
+                                        @RenderSvaValue(group.Values.First())
+                                    </MudField>
+                                </MudItem>
+                            }
+                        </MudGrid>
+                    }
+
+                    @* Multi-valued attributes, each rendered according to its effective view mode *@
+                    @{ var mvaGroups = category.AttributeGroups.Where(g => g.IsMultiValued).ToList(); }
+                    @foreach (var group in mvaGroups)
+                    {
+                        var effectiveMode = GetEffectiveViewMode(group);
+                        <div class="@(svaGroups.Any() ? "mt-4" : "")">
+                            @if (effectiveMode == "table")
+                            {
+                                @RenderMvaTable(group)
+                            }
+                            else if (effectiveMode == "chipset")
+                            {
+                                @RenderMvaChipSet(group)
+                            }
+                            else
+                            {
+                                @RenderMvaList(group)
+                            }
+                        </div>
+                    }
+                </ChildContent>
+            </MudExpansionPanel>
+        }
+    </MudExpansionPanels>
+}
+
+@* ========================== Render Fragments ========================== *@
+
+@* Renders a single-valued attribute value with type-appropriate formatting *@
+@{
+    RenderFragment RenderSvaValue(MetaverseObjectAttributeValue attributeValue) => __builder =>
+    {
+        if (attributeValue.Attribute.Type == AttributeDataType.Text)
+        {
+            if (attributeValue.Attribute.Name == Constants.BuiltInAttributes.Email && !string.IsNullOrEmpty(attributeValue.StringValue))
+            {
+                <MudLink Href="@($"mailto:{attributeValue.StringValue}")">@attributeValue.StringValue</MudLink>
+            }
+            else
+            {
+                @attributeValue.StringValue
+            }
+        }
+        else if (attributeValue.Attribute.Type == AttributeDataType.Number)
+        {
+            @attributeValue.IntValue
+        }
+        else if (attributeValue.Attribute.Type == AttributeDataType.LongNumber)
+        {
+            @attributeValue.LongValue
+        }
+        else if (attributeValue.Attribute.Type == AttributeDataType.DateTime && attributeValue.DateTimeValue.HasValue)
+        {
+            <MudTooltip Text="@attributeValue.DateTimeValue.Value.ToString("O")">
+                <ChildContent>
+                    @attributeValue.DateTimeValue.Value.ToFriendlyDate()
+                </ChildContent>
+            </MudTooltip>
+        }
+        else if (attributeValue.Attribute.Type == AttributeDataType.Guid)
+        {
+            @attributeValue.GuidValue?.ToString()
+        }
+        else if (attributeValue.Attribute.Type == AttributeDataType.Boolean && attributeValue.BoolValue.HasValue)
+        {
+            if (attributeValue.BoolValue.Value)
+            {
+                <MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small" />
+                <span class="ms-1">True</span>
+            }
+            else
+            {
+                <MudIcon Icon="@Icons.Material.Filled.Close" Color="Color.Default" Size="Size.Small" />
+                <span class="ms-1">False</span>
+            }
+        }
+        else if (attributeValue.Attribute.Type == AttributeDataType.Binary && attributeValue.ByteValue != null)
+        {
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@attributeValue.ByteValue.Length bytes</MudChip>
+        }
+        else if (attributeValue.Attribute.Type == AttributeDataType.Reference && attributeValue.ReferenceValue != null)
+        {
+            <MudLink Href="@Utilities.GetMetaverseObjectHref(attributeValue.ReferenceValue)">
+                @(attributeValue.ReferenceValue.DisplayName ?? attributeValue.ReferenceValue.Id.ToString())
+            </MudLink>
+        }
+    };
+}
+
+@* Renders a multi-valued attribute as a searchable, paginated table *@
+@{
+    RenderFragment RenderMvaTable(MvoAttributeGroup group) => __builder =>
+    {
+        var searchText = _searchTexts.GetValueOrDefault(group.AttributeName, "");
+        @* TODO: When editable, add Add/Remove buttons and search-to-add dialog *@
+        <MudText Typo="Typo.subtitle2" Class="mb-2">
+            <div class="d-flex align-center justify-space-between">
+                <span>@group.AttributeName (@group.Values.Count)</span>
+                @RenderViewModeToggle(group, "table")
+            </div>
+        </MudText>
+        <MudTable T="MetaverseObjectAttributeValue" Items="@group.Values" Dense="true" Hover="true"
+                  Elevation="0" Outlined="true" FixedHeader="true" Height="400px"
+                  Filter="new Func<MetaverseObjectAttributeValue, bool>(v => FilterMvaTableValue(v, group.AttributeName))"
+                  Virtualize="true">
+            <ToolBarContent>
+                <MudTextField T="string" Value="@searchText"
+                              ValueChanged="@(v => OnSearchTextChanged(group.AttributeName, v))"
+                              Placeholder="@($"Search {group.AttributeName.ToLower()}...")"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              Immediate="true" DebounceInterval="300"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh>Display Name</MudTh>
+                <MudTh>Type</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                @if (context.ReferenceValue != null)
+                {
+                    <MudTd DataLabel="Display Name">
+                        <MudLink Href="@Utilities.GetMetaverseObjectHref(context.ReferenceValue)">
+                            @(context.ReferenceValue.DisplayName ?? context.ReferenceValue.Id.ToString())
+                        </MudLink>
+                    </MudTd>
+                    <MudTd DataLabel="Type">
+                        @context.ReferenceValue.Type?.Name
+                    </MudTd>
+                }
+                else
+                {
+                    <MudTd DataLabel="Display Name">@GetDisplayValue(context)</MudTd>
+                    <MudTd DataLabel="Type"></MudTd>
+                }
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    };
+}
+
+@* Renders a multi-valued attribute as horizontal chips *@
+@{
+    RenderFragment RenderMvaChipSet(MvoAttributeGroup group) => __builder =>
+    {
+        @* TODO: When editable, add OnClose handlers for chip removal and Add button *@
+        <MudField Label="@group.AttributeName" Variant="Variant.Outlined">
+            <div class="d-flex align-center">
+                <div class="d-flex flex-wrap gap-1 flex-grow-1">
+                    @foreach (var val in group.Values)
+                    {
+                        if (val.ReferenceValue != null)
+                        {
+                            <MudChip T="string" Href="@Utilities.GetMetaverseObjectHref(val.ReferenceValue)" Color="Color.Primary" Variant="Variant.Text">
+                                @(val.ReferenceValue.DisplayName ?? val.ReferenceValue.Id.ToString())
+                            </MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Variant="Variant.Text">@GetDisplayValue(val)</MudChip>
+                        }
+                    }
+                </div>
+                @RenderViewModeToggle(group, "chipset")
+            </div>
+        </MudField>
+    };
+}
+
+@* Renders a multi-valued attribute as a vertical list *@
+@{
+    RenderFragment RenderMvaList(MvoAttributeGroup group) => __builder =>
+    {
+        @* TODO: When editable, add remove button per item and Add button at bottom *@
+        <MudText Typo="Typo.subtitle2" Class="mb-1">
+            <div class="d-flex align-center justify-space-between">
+                <span>@group.AttributeName (@group.Values.Count)</span>
+                @RenderViewModeToggle(group, "list")
+            </div>
+        </MudText>
+        <MudPaper Outlined="true" Class="pa-0">
+            <MudList T="string" Dense="true" ReadOnly="true">
+                @foreach (var val in group.Values)
+                {
+                    if (val.ReferenceValue != null)
+                    {
+                        <MudListItem T="string" Href="@Utilities.GetMetaverseObjectHref(val.ReferenceValue)" Icon="@Icons.Material.Filled.Link">
+                            @(val.ReferenceValue.DisplayName ?? val.ReferenceValue.Id.ToString())
+                        </MudListItem>
+                    }
+                    else
+                    {
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.ChevronRight">
+                            @GetDisplayValue(val)
+                        </MudListItem>
+                    }
+                }
+            </MudList>
+        </MudPaper>
+    };
+}
+
+@* Renders a view mode toggle button for switching between table/chipset/list *@
+@{
+    RenderFragment RenderViewModeToggle(MvoAttributeGroup group, string currentMode) => __builder =>
+    {
+        <MudMenu Icon="@Icons.Material.Filled.ViewModule" Size="Size.Small" Dense="true"
+                 AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+                 AriaLabel="Change view mode">
+            <MudMenuItem OnClick="@(() => SetViewModeAsync(group.AttributeName, "table"))"
+                         Icon="@Icons.Material.Filled.ViewList"
+                         Disabled="@(currentMode == "table")">Table</MudMenuItem>
+            <MudMenuItem OnClick="@(() => SetViewModeAsync(group.AttributeName, "chipset"))"
+                         Icon="@Icons.Material.Filled.Style"
+                         Disabled="@(currentMode == "chipset")">Chips</MudMenuItem>
+            <MudMenuItem OnClick="@(() => SetViewModeAsync(group.AttributeName, "list"))"
+                         Icon="@Icons.Material.Filled.FormatListBulleted"
+                         Disabled="@(currentMode == "list")">List</MudMenuItem>
+        </MudMenu>
+    };
+}
+
+@code {
+    /// <summary>
+    /// The metaverse object whose attributes to display.
+    /// </summary>
+    [Parameter]
+    public MetaverseObject MetaverseObject { get; set; } = null!;
+
+    /// <summary>
+    /// Whether attributes are editable. Currently always false.
+    /// Future: This will evolve to per-attribute editability via RBAC, where some attributes
+    /// may be editable while others remain read-only for the same user on the same page.
+    /// When that work begins, replace this with a per-attribute permission map
+    /// (e.g., Dictionary&lt;string, bool&gt; or IAttributePermissionService).
+    /// </summary>
+    [Parameter]
+    public bool IsEditable { get; set; } = false;
+
+    private List<CategoryGroup> _categoryGroups = new();
+
+    /// <summary>
+    /// Per-attribute user view mode overrides loaded from browser localStorage.
+    /// </summary>
+    private readonly Dictionary<string, string> _viewModeOverrides = new();
+
+    /// <summary>
+    /// Per-attribute search text for table view filters.
+    /// </summary>
+    private readonly Dictionary<string, string> _searchTexts = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (MetaverseObject == null)
+            return;
+
+        _categoryGroups = BuildCategoryGroups();
+
+        // Pre-load user view mode preferences for all MVAs
+        var mvaAttributeNames = MetaverseObject.AttributeValues
+            .Where(v => v.Attribute.AttributePlurality == AttributePlurality.MultiValued)
+            .Select(v => v.Attribute.Name)
+            .Distinct();
+
+        foreach (var name in mvaAttributeNames)
+        {
+            var mode = await UserPreferences.GetMvaViewModeAsync(name);
+            if (mode != null)
+                _viewModeOverrides[name] = mode;
+        }
+    }
+
+    // ========================== Category Grouping ==========================
+
+    /// <summary>
+    /// Heuristic mapping of built-in attribute names to display categories.
+    /// This is a presentation-layer concern that will be replaced by admin-configurable
+    /// layouts in the future (RCDC-like feature).
+    /// </summary>
+    private static readonly Dictionary<string, string> AttributeCategoryMap = new()
+    {
+        // Identity
+        { Constants.BuiltInAttributes.DisplayName, "Identity" },
+        { Constants.BuiltInAttributes.AccountName, "Identity" },
+        { Constants.BuiltInAttributes.CommonName, "Identity" },
+        { Constants.BuiltInAttributes.DistinguishedName, "Identity" },
+        { Constants.BuiltInAttributes.UserPrincipalName, "Identity" },
+        { Constants.BuiltInAttributes.ObjectGuid, "Identity" },
+        { Constants.BuiltInAttributes.ObjectSid, "Identity" },
+        { Constants.BuiltInAttributes.EmployeeId, "Identity" },
+        { Constants.BuiltInAttributes.EmployeeNumber, "Identity" },
+        { Constants.BuiltInAttributes.ObjectIdentifier, "Identity" },
+        { Constants.BuiltInAttributes.SubjectIdentifier, "Identity" },
+        { Constants.BuiltInAttributes.Type, "Identity" },
+        { Constants.BuiltInAttributes.FirstName, "Identity" },
+        { Constants.BuiltInAttributes.LastName, "Identity" },
+
+        // Contact
+        { Constants.BuiltInAttributes.Email, "Contact" },
+        { Constants.BuiltInAttributes.TelephoneNumber, "Contact" },
+        { Constants.BuiltInAttributes.MobileNumber, "Contact" },
+        { Constants.BuiltInAttributes.FacsimileTelephoneNumber, "Contact" },
+        { Constants.BuiltInAttributes.IpPhone, "Contact" },
+        { Constants.BuiltInAttributes.Pager, "Contact" },
+        { Constants.BuiltInAttributes.HomePhone, "Contact" },
+        { Constants.BuiltInAttributes.OtherTelephones, "Contact" },
+        { Constants.BuiltInAttributes.OtherMobiles, "Contact" },
+        { Constants.BuiltInAttributes.OtherIpPhones, "Contact" },
+        { Constants.BuiltInAttributes.OtherPagers, "Contact" },
+        { Constants.BuiltInAttributes.OtherFacsimileTelephoneNumbers, "Contact" },
+        { Constants.BuiltInAttributes.MailNickname, "Contact" },
+        { Constants.BuiltInAttributes.ProxyAddresses, "Contact" },
+        { Constants.BuiltInAttributes.WebPage, "Contact" },
+        { Constants.BuiltInAttributes.Urls, "Contact" },
+
+        // Organisation
+        { Constants.BuiltInAttributes.Company, "Organisation" },
+        { Constants.BuiltInAttributes.Department, "Organisation" },
+        { Constants.BuiltInAttributes.JobTitle, "Organisation" },
+        { Constants.BuiltInAttributes.Manager, "Organisation" },
+        { Constants.BuiltInAttributes.ManagedBy, "Organisation" },
+        { Constants.BuiltInAttributes.Office, "Organisation" },
+        { Constants.BuiltInAttributes.Team, "Organisation" },
+        { Constants.BuiltInAttributes.Organisation, "Organisation" },
+        { Constants.BuiltInAttributes.Pronouns, "Organisation" },
+
+        // Location
+        { Constants.BuiltInAttributes.Country, "Location" },
+        { Constants.BuiltInAttributes.CountryCode, "Location" },
+        { Constants.BuiltInAttributes.Locality, "Location" },
+        { Constants.BuiltInAttributes.PostalCode, "Location" },
+        { Constants.BuiltInAttributes.StateOrProvince, "Location" },
+        { Constants.BuiltInAttributes.StreetAddress, "Location" },
+        { Constants.BuiltInAttributes.PostalAddresses, "Location" },
+        { Constants.BuiltInAttributes.PhysicalDeliveryOfficeName, "Location" },
+        { Constants.BuiltInAttributes.PostOfficeBoxes, "Location" },
+
+        // Group
+        { Constants.BuiltInAttributes.StaticMembers, "Group" },
+        { Constants.BuiltInAttributes.Owners, "Group" },
+        { Constants.BuiltInAttributes.GroupType, "Group" },
+        { Constants.BuiltInAttributes.GroupScope, "Group" },
+        { Constants.BuiltInAttributes.GroupTypeFlags, "Group" },
+
+        // Account
+        { Constants.BuiltInAttributes.UserAccountControl, "Account" },
+        { Constants.BuiltInAttributes.AccountExpires, "Account" },
+        { Constants.BuiltInAttributes.EmployeeStatus, "Account" },
+        { Constants.BuiltInAttributes.EmployeeType, "Account" },
+        { Constants.BuiltInAttributes.EmployeeStartDate, "Account" },
+        { Constants.BuiltInAttributes.EmployeeEndDate, "Account" },
+        { Constants.BuiltInAttributes.Status, "Account" },
+        { Constants.BuiltInAttributes.HomeDirectory, "Account" },
+        { Constants.BuiltInAttributes.HomeDrive, "Account" },
+        { Constants.BuiltInAttributes.ScriptPath, "Account" },
+        { Constants.BuiltInAttributes.UserSharedFolder, "Account" },
+        { Constants.BuiltInAttributes.IdentityAssuranceLevel, "Account" },
+
+        // Security
+        { Constants.BuiltInAttributes.AltSecurityIdentities, "Security" },
+        { Constants.BuiltInAttributes.SidHistory, "Security" },
+        { Constants.BuiltInAttributes.UserCertificates, "Security" },
+        { Constants.BuiltInAttributes.Photo, "Security" },
+    };
+
+    private static readonly Dictionary<string, string> CategoryIcons = new()
+    {
+        { "Identity", Icons.Material.Filled.Badge },
+        { "Contact", Icons.Material.Filled.ContactPhone },
+        { "Organisation", Icons.Material.Filled.Business },
+        { "Location", Icons.Material.Filled.LocationOn },
+        { "Group", Icons.Material.Filled.Group },
+        { "Account", Icons.Material.Filled.ManageAccounts },
+        { "Security", Icons.Material.Filled.Security },
+        { "Other", Icons.Material.Filled.MoreHoriz },
+    };
+
+    /// <summary>
+    /// Category display order. Categories with no populated attributes are hidden.
+    /// </summary>
+    private static readonly string[] CategoryOrder =
+        ["Identity", "Contact", "Organisation", "Location", "Group", "Account", "Security", "Other"];
+
+    private List<CategoryGroup> BuildCategoryGroups()
+    {
+        // Group attribute values by attribute name (same pattern as ConnectedSystemObjectDetail.razor)
+        var attributeGroups = MetaverseObject.AttributeValues
+            .GroupBy(v => v.Attribute.Name)
+            .OrderBy(g => g.Key)
+            .Select(g => new MvoAttributeGroup(
+                g.Key,
+                g.ToList(),
+                g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued,
+                g.First().Attribute.RenderingHint))
+            .ToList();
+
+        // Assign to categories
+        var categoryDict = new Dictionary<string, List<MvoAttributeGroup>>();
+        foreach (var group in attributeGroups)
+        {
+            var category = AttributeCategoryMap.GetValueOrDefault(group.AttributeName, "Other");
+            if (!categoryDict.ContainsKey(category))
+                categoryDict[category] = new List<MvoAttributeGroup>();
+            categoryDict[category].Add(group);
+        }
+
+        // Build ordered category list, skipping empty categories
+        return CategoryOrder
+            .Where(c => categoryDict.ContainsKey(c))
+            .Select(c => new CategoryGroup(c, CategoryIcons[c], categoryDict[c]))
+            .ToList();
+    }
+
+    // ========================== View Mode ==========================
+
+    /// <summary>
+    /// Determines the effective view mode for a multi-valued attribute.
+    /// Priority: 1) user preference override, 2) schema rendering hint, 3) auto-decide by count.
+    /// </summary>
+    private string GetEffectiveViewMode(MvoAttributeGroup group)
+    {
+        // User override takes precedence
+        if (_viewModeOverrides.TryGetValue(group.AttributeName, out var userMode))
+            return userMode;
+
+        // Then rendering hint from schema
+        return group.RenderingHint switch
+        {
+            AttributeRenderingHint.Table => "table",
+            AttributeRenderingHint.ChipSet => "chipset",
+            AttributeRenderingHint.List => "list",
+            _ => group.Values.Count > 10 ? "table" : "chipset"
+        };
+    }
+
+    private async Task SetViewModeAsync(string attributeName, string viewMode)
+    {
+        _viewModeOverrides[attributeName] = viewMode;
+        await UserPreferences.SetMvaViewModeAsync(attributeName, viewMode);
+        StateHasChanged();
+    }
+
+    // ========================== Table Search ==========================
+
+    private void OnSearchTextChanged(string attributeName, string value)
+    {
+        _searchTexts[attributeName] = value;
+    }
+
+    private bool FilterMvaTableValue(MetaverseObjectAttributeValue value, string attributeName)
+    {
+        var searchText = _searchTexts.GetValueOrDefault(attributeName, "");
+        if (string.IsNullOrWhiteSpace(searchText))
+            return true;
+
+        var displayValue = value.ReferenceValue != null
+            ? value.ReferenceValue.DisplayName ?? value.ReferenceValue.Id.ToString()
+            : GetDisplayValue(value);
+
+        return displayValue.Contains(searchText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ========================== Helpers ==========================
+
+    /// <summary>
+    /// Gets the display-friendly value string for a non-reference attribute value.
+    /// </summary>
+    private static string GetDisplayValue(MetaverseObjectAttributeValue value)
+    {
+        if (!string.IsNullOrEmpty(value.StringValue))
+            return value.StringValue;
+        if (value.DateTimeValue.HasValue)
+            return value.DateTimeValue.Value.ToFriendlyDate();
+        if (value.IntValue.HasValue)
+            return value.IntValue.Value.ToString();
+        if (value.LongValue.HasValue)
+            return value.LongValue.Value.ToString();
+        if (value.GuidValue.HasValue)
+            return value.GuidValue.Value.ToString();
+        if (value.BoolValue.HasValue)
+            return value.BoolValue.Value ? "True" : "False";
+        if (value.ByteValue != null)
+            return $"{value.ByteValue.Length} bytes";
+        return string.Empty;
+    }
+
+    // ========================== Records ==========================
+
+    private record MvoAttributeGroup(
+        string AttributeName,
+        List<MetaverseObjectAttributeValue> Values,
+        bool IsMultiValued,
+        AttributeRenderingHint RenderingHint);
+
+    private record CategoryGroup(
+        string CategoryName,
+        string Icon,
+        List<MvoAttributeGroup> AttributeGroups);
+}
