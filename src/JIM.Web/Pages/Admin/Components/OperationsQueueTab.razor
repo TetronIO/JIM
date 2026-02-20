@@ -64,6 +64,17 @@ else
         <MudText Typo="Typo.caption" Class="mud-text-secondary">Queue processes from top to bottom</MudText>
     </div>
 
+    @if (_hasProcessingTasks)
+    {
+        <div class="jim-worker-activity-bar">
+            <div class="jim-worker-activity-shimmer"></div>
+            <div class="jim-worker-activity-text">
+                <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Small" />
+                <span>Worker processing</span>
+            </div>
+        </div>
+    }
+
     <MudTable T="WorkerTaskHeader" Items="@GetSortedQueueItems()" Hover="true" Breakpoint="Breakpoint.Sm"
               Outlined="true" Elevation="0" Dense="true" GroupBy="@_groupDefinition"
               Class="@(_hasProcessingTasks ? "jim-queue-table-active" : "")">
@@ -133,7 +144,7 @@ else
             </MudTd>
             <MudTd DataLabel="Name">@context.Name</MudTd>
             <MudTd DataLabel="Status">
-                @GetTaskStatusDisplay(context)
+                <MudChip T="string" Variant="Variant.Text" Color="GetTaskStatusColor(context.Status)" Class="ml-0">@GetTaskStatusDisplay(context)</MudChip>
             </MudTd>
             <MudTd DataLabel="Progress">
                 @RenderProgress(context)
@@ -151,17 +162,6 @@ else
             </MudTd>
         </RowTemplate>
     </MudTable>
-
-    @if (_hasProcessingTasks)
-    {
-        <div class="jim-worker-activity-bar">
-            <div class="jim-worker-activity-shimmer"></div>
-            <div class="jim-worker-activity-text">
-                <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Small" />
-                <span>Worker processing</span>
-            </div>
-        </div>
-    }
 }
 
 @code {
@@ -366,6 +366,14 @@ else
             _ => task.Status.ToString().SplitOnCapitalLetters()
         };
     }
+
+    private static Color GetTaskStatusColor(WorkerTaskStatus status) => status switch
+    {
+        WorkerTaskStatus.Processing => Color.Success,
+        WorkerTaskStatus.CancellationRequested => Color.Warning,
+        WorkerTaskStatus.Queued => Color.Info,
+        _ => Color.Default
+    };
 
     private static RenderFragment RenderProgress(WorkerTaskHeader context) => __builder =>
     {

@@ -186,20 +186,20 @@ html[lang] .mud-table-outlined {
     background-color: var(--mud-palette-lines-default);
 }
 
-/* Operations Queue: remove bottom border radius when worker activity bar connects */
+/* Operations Queue: remove top border radius when worker activity bar connects */
 .jim-queue-table-active.mud-table-outlined {
-    border-bottom-left-radius: 0 !important;
-    border-bottom-right-radius: 0 !important;
-    border-bottom: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
+    border-top-left-radius: 0 !important;
+    border-top-right-radius: 0 !important;
+    border-top: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
 }
 
-/* Worker activity indicator bar — shown below queue table when tasks are processing */
+/* Worker activity indicator bar — shown above queue table when tasks are processing */
 .jim-worker-activity-bar {
     position: relative;
     height: 40px;
     border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
-    border-top: none;
-    border-radius: 0 0 4px 4px;
+    border-bottom: none;
+    border-radius: 4px 4px 0 0;
     overflow: hidden;
     background-color: var(--mud-palette-surface);
 }
