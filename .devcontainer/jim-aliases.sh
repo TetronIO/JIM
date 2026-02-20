@@ -41,6 +41,9 @@ Reset:
   jim-reset          - Full reset (containers, images, volumes)
   jim-wipe           - Wipe JIM data (reset CSOs/MVOs/config, keep schema)
 
+Diagrams:
+  jim-diagrams       - Export Structurizr C4 diagrams as SVG
+
 Help:
   jim                - Show this help message
 "'
@@ -126,6 +129,73 @@ alias jim-build-scheduler='docker compose -f docker-compose.yml -f docker-compos
 
 # Reset
 alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down --rmi local --volumes && docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --rmi local --volumes --remove-orphans 2>/dev/null || true && docker rm -f samba-ad-primary samba-ad-source samba-ad-target sqlserver-hris-a oracle-hris-b postgres-target openldap-test mysql-test 2>/dev/null || true && docker volume ls --format "{{.Name}}" | grep jim-integration | xargs -r docker volume rm 2>/dev/null || true && docker volume rm -f jim-db-volume jim-logs-volume 2>/dev/null || true && echo "JIM reset complete. All containers, images, and volumes removed. Run jim-build to rebuild."'
+
+# Structurizr diagram export
+jim-diagrams() {
+  local repo_root structurizr_dir container_name port
+  repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo '/workspaces/JIM')"
+  structurizr_dir="${repo_root}/docs/diagrams/structurizr"
+  container_name="jim-structurizr-export"
+  port=8085
+
+  # Install npm dependencies if needed
+  if [ ! -d "${structurizr_dir}/node_modules" ]; then
+    echo "Installing Puppeteer dependencies..."
+    (cd "${structurizr_dir}" && npm install --silent)
+  fi
+
+  # Remove any stale container
+  docker rm -f "${container_name}" 2>/dev/null
+
+  # Start Structurizr Lite (adrs mount resolves the symlink inside the container)
+  echo "Starting Structurizr Lite on port ${port}..."
+  docker run -d --name "${container_name}" \
+    -p "${port}:8080" \
+    -v "${structurizr_dir}:/usr/local/structurizr" \
+    -v "${repo_root}/docs/adrs:/usr/local/structurizr/adrs" \
+    structurizr/lite > /dev/null
+
+  # Wait for Structurizr Lite to be ready
+  echo "Waiting for Structurizr Lite to start..."
+  local attempts=0
+  while [ $attempts -lt 30 ]; do
+    if curl -sf "http://localhost:${port}/workspace/diagrams" > /dev/null 2>&1; then
+      break
+    fi
+    attempts=$((attempts + 1))
+    sleep 2
+  done
+
+  if [ $attempts -ge 30 ]; then
+    echo "ERROR: Structurizr Lite failed to start within 60 seconds."
+    docker rm -f "${container_name}" > /dev/null 2>&1
+    return 1
+  fi
+
+  echo "Structurizr Lite is ready."
+
+  # Remove old images
+  rm -f "${repo_root}/docs/diagrams/images"/jim-structurizr-1-*.svg
+
+  # Export diagrams
+  node "${structurizr_dir}/export-diagrams.js" \
+    "http://localhost:${port}/workspace/diagrams" \
+    "${repo_root}/docs/diagrams/images"
+  local export_rc=$?
+
+  # Cleanup
+  echo "Stopping Structurizr Lite..."
+  docker rm -f "${container_name}" > /dev/null 2>&1
+
+  if [ $export_rc -eq 0 ]; then
+    echo ""
+    echo "Diagrams exported to docs/diagrams/images/"
+    ls -1 "${repo_root}/docs/diagrams/images"/jim-structurizr-1-*.svg 2>/dev/null | sed 's|.*/||' | sed 's/^/  /'
+  else
+    echo "ERROR: Diagram export failed."
+    return 1
+  fi
+}
 
 # Wipe JIM data (reset to initial state without destroying database)
 # Note: Preserves MetaverseObjects with Administrator role assignments

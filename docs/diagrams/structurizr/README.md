@@ -98,6 +98,8 @@ The workspace contains C4 diagrams at three levels:
 | `workspace.dsl` | Structurizr DSL model defining all diagrams |
 | `docs/01-overview.md` | System overview documentation (shown in Structurizr) |
 | `adrs/` | Symlink to `docs/adrs/` - Architecture Decision Records (shown in Structurizr via `!adrs`) |
+| `export-diagrams.js` | Puppeteer script for automated SVG export |
+| `package.json` | Node.js dependencies for the export script |
 
 ## Editing the Diagrams
 
@@ -106,6 +108,20 @@ The workspace contains C4 diagrams at three levels:
 3. The DSL syntax is documented at https://docs.structurizr.com/dsl/language
 
 ## Exporting Diagrams
+
+### Automated Export (Recommended)
+
+Run the `jim-diagrams` alias from the repository root:
+
+```bash
+jim-diagrams
+```
+
+This starts Structurizr Lite in Docker, exports all diagrams as SVG using headless Chromium, saves them to `docs/diagrams/images/`, and cleans up automatically.
+
+Prerequisites: Node.js, Docker. Dependencies are installed automatically on first run.
+
+### Manual Export
 
 From Structurizr Lite, you can export diagrams as:
 - PNG images (click the export button on each diagram)

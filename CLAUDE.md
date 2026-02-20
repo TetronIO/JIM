@@ -120,6 +120,9 @@ Sync operations are the core of JIM. Customers depend on JIM to synchronise thei
 **Reset:**
 - `jim-reset` - Reset JIM (delete database & logs volumes)
 
+**Diagrams:**
+- `jim-diagrams` - Export Structurizr C4 diagrams as SVG (requires Docker)
+
 **Docker (Manual Commands):**
 - `docker compose -f db.yml up -d` - Start database (same as jim-db)
 - `docker compose -f db.yml down` - Stop database

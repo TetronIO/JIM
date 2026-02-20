@@ -1,0 +1,12 @@
+{
+  "name": "jim-structurizr-export",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Automated SVG diagram export from Structurizr workspace",
+  "scripts": {
+    "export": "node export-diagrams.js"
+  },
+  "dependencies": {
+    "puppeteer": "^24.0.0"
+  }
+}
