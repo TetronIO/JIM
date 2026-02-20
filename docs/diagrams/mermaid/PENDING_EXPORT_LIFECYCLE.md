@@ -145,24 +145,11 @@ stateDiagram-v2
 
 ## Change Types
 
-```
-+--------+-------------------+---------------------------------------------+
-| Type   | When Created      | What Happens                                |
-+--------+-------------------+---------------------------------------------+
-| Create | No CSO exists in  | Provisions new object in target system      |
-|        | target system for | Connector creates object + sets attributes  |
-|        | this MVO          | PE captures DN template + all attributes    |
-+--------+-------------------+---------------------------------------------+
-| Update | CSO exists but    | Updates existing object attributes          |
-|        | attributes differ | Only changed attributes are included        |
-|        | from MVO values   | No-net-change detection avoids unnecessary  |
-+--------+-------------------+---------------------------------------------+
-| Delete | MVO deletion rule | Removes object from target system           |
-|        | triggered, or MVO | Created by EvaluateMvoDeletionAsync or      |
-|        | falls out of      | EvaluateOutOfScopeExportsAsync              |
-|        | export scope      | PE deleted along with CSO on success        |
-+--------+-------------------+---------------------------------------------+
-```
+| Type | When Created | What Happens |
+|------|-------------|--------------|
+| Create | No CSO exists in target system for this MVO | Provisions new object in target system. Connector creates object + sets attributes. PE captures DN template + all attributes. |
+| Update | CSO exists but attributes differ from MVO values | Updates existing object attributes. Only changed attributes are included. No-net-change detection avoids unnecessary exports. |
+| Delete | MVO deletion rule triggered, or MVO falls out of export scope | Removes object from target system. Created by EvaluateMvoDeletionAsync or EvaluateOutOfScopeExportsAsync. PE deleted along with CSO on success. |
 
 ## Drift Detection Creates Corrective Exports
 
