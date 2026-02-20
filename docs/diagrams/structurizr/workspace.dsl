@@ -241,6 +241,7 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
             element "Component" {
                 background #85bbf0
                 color #000000
+                width 550
             }
             element "Planned" {
                 background #e0e0e0
