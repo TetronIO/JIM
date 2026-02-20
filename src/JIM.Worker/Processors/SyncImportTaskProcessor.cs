@@ -1475,6 +1475,14 @@ public class SyncImportTaskProcessor
         var pageSize = await _jim.ServiceSettings.GetSyncPageSizeAsync();
         var processedCount = 0;
 
+        // Build RPEI lookup dictionary for O(1) error reporting instead of O(N) linear scans
+        var rpeiLookup = new Dictionary<ConnectedSystemObject, ActivityRunProfileExecutionItem>();
+        foreach (var rpei in _activityRunProfileExecutionItems)
+        {
+            if (rpei.ConnectedSystemObject != null)
+                rpeiLookup.TryAdd(rpei.ConnectedSystemObject, rpei);
+        }
+
         // enumerate just the CSOs with unresolved references, for efficiency
         foreach (var csoToProcess in connectedSystemObjectsToBeCreated.Where(cso => cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))))
         {
@@ -1484,7 +1492,7 @@ public class SyncImportTaskProcessor
 
             // enumerate just the attribute values for this CSO that are for unresolved references
             foreach (var referenceAttributeValue in csoToProcess.AttributeValues.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
-                await ResolveAttributeValueReferenceAsync(csoToProcess, referenceAttributeValue, externalIdAttributeToUse, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+                await ResolveAttributeValueReferenceAsync(csoToProcess, referenceAttributeValue, externalIdAttributeToUse, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated, rpeiLookup);
 
             processedCount++;
             _activity.ObjectsProcessed = processedCount;
@@ -1502,7 +1510,7 @@ public class SyncImportTaskProcessor
 
             // enumerate just the attribute values for this CSO that are for unresolved references
             foreach (var referenceAttributeValue in csoToProcess.PendingAttributeValueAdditions.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
-                await ResolveAttributeValueReferenceAsync(csoToProcess, referenceAttributeValue, externalIdAttributeToUse, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+                await ResolveAttributeValueReferenceAsync(csoToProcess, referenceAttributeValue, externalIdAttributeToUse, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated, rpeiLookup);
 
             processedCount++;
             _activity.ObjectsProcessed = processedCount;
@@ -1516,7 +1524,7 @@ public class SyncImportTaskProcessor
         await _jim.Activities.UpdateActivityAsync(_activity);
     }
 
-    private async Task ResolveAttributeValueReferenceAsync(ConnectedSystemObject csoToProcess, ConnectedSystemObjectAttributeValue referenceAttributeValue, ConnectedSystemObjectTypeAttribute externalIdAttribute, IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    private async Task ResolveAttributeValueReferenceAsync(ConnectedSystemObject csoToProcess, ConnectedSystemObjectAttributeValue referenceAttributeValue, ConnectedSystemObjectTypeAttribute externalIdAttribute, IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, Dictionary<ConnectedSystemObject, ActivityRunProfileExecutionItem> rpeiLookup)
     {
         // try and find a cso in the database, or in the processing list we've been passed in, that has an identifier mentioned in the UnresolvedReferenceValue property.
         // to do this:
@@ -1652,8 +1660,8 @@ public class SyncImportTaskProcessor
         {
             // reference not found. referenced object probably out of container scope!
             // todo: make it a per-connected system setting whether to raise an error, or ignore. sometimes this is desirable.
-            var activityRunProfileExecutionItem = _activityRunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject == csoToProcess);
-            if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || (activityRunProfileExecutionItem.ErrorType == null && activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)))
+            rpeiLookup.TryGetValue(csoToProcess, out var activityRunProfileExecutionItem);
+            if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
             {
                 activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {referenceAttributeValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
                 activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
