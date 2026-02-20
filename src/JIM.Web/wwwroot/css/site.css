@@ -175,10 +175,22 @@ html[lang] .mud-table-outlined {
     border: none !important;
 }
 
-/* Thicker separator between adjacent panels for visual distinction when expanded.
-   Skips the first to avoid doubling with the container's top border. */
+/* Thin separator between adjacent panels — skips the first to avoid
+   doubling with the container's top border */
 .jim-expansion-panel .mud-expand-panel + .mud-expand-panel {
-    border-top: 3px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
+    border-top: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default)) !important;
+}
+
+/* Panel header row uses inner-surface background for visual distinction,
+   matching nested table header styling */
+.jim-expansion-panel .mud-expand-panel-header {
+    background-color: var(--jim-inner-surface, transparent);
+}
+
+/* Space between header and content — matches the default 24px gutters on
+   left/right/bottom so spacing is uniform on all sides */
+.jim-expansion-panel .mud-expand-panel-content {
+    padding-top: 24px !important;
 }
 
 /* Nested containers inside expansion panels — mirrors the .mud-paper nesting
