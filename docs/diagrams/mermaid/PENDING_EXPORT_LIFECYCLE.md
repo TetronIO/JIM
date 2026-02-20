@@ -29,10 +29,26 @@ stateDiagram-v2
 
     Failed --> [*]: Manual intervention<br/>or PE deleted
 
-    note right of Pending: Initial state.<br/>Created by EvaluateExportRules<br/>during Full/Delta Sync.
-    note right of Exported: Awaiting confirmation.<br/>Confirming import checks if<br/>CSO attributes match expected values.
-    note left of ExportNotConfirmed: Retryable failure.<br/>Will be re-exported after<br/>exponential backoff delay.
-    note left of Failed: Permanent failure.<br/>Requires manual intervention.<br/>RPEI: ExportConfirmationFailed
+    note right of Pending
+        Initial state.
+        Created by EvaluateExportRules
+        during Full/Delta Sync.
+    end note
+    note right of Exported
+        Awaiting confirmation.
+        Confirming import checks if
+        CSO attributes match expected values.
+    end note
+    note left of ExportNotConfirmed
+        Retryable failure.
+        Will be re-exported after
+        exponential backoff delay.
+    end note
+    note left of Failed
+        Permanent failure.
+        Requires manual intervention.
+        RPEI: ExportConfirmationFailed
+    end note
 ```
 
 ## Full Lifecycle Across Operations
