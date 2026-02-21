@@ -1,4 +1,6 @@
 using JIM.Application.Expressions;
+using JIM.Models.Expressions;
+using JIM.Models.Interfaces;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;

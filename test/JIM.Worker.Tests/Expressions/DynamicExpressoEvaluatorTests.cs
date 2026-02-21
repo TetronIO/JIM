@@ -1,4 +1,6 @@
 using JIM.Application.Expressions;
+using JIM.Models.Expressions;
+using JIM.Models.Interfaces;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Expressions;
