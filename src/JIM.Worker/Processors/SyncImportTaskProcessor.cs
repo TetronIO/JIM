@@ -1999,16 +1999,14 @@ public class SyncImportTaskProcessor
             {
                 if (pendingExportsToDelete.Count > 0)
                 {
-                    await _jim.Repository.ConnectedSystems.DeletePendingExportsByIdsAsync(
-                        pendingExportsToDelete.Select(pe => pe.Id));
+                    await _jim.Repository.ConnectedSystems.DeleteUntrackedPendingExportsAsync(pendingExportsToDelete);
                     Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch deleted {Count} confirmed pending exports", page + 1, pendingExportsToDelete.Count);
                 }
 
                 // Delete confirmed attribute changes before updating (AsNoTracking requires explicit child deletion)
                 if (confirmedAttrChangesToDelete.Count > 0)
                 {
-                    await _jim.Repository.ConnectedSystems.DeletePendingExportAttributeValueChangesByIdsAsync(
-                        confirmedAttrChangesToDelete.Select(avc => avc.Id));
+                    await _jim.Repository.ConnectedSystems.DeleteUntrackedPendingExportAttributeValueChangesAsync(confirmedAttrChangesToDelete);
                     Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch deleted {Count} confirmed attribute value changes", page + 1, confirmedAttrChangesToDelete.Count);
                 }
 

@@ -188,26 +188,27 @@ public interface IConnectedSystemRepository
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
     /// <summary>
-    /// Deletes pending exports by their IDs using a query-based approach that avoids
-    /// change tracker conflicts when the same entities are already tracked.
-    /// Also deletes associated PendingExportAttributeValueChange records.
+    /// Deletes pending exports loaded via AsNoTracking, handling change tracker conflicts
+    /// when the same entities may already be tracked from earlier processing.
+    /// Deletes both the parent PendingExport and all child AttributeValueChange records.
     /// </summary>
-    /// <param name="pendingExportIds">The IDs of the pending exports to delete.</param>
-    public Task DeletePendingExportsByIdsAsync(IEnumerable<Guid> pendingExportIds);
+    /// <param name="untrackedPendingExports">The untracked pending export entities to delete (with AttributeValueChanges populated).</param>
+    public Task DeleteUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports);
 
     /// <summary>
-    /// Updates pending exports from untracked entities by finding the tracked instance (or attaching)
-    /// and copying property values. Avoids change tracker conflicts when using AsNoTracking queries.
+    /// Updates pending exports loaded via AsNoTracking, handling change tracker conflicts
+    /// when the same entities may already be tracked from earlier processing.
+    /// Copies property values to tracked instances when they exist.
     /// </summary>
-    /// <param name="pendingExports">The untracked pending export entities with updated property values.</param>
-    public Task UpdateUntrackedPendingExportsAsync(IEnumerable<PendingExport> pendingExports);
+    /// <param name="untrackedPendingExports">The untracked pending export entities with updated property values.</param>
+    public Task UpdateUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports);
 
     /// <summary>
-    /// Deletes specific PendingExportAttributeValueChange records by their IDs using a query-based
-    /// approach that avoids change tracker conflicts.
+    /// Deletes specific PendingExportAttributeValueChange records loaded via AsNoTracking,
+    /// handling change tracker conflicts when the same entities may already be tracked.
     /// </summary>
-    /// <param name="attributeValueChangeIds">The IDs of the attribute value changes to delete.</param>
-    public Task DeletePendingExportAttributeValueChangesByIdsAsync(IEnumerable<Guid> attributeValueChangeIds);
+    /// <param name="untrackedAttributeValueChanges">The untracked attribute value change entities to delete.</param>
+    public Task DeleteUntrackedPendingExportAttributeValueChangesAsync(IEnumerable<PendingExportAttributeValueChange> untrackedAttributeValueChanges);
 
     /// <summary>
     /// Lightweight query that returns only the CSO IDs from the given set that have pending exports.

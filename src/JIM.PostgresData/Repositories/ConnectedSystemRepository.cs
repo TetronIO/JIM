@@ -1931,53 +1931,37 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return result;
     }
 
-    public async Task DeletePendingExportsByIdsAsync(IEnumerable<Guid> pendingExportIds)
+    public async Task DeleteUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports)
     {
-        var idList = pendingExportIds.ToHashSet();
-        if (idList.Count == 0)
+        var exportList = untrackedPendingExports.ToList();
+        if (exportList.Count == 0)
             return;
 
-        // Find or load the entities, handling change tracker conflicts gracefully.
-        // Some may already be tracked (from per-CSO processing), others may not.
-        var entitiesToDelete = new List<PendingExport>();
-
-        foreach (var id in idList)
+        // For each untracked pending export, resolve children first (delete), then parent.
+        // The untracked entities have AttributeValueChanges populated from the lightweight query.
+        // We must delete children before parents due to FK constraints (no DB cascade configured).
+        foreach (var untrackedExport in exportList)
         {
-            var trackedEntry = Repository.Database.ChangeTracker.Entries<PendingExport>()
-                .FirstOrDefault(e => e.Entity.Id == id);
+            // Delete all child attribute value changes
+            foreach (var attrChange in untrackedExport.AttributeValueChanges)
+            {
+                var entity = FindTrackedOrAttach<PendingExportAttributeValueChange>(
+                    attrChange.Id, attrChange, Repository.Database.PendingExportAttributeValueChanges);
+                Repository.Database.PendingExportAttributeValueChanges.Remove(entity);
+            }
 
-            if (trackedEntry != null)
-            {
-                entitiesToDelete.Add(trackedEntry.Entity);
-            }
-            else
-            {
-                // Create a stub entity for deletion
-                var stub = new PendingExport { Id = id };
-                Repository.Database.PendingExports.Attach(stub);
-                entitiesToDelete.Add(stub);
-            }
+            // Delete the parent pending export
+            var parentEntity = FindTrackedOrAttach<PendingExport>(
+                untrackedExport.Id, untrackedExport, Repository.Database.PendingExports);
+            Repository.Database.PendingExports.Remove(parentEntity);
         }
 
-        // Remove child attribute value changes first (tracked ones)
-        foreach (var pe in entitiesToDelete)
-        {
-            var trackedChildren = Repository.Database.ChangeTracker.Entries<PendingExportAttributeValueChange>()
-                .Where(e => pe.AttributeValueChanges.Any(avc => avc.Id == e.Entity.Id))
-                .Select(e => e.Entity)
-                .ToList();
-
-            if (trackedChildren.Count > 0)
-                Repository.Database.PendingExportAttributeValueChanges.RemoveRange(trackedChildren);
-        }
-
-        Repository.Database.PendingExports.RemoveRange(entitiesToDelete);
         await Repository.Database.SaveChangesAsync();
     }
 
-    public async Task UpdateUntrackedPendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+    public async Task UpdateUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports)
     {
-        var exportList = pendingExports.ToList();
+        var exportList = untrackedPendingExports.ToList();
         if (exportList.Count == 0)
             return;
 
@@ -2030,34 +2014,40 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
-    public async Task DeletePendingExportAttributeValueChangesByIdsAsync(IEnumerable<Guid> attributeValueChangeIds)
+    public async Task DeleteUntrackedPendingExportAttributeValueChangesAsync(IEnumerable<PendingExportAttributeValueChange> untrackedAttributeValueChanges)
     {
-        var idList = attributeValueChangeIds.ToHashSet();
-        if (idList.Count == 0)
+        var changeList = untrackedAttributeValueChanges.ToList();
+        if (changeList.Count == 0)
             return;
 
-        // Find tracked or create stub entities for deletion
-        var entitiesToDelete = new List<PendingExportAttributeValueChange>();
-
-        foreach (var id in idList)
+        foreach (var untrackedChange in changeList)
         {
-            var trackedEntry = Repository.Database.ChangeTracker.Entries<PendingExportAttributeValueChange>()
-                .FirstOrDefault(e => e.Entity.Id == id);
-
-            if (trackedEntry != null)
-            {
-                entitiesToDelete.Add(trackedEntry.Entity);
-            }
-            else
-            {
-                var stub = new PendingExportAttributeValueChange { Id = id };
-                Repository.Database.PendingExportAttributeValueChanges.Attach(stub);
-                entitiesToDelete.Add(stub);
-            }
+            var entity = FindTrackedOrAttach<PendingExportAttributeValueChange>(
+                untrackedChange.Id, untrackedChange, Repository.Database.PendingExportAttributeValueChanges);
+            Repository.Database.PendingExportAttributeValueChanges.Remove(entity);
         }
 
-        Repository.Database.PendingExportAttributeValueChanges.RemoveRange(entitiesToDelete);
         await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Finds an already-tracked entity by ID, or attaches the untracked instance.
+    /// Prevents "already tracked" conflicts when mixing AsNoTracking queries with change tracking operations.
+    /// </summary>
+    private T FindTrackedOrAttach<T>(Guid id, T untrackedEntity, DbSet<T> dbSet) where T : class
+    {
+        var trackedEntry = Repository.Database.ChangeTracker.Entries<T>()
+            .FirstOrDefault(e =>
+            {
+                var idProp = e.Metadata.FindPrimaryKey()?.Properties.FirstOrDefault();
+                return idProp != null && Equals(e.Property(idProp.Name).CurrentValue, id);
+            });
+
+        if (trackedEntry != null)
+            return trackedEntry.Entity;
+
+        dbSet.Attach(untrackedEntity);
+        return untrackedEntity;
     }
 
     public async Task<HashSet<Guid>> GetCsoIdsWithPendingExportsAsync(IEnumerable<Guid> connectedSystemObjectIds)
