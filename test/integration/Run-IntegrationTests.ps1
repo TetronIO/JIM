@@ -671,7 +671,9 @@ if (-not $SkipBuild -and -not $SkipReset) {
     Write-Section "Step 2: Building Docker Images"
 
     Write-Step "Building JIM stack..."
-    $env:VERSION_SUFFIX = "dev.$((Get-Date).ToUniversalTime().ToString('yyyyMMdd.HHmm'))"
+    $now = (Get-Date).ToUniversalTime()
+    $minutesSinceMidnight = $now.Hour * 60 + $now.Minute
+    $env:VERSION_SUFFIX = "dev.$($now.ToString('yyyyMMdd')).$minutesSinceMidnight"
     $buildOutput = docker compose -f docker-compose.yml -f docker-compose.override.yml build 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to build JIM stack"
