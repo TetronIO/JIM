@@ -12,9 +12,16 @@
 4. **NEVER** create a PR without verifying build and tests pass
 5. **NEVER** assume tests will pass without running them
 
-**EXCEPTIONS:**
-- Scripts (.ps1, .sh, etc.) do not require dotnet build/test
-- **Static assets** (CSS, JS, images) do not require dotnet build/test - these are served directly without compilation
+**EXCEPTIONS - changes that do NOT require dotnet build/test:**
+- **Scripts** (.ps1, .sh, etc.) - do not affect compiled code
+- **Static assets** (CSS, JS, images) - served directly without compilation
+- **Documentation** (`.md` files, `docs/` changes) - no compiled code
+- **Configuration files** (`.env.example`, `docker-compose.yml`, `Dockerfile`, `.gitignore`, `.editorconfig`, etc.) - not compiled
+- **CI/CD workflows** (`.github/workflows/`) - run remotely, not compiled locally
+- **Diagrams** (`workspace.dsl`, exported SVGs) - non-code assets
+- **Plan documents** (`docs/plans/`) - documentation only
+
+**Partial exception:**
 - **UI-only changes** (Blazor pages, Razor components) require `dotnet build` but do NOT require `dotnet test` - there are no UI tests, so running tests just wastes time
 
 **YOU MUST WRITE UNIT TESTS FOR NEW FUNCTIONALITY:**
@@ -233,10 +240,11 @@ When creating ASCII diagrams in documentation or code comments, use only reliabl
 
 ## Testing
 
-**Before Committing (MANDATORY - NO EXCEPTIONS):**
+**Before Committing .NET Code (MANDATORY):**
 - Run `dotnet build JIM.sln` - Must complete with zero errors
 - Run `dotnet test JIM.sln` - All tests must pass
 - **DO NOT proceed to commit if any tests fail or build has errors**
+- See **Exceptions** under Critical Requirements for changes that do not require build/test
 
 **Test Basics:**
 - NUnit with `[Test]` attribute, `Assert.That()` syntax, Moq for mocking
@@ -469,20 +477,23 @@ Use `./test/integration/Run-IntegrationTests.ps1` (PowerShell) - never invoke sc
 ## Workflow Best Practices
 
 **Git:**
+- **ALWAYS** work on a feature branch - NEVER commit directly to `main`
+- **NEVER** automatically create a PR or merge to `main` - the user must explicitly instruct you to do so
 - Branch naming: `feature/description` or `claude/description-sessionId`
 - Commit messages: Descriptive, include issue reference if applicable
-- Build and test before EVERY commit - NO EXCEPTIONS
+- Build and test before every commit of .NET code (see **Exceptions** under Critical Requirements)
 - Push to feature branches, create PRs to main
 
 **Development Cycle (FOLLOW THIS EXACTLY):**
-1. Create/checkout feature branch
+1. Create/checkout feature branch (NEVER work on `main`)
 2. Make changes
-3. **MANDATORY: Build**: `dotnet build JIM.sln` - Must succeed
-4. **MANDATORY: Test**: `dotnet test JIM.sln` - All must pass
-5. If build or tests fail, fix errors and repeat steps 3-4
-6. **ONLY AFTER** build and tests pass: Commit with clear message
-7. **ONLY AFTER** successful commit: Push and create PR
+3. **For .NET code changes**: Build (`dotnet build JIM.sln`) and Test (`dotnet test JIM.sln`) - must succeed
+4. For non-.NET changes (scripts, docs, config, CI/CD, diagrams): skip build/test (see Exceptions above)
+5. If build or tests fail, fix errors and repeat step 3
+6. **ONLY AFTER** build and tests pass (or are not required): Commit with clear message
+7. **ONLY AFTER** successful commit and **ONLY when the user explicitly asks**: Push and create PR
 8. **NEVER** create a PR with failing tests or build errors
+9. **NEVER** merge PRs without explicit user instruction
 
 ## Release Process
 
