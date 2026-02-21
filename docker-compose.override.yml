@@ -30,13 +30,17 @@ services:
   # Development PostgreSQL settings - sized for dev environments (~8-16GB RAM)
   # shm_size must be >= shared_buffers (256MB + headroom) - see docker-compose.yml for production guidance
   # statement_timeout=300000 (5 minutes) prevents runaway queries
-  # log_min_duration_statement=500 (0.5 seconds) logs slow queries for dev analysis
+  # log_min_duration_statement (JIM_DB_LOG_MIN_DURATION, default 500ms) logs slow queries for dev analysis
+  # logging_collector + jsonlog writes structured JSON logs to the shared log volume for the Logs UI
   jim.database:
     shm_size: '512mb'
     environment:
       # Override LANG from .env - PostgreSQL doesn't have en_GB.UTF-8 locale installed
       - LANG=C
-    command: postgres -c max_connections=100 -c shared_buffers=256MB -c effective_cache_size=1GB -c maintenance_work_mem=64MB -c checkpoint_completion_target=0.9 -c wal_buffers=8MB -c default_statistics_target=100 -c random_page_cost=1.1 -c work_mem=4MB -c min_wal_size=80MB -c max_wal_size=1GB -c statement_timeout=300000 -c log_min_duration_statement=500
+    volumes:
+      - jim-logs-volume:/var/log/jim
+    entrypoint: ["/bin/bash", "-c", "mkdir -p /var/log/jim/database && chown postgres:postgres /var/log/jim/database && exec docker-entrypoint.sh \"$$@\"", "--"]
+    command: postgres -c max_connections=100 -c shared_buffers=256MB -c effective_cache_size=1GB -c maintenance_work_mem=64MB -c checkpoint_completion_target=0.9 -c wal_buffers=8MB -c default_statistics_target=100 -c random_page_cost=1.1 -c work_mem=4MB -c min_wal_size=80MB -c max_wal_size=1GB -c statement_timeout=300000 -c log_min_duration_statement=${JIM_DB_LOG_MIN_DURATION:-500} -c logging_collector=on -c log_destination=jsonlog -c log_directory=/var/log/jim/database -c log_filename=jim.database.%Y%m%d.log -c log_rotation_age=1440 -c log_rotation_size=0 -c log_file_mode=0644
     # Expose PostgreSQL port for local database tools (VS Code extensions, etc.)
     ports:
       - "5432:5432"
