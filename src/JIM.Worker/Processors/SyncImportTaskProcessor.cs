@@ -131,7 +131,10 @@ public class SyncImportTaskProcessor
 
                     // Update progress - for paginated imports we don't know the total, but we track objects imported so far
                     _activity.ObjectsProcessed = totalObjectsImported;
-                    await _jim.Activities.UpdateActivityMessageAsync(_activity, $"Imported {totalObjectsImported} objects (page {pageNumber})");
+                    var progressMessage = pageNumber > 1 || result.PaginationTokens.Count > 0
+                        ? $"Imported {totalObjectsImported} objects (page {pageNumber})"
+                        : $"Imported {totalObjectsImported} objects";
+                    await _jim.Activities.UpdateActivityMessageAsync(_activity, progressMessage);
 
                     // add the external ids from this page worth of results to our external-id collection for later deletion calculation
                     AddExternalIdsToCollection(result, externalIdsImported);

@@ -2,7 +2,8 @@
   <PropertyGroup>
     <!-- Version configuration - read from VERSION file or CI environment -->
     <VersionPrefix>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)VERSION').Trim())</VersionPrefix>
-    <VersionSuffix Condition="'$(VersionSuffix)' == '' AND '$(Configuration)' == 'Debug'">dev.$([System.DateTime]::UtcNow.ToString('yyyyMMdd.HHmm'))</VersionSuffix>
+    <!-- Use minutes-since-midnight (0-1439) instead of HHmm to avoid SemVer leading zeros -->
+    <VersionSuffix Condition="'$(VersionSuffix)' == '' AND '$(Configuration)' == 'Debug'">dev.$([System.DateTime]::UtcNow.ToString('yyyyMMdd')).$([MSBuild]::Add($([MSBuild]::Multiply($([System.DateTime]::UtcNow.Hour), 60)), $([System.DateTime]::UtcNow.Minute)))</VersionSuffix>
     <Version Condition="'$(VersionSuffix)' != ''">$(VersionPrefix)-$(VersionSuffix)</Version>
     <Version Condition="'$(VersionSuffix)' == ''">$(VersionPrefix)</Version>
     <AssemblyVersion>$(VersionPrefix).0</AssemblyVersion>
