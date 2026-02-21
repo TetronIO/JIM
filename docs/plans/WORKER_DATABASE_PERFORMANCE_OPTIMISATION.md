@@ -109,27 +109,60 @@ var allMatches = await Repository.Database.ConnectedSystemObjects
     .ToListAsync();
 ```
 
-**Proposed approach**: Two-phase lookup:
-1. **ID resolution query** (raw SQL): Simple indexed query returning just the CSO ID
-   ```sql
-   SELECT cso."Id"
-   FROM "ConnectedSystemObjects" cso
-   JOIN "ConnectedSystemObjectAttributeValues" av ON av."ConnectedSystemObjectId" = cso."Id"
-   WHERE cso."ConnectedSystemId" = @csId
-     AND av."ConnectedSystemObjectTypeAttributeId" = @attrId
-     AND LOWER(av."StringValue") = @value
-   ```
-2. **Entity loading**: Load the matched CSO with its graph using the existing Include chain, but only for the single matched ID (or a small batch of matched IDs)
+**Approach**: Service-lifetime CSO lookup index using .NET's built-in `IMemoryCache`.
 
-**Alternative** (higher impact, more complex): Pre-load an external ID lookup dictionary at the start of import, eliminating per-object queries entirely. This trades memory for speed and would require understanding the import processor's flow in more detail.
+The cache stores a **lookup index only** — mapping external ID values to CSO GUIDs — not full entity graphs. This keeps memory lightweight (~100 bytes per entry), avoids EF Core entity lifecycle concerns (attach/detach, change tracking), and simplifies cache invalidation. When a cache hit returns a CSO GUID, the full entity is loaded by primary key (fast indexed lookup, ~1-2ms) in the current `DbContext`.
 
-**Estimated impact**: 10-50x reduction in import lookup query count. Import of 10,000 objects drops from ~30,000-40,000 queries to ~10,000 (or ~1-2 if using pre-loading).
+**Cache key format**: `$"cso:{connectedSystemId}:{attributeId}:{lowerExternalIdValue}"`
 
-**Complexity**: Low-Moderate
+**Population and invalidation**:
+
+| Event | Cache action |
+|-------|-------------|
+| Full Import start | Bulk-load all CSO external ID → GUID mappings for the connected system |
+| Cache hit (any import) | Return GUID, load entity by PK |
+| Cache miss (delta import) | Query DB by attribute value, add result to cache if found |
+| CSO created (import) | Add to cache after DB persist |
+| CSO updated (import) | Update cache entry if external ID changed |
+| CSO deleted (obsolete removal) | Evict from cache |
+| Full CS deletion | Evict all entries for that connected system |
+
+**Run profile sequencing**:
+
+| Scenario | Behaviour |
+|----------|-----------|
+| First run is Full Import | Bulk-load all CSO IDs into cache — eliminates N+1 entirely |
+| Subsequent Full Import | Cache already warm, all lookups are cache hits |
+| First run is Delta Import | No bulk pre-load (wasteful for a few objects). Per-object DB lookup on cache miss, result added to cache |
+| Delta Import after Full Import | Cache warm from prior full import, most lookups are cache hits |
+| Delta Import, new object in source | Cache miss → DB query → add to cache. Subsequent delta imports for same object are cache hits |
+
+**Cache lifetime**: Service-lifetime (lives as long as the Worker process). No automatic expiration — CSO external IDs rarely change. Explicit invalidation on mutation events ensures coherency.
+
+**Infrastructure**: Uses `Microsoft.Extensions.Caching.Memory` (`IMemoryCache`), already available as a transitive dependency in the Worker — no new NuGet package required. A single `MemoryCache` instance is created at Worker startup and passed through `JimApplication` to the repository/server layer.
+
+**Estimated memory**:
+
+| CSO Count | Cache Memory (index only) | Notes |
+|-----------|--------------------------|-------|
+| 1,000 | ~100 KB | Small org |
+| 10,000 | ~1 MB | Large org |
+| 50,000 | ~5 MB | Very large |
+| 100,000 | ~10 MB | Extreme — comfortably viable |
+
+**Estimated impact**: Eliminates all N+1 import lookup queries. Import of 10,000 objects drops from ~30,000-40,000 queries to 10,000 PK lookups (cache hit path) or 1 bulk query + 10,000 PK lookups (first full import).
+
+**Complexity**: Moderate
+
+**Migration path**: If the index-only approach proves insufficient for performance (the per-object PK load still adds ~1-2ms per object), the next step is to cache full CSO entity graphs in memory (`AsNoTracking`) rather than just IDs. This eliminates DB queries entirely for cache hits but introduces entity lifecycle complexity (attaching detached entities for modification, staleness of cached attribute values). The `IMemoryCache` infrastructure would remain identical — only the cached value type changes from `Guid` to `ConnectedSystemObject`.
 
 **Files affected**:
-- `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` (4 method overloads)
-- Tests in `test/JIM.Worker.Tests/` for the new query paths
+- `src/JIM.Application/JimApplication.cs` (accept `IMemoryCache` in constructor)
+- `src/JIM.Application/Servers/ConnectedSystemServer.cs` (cache-aware lookup methods)
+- `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` (bulk ID loading method, PK lookup method)
+- `src/JIM.Data/Repositories/IConnectedSystemRepository.cs` (new method signatures)
+- `src/JIM.Worker/Worker.cs` (create and pass `MemoryCache` instance)
+- Tests in `test/JIM.Worker.Tests/` for cache behaviour
 
 ---
 
@@ -276,22 +309,30 @@ await writer.CompleteAsync();
 
 If the above phases don't yield sufficient improvement, or if we decide to push performance further afterwards, the following more ambitious approaches should be explored:
 
-### A. Pre-Load CSO Lookup Dictionary at Import Start
+### A. Upgrade Lookup Index to Full Entity Cache
 
-**Concept**: At the beginning of an import run, load all existing CSOs for the connected system into an in-memory dictionary keyed by their external ID attribute value. Import object lookups then become O(1) dictionary lookups instead of per-object database queries.
+**Concept**: Phase 1 introduces a service-lifetime `IMemoryCache` storing a lookup index (external ID → CSO GUID). If the per-object PK load on cache hit (~1-2ms per object) still results in unacceptable import times, upgrade the cache to store full CSO entity graphs (`AsNoTracking`) instead of just IDs. This eliminates all database queries for cache hits entirely — lookups become pure in-memory O(1) operations.
 
 **Advantages**:
-- Eliminates all per-object database round-trips for CSO matching during import
-- Simple to implement -- a single query at import start, dictionary lookups during processing
+- Eliminates all per-object database round-trips for CSO matching during import (zero DB queries on cache hit)
+- Builds on the same `IMemoryCache` infrastructure from Phase 1 — only the cached value type changes from `Guid` to `ConnectedSystemObject`
 - Memory usage is bounded by the connected system's object count (known up front)
-- Natural fit for the import processor's sequential object processing pattern
 
 **Trade-offs**:
-- Memory consumption scales with connected system size (but CSO lookup entries would be lightweight -- just ID + external ID value, not full entity graphs)
-- Initial load query may take several seconds for very large connected systems (100k+ objects), but this is a one-time cost per import run
-- Requires invalidation/update strategy when new CSOs are created during the same import run
+- Memory consumption scales with connected system size (~10 KB per CSO with attribute values vs ~100 bytes for index-only)
+- Entity lifecycle complexity: cached entities are detached from EF Core change tracking. Modification requires attaching to the current `DbContext`, which needs careful handling to avoid tracking conflicts
+- Cache invalidation becomes more critical — a stale cached entity with outdated attribute values could cause incorrect delta detection
+- Requires `AsNoTracking()` on load and explicit `Attach()`/`Update()` on modification
 
-**When to consider**: If Phase 1's two-phase lookup approach still results in unacceptable import times, particularly for large connected systems where even one query per object is too many.
+**Estimated memory (full entity cache)**:
+
+| CSO Count | Est. Memory | Notes |
+|-----------|-------------|-------|
+| 10,000 | ~100 MB | Comfortable for most deployments |
+| 50,000 | ~500 MB | Requires adequate Worker host resources |
+| 100,000 | ~1 GB | Large but viable for enterprise deployments |
+
+**When to consider**: If Phase 1's index-only approach still results in unacceptable import times due to per-object PK loads, particularly for very large connected systems (50k+ objects) where even fast indexed queries accumulate significant total time.
 
 ### B. Persistent In-Memory Model for the Worker Service
 
