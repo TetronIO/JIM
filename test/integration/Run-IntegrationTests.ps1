@@ -1080,6 +1080,7 @@ $logTimestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
 $scenarioLogFile = Join-Path $logDir "$Scenario-$Template-$logTimestamp.log"
 
 Start-Transcript -Path $scenarioLogFile -Append | Out-Null
+$transcriptActive = $true
 try {
     # Build scenario invocation params — only pass export tuning params to scenarios that accept them
     $scenarioParams = @{
@@ -1104,8 +1105,11 @@ try {
     & $scenarioScript @scenarioParams
     $scenarioExitCode = $LASTEXITCODE
 }
-finally {
-    Stop-Transcript | Out-Null
+catch {
+    $scenarioExitCode = 1
+    Write-Host ""
+    Write-Host "${RED}✗ Scenario failed with error: $_${NC}"
+    Write-Host ""
 }
 $timings["5. Run Tests"] = (Get-Date) - $step5Start
 
@@ -1435,4 +1439,11 @@ else {
 }
 
 Write-Host ""
+
+# Stop transcript so the total execution time and summary are captured in the log file
+} finally {
+    if ($transcriptActive) {
+        Stop-Transcript | Out-Null
+    }
+}
 exit $scenarioExitCode
