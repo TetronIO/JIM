@@ -172,7 +172,9 @@ Blocking startup avoids all concurrency complexity between cache warming and tas
 | 500,000 | ~50 MB | Extreme scale |
 | 1,000,000 | ~100 MB | Theoretical upper bound — comfortably viable |
 
-**Estimated impact**: Eliminates all N+1 import lookup queries. Import of 10,000 objects drops from ~30,000-40,000 queries to 10,000 PK lookups (cache hit path) or 1 bulk query + 10,000 PK lookups (first full import).
+**Empty connected system optimisation**: When a connected system has no existing CSOs (first-ever import), `TryAndFindMatchingConnectedSystemObjectAsync` is skipped entirely. A single `COUNT(*)` query at import start determines if the CS is empty — if so, all N per-object lookups (cache and DB) are eliminated since every object is guaranteed to be new. This is particularly beneficial for integration tests (which run from a blank slate) and for initial production deployments with large source systems. CSOs are bulk-persisted after all pages are processed, so the empty flag remains valid for the entire import run.
+
+**Estimated impact**: Eliminates all N+1 import lookup queries. Import of 10,000 objects drops from ~30,000-40,000 queries to 10,000 PK lookups (cache hit path) or 1 bulk query + 10,000 PK lookups (first full import). For first-ever imports against an empty CS, the lookup is skipped entirely — reducing to 0 lookup queries.
 
 **Complexity**: Moderate
 
@@ -184,6 +186,7 @@ Blocking startup avoids all concurrency complexity between cache warming and tas
 - `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` (bulk ID loading method, PK lookup method)
 - `src/JIM.Data/Repositories/IConnectedSystemRepository.cs` (new method signatures)
 - `src/JIM.Worker/Worker.cs` (create and pass `MemoryCache` instance, startup cache warming)
+- `src/JIM.Worker/Processors/SyncImportTaskProcessor.cs` (empty CS detection, cache population on create)
 - Tests in `test/JIM.Worker.Tests/` for cache behaviour
 
 ---

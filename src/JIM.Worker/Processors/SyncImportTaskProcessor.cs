@@ -27,6 +27,12 @@ public class SyncImportTaskProcessor
     private readonly List<ActivityRunProfileExecutionItem> _activityRunProfileExecutionItems;
     private readonly CancellationTokenSource _cancellationTokenSource;
 
+    /// <summary>
+    /// When true, the connected system has no existing CSOs, so all imported objects are known to be new.
+    /// This eliminates N unnecessary DB round-trips during first-ever imports.
+    /// </summary>
+    private bool _csIsEmpty;
+
     public SyncImportTaskProcessor(
         JimApplication jimApplication,
         IConnector connector,
@@ -62,6 +68,14 @@ public class SyncImportTaskProcessor
 
         if (_connectedSystem.ObjectTypes == null)
             throw new InvalidDataException("PerformFullImportAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
+
+        // Check if the connected system has any existing CSOs. If it's empty (first-ever import),
+        // we can skip all FindMatchingCso lookups since every object is guaranteed to be new.
+        // This eliminates N unnecessary DB round-trips for initial imports.
+        var csoCountAtStart = await _jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
+        _csIsEmpty = csoCountAtStart == 0;
+        if (_csIsEmpty)
+            Log.Information("PerformFullImportAsync: Connected system {ConnectedSystemId} has no existing CSOs. Skipping CSO lookups for this import.", _connectedSystem.Id);
 
         // we keep track of all processed CSOs here, so we can bulk-persist later, when all waves of CSO changes are prepared
         var connectedSystemObjectsToBeCreated = new List<ConnectedSystemObject>();
@@ -901,6 +915,11 @@ public class SyncImportTaskProcessor
 
     private async Task<ConnectedSystemObject?> TryAndFindMatchingConnectedSystemObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
     {
+        // If the connected system has no existing CSOs (first-ever import), every object is new.
+        // Skip the DB/cache lookup entirely — there's nothing to match against.
+        if (_csIsEmpty)
+            return null;
+
         // todo: consider support for multiple external id attributes, i.e. compound primary keys
         var externalIdAttribute = connectedSystemObjectType.Attributes.First(a => a.IsExternalId);
 
