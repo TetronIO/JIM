@@ -1937,34 +1937,47 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (exportList.Count == 0)
             return;
 
-        // Delete children first, then parents, using SEPARATE SaveChangesAsync calls.
-        // EF Core batches all pending changes into a single transaction and may reorder
-        // DELETE statements. Without DB cascade delete configured (FK uses SetNull/ClientSetNull),
-        // PostgreSQL enforces FK constraints and rejects parent DELETEs if children still exist.
-        // Two separate flushes guarantee children are deleted before parents.
+        var pendingExportIds = exportList.Select(pe => pe.Id).ToList();
 
-        // Step 1: Mark all child attribute value changes for deletion and flush
-        foreach (var untrackedExport in exportList)
+        // Delete children first, then parents. Must delete ALL children from the database,
+        // not just the ones loaded in the untracked entity's collection. The change tracker
+        // may contain additional tracked children from the import phase (via navigation fixup)
+        // that weren't loaded by the AsNoTracking query.
+
+        // Detach any tracked children and parents to prevent EF Core's ClientSetNull
+        // behaviour from interfering with our explicit deletion order.
+        DetachTrackedChildEntities(pendingExportIds);
+        DetachTrackedEntities<PendingExport>(
+            e => pendingExportIds.Contains(e.Id));
+
+        if (Repository.Database.Database.IsRelational())
         {
-            foreach (var attrChange in untrackedExport.AttributeValueChanges)
-            {
-                var entity = FindTrackedOrAttach<PendingExportAttributeValueChange>(
-                    attrChange.Id, attrChange, Repository.Database.PendingExportAttributeValueChanges);
-                Repository.Database.PendingExportAttributeValueChanges.Remove(entity);
-            }
+            // Relational databases: use ExecuteDeleteAsync for direct SQL DELETE.
+            // Bypasses change tracker entirely, guaranteed correct ordering.
+            await Repository.Database.PendingExportAttributeValueChanges
+                .Where(avc => EF.Property<Guid?>(avc, "PendingExportId") != null && pendingExportIds.Contains(EF.Property<Guid?>(avc, "PendingExportId")!.Value))
+                .ExecuteDeleteAsync();
+
+            await Repository.Database.PendingExports
+                .Where(pe => pendingExportIds.Contains(pe.Id))
+                .ExecuteDeleteAsync();
         }
-
-        await Repository.Database.SaveChangesAsync();
-
-        // Step 2: Mark parent pending exports for deletion and flush
-        foreach (var untrackedExport in exportList)
+        else
         {
-            var parentEntity = FindTrackedOrAttach<PendingExport>(
-                untrackedExport.Id, untrackedExport, Repository.Database.PendingExports);
-            Repository.Database.PendingExports.Remove(parentEntity);
-        }
+            // InMemory provider (tests): ExecuteDeleteAsync not supported.
+            // Load and remove children, flush, then remove parents, flush.
+            var children = await Repository.Database.PendingExportAttributeValueChanges
+                .Where(avc => EF.Property<Guid?>(avc, "PendingExportId") != null && pendingExportIds.Contains(EF.Property<Guid?>(avc, "PendingExportId")!.Value))
+                .ToListAsync();
+            Repository.Database.PendingExportAttributeValueChanges.RemoveRange(children);
+            await Repository.Database.SaveChangesAsync();
 
-        await Repository.Database.SaveChangesAsync();
+            var parents = await Repository.Database.PendingExports
+                .Where(pe => pendingExportIds.Contains(pe.Id))
+                .ToListAsync();
+            Repository.Database.PendingExports.RemoveRange(parents);
+            await Repository.Database.SaveChangesAsync();
+        }
     }
 
     public async Task UpdateUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports)
@@ -2028,34 +2041,59 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (changeList.Count == 0)
             return;
 
-        foreach (var untrackedChange in changeList)
-        {
-            var entity = FindTrackedOrAttach<PendingExportAttributeValueChange>(
-                untrackedChange.Id, untrackedChange, Repository.Database.PendingExportAttributeValueChanges);
-            Repository.Database.PendingExportAttributeValueChanges.Remove(entity);
-        }
+        var changeIds = changeList.Select(c => c.Id).ToList();
 
-        await Repository.Database.SaveChangesAsync();
+        // Detach any tracked instances to prevent change tracker conflicts
+        DetachTrackedEntities<PendingExportAttributeValueChange>(
+            e => changeIds.Contains(e.Id));
+
+        if (Repository.Database.Database.IsRelational())
+        {
+            await Repository.Database.PendingExportAttributeValueChanges
+                .Where(avc => changeIds.Contains(avc.Id))
+                .ExecuteDeleteAsync();
+        }
+        else
+        {
+            var entities = await Repository.Database.PendingExportAttributeValueChanges
+                .Where(avc => changeIds.Contains(avc.Id))
+                .ToListAsync();
+            Repository.Database.PendingExportAttributeValueChanges.RemoveRange(entities);
+            await Repository.Database.SaveChangesAsync();
+        }
     }
 
     /// <summary>
-    /// Finds an already-tracked entity by ID, or attaches the untracked instance.
-    /// Prevents "already tracked" conflicts when mixing AsNoTracking queries with change tracking operations.
+    /// Detaches all tracked entities of type T that match the predicate.
+    /// Used before ExecuteDeleteAsync to prevent the change tracker from interfering
+    /// with direct SQL operations (e.g., ClientSetNull cascading on orphaned children).
     /// </summary>
-    private T FindTrackedOrAttach<T>(Guid id, T untrackedEntity, DbSet<T> dbSet) where T : class
+    private void DetachTrackedEntities<T>(Func<T, bool> predicate) where T : class
     {
-        var trackedEntry = Repository.Database.ChangeTracker.Entries<T>()
-            .FirstOrDefault(e =>
+        var entries = Repository.Database.ChangeTracker.Entries<T>()
+            .Where(e => predicate(e.Entity))
+            .ToList();
+
+        foreach (var entry in entries)
+            entry.State = EntityState.Detached;
+    }
+
+    /// <summary>
+    /// Detaches tracked PendingExportAttributeValueChange entities whose PendingExportId shadow FK
+    /// matches any of the given parent IDs. Accesses the shadow property via the change tracker entry.
+    /// </summary>
+    private void DetachTrackedChildEntities(List<Guid> pendingExportIds)
+    {
+        var entries = Repository.Database.ChangeTracker.Entries<PendingExportAttributeValueChange>()
+            .Where(e =>
             {
-                var idProp = e.Metadata.FindPrimaryKey()?.Properties.FirstOrDefault();
-                return idProp != null && Equals(e.Property(idProp.Name).CurrentValue, id);
-            });
+                var fkValue = e.Property<Guid?>("PendingExportId").CurrentValue;
+                return fkValue.HasValue && pendingExportIds.Contains(fkValue.Value);
+            })
+            .ToList();
 
-        if (trackedEntry != null)
-            return trackedEntry.Entity;
-
-        dbSet.Attach(untrackedEntity);
-        return untrackedEntity;
+        foreach (var entry in entries)
+            entry.State = EntityState.Detached;
     }
 
     public async Task<HashSet<Guid>> GetCsoIdsWithPendingExportsAsync(IEnumerable<Guid> connectedSystemObjectIds)

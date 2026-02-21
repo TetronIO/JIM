@@ -166,17 +166,29 @@ public class ActivityServer
     public async Task FailActivityWithErrorAsync(Activity activity, Exception exception)
     {
         var now = DateTime.UtcNow;
-        activity.ErrorMessage = exception.Message;
+        activity.ErrorMessage = GetFullExceptionMessage(exception);
 
         // Only persist stack traces for unexpected errors (bugs), not for operational errors
         // that have clear, user-actionable messages
         if (exception is not OperationalException)
-            activity.ErrorStackTrace = exception.StackTrace;
+            activity.ErrorStackTrace = exception.ToString();
 
         activity.Status = ActivityStatus.FailedWithError;
         activity.ExecutionTime = now - activity.Executed;
         activity.TotalActivityTime = now - activity.Created;
         await Application.Repository.Activity.UpdateActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Builds a complete error message by unwrapping inner exceptions.
+    /// Many exceptions (e.g. DbUpdateException) have generic messages with details in InnerException.
+    /// </summary>
+    private static string GetFullExceptionMessage(Exception exception)
+    {
+        if (exception.InnerException == null)
+            return exception.Message;
+
+        return $"{exception.Message} --> {GetFullExceptionMessage(exception.InnerException)}";
     }
 
     public async Task CancelActivityAsync(Activity activity)
