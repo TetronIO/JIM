@@ -238,48 +238,37 @@ var result = await metaVerseObjects.ToListAsync();
 
 ---
 
-### Phase 3: Bulk Write Operations
+### Phase 3: Bulk Write Operations ✅
 
-**Target**: Batch INSERT/UPDATE/DELETE methods across ConnectedSystemRepository and MetaverseRepository
+**Target**: Batch INSERT/UPDATE/DELETE methods in ConnectedSystemRepository
 
 **Problem**: EF Core's `AddRange`/`UpdateRange`/`RemoveRange` generate individual SQL statements per entity. For a batch of 500 CSOs, each with 10 attribute values, that's 5,500 individual INSERT/UPDATE/DELETE statements sent to PostgreSQL.
 
-**Methods to optimise**:
+**Methods optimised**:
 
-| Method | Current Pattern | Proposed Pattern |
-|--------|----------------|-----------------|
-| `CreateConnectedSystemObjectsAsync` | AddRange (N INSERTs) | Npgsql binary COPY or multi-row INSERT |
-| `UpdateConnectedSystemObjectsAsync` | UpdateRange (N UPDATEs, all columns) | Raw SQL batch UPDATE with unnest arrays |
-| `CreatePendingExportsAsync` | AddRangeAsync (N INSERTs) | Npgsql binary COPY or multi-row INSERT |
+| Method | Previous Pattern | New Pattern |
+|--------|-----------------|-------------|
 | `DeletePendingExportsAsync` | RemoveRange (N DELETEs + cascades) | Raw SQL `DELETE WHERE Id = ANY(@ids)` |
-| `UpdatePendingExportsAsync` | UpdateRange (N UPDATEs, all columns) | Raw SQL batch UPDATE (like existing `MarkPendingExportsAsExecutingAsync`) |
+| `CreateConnectedSystemObjectsAsync` | AddRange (N INSERTs) | Parameterised multi-row INSERT with transaction |
+| `CreatePendingExportsAsync` | AddRangeAsync (N INSERTs) | Parameterised multi-row INSERT with transaction |
+| `UpdateConnectedSystemObjectsAsync` | UpdateRange (N UPDATEs, all columns) | `UPDATE ... FROM (VALUES ...)` batch pattern |
+| `UpdatePendingExportsAsync` | UpdateRange (N UPDATEs, all columns) | `UPDATE ... FROM (VALUES ...)` batch pattern |
 
-**Npgsql binary COPY** example for bulk inserts:
-```csharp
-await using var writer = await conn.BeginBinaryImportAsync(
-    @"COPY ""ConnectedSystemObjects"" (""Id"", ""ConnectedSystemId"", ""TypeId"", ...) FROM STDIN (FORMAT BINARY)");
-foreach (var cso in objects)
-{
-    await writer.StartRowAsync();
-    await writer.WriteAsync(cso.Id, NpgsqlDbType.Uuid);
-    await writer.WriteAsync(cso.ConnectedSystemId, NpgsqlDbType.Integer);
-    // ...
-}
-await writer.CompleteAsync();
-```
+**Implementation details**:
+- **Multi-row INSERT** via `ExecuteSqlRawAsync` with parameterised `INSERT INTO ... VALUES (...), (...)` for creates
+- **Batch UPDATE** via `UPDATE ... FROM (VALUES ...) AS v(...)` pattern for updates — single round-trip per chunk
+- **Batch DELETE** via `DELETE WHERE Id = ANY({0})` for deletes — children first, then parents
+- **Pre-generated GUIDs**: All entity IDs (`Guid.NewGuid()`) assigned before raw SQL to bypass EF's `ValueGeneratedOnAdd`
+- **Shadow FK handling**: `ConnectedSystemObjectId` on attribute values and `PendingExportId` on attribute value changes set explicitly via parent's pre-generated ID
+- **Explicit transactions**: Parent-child INSERTs wrapped in `Database.BeginTransactionAsync()` for atomicity
+- **Auto-chunking**: Batches split to stay under PostgreSQL's 65,535 parameter limit (~5,000 rows per statement depending on column count)
+- **Try/catch fallback**: All methods fall back to EF Core for unit test compatibility (established pattern from `MarkPendingExportsAsExecutingAsync`)
+- **Change tracker management**: Updated/deleted entities detached after raw SQL to prevent stale tracking
 
-**Two-step approach for parent-child inserts**:
-1. COPY parent records (CSOs) -- IDs are pre-generated GUIDs, no need to retrieve auto-generated keys
-2. COPY child records (attribute values) -- reference parent by known GUID
-
-**Complexity**: Moderate -- the entity graphs (CSO + AttributeValues, PendingExport + AttributeValueChanges) require two-step COPY operations. Type-specific value columns (StringValue, IntValue, GuidValue, etc.) need careful mapping.
-
-**Estimated impact**: 5-20x faster bulk writes. The COPY protocol is PostgreSQL's fastest ingestion path.
+**Estimated impact**: 5-10x faster bulk writes compared to EF Core's per-entity SQL generation.
 
 **Files affected**:
-- `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs`
-- `src/JIM.PostgresData/Repositories/MetaverseRepository.cs` (batch create/update)
-- Tests for all modified methods
+- `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` — all 5 methods + 7 private helpers
 
 ---
 
