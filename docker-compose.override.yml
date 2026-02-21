@@ -19,8 +19,6 @@ services:
       - JIM_DB_HOSTNAME=jim.database
       # OpenLDAP TLS configuration for LDAPS connections
       - LDAPTLS_REQCERT=never
-      # Verbose logging for development debugging
-      - JIM_LOG_LEVEL=Verbose
     volumes:
       - ./test/test-data:/var/connector-files/test-data
 

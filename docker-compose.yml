@@ -9,7 +9,6 @@ services:
       # Docker-specific overrides (JIM_DB_HOSTNAME set in .env for external DB, or overridden by codespaces file)
       - JIM_DB_HOSTNAME=${JIM_DB_HOSTNAME:-jim.database}
       - JIM_LOG_PATH=/var/log/jim
-      - JIM_LOG_LEVEL=Verbose
       - JIM_LOG_REQUESTS=true
     volumes:
       - jim-logs-volume:/var/log/jim
@@ -46,7 +45,6 @@ services:
       # Docker-specific overrides
       - JIM_DB_HOSTNAME=${JIM_DB_HOSTNAME:-jim.database}
       - JIM_LOG_PATH=/var/log/jim
-      - JIM_LOG_LEVEL=Verbose
     volumes:
       - jim-logs-volume:/var/log/jim
       - jim-keys-volume:/data/keys
