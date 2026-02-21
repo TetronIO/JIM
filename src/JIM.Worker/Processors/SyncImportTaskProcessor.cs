@@ -1850,10 +1850,19 @@ public class SyncImportTaskProcessor
         {
             Log.Debug("ReconcilePendingExportsAsync: No pending exports found for any of the {CsoCount} updated CSOs. Skipping reconciliation",
                 updatedCsos.Count);
+
+            // Mark progress as complete so the UI doesn't stay stuck at "0 / N"
+            _activity.ObjectsProcessed = _activity.ObjectsToProcess;
+            await _jim.Activities.UpdateActivityAsync(_activity);
             return;
         }
 
         var csoList = updatedCsos.Where(c => csoIdsWithExports.Contains(c.Id)).ToList();
+
+        // Update progress counter to reflect the filtered count (only CSOs with pending exports)
+        _activity.ObjectsToProcess = csoList.Count;
+        _activity.ObjectsProcessed = 0;
+        await _jim.Activities.UpdateActivityAsync(_activity);
 
         Log.Debug("ReconcilePendingExportsAsync: {FilteredCount} of {TotalCount} CSOs have pending exports",
             csoList.Count, updatedCsos.Count);

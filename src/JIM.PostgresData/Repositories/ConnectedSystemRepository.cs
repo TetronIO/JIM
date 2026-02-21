@@ -1937,20 +1937,28 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (exportList.Count == 0)
             return;
 
-        // For each untracked pending export, resolve children first (delete), then parent.
-        // The untracked entities have AttributeValueChanges populated from the lightweight query.
-        // We must delete children before parents due to FK constraints (no DB cascade configured).
+        // Delete children first, then parents, using SEPARATE SaveChangesAsync calls.
+        // EF Core batches all pending changes into a single transaction and may reorder
+        // DELETE statements. Without DB cascade delete configured (FK uses SetNull/ClientSetNull),
+        // PostgreSQL enforces FK constraints and rejects parent DELETEs if children still exist.
+        // Two separate flushes guarantee children are deleted before parents.
+
+        // Step 1: Mark all child attribute value changes for deletion and flush
         foreach (var untrackedExport in exportList)
         {
-            // Delete all child attribute value changes
             foreach (var attrChange in untrackedExport.AttributeValueChanges)
             {
                 var entity = FindTrackedOrAttach<PendingExportAttributeValueChange>(
                     attrChange.Id, attrChange, Repository.Database.PendingExportAttributeValueChanges);
                 Repository.Database.PendingExportAttributeValueChanges.Remove(entity);
             }
+        }
 
-            // Delete the parent pending export
+        await Repository.Database.SaveChangesAsync();
+
+        // Step 2: Mark parent pending exports for deletion and flush
+        foreach (var untrackedExport in exportList)
+        {
             var parentEntity = FindTrackedOrAttach<PendingExport>(
                 untrackedExport.Id, untrackedExport, Repository.Database.PendingExports);
             Repository.Database.PendingExports.Remove(parentEntity);
