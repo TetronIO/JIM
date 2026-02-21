@@ -3,6 +3,7 @@ using JIM.Application.Services;
 using JIM.Data;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
+using Microsoft.Extensions.Caching.Memory;
 using Serilog;
 namespace JIM.Application;
 
@@ -15,6 +16,14 @@ public class JimApplication : IDisposable
     /// Set by the hosting application (JIM.Web) after construction.
     /// </summary>
     public ICredentialProtectionService? CredentialProtection { get; set; }
+
+    /// <summary>
+    /// Optional service-lifetime memory cache shared across JimApplication instances.
+    /// Used by the Worker for CSO lookup indexing to eliminate N+1 import queries.
+    /// Null when running in JIM.Web (which does not need CSO caching).
+    /// </summary>
+    public IMemoryCache? Cache { get; }
+
     private SeedingServer Seeding { get; }
     public ActivityServer Activities { get; }
     public CertificateServer Certificates { get; }
@@ -34,7 +43,7 @@ public class JimApplication : IDisposable
     public ServiceSettingsServer ServiceSettings { get; }
     public TaskingServer Tasking { get; }
 
-    public JimApplication(IRepository dataRepository)
+    public JimApplication(IRepository dataRepository, IMemoryCache? cache = null)
     {
         Activities = new ActivityServer(this);
         Certificates = new CertificateServer(this);
@@ -49,6 +58,7 @@ public class JimApplication : IDisposable
         Metaverse = new MetaverseServer(this);
         ObjectMatching = new ObjectMatchingServer(this);
         Repository = dataRepository;
+        Cache = cache;
         Scheduler = new SchedulerServer(this);
         Search = new SearchServer(this);
         Security = new SecurityServer(this);

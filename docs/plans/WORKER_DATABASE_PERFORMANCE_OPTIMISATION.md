@@ -139,7 +139,27 @@ The cache stores a **lookup index only** — mapping external ID values to CSO G
 
 **Cache lifetime**: Service-lifetime (lives as long as the Worker process). No automatic expiration — CSO external IDs rarely change. Explicit invalidation on mutation events ensures coherency.
 
+**Thread safety**: All cache writes use `IMemoryCache.Set()` (upsert semantics) rather than `TryAdd()`. `Set()` silently overwrites if the key already exists. This is safe because the cached value (a CSO GUID) is immutable for a given external ID — two threads writing the same key will always write the same value. No locking, no exceptions, no conflict handling needed.
+
 **Infrastructure**: Uses `Microsoft.Extensions.Caching.Memory` (`IMemoryCache`), already available as a transitive dependency in the Worker — no new NuGet package required. A single `MemoryCache` instance is created at Worker startup and passed through `JimApplication` to the repository/server layer.
+
+**Database indexes**: No new indexes required. The bulk load query joins `ConnectedSystemObjects` to `ConnectedSystemObjectAttributeValues` filtering by `ConnectedSystemId` and `AttributeId`. Existing indexes cover this:
+- `IX_ConnectedSystemObjects_ConnectedSystemId_TypeId` — `ConnectedSystemId` as leading column satisfies the CS filter
+- `IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId` — composite on `(ConnectedSystemObjectId, AttributeId)` covers the join and attribute filter
+
+**Cache warming strategy**: Blocking startup warm. When the Worker starts, it loads CSO lookup indexes for all connected systems before accepting tasks. Connected systems are warmed with limited parallelism (default 3 concurrent, configurable) to balance startup speed against database load.
+
+| Environment | Total CSOs (all CS) | Est. Startup (sequential) | Est. Startup (3 parallel) |
+|-------------|--------------------|--------------------------|----|
+| Small (2 CS x 1k) | 2,000 | < 1s | < 1s |
+| Medium (3 CS x 5k) | 15,000 | ~1-2s | < 1s |
+| Large (5 CS x 50k) | 250,000 | ~10-15s | ~4-5s |
+| Very large (10 CS x 100k) | 1,000,000 | ~30-60s | ~15-20s |
+| Extreme (20 CS x 100k) | 2,000,000 | ~1-2min | ~30-40s |
+
+Blocking startup avoids all concurrency complexity between cache warming and task processing. The delay is within acceptable tolerance — schedules queue tasks until the Worker is ready, and the Worker only needs to warm once per process lifetime.
+
+**Future consideration**: If startup delays become problematic (e.g., frequent Worker restarts during active schedules, or if upgrading to full entity caching where load times are significantly longer), the warming strategy can be changed to non-blocking background loading. This would require a shared `SemaphoreSlim` to limit total concurrent database queries across warming threads and task processing threads, with cache misses falling back to per-object DB queries while warming is in progress. The `Set()` upsert semantics already support concurrent writes from both warming and task threads without conflict.
 
 **Estimated memory**:
 
@@ -148,20 +168,22 @@ The cache stores a **lookup index only** — mapping external ID values to CSO G
 | 1,000 | ~100 KB | Small org |
 | 10,000 | ~1 MB | Large org |
 | 50,000 | ~5 MB | Very large |
-| 100,000 | ~10 MB | Extreme — comfortably viable |
+| 100,000 | ~10 MB | Enterprise scale |
+| 500,000 | ~50 MB | Extreme scale |
+| 1,000,000 | ~100 MB | Theoretical upper bound — comfortably viable |
 
 **Estimated impact**: Eliminates all N+1 import lookup queries. Import of 10,000 objects drops from ~30,000-40,000 queries to 10,000 PK lookups (cache hit path) or 1 bulk query + 10,000 PK lookups (first full import).
 
 **Complexity**: Moderate
 
-**Migration path**: If the index-only approach proves insufficient for performance (the per-object PK load still adds ~1-2ms per object), the next step is to cache full CSO entity graphs in memory (`AsNoTracking`) rather than just IDs. This eliminates DB queries entirely for cache hits but introduces entity lifecycle complexity (attaching detached entities for modification, staleness of cached attribute values). The `IMemoryCache` infrastructure would remain identical — only the cached value type changes from `Guid` to `ConnectedSystemObject`.
+**Migration path**: If the index-only approach proves insufficient for performance (the per-object PK load still adds ~1-2ms per object), the next step is to cache full CSO entity graphs in memory (`AsNoTracking`) rather than just IDs. This eliminates DB queries entirely for cache hits but introduces entity lifecycle complexity (attaching detached entities for modification, staleness of cached attribute values). The `IMemoryCache` infrastructure would remain identical — only the cached value type changes from `Guid` to `ConnectedSystemObject`. If upgrading to full entity caching, the blocking startup warm strategy should be reassessed — full entity loads are significantly slower and may warrant switching to non-blocking background warming (see future consideration above).
 
 **Files affected**:
 - `src/JIM.Application/JimApplication.cs` (accept `IMemoryCache` in constructor)
 - `src/JIM.Application/Servers/ConnectedSystemServer.cs` (cache-aware lookup methods)
 - `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` (bulk ID loading method, PK lookup method)
 - `src/JIM.Data/Repositories/IConnectedSystemRepository.cs` (new method signatures)
-- `src/JIM.Worker/Worker.cs` (create and pass `MemoryCache` instance)
+- `src/JIM.Worker/Worker.cs` (create and pass `MemoryCache` instance, startup cache warming)
 - Tests in `test/JIM.Worker.Tests/` for cache behaviour
 
 ---

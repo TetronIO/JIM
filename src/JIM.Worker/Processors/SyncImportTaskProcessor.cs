@@ -267,6 +267,21 @@ public class SyncImportTaskProcessor
             }
 
             await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activityRunProfileExecutionItems);
+
+            // Add newly created CSOs to the lookup cache so subsequent imports (delta or full) can find them
+            foreach (var newCso in connectedSystemObjectsToBeCreated)
+            {
+                var extIdValue = newCso.ExternalIdAttributeValue;
+                if (extIdValue?.StringValue != null)
+                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.StringValue, newCso.Id);
+                else if (extIdValue?.IntValue != null)
+                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), newCso.Id);
+                else if (extIdValue?.LongValue != null)
+                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), newCso.Id);
+                else if (extIdValue?.GuidValue != null)
+                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), newCso.Id);
+            }
+
             _activity.ObjectsProcessed = connectedSystemObjectsToBeCreated.Count;
             await _jim.Activities.UpdateActivityAsync(_activity);
 

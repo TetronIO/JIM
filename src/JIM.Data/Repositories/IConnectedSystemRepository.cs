@@ -45,6 +45,16 @@ public interface IConnectedSystemRepository
     public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id);
     public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name);
     public Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
+
+    /// <summary>
+    /// Bulk-loads all CSO external ID mappings for a connected system.
+    /// Returns a dictionary mapping cache keys to CSO GUIDs for populating the lookup index.
+    /// Each entry maps "connectedSystemId:attributeId:lowerExternalIdValue" to the CSO GUID.
+    /// Used for cache warming to eliminate N+1 import lookups.
+    /// </summary>
+    /// <param name="connectedSystemId">The connected system to load mappings for.</param>
+    /// <returns>A dictionary of cache key → CSO GUID mappings.</returns>
+    public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId);
     public Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem);
 
     /// <summary>

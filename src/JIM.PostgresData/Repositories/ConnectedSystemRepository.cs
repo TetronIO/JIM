@@ -1005,6 +1005,65 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Bulk-loads all CSO external ID mappings for a connected system.
+    /// Returns a dictionary mapping cache keys to CSO GUIDs for populating the lookup index.
+    /// Each entry maps "connectedSystemId:attributeId:lowerExternalIdValue" to the CSO GUID.
+    /// Handles all external ID data types (string, int, long, Guid).
+    /// Uses AsNoTracking for efficiency — results are read-only index data.
+    /// </summary>
+    public async Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
+    {
+        // Load all CSOs for this connected system with just the external ID attribute value.
+        // We need: CSO ID, ExternalIdAttributeId, and the matching attribute value.
+        // Using AsNoTracking since this is read-only data for the cache index.
+        var csos = await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Include(cso => cso.AttributeValues)
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId)
+            .Select(cso => new
+            {
+                cso.Id,
+                cso.ExternalIdAttributeId,
+                AttributeValues = cso.AttributeValues
+                    .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
+                    .Select(av => new
+                    {
+                        av.StringValue,
+                        av.IntValue,
+                        av.LongValue,
+                        av.GuidValue
+                    })
+                    .ToList()
+            })
+            .ToListAsync();
+
+        var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        foreach (var cso in csos)
+        {
+            var av = cso.AttributeValues.FirstOrDefault();
+            if (av == null) continue;
+
+            // Determine the external ID value string based on whichever value column is populated
+            string? externalIdValue = null;
+            if (av.StringValue != null)
+                externalIdValue = av.StringValue.ToLowerInvariant();
+            else if (av.IntValue.HasValue)
+                externalIdValue = av.IntValue.Value.ToString();
+            else if (av.LongValue.HasValue)
+                externalIdValue = av.LongValue.Value.ToString();
+            else if (av.GuidValue.HasValue)
+                externalIdValue = av.GuidValue.Value.ToString().ToLowerInvariant();
+
+            if (externalIdValue == null) continue;
+
+            var cacheKey = $"cso:{connectedSystemId}:{cso.ExternalIdAttributeId}:{externalIdValue}";
+            result.TryAdd(cacheKey, cso.Id);
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Gets a Connected System Object by its secondary external ID attribute value.
     /// Used to find PendingProvisioning CSOs during import reconciliation when the
     /// primary external ID (e.g., objectGUID) is system-assigned and not yet known.
