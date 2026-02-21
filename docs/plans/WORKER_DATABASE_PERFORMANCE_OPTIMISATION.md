@@ -89,7 +89,7 @@ await Repository.Database.Database.ExecuteSqlRawAsync(
 
 ## Implementation Phases
 
-### Phase 1: Eliminate N+1 Import Lookups
+### Phase 1: Eliminate N+1 Import Lookups ✅
 
 **Target**: `GetConnectedSystemObjectByAttributeAsync` (4 overloads in ConnectedSystemRepository)
 
@@ -191,7 +191,7 @@ Blocking startup avoids all concurrency complexity between cache warming and tas
 
 ---
 
-### Phase 2: Batch Metaverse Object Matching
+### Phase 2: Batch Metaverse Object Matching ✅
 
 **Target**: `FindMetaverseObjectUsingMatchingRuleAsync` (MetaverseRepository)
 
@@ -359,7 +359,24 @@ If the above phases don't yield sufficient improvement, or if we decide to push 
 
 **When to consider**: If Phase 1's index-only approach still results in unacceptable import times due to per-object PK loads, particularly for very large connected systems (50k+ objects) where even fast indexed queries accumulate significant total time.
 
-### B. Persistent In-Memory Model for the Worker Service
+### B. MVO Join-Attribute Lookup Cache
+
+**Concept**: Extend the `IMemoryCache` infrastructure from Phase 1 to cache MVO join-attribute values — the attributes referenced in object matching rules across all sync rules. During sync, `FindMetaverseObjectUsingMatchingRuleAsync` is called per CSO to find a matching MVO. If the join-rule-referenced attribute values are cached (e.g., `mvo-match:{objectTypeId}:{attributeId}:{value}` → MVO GUID), sync matching becomes a pure in-memory lookup followed by a single PK load, eliminating the N+1 matching queries entirely.
+
+**Advantages**:
+- Reuses the proven `IMemoryCache` infrastructure and patterns from Phase 1 (cache warming, miss-population, eviction)
+- Join rules typically reference a small, well-defined set of attributes (1-2 per sync rule — e.g., `employeeId`, `sAMAccountName`, `objectGUID`), keeping the cache footprint small
+- MVO join attributes are identity anchors that rarely change, making the cache highly effective
+- Cache warming can read sync rule configurations to determine exactly which attributes to index
+
+**Trade-offs**:
+- MVO attribute values can change during sync (unlike CSO external IDs which are essentially immutable). Cache invalidation must cover attribute value updates, not just creates/deletes
+- The set of "which attributes are join-rule attributes" must be resolved at warmup time by reading sync rule configurations. If sync rules change (admin adds/modifies a join rule), the cache needs re-warming — but this is rare and a Worker restart suffices
+- More complex than the lightweight query optimisation in Phase 2, but potentially higher impact
+
+**When to consider**: If Phase 2's lightweight query optimisation doesn't sufficiently reduce sync matching times, particularly for large environments with 50k+ MVOs where even optimised per-object queries accumulate significant total time.
+
+### C. Persistent In-Memory Model for the Worker Service
 
 **Concept**: Adopt an in-memory processing model for the Worker service. When the Worker starts, establish and maintain a persistent in-memory cache of everything needed for run profile execution -- CSOs, MVOs, attribute values, sync rules, object types, etc. The cache stays warm across run profile executions, so the Worker is always ready to execute without per-run database loading. Database writes are batched and the cache is kept in sync with persisted changes.
 
