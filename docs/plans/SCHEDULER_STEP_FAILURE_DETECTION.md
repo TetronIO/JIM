@@ -1,6 +1,6 @@
 # Plan: Scheduler Step Failure Detection (Activity-Based)
 
-- **Status:** Phase 1 Complete
+- **Status:** Phase 1 Implemented
 - **Milestone:** MVP
 - **Branch:** `feature/scheduler-step-failure-detection`
 

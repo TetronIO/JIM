@@ -55,6 +55,11 @@
 .PARAMETER TimeoutSeconds
     Maximum time to wait for services to be ready. Default: 180 seconds.
 
+.PARAMETER CaptureMetrics
+    Force capture of detailed performance metrics even for large templates (MediumLarge+).
+    By default, metrics capture is skipped for large templates because parsing the worker
+    logs is prohibitively slow. Use this flag when you need performance data for comparison.
+
 .EXAMPLE
     ./Run-IntegrationTests.ps1
 
@@ -89,6 +94,11 @@
     ./Run-IntegrationTests.ps1 -Scenario "Scenario1-HRToIdentityDirectory" -SetupOnly
 
     Sets up the full environment with Scenario 1 configuration, then stops for manual use.
+
+.EXAMPLE
+    ./Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync" -Template MediumLarge -CaptureMetrics
+
+    Runs Scenario 8 with MediumLarge template and forces performance metrics capture.
 #>
 
 param(
@@ -118,7 +128,10 @@ param(
     [int]$MaxExportParallelism,
 
     [Parameter(Mandatory=$false)]
-    [int]$TimeoutSeconds = 180
+    [int]$TimeoutSeconds = 180,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$CaptureMetrics
 )
 
 Set-StrictMode -Version Latest
@@ -658,6 +671,9 @@ if (-not $SkipBuild -and -not $SkipReset) {
     Write-Section "Step 2: Building Docker Images"
 
     Write-Step "Building JIM stack..."
+    $now = (Get-Date).ToUniversalTime()
+    $minutesSinceMidnight = $now.Hour * 60 + $now.Minute
+    $env:VERSION_SUFFIX = "dev.$($now.ToString('yyyyMMdd')).$minutesSinceMidnight"
     $buildOutput = docker compose -f docker-compose.yml -f docker-compose.override.yml build 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Failure "Failed to build JIM stack"
@@ -1100,6 +1116,15 @@ Write-Step "Scenario log saved to: results/logs/$Scenario-$Template-$logTimestam
 $step6Start = Get-Date
 Write-Section "Step 6: Capturing Performance Metrics"
 
+# Skip detailed metrics capture for large templates - parsing the worker logs becomes
+# prohibitively expensive (CPU and memory) due to the volume of DiagnosticListener lines.
+# Use -CaptureMetrics to force capture regardless of template size.
+$metricsSkippedTemplates = @("MediumLarge", "Large", "XLarge", "XXLarge")
+if ($Template -in $metricsSkippedTemplates -and -not $CaptureMetrics) {
+    Write-Warning "Skipping detailed performance metrics for '$Template' template (log volume too large for efficient parsing)"
+    Write-Step "Use -CaptureMetrics to force capture (this will be slow)"
+}
+else {
 Write-Step "Extracting diagnostic timing from worker logs..."
 
 # Capture worker logs with diagnostic output
@@ -1354,6 +1379,7 @@ else {
         Write-Host "${GRAY}This is the first performance capture for $Scenario-$Template on $hostname${NC}"
     }
 }
+} # end else (metrics not skipped)
 
 $timings["6. Capture Metrics"] = (Get-Date) - $step6Start
 

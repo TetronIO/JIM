@@ -1,7 +1,8 @@
 # Worker Database Performance Optimisation
 
-- **Status**: Proposed
+- **Status**: Planned
 - **Milestone**: Post-MVP
+- **GitHub Issue**: [#338](https://github.com/TetronIO/JIM/issues/338)
 - **Related**: `docs/plans/EXPORT_PERFORMANCE_OPTIMISATION.md`
 - **Created**: 2026-02-20
 
@@ -268,6 +269,63 @@ await writer.CompleteAsync();
 - `src/JIM.PostgresData/Repositories/ActivitiesRepository.cs`
 - `src/JIM.Data/Repositories/IActivityRepository.cs`
 - Sync processor code that creates RPEIs
+
+---
+
+## Future Considerations
+
+If the above phases don't yield sufficient improvement, or if we decide to push performance further afterwards, the following more ambitious approaches should be explored:
+
+### A. Pre-Load CSO Lookup Dictionary at Import Start
+
+**Concept**: At the beginning of an import run, load all existing CSOs for the connected system into an in-memory dictionary keyed by their external ID attribute value. Import object lookups then become O(1) dictionary lookups instead of per-object database queries.
+
+**Advantages**:
+- Eliminates all per-object database round-trips for CSO matching during import
+- Simple to implement -- a single query at import start, dictionary lookups during processing
+- Memory usage is bounded by the connected system's object count (known up front)
+- Natural fit for the import processor's sequential object processing pattern
+
+**Trade-offs**:
+- Memory consumption scales with connected system size (but CSO lookup entries would be lightweight -- just ID + external ID value, not full entity graphs)
+- Initial load query may take several seconds for very large connected systems (100k+ objects), but this is a one-time cost per import run
+- Requires invalidation/update strategy when new CSOs are created during the same import run
+
+**When to consider**: If Phase 1's two-phase lookup approach still results in unacceptable import times, particularly for large connected systems where even one query per object is too many.
+
+### B. Persistent In-Memory Model for the Worker Service
+
+**Concept**: Adopt an in-memory processing model for the Worker service. When the Worker starts, establish and maintain a persistent in-memory cache of everything needed for run profile execution -- CSOs, MVOs, attribute values, sync rules, object types, etc. The cache stays warm across run profile executions, so the Worker is always ready to execute without per-run database loading. Database writes are batched and the cache is kept in sync with persisted changes.
+
+This is a fundamentally different approach to the surgical per-query optimisations above. Rather than optimising individual database calls, it shifts the Worker to an in-memory processing model where the database becomes a persistence layer rather than the primary data source during execution. The architectural options for this will need exploring and analysing for suitability.
+
+**Architectural options to explore**:
+- Service-lifetime cache populated on startup and kept in sync via write-through updates
+- Per-connected-system lazy-loaded cache segments (load on first access, retain for subsequent runs)
+- Event-driven cache invalidation (e.g., when schema changes are made via the UI)
+- Hybrid approach: lightweight index/lookup structures always in memory, full entity graphs loaded on demand
+
+**Advantages**:
+- Eliminates virtually all database read latency during processing
+- Worker is always ready -- no per-run warm-up cost after initial startup
+- Enables complex cross-object operations (matching, reference resolution, deduplication) without any database I/O
+- Processing speed becomes CPU-bound rather than I/O-bound
+- Simplifies processing code -- no async database calls in hot loops
+
+**Trade-offs**:
+- Memory consumption scales with total environment size across all connected systems
+- Cache coherency with the database needs careful design (especially when the Web/API layer modifies configuration)
+- Larger upfront engineering effort -- this is an architectural shift, not a surgical optimisation
+- Requires thorough analysis of which data structures are appropriate and how much memory is realistic for target environment sizes (10k, 50k, 100k+ objects)
+- Crash recovery needs consideration when state is in-memory (checkpointing or idempotent replay)
+
+**Operator mode switch**: Consider exposing this as an administrator-configurable processing mode. JIM would support two modes:
+- **Direct mode** (default) -- the Worker queries the database on demand during processing. Lower memory requirements, suitable for basic hosts or smaller datasets. Accepts slower processing times as a trade-off.
+- **In-memory mode** -- the Worker maintains a persistent in-memory cache as described above. Requires hosts with sufficient memory for the dataset size, but delivers massively increased processing performance.
+
+This gives customers the flexibility to run JIM on modest hardware in direct mode and accept the performance characteristics, or to provision appropriately resourced hosts and enable in-memory mode for large-scale environments. The mode switch could be a simple configuration option (admin UI or environment variable) that controls how the Worker's data access layer behaves, with the rest of the processing pipeline remaining identical.
+
+**When to consider**: If the surgical optimisations in Phases 1-5 don't bring sync cycle times to acceptable levels, or if we decide to push further regardless. Requires a dedicated design phase to explore and analyse the architectural options for suitability.
 
 ---
 

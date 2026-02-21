@@ -132,7 +132,16 @@ function Connect-JIMWithApiKey {
 
         $script:JIMConnection.Connected = $true
 
+        # Fetch server version
+        $serverVersion = Get-JIMServerVersion
+
         Write-Verbose "Successfully connected to JIM using API key"
+
+        if ($serverVersion) {
+            Write-Host ""
+            Write-Host "Connected to JIM server v$serverVersion at $BaseUrl" -ForegroundColor Green
+            Write-Host ""
+        }
 
         # Return connection info (without exposing full API key)
         $keyPreview = if ($ApiKey.Length -gt 12) {
@@ -143,11 +152,12 @@ function Connect-JIMWithApiKey {
         }
 
         [PSCustomObject]@{
-            Url        = $script:JIMConnection.Url
-            AuthMethod = 'ApiKey'
-            ApiKey     = $keyPreview
-            Connected  = $true
-            Status     = $health.status ?? 'Connected'
+            Url           = $script:JIMConnection.Url
+            AuthMethod    = 'ApiKey'
+            ApiKey        = $keyPreview
+            Connected     = $true
+            ServerVersion = $serverVersion
+            Status        = $health.status ?? 'Connected'
         }
     }
     catch {
@@ -271,16 +281,25 @@ function Connect-JIMInteractive {
 
         $script:JIMConnection.Connected = $true
 
+        # Fetch server version
+        $serverVersion = Get-JIMServerVersion
+
         Write-Host ""
-        Write-Host "Successfully connected to JIM!" -ForegroundColor Green
+        if ($serverVersion) {
+            Write-Host "Connected to JIM server v$serverVersion at $BaseUrl" -ForegroundColor Green
+        }
+        else {
+            Write-Host "Successfully connected to JIM!" -ForegroundColor Green
+        }
         Write-Host ""
 
         [PSCustomObject]@{
-            Url        = $script:JIMConnection.Url
-            AuthMethod = 'OAuth'
-            Connected  = $true
-            ExpiresAt  = $tokens.ExpiresAt
-            Status     = $health.status ?? 'Connected'
+            Url           = $script:JIMConnection.Url
+            AuthMethod    = 'OAuth'
+            Connected     = $true
+            ServerVersion = $serverVersion
+            ExpiresAt     = $tokens.ExpiresAt
+            Status        = $health.status ?? 'Connected'
         }
     }
     catch {

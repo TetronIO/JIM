@@ -324,18 +324,18 @@ public class FileConnectorTests
 
 ## Acceptance Criteria
 
-### Phase 1 Complete When: ✅
+### Phase 1 Implemented When: ✅
 - [x] Invalid CSV data records errors instead of crashing
 - [x] XML documentation is correct
 - [x] Build passes (one unrelated warning in SyncFullSyncTaskProcessor.cs)
 - [x] All existing tests pass
 
-### Phase 2 Complete When: ✅
+### Phase 2 Implemented When: ✅
 - [x] FileConnector has direct test coverage (8 tests added)
 - [x] Error scenario tested (invalid number records error, not crash)
 - [x] Test data files committed (4 CSV files)
 
-### Phase 3 Complete When: ✅
+### Phase 3 Implemented When: ✅
 - [x] "Stop on first error" setting available (CheckBox setting in General category)
 - [x] Multi-valued attributes parse correctly (pipe `|` delimited)
 - [x] Column-based object types work (discovers types from specified column)

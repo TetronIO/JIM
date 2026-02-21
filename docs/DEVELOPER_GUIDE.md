@@ -15,7 +15,7 @@ JIM is a .NET-based Identity Management (IDM) system implementing the metaverse 
 - **Application Layer**: JIM.Application (business logic, domain servers)
 - **Domain Layer**: JIM.Models (entities, DTOs, interfaces)
 - **Data Layer**: JIM.Data (abstractions), JIM.PostgresData (implementation)
-- **Integration Layer**: JIM.Connectors (external systems), JIM.Functions (extensibility)
+- **Integration Layer**: JIM.Connectors (external systems)
 
 **Rule**: Respect layer boundaries. Upper layers depend on lower layers, never vice versa.
 
@@ -30,7 +30,7 @@ The metaverse is the authoritative identity repository:
 
 ### 3. Modularity & Extensibility
 - **Connectors**: Implement `IConnector` and related interfaces for new systems
-- **Functions**: Custom business logic via `IFunction` interface
+- **Expressions**: C#-like expression language for attribute mappings, conditional logic, and scoping filters (see [Expression Language Guide](EXPRESSIONS_GUIDE.md))
 - **Object Types**: Define custom identity types beyond built-in User/Group
 - **Attributes**: Extensible attribute schema via MetaverseAttribute
 
@@ -376,7 +376,7 @@ See [GitHub Issue #212](https://github.com/TetronIO/JIM/issues/212) for .NET Asp
 ### 2. Authorisation
 - **Role-based**: Use claims-based authorisation in controllers/pages
 - **Metaverse-driven**: Roles defined in metaverse, not hardcoded
-- **Attribute-based**: Support for custom authorisation rules via Functions
+- **Attribute-based**: Scoping and conditional logic driven by expressions and attribute values
 
 ### 3. Input Validation
 - Validate all user input (web, API)

@@ -1062,6 +1062,88 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.StringValue.ToLower() == lowerValue));
     }
 
+    public async Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
+    {
+        var values = attributeValues.ToList();
+        if (values.Count == 0)
+            return new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+
+        // Use case-insensitive matching consistent with the single-value method
+        var lowerValues = values.Select(v => v.ToLowerInvariant()).ToList();
+        // Lightweight query: only include AttributeValues with Attribute for key extraction.
+        // No Type/Attributes or deep ReferenceValue chains needed — the CSO entity itself is
+        // sufficient for reference resolution (EF Core sets ReferenceValueId FK automatically).
+        var csos = await Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Where(cso =>
+                cso.ConnectedSystem.Id == connectedSystemId &&
+                cso.AttributeValues.Any(av => av.Attribute.Id == attributeId && av.StringValue != null && lowerValues.Contains(av.StringValue.ToLower())))
+            .ToListAsync();
+
+        // Build dictionary keyed by lowercase attribute value for case-insensitive lookup.
+        // Use TryAdd for duplicates — first match wins (matching single-value method semantics).
+        var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+        foreach (var cso in csos)
+        {
+            var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av => av.Attribute?.Id == attributeId && av.StringValue != null);
+            if (matchingAttrValue?.StringValue != null)
+            {
+                if (!result.TryAdd(matchingAttrValue.StringValue, cso))
+                {
+                    Log.Warning("GetConnectedSystemObjectsByAttributeValuesAsync: Found duplicate Connected System Objects for external ID '{ExternalId}' in connected system {ConnectedSystemId}. Returning first match.",
+                        matchingAttrValue.StringValue, connectedSystemId);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public async Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues)
+    {
+        var values = secondaryExternalIdValues.ToList();
+        if (values.Count == 0)
+            return new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+
+        // Use case-insensitive matching consistent with the single-value method
+        var lowerValues = values.Select(v => v.ToLowerInvariant()).ToList();
+        // Lightweight query: only include AttributeValues for key extraction (using scalar FK AttributeId).
+        // No Attribute navigation, Type/Attributes or deep ReferenceValue chains needed — the CSO entity
+        // itself is sufficient for reference resolution (EF Core sets ReferenceValueId FK automatically).
+        var csos = await Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.AttributeValues)
+            .Where(cso =>
+                cso.ConnectedSystemId == connectedSystemId &&
+                cso.SecondaryExternalIdAttributeId != null &&
+                cso.AttributeValues.Any(av =>
+                    av.AttributeId == cso.SecondaryExternalIdAttributeId &&
+                    av.StringValue != null &&
+                    lowerValues.Contains(av.StringValue.ToLower())))
+            .ToListAsync();
+
+        // Build dictionary keyed by the secondary external ID value for case-insensitive lookup.
+        var result = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+        foreach (var cso in csos)
+        {
+            if (!cso.SecondaryExternalIdAttributeId.HasValue)
+                continue;
+
+            var matchingAttrValue = cso.AttributeValues.FirstOrDefault(av =>
+                av.AttributeId == cso.SecondaryExternalIdAttributeId && av.StringValue != null);
+            if (matchingAttrValue?.StringValue != null)
+            {
+                if (!result.TryAdd(matchingAttrValue.StringValue, cso))
+                {
+                    Log.Warning("GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync: Found duplicate Connected System Objects for secondary external ID '{SecondaryExternalId}' in connected system {ConnectedSystemId}. Returning first match.",
+                        matchingAttrValue.StringValue, connectedSystemId);
+                }
+            }
+        }
+
+        return result;
+    }
+
     public async Task<int> GetConnectedSystemObjectCountAsync()
     {
         return await Repository.Database.ConnectedSystemObjects.CountAsync();
@@ -1807,6 +1889,227 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }
 
         return result;
+    }
+
+    public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        var csoIdList = connectedSystemObjectIds.ToList();
+        if (csoIdList.Count == 0)
+            return new Dictionary<Guid, PendingExport>();
+
+        // Lightweight query: only load AttributeValueChanges with Attribute (needed for reconciliation comparison).
+        // Skip ConnectedSystemObject (caller already has CSOs in memory), ConnectedSystem, and SourceMetaverseObject.
+        // AsNoTracking avoids identity resolution overhead against the large tracked entity graph from the import phase.
+        var pendingExports = await Repository.Database.PendingExports
+            .AsNoTracking()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Where(pe => pe.ConnectedSystemObjectId != null && csoIdList.Contains(pe.ConnectedSystemObjectId.Value))
+            .ToListAsync();
+
+        // Build dictionary mapping CSO ID to pending export using the FK property (no navigation needed)
+        var result = new Dictionary<Guid, PendingExport>();
+
+        foreach (var pe in pendingExports.Where(pe => pe.ConnectedSystemObjectId != null))
+        {
+            var csoId = pe.ConnectedSystemObjectId!.Value;
+            if (result.ContainsKey(csoId))
+            {
+                Log.Error("GetPendingExportsLightweightByConnectedSystemObjectIdsAsync: DUPLICATE PENDING EXPORT detected for CSO {CsoId}. " +
+                    "Existing PE: {ExistingPeId}, Duplicate PE: {DuplicatePeId}. " +
+                    "This is a data integrity violation - failing the operation.",
+                    csoId, result[csoId].Id, pe.Id);
+
+                throw new DuplicatePendingExportException(
+                    $"Duplicate pending exports detected for Connected System Object {csoId}. " +
+                    $"Pending Export IDs: {result[csoId].Id} and {pe.Id}. " +
+                    $"This indicates a data integrity issue that must be investigated before sync can continue.");
+            }
+            result[csoId] = pe;
+        }
+
+        return result;
+    }
+
+    public async Task DeleteUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports)
+    {
+        var exportList = untrackedPendingExports.ToList();
+        if (exportList.Count == 0)
+            return;
+
+        var pendingExportIds = exportList.Select(pe => pe.Id).ToList();
+
+        // Delete children first, then parents. Must delete ALL children from the database,
+        // not just the ones loaded in the untracked entity's collection. The change tracker
+        // may contain additional tracked children from the import phase (via navigation fixup)
+        // that weren't loaded by the AsNoTracking query.
+
+        // Detach any tracked children and parents to prevent EF Core's ClientSetNull
+        // behaviour from interfering with our explicit deletion order.
+        DetachTrackedChildEntities(pendingExportIds);
+        DetachTrackedEntities<PendingExport>(
+            e => pendingExportIds.Contains(e.Id));
+
+        if (Repository.Database.Database.IsRelational())
+        {
+            // Relational databases: use ExecuteDeleteAsync for direct SQL DELETE.
+            // Bypasses change tracker entirely, guaranteed correct ordering.
+            await Repository.Database.PendingExportAttributeValueChanges
+                .Where(avc => EF.Property<Guid?>(avc, "PendingExportId") != null && pendingExportIds.Contains(EF.Property<Guid?>(avc, "PendingExportId")!.Value))
+                .ExecuteDeleteAsync();
+
+            await Repository.Database.PendingExports
+                .Where(pe => pendingExportIds.Contains(pe.Id))
+                .ExecuteDeleteAsync();
+        }
+        else
+        {
+            // InMemory provider (tests): ExecuteDeleteAsync not supported.
+            // Load and remove children, flush, then remove parents, flush.
+            var children = await Repository.Database.PendingExportAttributeValueChanges
+                .Where(avc => EF.Property<Guid?>(avc, "PendingExportId") != null && pendingExportIds.Contains(EF.Property<Guid?>(avc, "PendingExportId")!.Value))
+                .ToListAsync();
+            Repository.Database.PendingExportAttributeValueChanges.RemoveRange(children);
+            await Repository.Database.SaveChangesAsync();
+
+            var parents = await Repository.Database.PendingExports
+                .Where(pe => pendingExportIds.Contains(pe.Id))
+                .ToListAsync();
+            Repository.Database.PendingExports.RemoveRange(parents);
+            await Repository.Database.SaveChangesAsync();
+        }
+    }
+
+    public async Task UpdateUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports)
+    {
+        var exportList = untrackedPendingExports.ToList();
+        if (exportList.Count == 0)
+            return;
+
+        foreach (var untrackedExport in exportList)
+        {
+            // Find the tracked instance if one exists, otherwise attach the untracked entity
+            var trackedEntry = Repository.Database.ChangeTracker.Entries<PendingExport>()
+                .FirstOrDefault(e => e.Entity.Id == untrackedExport.Id);
+
+            if (trackedEntry != null)
+            {
+                // Copy scalar properties from the untracked entity to the tracked one
+                trackedEntry.Entity.Status = untrackedExport.Status;
+                trackedEntry.Entity.ChangeType = untrackedExport.ChangeType;
+                trackedEntry.Entity.ErrorCount = untrackedExport.ErrorCount;
+                trackedEntry.Entity.MaxRetries = untrackedExport.MaxRetries;
+                trackedEntry.Entity.LastAttemptedAt = untrackedExport.LastAttemptedAt;
+                trackedEntry.Entity.NextRetryAt = untrackedExport.NextRetryAt;
+                trackedEntry.Entity.LastErrorMessage = untrackedExport.LastErrorMessage;
+                trackedEntry.Entity.LastErrorStackTrace = untrackedExport.LastErrorStackTrace;
+                trackedEntry.Entity.HasUnresolvedReferences = untrackedExport.HasUnresolvedReferences;
+                trackedEntry.State = EntityState.Modified;
+            }
+            else
+            {
+                Repository.Database.PendingExports.Update(untrackedExport);
+            }
+
+            // Update attribute value changes that remain (those not deleted)
+            foreach (var attrChange in untrackedExport.AttributeValueChanges)
+            {
+                var trackedAttrEntry = Repository.Database.ChangeTracker.Entries<PendingExportAttributeValueChange>()
+                    .FirstOrDefault(e => e.Entity.Id == attrChange.Id);
+
+                if (trackedAttrEntry != null)
+                {
+                    trackedAttrEntry.Entity.Status = attrChange.Status;
+                    trackedAttrEntry.Entity.LastImportedValue = attrChange.LastImportedValue;
+                    trackedAttrEntry.Entity.ExportAttemptCount = attrChange.ExportAttemptCount;
+                    trackedAttrEntry.Entity.LastExportedAt = attrChange.LastExportedAt;
+                    trackedAttrEntry.State = EntityState.Modified;
+                }
+                else
+                {
+                    Repository.Database.PendingExportAttributeValueChanges.Update(attrChange);
+                }
+            }
+        }
+
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task DeleteUntrackedPendingExportAttributeValueChangesAsync(IEnumerable<PendingExportAttributeValueChange> untrackedAttributeValueChanges)
+    {
+        var changeList = untrackedAttributeValueChanges.ToList();
+        if (changeList.Count == 0)
+            return;
+
+        var changeIds = changeList.Select(c => c.Id).ToList();
+
+        // Detach any tracked instances to prevent change tracker conflicts
+        DetachTrackedEntities<PendingExportAttributeValueChange>(
+            e => changeIds.Contains(e.Id));
+
+        if (Repository.Database.Database.IsRelational())
+        {
+            await Repository.Database.PendingExportAttributeValueChanges
+                .Where(avc => changeIds.Contains(avc.Id))
+                .ExecuteDeleteAsync();
+        }
+        else
+        {
+            var entities = await Repository.Database.PendingExportAttributeValueChanges
+                .Where(avc => changeIds.Contains(avc.Id))
+                .ToListAsync();
+            Repository.Database.PendingExportAttributeValueChanges.RemoveRange(entities);
+            await Repository.Database.SaveChangesAsync();
+        }
+    }
+
+    /// <summary>
+    /// Detaches all tracked entities of type T that match the predicate.
+    /// Used before ExecuteDeleteAsync to prevent the change tracker from interfering
+    /// with direct SQL operations (e.g., ClientSetNull cascading on orphaned children).
+    /// </summary>
+    private void DetachTrackedEntities<T>(Func<T, bool> predicate) where T : class
+    {
+        var entries = Repository.Database.ChangeTracker.Entries<T>()
+            .Where(e => predicate(e.Entity))
+            .ToList();
+
+        foreach (var entry in entries)
+            entry.State = EntityState.Detached;
+    }
+
+    /// <summary>
+    /// Detaches tracked PendingExportAttributeValueChange entities whose PendingExportId shadow FK
+    /// matches any of the given parent IDs. Accesses the shadow property via the change tracker entry.
+    /// </summary>
+    private void DetachTrackedChildEntities(List<Guid> pendingExportIds)
+    {
+        var entries = Repository.Database.ChangeTracker.Entries<PendingExportAttributeValueChange>()
+            .Where(e =>
+            {
+                var fkValue = e.Property<Guid?>("PendingExportId").CurrentValue;
+                return fkValue.HasValue && pendingExportIds.Contains(fkValue.Value);
+            })
+            .ToList();
+
+        foreach (var entry in entries)
+            entry.State = EntityState.Detached;
+    }
+
+    public async Task<HashSet<Guid>> GetCsoIdsWithPendingExportsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        var csoIdList = connectedSystemObjectIds.ToList();
+        if (csoIdList.Count == 0)
+            return new HashSet<Guid>();
+
+        var csoIdsWithExports = await Repository.Database.PendingExports
+            .AsNoTracking()
+            .Where(pe => pe.ConnectedSystemObject != null && csoIdList.Contains(pe.ConnectedSystemObject.Id))
+            .Select(pe => pe.ConnectedSystemObject!.Id)
+            .Distinct()
+            .ToListAsync();
+
+        return csoIdsWithExports.ToHashSet();
     }
 
     public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)

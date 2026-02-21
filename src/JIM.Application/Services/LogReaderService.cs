@@ -10,7 +10,7 @@ namespace JIM.Application.Services;
 /// </summary>
 public class LogReaderService
 {
-    private static readonly string[] ServicePrefixes = ["jim.web", "jim.worker", "jim.scheduler"];
+    private static readonly string[] ServicePrefixes = ["jim.web", "jim.worker", "jim.scheduler", "jim.database"];
     private static readonly Dictionary<string, int> LogLevelPriority = new()
     {
         ["Verbose"] = 0,
@@ -19,6 +19,25 @@ public class LogReaderService
         ["Warning"] = 3,
         ["Error"] = 4,
         ["Fatal"] = 5
+    };
+
+    /// <summary>
+    /// Maps PostgreSQL error_severity values to Serilog log level names.
+    /// </summary>
+    private static readonly Dictionary<string, string> PostgresSeverityMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["DEBUG5"] = "Verbose",
+        ["DEBUG4"] = "Verbose",
+        ["DEBUG3"] = "Verbose",
+        ["DEBUG2"] = "Verbose",
+        ["DEBUG1"] = "Verbose",
+        ["INFO"] = "Debug",
+        ["NOTICE"] = "Information",
+        ["LOG"] = "Information",
+        ["WARNING"] = "Warning",
+        ["ERROR"] = "Error",
+        ["FATAL"] = "Fatal",
+        ["PANIC"] = "Fatal"
     };
 
     private readonly string _logPath;
@@ -60,12 +79,26 @@ public class LogReaderService
             return Task.FromResult(files);
         }
 
-        foreach (var filePath in Directory.GetFiles(_logPath, "*.log"))
+        // Scan for both .log (Serilog) and .json (PostgreSQL jsonlog) files.
+        // Also scan subdirectories (e.g. /var/log/jim/database/) for PostgreSQL logs
+        // which are written to a separate subdirectory for filesystem permission isolation.
+        var logFiles = Directory.GetFiles(_logPath, "*.log")
+            .Concat(Directory.GetFiles(_logPath, "*.json"))
+            .Concat(Directory.GetDirectories(_logPath)
+                .SelectMany(dir => Directory.GetFiles(dir, "*.log")
+                    .Concat(Directory.GetFiles(dir, "*.json"))));
+        foreach (var filePath in logFiles)
         {
             var fileName = Path.GetFileName(filePath);
             var (service, date) = ParseLogFileName(fileName);
 
             if (service == null || date == null)
+                continue;
+
+            // PostgreSQL jsonlog writes structured content to .json files. The .log file
+            // in the same directory only contains a brief stderr redirect notice and should
+            // be skipped to avoid parsing warnings.
+            if (service == "database" && filePath.EndsWith(".log", StringComparison.OrdinalIgnoreCase))
                 continue;
 
             var fileInfo = new FileInfo(filePath);
@@ -156,7 +189,7 @@ public class LogReaderService
     /// <returns>A list of service names.</returns>
     public static List<string> GetServices()
     {
-        return ["web", "worker", "scheduler"];
+        return ["web", "worker", "scheduler", "database"];
     }
 
     private async Task<List<LogEntry>> ReadLogFileAsync(string filePath, string service)
@@ -192,6 +225,9 @@ public class LogReaderService
 
     private static LogEntry? ParseLogLine(string line, string service)
     {
+        if (service == "database")
+            return ParsePostgresJsonLogLine(line, service);
+
         try
         {
             using var doc = JsonDocument.Parse(line);
@@ -250,6 +286,103 @@ public class LogReaderService
         }
     }
 
+    /// <summary>
+    /// Parses a PostgreSQL jsonlog format line into a LogEntry.
+    /// PostgreSQL jsonlog uses different field names from Serilog Compact JSON:
+    /// "timestamp", "error_severity", "message" instead of "@t", "@l", "@m".
+    /// </summary>
+    private static LogEntry? ParsePostgresJsonLogLine(string line, string service)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(line);
+            var root = doc.RootElement;
+
+            // Parse PostgreSQL timestamp (format: "2026-02-21 14:30:00.123 UTC")
+            var timestamp = DateTime.UtcNow;
+            if (root.TryGetProperty("timestamp", out var t))
+            {
+                var timestampStr = t.GetString();
+                if (timestampStr != null)
+                {
+                    // PostgreSQL appends " UTC" which DateTime.TryParse may not handle correctly.
+                    // Strip the timezone suffix and parse as UTC.
+                    var normalised = timestampStr.TrimEnd();
+                    if (normalised.EndsWith(" UTC", StringComparison.OrdinalIgnoreCase))
+                        normalised = normalised[..^4];
+
+                    if (DateTime.TryParse(normalised,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                        out var parsed))
+                    {
+                        timestamp = parsed;
+                    }
+                }
+            }
+
+            // Map PostgreSQL error_severity to Serilog level
+            var severityStr = root.TryGetProperty("error_severity", out var s)
+                ? s.GetString()
+                : null;
+            var level = MapPostgresSeverity(severityStr);
+
+            // Extract the message
+            var message = root.TryGetProperty("message", out var m)
+                ? m.GetString() ?? string.Empty
+                : string.Empty;
+
+            // Extract useful PostgreSQL metadata as properties
+            var properties = new Dictionary<string, object>();
+            var pgPropertyNames = new[] { "user", "dbname", "pid", "remote_host", "application_name", "statement", "backend_type", "query_id", "detail", "hint", "context", "state_code" };
+
+            foreach (var propName in pgPropertyNames)
+            {
+                if (!root.TryGetProperty(propName, out var prop))
+                    continue;
+
+                switch (prop.ValueKind)
+                {
+                    case JsonValueKind.String:
+                        var strVal = prop.GetString();
+                        if (!string.IsNullOrEmpty(strVal))
+                            properties[propName] = strVal;
+                        break;
+                    case JsonValueKind.Number:
+                        if (prop.TryGetInt64(out var longVal) && longVal != 0)
+                            properties[propName] = longVal;
+                        break;
+                }
+            }
+
+            return new LogEntry
+            {
+                Timestamp = timestamp,
+                Level = level,
+                LevelShort = GetLevelShort(level),
+                Message = message,
+                Exception = null,
+                Service = service,
+                Properties = properties.Count > 0 ? properties : null
+            };
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            Log.Warning("Failed to parse PostgreSQL jsonlog line: {Error}", ex.Message);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Maps a PostgreSQL error_severity value to a Serilog log level name.
+    /// </summary>
+    private static string MapPostgresSeverity(string? severity)
+    {
+        if (severity != null && PostgresSeverityMap.TryGetValue(severity, out var level))
+            return level;
+        return "Information";
+    }
+
     private static LogEntry? ParsePlainTextLogLine(string line, string service)
     {
         // Pattern: 2026-01-03 11:36:55.735 +00:00 [INF] Message
@@ -279,12 +412,13 @@ public class LogReaderService
     private static (string? Service, DateTime? Date) ParseLogFileName(string fileName)
     {
         // Pattern: jim.web.20260103.log or jim.web.20260103_001.log (rolled)
+        // Also: jim.database.20260103.json (PostgreSQL jsonlog replaces .log with .json)
         foreach (var prefix in ServicePrefixes)
         {
             if (!fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var match = Regex.Match(fileName, $@"^{Regex.Escape(prefix)}\.(\d{{8}})(?:_\d+)?\.log$", RegexOptions.IgnoreCase);
+            var match = Regex.Match(fileName, $@"^{Regex.Escape(prefix)}\.(\d{{8}})(?:_\d+)?\.(?:log|json)$", RegexOptions.IgnoreCase);
             if (!match.Success)
                 continue;
 

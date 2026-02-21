@@ -19,6 +19,28 @@ public interface IConnectedSystemRepository
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue);
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, long attributeValue);
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
+
+    /// <summary>
+    /// Batch loads Connected System Objects by multiple primary external ID string values in a single query.
+    /// Used for reference resolution to eliminate N+1 individual lookups.
+    /// Uses case-insensitive matching for string comparison.
+    /// </summary>
+    /// <param name="connectedSystemId">The connected system to search within.</param>
+    /// <param name="attributeId">The external ID attribute to match against.</param>
+    /// <param name="attributeValues">The string values to search for.</param>
+    /// <returns>A dictionary keyed by lowercase attribute value for O(1) lookup.</returns>
+    public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(int connectedSystemId, int attributeId, IEnumerable<string> attributeValues);
+
+    /// <summary>
+    /// Batch loads Connected System Objects by multiple secondary external ID string values across ALL object types.
+    /// Used for reference resolution where referenced objects can be of any type (e.g. LDAP group members).
+    /// Uses case-insensitive matching for string comparison.
+    /// </summary>
+    /// <param name="connectedSystemId">The connected system to search within.</param>
+    /// <param name="secondaryExternalIdValues">The secondary external ID values to search for (e.g. LDAP DNs).</param>
+    /// <returns>A dictionary keyed by lowercase attribute value for O(1) lookup.</returns>
+    public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues);
+
     public Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId);
     public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id);
     public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name);
@@ -146,6 +168,56 @@ public interface IConnectedSystemRepository
     /// Thrown when duplicate pending exports are found for the same CSO, indicating a data integrity violation.
     /// </exception>
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// Lightweight version of GetPendingExportsByConnectedSystemObjectIdsAsync for reconciliation.
+    /// Uses AsNoTracking and only loads AttributeValueChanges (with Attribute), avoiding the heavy
+    /// Include chains for ConnectedSystemObject, ConnectedSystem, and SourceMetaverseObject.
+    /// Uses the ConnectedSystemObjectId FK property for the dictionary key instead of loading the full CSO.
+    /// </summary>
+    /// <remarks>
+    /// Because entities are untracked, callers must explicitly handle child entity deletions
+    /// (e.g. confirmed PendingExportAttributeValueChange records) rather than relying on
+    /// EF Core change tracking to detect collection removals.
+    /// </remarks>
+    /// <param name="connectedSystemObjectIds">The CSO IDs to retrieve pending exports for.</param>
+    /// <returns>A dictionary mapping CSO ID to its pending export (if any).</returns>
+    /// <exception cref="JIM.Models.Exceptions.DuplicatePendingExportException">
+    /// Thrown when duplicate pending exports are found for the same CSO, indicating a data integrity violation.
+    /// </exception>
+    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// Deletes pending exports loaded via AsNoTracking, handling change tracker conflicts
+    /// when the same entities may already be tracked from earlier processing.
+    /// Deletes both the parent PendingExport and all child AttributeValueChange records.
+    /// </summary>
+    /// <param name="untrackedPendingExports">The untracked pending export entities to delete (with AttributeValueChanges populated).</param>
+    public Task DeleteUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports);
+
+    /// <summary>
+    /// Updates pending exports loaded via AsNoTracking, handling change tracker conflicts
+    /// when the same entities may already be tracked from earlier processing.
+    /// Copies property values to tracked instances when they exist.
+    /// </summary>
+    /// <param name="untrackedPendingExports">The untracked pending export entities with updated property values.</param>
+    public Task UpdateUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports);
+
+    /// <summary>
+    /// Deletes specific PendingExportAttributeValueChange records loaded via AsNoTracking,
+    /// handling change tracker conflicts when the same entities may already be tracked.
+    /// </summary>
+    /// <param name="untrackedAttributeValueChanges">The untracked attribute value change entities to delete.</param>
+    public Task DeleteUntrackedPendingExportAttributeValueChangesAsync(IEnumerable<PendingExportAttributeValueChange> untrackedAttributeValueChanges);
+
+    /// <summary>
+    /// Lightweight query that returns only the CSO IDs from the given set that have pending exports.
+    /// Used to filter the CSO list before performing full pending export reconciliation,
+    /// avoiding unnecessary iteration over CSOs that have no pending exports.
+    /// </summary>
+    /// <param name="connectedSystemObjectIds">The CSO IDs to check for pending exports.</param>
+    /// <returns>A HashSet of CSO IDs that have at least one pending export.</returns>
+    public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
     /// <summary>
     /// Gets all Connected System Objects that are joined to a specific Metaverse Object.

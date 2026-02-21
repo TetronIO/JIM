@@ -684,11 +684,11 @@ public class Worker : BackgroundService
                 // Second attempt: Try to update the activity status directly
                 // This handles EF Core tracking issues or DbContext disposal problems
                 activity.Status = ActivityStatus.FailedWithError;
-                activity.ErrorMessage = $"{context}: {originalException.Message}";
+                activity.ErrorMessage = $"{context}: {GetFullExceptionMessage(originalException)}";
 
                 // Only persist stack traces for unexpected errors (bugs), not for operational errors
                 if (originalException is not OperationalException)
-                    activity.ErrorStackTrace = originalException.StackTrace;
+                    activity.ErrorStackTrace = originalException.ToString();
 
                 activity.ExecutionTime = DateTime.UtcNow - activity.Executed;
                 activity.TotalActivityTime = DateTime.UtcNow - activity.Created;
@@ -711,7 +711,8 @@ public class Worker : BackgroundService
                     if (freshActivity != null && freshActivity.Status == ActivityStatus.InProgress)
                     {
                         freshActivity.Status = ActivityStatus.FailedWithError;
-                        freshActivity.ErrorMessage = $"EMERGENCY UPDATE: {context}: {originalException.Message}";
+                        freshActivity.ErrorMessage = $"EMERGENCY UPDATE: {context}: {GetFullExceptionMessage(originalException)}";
+                        freshActivity.ErrorStackTrace = originalException.ToString();
                         freshActivity.ExecutionTime = DateTime.UtcNow - freshActivity.Executed;
                         freshActivity.TotalActivityTime = DateTime.UtcNow - freshActivity.Created;
                         await emergencyJim.Activities.UpdateActivityAsync(freshActivity);
@@ -724,6 +725,18 @@ public class Worker : BackgroundService
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Builds a complete error message by unwrapping inner exceptions.
+    /// Many exceptions (e.g. DbUpdateException) have generic messages with details in InnerException.
+    /// </summary>
+    private static string GetFullExceptionMessage(Exception exception)
+    {
+        if (exception.InnerException == null)
+            return exception.Message;
+
+        return $"{exception.Message} --> {GetFullExceptionMessage(exception.InnerException)}";
     }
 
     private static void InitialiseLogging()

@@ -183,7 +183,7 @@ When an MVO is deleted, downstream CSOs need to be handled. This is controlled b
 | Internal Origin Protection | ✅ Implemented | Internal MVOs are skipped |
 | Deprovisioning on MVO Deletion | ✅ Implemented | Delete exports created for Provisioned CSOs |
 
-### Recently Completed (January 2026)
+### Recently Implemented (January 2026)
 
 1. **`WhenAuthoritativeSourceDisconnected` enum value** - Added to `MetaverseObjectDeletionRule` enum in `CoreEnums.cs`
 2. **API support** - `MetaverseController.UpdateObjectTypeAsync()` validates that `WhenAuthoritativeSourceDisconnected` requires at least one authoritative source
@@ -195,7 +195,7 @@ When an MVO is deleted, downstream CSOs need to be handled. This is controlled b
    - Only "contributing systems" (systems with inbound sync rules for this object type) appear as selectable authoritative sources
 5. **Admin UI - List view** - `SchemaObjectTypeList.razor` shows deletion rule column with coloured chips and tooltips
 
-## Implementation Status: Complete ✅
+## Phase 1 Implementation Status: Implemented ✅
 
 All deletion rule features are now fully implemented:
 - `WhenAuthoritativeSourceDisconnected` enum value
@@ -468,10 +468,10 @@ MetaverseObjectType:
 #### Phase 1: MVP ✅ COMPLETE
 | Feature | Issue | Status |
 |---------|-------|--------|
-| `WhenAuthoritativeSourceDisconnected` enum + UI | #115 | ✅ **Complete** |
-| `DeletionTriggerConnectedSystemIds` backend logic | #115 | ✅ **Complete** |
-| Multi-source deletion rule unit tests | #115 | ✅ **Complete** |
-| Scenario 8 integration test validation | #115 | ✅ **Complete** |
+| `WhenAuthoritativeSourceDisconnected` enum + UI | #115 | ✅ **Implemented** |
+| `DeletionTriggerConnectedSystemIds` backend logic | #115 | ✅ **Implemented** |
+| Multi-source deletion rule unit tests | #115 | ✅ **Implemented** |
+| Scenario 8 integration test validation | #115 | ✅ **Implemented** |
 
 #### Phase 2: Post-MVP (Near-term)
 | Feature | Issue | Rationale |

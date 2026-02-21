@@ -54,6 +54,7 @@ function Test-JIMConnection {
             Connected      = $false
             Url            = $null
             AuthMethod     = $null
+            ServerVersion  = $null
             Status         = 'Not connected'
             Message        = 'Use Connect-JIM to establish a connection.'
             TokenExpiresAt = $null
@@ -72,6 +73,7 @@ function Test-JIMConnection {
             Connected      = $true
             Url            = $script:JIMConnection.Url
             AuthMethod     = $script:JIMConnection.AuthMethod ?? 'Unknown'
+            ServerVersion  = $script:JIMConnection.ServerVersion
             Status         = $health.status ?? 'Healthy'
             Message        = 'Connection successful'
             TokenExpiresAt = $null
@@ -101,6 +103,7 @@ function Test-JIMConnection {
             Connected      = $false
             Url            = $script:JIMConnection.Url
             AuthMethod     = $script:JIMConnection.AuthMethod ?? 'Unknown'
+            ServerVersion  = $script:JIMConnection.ServerVersion
             Status         = 'Error'
             Message        = $_.Exception.Message
             TokenExpiresAt = $null

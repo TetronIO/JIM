@@ -230,10 +230,11 @@ public class LogsControllerTests
         var services = result?.Value as List<string>;
 
         Assert.That(services, Is.Not.Null);
-        Assert.That(services, Has.Count.EqualTo(3));
+        Assert.That(services, Has.Count.EqualTo(4));
         Assert.That(services, Contains.Item("web"));
         Assert.That(services, Contains.Item("worker"));
         Assert.That(services, Contains.Item("scheduler"));
+        Assert.That(services, Contains.Item("database"));
     }
 
     #endregion

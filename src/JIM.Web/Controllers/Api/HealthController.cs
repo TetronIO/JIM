@@ -93,4 +93,33 @@ public class HealthController(JimApplication application) : ControllerBase
     {
         return Ok(new { status = "alive", timestamp = DateTime.UtcNow });
     }
+
+    /// <summary>
+    /// Returns the JIM application version.
+    /// </summary>
+    /// <remarks>
+    /// Reads the version from the assembly's InformationalVersion attribute,
+    /// which is set at build time from the VERSION file.
+    /// </remarks>
+    /// <returns>Product name and version string.</returns>
+    [HttpGet("version", Name = "GetHealthVersion")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public IActionResult Version()
+    {
+        return Ok(new { product = "JIM", version = AppVersion });
+    }
+
+    private static readonly string AppVersion = GetCleanVersion();
+
+    private static string GetCleanVersion()
+    {
+        var version = System.Reflection.CustomAttributeExtensions
+            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(
+                typeof(HealthController).Assembly)
+            ?.InformationalVersion ?? "unknown";
+
+        // Strip the Source Link commit hash suffix (e.g. "+6444a6934e...")
+        var plusIndex = version.IndexOf('+');
+        return plusIndex >= 0 ? version[..plusIndex] : version;
+    }
 }

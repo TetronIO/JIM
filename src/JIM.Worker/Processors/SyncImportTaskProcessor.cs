@@ -131,7 +131,10 @@ public class SyncImportTaskProcessor
 
                     // Update progress - for paginated imports we don't know the total, but we track objects imported so far
                     _activity.ObjectsProcessed = totalObjectsImported;
-                    await _jim.Activities.UpdateActivityMessageAsync(_activity, $"Imported {totalObjectsImported} objects (page {pageNumber})");
+                    var progressMessage = pageNumber > 1 || result.PaginationTokens.Count > 0
+                        ? $"Imported {totalObjectsImported} objects (page {pageNumber})"
+                        : $"Imported {totalObjectsImported} objects";
+                    await _jim.Activities.UpdateActivityMessageAsync(_activity, progressMessage);
 
                     // add the external ids from this page worth of results to our external-id collection for later deletion calculation
                     AddExternalIdsToCollection(result, externalIdsImported);
@@ -1475,93 +1478,188 @@ public class SyncImportTaskProcessor
         var pageSize = await _jim.ServiceSettings.GetSyncPageSizeAsync();
         var processedCount = 0;
 
-        // enumerate just the CSOs with unresolved references, for efficiency
-        foreach (var csoToProcess in connectedSystemObjectsToBeCreated.Where(cso => cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))))
+        // Build RPEI lookup dictionary for O(1) error reporting instead of O(N) linear scans
+        var rpeiLookup = new Dictionary<ConnectedSystemObject, ActivityRunProfileExecutionItem>();
+        foreach (var rpei in _activityRunProfileExecutionItems)
         {
-            var externalIdAttribute = csoToProcess.Type.Attributes.Single(a => a.IsExternalId);
-            var secondaryExternalIdAttribute = csoToProcess.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
-            var externalIdAttributeToUse = secondaryExternalIdAttribute ?? externalIdAttribute;
-
-            // enumerate just the attribute values for this CSO that are for unresolved references
-            foreach (var referenceAttributeValue in csoToProcess.AttributeValues.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
-                await ResolveAttributeValueReferenceAsync(csoToProcess, referenceAttributeValue, externalIdAttributeToUse, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
-
-            processedCount++;
-            _activity.ObjectsProcessed = processedCount;
-
-            // persist progress at page boundaries for consistent UI updates
-            if (processedCount % pageSize == 0)
-                await _jim.Activities.UpdateActivityAsync(_activity);
+            if (rpei.ConnectedSystemObject != null)
+                rpeiLookup.TryAdd(rpei.ConnectedSystemObject, rpei);
         }
 
-        foreach (var csoToProcess in connectedSystemObjectsToBeUpdated.Where(cso => cso.PendingAttributeValueAdditions.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))))
+        // Build external ID lookup dictionaries for O(1) in-memory resolution instead of O(N) linear scans per reference
+        var externalIdLookups = BuildExternalIdLookups(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+
+        // Phase 1: Resolve from in-memory dictionaries in parallel and collect still-unresolved references for batch DB query.
+        // After Commits 1-4, the loop body is purely CPU-bound dictionary lookups with no DB calls,
+        // so parallel execution is safe. All shared data structures are read-only after construction;
+        // writes are per-CSO (no contention on the same attribute values from multiple threads).
+        var unresolvedItems = new System.Collections.Concurrent.ConcurrentBag<(ConnectedSystemObject Cso, ConnectedSystemObjectAttributeValue AttrValue, ConnectedSystemObjectTypeAttribute ExternalIdAttribute)>();
+
+        var createdCsosWithRefs = connectedSystemObjectsToBeCreated
+            .Where(cso => cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
+            .ToList();
+        var updatedCsosWithRefs = connectedSystemObjectsToBeUpdated
+            .Where(cso => cso.PendingAttributeValueAdditions.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
+            .ToList();
+
+        Parallel.ForEach(createdCsosWithRefs, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, csoToProcess =>
         {
             var externalIdAttribute = csoToProcess.Type.Attributes.Single(a => a.IsExternalId);
             var secondaryExternalIdAttribute = csoToProcess.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
             var externalIdAttributeToUse = secondaryExternalIdAttribute ?? externalIdAttribute;
 
-            // enumerate just the attribute values for this CSO that are for unresolved references
+            foreach (var referenceAttributeValue in csoToProcess.AttributeValues.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
+            {
+                var resolved = ResolveAttributeValueFromLookups(referenceAttributeValue, externalIdAttributeToUse, externalIdLookups);
+                if (!resolved)
+                    unresolvedItems.Add((csoToProcess, referenceAttributeValue, externalIdAttributeToUse));
+            }
+
+            Interlocked.Increment(ref processedCount);
+        });
+
+        Parallel.ForEach(updatedCsosWithRefs, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, csoToProcess =>
+        {
+            var externalIdAttribute = csoToProcess.Type.Attributes.Single(a => a.IsExternalId);
+            var secondaryExternalIdAttribute = csoToProcess.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
+            var externalIdAttributeToUse = secondaryExternalIdAttribute ?? externalIdAttribute;
+
             foreach (var referenceAttributeValue in csoToProcess.PendingAttributeValueAdditions.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
-                await ResolveAttributeValueReferenceAsync(csoToProcess, referenceAttributeValue, externalIdAttributeToUse, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+            {
+                var resolved = ResolveAttributeValueFromLookups(referenceAttributeValue, externalIdAttributeToUse, externalIdLookups);
+                if (!resolved)
+                    unresolvedItems.Add((csoToProcess, referenceAttributeValue, externalIdAttributeToUse));
+            }
 
-            processedCount++;
-            _activity.ObjectsProcessed = processedCount;
+            Interlocked.Increment(ref processedCount);
+        });
 
-            // persist progress at page boundaries for consistent UI updates
-            if (processedCount % pageSize == 0)
-                await _jim.Activities.UpdateActivityAsync(_activity);
+        // Update progress after parallel processing completes
+        _activity.ObjectsProcessed = processedCount;
+        await _jim.Activities.UpdateActivityAsync(_activity);
+
+        // Phase 2: Batch DB query for remaining unresolved references (eliminates N+1 individual queries)
+        if (unresolvedItems.Count > 0)
+        {
+            // Collect unresolved values grouped by lookup type
+            var unresolvedPrimaryValues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var unresolvedSecondaryValues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int? primaryAttributeId = null;
+
+            foreach (var (_, attrValue, externalIdAttribute) in unresolvedItems)
+            {
+                if (externalIdAttribute.IsSecondaryExternalId && externalIdAttribute.Type == AttributeDataType.Text)
+                    unresolvedSecondaryValues.Add(attrValue.UnresolvedReferenceValue!);
+                else
+                {
+                    unresolvedPrimaryValues.Add(attrValue.UnresolvedReferenceValue!);
+                    primaryAttributeId ??= externalIdAttribute.Id;
+                }
+            }
+
+            // Batch query the database in pages using the configurable sync page size
+            var dbPrimaryResults = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+            var dbSecondaryResults = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+
+            if (unresolvedPrimaryValues.Count > 0 && primaryAttributeId.HasValue)
+            {
+                var primaryValuesList = unresolvedPrimaryValues.ToList();
+                for (var i = 0; i < primaryValuesList.Count; i += pageSize)
+                {
+                    var batch = primaryValuesList.Skip(i).Take(pageSize);
+                    var batchResults = await _jim.ConnectedSystems.GetConnectedSystemObjectsByAttributeValuesAsync(
+                        _connectedSystem.Id, primaryAttributeId.Value, batch);
+                    foreach (var kvp in batchResults)
+                        dbPrimaryResults.TryAdd(kvp.Key, kvp.Value);
+                }
+            }
+
+            if (unresolvedSecondaryValues.Count > 0)
+            {
+                var secondaryValuesList = unresolvedSecondaryValues.ToList();
+                for (var i = 0; i < secondaryValuesList.Count; i += pageSize)
+                {
+                    var batch = secondaryValuesList.Skip(i).Take(pageSize);
+                    var batchResults = await _jim.ConnectedSystems.GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(
+                        _connectedSystem.Id, batch);
+                    foreach (var kvp in batchResults)
+                        dbSecondaryResults.TryAdd(kvp.Key, kvp.Value);
+                }
+            }
+
+            // Phase 3: Apply DB results and report errors for truly unresolvable references
+            foreach (var (cso, attrValue, externalIdAttribute) in unresolvedItems)
+            {
+                ConnectedSystemObject? referencedCso = null;
+                if (externalIdAttribute.IsSecondaryExternalId && externalIdAttribute.Type == AttributeDataType.Text)
+                    dbSecondaryResults.TryGetValue(attrValue.UnresolvedReferenceValue!, out referencedCso);
+                else
+                    dbPrimaryResults.TryGetValue(attrValue.UnresolvedReferenceValue!, out referencedCso);
+
+                if (referencedCso != null)
+                {
+                    Log.Debug($"ResolveReferencesAsync: Matched an unresolved reference ({attrValue.UnresolvedReferenceValue}) to CSO: {referencedCso.Id} (from database batch query)");
+                    attrValue.ReferenceValue = referencedCso;
+                }
+                else
+                {
+                    // reference not found. referenced object probably out of container scope!
+                    // todo: make it a per-connected system setting whether to raise an error, or ignore. sometimes this is desirable.
+                    rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem);
+                    if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
+                    {
+                        activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {attrValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
+                        activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
+                    }
+                    else
+                    {
+                        Log.Warning($"ResolveReferencesAsync: Couldn't find an ActivityRunProfileExecutionItem for cso: {cso.Id}, unresolved reference: {attrValue.UnresolvedReferenceValue}");
+                    }
+
+                    Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {attrValue.UnresolvedReferenceValue}");
+                }
+            }
         }
 
         // persist final progress so the UI reflects completion before moving to the next phase
         await _jim.Activities.UpdateActivityAsync(_activity);
     }
 
-    private async Task ResolveAttributeValueReferenceAsync(ConnectedSystemObject csoToProcess, ConnectedSystemObjectAttributeValue referenceAttributeValue, ConnectedSystemObjectTypeAttribute externalIdAttribute, IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    /// <summary>
+    /// Attempts to resolve an attribute value's unresolved reference using the pre-built in-memory lookup dictionaries.
+    /// Returns true if the reference was resolved, false if it needs to be resolved via database fallback.
+    /// </summary>
+    private static bool ResolveAttributeValueFromLookups(ConnectedSystemObjectAttributeValue referenceAttributeValue, ConnectedSystemObjectTypeAttribute externalIdAttribute, ExternalIdLookups lookups)
     {
-        // try and find a cso in the database, or in the processing list we've been passed in, that has an identifier mentioned in the UnresolvedReferenceValue property.
-        // to do this:
-        // - work out what type of target attribute the unresolved reference is pointing to
-        //   most connected systems use the external id attribute when referencing other objects
-        //   but connected systems that use a secondary id use the secondary external id for references (i.e. LDAP and their DNs).
-        // - search the processing list for a cso match
-        // - failing that, search the database for a cso match
-        // - assign the cso in the reference property, and remove the unresolved reference string property
-
-        // vs linting issue. it doesn't know how to interpret the loop query and thinks UnresolvedReferenceValue may be null.
         if (string.IsNullOrEmpty(referenceAttributeValue.UnresolvedReferenceValue))
-            return;
+            return true; // nothing to resolve
 
-        // try and find the referenced object by the external id amongst the two processing lists of CSOs first
-        ConnectedSystemObject? referencedConnectedSystemObject;
+        ConnectedSystemObject? referencedConnectedSystemObject = null;
 
         if (externalIdAttribute.IsExternalId)
         {
             switch (externalIdAttribute.Type)
             {
                 case AttributeDataType.Text:
-                    referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.ExternalIdAttributeValue?.StringValue != null && cso.ExternalIdAttributeValue.StringValue.Equals(referenceAttributeValue.UnresolvedReferenceValue, StringComparison.InvariantCultureIgnoreCase)) ??
-                                                      connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.ExternalIdAttributeValue?.StringValue != null && cso.ExternalIdAttributeValue.StringValue.Equals(referenceAttributeValue.UnresolvedReferenceValue, StringComparison.InvariantCultureIgnoreCase));
+                    lookups.PrimaryTextLookup?.TryGetValue(referenceAttributeValue.UnresolvedReferenceValue, out referencedConnectedSystemObject);
                     break;
                 case AttributeDataType.Number:
-                    if (int.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var intUnresolvedReferenceValue))
-                        referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.IntValue == intUnresolvedReferenceValue) ??
-                                                          connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.IntValue == intUnresolvedReferenceValue);
+                    if (int.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var intValue))
+                        lookups.PrimaryIntLookup?.TryGetValue(intValue, out referencedConnectedSystemObject);
                     else
                         throw new InvalidCastException(
                             $"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to an int.");
                     break;
                 case AttributeDataType.LongNumber:
-                    if (long.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var longUnresolvedReferenceValue))
-                        referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.LongValue == longUnresolvedReferenceValue) ??
-                                                          connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.LongValue == longUnresolvedReferenceValue);
+                    if (long.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var longValue))
+                        lookups.PrimaryLongLookup?.TryGetValue(longValue, out referencedConnectedSystemObject);
                     else
                         throw new InvalidCastException(
                             $"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a long.");
                     break;
                 case AttributeDataType.Guid:
-                    if (Guid.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var guidUnresolvedReferenceValue))
-                        referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.GuidValue == guidUnresolvedReferenceValue) ??
-                                                          connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.ExternalIdAttributeValue != null && cso.ExternalIdAttributeValue.GuidValue == guidUnresolvedReferenceValue);
+                    if (Guid.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var guidValue))
+                        lookups.PrimaryGuidLookup?.TryGetValue(guidValue, out referencedConnectedSystemObject);
                     else
                         throw new InvalidCastException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a guid.");
                     break;
@@ -1579,28 +1677,23 @@ public class SyncImportTaskProcessor
             switch (externalIdAttribute.Type)
             {
                 case AttributeDataType.Text:
-                    // Use case-insensitive comparison for secondary external IDs (e.g., LDAP DNs are case-insensitive)
-                    referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue?.StringValue != null && cso.SecondaryExternalIdAttributeValue.StringValue.Equals(referenceAttributeValue.UnresolvedReferenceValue, StringComparison.OrdinalIgnoreCase)) ??
-                                                      connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue?.StringValue != null && cso.SecondaryExternalIdAttributeValue.StringValue.Equals(referenceAttributeValue.UnresolvedReferenceValue, StringComparison.OrdinalIgnoreCase));
+                    lookups.SecondaryTextLookup?.TryGetValue(referenceAttributeValue.UnresolvedReferenceValue, out referencedConnectedSystemObject);
                     break;
                 case AttributeDataType.Number:
-                    if (int.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var intUnresolvedReferenceValue))
-                        referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.IntValue == intUnresolvedReferenceValue) ??
-                                                          connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.IntValue == intUnresolvedReferenceValue);
+                    if (int.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var intValue))
+                        lookups.SecondaryIntLookup?.TryGetValue(intValue, out referencedConnectedSystemObject);
                     else
                         throw new InvalidCastException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to an int.");
                     break;
                 case AttributeDataType.LongNumber:
-                    if (long.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var longUnresolvedReferenceValue2))
-                        referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.LongValue == longUnresolvedReferenceValue2) ??
-                                                          connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.LongValue == longUnresolvedReferenceValue2);
+                    if (long.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var longValue))
+                        lookups.SecondaryLongLookup?.TryGetValue(longValue, out referencedConnectedSystemObject);
                     else
                         throw new InvalidCastException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a long.");
                     break;
                 case AttributeDataType.Guid:
-                    if (Guid.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var guidUnresolvedReferenceValue))
-                        referencedConnectedSystemObject = connectedSystemObjectsToBeCreated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.GuidValue == guidUnresolvedReferenceValue) ??
-                                                          connectedSystemObjectsToBeUpdated.SingleOrDefault(cso => cso.SecondaryExternalIdAttributeValue != null && cso.SecondaryExternalIdAttributeValue.GuidValue == guidUnresolvedReferenceValue);
+                    if (Guid.TryParse(referenceAttributeValue.UnresolvedReferenceValue, out var guidValue))
+                        lookups.SecondaryGuidLookup?.TryGetValue(guidValue, out referencedConnectedSystemObject);
                     else
                         throw new InvalidCastException($"Attribute '{externalIdAttribute.Name}' of type {externalIdAttribute.Type} with value '{referenceAttributeValue.UnresolvedReferenceValue}' cannot be parsed to a guid.");
                     break;
@@ -1618,55 +1711,122 @@ public class SyncImportTaskProcessor
             throw new InvalidDataException("externalIdAttributeToUse wasn't external or secondary external id");
         }
 
-        // no match in-memory, try and find a matching CSO in the database
-        // IMPORTANT: For secondary external IDs, we must search across ALL object types because
-        // references can point to objects of different types (e.g., a group's member reference
-        // points to users, other groups, etc.). Each object type has its own attribute schema
-        // with different attribute IDs, so we can't use the source object's attribute ID.
         if (referencedConnectedSystemObject == null)
+            return false;
+
+        Log.Debug($"ResolveReferencesAsync: Matched an unresolved reference ({referenceAttributeValue.UnresolvedReferenceValue}) to CSO: {referencedConnectedSystemObject.Id}");
+        referenceAttributeValue.ReferenceValue = referencedConnectedSystemObject;
+        return true;
+    }
+
+    /// <summary>
+    /// Builds lookup dictionaries from both CSO lists for O(1) in-memory reference resolution.
+    /// Extracts external ID attribute values once per CSO (avoiding repeated computed property access)
+    /// and indexes them by value for fast lookup during reference resolution.
+    /// </summary>
+    private static ExternalIdLookups BuildExternalIdLookups(IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    {
+        var lookups = new ExternalIdLookups();
+
+        // Process both lists into the same dictionaries
+        foreach (var csoList in new[] { connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated })
         {
-            if (externalIdAttribute.IsSecondaryExternalId && externalIdAttribute.Type == AttributeDataType.Text)
+            foreach (var cso in csoList)
             {
-                // Secondary external ID lookup needs to search across all object types
-                referencedConnectedSystemObject = await _jim.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(
-                    _connectedSystem.Id,
-                    referenceAttributeValue.UnresolvedReferenceValue);
-            }
-            else
-            {
-                // Primary external ID lookup can use the attribute ID (though it may also have cross-type issues)
-                referencedConnectedSystemObject = await _jim.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(
-                    _connectedSystem.Id,
-                    externalIdAttribute.Id,
-                    referenceAttributeValue.UnresolvedReferenceValue);
+                if (cso.AttributeValues.Count == 0)
+                    continue;
+
+                // Extract primary external ID value once (replicating ConnectedSystemObject.ExternalIdAttributeValue computed property logic)
+                var primaryIdAttrValue = cso.AttributeValues.SingleOrDefault(q => (q.AttributeId != 0 ? q.AttributeId : q.Attribute?.Id) == cso.ExternalIdAttributeId);
+                if (primaryIdAttrValue != null)
+                {
+                    // Determine data type from the attribute definition
+                    var attrType = primaryIdAttrValue.Attribute?.Type;
+                    if (attrType != null)
+                    {
+                        switch (attrType)
+                        {
+                            case AttributeDataType.Text when !string.IsNullOrEmpty(primaryIdAttrValue.StringValue):
+                                lookups.PrimaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(StringComparer.InvariantCultureIgnoreCase);
+                                if (!lookups.PrimaryTextLookup.TryAdd(primaryIdAttrValue.StringValue, cso))
+                                    throw new InvalidOperationException($"Duplicate primary external ID text value '{primaryIdAttrValue.StringValue}' found for CSO {cso.Id}. Another CSO already has the same external ID value.");
+                                break;
+                            case AttributeDataType.Number when primaryIdAttrValue.IntValue.HasValue:
+                                lookups.PrimaryIntLookup ??= new Dictionary<int, ConnectedSystemObject>();
+                                if (!lookups.PrimaryIntLookup.TryAdd(primaryIdAttrValue.IntValue.Value, cso))
+                                    throw new InvalidOperationException($"Duplicate primary external ID int value '{primaryIdAttrValue.IntValue.Value}' found for CSO {cso.Id}. Another CSO already has the same external ID value.");
+                                break;
+                            case AttributeDataType.LongNumber when primaryIdAttrValue.LongValue.HasValue:
+                                lookups.PrimaryLongLookup ??= new Dictionary<long, ConnectedSystemObject>();
+                                if (!lookups.PrimaryLongLookup.TryAdd(primaryIdAttrValue.LongValue.Value, cso))
+                                    throw new InvalidOperationException($"Duplicate primary external ID long value '{primaryIdAttrValue.LongValue.Value}' found for CSO {cso.Id}. Another CSO already has the same external ID value.");
+                                break;
+                            case AttributeDataType.Guid when primaryIdAttrValue.GuidValue.HasValue:
+                                lookups.PrimaryGuidLookup ??= new Dictionary<Guid, ConnectedSystemObject>();
+                                if (!lookups.PrimaryGuidLookup.TryAdd(primaryIdAttrValue.GuidValue.Value, cso))
+                                    throw new InvalidOperationException($"Duplicate primary external ID guid value '{primaryIdAttrValue.GuidValue.Value}' found for CSO {cso.Id}. Another CSO already has the same external ID value.");
+                                break;
+                        }
+                    }
+                }
+
+                // Extract secondary external ID value once (replicating ConnectedSystemObject.SecondaryExternalIdAttributeValue computed property logic)
+                if (cso.SecondaryExternalIdAttributeId.HasValue)
+                {
+                    var secondaryIdAttrValue = cso.AttributeValues.SingleOrDefault(q => (q.AttributeId != 0 ? q.AttributeId : q.Attribute?.Id) == cso.SecondaryExternalIdAttributeId);
+                    if (secondaryIdAttrValue != null)
+                    {
+                        var attrType2 = secondaryIdAttrValue.Attribute?.Type;
+                        if (attrType2 != null)
+                        {
+                            switch (attrType2)
+                            {
+                                case AttributeDataType.Text when !string.IsNullOrEmpty(secondaryIdAttrValue.StringValue):
+                                    lookups.SecondaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+                                    if (!lookups.SecondaryTextLookup.TryAdd(secondaryIdAttrValue.StringValue, cso))
+                                        throw new InvalidOperationException($"Duplicate secondary external ID text value '{secondaryIdAttrValue.StringValue}' found for CSO {cso.Id}. Another CSO already has the same secondary external ID value.");
+                                    break;
+                                case AttributeDataType.Number when secondaryIdAttrValue.IntValue.HasValue:
+                                    lookups.SecondaryIntLookup ??= new Dictionary<int, ConnectedSystemObject>();
+                                    if (!lookups.SecondaryIntLookup.TryAdd(secondaryIdAttrValue.IntValue.Value, cso))
+                                        throw new InvalidOperationException($"Duplicate secondary external ID int value '{secondaryIdAttrValue.IntValue.Value}' found for CSO {cso.Id}. Another CSO already has the same secondary external ID value.");
+                                    break;
+                                case AttributeDataType.LongNumber when secondaryIdAttrValue.LongValue.HasValue:
+                                    lookups.SecondaryLongLookup ??= new Dictionary<long, ConnectedSystemObject>();
+                                    if (!lookups.SecondaryLongLookup.TryAdd(secondaryIdAttrValue.LongValue.Value, cso))
+                                        throw new InvalidOperationException($"Duplicate secondary external ID long value '{secondaryIdAttrValue.LongValue.Value}' found for CSO {cso.Id}. Another CSO already has the same secondary external ID value.");
+                                    break;
+                                case AttributeDataType.Guid when secondaryIdAttrValue.GuidValue.HasValue:
+                                    lookups.SecondaryGuidLookup ??= new Dictionary<Guid, ConnectedSystemObject>();
+                                    if (!lookups.SecondaryGuidLookup.TryAdd(secondaryIdAttrValue.GuidValue.Value, cso))
+                                        throw new InvalidOperationException($"Duplicate secondary external ID guid value '{secondaryIdAttrValue.GuidValue.Value}' found for CSO {cso.Id}. Another CSO already has the same secondary external ID value.");
+                                    break;
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        if (referencedConnectedSystemObject != null)
-        {
-            // referenced cso found! set the ReferenceValue property, and leave the UnresolvedReferenceValue in place, as we'll use that for looking for updates to existing references on import.
-            Log.Debug($"ResolveReferencesAsync: Matched an unresolved reference ({referenceAttributeValue.UnresolvedReferenceValue}) to CSO: {referencedConnectedSystemObject.Id}");
-            referenceAttributeValue.ReferenceValue = referencedConnectedSystemObject;
-        }
-        else
-        {
-            // reference not found. referenced object probably out of container scope!
-            // todo: make it a per-connected system setting whether to raise an error, or ignore. sometimes this is desirable.
-            var activityRunProfileExecutionItem = _activityRunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject == csoToProcess);
-            if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || (activityRunProfileExecutionItem.ErrorType == null && activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)))
-            {
-                activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {referenceAttributeValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
-                activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
-            }
-            else
-            {
-                // CSO may not have been persisted yet or ActivityRunProfileExecutionItem wasn't created
-                // Log a warning but don't throw - this can happen with references to objects outside container scope
-                Log.Warning($"ResolveReferencesAsync: Couldn't find an ActivityRunProfileExecutionItem for cso: {csoToProcess.Id}, unresolved reference: {referenceAttributeValue.UnresolvedReferenceValue}");
-            }
+        return lookups;
+    }
 
-            Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {referenceAttributeValue.UnresolvedReferenceValue}");
-        }
+    /// <summary>
+    /// Holds pre-built lookup dictionaries for O(1) in-memory reference resolution.
+    /// Dictionaries are keyed by external ID values with appropriate comparers
+    /// (InvariantCultureIgnoreCase for primary text, OrdinalIgnoreCase for secondary text).
+    /// Only the dictionaries needed for the data types present in the import are initialised.
+    /// </summary>
+    private sealed class ExternalIdLookups
+    {
+        public Dictionary<string, ConnectedSystemObject>? PrimaryTextLookup { get; set; }
+        public Dictionary<int, ConnectedSystemObject>? PrimaryIntLookup { get; set; }
+        public Dictionary<long, ConnectedSystemObject>? PrimaryLongLookup { get; set; }
+        public Dictionary<Guid, ConnectedSystemObject>? PrimaryGuidLookup { get; set; }
+        public Dictionary<string, ConnectedSystemObject>? SecondaryTextLookup { get; set; }
+        public Dictionary<int, ConnectedSystemObject>? SecondaryIntLookup { get; set; }
+        public Dictionary<long, ConnectedSystemObject>? SecondaryLongLookup { get; set; }
+        public Dictionary<Guid, ConnectedSystemObject>? SecondaryGuidLookup { get; set; }
     }
 
     /// <summary>
@@ -1681,6 +1841,32 @@ public class SyncImportTaskProcessor
         if (updatedCsos.Count == 0)
             return;
 
+        // Filter to only CSOs that actually have pending exports - avoids iterating thousands of CSOs
+        // that have no pending exports (e.g. on a first import before any exports have occurred)
+        var csoIdsWithExports = await _jim.Repository.ConnectedSystems
+            .GetCsoIdsWithPendingExportsAsync(updatedCsos.Select(c => c.Id));
+
+        if (csoIdsWithExports.Count == 0)
+        {
+            Log.Debug("ReconcilePendingExportsAsync: No pending exports found for any of the {CsoCount} updated CSOs. Skipping reconciliation",
+                updatedCsos.Count);
+
+            // Mark progress as complete so the UI doesn't stay stuck at "0 / N"
+            _activity.ObjectsProcessed = _activity.ObjectsToProcess;
+            await _jim.Activities.UpdateActivityAsync(_activity);
+            return;
+        }
+
+        var csoList = updatedCsos.Where(c => csoIdsWithExports.Contains(c.Id)).ToList();
+
+        // Update progress counter to reflect the filtered count (only CSOs with pending exports)
+        _activity.ObjectsToProcess = csoList.Count;
+        _activity.ObjectsProcessed = 0;
+        await _jim.Activities.UpdateActivityAsync(_activity);
+
+        Log.Debug("ReconcilePendingExportsAsync: {FilteredCount} of {TotalCount} CSOs have pending exports",
+            csoList.Count, updatedCsos.Count);
+
         var reconciliationService = new PendingExportReconciliationService(_jim);
         var totalConfirmed = 0;
         var totalRetry = 0;
@@ -1689,7 +1875,6 @@ public class SyncImportTaskProcessor
 
         // Use sync page size for consistent batching across all sync operations
         var pageSize = await _jim.ServiceSettings.GetSyncPageSizeAsync();
-        var csoList = updatedCsos.ToList();
         var totalPages = (int)Math.Ceiling((double)csoList.Count / pageSize);
 
         Log.Debug("ReconcilePendingExportsAsync: Processing {CsoCount} CSOs in {PageCount} pages of {PageSize}",
@@ -1701,29 +1886,36 @@ public class SyncImportTaskProcessor
         {
             var pageCsos = csoList.Skip(page * pageSize).Take(pageSize).ToList();
 
-            // Batch collections for deferred database operations (per page)
-            var pendingExportsToDelete = new List<JIM.Models.Transactional.PendingExport>();
-            var pendingExportsToUpdate = new List<JIM.Models.Transactional.PendingExport>();
+            // Thread-safe batch collections for deferred database operations (per page)
+            var pendingExportsToDelete = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExport>();
+            var pendingExportsToUpdate = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExport>();
+            var confirmedAttrChangesToDelete = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExportAttributeValueChange>();
+            var pageExecutionItems = new System.Collections.Concurrent.ConcurrentBag<ActivityRunProfileExecutionItem>();
 
-            // Bulk fetch pending exports for this page's CSOs in a single query
+            // Lightweight fetch: AsNoTracking + only AttributeValueChanges with Attribute.
+            // Avoids loading ConnectedSystemObject/ConnectedSystem/SourceMetaverseObject (not needed for reconciliation)
+            // and eliminates EF Core identity resolution overhead against the import phase's tracked entity graph.
             Dictionary<Guid, JIM.Models.Transactional.PendingExport> pendingExportsByCsoId;
             using (Diagnostics.Sync.StartSpan("LoadPendingExports").SetTag("csoCount", pageCsos.Count))
             {
                 pendingExportsByCsoId = await _jim.Repository.ConnectedSystems
-                    .GetPendingExportsByConnectedSystemObjectIdsAsync(pageCsos.Select(c => c.Id));
+                    .GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(pageCsos.Select(c => c.Id));
             }
 
             Log.Verbose("ReconcilePendingExportsAsync: Page {Page}/{TotalPages}: Loaded {PendingExportCount} pending exports for {CsoCount} CSOs",
                 page + 1, totalPages, pendingExportsByCsoId.Count, pageCsos.Count);
 
-            // Process each CSO in this page against its pre-loaded pending export
+            // Process CSOs in parallel - reconciliation is pure in-memory comparison.
+            // Thread safety:
+            // - pendingExportsByCsoId: read-only dictionary (concurrent reads are safe)
+            // - Each CSO gets its own PendingExportReconciliationResult (no sharing)
+            // - Each pending export is unique per CSO (no cross-CSO contention)
+            // - reconciliationService.ReconcileCsoAgainstPendingExport uses only static helper methods
+            // - Shared collections use ConcurrentBag, counters use Interlocked
             using (Diagnostics.Sync.StartSpan("ProcessReconciliation").SetTag("csoCount", pageCsos.Count))
             {
-                foreach (var cso in pageCsos)
+                Parallel.ForEach(pageCsos, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, cso =>
                 {
-                    processedCount++;
-                    _activity.ObjectsProcessed = processedCount;
-
                     try
                     {
                         // Get the pre-loaded pending export for this CSO (if any)
@@ -1735,19 +1927,24 @@ public class SyncImportTaskProcessor
 
                         if (result.HasChanges)
                         {
-                            totalConfirmed += result.ConfirmedChanges.Count;
-                            totalRetry += result.RetryChanges.Count;
-                            totalFailed += result.FailedChanges.Count;
+                            Interlocked.Add(ref totalConfirmed, result.ConfirmedChanges.Count);
+                            Interlocked.Add(ref totalRetry, result.RetryChanges.Count);
+                            Interlocked.Add(ref totalFailed, result.FailedChanges.Count);
 
                             // Collect pending exports for batch operations
                             if (result.PendingExportToDelete != null)
                             {
                                 pendingExportsToDelete.Add(result.PendingExportToDelete);
-                                exportsDeleted++;
+                                Interlocked.Increment(ref exportsDeleted);
                             }
                             else if (result.PendingExportToUpdate != null)
                             {
                                 pendingExportsToUpdate.Add(result.PendingExportToUpdate);
+
+                                // With AsNoTracking, EF Core won't detect collection removals.
+                                // Explicitly collect confirmed attribute changes for batch deletion.
+                                foreach (var confirmedChange in result.ConfirmedChanges)
+                                    confirmedAttrChangesToDelete.Add(confirmedChange);
                             }
 
                             // Create execution items for failed exports (permanent failures)
@@ -1765,7 +1962,7 @@ public class SyncImportTaskProcessor
                                     ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.",
                                     DataSnapshot = $"Failed attributes: {failedAttrNames}"
                                 };
-                                _activityRunProfileExecutionItems.Add(executionItem);
+                                pageExecutionItems.Add(executionItem);
                             }
 
                             // Create execution items for retry exports (temporary failures that will be retried)
@@ -1783,31 +1980,51 @@ public class SyncImportTaskProcessor
                                     ErrorMessage = $"We exported a change, but did not get confirmation of it when a confirming import was performed. Details: {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will attempt to reassert the change on the next export run.",
                                     DataSnapshot = $"Unconfirmed attributes: {retryAttrNames}"
                                 };
-                                _activityRunProfileExecutionItems.Add(executionItem);
+                                pageExecutionItems.Add(executionItem);
                             }
                         }
+
+                        Interlocked.Increment(ref processedCount);
                     }
                     catch (Exception ex)
                     {
                         Log.Error(ex, "ReconcilePendingExportsAsync: Error reconciling pending exports for CSO {CsoId}", cso.Id);
+                        Interlocked.Increment(ref processedCount);
                     }
-                }
+                });
+
+                // Update progress after parallel processing completes
+                _activity.ObjectsProcessed = processedCount;
+
+                // Transfer execution items from thread-safe collection to main list
+                foreach (var item in pageExecutionItems)
+                    _activityRunProfileExecutionItems.Add(item);
             }
 
-            // Batch persist pending export changes for this page
+            // Batch persist pending export changes for this page.
+            // Uses ID-based and tracker-aware methods to avoid conflicts with entities
+            // already tracked from the per-CSO processing phase (AsNoTracking loads separate instances).
             using (Diagnostics.Sync.StartSpan("FlushPendingExportChanges")
                 .SetTag("deleteCount", pendingExportsToDelete.Count)
-                .SetTag("updateCount", pendingExportsToUpdate.Count))
+                .SetTag("updateCount", pendingExportsToUpdate.Count)
+                .SetTag("confirmedAttrChangeDeleteCount", confirmedAttrChangesToDelete.Count))
             {
                 if (pendingExportsToDelete.Count > 0)
                 {
-                    await _jim.Repository.ConnectedSystems.DeletePendingExportsAsync(pendingExportsToDelete);
+                    await _jim.Repository.ConnectedSystems.DeleteUntrackedPendingExportsAsync(pendingExportsToDelete);
                     Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch deleted {Count} confirmed pending exports", page + 1, pendingExportsToDelete.Count);
+                }
+
+                // Delete confirmed attribute changes before updating (AsNoTracking requires explicit child deletion)
+                if (confirmedAttrChangesToDelete.Count > 0)
+                {
+                    await _jim.Repository.ConnectedSystems.DeleteUntrackedPendingExportAttributeValueChangesAsync(confirmedAttrChangesToDelete);
+                    Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch deleted {Count} confirmed attribute value changes", page + 1, confirmedAttrChangesToDelete.Count);
                 }
 
                 if (pendingExportsToUpdate.Count > 0)
                 {
-                    await _jim.Repository.ConnectedSystems.UpdatePendingExportsAsync(pendingExportsToUpdate);
+                    await _jim.Repository.ConnectedSystems.UpdateUntrackedPendingExportsAsync(pendingExportsToUpdate);
                     Log.Verbose("ReconcilePendingExportsAsync: Page {Page}: Batch updated {Count} pending exports", page + 1, pendingExportsToUpdate.Count);
                 }
             }

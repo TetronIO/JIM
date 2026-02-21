@@ -1,6 +1,6 @@
 # Synchronisation Status Improvements
 
-**Status:** Planned
+**Status:** Implemented
 **Milestone:** Post-MVP
 **Created:** 2026-01-07
 

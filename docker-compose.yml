@@ -9,7 +9,6 @@ services:
       # Docker-specific overrides (JIM_DB_HOSTNAME set in .env for external DB, or overridden by codespaces file)
       - JIM_DB_HOSTNAME=${JIM_DB_HOSTNAME:-jim.database}
       - JIM_LOG_PATH=/var/log/jim
-      - JIM_LOG_LEVEL=Verbose
       - JIM_LOG_REQUESTS=true
     volumes:
       - jim-logs-volume:/var/log/jim
@@ -20,6 +19,8 @@ services:
     build:
       context: .
       dockerfile: src/JIM.Web/Dockerfile
+      args:
+        VERSION_SUFFIX: ${VERSION_SUFFIX:-}
     depends_on:
       jim.database:
         condition: service_healthy
@@ -44,13 +45,14 @@ services:
       # Docker-specific overrides
       - JIM_DB_HOSTNAME=${JIM_DB_HOSTNAME:-jim.database}
       - JIM_LOG_PATH=/var/log/jim
-      - JIM_LOG_LEVEL=Verbose
     volumes:
       - jim-logs-volume:/var/log/jim
       - jim-keys-volume:/data/keys
     build:
       context: .
       dockerfile: src/JIM.Worker/Dockerfile
+      args:
+        VERSION_SUFFIX: ${VERSION_SUFFIX:-}
     depends_on:
       jim.database:
         condition: service_healthy
@@ -72,6 +74,8 @@ services:
     build:
       context: .
       dockerfile: src/JIM.Scheduler/Dockerfile
+      args:
+        VERSION_SUFFIX: ${VERSION_SUFFIX:-}
     depends_on:
       jim.database:
         condition: service_healthy
@@ -96,12 +100,17 @@ services:
     #   shared_buffers=8GB  -> shm_size: '10gb'   (e.g. 64GB host)
     #   shared_buffers=16GB -> shm_size: '20gb'   (e.g. 128GB host)
     # statement_timeout=300000 (5 minutes) prevents runaway queries
-    # log_min_duration_statement=1000 (1 second) logs slow queries for performance analysis
-    command: postgres -c max_connections=200 -c shared_buffers=8GB -c effective_cache_size=24GB -c maintenance_work_mem=2GB -c checkpoint_completion_target=0.9 -c wal_buffers=16MB -c default_statistics_target=100 -c random_page_cost=1.1 -c effective_io_concurrency=200 -c work_mem=10485kB -c min_wal_size=1GB -c max_wal_size=4GB -c max_worker_processes=16 -c max_parallel_workers_per_gather=4 -c max_parallel_workers=16 -c max_parallel_maintenance_workers=4 -c statement_timeout=300000 -c log_min_duration_statement=1000
+    # log_min_duration_statement (JIM_DB_LOG_MIN_DURATION) logs slow queries for performance analysis
+    # logging_collector + jsonlog writes structured JSON logs to the shared log volume for the Logs UI.
+    # The entrypoint wrapper creates a postgres-owned subdirectory before delegating to the
+    # standard postgres entrypoint, since the shared volume root is owned by root.
+    entrypoint: ["/bin/bash", "-c", "mkdir -p /var/log/jim/database && chown postgres:postgres /var/log/jim/database && exec docker-entrypoint.sh \"$$@\"", "--"]
+    command: postgres -c max_connections=200 -c shared_buffers=8GB -c effective_cache_size=24GB -c maintenance_work_mem=2GB -c checkpoint_completion_target=0.9 -c wal_buffers=16MB -c default_statistics_target=100 -c random_page_cost=1.1 -c effective_io_concurrency=200 -c work_mem=10485kB -c min_wal_size=1GB -c max_wal_size=4GB -c max_worker_processes=16 -c max_parallel_workers_per_gather=4 -c max_parallel_workers=16 -c max_parallel_maintenance_workers=4 -c statement_timeout=300000 -c log_min_duration_statement=${JIM_DB_LOG_MIN_DURATION:-1000} -c logging_collector=on -c log_destination=jsonlog -c log_directory=/var/log/jim/database -c log_filename=jim.database.%Y%m%d.log -c log_rotation_age=1440 -c log_rotation_size=0 -c log_file_mode=0644
     restart: always
     shm_size: '10gb'
     volumes:
       - jim-db-volume:/var/lib/postgresql
+      - jim-logs-volume:/var/log/jim
     env_file: .env
     environment:
       # Postgres uses different var names

@@ -1,6 +1,6 @@
-# CSO and MVO Change Objects - Complete Design
+# CSO and MVO Change Objects - Implemented Design
 
-> **Status:** Complete
+> **Status:** Implemented
 > **Milestone:** Post-MVP
 > **GitHub Issue:** #269
 > **Created:** 2026-01-06
@@ -30,7 +30,7 @@ Complete the implementation of change object tracking and lifecycle management f
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| `ConnectedSystemObjectChange` model | ✅ Complete | Created on CSO create/update/delete |
+| `ConnectedSystemObjectChange` model | ✅ Implemented | Created on CSO create/update/delete |
 | `MetaverseObjectChange` model | ⚠️ Schema only | Model exists but never instantiated |
 | RPEI detail view | ✅ Shows changes | Only place CSO changes are displayed |
 | RPEI detail view (CSO deletion) | ⚠️ Info only | Shows generic MVO impact info, cannot link to specific MVO |
