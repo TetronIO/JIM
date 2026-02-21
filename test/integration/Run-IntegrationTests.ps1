@@ -1082,26 +1082,28 @@ $scenarioLogFile = Join-Path $logDir "$Scenario-$Template-$logTimestamp.log"
 Start-Transcript -Path $scenarioLogFile -Append | Out-Null
 $transcriptActive = $true
 try {
-    # Build scenario invocation params — only pass export tuning params to scenarios that accept them
-    $scenarioParams = @{
-        Template = $Template
-        Step = $Step
-        ApiKey = $apiKey
-    }
 
-    # Export tuning params only apply to scenarios that accept them and have LDAP exports
-    # Scenarios 1, 2, 8: pass through to their setup scripts
-    # Scenario 6: passes through to its internal Setup-Scenario1 call
-    $scenariosAcceptingExportParams = @("1", "2", "6", "8")
-    if ($scenarioNumber -and $scenariosAcceptingExportParams -contains $scenarioNumber) {
-        if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
-            $scenarioParams.ExportConcurrency = $ExportConcurrency
-        }
-        if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
-            $scenarioParams.MaxExportParallelism = $MaxExportParallelism
-        }
-    }
+# Build scenario invocation params — only pass export tuning params to scenarios that accept them
+$scenarioParams = @{
+    Template = $Template
+    Step = $Step
+    ApiKey = $apiKey
+}
 
+# Export tuning params only apply to scenarios that accept them and have LDAP exports
+# Scenarios 1, 2, 8: pass through to their setup scripts
+# Scenario 6: passes through to its internal Setup-Scenario1 call
+$scenariosAcceptingExportParams = @("1", "2", "6", "8")
+if ($scenarioNumber -and $scenariosAcceptingExportParams -contains $scenarioNumber) {
+    if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
+        $scenarioParams.ExportConcurrency = $ExportConcurrency
+    }
+    if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
+        $scenarioParams.MaxExportParallelism = $MaxExportParallelism
+    }
+}
+
+try {
     & $scenarioScript @scenarioParams
     $scenarioExitCode = $LASTEXITCODE
 }
