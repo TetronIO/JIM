@@ -62,4 +62,11 @@ public interface IActivityRepository
     /// A step may have multiple activities if it runs multiple run profiles in parallel.
     /// </summary>
     public Task<List<Activity>> GetActivitiesByScheduleExecutionStepAsync(Guid scheduleExecutionId, int stepIndex);
+
+    /// <summary>
+    /// Gets the creation time of the most recent HistoryRetentionCleanup activity.
+    /// Used by the worker to determine whether the cleanup interval has elapsed since the last run,
+    /// preventing immediate re-execution after worker restarts.
+    /// </summary>
+    public Task<DateTime?> GetLastHistoryCleanupTimeAsync();
 }

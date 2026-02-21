@@ -462,8 +462,10 @@ public class Worker : BackgroundService
     /// Tracks when the last history retention cleanup occurred.
     /// History cleanup runs on a longer interval (every 6 hours) as it only
     /// deals with records that are 90+ days old and doesn't need frequent checks.
+    /// Null until the first housekeeping check, at which point it is initialised
+    /// from the database to survive worker restarts.
     /// </summary>
-    private DateTime _lastHistoryCleanupRun = DateTime.MinValue;
+    private DateTime? _lastHistoryCleanupRun;
 
     /// <summary>
     /// Performs housekeeping tasks during worker idle time.
@@ -519,8 +521,24 @@ public class Worker : BackgroundService
             Log.Error(ex, "PerformHousekeepingAsync: Error during housekeeping");
         }
 
-        // History retention cleanup runs on its own schedule (every 6 hours)
-        if ((DateTime.UtcNow - _lastHistoryCleanupRun).TotalHours >= 6)
+        // History retention cleanup runs on its own schedule (every 6 hours).
+        // On first check after worker start, query the database for the last cleanup time
+        // so we don't re-run immediately if the interval hasn't elapsed yet.
+        if (_lastHistoryCleanupRun == null)
+        {
+            try
+            {
+                _lastHistoryCleanupRun = await jim.ChangeHistory.GetLastCleanupTimeAsync() ?? DateTime.MinValue;
+                Log.Debug("PerformHousekeepingAsync: Last history cleanup was at {LastCleanupTime}", _lastHistoryCleanupRun);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "PerformHousekeepingAsync: Failed to query last history cleanup time, will run cleanup on next cycle");
+                _lastHistoryCleanupRun = DateTime.MinValue;
+            }
+        }
+
+        if ((DateTime.UtcNow - _lastHistoryCleanupRun.Value).TotalHours >= 6)
         {
             _lastHistoryCleanupRun = DateTime.UtcNow;
             await PerformChangeHistoryCleanupAsync(jim);
