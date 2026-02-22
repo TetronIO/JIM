@@ -41,7 +41,8 @@ a.mud-link.mud-primary-text {
    IMPORTANT: avoid wrapping MudLink inside mud-text-secondary containers,
    as the inherited secondary colour can bleed into the visited state. */
 
-a.mud-link.mud-primary-text:hover {
+html[lang] a.mud-link.mud-primary-text:hover,
+html[lang] a.mud-link.mud-primary-text:visited:hover {
     color: var(--jim-link-hover-color) !important;
 }
 
