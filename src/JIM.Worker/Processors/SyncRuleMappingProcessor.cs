@@ -18,13 +18,15 @@ public static class SyncRuleMappingProcessor
     /// <param name="expressionEvaluator">Optional expression evaluator for expression-based mappings.</param>
     /// <param name="skipReferenceAttributes">If true, skip reference attribute processing (deferred to second pass).</param>
     /// <param name="onlyReferenceAttributes">If true, process ONLY reference attributes (for deferred second pass). Takes precedence over skipReferenceAttributes.</param>
+    /// <param name="isFinalReferencePass">If true, this is the final cross-page resolution pass — unresolved references are logged as warnings. If false (within-page deferred pass), unresolved references are expected and logged at debug level.</param>
     public static void Process(
         ConnectedSystemObject connectedSystemObject,
         SyncRuleMapping syncRuleMapping,
         List<ConnectedSystemObjectType> connectedSystemObjectTypes,
         IExpressionEvaluator? expressionEvaluator = null,
         bool skipReferenceAttributes = false,
-        bool onlyReferenceAttributes = false)
+        bool onlyReferenceAttributes = false,
+        bool isFinalReferencePass = false)
     {
         if (connectedSystemObject.MetaverseObject == null)
         {
@@ -101,7 +103,7 @@ public static class SyncRuleMappingProcessor
                                 // we ensure all referenced MVOs exist.
                                 if (!skipReferenceAttributes)
                                 {
-                                    ProcessReferenceAttribute(mvo, syncRuleMapping, source, connectedSystemObject, csoAttributeValues);
+                                    ProcessReferenceAttribute(mvo, syncRuleMapping, source, connectedSystemObject, csoAttributeValues, isFinalReferencePass);
                                 }
                                 break;
 
@@ -398,7 +400,8 @@ public static class SyncRuleMappingProcessor
         SyncRuleMapping syncRuleMapping,
         SyncRuleMappingSource source,
         ConnectedSystemObject connectedSystemObject,
-        List<ConnectedSystemObjectAttributeValue> csoAttributeValues)
+        List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
+        bool isFinalReferencePass)
     {
         // Log warning for CSO reference values that cannot be resolved due to missing navigation properties.
         // This can happen if:
@@ -415,17 +418,28 @@ public static class SyncRuleMappingProcessor
             {
                 if (unresolved.ReferenceValue == null && unresolved.ReferenceValueId != null)
                 {
-                    // ReferenceValueId is set but ReferenceValue navigation wasn't loaded - this is a bug
+                    // ReferenceValueId is set but ReferenceValue navigation wasn't loaded - this is always a bug
                     Log.Warning("SyncRuleMappingProcessor: CSO {CsoId} has reference attribute {AttrName} with ReferenceValueId {RefId} but ReferenceValue navigation is null. " +
                         "This indicates the EF Core query is missing .Include(av => av.ReferenceValue). The reference will not flow to the MVO.",
                         connectedSystemObject.Id, source.ConnectedSystemAttribute?.Name ?? "unknown", unresolved.ReferenceValueId);
                 }
                 else if (unresolved.ReferenceValue != null && unresolved.ReferenceValue.MetaverseObject == null)
                 {
-                    // ReferenceValue loaded but MetaverseObject is null - referenced CSO not yet joined
-                    Log.Warning("SyncRuleMappingProcessor: CSO {CsoId} has reference attribute {AttrName} pointing to CSO {RefCsoId} which is not joined to an MVO. " +
-                        "Ensure referenced objects are synced before referencing objects. The reference will not flow to the MVO.",
-                        connectedSystemObject.Id, source.ConnectedSystemAttribute?.Name ?? "unknown", unresolved.ReferenceValue.Id);
+                    // ReferenceValue loaded but MetaverseObject is null - referenced CSO not yet joined.
+                    // During the within-page deferred pass this is expected (cross-page references will be retried).
+                    // During the final cross-page resolution pass this is a real problem.
+                    if (isFinalReferencePass)
+                    {
+                        Log.Warning("SyncRuleMappingProcessor: CSO {CsoId} has reference attribute {AttrName} pointing to CSO {RefCsoId} which is not joined to an MVO. " +
+                            "Ensure referenced objects are synced before referencing objects. The reference will not flow to the MVO.",
+                            connectedSystemObject.Id, source.ConnectedSystemAttribute?.Name ?? "unknown", unresolved.ReferenceValue.Id);
+                    }
+                    else
+                    {
+                        Log.Debug("SyncRuleMappingProcessor: CSO {CsoId} has reference attribute {AttrName} pointing to CSO {RefCsoId} which is not yet joined to an MVO. " +
+                            "This will be retried during cross-page reference resolution.",
+                            connectedSystemObject.Id, source.ConnectedSystemAttribute?.Name ?? "unknown", unresolved.ReferenceValue.Id);
+                    }
                 }
             }
         }

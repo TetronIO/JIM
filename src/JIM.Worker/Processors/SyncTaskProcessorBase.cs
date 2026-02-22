@@ -1144,6 +1144,14 @@ public abstract class SyncTaskProcessorBase
         await _jim.Activities.UpdateActivityMessageAsync(_activity,
             $"Resolving cross-page references (0 / {totalCrossPagesToResolve})");
 
+        // Clear the change tracker to prevent performance degradation.
+        // After processing all pages, the change tracker accumulates thousands of tracked entities
+        // (MVOs, CSOs, attribute values, etc.). This causes EF Core's identity resolution to become
+        // extremely slow when loading the cross-page reference CSOs with deep Include chains.
+        // All previous page data has been fully persisted, so clearing is safe. The activity and
+        // any entities loaded below will be re-tracked as needed via Update/Add calls.
+        _jim.Repository.ClearChangeTracker();
+
         // Build sync rule lookup (keyed by ID) for O(1) access
         var requiredSyncRuleIds = _unresolvedCrossPageReferences
             .SelectMany(x => x.SyncRuleIds)
@@ -1201,10 +1209,11 @@ public abstract class SyncTaskProcessorBase
                 var beforeAdditions = mvo.PendingAttributeValueAdditions.Count;
                 var beforeRemovals = mvo.PendingAttributeValueRemovals.Count;
 
-                // Process ONLY reference attributes — now all references should resolve
+                // Process ONLY reference attributes — now all references should resolve.
+                // isFinalReferencePass: true so any still-unresolved references are logged as warnings.
                 foreach (var syncRule in applicableSyncRules)
                 {
-                    ProcessInboundAttributeFlow(cso, syncRule, skipReferenceAttributes: false, onlyReferenceAttributes: true);
+                    ProcessInboundAttributeFlow(cso, syncRule, skipReferenceAttributes: false, onlyReferenceAttributes: true, isFinalReferencePass: true);
                 }
 
                 var additionsCount = mvo.PendingAttributeValueAdditions.Count - beforeAdditions;
@@ -1755,7 +1764,7 @@ public abstract class SyncTaskProcessorBase
     /// <param name="onlyReferenceAttributes">If true, process ONLY reference attributes (for deferred second pass). Takes precedence over skipReferenceAttributes.</param>
     /// <exception cref="InvalidDataException">Can be thrown if a Sync Rule Mapping Source is not properly formed.</exception>
     /// <exception cref="NotImplementedException">Will be thrown whilst Functions have not been implemented, but are being used in the Sync Rule.</exception>
-    protected void ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule, bool skipReferenceAttributes = false, bool onlyReferenceAttributes = false)
+    protected void ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule, bool skipReferenceAttributes = false, bool onlyReferenceAttributes = false, bool isFinalReferencePass = false)
     {
         if (connectedSystemObject.MetaverseObject == null)
         {
@@ -1771,7 +1780,7 @@ public abstract class SyncTaskProcessorBase
             if (syncRuleMapping.TargetMetaverseAttribute == null)
                 throw new InvalidDataException("SyncRuleMapping.TargetMetaverseAttribute must not be null.");
 
-            SyncRuleMappingProcessor.Process(connectedSystemObject, syncRuleMapping, _objectTypes, _expressionEvaluator, skipReferenceAttributes, onlyReferenceAttributes);
+            SyncRuleMappingProcessor.Process(connectedSystemObject, syncRuleMapping, _objectTypes, _expressionEvaluator, skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass);
         }
     }
 
