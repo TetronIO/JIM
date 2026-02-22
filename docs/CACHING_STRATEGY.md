@@ -103,14 +103,20 @@ When `TryAndFindMatchingConnectedSystemObjectAsync` runs for each imported objec
 
 ## Eviction
 
-Cache entries are evicted:
+Cache entries are evicted whenever the external ID value they index changes or becomes invalid:
 
 | Event | Action |
 |---|---|
 | Stale PK hit (CSO deleted since cached) | `GetCsoWithCacheLookupAsync` auto-evicts |
 | PendingProvisioning → Normal transition | Confirming import evicts secondary, adds primary |
+| Import updates primary external ID (value change) | Old primary entry evicted, new primary entry added |
+| Import updates secondary external ID (e.g. DN rename) | Old secondary entry evicted |
+| Export result sets/changes primary external ID | Old primary entry evicted, new primary entry added |
+| Export result sets/changes secondary external ID | Old secondary entry evicted, new secondary entry added |
 
-`EvictCsoFromCache` is also available for explicit eviction but is currently only used during the confirming import cache key swap.
+### Why eviction on value change matters
+
+External ID values can change in the connected system. The most common example is an LDAP `distinguishedName` (DN) rename — when a user's OU changes or their name changes, the DN changes. Without eviction, the old DN cache entry remains orphaned. While a lookup with the _new_ DN will miss the cache harmlessly and self-populate from the database, the stale entry becomes dangerous if a _different_ object is later assigned the old DN value: it would incorrectly resolve to the wrong CSO.
 
 ## Thread Safety
 
@@ -150,7 +156,8 @@ With cache (PK lookups at ~1ms each, or cache-hit at ~0.1ms):
 | `src/JIM.Application/Servers/ConnectedSystemServer.cs` | Cache operations: `BuildCsoCacheKey`, `GetCsoWithCacheLookupAsync`, `AddCsoToCache`, `EvictCsoFromCache`, `WarmCsoCacheAsync` |
 | `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` | `GetAllCsoExternalIdMappingsAsync` — bulk-loads primary and secondary ID mappings for cache warming |
 | `src/JIM.Worker/Worker.cs` | Cache initialisation (`IMemoryCache`) and startup warming |
-| `src/JIM.Worker/Processors/SyncImportTaskProcessor.cs` | Cache population after import, cache key swap on PendingProvisioning → Normal |
+| `src/JIM.Worker/Processors/SyncImportTaskProcessor.cs` | Cache population after import, cache key swap on PendingProvisioning → Normal, eviction on external ID value changes |
 | `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs` | Cache population after provisioning CSO batch creation |
 | `src/JIM.Application/Servers/ExportEvaluationServer.cs` | Cache population after immediate provisioning CSO creation |
+| `src/JIM.Application/Servers/ExportExecutionServer.cs` | Cache eviction and re-population when export results set/change primary or secondary external IDs |
 | `test/JIM.Worker.Tests/Servers/ConnectedSystemCsoCacheTests.cs` | Unit tests for all cache operations |

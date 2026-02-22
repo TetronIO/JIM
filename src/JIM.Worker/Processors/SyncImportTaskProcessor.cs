@@ -296,35 +296,69 @@ public class SyncImportTaskProcessor
             _activity.ObjectsProcessed = connectedSystemObjectsToBeCreated.Count;
             await _jim.Activities.UpdateActivityAsync(_activity);
 
+            // Capture old external ID values BEFORE the update mutates AttributeValues,
+            // so we can evict stale cache entries if external IDs changed during import.
+            var oldExternalIds = new Dictionary<Guid, (string? primaryIdValue, string? secondaryIdValue)>();
+            foreach (var cso in connectedSystemObjectsToBeUpdated)
+            {
+                var oldPrimaryValue = cso.ExternalIdAttributeValue;
+                var oldPrimaryId = oldPrimaryValue?.StringValue
+                    ?? oldPrimaryValue?.IntValue?.ToString()
+                    ?? oldPrimaryValue?.LongValue?.ToString()
+                    ?? oldPrimaryValue?.GuidValue?.ToString();
+
+                string? oldSecondaryId = null;
+                if (cso.SecondaryExternalIdAttributeId.HasValue)
+                {
+                    var oldSecondaryValue = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
+                    oldSecondaryId = oldSecondaryValue?.StringValue;
+                }
+
+                oldExternalIds[cso.Id] = (oldPrimaryId, oldSecondaryId);
+            }
+
             await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activityRunProfileExecutionItems);
 
             // Update cache for CSOs that were updated during import.
             // For PendingProvisioning → Normal transitions: the confirming import has assigned a primary
             // external ID, so evict the old secondary-keyed cache entry and add a primary-keyed one.
             // For Normal CSOs: refresh the cache with the current primary external ID.
+            // If any external ID changed (e.g. DN rename), evict the stale cache entry.
             foreach (var updatedCso in connectedSystemObjectsToBeUpdated)
             {
                 var extIdValue = updatedCso.ExternalIdAttributeValue;
-                if (extIdValue != null)
-                {
-                    // Evict old secondary cache entry if this CSO has a secondary external ID
-                    if (updatedCso.SecondaryExternalIdAttributeId.HasValue)
-                    {
-                        var secondaryValue = updatedCso.AttributeValues?.FirstOrDefault(av => av.AttributeId == updatedCso.SecondaryExternalIdAttributeId);
-                        if (secondaryValue?.StringValue != null)
-                            _jim.ConnectedSystems.EvictCsoFromCache(_connectedSystem.Id, updatedCso.SecondaryExternalIdAttributeId.Value, secondaryValue.StringValue);
-                    }
+                if (extIdValue == null)
+                    continue;
 
-                    // Add primary external ID cache entry
-                    if (extIdValue.StringValue != null)
-                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.StringValue, updatedCso.Id);
-                    else if (extIdValue.IntValue != null)
-                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), updatedCso.Id);
-                    else if (extIdValue.LongValue != null)
-                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), updatedCso.Id);
-                    else if (extIdValue.GuidValue != null)
-                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), updatedCso.Id);
+                var newPrimaryId = extIdValue.StringValue
+                    ?? extIdValue.IntValue?.ToString()
+                    ?? extIdValue.LongValue?.ToString()
+                    ?? extIdValue.GuidValue?.ToString();
+
+                oldExternalIds.TryGetValue(updatedCso.Id, out var oldIds);
+
+                // Evict old primary cache entry if primary external ID changed
+                if (oldIds.primaryIdValue != null && newPrimaryId != null
+                    && !oldIds.primaryIdValue.Equals(newPrimaryId, StringComparison.OrdinalIgnoreCase))
+                {
+                    _jim.ConnectedSystems.EvictCsoFromCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, oldIds.primaryIdValue);
                 }
+
+                // Evict old secondary cache entry if this CSO has a secondary external ID
+                if (updatedCso.SecondaryExternalIdAttributeId.HasValue && oldIds.secondaryIdValue != null)
+                {
+                    _jim.ConnectedSystems.EvictCsoFromCache(_connectedSystem.Id, updatedCso.SecondaryExternalIdAttributeId.Value, oldIds.secondaryIdValue);
+                }
+
+                // Add/refresh primary external ID cache entry
+                if (extIdValue.StringValue != null)
+                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.StringValue, updatedCso.Id);
+                else if (extIdValue.IntValue != null)
+                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), updatedCso.Id);
+                else if (extIdValue.LongValue != null)
+                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), updatedCso.Id);
+                else if (extIdValue.GuidValue != null)
+                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), updatedCso.Id);
             }
 
             _activity.ObjectsProcessed = totalChanges;

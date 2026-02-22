@@ -623,4 +623,165 @@ public class ConnectedSystemCsoCacheTests
     }
 
     #endregion
+
+    #region Cache Invalidation on External ID Change Tests
+
+    [Test]
+    public void AddCsoToCache_PrimaryIdChange_OldEntryBecomesOrphaned()
+    {
+        // Demonstrates that without explicit eviction, changing a primary ID value
+        // leaves the old cache entry orphaned (pointing to the same CSO via a stale key).
+        var connectedSystemId = 1;
+        var primaryAttributeId = 42;
+        var oldPrimaryId = "old-guid-value";
+        var newPrimaryId = "new-guid-value";
+        var csoId = Guid.NewGuid();
+
+        // Cache the CSO by its original primary ID
+        _jim.ConnectedSystems.AddCsoToCache(connectedSystemId, primaryAttributeId, oldPrimaryId, csoId);
+
+        // Simulate primary ID change: add new entry without evicting old
+        _jim.ConnectedSystems.AddCsoToCache(connectedSystemId, primaryAttributeId, newPrimaryId, csoId);
+
+        // Old entry still exists — orphaned and stale
+        var oldCacheKey = ConnectedSystemServer.BuildCsoCacheKey(connectedSystemId, primaryAttributeId, oldPrimaryId.ToLowerInvariant());
+        Assert.That(_cache.TryGetValue(oldCacheKey, out Guid oldCachedId), Is.True, "Old cache entry should still exist (orphaned)");
+        Assert.That(oldCachedId, Is.EqualTo(csoId));
+
+        // New entry also exists
+        var newCacheKey = ConnectedSystemServer.BuildCsoCacheKey(connectedSystemId, primaryAttributeId, newPrimaryId.ToLowerInvariant());
+        Assert.That(_cache.TryGetValue(newCacheKey, out Guid newCachedId), Is.True);
+        Assert.That(newCachedId, Is.EqualTo(csoId));
+    }
+
+    [Test]
+    public void EvictAndReplace_PrimaryIdChange_OldEntryRemoved()
+    {
+        // Verifies the correct evict-then-add pattern for primary ID changes.
+        var connectedSystemId = 1;
+        var primaryAttributeId = 42;
+        var oldPrimaryId = "old-guid-value";
+        var newPrimaryId = "new-guid-value";
+        var csoId = Guid.NewGuid();
+
+        // Cache the CSO by its original primary ID
+        _jim.ConnectedSystems.AddCsoToCache(connectedSystemId, primaryAttributeId, oldPrimaryId, csoId);
+
+        // Simulate correct primary ID change: evict old, then add new
+        _jim.ConnectedSystems.EvictCsoFromCache(connectedSystemId, primaryAttributeId, oldPrimaryId);
+        _jim.ConnectedSystems.AddCsoToCache(connectedSystemId, primaryAttributeId, newPrimaryId, csoId);
+
+        // Old entry should be gone
+        var oldCacheKey = ConnectedSystemServer.BuildCsoCacheKey(connectedSystemId, primaryAttributeId, oldPrimaryId.ToLowerInvariant());
+        Assert.That(_cache.TryGetValue(oldCacheKey, out Guid _), Is.False, "Old primary cache entry should be evicted");
+
+        // New entry should exist
+        var newCacheKey = ConnectedSystemServer.BuildCsoCacheKey(connectedSystemId, primaryAttributeId, newPrimaryId.ToLowerInvariant());
+        Assert.That(_cache.TryGetValue(newCacheKey, out Guid cachedId), Is.True);
+        Assert.That(cachedId, Is.EqualTo(csoId));
+    }
+
+    [Test]
+    public void EvictAndReplace_SecondaryIdChange_OldEntryRemoved()
+    {
+        // Verifies evict-then-add pattern for secondary ID changes (e.g. DN rename).
+        var connectedSystemId = 1;
+        var secondaryAttributeId = 55;
+        var oldDn = "CN=John Smith,OU=Users,DC=corp,DC=local";
+        var newDn = "CN=John E. Smith,OU=Users,DC=corp,DC=local";
+        var csoId = Guid.NewGuid();
+
+        // Cache the CSO by its original DN
+        _jim.ConnectedSystems.AddCsoToCache(connectedSystemId, secondaryAttributeId, oldDn, csoId);
+
+        // Simulate DN rename: evict old, add new
+        _jim.ConnectedSystems.EvictCsoFromCache(connectedSystemId, secondaryAttributeId, oldDn);
+        _jim.ConnectedSystems.AddCsoToCache(connectedSystemId, secondaryAttributeId, newDn, csoId);
+
+        // Old DN entry should be gone
+        var oldCacheKey = ConnectedSystemServer.BuildCsoCacheKey(connectedSystemId, secondaryAttributeId, oldDn.ToLowerInvariant());
+        Assert.That(_cache.TryGetValue(oldCacheKey, out Guid _), Is.False, "Old DN cache entry should be evicted after rename");
+
+        // New DN entry should exist
+        var newCacheKey = ConnectedSystemServer.BuildCsoCacheKey(connectedSystemId, secondaryAttributeId, newDn.ToLowerInvariant());
+        Assert.That(_cache.TryGetValue(newCacheKey, out Guid cachedId), Is.True);
+        Assert.That(cachedId, Is.EqualTo(csoId));
+    }
+
+    [Test]
+    public void CacheKeySwap_SecondaryIdRename_OldDnEvicted_NewDnCached()
+    {
+        // End-to-end DN rename scenario: object provisioned with old DN, then DN changes
+        // in LDAP, confirming import brings in the new DN.
+        var connectedSystemId = 1;
+        var primaryAttributeId = 42;
+        var secondaryAttributeId = 55;
+        var primaryId = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+        var oldDn = "CN=John Smith,OU=Users,DC=corp,DC=local";
+        var newDn = "CN=John E. Smith,OU=Senior Staff,DC=corp,DC=local";
+        var csoId = Guid.NewGuid();
+
+        // Step 1: CSO is Normal, cached by primary ID and old secondary (DN)
+        _jim.ConnectedSystems.AddCsoToCache(connectedSystemId, primaryAttributeId, primaryId, csoId);
+        _jim.ConnectedSystems.AddCsoToCache(connectedSystemId, secondaryAttributeId, oldDn, csoId);
+
+        // Step 2: Import detects DN rename — evict old secondary, add new secondary
+        _jim.ConnectedSystems.EvictCsoFromCache(connectedSystemId, secondaryAttributeId, oldDn);
+        _jim.ConnectedSystems.AddCsoToCache(connectedSystemId, secondaryAttributeId, newDn, csoId);
+
+        // Primary should be untouched
+        var primaryCacheKey = ConnectedSystemServer.BuildCsoCacheKey(connectedSystemId, primaryAttributeId, primaryId.ToLowerInvariant());
+        Assert.That(_cache.TryGetValue(primaryCacheKey, out Guid primaryCachedId), Is.True, "Primary cache entry should still exist");
+        Assert.That(primaryCachedId, Is.EqualTo(csoId));
+
+        // Old DN should be gone
+        var oldDnCacheKey = ConnectedSystemServer.BuildCsoCacheKey(connectedSystemId, secondaryAttributeId, oldDn.ToLowerInvariant());
+        Assert.That(_cache.TryGetValue(oldDnCacheKey, out Guid _), Is.False, "Old DN cache entry should be evicted");
+
+        // New DN should exist
+        var newDnCacheKey = ConnectedSystemServer.BuildCsoCacheKey(connectedSystemId, secondaryAttributeId, newDn.ToLowerInvariant());
+        Assert.That(_cache.TryGetValue(newDnCacheKey, out Guid newDnCachedId), Is.True, "New DN cache entry should exist");
+        Assert.That(newDnCachedId, Is.EqualTo(csoId));
+    }
+
+    [Test]
+    public async Task AddCsoToCache_DifferentCsoReusesOldExternalId_ReturnsNewCsoAsync()
+    {
+        // After proper eviction and re-add, a reused external ID value should resolve to the new CSO.
+        // Scenario: Object A had DN "CN=ServiceAccount,OU=...", Object A is deleted,
+        // Object B is created and assigned the same DN.
+        var connectedSystemId = 1;
+        var attributeId = 55;
+        var sharedDn = "CN=ServiceAccount,OU=Services,DC=corp,DC=local";
+        var csoA = Guid.NewGuid();
+        var csoB = Guid.NewGuid();
+        var expectedCsoB = new ConnectedSystemObject { Id = csoB };
+
+        // Object A cached by DN
+        _jim.ConnectedSystems.AddCsoToCache(connectedSystemId, attributeId, sharedDn, csoA);
+
+        // Object A deleted — evict its cache entry
+        _jim.ConnectedSystems.EvictCsoFromCache(connectedSystemId, attributeId, sharedDn);
+
+        // Object B created with same DN
+        _jim.ConnectedSystems.AddCsoToCache(connectedSystemId, attributeId, sharedDn, csoB);
+
+        // Mock PK lookup for Object B
+        _mockCsRepo.Setup(r => r.GetConnectedSystemObjectAsync(connectedSystemId, csoB))
+            .ReturnsAsync(expectedCsoB);
+
+        // Lookup by DN should return Object B, not Object A
+        var result = await _jim.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(
+            connectedSystemId, 10, sharedDn, attributeId);
+
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Id, Is.EqualTo(csoB), "Reused external ID should resolve to the new CSO after proper eviction");
+
+        // Should NOT have called DB — resolved from cache
+        _mockCsRepo.Verify(
+            r => r.GetConnectedSystemObjectBySecondaryExternalIdAsync(connectedSystemId, 10, sharedDn),
+            Times.Never);
+    }
+
+    #endregion
 }

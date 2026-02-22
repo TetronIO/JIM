@@ -2557,6 +2557,8 @@ public class ConnectedSystemServer
         // Check cache for CSO GUID
         if (cache.TryGetValue(cacheKey, out Guid cachedCsoId))
         {
+            Log.Verbose("GetCsoWithCacheLookupAsync: Cache hit for key '{CacheKey}' → CSO {CsoId}", cacheKey, cachedCsoId);
+
             // Cache hit — load entity by PK (fast indexed lookup)
             var cso = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, cachedCsoId);
             if (cso != null)
@@ -2566,6 +2568,10 @@ public class ConnectedSystemServer
             cache.Remove(cacheKey);
             Log.Debug("GetCsoWithCacheLookupAsync: Cache hit for key '{CacheKey}' but CSO {CsoId} no longer exists. Evicted stale entry.", cacheKey, cachedCsoId);
         }
+        else
+        {
+            Log.Verbose("GetCsoWithCacheLookupAsync: Cache miss for key '{CacheKey}'. Falling back to DB query.", cacheKey);
+        }
 
         // Cache miss — query DB by attribute value
         var result = await dbFallback();
@@ -2573,6 +2579,7 @@ public class ConnectedSystemServer
         {
             // Populate cache with the result
             cache.Set(cacheKey, result.Id);
+            Log.Verbose("GetCsoWithCacheLookupAsync: Auto-populated cache for key '{CacheKey}' → CSO {CsoId}", cacheKey, result.Id);
         }
 
         return result;
@@ -2633,6 +2640,7 @@ public class ConnectedSystemServer
 
         var cacheKey = BuildCsoCacheKey(connectedSystemId, attributeId, externalIdValue.ToLowerInvariant());
         cache.Set(cacheKey, csoId);
+        Log.Verbose("AddCsoToCache: Added cache entry '{CacheKey}' → CSO {CsoId}", cacheKey, csoId);
     }
 
     /// <summary>
@@ -2645,6 +2653,7 @@ public class ConnectedSystemServer
 
         var cacheKey = BuildCsoCacheKey(connectedSystemId, attributeId, externalIdValue.ToLowerInvariant());
         cache.Remove(cacheKey);
+        Log.Verbose("EvictCsoFromCache: Evicted cache entry '{CacheKey}'", cacheKey);
     }
 
     #endregion
