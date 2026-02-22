@@ -16,11 +16,14 @@ else
                     Margin="Margin.Dense" />
             </MudItem>
             <MudItem xs="12" sm="6" md="3">
-                <MudSelect T="ValueChangeType ?" @bind-Value="_filterChangeType" Label="Change type" Variant="Variant.Outlined"
+                <MudSelect T="string" @bind-Value="_filterChangeType" Label="Change type" Variant="Variant.Outlined"
                     Dense="true" Margin="Margin.Dense">
-                    <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)null)">All Changes</MudSelectItem>
-                    <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Add)">Add</MudSelectItem>
-                    <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Remove)">Remove</MudSelectItem>
+                    <MudSelectItem T="string" Value="@((string)null!)">All Changes</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Set")">Set</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Updated")">Updated</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Removed")">Removed</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Add")">Add</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Remove")">Remove</MudSelectItem>
                 </MudSelect>
             </MudItem>
         </MudGrid>
@@ -259,13 +262,14 @@ else
                     </MudSelect>
                 </div>
                 <div style="width: 150px;">
-                    <MudSelect T="ValueChangeType ?" @bind-Value="_modalFilterChangeType" Label="Change type"
+                    <MudSelect T="string" @bind-Value="_modalFilterChangeType" Label="Change type"
                         Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense">
-                        <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)null)">All</MudSelectItem>
-                        <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Add)">Add
-                        </MudSelectItem>
-                        <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Remove)">Remove
-                        </MudSelectItem>
+                        <MudSelectItem T="string" Value="@((string)null!)">All</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Set")">Set</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Updated")">Updated</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Removed")">Removed</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Add")">Add</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Remove")">Remove</MudSelectItem>
                     </MudSelect>
                 </div>
             </div>
@@ -413,14 +417,14 @@ else
     public List<ChangeGroup> Changes { get; set; } = new();
 
     private string _searchText = string.Empty;
-    private ValueChangeType? _filterChangeType = null;
+    private string? _filterChangeType = null;
     private bool _detailsDialogVisible = false;
     private ChangeGroup? _selectedChange = null;
 
     // Modal filter state
     private string _modalSearchText = string.Empty;
     private string? _modalFilterAttribute = null;
-    private ValueChangeType? _modalFilterChangeType = null;
+    private string? _modalFilterChangeType = null;
 
     private DialogOptions _dialogOptions = new DialogOptions
     {
@@ -650,23 +654,12 @@ else
             }).Where(cg => cg.AttributeChanges.Any() || cg.ChangeType == ObjectChangeType.Deleted);
         }
 
-        // Apply change type filter
-        if (_filterChangeType.HasValue)
+        // Apply change type filter using display terms (Set, Updated, Removed, Add, Remove)
+        if (!string.IsNullOrEmpty(_filterChangeType))
         {
-            filtered = filtered.Select(cg => new ChangeGroup
-            {
-                ChangeType = cg.ChangeType,
-                ChangeTime = cg.ChangeTime,
-                ChangeInitiatorType = cg.ChangeInitiatorType,
-                ChangeInitiatorName = cg.ChangeInitiatorName,
-                ChangeInitiatorId = cg.ChangeInitiatorId,
-                SyncRuleId = cg.SyncRuleId,
-                SyncRuleName = cg.SyncRuleName,
-                ActivityRunProfileExecutionItemId = cg.ActivityRunProfileExecutionItemId,
-                AttributeChanges = cg.AttributeChanges
-            .Where(ac => ac.ChangeType == _filterChangeType.Value)
-            .ToList()
-            }).Where(cg => cg.AttributeChanges.Any() || cg.ChangeType == ObjectChangeType.Deleted);
+            filtered = filtered.Where(cg =>
+                cg.ChangeType == ObjectChangeType.Deleted ||
+                GetDisplayChanges(cg).Any(dc => dc.DisplayChangeType == _filterChangeType));
         }
 
         return filtered.OrderByDescending(cg => cg.ChangeTime);
@@ -857,12 +850,10 @@ else
             displayChanges = displayChanges.Where(c => c.AttributeName == _modalFilterAttribute);
         }
 
-        // Apply change type filter (Update matches Add filter since it represents a value being set)
-        if (_modalFilterChangeType.HasValue)
+        // Apply change type filter using display terms (Set, Updated, Removed, Add, Remove)
+        if (!string.IsNullOrEmpty(_modalFilterChangeType))
         {
-            displayChanges = displayChanges.Where(c =>
-            c.UnderlyingChangeType == _modalFilterChangeType.Value ||
-            (c.IsUpdate && _modalFilterChangeType.Value == ValueChangeType.Add));
+            displayChanges = displayChanges.Where(c => c.DisplayChangeType == _modalFilterChangeType);
         }
 
         return displayChanges.OrderBy(c => c.AttributeName).ThenBy(c => c.DisplayChangeType);
