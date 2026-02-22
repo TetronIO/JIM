@@ -95,6 +95,20 @@ public class PostgresDataRepository : IRepository
             await Database.Database.MigrateAsync();
     }
 
+    public void ClearChangeTracker()
+    {
+        try
+        {
+            var trackedCount = Database.ChangeTracker.Entries().Count();
+            Database.ChangeTracker.Clear();
+            Log.Debug("ClearChangeTracker: Cleared {Count} tracked entities", trackedCount);
+        }
+        catch (NullReferenceException)
+        {
+            // ChangeTracker is unavailable in unit test environments with mocked DbContext
+        }
+    }
+
     #region IDisposable
 
     private bool _disposed;

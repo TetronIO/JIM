@@ -365,6 +365,7 @@ public class ExportExecutionServer
                     // Separate resolved from still-unresolved exports
                     var resolvedExports = new List<PendingExport>();
                     var stillUnresolvedExports = new List<PendingExport>();
+                    var resolveProcessedCount = 0;
 
                     foreach (var export in deferredExports)
                     {
@@ -380,6 +381,15 @@ public class ExportExecutionServer
                         {
                             stillUnresolvedExports.Add(export);
                         }
+
+                        resolveProcessedCount++;
+                        await ReportProgressAsync(progressCallback, new ExportProgressInfo
+                        {
+                            Phase = ExportPhase.ResolvingReferences,
+                            TotalExports = result.TotalPendingExports,
+                            ProcessedExports = result.SuccessCount + resolveProcessedCount,
+                            Message = $"Resolving deferred exports ({resolveProcessedCount} / {deferredExports.Count})"
+                        });
                     }
 
                     // Batch-export resolved deferred exports using the same batching as immediate exports
@@ -398,7 +408,7 @@ public class ExportExecutionServer
                         }
                         else
                         {
-                            await ProcessDeferredBatchesSequentiallyAsync(connector, deferredBatches, result, cancellationToken);
+                            await ProcessDeferredBatchesSequentiallyAsync(connector, deferredBatches, result, cancellationToken, progressCallback);
                         }
                     }
 
@@ -514,11 +524,23 @@ public class ExportExecutionServer
         IConnectorExportUsingCalls connector,
         List<List<PendingExport>> batches,
         ExportExecutionResult result,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<ExportProgressInfo, Task>? progressCallback)
     {
+        var processedCount = 0;
         foreach (var batch in batches)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            // Report progress for deferred batch execution
+            await ReportProgressAsync(progressCallback, new ExportProgressInfo
+            {
+                Phase = ExportPhase.Executing,
+                TotalExports = result.TotalPendingExports,
+                ProcessedExports = result.SuccessCount + result.FailedCount + processedCount,
+                CurrentBatchSize = batch.Count,
+                Message = "Exporting deferred"
+            });
 
             using (Diagnostics.Diagnostics.Database.StartSpan("MarkDeferredBatchAsExecuting")
                 .SetTag("batchSize", batch.Count))
@@ -538,6 +560,8 @@ public class ExportExecutionServer
             {
                 await ProcessBatchSuccessAsync(batch, exportResults, result, Application.Repository.ConnectedSystems);
             }
+
+            processedCount += batch.Count;
         }
     }
 
@@ -805,7 +829,7 @@ public class ExportExecutionServer
     /// and saves all CSO updates together.
     /// Accepts an explicit repository parameter to support both sequential (shared) and parallel (per-batch) paths.
     /// </summary>
-    private static async Task BatchUpdateCsosAfterSuccessfulExportAsync(
+    private async Task BatchUpdateCsosAfterSuccessfulExportAsync(
         List<(ConnectedSystemObject cso, ExportResult exportResult)> csosToUpdate,
         IConnectedSystemRepository repository)
     {
@@ -829,8 +853,10 @@ public class ExportExecutionServer
                 : new Dictionary<int, ConnectedSystemObjectTypeAttribute>();
         }
 
-        // Apply changes to each CSO in-memory
+        // Apply changes to each CSO in-memory, tracking old external ID values for cache invalidation
         var csoUpdates = new List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)>();
+        var cacheEvictions = new List<(int connectedSystemId, int attributeId, string oldValue)>();
+        var cacheAdditions = new List<(int connectedSystemId, int attributeId, string newValue, Guid csoId)>();
 
         foreach (var (cso, exportResult) in csosToUpdate)
         {
@@ -844,6 +870,9 @@ public class ExportExecutionServer
 
                 var externalIdAttrValue = cso.AttributeValues
                     .FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
+
+                // Capture old primary external ID value before overwriting for cache invalidation
+                var oldPrimaryIdValue = externalIdAttrValue?.StringValue ?? externalIdAttrValue?.GuidValue?.ToString();
 
                 if (externalIdAttrValue == null)
                 {
@@ -867,6 +896,11 @@ public class ExportExecutionServer
                     externalIdAttrValue.GuidValue = null;
                 }
 
+                // Track cache invalidation: evict old value if it differs from the new one
+                if (oldPrimaryIdValue != null && !oldPrimaryIdValue.Equals(exportResult.ExternalId, StringComparison.OrdinalIgnoreCase))
+                    cacheEvictions.Add((cso.ConnectedSystemId, cso.ExternalIdAttributeId, oldPrimaryIdValue));
+                cacheAdditions.Add((cso.ConnectedSystemId, cso.ExternalIdAttributeId, exportResult.ExternalId, cso.Id));
+
                 needsUpdate = true;
                 Log.Information("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} external ID to {ExternalId} (type: {AttrType})",
                     cso.Id, exportResult.ExternalId, externalIdAttribute?.Type.ToString() ?? "Unknown");
@@ -877,6 +911,9 @@ public class ExportExecutionServer
             {
                 var secondaryExternalIdAttrValue = cso.AttributeValues
                     .FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId.Value);
+
+                // Capture old secondary external ID value before overwriting for cache invalidation
+                var oldSecondaryIdValue = secondaryExternalIdAttrValue?.StringValue;
 
                 if (secondaryExternalIdAttrValue == null)
                 {
@@ -890,6 +927,12 @@ public class ExportExecutionServer
                 }
 
                 secondaryExternalIdAttrValue.StringValue = exportResult.SecondaryExternalId;
+
+                // Track cache invalidation: evict old value if it differs from the new one
+                if (oldSecondaryIdValue != null && !oldSecondaryIdValue.Equals(exportResult.SecondaryExternalId, StringComparison.OrdinalIgnoreCase))
+                    cacheEvictions.Add((cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, oldSecondaryIdValue));
+                cacheAdditions.Add((cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, exportResult.SecondaryExternalId, cso.Id));
+
                 needsUpdate = true;
                 Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} secondary external ID to {SecondaryExternalId}",
                     cso.Id, exportResult.SecondaryExternalId);
@@ -911,6 +954,12 @@ public class ExportExecutionServer
             }
             Log.Information("BatchUpdateCsosAfterSuccessfulExportAsync: Batch updated {Count} CSOs", csoUpdates.Count);
         }
+
+        // Update cache after successful persistence: evict stale entries, then add current ones
+        foreach (var (connectedSystemId, attributeId, oldValue) in cacheEvictions)
+            Application.ConnectedSystems.EvictCsoFromCache(connectedSystemId, attributeId, oldValue);
+        foreach (var (connectedSystemId, attributeId, newValue, csoId) in cacheAdditions)
+            Application.ConnectedSystems.AddCsoToCache(connectedSystemId, attributeId, newValue, csoId);
     }
 
     /// <summary>

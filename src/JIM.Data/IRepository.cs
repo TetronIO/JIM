@@ -19,4 +19,11 @@ public interface IRepository : IDisposable
 
     public Task InitialiseDatabaseAsync();
     public Task InitialisationCompleteAsync();
+
+    /// <summary>
+    /// Clears all tracked entities from the change tracker.
+    /// Use after long-running operations where accumulated tracked entities cause performance degradation.
+    /// All tracked entities will become detached — any subsequent updates must re-attach them.
+    /// </summary>
+    public void ClearChangeTracker();
 }
