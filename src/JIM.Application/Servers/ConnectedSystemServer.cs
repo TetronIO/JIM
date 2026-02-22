@@ -2652,9 +2652,19 @@ public class ConnectedSystemServer
     /// <summary>
     /// Gets a Connected System Object by its secondary external ID attribute value.
     /// Used to find PendingProvisioning CSOs during import reconciliation.
+    /// Routes through the CSO lookup cache using the secondary external ID attribute ID as the cache key component.
     /// </summary>
-    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
+    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue, int? secondaryExternalIdAttributeId = null)
     {
+        // If we have the attribute ID, route through the cache for O(1) lookup
+        if (secondaryExternalIdAttributeId.HasValue)
+        {
+            var cacheKey = BuildCsoCacheKey(connectedSystemId, secondaryExternalIdAttributeId.Value, secondaryExternalIdValue.ToLowerInvariant());
+            return await GetCsoWithCacheLookupAsync(connectedSystemId, cacheKey, () =>
+                Application.Repository.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(connectedSystemId, objectTypeId, secondaryExternalIdValue));
+        }
+
+        // No attribute ID available — fall back to direct DB query
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(connectedSystemId, objectTypeId, secondaryExternalIdValue);
     }
 

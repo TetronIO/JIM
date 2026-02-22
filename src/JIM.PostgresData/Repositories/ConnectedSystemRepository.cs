@@ -1008,8 +1008,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     public async Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
     {
-        // Load all CSOs for this connected system with just the external ID attribute value.
-        // We need: CSO ID, ExternalIdAttributeId, and the matching attribute value.
+        // Load all CSOs for this connected system with their external ID attribute values.
+        // Each CSO gets ONE cache entry, keyed by whichever external ID is available:
+        // - Primary external ID (for Normal CSOs that have been imported)
+        // - Secondary external ID (for PendingProvisioning CSOs awaiting confirming import)
         // Using AsNoTracking since this is read-only data for the cache index.
         var csos = await Repository.Database.ConnectedSystemObjects
             .AsNoTracking()
@@ -1019,10 +1021,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 cso.Id,
                 cso.ExternalIdAttributeId,
+                cso.SecondaryExternalIdAttributeId,
+                // Load attribute values for both primary and secondary external ID attributes
                 AttributeValues = cso.AttributeValues
-                    .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
+                    .Where(av => av.AttributeId == cso.ExternalIdAttributeId ||
+                                 (cso.SecondaryExternalIdAttributeId != null && av.AttributeId == cso.SecondaryExternalIdAttributeId))
                     .Select(av => new
                     {
+                        av.AttributeId,
                         av.StringValue,
                         av.IntValue,
                         av.LongValue,
@@ -1035,27 +1041,45 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
         foreach (var cso in csos)
         {
-            var av = cso.AttributeValues.FirstOrDefault();
-            if (av == null) continue;
+            // Try primary external ID first
+            var primaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
+            var primaryValue = GetExternalIdValueString(primaryAv?.StringValue, primaryAv?.IntValue, primaryAv?.LongValue, primaryAv?.GuidValue);
 
-            // Determine the external ID value string based on whichever value column is populated
-            string? externalIdValue = null;
-            if (av.StringValue != null)
-                externalIdValue = av.StringValue.ToLowerInvariant();
-            else if (av.IntValue.HasValue)
-                externalIdValue = av.IntValue.Value.ToString();
-            else if (av.LongValue.HasValue)
-                externalIdValue = av.LongValue.Value.ToString();
-            else if (av.GuidValue.HasValue)
-                externalIdValue = av.GuidValue.Value.ToString().ToLowerInvariant();
+            if (primaryValue != null)
+            {
+                var cacheKey = $"cso:{connectedSystemId}:{cso.ExternalIdAttributeId}:{primaryValue}";
+                result.TryAdd(cacheKey, cso.Id);
+                continue; // Primary found — no need for secondary
+            }
 
-            if (externalIdValue == null) continue;
+            // No primary external ID value — try secondary (PendingProvisioning CSOs)
+            if (cso.SecondaryExternalIdAttributeId.HasValue)
+            {
+                var secondaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
+                var secondaryValue = GetExternalIdValueString(secondaryAv?.StringValue, secondaryAv?.IntValue, secondaryAv?.LongValue, secondaryAv?.GuidValue);
 
-            var cacheKey = $"cso:{connectedSystemId}:{cso.ExternalIdAttributeId}:{externalIdValue}";
-            result.TryAdd(cacheKey, cso.Id);
+                if (secondaryValue != null)
+                {
+                    var cacheKey = $"cso:{connectedSystemId}:{cso.SecondaryExternalIdAttributeId.Value}:{secondaryValue}";
+                    result.TryAdd(cacheKey, cso.Id);
+                }
+            }
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Converts an external ID attribute value to its lowercase string representation for cache key building.
+    /// Returns null if no value column is populated.
+    /// </summary>
+    private static string? GetExternalIdValueString(string? stringValue, int? intValue, long? longValue, Guid? guidValue)
+    {
+        if (stringValue != null) return stringValue.ToLowerInvariant();
+        if (intValue.HasValue) return intValue.Value.ToString();
+        if (longValue.HasValue) return longValue.Value.ToString();
+        if (guidValue.HasValue) return guidValue.Value.ToString().ToLowerInvariant();
+        return null;
     }
 
     /// <summary>

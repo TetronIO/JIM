@@ -1353,6 +1353,20 @@ public abstract class SyncTaskProcessorBase
         if (_provisioningCsosToCreate.Count > 0)
         {
             await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(_provisioningCsosToCreate);
+
+            // Add provisioned CSOs to the lookup cache so confirming imports can find them.
+            // Provisioned CSOs don't have a primary external ID yet (it's system-assigned during export),
+            // so we cache by secondary external ID (e.g., distinguishedName) instead.
+            foreach (var cso in _provisioningCsosToCreate)
+            {
+                if (cso.SecondaryExternalIdAttributeId.HasValue)
+                {
+                    var secondaryIdValue = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
+                    if (secondaryIdValue?.StringValue != null)
+                        _jim.ConnectedSystems.AddCsoToCache(cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryIdValue.StringValue, cso.Id);
+                }
+            }
+
             Log.Verbose("FlushPendingExportOperationsAsync: Created {Count} provisioning CSOs in batch", _provisioningCsosToCreate.Count);
             _provisioningCsosToCreate.Clear();
         }

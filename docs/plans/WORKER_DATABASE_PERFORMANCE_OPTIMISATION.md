@@ -109,6 +109,8 @@ var allMatches = await Repository.Database.ConnectedSystemObjects
     .ToListAsync();
 ```
 
+> **Current implementation details**: See [CSO Lookup Cache Strategy](../CACHING_STRATEGY.md) for the full cache lifecycle, population points, and secondary external ID support.
+
 **Approach**: Service-lifetime CSO lookup index using .NET's built-in `IMemoryCache`.
 
 The cache stores a **lookup index only** — mapping external ID values to CSO GUIDs — not full entity graphs. This keeps memory lightweight (~100 bytes per entry), avoids EF Core entity lifecycle concerns (attach/detach, change tracking), and simplifies cache invalidation. When a cache hit returns a CSO GUID, the full entity is loaded by primary key (fast indexed lookup, ~1-2ms) in the current `DbContext`.

@@ -204,10 +204,7 @@ public class SyncImportTaskProcessor
                 totalObjectsImported = result.ImportObjects.Count;
                 connectorSpan.SetTag("objectCount", totalObjectsImported);
 
-                // Update progress - for file-based imports we know the total after reading the file
-                _activity.ObjectsToProcess = totalObjectsImported;
-                _activity.ObjectsProcessed = 0;
-                await _jim.Activities.UpdateActivityMessageAsync(_activity, $"Processing {totalObjectsImported} objects");
+                // Progress is now initialised inside ProcessImportObjectsAsync
 
                 // todo: simplify externalIdsImported. objects are unnecessarily complex
                 // add the external ids from the results to our external id collection for later deletion calculation
@@ -300,6 +297,36 @@ public class SyncImportTaskProcessor
             await _jim.Activities.UpdateActivityAsync(_activity);
 
             await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activityRunProfileExecutionItems);
+
+            // Update cache for CSOs that were updated during import.
+            // For PendingProvisioning → Normal transitions: the confirming import has assigned a primary
+            // external ID, so evict the old secondary-keyed cache entry and add a primary-keyed one.
+            // For Normal CSOs: refresh the cache with the current primary external ID.
+            foreach (var updatedCso in connectedSystemObjectsToBeUpdated)
+            {
+                var extIdValue = updatedCso.ExternalIdAttributeValue;
+                if (extIdValue != null)
+                {
+                    // Evict old secondary cache entry if this CSO has a secondary external ID
+                    if (updatedCso.SecondaryExternalIdAttributeId.HasValue)
+                    {
+                        var secondaryValue = updatedCso.AttributeValues?.FirstOrDefault(av => av.AttributeId == updatedCso.SecondaryExternalIdAttributeId);
+                        if (secondaryValue?.StringValue != null)
+                            _jim.ConnectedSystems.EvictCsoFromCache(_connectedSystem.Id, updatedCso.SecondaryExternalIdAttributeId.Value, secondaryValue.StringValue);
+                    }
+
+                    // Add primary external ID cache entry
+                    if (extIdValue.StringValue != null)
+                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.StringValue, updatedCso.Id);
+                    else if (extIdValue.IntValue != null)
+                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), updatedCso.Id);
+                    else if (extIdValue.LongValue != null)
+                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), updatedCso.Id);
+                    else if (extIdValue.GuidValue != null)
+                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), updatedCso.Id);
+                }
+            }
+
             _activity.ObjectsProcessed = totalChanges;
             await _jim.Activities.UpdateActivityAsync(_activity);
         }
@@ -538,6 +565,15 @@ public class SyncImportTaskProcessor
         var seenExternalIds = new Dictionary<string, (int index, ActivityRunProfileExecutionItem rpei, ConnectedSystemObject? cso)>(StringComparer.OrdinalIgnoreCase);
         var knownDuplicateExternalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // Set up progress tracking for this batch of imported objects.
+        // At ~50ms per object (cache-miss), 100 objects = ~5 seconds between UI updates.
+        var totalObjectsInBatch = connectedSystemImportResult.ImportObjects.Count;
+        _activity.ObjectsToProcess = totalObjectsInBatch;
+        _activity.ObjectsProcessed = 0;
+        await _jim.Activities.UpdateActivityMessageAsync(_activity,
+            $"Processing imported objects (0 / {totalObjectsInBatch:N0})");
+        const int progressUpdateInterval = 100;
+
         // decision: do we want to load the whole connector space into memory to maximise performance? for now, let's keep it db-centric.
         // todo: experiment with using parallel foreach to see if we can speed up processing
         var importIndex = -1;
@@ -550,6 +586,8 @@ public class SyncImportTaskProcessor
             activityRunProfileExecutionItem.Activity = _activity;  // Set Activity for initiator tracking in CSO change history
             _activityRunProfileExecutionItems.Add(activityRunProfileExecutionItem);
 
+            try
+            {
             try
             {
                 // validate the results.
@@ -866,6 +904,25 @@ public class SyncImportTaskProcessor
                 // still perform system logging.
                 Log.Error(e, $"ProcessImportObjectsAsync: Unhandled {_connectedSystemRunProfile} sync error whilst processing import object {importObject}.");
             }
+            }
+            finally
+            {
+                // Update progress for every object (including errored/skipped via continue).
+                // In-memory assignment is free; DB write only every N objects.
+                _activity.ObjectsProcessed = importIndex + 1;
+                if ((importIndex + 1) % progressUpdateInterval == 0)
+                {
+                    await _jim.Activities.UpdateActivityMessageAsync(_activity,
+                        $"Processing imported objects ({importIndex + 1:N0} / {totalObjectsInBatch:N0})");
+                }
+            }
+        }
+
+        // Final progress update to ensure the UI reflects completion for this batch
+        if (totalObjectsInBatch > 0 && totalObjectsInBatch % progressUpdateInterval != 0)
+        {
+            await _jim.Activities.UpdateActivityMessageAsync(_activity,
+                $"Processing imported objects ({totalObjectsInBatch:N0} / {totalObjectsInBatch:N0})");
         }
 
         // DEBUG: Summary statistics for duplicate detection
@@ -973,7 +1030,9 @@ public class SyncImportTaskProcessor
         cso = secondaryExternalIdAttribute.Type switch
         {
             AttributeDataType.Text when secondaryIdImportAttr.StringValues.Count > 0 =>
-                await _jim.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(_connectedSystem.Id, connectedSystemObjectType.Id, secondaryIdImportAttr.StringValues[0]),
+                await _jim.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(
+                    _connectedSystem.Id, connectedSystemObjectType.Id, secondaryIdImportAttr.StringValues[0],
+                    secondaryExternalIdAttribute.Id),
             _ => null
         };
 
