@@ -148,10 +148,10 @@
                     <thead>
                         <tr>
                             <th class="jim-attr-header-name">Attribute</th>
+                            <th class="jim-attr-header-value">Value</th>
                             <th class="jim-attr-header-type">Type</th>
                             <th class="jim-attr-header-plurality">Plurality</th>
-                            <th class="jim-attr-header-extid">External ID</th>
-                            <th class="jim-attr-header-value">Value</th>
+                            <th class="jim-attr-header-extid">External ID?</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -172,35 +172,7 @@
                             {
                                 <tr class="@(group.Values.Count > 1 ? "jim-attr-row-mva" : "")">
                                     <td class="jim-attr-name">
-                                        <MudText Typo="Typo.body2" Class="jim-text-code">@group.AttributeName</MudText>
-                                    </td>
-                                    <td class="jim-attr-type">
-                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@group.Values[0].Attribute.Type
-                                        </MudText>
-                                    </td>
-                                    <td class="jim-attr-plurality">
-                                        @if (group.IsMultiValued)
-                                        {
-                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Multi</MudText>
-                                        }
-                                        else
-                                        {
-                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Single</MudText>
-                                        }
-                                    </td>
-                                    <td>
-                                        @if (IsExternalId(group.Values[0]))
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
-                                        }
-                                        else if (IsSecondaryExternalId(group.Values[0]))
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
-                                        }
-                                        else
-                                        {
-                                            <span>-</span>
-                                        }
+                                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.AttributeName</MudText>
                                     </td>
                                     <td class="jim-attr-value">
                                         @if (group.Values.Count == 1)
@@ -226,11 +198,39 @@
                                                         <CsoAttributeValue Value="@val" />
                                                     </div>
                                                 }
-                                                <MudButton Variant="Variant.Outlined" Class="jim-attr-collapse-btn"
+                                                <MudButton Variant="Variant.Outlined" Size="Size.Small" Class="jim-attr-collapse-btn"
                                                     OnClick="@(() => ToggleCollapse(group.AttributeName))">
                                                     Collapse
                                                 </MudButton>
                                             </div>
+                                        }
+                                    </td>
+                                    <td class="jim-attr-type">
+                                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.Values[0].Attribute.Type
+                                        </MudText>
+                                    </td>
+                                    <td class="jim-attr-plurality">
+                                        @if (group.IsMultiValued)
+                                        {
+                                            <MudText Typo="Typo.body1" Class="mud-text-secondary">Multi</MudText>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.body1" Class="mud-text-secondary">Single</MudText>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (IsExternalId(group.Values[0]))
+                                        {
+                                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
+                                        }
+                                        else if (IsSecondaryExternalId(group.Values[0]))
+                                        {
+                                            <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <span>-</span>
                                         }
                                     </td>
                                 </tr>
