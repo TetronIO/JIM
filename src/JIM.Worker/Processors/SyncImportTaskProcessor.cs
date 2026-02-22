@@ -1632,7 +1632,8 @@ public class SyncImportTaskProcessor
 
                 if (referencedCso != null)
                 {
-                    Log.Debug($"ResolveReferencesAsync: Matched an unresolved reference ({attrValue.UnresolvedReferenceValue}) to CSO: {referencedCso.Id} (from database batch query)");
+                    Log.Debug("ResolveReferencesAsync: Matched an unresolved reference ({UnresolvedRef}) to CSO: {CsoId} (from database batch query)",
+                        attrValue.UnresolvedReferenceValue, referencedCso.Id);
                     attrValue.ReferenceValue = referencedCso;
                 }
                 else
@@ -1748,7 +1749,11 @@ public class SyncImportTaskProcessor
         if (referencedConnectedSystemObject == null)
             return false;
 
-        Log.Debug($"ResolveReferencesAsync: Matched an unresolved reference ({referenceAttributeValue.UnresolvedReferenceValue}) to CSO: {referencedConnectedSystemObject.Id}");
+        var csoIdentifier = referencedConnectedSystemObject.Id != Guid.Empty
+            ? referencedConnectedSystemObject.Id.ToString()
+            : referencedConnectedSystemObject.ExternalIdAttributeValue?.ToString() ?? "(unknown)";
+        Log.Debug("ResolveReferencesAsync: Matched an unresolved reference ({UnresolvedRef}) to CSO: {CsoIdentifier}",
+            referenceAttributeValue.UnresolvedReferenceValue, csoIdentifier);
         referenceAttributeValue.ReferenceValue = referencedConnectedSystemObject;
         return true;
     }
