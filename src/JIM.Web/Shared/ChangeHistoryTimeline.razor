@@ -59,7 +59,7 @@ else
                                         @foreach (var change in GetVisibleDisplayChanges(changeGroup))
                                         {
                                             <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mb-1">
-                                                <MudText Typo="Typo.body2" Class="jim-text-code" Style="min-width: 120px;">
+                                                <MudText Class="mud-text-secondary" Style="min-width: 120px;">
                                                     @change.AttributeName
                                                 </MudText>
                                                 <MudChip T="string" Variant="Variant.Text"
@@ -73,20 +73,20 @@ else
                                                     {
                                                         @if (change.OldReferenceValue != null || change.NewReferenceValue != null)
                                                         {
-                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;">
+                                                            <MudText Class="mud-text-secondary" Style="display: inline;">
                                                                 @(change.OldReferenceValue?.DisplayName ?? "(none)")</MudText>
-                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;"> →
+                                                            <MudText Class="mud-text-secondary" Style="display: inline;"> →
                                                             </MudText>
-                                                            <MudText Typo="Typo.body2" Style="display: inline; font-weight: 600;">
+                                                            <MudText Style="display: inline;">
                                                                 @(change.NewReferenceValue?.DisplayName ?? "(none)")</MudText>
                                                         }
                                                         else
                                                         {
-                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;">
+                                                            <MudText Class="mud-text-secondary" Style="display: inline;">
                                                                 @change.OldValue</MudText>
-                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;"> →
+                                                            <MudText Class="mud-text-secondary" Style="display: inline;"> →
                                                             </MudText>
-                                                            <MudText Typo="Typo.body2" Style="display: inline; font-weight: 600;">
+                                                            <MudText Style="display: inline;">
                                                                 @change.NewValue</MudText>
                                                         }
                                                     }
@@ -95,12 +95,12 @@ else
                                                         @* Set/Add values get bold emphasis, Removed values get de-emphasised *@
                                                         @if (change.DisplayChangeType == "Removed" || change.DisplayChangeType == "Remove")
                                                         {
-                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@GetDisplayValue(change)
+                                                            <MudText Class="mud-text-secondary">@GetDisplayValue(change)
                                                             </MudText>
                                                         }
                                                         else
                                                         {
-                                                            <MudText Typo="Typo.body2" Style="font-weight: 600;">@GetDisplayValue(change)
+                                                            <MudText>@GetDisplayValue(change)
                                                             </MudText>
                                                         }
                                                     }
@@ -119,7 +119,7 @@ else
                                 }
                                 else if (changeGroup.ChangeType == ObjectChangeType.Deleted)
                                 {
-                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                    <MudText Class="mud-text-secondary">
                                         Object was deleted. Final attribute values were not captured.
                                     </MudText>
                                 }
@@ -197,7 +197,7 @@ else
                         {
                             <MudItem xs="12" sm="6" md="4">
                                 <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                                    <MudText Class="jim-text-code" Style="min-width: 120px;">
+                                    <MudText Class="mud-text-secondary" Style="min-width: 120px;">
                                         @summary.AttributeName
                                     </MudText>
                                     @* SVA terminology: Set, Updated, Removed *@
@@ -286,7 +286,7 @@ else
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Attribute">
-                        <MudText Class="jim-text-code">@context.AttributeName</MudText>
+                        <MudText Class="mud-text-secondary">@context.AttributeName</MudText>
                     </MudTd>
                     <MudTd DataLabel="Change">
                         <MudChip T="string" Variant="Variant.Text" Color="@GetDisplayChangeTypeColor(context)">
@@ -312,7 +312,7 @@ else
                                     <MudText Class="mud-text-secondary">→</MudText>
                                     @if (context.NewReferenceValue != null)
                                     {
-                                        <MudLink Href="@context.NewReferenceValue.Href" Style="font-weight: 600;">
+                                        <MudLink Href="@context.NewReferenceValue.Href">
                                             @context.NewReferenceValue.DisplayName</MudLink>
                                     }
                                     else
@@ -327,7 +327,7 @@ else
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                     <MudText Class="mud-text-secondary">@context.OldValue</MudText>
                                     <MudText Class="mud-text-secondary">→</MudText>
-                                    <MudText Style="font-weight: 600;">@context.NewValue</MudText>
+                                    <MudText>@context.NewValue</MudText>
                                 </MudStack>
                             }
                         }
@@ -345,7 +345,7 @@ else
                                 }
                                 else
                                 {
-                                    <MudLink Href="@context.ReferenceValue.Href" Style="font-weight: 600;">
+                                    <MudLink Href="@context.ReferenceValue.Href">
                                         @context.ReferenceValue.DisplayName
                                     </MudLink>
                                 }
@@ -364,7 +364,7 @@ else
                             }
                             else
                             {
-                                <MudText Style="font-weight: 600;">@context.DisplayValue</MudText>
+                                <MudText>@context.DisplayValue</MudText>
                             }
                         }
                     </MudTd>

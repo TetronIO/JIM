@@ -598,7 +598,7 @@ else
                             </HeaderContent>
                             <RowTemplate>
                                 <MudTd DataLabel="Attribute">
-                                    <MudText Class="jim-text-code">@context.AttributeName</MudText>
+                                    <MudText Class="mud-text-secondary">@context.AttributeName</MudText>
                                 </MudTd>
                                 <MudTd DataLabel="Change">
                                     <MudChip T="string" Variant="Variant.Text"
@@ -746,7 +746,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                                                 </HeaderContent>
                                                 <RowTemplate>
                                                     <MudTd DataLabel="Attribute">
-                                                        <MudText Class="jim-text-code">@(context.Attribute?.Name ?? $"Attribute {context.AttributeId}")</MudText>
+                                                        <MudText Class="mud-text-secondary">@(context.Attribute?.Name ?? $"Attribute {context.AttributeId}")</MudText>
                                                     </MudTd>
                                                     <MudTd DataLabel="Change Type">
                                                         <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportChangeTypeColor(context.ChangeType)"
