@@ -233,6 +233,43 @@ namespace JIM.Application.Servers
             await Application.Repository.Tasking.UpdateWorkerTaskAsync(workerTask);
         }
 
+        /// <summary>
+        /// Requests cancellation of a worker task. For tasks actively being processed by the worker,
+        /// this sets the status to CancellationRequested so the worker can detect it, cancel its
+        /// CancellationToken, and clean up gracefully. For queued or waiting tasks that no worker
+        /// thread is processing, this cancels them immediately.
+        /// </summary>
+        public async Task RequestWorkerTaskCancellationAsync(Guid workerTaskId)
+        {
+            var workerTask = await GetWorkerTaskAsync(workerTaskId);
+            if (workerTask == null)
+            {
+                Log.Warning("RequestWorkerTaskCancellationAsync: no worker task for id {WorkerTaskId} exists. Aborting.", workerTaskId);
+                return;
+            }
+
+            if (workerTask.Status == WorkerTaskStatus.Processing)
+            {
+                // Task is actively being processed by the worker — signal it for cancellation.
+                // The worker's main loop will detect this, cancel the CancellationToken, and
+                // call CancelWorkerTaskAsync to complete the cleanup.
+                workerTask.Status = WorkerTaskStatus.CancellationRequested;
+                await Application.Repository.Tasking.UpdateWorkerTaskAsync(workerTask);
+                Log.Information("RequestWorkerTaskCancellationAsync: Marked task {WorkerTaskId} as CancellationRequested for worker pickup.", workerTaskId);
+            }
+            else
+            {
+                // Task is Queued or WaitingForPreviousStep — no worker thread is processing it,
+                // so we can cancel and remove it immediately.
+                await CancelWorkerTaskAsync(workerTask);
+            }
+        }
+
+        /// <summary>
+        /// Immediately cancels a worker task by marking its activity as cancelled and deleting the
+        /// worker task record. Called by the worker after it has triggered the CancellationToken,
+        /// or directly for tasks that are not actively being processed.
+        /// </summary>
         public async Task CancelWorkerTaskAsync(Guid workerTaskId)
         {
             var workerTask = await GetWorkerTaskAsync(workerTaskId);
