@@ -1,9 +1,9 @@
+using System.DirectoryServices.Protocols;
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Utilities;
 using Serilog;
-using System.DirectoryServices.Protocols;
 namespace JIM.Connectors.LDAP;
 
 /// <summary>
@@ -182,7 +182,7 @@ internal class LdapConnectorExport
             ThrowAddFailure(addRequest, dn, response);
         }
 
-        _logger.Information("LdapConnectorExport.ProcessCreate: Successfully created object at '{Dn}'", dn);
+        _logger.Debug("LdapConnectorExport.ProcessCreate: Successfully created object at '{Dn}'", dn);
 
         // After successful create, fetch the system-assigned objectGUID
         var objectGuid = FetchObjectGuid(dn);
@@ -559,7 +559,7 @@ internal class LdapConnectorExport
             ThrowAddFailure(addRequest, dn, response);
         }
 
-        _logger.Information("LdapConnectorExport.ProcessCreateAsync: Successfully created object at '{Dn}'", dn);
+        _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Successfully created object at '{Dn}'", dn);
 
         var objectGuid = await FetchObjectGuidAsync(dn);
         if (objectGuid != null)
