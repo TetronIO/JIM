@@ -2437,11 +2437,19 @@ public class ConnectedSystemServer
     /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
     /// <param name="page">Which page to return results for, i.e. 1-n.</param>
     /// <param name="pageSize">How many Connected System Objects to return in this page of result. By default it's 100.</param>
-    /// <param name="returnAttributes">Controls whether ConnectedSystemObject.AttributeValues[n].Attribute is populated. By default, it isn't for performance reasons.</param>
     /// <exception cref="ArgumentOutOfRangeException"></exception>
-    public async Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page = 1, int pageSize = 100, bool returnAttributes = false)
+    public async Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page = 1, int pageSize = 100)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, returnAttributes);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize);
+    }
+
+    /// <summary>
+    /// Batch loads Connected System Objects by their IDs with navigation properties needed
+    /// for cross-page reference resolution during sync.
+    /// </summary>
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForReferenceResolutionAsync(IList<Guid> csoIds)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsForReferenceResolutionAsync(csoIds);
     }
 
     /// <summary>
@@ -3618,6 +3626,11 @@ public class ConnectedSystemServer
     public async Task<PendingExport?> GetPendingExportForObjectAsync(Guid connectedSystemObjectId)
     {
         return await Application.Repository.ConnectedSystems.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
+    }
+
+    public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsForObjectsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportsByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
     }
 
     /// <summary>

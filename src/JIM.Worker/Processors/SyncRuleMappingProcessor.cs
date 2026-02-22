@@ -430,12 +430,32 @@ public static class SyncRuleMappingProcessor
             }
         }
 
-        // find reference values on the MVO that aren't on the CSO and remove.
-        var mvoObsoleteAttributeValues = mvo.AttributeValues.Where(mvoav =>
-            mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id &&
-            mvoav.ReferenceValue != null &&
-            !csoAttributeValues.Any(csoav => csoav.ReferenceValue is { MetaverseObject: not null } && csoav.ReferenceValue.MetaverseObject.Id == mvoav.ReferenceValue.Id));
-        mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
+        // Find reference values on the MVO that aren't on the CSO and remove.
+        // IMPORTANT: Only perform removal logic when ALL CSO references are resolved.
+        // If any CSO reference has an unresolved MetaverseObject (cross-page reference where
+        // the referenced CSO is on a different page and hasn't been joined/projected yet),
+        // we cannot correctly determine which MVO references are obsolete. Skipping removal
+        // is safe because the cross-page resolution pass will re-run this logic once all
+        // MVOs exist and all references can be resolved.
+        var hasUnresolvedReferences = csoAttributeValues.Any(csoav =>
+            csoav.ReferenceValueId.HasValue &&
+            (csoav.ReferenceValue == null || csoav.ReferenceValue.MetaverseObject == null));
+
+        if (!hasUnresolvedReferences)
+        {
+            var mvoObsoleteAttributeValues = mvo.AttributeValues.Where(mvoav =>
+                mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id &&
+                mvoav.ReferenceValue != null &&
+                !csoAttributeValues.Any(csoav => csoav.ReferenceValue is { MetaverseObject: not null } && csoav.ReferenceValue.MetaverseObject.Id == mvoav.ReferenceValue.Id));
+            mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
+        }
+        else
+        {
+            Log.Debug("ProcessReferenceAttribute: Skipping MVO reference removal for CSO {CsoId} " +
+                "because some reference(s) have unresolved MetaverseObject (cross-page references). " +
+                "Removals will be handled in the cross-page resolution pass.",
+                connectedSystemObject.Id);
+        }
 
         // find values on the CSO of type reference that aren't on the MVO according to the sync rule mapping.
         var csoNewAttributeValues = csoAttributeValues.Where(csoav =>

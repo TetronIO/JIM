@@ -272,28 +272,27 @@ var result = await metaVerseObjects.ToListAsync();
 
 ---
 
-### Phase 4: Optimise Sync Page Loading
+### Phase 4: Optimise Sync Page Loading ✅
 
 **Target**: `GetConnectedSystemObjectsAsync` and `GetConnectedSystemObjectsModifiedSinceAsync`
 
-**Problem**: These paginated queries load CSOs with deep Include chains for sync processing. Each page generates 7+ SQL queries via AsSplitQuery. Additionally, `GetConnectedSystemObjectsAsync` uses synchronous `.Count()` instead of `CountAsync()`.
+**Status**: Quick wins implemented. Deeper optimisation (raw SQL page loading) deferred — requires extensive integration testing and the Include chains are still necessary for sync processor correctness.
 
-**Quick wins** (low effort):
-1. Fix synchronous `.Count()` to `CountAsync()` in `GetConnectedSystemObjectsAsync`
-2. Audit the Include chains -- both `returnAttributes = true` and `false` branches currently load identical data, suggesting unnecessary includes in one branch
+**Changes made**:
+1. ✅ Fixed synchronous `.Count()` → `CountAsync()` in `GetConnectedSystemObjectsAsync` (was blocking a thread pool thread)
+2. ✅ Removed dead `returnAttributes` branching — the `if/else` branches were identical and the only caller always passed `false`. Eliminated the parameter from the interface, application layer, and repository, consolidating to a single query
+3. ✅ Added missing `ContributedBySystem` include to `GetConnectedSystemObjectsModifiedSinceAsync` (delta sync method) — without this, `ProcessObsoleteConnectedSystemObjectAsync` cannot identify attributes contributed by a disconnecting system when `RemoveContributedAttributesOnObsoletion` is enabled during delta sync
 
-**Deeper optimisation** (moderate effort):
+**Files changed**:
+- `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` — query consolidation + missing include
+- `src/JIM.Data/Repositories/IConnectedSystemRepository.cs` — removed `returnAttributes` parameter
+- `src/JIM.Application/Servers/ConnectedSystemServer.cs` — removed `returnAttributes` parameter
+- `src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs` — removed `returnAttributes: false` argument
+
+**Deeper optimisation** (deferred):
 - Replace the 7+ split queries with 2-3 explicit raw SQL queries with manual mapping
 - Load CSOs and their attribute values in separate queries, then stitch in C#
 - Avoid loading reference value chains unless the sync processor actually needs them for the current operation
-
-**Estimated impact**: 30-50% reduction in sync page loading time.
-
-**Complexity**: Moderate -- the sync processor heavily depends on the materialised object graph shape. Changes here require careful validation that all navigation properties the processor accesses are still populated.
-
-**Files affected**:
-- `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs`
-- Integration testing is essential for this phase
 
 ---
 

@@ -124,7 +124,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             PagedResultSet<ConnectedSystemObject> csoPagedResult;
             using (Diagnostics.Sync.StartSpan("LoadCsoPage"))
             {
-                csoPagedResult = await _jim.ConnectedSystems.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize, returnAttributes: false);
+                csoPagedResult = await _jim.ConnectedSystems.GetConnectedSystemObjectsAsync(_connectedSystem.Id, i, pageSize);
             }
 
             // Note: Target CSO attribute values for no-net-change detection are pre-loaded in ExportEvaluationCache
@@ -201,6 +201,12 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 await _jim.Activities.UpdateActivityAsync(_activity);
             }
         }
+
+        // Resolve cross-page reference attributes.
+        // During page processing, some CSO reference attributes could not be resolved because
+        // the referenced CSO was on a different page. Now that all pages have been processed
+        // and all MVOs exist in the database, reload those CSOs and resolve their references.
+        await ResolveCrossPageReferencesAsync(activeSyncRules);
 
         // Ensure the activity and any pending db updates are applied after all pages are processed
         await _jim.Activities.UpdateActivityAsync(_activity);

@@ -567,13 +567,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
     /// <param name="page">Which page to return results for, i.e. 1-n.</param>
     /// <param name="pageSize">How many Connected System Objects to return in this page of result.</param>
-    /// <param name="returnAttributes">Controls whether ConnectedSystemObject.AttributeValues[n].Attribute is populated. By default, it isn't for performance reasons.</param>
     /// <exception cref="ArgumentOutOfRangeException"></exception>
     public async Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
         int connectedSystemId,
         int page,
-        int pageSize,
-        bool returnAttributes = false)
+        int pageSize)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -590,76 +588,37 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // The MVO AttributeValues are needed during full sync to detect attribute changes and create PendingExports.
         // IMPORTANT: We also include the MVO's Attribute navigation property so that expression-based
         // mappings (like DN generation) can access attribute values by name during export evaluation.
-        IQueryable<ConnectedSystemObject> query;
-
+        // Include Attribute navigation property for both CSO and MVO AttributeValues.
+        // Also include ReferenceValue and ReferenceValue.MetaverseObject for reference attribute
+        // flow during sync - without these, SyncRuleMappingProcessor cannot resolve CSO references
+        // to MVO references and will silently skip them.
+        // IMPORTANT: MVO AttributeValues must also include ReferenceValue so that reference comparison
+        // in SyncRuleMappingProcessor.ProcessReferenceAttribute can detect existing MVO reference values
+        // and avoid creating spurious "new" values for unchanged references.
+        // IMPORTANT: MVO Type must be included for deletion rule evaluation in ProcessMvoDeletionRuleAsync.
+        // IMPORTANT: MVO AttributeValues must include ContributedBySystem so that
+        // ProcessObsoleteConnectedSystemObjectAsync can identify and recall attributes contributed
+        // by the disconnecting system when RemoveContributedAttributesOnObsoletion is enabled.
         // Include Type for sync processors that access CSO.Type.RemoveContributedAttributesOnObsoletion.
-        if (returnAttributes)
-        {
-            // Include Attribute navigation property for both CSO and MVO AttributeValues.
-            // Also include ReferenceValue and ReferenceValue.MetaverseObject for reference attribute
-            // flow during sync - without these, SyncRuleMappingProcessor cannot resolve CSO references
-            // to MVO references and will silently skip them.
-            // IMPORTANT: MVO AttributeValues must also include ReferenceValue so that reference comparison
-            // in SyncRuleMappingProcessor.ProcessReferenceAttribute can detect existing MVO reference values
-            // and avoid creating spurious "new" values for unchanged references.
-            // IMPORTANT: MVO Type must be included for deletion rule evaluation in ProcessMvoDeletionRuleAsync.
-            // IMPORTANT: MVO AttributeValues must include ContributedBySystem so that
-            // ProcessObsoleteConnectedSystemObjectAsync can identify and recall attributes contributed
-            // by the disconnecting system when RemoveContributedAttributesOnObsoletion is enabled.
-            query = Repository.Database.ConnectedSystemObjects
-                .AsSplitQuery()
-                .Include(cso => cso.Type)
-                .Include(cso => cso.AttributeValues)
-                    .ThenInclude(av => av.Attribute)
-                .Include(cso => cso.AttributeValues)
-                    .ThenInclude(av => av.ReferenceValue)
-                    .ThenInclude(rv => rv!.MetaverseObject)
-                .Include(cso => cso.MetaverseObject)
-                    .ThenInclude(mvo => mvo!.Type)
-                .Include(cso => cso.MetaverseObject)
-                    .ThenInclude(mvo => mvo!.AttributeValues)
-                    .ThenInclude(av => av.Attribute)
-                .Include(cso => cso.MetaverseObject)
-                    .ThenInclude(mvo => mvo!.AttributeValues)
-                    .ThenInclude(av => av.ReferenceValue)
-                .Include(cso => cso.MetaverseObject)
-                    .ThenInclude(mvo => mvo!.AttributeValues)
-                    .ThenInclude(av => av.ContributedBySystem);
-        }
-        else
-        {
-            // Include Attribute navigation for CSO AttributeValues (needed for DisplayNameOrId)
-            // and MVO Attribute (required for expression-based export mappings).
-            // Also include ReferenceValue and ReferenceValue.MetaverseObject for reference attribute
-            // flow during sync - without these, SyncRuleMappingProcessor cannot resolve CSO references
-            // to MVO references and will silently skip them.
-            // IMPORTANT: MVO AttributeValues must also include ReferenceValue so that reference comparison
-            // in SyncRuleMappingProcessor.ProcessReferenceAttribute can detect existing MVO reference values
-            // and avoid creating spurious "new" values for unchanged references.
-            // IMPORTANT: MVO Type must be included for deletion rule evaluation in ProcessMvoDeletionRuleAsync.
-            // IMPORTANT: MVO AttributeValues must include ContributedBySystem so that
-            // ProcessObsoleteConnectedSystemObjectAsync can identify and recall attributes contributed
-            // by the disconnecting system when RemoveContributedAttributesOnObsoletion is enabled.
-            query = Repository.Database.ConnectedSystemObjects
-                .AsSplitQuery()
-                .Include(cso => cso.Type)
-                .Include(cso => cso.AttributeValues)
-                    .ThenInclude(av => av.Attribute)
-                .Include(cso => cso.AttributeValues)
-                    .ThenInclude(av => av.ReferenceValue)
-                    .ThenInclude(rv => rv!.MetaverseObject)
-                .Include(cso => cso.MetaverseObject)
-                    .ThenInclude(mvo => mvo!.Type)
-                .Include(cso => cso.MetaverseObject)
-                    .ThenInclude(mvo => mvo!.AttributeValues)
-                    .ThenInclude(av => av.Attribute)
-                .Include(cso => cso.MetaverseObject)
-                    .ThenInclude(mvo => mvo!.AttributeValues)
-                    .ThenInclude(av => av.ReferenceValue)
-                .Include(cso => cso.MetaverseObject)
-                    .ThenInclude(mvo => mvo!.AttributeValues)
-                    .ThenInclude(av => av.ContributedBySystem);
-        }
+        var query = Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
+            .Include(cso => cso.Type)
+            .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+            .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.ReferenceValue)
+                .ThenInclude(rv => rv!.MetaverseObject)
+            .Include(cso => cso.MetaverseObject)
+                .ThenInclude(mvo => mvo!.Type)
+            .Include(cso => cso.MetaverseObject)
+                .ThenInclude(mvo => mvo!.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+            .Include(cso => cso.MetaverseObject)
+                .ThenInclude(mvo => mvo!.AttributeValues)
+                .ThenInclude(av => av.ReferenceValue)
+            .Include(cso => cso.MetaverseObject)
+                .ThenInclude(mvo => mvo!.AttributeValues)
+                .ThenInclude(av => av.ContributedBySystem);
 
         // add the Connected System filter and order by Id for consistent pagination
         // Without ordering, Skip/Take can return inconsistent results across pages
@@ -668,7 +627,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .OrderBy(cso => cso.Id);
 
         // now just add a page's worth of results filter to the query and project to a list we can return.
-        var grossCount = objects.Count();
+        var grossCount = await objects.CountAsync();
         var offset = (page - 1) * pageSize;
         var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
         var pagedObjects = objects.Skip(offset).Take(itemsToGet);
@@ -807,6 +766,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(cso => cso.MetaverseObject)
                 .ThenInclude(mvo => mvo!.AttributeValues)
                 .ThenInclude(av => av.ReferenceValue)
+            .Include(cso => cso.MetaverseObject)
+                .ThenInclude(mvo => mvo!.AttributeValues)
+                .ThenInclude(av => av.ContributedBySystem)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
                          (cso.Created > modifiedSince ||
                           (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)))
@@ -840,6 +802,39 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         pagedResultSet.TotalResults = 0;
         pagedResultSet.Results.Clear();
         return pagedResultSet;
+    }
+
+    /// <summary>
+    /// Batch loads Connected System Objects by their IDs with the full Include chain needed for
+    /// sync reference attribute processing. Used for cross-page reference resolution after all
+    /// pages have been processed and all MVOs exist in the database.
+    /// </summary>
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForReferenceResolutionAsync(IList<Guid> csoIds)
+    {
+        if (csoIds.Count == 0)
+            return [];
+
+        return await Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
+            .Include(cso => cso.Type)
+            .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+            .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.ReferenceValue)
+                .ThenInclude(rv => rv!.MetaverseObject)
+            .Include(cso => cso.MetaverseObject)
+                .ThenInclude(mvo => mvo!.Type)
+            .Include(cso => cso.MetaverseObject)
+                .ThenInclude(mvo => mvo!.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+            .Include(cso => cso.MetaverseObject)
+                .ThenInclude(mvo => mvo!.AttributeValues)
+                .ThenInclude(av => av.ReferenceValue)
+            .Include(cso => cso.MetaverseObject)
+                .ThenInclude(mvo => mvo!.AttributeValues)
+                .ThenInclude(av => av.ContributedBySystem)
+            .Where(cso => csoIds.Contains(cso.Id))
+            .ToListAsync();
     }
 
     /// <summary>

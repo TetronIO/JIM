@@ -82,6 +82,14 @@ public abstract class SyncTaskProcessorBase
     // By deferring reference attributes, we ensure all MVOs exist before resolving references.
     protected readonly List<(ConnectedSystemObject Cso, List<SyncRule> SyncRules)> _pendingReferenceAttributeProcessing = [];
 
+    // Tracks CSOs with unresolved cross-page reference attributes.
+    // During page processing, if ProcessDeferredReferenceAttributes finds references where
+    // ReferenceValue.MetaverseObject is null (the referenced CSO is on a different page and hasn't
+    // been joined/projected yet), the CSO ID and applicable sync rule IDs are recorded here.
+    // After all pages, these CSOs are reloaded from the DB (where all MVOs now exist)
+    // and reference attributes are re-processed in ResolveCrossPageReferencesAsync.
+    protected readonly List<(Guid CsoId, List<int> SyncRuleIds)> _unresolvedCrossPageReferences = [];
+
     // Expression evaluator for expression-based sync rule mappings
     protected readonly IExpressionEvaluator _expressionEvaluator = new DynamicExpressoEvaluator();
 
@@ -809,11 +817,11 @@ public abstract class SyncTaskProcessorBase
             }
 
             // Queue for export evaluation after MVOs are persisted (need valid IDs for pending export FKs)
-            // Dedup check: if the same MVO is already queued (e.g., multiple CSOs joined to the same MVO),
-            // skip to avoid creating duplicate pending exports for the same target CSO.
-            if (changedAttributes.Count > 0 && !_pendingExportEvaluations.Any(e => e.Mvo == connectedSystemObject.MetaverseObject))
+            // Merge with existing entry if the same MVO is already queued (e.g., multiple CSOs joined
+            // to the same MVO, or scalar + reference changes processed in separate passes).
+            if (changedAttributes.Count > 0)
             {
-                _pendingExportEvaluations.Add((connectedSystemObject.MetaverseObject, changedAttributes, removedAttributes));
+                MergeOrAddPendingExportEvaluation(connectedSystemObject.MetaverseObject, changedAttributes, removedAttributes);
             }
 
             // Evaluate drift detection: check if the CSO has drifted from expected state
@@ -971,6 +979,31 @@ public abstract class SyncTaskProcessorBase
                 ProcessInboundAttributeFlow(cso, syncRule, skipReferenceAttributes: false, onlyReferenceAttributes: true);
             }
 
+            // Check for unresolved cross-page references after processing this CSO.
+            // Only check CSO attribute values that are actually mapped by reference-type sync
+            // rule mappings. Checking ALL CSO attributes would incorrectly flag users with
+            // unmapped reference attributes (e.g. managedBy), causing thousands of unnecessary
+            // CSOs to be re-processed in the cross-page resolution pass.
+            var mappedRefAttributeIds = syncRules
+                .SelectMany(sr => sr.AttributeFlowRules)
+                .Where(afr => afr.TargetMetaverseAttribute?.Type == AttributeDataType.Reference)
+                .SelectMany(afr => afr.Sources)
+                .Where(s => s.ConnectedSystemAttributeId.HasValue)
+                .Select(s => s.ConnectedSystemAttributeId!.Value)
+                .ToHashSet();
+
+            var hasUnresolvedCrossPageRefs = mappedRefAttributeIds.Count > 0 &&
+                cso.AttributeValues.Any(av =>
+                    mappedRefAttributeIds.Contains(av.AttributeId) &&
+                    av.ReferenceValueId.HasValue &&
+                    (av.ReferenceValue == null || av.ReferenceValue.MetaverseObject == null));
+
+            if (hasUnresolvedCrossPageRefs)
+            {
+                var syncRuleIds = syncRules.Select(sr => sr.Id).ToList();
+                _unresolvedCrossPageReferences.Add((cso.Id, syncRuleIds));
+            }
+
             // Count changes from reference attribute processing
             var additionsFromReferences = mvo.PendingAttributeValueAdditions.Count - beforeAdditions;
             var removalsFromReferences = mvo.PendingAttributeValueRemovals.Count - beforeRemovals;
@@ -1070,20 +1103,194 @@ public abstract class SyncTaskProcessorBase
                     .Concat(removedRefAttributesFiltered)
                     .Cast<MetaverseObjectAttributeValue>()
                     .ToList();
-                if (changedRefAttributes.Count > 0 && !_pendingExportEvaluations.Any(e => e.Mvo == mvo))
+                if (changedRefAttributes.Count > 0)
                 {
-                    _pendingExportEvaluations.Add((mvo, changedRefAttributes, refRemovedAttributes));
+                    MergeOrAddPendingExportEvaluation(mvo, changedRefAttributes, refRemovedAttributes);
                 }
             }
         }
 
-        Log.Verbose("ProcessDeferredReferenceAttributes: Processed {Count} CSOs, {Changes} total reference changes",
-            _pendingReferenceAttributeProcessing.Count, totalChanges);
+        Log.Verbose("ProcessDeferredReferenceAttributes: Processed {Count} CSOs, {Changes} total reference changes, " +
+            "{UnresolvedCount} CSOs have unresolved cross-page references",
+            _pendingReferenceAttributeProcessing.Count, totalChanges, _unresolvedCrossPageReferences.Count);
 
         _pendingReferenceAttributeProcessing.Clear();
         span.SetSuccess();
 
         return totalChanges;
+    }
+
+    /// <summary>
+    /// Resolves cross-page reference attributes after all pages have been processed.
+    /// During page processing, some CSO reference attributes cannot be resolved because the
+    /// referenced CSO is on a different page and its MVO either doesn't exist yet (future page)
+    /// or has been discarded from the working set (previous page).
+    /// After all pages, all MVOs exist in the database. This method reloads the CSOs with
+    /// unresolved references and re-processes their reference attributes.
+    /// </summary>
+    /// <param name="activeSyncRules">The active sync rules for this connected system (already loaded by the caller).</param>
+    protected async Task ResolveCrossPageReferencesAsync(List<SyncRule> activeSyncRules)
+    {
+        if (_unresolvedCrossPageReferences.Count == 0)
+            return;
+
+        using var span = Diagnostics.Sync.StartSpan("ResolveCrossPageReferences");
+        span.SetTag("csoCount", _unresolvedCrossPageReferences.Count);
+
+        Log.Information("ResolveCrossPageReferences: Resolving cross-page references for {Count} CSOs",
+            _unresolvedCrossPageReferences.Count);
+
+        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Resolving cross-page references");
+
+        // Build sync rule lookup (keyed by ID) for O(1) access
+        var requiredSyncRuleIds = _unresolvedCrossPageReferences
+            .SelectMany(x => x.SyncRuleIds)
+            .Distinct()
+            .ToHashSet();
+        var syncRulesById = activeSyncRules
+            .Where(sr => requiredSyncRuleIds.Contains(sr.Id))
+            .ToDictionary(sr => sr.Id);
+
+        // Process in batches to avoid loading too many CSOs at once
+        var pageSize = await _jim.ServiceSettings.GetSyncPageSizeAsync();
+        var totalItems = _unresolvedCrossPageReferences.Count;
+        var totalBatches = (int)Math.Ceiling((double)totalItems / pageSize);
+
+        for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
+        {
+            var batch = _unresolvedCrossPageReferences
+                .Skip(batchIndex * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            // Reload CSOs from DB — now all MVOs exist, so ReferenceValue.MetaverseObject will be populated
+            var csoIds = batch.Select(x => x.CsoId).ToList();
+            List<ConnectedSystemObject> reloadedCsos;
+            using (Diagnostics.Sync.StartSpan("ReloadCsosForCrossPageReferences").SetTag("count", csoIds.Count))
+            {
+                reloadedCsos = await _jim.ConnectedSystems.GetConnectedSystemObjectsForReferenceResolutionAsync(csoIds);
+            }
+
+            // Index reloaded CSOs by ID for O(1) lookup
+            var csosById = reloadedCsos.ToDictionary(c => c.Id);
+
+            foreach (var (csoId, syncRuleIds) in batch)
+            {
+                if (!csosById.TryGetValue(csoId, out var cso) || cso.MetaverseObject == null)
+                {
+                    Log.Warning("ResolveCrossPageReferences: CSO {CsoId} not found or not joined after reload, skipping",
+                        csoId);
+                    continue;
+                }
+
+                var mvo = cso.MetaverseObject;
+
+                // Resolve the sync rules for this CSO
+                var applicableSyncRules = syncRuleIds
+                    .Where(id => syncRulesById.ContainsKey(id))
+                    .Select(id => syncRulesById[id])
+                    .ToList();
+
+                var beforeAdditions = mvo.PendingAttributeValueAdditions.Count;
+                var beforeRemovals = mvo.PendingAttributeValueRemovals.Count;
+
+                // Process ONLY reference attributes — now all references should resolve
+                foreach (var syncRule in applicableSyncRules)
+                {
+                    ProcessInboundAttributeFlow(cso, syncRule, skipReferenceAttributes: false, onlyReferenceAttributes: true);
+                }
+
+                var additionsCount = mvo.PendingAttributeValueAdditions.Count - beforeAdditions;
+                var removalsCount = mvo.PendingAttributeValueRemovals.Count - beforeRemovals;
+
+                if (additionsCount > 0 || removalsCount > 0)
+                {
+                    Log.Debug("ResolveCrossPageReferences: CSO {CsoId} resolved {Adds} reference additions, {Removes} removals",
+                        csoId, additionsCount, removalsCount);
+
+                    // Capture changes before applying (they get cleared by ApplyPendingMetaverseObjectAttributeChanges)
+                    var refAddedAttributes = mvo.PendingAttributeValueAdditions.ToList();
+                    var refRemovedAttributesList = mvo.PendingAttributeValueRemovals.ToList();
+                    var refRemovedAttributes = refRemovedAttributesList.Count > 0
+                        ? refRemovedAttributesList.ToHashSet()
+                        : (HashSet<MetaverseObjectAttributeValue>?)null;
+
+                    // Create RPEI for cross-page reference resolution
+                    var rpei = _activity.PrepareRunProfileExecutionItem();
+                    rpei.ConnectedSystemObject = cso;
+                    rpei.ObjectChangeType = ObjectChangeType.AttributeFlow;
+                    _activity.RunProfileExecutionItems.Add(rpei);
+
+                    // Track MVO changes for change tracking
+                    _pendingMvoChanges.Add((mvo, refAddedAttributes, refRemovedAttributesList,
+                        ObjectChangeType.AttributeFlow, rpei));
+
+                    // Apply changes to MVO
+                    ApplyPendingMetaverseObjectAttributeChanges(mvo);
+
+                    // Queue for persistence and export evaluation
+                    if (!_pendingMvoUpdates.Contains(mvo))
+                        _pendingMvoUpdates.Add(mvo);
+
+                    var changedRefAttributes = mvo.AttributeValues
+                        .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
+                        .Cast<MetaverseObjectAttributeValue>()
+                        .ToList();
+
+                    if (refRemovedAttributes != null)
+                    {
+                        changedRefAttributes.AddRange(refRemovedAttributes);
+                    }
+
+                    if (changedRefAttributes.Count > 0)
+                    {
+                        MergeOrAddPendingExportEvaluation(mvo, changedRefAttributes, refRemovedAttributes);
+                    }
+                }
+            }
+
+            // Batch-delete existing pending exports from DB before export evaluation.
+            // During cross-page resolution, PEs from earlier pages have been flushed to DB.
+            // Without this, each MVO's export evaluation hits GetPendingExportByConnectedSystemObjectIdAsync
+            // individually (N+1 problem, ~1.9s per group PE due to heavy Include chains).
+            // By deleting them in one batch query, the DB fallback finds nothing and evaluation
+            // creates fresh PEs with the fully-resolved reference attributes.
+            if (_pendingExportEvaluations.Count > 0 && _exportEvaluationCache != null)
+            {
+                var mvoIds = _pendingExportEvaluations.Select(e => e.Mvo.Id).ToHashSet();
+                var targetCsoIds = _exportEvaluationCache.CsoLookup
+                    .Where(kvp => mvoIds.Contains(kvp.Key.MvoId))
+                    .Select(kvp => kvp.Value.Id)
+                    .Distinct()
+                    .ToList();
+
+                if (targetCsoIds.Count > 0)
+                {
+                    var existingPes = await _jim.ConnectedSystems.GetPendingExportsForObjectsAsync(targetCsoIds);
+                    if (existingPes.Count > 0)
+                    {
+                        Log.Information("ResolveCrossPageReferences: Batch-deleting {Count} existing pending exports " +
+                            "from earlier pages before re-evaluation with resolved references", existingPes.Count);
+                        await _jim.ConnectedSystems.DeletePendingExportsAsync(existingPes.Values.ToList());
+                    }
+                }
+            }
+
+            // Flush this batch (same sequence as per-page processing)
+            await PersistPendingMetaverseObjectsAsync();
+            await CreatePendingMvoChangeObjectsAsync();
+            await EvaluatePendingExportsAsync();
+            await FlushPendingExportOperationsAsync();
+
+            // Update activity progress
+            await _jim.Activities.UpdateActivityAsync(_activity);
+        }
+
+        Log.Information("ResolveCrossPageReferences: Completed cross-page reference resolution for {Count} CSOs",
+            _unresolvedCrossPageReferences.Count);
+
+        _unresolvedCrossPageReferences.Clear();
+        span.SetSuccess();
     }
 
     /// <summary>
@@ -1477,6 +1684,43 @@ public abstract class SyncTaskProcessorBase
 
     /// <summary>
     /// Assigns values to a Metaverse Object, from a Connected System Object using a Sync Rule.
+    /// Merges changed attributes and removals into an existing pending export evaluation entry for the given MVO,
+    /// or adds a new entry if none exists. This prevents silently dropping reference attribute changes when
+    /// scalar changes have already been queued for the same MVO.
+    /// </summary>
+    protected void MergeOrAddPendingExportEvaluation(
+        MetaverseObject mvo,
+        List<MetaverseObjectAttributeValue> changedAttributes,
+        HashSet<MetaverseObjectAttributeValue>? removedAttributes)
+    {
+        var existingIndex = _pendingExportEvaluations.FindIndex(e => e.Mvo == mvo);
+        if (existingIndex >= 0)
+        {
+            // Merge: ChangedAttributes is a List (reference type) so AddRange mutates the existing list
+            _pendingExportEvaluations[existingIndex].ChangedAttributes.AddRange(changedAttributes);
+
+            if (removedAttributes != null)
+            {
+                var existing = _pendingExportEvaluations[existingIndex];
+                if (existing.RemovedAttributes != null)
+                {
+                    foreach (var removed in removedAttributes)
+                        existing.RemovedAttributes.Add(removed);
+                }
+                else
+                {
+                    // Replace tuple entry to add the removedAttributes set
+                    _pendingExportEvaluations[existingIndex] = (existing.Mvo, existing.ChangedAttributes, removedAttributes);
+                }
+            }
+        }
+        else
+        {
+            _pendingExportEvaluations.Add((mvo, changedAttributes, removedAttributes));
+        }
+    }
+
+    /// <summary>
     /// Does not perform any delta processing. This is for MVO create scenarios where there are not MVO attribute values already.
     /// </summary>
     /// <param name="connectedSystemObject">The source Connected System Object to map values from.</param>

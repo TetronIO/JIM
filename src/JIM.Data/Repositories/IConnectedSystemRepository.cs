@@ -436,8 +436,16 @@ public interface IConnectedSystemRepository
         string? sortBy = null,
         bool sortDescending = true,
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null);
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, bool returnAttributes = false);
-    
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize);
+
+    /// <summary>
+    /// Batch loads Connected System Objects by their IDs with the full Include chain needed for
+    /// sync reference attribute processing. Used for cross-page reference resolution after all
+    /// pages have been processed and all MVOs exist in the database.
+    /// </summary>
+    /// <param name="csoIds">The CSO IDs to load.</param>
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForReferenceResolutionAsync(IList<Guid> csoIds);
+
     /// <summary>
     /// Returns all the CSOs for a Connected System that are marked as Obsolete.
     /// </summary>

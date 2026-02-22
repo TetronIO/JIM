@@ -198,6 +198,9 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             }
         }
 
+        // Resolve cross-page reference attributes (same as full sync — see full sync for detailed explanation)
+        await ResolveCrossPageReferencesAsync(activeSyncRules);
+
         // Ensure the activity and any pending db updates are applied after all pages are processed
         await _jim.Activities.UpdateActivityAsync(_activity);
 
