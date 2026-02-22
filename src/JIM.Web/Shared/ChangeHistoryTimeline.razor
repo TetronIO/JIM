@@ -401,11 +401,15 @@ else
 
     .cursor-pointer {
         cursor: pointer;
-        transition: box-shadow 0.2s;
+        transition: background 0.2s;
     }
 
     .cursor-pointer:hover {
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        background: linear-gradient(
+            to right,
+            var(--mud-palette-surface) 0%,
+            var(--jim-inner-surface, var(--mud-palette-background-grey)) 15%
+        );
     }
 </style>
 
