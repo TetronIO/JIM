@@ -46,6 +46,18 @@ public interface IUserPreferenceService
     Task SetDarkModeAsync(bool isDarkMode);
 
     /// <summary>
+    /// Gets the user's drawer pinned preference.
+    /// </summary>
+    /// <returns>True if the user pinned the drawer, false if unpinned, null if no preference saved (use screen size default).</returns>
+    Task<bool?> GetDrawerPinnedAsync();
+
+    /// <summary>
+    /// Sets the user's drawer pinned preference.
+    /// </summary>
+    /// <param name="isPinned">Whether the drawer is pinned open.</param>
+    Task SetDrawerPinnedAsync(bool isPinned);
+
+    /// <summary>
     /// Gets the user's preferred MVA (multi-valued attribute) view mode for a specific attribute.
     /// </summary>
     /// <param name="attributeName">The attribute name (e.g., "Static Members").</param>
@@ -84,6 +96,7 @@ public class UserPreferenceService : IUserPreferenceService
     private readonly IJSRuntime _jsRuntime;
     private const string RowsPerPageKey = "rowsPerPage";
     private const string DarkModeKey = "darkMode";
+    private const string DrawerPinnedKey = "drawerPinned";
     private const int DefaultRowsPerPage = 10;
 
     /// <summary>
@@ -215,6 +228,48 @@ public class UserPreferenceService : IUserPreferenceService
         try
         {
             await _jsRuntime.InvokeVoidAsync("jimPreferences.set", DarkModeKey, isDarkMode ? "true" : "false");
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, ignore
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), ignore
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool?> GetDrawerPinnedAsync()
+    {
+        try
+        {
+            var value = await _jsRuntime.InvokeAsync<string?>("jimPreferences.get", DrawerPinnedKey);
+            return value switch
+            {
+                "true" => true,
+                "false" => false,
+                _ => null // No preference saved - use screen size default
+            };
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, return default
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), return default
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc />
+    public async Task SetDrawerPinnedAsync(bool isPinned)
+    {
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("jimPreferences.set", DrawerPinnedKey, isPinned ? "true" : "false");
         }
         catch (JSDisconnectedException)
         {
