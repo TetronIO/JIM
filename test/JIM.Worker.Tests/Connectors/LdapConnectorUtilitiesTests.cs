@@ -125,6 +125,14 @@ public class LdapConnectorUtilitiesTests
     }
 
     [Test]
+    public void GetLdapAttributeDataType_OmSyntax66_ReturnsBinary()
+    {
+        // omSyntax 66 = Object(Replica-Link) (nTSecurityDescriptor, msExchMailboxSecurityDescriptor)
+        var result = LdapConnectorUtilities.GetLdapAttributeDataType(66);
+        Assert.That(result, Is.EqualTo(AttributeDataType.Binary));
+    }
+
+    [Test]
     public void GetLdapAttributeDataType_UnsupportedOmSyntax_ThrowsInvalidDataException()
     {
         Assert.Throws<InvalidDataException>(() => LdapConnectorUtilities.GetLdapAttributeDataType(999));

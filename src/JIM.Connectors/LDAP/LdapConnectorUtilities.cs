@@ -425,7 +425,7 @@ internal static class LdapConnectorUtilities
             1 or 10 => AttributeDataType.Boolean,
             2 => AttributeDataType.Number,  // Integer (32-bit)
             65 => AttributeDataType.LongNumber,  // Large Integer (64-bit) - accountExpires, pwdLastSet, lastLogon, etc.
-            3 or 4 => AttributeDataType.Binary, // 3 = Binary, 4 = OctetString (photo, objectSid, logonHours)
+            3 or 4 or 66 => AttributeDataType.Binary, // 3 = Binary, 4 = OctetString (photo, objectSid, logonHours), 66 = Object(Replica-Link) (nTSecurityDescriptor)
             6 or 18 or 19 or 20 or 22 or 27 or 64 => AttributeDataType.Text,
             23 or 24 => AttributeDataType.DateTime,
             127 => AttributeDataType.Reference,
