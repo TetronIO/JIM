@@ -527,12 +527,12 @@ Write-Host "  Setup Only:             ${CYAN}$SetupOnly${NC}"
 if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
     Write-Host "  Export Concurrency:     ${CYAN}$ExportConcurrency${NC}"
 } else {
-    Write-Host "  Export Concurrency:     ${GRAY}(JIM default)${NC}"
+    Write-Host "  Export Concurrency:     ${GRAY}(JIM default: 4)${NC}"
 }
 if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
     Write-Host "  Max Export Parallelism: ${CYAN}$MaxExportParallelism${NC}"
 } else {
-    Write-Host "  Max Export Parallelism: ${GRAY}(JIM default)${NC}"
+    Write-Host "  Max Export Parallelism: ${GRAY}(JIM default: 1)${NC}"
 }
 Write-Host "  Service Timeout:        ${CYAN}${TimeoutSeconds}s${NC}"
 Write-Host ""
