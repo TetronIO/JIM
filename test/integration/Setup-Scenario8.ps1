@@ -1020,20 +1020,6 @@ else {
 }
 
 # ============================================================================
-# Step 14: Restart Worker
-# ============================================================================
-Write-TestStep "Step 14" "Restarting JIM.Worker to reload schema"
-
-docker restart jim.worker > $null
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "  ✓ JIM.Worker restarted" -ForegroundColor Green
-    Start-Sleep -Seconds 3
-}
-else {
-    Write-Host "  ⚠ Failed to restart JIM.Worker" -ForegroundColor Yellow
-}
-
-# ============================================================================
 # Summary
 # ============================================================================
 Write-TestSection "Setup Complete"
