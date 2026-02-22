@@ -11,700 +11,778 @@
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 
-<PageTitle>Item Details: @(_externalIdAttributeValue?.ToStringNoName() ?? _activityRunProfileExecutionItem?.Id.ToString())</PageTitle>
+<PageTitle>Item Details: @(_externalIdAttributeValue?.ToStringNoName() ??
+        _activityRunProfileExecutionItem?.Id.ToString())</PageTitle>
 
-@if (_activityRunProfileExecutionItem != null)
-{
-    @* Page Title - must come before breadcrumbs for consistency *@
-    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
-        <MudText Typo="Typo.h4">@GetStatusTitle()</MudText>
-        <MudIcon Icon="@GetStatusIcon()" Size="Size.Large" Color="@GetStatusColor()" />
-    </MudStack>
-    <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0 mb-4"></MudBreadcrumbs>
+    @if (_activityRunProfileExecutionItem != null)
+    {
+        @* Page Title - must come before breadcrumbs for consistency *@
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+            <MudText Typo="Typo.h4">@GetStatusTitle()</MudText>
+            <MudIcon Icon="@GetStatusIcon()" Size="Size.Large" Color="@GetStatusColor()" />
+        </MudStack>
+        <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0 mb-4"></MudBreadcrumbs>
 
-    @* Summary Section *@
-    <MudText Typo="Typo.h6" Class="mb-2">
-        Execution Summary
-    </MudText>
-    <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
-        @GetStatusDescription()
-    </MudText>
-    <MudPaper Class="pa-5 mb-5" Outlined="true">
-        <MudGrid Spacing="3">
-            @* Connected System *@
-            @if (_connectedSystemHeader != null)
-            {
-                <MudItem xs="12" sm="6" md="4">
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">Connected System</MudText>
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.Storage" Class="mud-text-secondary" />
-                        <MudLink Href="@Utilities.GetConnectedSystemHref(_connectedSystemHeader)">
-                            @_connectedSystemHeader.Name
-                        </MudLink>
-                    </MudStack>
-                </MudItem>
-            }
-
-            @* Run Profile *@
-            @if (_activity != null)
-            {
-                <MudItem xs="12" sm="6" md="4">
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">Run Profile</MudText>
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Class="mud-text-secondary" />
-                        <MudText>@_activity.TargetName</MudText>
-                    </MudStack>
-                </MudItem>
-
-                <MudItem xs="12" sm="6" md="4">
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">Executed</MudText>
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mud-text-secondary" />
-                        <MudText title="@_activity.Executed.ToLocalTime().ToString("F")">
-                            @_activity.Executed.ToLocalTime().ToRelativeTime()
-                        </MudText>
-                    </MudStack>
-                </MudItem>
-            }
-
-            @* Initiated By *@
-            <MudItem xs="12" sm="6" md="4" Class="mt-3">
-                <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By</MudText>
-                @if (_activity is { InitiatedByType: ActivityInitiatorType.User })
+        @* Summary Section *@
+        <MudText Typo="Typo.h6" Class="mb-2">
+            Execution Summary
+        </MudText>
+        <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
+            @GetStatusDescription()
+        </MudText>
+        <MudPaper Class="pa-5 mb-5" Outlined="true">
+            <MudGrid Spacing="3">
+                @* Connected System *@
+                @if (_connectedSystemHeader != null)
                 {
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.Person" Class="mud-text-secondary" />
-                        @if (_activity.InitiatedById.HasValue)
-                        {
-                            <MudLink Href="@($"/identity/person/{_activity.InitiatedById.Value}")">
-                                @_activity.InitiatedByName
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Connected System</MudText>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Storage" Class="mud-text-secondary" />
+                            <MudLink Href="@Utilities.GetConnectedSystemHref(_connectedSystemHeader)">
+                                @_connectedSystemHeader.Name
                             </MudLink>
-                        }
-                        else
-                        {
-                            <MudText>@_activity.InitiatedByName</MudText>
-                        }
-                    </MudStack>
+                        </MudStack>
+                    </MudItem>
                 }
-                else if (_activity is { InitiatedByType: ActivityInitiatorType.ApiKey })
-                {
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.Key" Class="mud-text-secondary" />
-                        @if (_activity.InitiatedById.HasValue)
-                        {
-                            <MudLink Href="@Utilities.GetApiKeyHref(_activity.InitiatedById.Value)">
-                                @_activity.InitiatedByName
-                            </MudLink>
-                        }
-                        else
-                        {
-                            <MudText>@_activity.InitiatedByName</MudText>
-                        }
-                    </MudStack>
-                }
-                else if (_activity is { InitiatedByType: ActivityInitiatorType.System })
-                {
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mud-text-secondary" />
-                        <MudText>@(_activity.InitiatedByName ?? "System")</MudText>
-                    </MudStack>
-                }
-                else if (_activity != null && !string.IsNullOrEmpty(_activity.InitiatedByName))
-                {
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mud-text-secondary" />
-                        <MudText Typo="Typo.body1">@_activity.InitiatedByName</MudText>
-                    </MudStack>
-                }
-                else
-                {
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.SmartToy" Class="mud-text-secondary" />
-                        <MudText Typo="Typo.body1">System (Automated)</MudText>
-                    </MudStack>
-                }
-            </MudItem>
 
-            @* Change Type - hide when NotSet with error (rejected imports don't have an operation) *@
-            @if (!(_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.NotSet &&
-                   _activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet))
-            {
+                @* Run Profile *@
+                @if (_activity != null)
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Run Profile</MudText>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Class="mud-text-secondary" />
+                            <MudText>@_activity.TargetName</MudText>
+                        </MudStack>
+                    </MudItem>
+
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Executed</MudText>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mud-text-secondary" />
+                            <MudText title="@_activity.Executed.ToLocalTime().ToString("F")">
+                                @_activity.Executed.ToLocalTime().ToRelativeTime()
+                            </MudText>
+                        </MudStack>
+                    </MudItem>
+                }
+
+                @* Initiated By *@
                 <MudItem xs="12" sm="6" md="4" Class="mt-3">
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">Operation</MudText><br />
-                    <MudChip T="string"
-                             Color="@Helpers.GetRunItemMudBlazorColorForType(_activityRunProfileExecutionItem.ObjectChangeType)"
-                             Variant="Variant.Filled"
-                             Size="Size.Medium"
-                             Icon="@GetChangeTypeIcon()"
-                             Class="ml-0 mt-1">
-                        @GetOperationDisplayText()
-                    </MudChip>
-                </MudItem>
-            }
-
-            @* Connected System Object / External ID - label changes based on context *@
-            <MudItem xs="12" sm="6" md="4" Class="mt-3">
-                <MudText Typo="Typo.button" Class="mud-text-secondary">@GetObjectFieldLabel()</MudText>
-                @if (_activityRunProfileExecutionItem.ConnectedSystemObject != null)
-                {
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
-                        <MudChip T="string" Color="Color.Default">
-                            @_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name
-                        </MudChip>
-                        @if (_externalIdAttributeValue != null)
-                        {
-                            <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))"
-                                     Class="jim-text-code">
-                                @_externalIdAttributeValue.ToStringNoName()
-                            </MudLink>
-                        }
-                        else
-                        {
-                            <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))">
-                                View Object
-                            </MudLink>
-                        }
-                    </MudStack>
-                }
-                else if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ExternalIdSnapshot))
-                {
-                    @* CSO doesn't exist but we have an external ID snapshot - differentiate between error (rejected) vs deleted *@
-                    @if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By</MudText>
+                    @if (_activity is { InitiatedByType: ActivityInitiatorType.User })
                     {
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            <MudTooltip Text="This object was not created due to an import error. The external ID shown is from the source data." Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Color="Color.Error" Icon="@Icons.Material.Filled.Block">
-                                    Rejected
-                                </MudChip>
-                            </MudTooltip>
-                            <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Class="mud-text-secondary" />
+                            @if (_activity.InitiatedById.HasValue)
+                            {
+                                <MudLink Href="@($"/identity/person/{_activity.InitiatedById.Value}")">
+                                    @_activity.InitiatedByName
+                                </MudLink>
+                            }
+                            else
+                            {
+                                <MudText>@_activity.InitiatedByName</MudText>
+                            }
+                        </MudStack>
+                    }
+                    else if (_activity is { InitiatedByType: ActivityInitiatorType.ApiKey })
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Key" Class="mud-text-secondary" />
+                            @if (_activity.InitiatedById.HasValue)
+                            {
+                                <MudLink Href="@Utilities.GetApiKeyHref(_activity.InitiatedById.Value)">
+                                    @_activity.InitiatedByName
+                                </MudLink>
+                            }
+                            else
+                            {
+                                <MudText>@_activity.InitiatedByName</MudText>
+                            }
+                        </MudStack>
+                    }
+                    else if (_activity is { InitiatedByType: ActivityInitiatorType.System })
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mud-text-secondary" />
+                            <MudText>@(_activity.InitiatedByName ?? "System")</MudText>
+                        </MudStack>
+                    }
+                    else if (_activity != null && !string.IsNullOrEmpty(_activity.InitiatedByName))
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mud-text-secondary" />
+                            <MudText Typo="Typo.body1">@_activity.InitiatedByName</MudText>
                         </MudStack>
                     }
                     else
                     {
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            <MudTooltip Text="This object has been deleted. The external ID shown is preserved from when this operation was recorded." Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Color="Color.Warning" Icon="@Icons.Material.Filled.History">
-                                    Deleted
-                                </MudChip>
-                            </MudTooltip>
-                            <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
+                            <MudIcon Icon="@Icons.Material.Filled.SmartToy" Class="mud-text-secondary" />
+                            <MudText Typo="Typo.body1">System (Automated)</MudText>
                         </MudStack>
                     }
-                }
-                else
+                </MudItem>
+
+                @* Change Type - hide when NotSet with error (rejected imports don't have an operation) *@
+                @if (!(_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.NotSet &&
+                        _activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet))
                 {
-                    @* No CSO and no external ID snapshot - object was deleted or never existed *@
-                    <MudText>No longer available</MudText>
+                    <MudItem xs="12" sm="6" md="4" Class="mt-3">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Operation</MudText><br />
+                        <MudChip T="string"
+                                 Color="@Helpers.GetRunItemMudBlazorColorForType(_activityRunProfileExecutionItem.ObjectChangeType)"
+                                 Variant="Variant.Filled" Size="Size.Medium" Icon="@GetStatusIcon()" Class="ml-0 mt-1">
+                            @GetOperationDisplayText()
+                        </MudChip>
+                    </MudItem>
                 }
-            </MudItem>
-        </MudGrid>
-    </MudPaper>
 
-    @* Projection Flow Visualisation - shown for Projected items *@
-    @if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Projected)
-    {
-        <MudText Typo="Typo.h6" Class="mb-3">Projection Details</MudText>
-        <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
-            The following connected system object was projected to create a new metaverse object.
-        </MudText>
-
-        <MudGrid Spacing="3" Class="mb-5">
-            @* Source: Connected System Object Card *@
-            <MudItem xs="12" md="5">
-                <MudPaper Class="pa-4" Outlined="true" Style="height: 100%; border-left: 4px solid var(--mud-palette-info);">
-                    <MudStack Spacing="2">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.Storage" Color="Color.Info" />
-                            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Source Object</MudText>
-                        </MudStack>
-
-                        @if (_activityRunProfileExecutionItem.ConnectedSystemObject != null)
-                        {
-                            var cso = _activityRunProfileExecutionItem.ConnectedSystemObject;
-
-                            @* Object Type *@
-                            <div>
-                                <MudText Typo="Typo.button" Class="mud-text-secondary">Type</MudText>
-                                <MudChip T="string" Color="Color.Default" Class="ml-0">
-                                    @cso.Type.Name
-                                </MudChip>
-                            </div>
-
-                            @* External ID *@
-                            <div>
-                                <MudText Typo="Typo.button" Class="mud-text-secondary">External ID</MudText>
-                                <MudText Class="jim-text-code" Style="word-break: break-all;">
-                                    @(_externalIdAttributeValue?.ToStringNoName() ?? "-")
-                                </MudText>
-                            </div>
-
-                            @* Secondary External ID (if available) *@
-                            @if (cso.SecondaryExternalIdAttributeValue != null)
-                            {
-                                <div>
-                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Secondary ID</MudText>
-                                    <MudText Class="jim-text-code" Style="word-break: break-all;">
-                                        @cso.SecondaryExternalIdAttributeValue.ToStringNoName()
-                                    </MudText>
-                                </div>
-                            }
-
-                            @* Display Name (if available) *@
-                            var csoDisplayName = cso.AttributeValues
-                                .FirstOrDefault(av => av.Attribute.Name.Equals("displayname", StringComparison.OrdinalIgnoreCase))?.StringValue;
-                            if (!string.IsNullOrEmpty(csoDisplayName))
-                            {
-                                <div>
-                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Display Name</MudText>
-                                    <MudText>@csoDisplayName</MudText>
-                                </div>
-                            }
-
-                            <MudDivider Class="my-2" />
-
-                            <MudButton Variant="Variant.Text"
-                                       Color="Color.Primary"
-                                      
-                                       StartIcon="@Icons.Material.Filled.OpenInNew"
-                                       Href="@Utilities.GetConnectedSystemObjectHref(cso)">
-                                View Connected System Object
-                            </MudButton>
-                        }
-                        else
-                        {
-                            <MudText Class="mud-text-secondary">Source object data not available</MudText>
-                        }
-                    </MudStack>
-                </MudPaper>
-            </MudItem>
-
-            @* Arrow / Flow Indicator *@
-            <MudItem xs="12" md="2" Class="d-flex align-center justify-center">
-                <MudStack AlignItems="AlignItems.Center" Spacing="1">
-                    @* Desktop: horizontal arrow *@
-                    <MudHidden Breakpoint="Breakpoint.SmAndDown">
-                        <MudIcon Icon="@Icons.Material.Filled.ArrowForward"
-                                 Size="Size.Large"
-                                 Color="Color.Primary"
-                                 Style="font-size: 3rem;" />
-                        <MudChip T="string"
-                                
-                                 Color="Color.Primary"
-                                 Variant="Variant.Outlined">
-                            Projected
-                        </MudChip>
-                    </MudHidden>
-                    @* Mobile: vertical arrow *@
-                    <MudHidden Breakpoint="Breakpoint.MdAndUp">
-                        <MudIcon Icon="@Icons.Material.Filled.ArrowDownward"
-                                 Size="Size.Large"
-                                 Color="Color.Primary"
-                                 Style="font-size: 2.5rem;" />
-                        <MudChip T="string"
-                                
-                                 Color="Color.Primary"
-                                 Variant="Variant.Outlined">
-                            Projected
-                        </MudChip>
-                    </MudHidden>
-                </MudStack>
-            </MudItem>
-
-            @* Destination: Metaverse Object Card *@
-            <MudItem xs="12" md="5">
-                <MudPaper Class="pa-4" Outlined="true" Style="height: 100%; border-left: 4px solid var(--mud-palette-primary);">
-                    <MudStack Spacing="2">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.Hub" Color="Color.Primary" />
-                            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Metaverse Object</MudText>
-                            <MudChip T="string" Color="Color.Success" Variant="Variant.Filled">New</MudChip>
-                        </MudStack>
-
-                        @if (_metaverseObject != null)
-                        {
-                            @* Object Type *@
-                            <div>
-                                <MudText Typo="Typo.button" Class="mud-text-secondary">Type</MudText>
-                                <MudChip T="string" Color="Color.Default" Class="ml-0">
-                                    @_metaverseObject.Type.Name
-                                </MudChip>
-                            </div>
-
-                            @* Display Name (if available) *@
-                            @if (!string.IsNullOrEmpty(_metaverseObject.DisplayName))
-                            {
-                                <div>
-                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Display Name</MudText>
-                                    <MudText Style="font-weight: 500;">@_metaverseObject.DisplayName</MudText>
-                                </div>
-                            }
-
-                            @* Preview of MVO Attributes (up to 5, excluding displayName) *@
-                            var previewAttributes = GetMvoAttributePreview();
-                            if (previewAttributes.Any())
-                            {
-                                <MudDivider Class="my-2" />
-                                <MudText Typo="Typo.button" Class="mud-text-secondary mb-2">Attributes</MudText>
-                                <MudSimpleTable Dense="true" Hover="true" Elevation="0" Style="background: transparent;">
-                                    <tbody>
-                                        @foreach (var attr in previewAttributes)
-                                        {
-                                            <tr>
-                                                <td style="padding: 4px 12px 4px 0; border: none; vertical-align: top; white-space: nowrap;">
-                                                    <MudText Typo="Typo.button" Class="mud-text-secondary">@attr.Name</MudText>
-                                                </td>
-                                                <td style="padding: 4px 0; border: none; vertical-align: top; word-break: break-word;">
-                                                    <MudText>@attr.DisplayValue</MudText>
-                                                </td>
-                                            </tr>
-                                        }
-                                    </tbody>
-                                </MudSimpleTable>
-
-                                var totalAttributes = _metaverseObject.AttributeValues
-                                    .Where(av => !av.Attribute.Name.Equals(Constants.BuiltInAttributes.DisplayName, StringComparison.OrdinalIgnoreCase))
-                                    .Count();
-                                var remainingCount = totalAttributes - previewAttributes.Count();
-                                if (remainingCount > 0)
-                                {
-                                    <MudText Class="mud-text-secondary mt-2">
-                                        +@remainingCount.ToString("N0") more attribute@(remainingCount != 1 ? "s" : "")
-                                    </MudText>
-                                }
-                            }
-
-                            <MudDivider Class="my-2" />
-
-                            <MudButton Variant="Variant.Text"
-                                       Color="Color.Primary"
-                                      
-                                       StartIcon="@Icons.Material.Filled.OpenInNew"
-                                       Href="@Utilities.GetMetaverseObjectHref(_metaverseObject)">
-                                View Metaverse Object
-                            </MudButton>
-                        }
-                        else
-                        {
-                            <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true" Class="mt-2">
-                                The projected metaverse object may have been deleted.
-                            </MudAlert>
-                        }
-                    </MudStack>
-                </MudPaper>
-            </MudItem>
-        </MudGrid>
-    }
-
-    @* Deletion Impact Section - shown for CSO deletions and disconnections (source deletion triggers both) *@
-    @if (_activityRunProfileExecutionItem.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected)
-    {
-        <MudText Typo="Typo.h6" Class="mb-3">Metaverse Impact</MudText>
-        @if (_metaverseObjectType != null)
-        {
-            @* Show concrete deletion rule based on object type configuration *@
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
-                <MudStack Spacing="2">
-                    <MudText Typo="Typo.body2">
-                        <strong>@_metaverseObjectType.Name</strong> objects are configured with the following deletion rule:
-                    </MudText>
-
-                    @switch (_metaverseObjectType.DeletionRule)
+                @* Connected System Object / External ID - label changes based on context *@
+                <MudItem xs="12" sm="6" md="4" Class="mt-3">
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">@GetObjectFieldLabel()</MudText>
+                    @if (_activityRunProfileExecutionItem.ConnectedSystemObject != null)
                     {
-                        case MetaverseObjectDeletionRule.Manual:
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudIcon Icon="@Icons.Material.Filled.Block" Color="Color.Warning" />
-                                <MudText Typo="Typo.body1">
-                                    <strong>Manual deletion only.</strong> The metaverse object will not be automatically deleted
-                                    even when all connectors are removed. An administrator must manually delete it.
-                                </MudText>
-                            </MudStack>
-                            break;
-
-                        case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudIcon Icon="@Icons.Material.Filled.LinkOff" Color="Color.Info" />
-                                <MudText Typo="Typo.body1">
-                                    <strong>Delete when last connector disconnects.</strong> The metaverse object will be
-                                    @if (_metaverseObjectType.DeletionGracePeriod.HasValue && _metaverseObjectType.DeletionGracePeriod.Value > TimeSpan.Zero)
-                                    {
-                                        <text>marked for deletion with a <strong>@FormatGracePeriod(_metaverseObjectType.DeletionGracePeriod.Value)</strong> grace period</text>
-                                    }
-                                    else
-                                    {
-                                        <text>deleted immediately</text>
-                                    }
-                                    when all connected system objects are removed.
-                                </MudText>
-                            </MudStack>
-                            break;
-
-                        case MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected:
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Info" />
-                                <MudText Typo="Typo.body1">
-                                    <strong>Delete when authoritative source disconnects.</strong> The metaverse object will be
-                                    @if (_metaverseObjectType.DeletionGracePeriod.HasValue && _metaverseObjectType.DeletionGracePeriod.Value > TimeSpan.Zero)
-                                    {
-                                        <text>marked for deletion with a <strong>@FormatGracePeriod(_metaverseObjectType.DeletionGracePeriod.Value)</strong> grace period</text>
-                                    }
-                                    else
-                                    {
-                                        <text>deleted immediately</text>
-                                    }
-                                    when disconnected from any of these authoritative sources:
-                                </MudText>
-                            </MudStack>
-                            @if (_deletionTriggerSystems != null && _deletionTriggerSystems.Count > 0)
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
+                            <MudChip T="string" Color="Color.Default">
+                                @_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name
+                            </MudChip>
+                            @if (_externalIdAttributeValue != null)
                             {
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="ml-6">
-                                    @foreach (var cs in _deletionTriggerSystems)
-                                    {
-                                        <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">
-                                            @cs.Name
-                                        </MudChip>
-                                    }
-                                </MudStack>
+                                <MudLink
+                                    Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))"
+                                    Class="jim-text-code">
+                                    @_externalIdAttributeValue.ToStringNoName()
+                                </MudLink>
                             }
-                            @if (_connectedSystemHeader != null && _deletionTriggerSystems != null
-                                && _deletionTriggerSystems.Any(cs => cs.Id == _connectedSystemHeader.Id))
+                            else
                             {
-                                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-2">
-                                    <MudText Typo="Typo.body1">
-                                        <strong>@_connectedSystemHeader.Name</strong> is an authoritative source for @_metaverseObjectType.Name objects.
-                                        This deletion will trigger the deletion rule for any joined metaverse objects.
+                                <MudLink
+                                    Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))">
+                                    View Object
+                                </MudLink>
+                            }
+                        </MudStack>
+                    }
+                    else if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ExternalIdSnapshot))
+                    {
+                        @* CSO doesn't exist but we have an external ID snapshot - differentiate between error (rejected) vs deleted *@
+                        @if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudTooltip
+                                    Text="This object was not created due to an import error. The external ID shown is from the source data."
+                                    Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Color="Color.Error" Icon="@Icons.Material.Filled.Block">
+                                        Rejected
+                                    </MudChip>
+                                </MudTooltip>
+                                <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudTooltip
+                                    Text="This object has been deleted. The external ID shown is preserved from when this operation was recorded."
+                                    Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Color="Color.Warning" Icon="@Icons.Material.Filled.History">
+                                        Deleted
+                                    </MudChip>
+                                </MudTooltip>
+                                <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
+                            </MudStack>
+                        }
+                    }
+                    else
+                    {
+                        @* No CSO and no external ID snapshot - object was deleted or never existed *@
+                        <MudText>No longer available</MudText>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        @* Projection Flow Visualisation - shown for Projected items *@
+        @if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Projected)
+        {
+            <MudText Typo="Typo.h6" Class="mb-3">Projection Details</MudText>
+            <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
+                The following connected system object was projected to create a new metaverse object.
+            </MudText>
+
+            <MudGrid Spacing="3" Class="mb-5">
+                @* Source: Connected System Object Card *@
+                <MudItem xs="12" md="5">
+                    <MudPaper Class="pa-4" Outlined="true" Style="height: 100%; border-left: 4px solid var(--mud-palette-info);">
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@Icons.Material.Filled.Storage" Color="Color.Info" />
+                                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Source Object</MudText>
+                            </MudStack>
+
+                            @if (_activityRunProfileExecutionItem.ConnectedSystemObject != null)
+                            {
+                                var cso = _activityRunProfileExecutionItem.ConnectedSystemObject;
+
+                                @* Object Type *@
+                                <div>
+                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Type</MudText><br />
+                                    <MudChip T="string" Color="Color.Default" Class="ml-0">
+                                        @cso.Type.Name
+                                    </MudChip>
+                                </div>
+
+                                @* External ID *@
+                                <div>
+                                    <MudText Typo="Typo.button" Class="mud-text-secondary">External ID</MudText>
+                                    <MudText Class="jim-text-code" Style="word-break: break-all;">
+                                        @(_externalIdAttributeValue?.ToStringNoName() ?? "-")
                                     </MudText>
+                                </div>
+
+                                @* Secondary External ID (if available) *@
+                                @if (cso.SecondaryExternalIdAttributeValue != null)
+                                {
+                                    <div>
+                                        <MudText Typo="Typo.button" Class="mud-text-secondary">Secondary ID</MudText>
+                                        <MudText Class="jim-text-code" Style="word-break: break-all;">
+                                            @cso.SecondaryExternalIdAttributeValue.ToStringNoName()
+                                        </MudText>
+                                    </div>
+                                }
+
+                                @* Display Name (if available) *@
+                                var csoDisplayName = cso.AttributeValues
+                                .FirstOrDefault(av => av.Attribute.Name.Equals("displayname",
+                                StringComparison.OrdinalIgnoreCase))?.StringValue;
+                                if (!string.IsNullOrEmpty(csoDisplayName))
+                                {
+                                    <div>
+                                        <MudText Typo="Typo.button" Class="mud-text-secondary">Display Name</MudText>
+                                        <MudText>@csoDisplayName</MudText>
+                                    </div>
+                                }
+
+                                @* All CSO attributes (excluding External ID, Secondary ID, Display Name) *@
+                                var csoAttributeGroups = GetGroupedCsoAttributes();
+                                if (csoAttributeGroups.Count > 0)
+                                {
+                                    <MudDivider Class="my-2" />
+                                    <MudText Typo="Typo.button" Class="mud-text-secondary mb-2">Attributes</MudText>
+                                    <MudSimpleTable Dense="true" Hover="true" Elevation="0" Style="background: transparent;">
+                                        <tbody>
+                                            @foreach (var group in csoAttributeGroups)
+                                            {
+                                                <tr>
+                                                    <td
+                                                        style="padding: 4px 12px 4px 0; border: none; vertical-align: top; white-space: nowrap;">
+                                                        <MudText Class="mud-text-secondary">@group.AttributeName</MudText>
+                                                    </td>
+                                                    <td style="padding: 4px 0; border: none; vertical-align: top; word-break: break-word;">
+                                                        @if (group.DisplayValues.Count == 1)
+                                                        {
+                                                            <MudText>@group.DisplayValues[0]</MudText>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudStack Spacing="0">
+                                                                @foreach (var value in group.DisplayValues)
+                                                                {
+                                                                    <MudText>@value</MudText>
+                                                                }
+                                                                @if (group.TotalValueCount > MaxMultiValuePreview)
+                                                                {
+                                                                    var remainingValues = group.TotalValueCount - MaxMultiValuePreview;
+                                                                    <MudText Class="mud-text-secondary">
+                                                                        +@remainingValues.ToString("N0") more value@(remainingValues != 1 ? "s" : "")
+                                                                    </MudText>
+                                                                }
+                                                            </MudStack>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </MudSimpleTable>
+
+                                    var totalCsoGroups = GetTotalCsoAttributeGroupCount();
+                                    var remainingCsoGroups = totalCsoGroups - csoAttributeGroups.Count;
+                                    if (remainingCsoGroups > 0)
+                                    {
+                                        <MudText Class="mud-text-secondary mt-2">
+                                            +@remainingCsoGroups.ToString("N0") more attribute@(remainingCsoGroups != 1 ? "s" : "")
+                                        </MudText>
+                                    }
+                                }
+
+                                <MudDivider Class="my-2" />
+
+                                <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.OpenInNew"
+                                           Href="@Utilities.GetConnectedSystemObjectHref(cso)">
+                                    View Connected System Object
+                                </MudButton>
+                            }
+                            else
+                            {
+                                <MudText Class="mud-text-secondary">Source object data not available</MudText>
+                            }
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+
+                @* Arrow / Flow Indicator *@
+                <MudItem xs="12" md="2" Class="d-flex align-center justify-center">
+                    <MudStack AlignItems="AlignItems.Center" Spacing="1">
+                        @* Desktop: horizontal arrow *@
+                        <MudHidden Breakpoint="Breakpoint.SmAndDown">
+                            <MudIcon Icon="@Icons.Material.Filled.ArrowForward" Size="Size.Large" Color="Color.Primary"
+                                     Style="font-size: 3rem;" />
+                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text">
+                                Projected
+                            </MudChip>
+                        </MudHidden>
+                        @* Mobile: vertical arrow *@
+                        <MudHidden Breakpoint="Breakpoint.MdAndUp">
+                            <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Large" Color="Color.Primary"
+                                     Style="font-size: 2.5rem;" />
+                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text">
+                                Projected
+                            </MudChip>
+                        </MudHidden>
+                    </MudStack>
+                </MudItem>
+
+                @* Destination: Metaverse Object Card *@
+                <MudItem xs="12" md="5">
+                    <MudPaper Class="pa-4" Outlined="true" Style="height: 100%; border-left: 4px solid var(--mud-palette-primary);">
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@Icons.Material.Filled.Hub" Color="Color.Primary" />
+                                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Metaverse Object</MudText>
+                                <MudChip T="string" Color="Color.Success" Variant="Variant.Filled">New</MudChip>
+                            </MudStack>
+
+                            @if (_metaverseObject != null)
+                            {
+                                @* Object Type *@
+                                <div>
+                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Type</MudText><br />
+                                    <MudChip T="string" Color="Color.Default" Class="ml-0">
+                                        @_metaverseObject.Type.Name
+                                    </MudChip>
+                                </div>
+
+                                @* Display Name (if available) *@
+                                @if (!string.IsNullOrEmpty(_metaverseObject.DisplayName))
+                                {
+                                    <div>
+                                        <MudText Typo="Typo.button" Class="mud-text-secondary">Display Name</MudText>
+                                        <MudText Style="font-weight: 500;">@_metaverseObject.DisplayName</MudText>
+                                    </div>
+                                }
+
+                                @* All MVO Attributes (excluding Display Name) *@
+                                var mvoAttributeGroups = GetGroupedMvoAttributes();
+                                if (mvoAttributeGroups.Count > 0)
+                                {
+                                    <MudDivider Class="my-2" />
+                                    <MudText Typo="Typo.button" Class="mud-text-secondary mb-2">Attributes</MudText>
+                                    <MudSimpleTable Dense="true" Hover="true" Elevation="0" Style="background: transparent;">
+                                        <tbody>
+                                            @foreach (var group in mvoAttributeGroups)
+                                            {
+                                                <tr>
+                                                    <td
+                                                        style="padding: 4px 12px 4px 0; border: none; vertical-align: top; white-space: nowrap;">
+                                                        <MudText Class="mud-text-secondary">@group.AttributeName</MudText>
+                                                    </td>
+                                                    <td style="padding: 4px 0; border: none; vertical-align: top; word-break: break-word;">
+                                                        @if (group.DisplayValues.Count == 1)
+                                                        {
+                                                            <MudText>@group.DisplayValues[0]</MudText>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudStack Spacing="0">
+                                                                @foreach (var value in group.DisplayValues)
+                                                                {
+                                                                    <MudText>@value</MudText>
+                                                                }
+                                                                @if (group.TotalValueCount > MaxMultiValuePreview)
+                                                                {
+                                                                    var remainingValues = group.TotalValueCount - MaxMultiValuePreview;
+                                                                    <MudText Class="mud-text-secondary">
+                                                                        +@remainingValues.ToString("N0") more value@(remainingValues != 1 ? "s" : "")
+                                                                    </MudText>
+                                                                }
+                                                            </MudStack>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </MudSimpleTable>
+
+                                    var totalMvoGroups = GetTotalMvoAttributeGroupCount();
+                                    var remainingMvoGroups = totalMvoGroups - mvoAttributeGroups.Count;
+                                    if (remainingMvoGroups > 0)
+                                    {
+                                        <MudText Class="mud-text-secondary mt-2">
+                                            +@remainingMvoGroups.ToString("N0") more attribute@(remainingMvoGroups != 1 ? "s" : "")
+                                        </MudText>
+                                    }
+                                }
+
+                                <MudDivider Class="my-2" />
+
+                                <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.OpenInNew"
+                                           Href="@Utilities.GetMetaverseObjectHref(_metaverseObject)">
+                                    View Metaverse Object
+                                </MudButton>
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true" Class="mt-2">
+                                    The projected metaverse object may have been deleted.
                                 </MudAlert>
                             }
-                            else if (_connectedSystemHeader != null)
-                            {
-                                <MudText Typo="Typo.body1" Class="ml-6 mud-text-secondary">
-                                    <strong>@_connectedSystemHeader.Name</strong> is not an authoritative source. This deletion alone
-                                    will not trigger metaverse object deletion.
-                                </MudText>
-                            }
-                            break;
-                    }
-                </MudStack>
-            </MudAlert>
-        }
-        else
-        {
-            @* Fallback generic message when object type info not available *@
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
-                <MudText Typo="Typo.body1">
-                    When a connected system object is deleted from the source system, JIM disconnects it from
-                    the metaverse. The metaverse object deletion rule for this object type determines what happens next.
-                </MudText>
-            </MudAlert>
-        }
-    }
-
-    @* Attribute Changes Section - hide for deletions since there are no attribute changes to show *@
-    @if (_activityRunProfileExecutionItem.ConnectedSystemObjectChange != null
-        && _activityRunProfileExecutionItem.ObjectChangeType != ObjectChangeType.Deleted)
-    {
-        var changeCount = _activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges
-            .Sum(c => c.ValueChanges.Count);
-
-        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
-            <MudText Typo="Typo.h6">
-                Attribute Changes
-            </MudText>
-            <MudChip T="string" Color="Color.Primary">@changeCount.ToString("N0")</MudChip>
-        </MudStack>
-
-        <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
-            @GetAttributeChangesDescription()
-        </MudText>
-
-        <MudTable Items="@GetFlattenedChanges()"
-                  Hover="true"
-                  Dense="true"
-                  Outlined="true"
-                  Elevation="0"
-                  Class="mb-5">
-            <HeaderContent>
-                <MudTh Style="width: 1%; white-space: nowrap;"><MudText Typo="Typo.button">Attribute</MudText></MudTh>
-                <MudTh Style="width: 1%; white-space: nowrap;"><MudText Typo="Typo.button">Change</MudText></MudTh>
-                <MudTh><MudText Typo="Typo.button">Value</MudText></MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Attribute">
-                    <MudText Class="jim-text-code">@context.AttributeName</MudText>
-                </MudTd>
-                <MudTd DataLabel="Change">
-                    <MudChip T="string"
-                             Variant="Variant.Text"
-                             Color="@Helpers.GetMudBlazorColorForValueChangeType(context.ChangeType)"
-                             Class="ml-0">
-                        @context.ChangeType
-                    </MudChip>
-                </MudTd>
-                <MudTd DataLabel="Value">
-                    @if (context.ReferenceValue != null)
-                    {
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            <MudChip T="string" Color="Color.Default">@context.ReferenceValue.Type.Name</MudChip>
-                            <MudLink Href="@Utilities.GetConnectedSystemObjectHref(context.ReferenceValue)">
-                                @context.ReferenceValue.DisplayNameOrId
-                            </MudLink>
-                            @if (context.ReferenceValue.SecondaryExternalIdAttributeValue != null)
-                            {
-                                <MudText Class="mud-text-secondary">(@context.ReferenceValue.SecondaryExternalIdAttributeValue.ToString())</MudText>
-                            }
                         </MudStack>
-                    }
-                    else
-                    {
-                        <MudText>@context.Value</MudText>
-                    }
-                </MudTd>
-            </RowTemplate>
-            <NoRecordsContent>
-                <MudText Class="pa-4">No attribute changes recorded.</MudText>
-            </NoRecordsContent>
-        </MudTable>
-    }
-    else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.NoChange)
-    {
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
-            <MudText Typo="Typo.body1">No Changes Required</MudText>
-            <MudText Typo="Typo.body1">
-                @if (_activityRunProfileExecutionItem.NoChangeReason != null)
-                {
-                    @_activityRunProfileExecutionItem.NoChangeReason.ToString()!.SplitOnCapitalLetters()
-                }
-                else
-                {
-                    <text>The object was already up to date with no attribute changes needed.</text>
-                }
-            </MudText>
-        </MudAlert>
-    }
-
-    @* Error Section *@
-    @if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
-    {
-        <MudText Typo="Typo.h6" Class="mb-3">
-            Error Details
-        </MudText>
-
-        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3 jim-alert-error">
-            <MudText Typo="Typo.body1" Style="font-weight: 500;">
-                @_activityRunProfileExecutionItem.ErrorType.ToString()!.SplitOnCapitalLetters()
-            </MudText>
-            @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorMessage))
-            {
-                <MudText Typo="Typo.body1" Class="mt-2">@_activityRunProfileExecutionItem.ErrorMessage</MudText>
-            }
-        </MudAlert>
-
-        @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorStackTrace))
-        {
-            <MudExpansionPanels Elevation="0" Class="mb-5 jim-expansion-panel">
-                <MudExpansionPanel Text="Stack Trace" MaxHeight="400">
-                    <pre class="jim-text-code" style="white-space: pre-wrap; word-wrap: break-word; overflow-x: auto; font-size: 0.8rem; margin: 0;">@_activityRunProfileExecutionItem.ErrorStackTrace</pre>
-                </MudExpansionPanel>
-            </MudExpansionPanels>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
         }
 
-        @* Pending Export Details - shown for ExportNotConfirmed and ExportConfirmationFailed errors *@
-        @if (_pendingExport != null)
+        @* Deletion Impact Section - shown for CSO deletions and disconnections (source deletion triggers both) *@
+        @if (_activityRunProfileExecutionItem.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected)
         {
-            <MudText Typo="Typo.h6" Class="mb-3">Pending Export Details</MudText>
-            <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
-                @if (_activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed)
-                {
-                    <text>The following attribute changes were exported but have not yet been confirmed. They will be retried on the next export run.</text>
-                }
-                else
-                {
-                    <text>The following attribute changes failed to export after multiple attempts and may require manual intervention.</text>
-                }
-            </MudText>
-
-            <MudPaper Class="pa-4 mb-4" Outlined="true">
-                <MudGrid Spacing="3">
-                    <MudItem xs="12" sm="6" md="3">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Status</MudText>
-                        <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportStatusColor(_pendingExport.Status)" Class="ml-0">
-                            @_pendingExport.Status.ToString().SplitOnCapitalLetters()
-                        </MudChip>
-                    </MudItem>
-                    <MudItem xs="12" sm="6" md="3">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Retry Count</MudText>
-                        <MudText>
-                            @_pendingExport.ErrorCount / @_pendingExport.MaxRetries
-                            @if (_pendingExport.ErrorCount >= _pendingExport.MaxRetries)
-                            {
-                                <MudChip T="string" Color="Color.Error" Class="ml-2">Max Reached</MudChip>
-                            }
+            <MudText Typo="Typo.h6" Class="mb-3">Metaverse Impact</MudText>
+            @if (_metaverseObjectType != null)
+            {
+                @* Show concrete deletion rule based on object type configuration *@
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.body2">
+                            <strong>@_metaverseObjectType.Name</strong> objects are configured with the following deletion rule:
                         </MudText>
-                    </MudItem>
-                    <MudItem xs="12" sm="6" md="3">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Last Attempted</MudText>
-                        <MudText>@(_pendingExport.LastAttemptedAt?.ToLocalTime().ToRelativeTime() ?? "-")</MudText>
-                    </MudItem>
-                    <MudItem xs="12" sm="6" md="3">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Created</MudText>
-                        <MudText>@_pendingExport.CreatedAt.ToLocalTime().ToRelativeTime()</MudText>
-                    </MudItem>
-                </MudGrid>
-            </MudPaper>
 
-            @if (_pendingExport.AttributeValueChanges.Count > 0)
-            {
-                <MudText Typo="Typo.subtitle1" Class="mb-2">
-                    Pending Attribute Changes (@_pendingExport.AttributeValueChanges.Count.ToString("N0"))
-                </MudText>
-                <MudTable Items="@_pendingExport.AttributeValueChanges" Hover="true" Dense="true" Outlined="true" Elevation="0" Class="mb-5">
-                    <HeaderContent>
-                        <MudTh Style="width: 1%; white-space: nowrap;"><MudText Typo="Typo.button">Attribute</MudText></MudTh>
-                        <MudTh Style="width: 1%; white-space: nowrap;"><MudText Typo="Typo.button">Change Type</MudText></MudTh>
-                        <MudTh Style="width: 1%; white-space: nowrap;"><MudText Typo="Typo.button">Status</MudText></MudTh>
-                        <MudTh><MudText Typo="Typo.button">Value</MudText></MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="Attribute">
-                            <MudText Class="jim-text-code">@(context.Attribute?.Name ?? $"Attribute {context.AttributeId}")</MudText>
-                        </MudTd>
-                        <MudTd DataLabel="Change Type">
-                            <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportChangeTypeColor(context.ChangeType)" Class="ml-0">
-                                @context.ChangeType
-                            </MudChip>
-                        </MudTd>
-                        <MudTd DataLabel="Status">
-                            <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportAttributeStatusColor(context.Status)" Class="ml-0">
-                                @context.Status.ToString().SplitOnCapitalLetters()
-                            </MudChip>
-                        </MudTd>
-                        <MudTd DataLabel="Value">@GetPendingExportAttributeValue(context)</MudTd>
-                    </RowTemplate>
-                    <NoRecordsContent>
-                        <MudText Class="pa-4">No attribute changes recorded.</MudText>
-                    </NoRecordsContent>
-                </MudTable>
-            }
+                        @switch (_metaverseObjectType.DeletionRule)
+                        {
+                            case MetaverseObjectDeletionRule.Manual:
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudIcon Icon="@Icons.Material.Filled.Block" Color="Color.Warning" />
+                                    <MudText Typo="Typo.body1">
+                                        <strong>Manual deletion only.</strong> The metaverse object will not be automatically deleted
+                                        even when all connectors are removed. An administrator must manually delete it.
+                                    </MudText>
+                                </MudStack>
+                                break;
 
-            @* Link to full pending export details *@
-            @if (_connectedSystemHeader != null)
-            {
-                <MudButton Variant="Variant.Text"
-                           Color="Color.Primary"
-                          
-                           StartIcon="@Icons.Material.Filled.OpenInNew"
-                           Href="@($"/admin/connected-systems/{_connectedSystemHeader.Id}/pending-exports/{_pendingExport.Id}")">
-                    View Full Pending Export Details
-                </MudButton>
-            }
-        }
-    }
-}
+                            case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudIcon Icon="@Icons.Material.Filled.LinkOff" Color="Color.Info" />
+                                    <MudText Typo="Typo.body1">
+                                        <strong>Delete when last connector disconnects.</strong> The metaverse object will be
+                                        @if (_metaverseObjectType.DeletionGracePeriod.HasValue && _metaverseObjectType.DeletionGracePeriod.Value
+                                                        > TimeSpan.Zero)
+                                        {
+                                            <text>marked for deletion with a
+                                                <strong>@FormatGracePeriod(_metaverseObjectType.DeletionGracePeriod.Value)</strong> grace
+                                                period</text>
+                                            }
+                else
+                                            {
+                                                <text>deleted immediately</text>
+                                            }
+                                            when all connected system objects are removed.
+                                        </MudText>
+                                    </MudStack>
+                                    break;
+
+        case MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected:
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Info" />
+                                            <MudText Typo="Typo.body1">
+                                                <strong>Delete when authoritative source disconnects.</strong> The metaverse object will be
+                                                @if (_metaverseObjectType.DeletionGracePeriod.HasValue && _metaverseObjectType.DeletionGracePeriod.Value
+                                                                > TimeSpan.Zero)
+                                                {
+                                                    <text>marked for deletion with a
+                                                        <strong>@FormatGracePeriod(_metaverseObjectType.DeletionGracePeriod.Value)</strong> grace
+                                                        period</text>
+                                                    }
+                else
+                                                    {
+                                                        <text>deleted immediately</text>
+                                                    }
+                                                    when disconnected from any of these authoritative sources:
+                                                </MudText>
+                                            </MudStack>
+                                            @if (_deletionTriggerSystems != null && _deletionTriggerSystems.Count > 0)
+                                            {
+                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="ml-6">
+                                                    @foreach (var cs in _deletionTriggerSystems)
+                                                    {
+                                                        <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">
+                                                            @cs.Name
+                                                        </MudChip>
+                                                    }
+                                                </MudStack>
+                                            }
+                                            @if (_connectedSystemHeader != null && _deletionTriggerSystems != null
+                                                    && _deletionTriggerSystems.Any(cs => cs.Id == _connectedSystemHeader.Id))
+                                            {
+                                                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mt-2">
+                                                    <MudText Typo="Typo.body1">
+                                                        <strong>@_connectedSystemHeader.Name</strong> is an authoritative source for @_metaverseObjectType.Name
+                                                        objects.
+                                                        This deletion will trigger the deletion rule for any joined metaverse objects.
+                                                    </MudText>
+                                                </MudAlert>
+                                            }
+                                            else if (_connectedSystemHeader != null)
+                                            {
+                                                <MudText Typo="Typo.body1" Class="ml-6 mud-text-secondary">
+                                                    <strong>@_connectedSystemHeader.Name</strong> is not an authoritative source. This deletion alone
+                                                    will not trigger metaverse object deletion.
+                                                </MudText>
+                                            }
+                                            break;
+                                        }
+                                    </MudStack>
+                                </MudAlert>
+                        }
 else
-{
-    <MudProgressCircular Indeterminate="true" />
-}
+                        {
+                            @* Fallback generic message when object type info not available *@
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+                                <MudText Typo="Typo.body1">
+                                    When a connected system object is deleted from the source system, JIM disconnects it from
+                                    the metaverse. The metaverse object deletion rule for this object type determines what happens next.
+                                </MudText>
+                            </MudAlert>
+                        }
+                    }
+
+                    @* Attribute Changes Section - hide for deletions since there are no attribute changes to show *@
+                    @if (_activityRunProfileExecutionItem.ConnectedSystemObjectChange != null
+                    && _activityRunProfileExecutionItem.ObjectChangeType != ObjectChangeType.Deleted)
+                    {
+                        var changeCount = _activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges
+                        .Sum(c => c.ValueChanges.Count);
+
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+                            <MudText Typo="Typo.h6">
+                                Attribute Changes
+                            </MudText>
+                            <MudChip T="string" Color="Color.Primary">@changeCount.ToString("N0")</MudChip>
+                        </MudStack>
+
+                        <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
+                            @GetAttributeChangesDescription()
+                        </MudText>
+
+                        <MudTable Items="@GetFlattenedChanges()" Hover="true" Dense="true" Outlined="true" Elevation="0" Class="mb-5">
+                            <HeaderContent>
+                                <MudTh Style="width: 1%; white-space: nowrap;">
+                                    <MudText Typo="Typo.button">Attribute</MudText>
+                                </MudTh>
+                                <MudTh Style="width: 1%; white-space: nowrap;">
+                                    <MudText Typo="Typo.button">Change</MudText>
+                                </MudTh>
+                                <MudTh>
+                                    <MudText Typo="Typo.button">Value</MudText>
+                                </MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Attribute">
+                                    <MudText Class="jim-text-code">@context.AttributeName</MudText>
+                                </MudTd>
+                                <MudTd DataLabel="Change">
+                                    <MudChip T="string" Variant="Variant.Text"
+                                             Color="@Helpers.GetMudBlazorColorForValueChangeType(context.ChangeType)" Class="ml-0">
+                                        @context.ChangeType
+                                    </MudChip>
+                                </MudTd>
+                                <MudTd DataLabel="Value">
+                                    @if (context.ReferenceValue != null)
+                                    {
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudChip T="string" Color="Color.Default">@context.ReferenceValue.Type.Name</MudChip>
+                                            <MudLink Href="@Utilities.GetConnectedSystemObjectHref(context.ReferenceValue)">
+                                                @context.ReferenceValue.DisplayNameOrId
+                                            </MudLink>
+                                            @if (context.ReferenceValue.SecondaryExternalIdAttributeValue != null)
+                                            {
+                                                <MudText Class="mud-text-secondary">
+                                                    (@context.ReferenceValue.SecondaryExternalIdAttributeValue.ToString())</MudText>
+                                                }
+                                            </MudStack>
+                                        }
+            else
+                                        {
+                                            <MudText>@context.Value</MudText>
+                                        }
+                                    </MudTd>
+                                </RowTemplate>
+                                <NoRecordsContent>
+                                    <MudText Class="pa-4">No attribute changes recorded.</MudText>
+                                </NoRecordsContent>
+                            </MudTable>
+                        }
+else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.NoChange)
+                        {
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+                                <MudText Typo="Typo.body1">No Changes Required</MudText>
+                                <MudText Typo="Typo.body1">
+                                    @if (_activityRunProfileExecutionItem.NoChangeReason != null)
+                                    {
+                                        @_activityRunProfileExecutionItem.NoChangeReason.ToString()!.SplitOnCapitalLetters()
+                                    }
+                                    else
+                                    {
+                                        <text>The object was already up to date with no attribute changes needed.</text>
+                                    }
+                                </MudText>
+                            </MudAlert>
+                        }
+
+                        @* Error Section *@
+                        @if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+                        {
+                            <MudText Typo="Typo.h6" Class="mb-3">
+                                Error Details
+                            </MudText>
+
+                            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3 jim-alert-error">
+                                <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                                    @_activityRunProfileExecutionItem.ErrorType.ToString()!.SplitOnCapitalLetters()
+                                </MudText>
+                                @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorMessage))
+                                {
+                                    <MudText Typo="Typo.body1" Class="mt-2">@_activityRunProfileExecutionItem.ErrorMessage</MudText>
+                                }
+                            </MudAlert>
+
+                            @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorStackTrace))
+                            {
+                                <MudExpansionPanels Elevation="0" Class="mb-5 jim-expansion-panel">
+                                    <MudExpansionPanel Text="Stack Trace" MaxHeight="400">
+                                        <pre class="jim-text-code"
+                                             style="white-space: pre-wrap; word-wrap: break-word; overflow-x: auto; font-size: 0.8rem; margin: 0;">@_activityRunProfileExecutionItem.ErrorStackTrace</pre>
+                                    </MudExpansionPanel>
+                                </MudExpansionPanels>
+                            }
+
+                            @* Pending Export Details - shown for ExportNotConfirmed and ExportConfirmationFailed errors *@
+                            @if (_pendingExport != null)
+                            {
+                                <MudText Typo="Typo.h6" Class="mb-3">Pending Export Details</MudText>
+                                <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
+                                    @if (_activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed)
+                                    {
+                                        <text>The following attribute changes were exported but have not yet been confirmed. They will be retried on the
+                                            next export run.</text>
+                                        }
+    else
+                                        {
+                                            <text>The following attribute changes failed to export after multiple attempts and may require manual
+                                                intervention.</text>
+                                            }
+                                        </MudText>
+
+                                        <MudPaper Class="pa-4 mb-4" Outlined="true">
+                                            <MudGrid Spacing="3">
+                                                <MudItem xs="12" sm="6" md="3">
+                                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Status</MudText>
+                                                    <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportStatusColor(_pendingExport.Status)"
+                                                             Class="ml-0">
+                                                        @_pendingExport.Status.ToString().SplitOnCapitalLetters()
+                                                    </MudChip>
+                                                </MudItem>
+                                                <MudItem xs="12" sm="6" md="3">
+                                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Retry Count</MudText>
+                                                    <MudText>
+                                                        @_pendingExport.ErrorCount / @_pendingExport.MaxRetries
+                                                        @if (_pendingExport.ErrorCount >= _pendingExport.MaxRetries)
+                                                        {
+                                                            <MudChip T="string" Color="Color.Error" Class="ml-2">Max Reached</MudChip>
+                                                        }
+                                                    </MudText>
+                                                </MudItem>
+                                                <MudItem xs="12" sm="6" md="3">
+                                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Last Attempted</MudText>
+                                                    <MudText>@(_pendingExport.LastAttemptedAt?.ToLocalTime().ToRelativeTime() ?? "-")</MudText>
+                                                </MudItem>
+                                                <MudItem xs="12" sm="6" md="3">
+                                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Created</MudText>
+                                                    <MudText>@_pendingExport.CreatedAt.ToLocalTime().ToRelativeTime()</MudText>
+                                                </MudItem>
+                                            </MudGrid>
+                                        </MudPaper>
+
+                                        @if (_pendingExport.AttributeValueChanges.Count > 0)
+                                        {
+                                            <MudText Typo="Typo.subtitle1" Class="mb-2">
+                                                Pending Attribute Changes (@_pendingExport.AttributeValueChanges.Count.ToString("N0"))
+                                            </MudText>
+                                            <MudTable Items="@_pendingExport.AttributeValueChanges" Hover="true" Dense="true" Outlined="true" Elevation="0"
+                                                      Class="mb-5">
+                                                <HeaderContent>
+                                                    <MudTh Style="width: 1%; white-space: nowrap;">
+                                                        <MudText Typo="Typo.button">Attribute</MudText>
+                                                    </MudTh>
+                                                    <MudTh Style="width: 1%; white-space: nowrap;">
+                                                        <MudText Typo="Typo.button">Change Type</MudText>
+                                                    </MudTh>
+                                                    <MudTh Style="width: 1%; white-space: nowrap;">
+                                                        <MudText Typo="Typo.button">Status</MudText>
+                                                    </MudTh>
+                                                    <MudTh>
+                                                        <MudText Typo="Typo.button">Value</MudText>
+                                                    </MudTh>
+                                                </HeaderContent>
+                                                <RowTemplate>
+                                                    <MudTd DataLabel="Attribute">
+                                                        <MudText Class="jim-text-code">@(context.Attribute?.Name ?? $"Attribute {context.AttributeId}")</MudText>
+                                                    </MudTd>
+                                                    <MudTd DataLabel="Change Type">
+                                                        <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportChangeTypeColor(context.ChangeType)"
+                                                                 Class="ml-0">
+                                                            @context.ChangeType
+                                                        </MudChip>
+                                                    </MudTd>
+                                                    <MudTd DataLabel="Status">
+                                                        <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportAttributeStatusColor(context.Status)"
+                                                                 Class="ml-0">
+                                                            @context.Status.ToString().SplitOnCapitalLetters()
+                                                        </MudChip>
+                                                    </MudTd>
+                                                    <MudTd DataLabel="Value">@GetPendingExportAttributeValue(context)</MudTd>
+                                                </RowTemplate>
+                                                <NoRecordsContent>
+                                                    <MudText Class="pa-4">No attribute changes recorded.</MudText>
+                                                </NoRecordsContent>
+                                            </MudTable>
+                                        }
+
+                                        @* Link to full pending export details *@
+                                        @if (_connectedSystemHeader != null)
+                                        {
+                                            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.OpenInNew"
+                                                       Href="@($"/admin/connected-systems/{_connectedSystemHeader.Id}/pending-exports/{_pendingExport.Id}")">
+                                                View Full Pending Export Details
+                                            </MudButton>
+                                        }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                <MudProgressCircular Indeterminate="true" />
+                            }
 
 @code {
     [Parameter]
@@ -733,20 +811,25 @@ else
     /// Helper record for flattened changes display in the table.
     /// </summary>
     private record FlattenedChange(
-        string AttributeName,
-        ValueChangeType ChangeType,
-        string? Value,
-        ConnectedSystemObject? ReferenceValue);
+    string AttributeName,
+    ValueChangeType ChangeType,
+    string? Value,
+    ConnectedSystemObject? ReferenceValue);
 
     /// <summary>
-    /// Helper record for MVO attribute preview display.
+    /// Helper record for grouped attribute display in projection details.
     /// </summary>
-    private record MvoAttributePreview(string Name, string DisplayValue);
+    private record ProjectionAttributeGroup(string AttributeName, List<string> DisplayValues, int TotalValueCount);
 
     /// <summary>
-    /// Maximum number of attributes to show in the MVO preview.
+    /// Maximum number of distinct attributes to show per side in projection details.
     /// </summary>
-    private const int MaxPreviewAttributes = 5;
+    private const int MaxProjectionAttributes = 30;
+
+    /// <summary>
+    /// Maximum number of values to show for a multi-valued attribute before truncation.
+    /// </summary>
+    private const int MaxMultiValuePreview = 5;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -760,12 +843,12 @@ else
         _activity = await Jim.Activities.GetActivityAsync(_activityRunProfileExecutionItem.ActivityId);
 
         _breadcrumbs = new List<BreadcrumbItem>
-        {
-            new("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new("Activity", href: "/activity"),
-            new(_activity?.DisplayName ?? "Activity Detail", href: $"/activity/{_activityRunProfileExecutionItem.ActivityId}"),
-            new("Item Details", href: null, disabled: true)
-        };
+{
+new("Home", href: "/", icon: Icons.Material.Filled.Home),
+new("Activity", href: "/activity"),
+new(_activity?.DisplayName ?? "Activity Detail", href: $"/activity/{_activityRunProfileExecutionItem.ActivityId}"),
+new("Item Details", href: null, disabled: true)
+};
         _externalIdAttributeValue = _activityRunProfileExecutionItem.GetExternalIdAttributeValue();
 
         var connectedSystemId = _activityRunProfileExecutionItem.GetConnectedSystemId();
@@ -777,16 +860,16 @@ else
         if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Projected)
         {
             _metaverseObject = _activityRunProfileExecutionItem.MetaverseObjectChange?.MetaverseObject
-                ?? _activityRunProfileExecutionItem.ConnectedSystemObject?.MetaverseObject;
+            ?? _activityRunProfileExecutionItem.ConnectedSystemObject?.MetaverseObject;
         }
 
         // For export-related errors, load the associated pending export to show detailed attribute status
         if (_activityRunProfileExecutionItem.ErrorType is ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed
-            or ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed
-            && _activityRunProfileExecutionItem.ConnectedSystemObjectId.HasValue)
+        or ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed
+        && _activityRunProfileExecutionItem.ConnectedSystemObjectId.HasValue)
         {
             _pendingExport = await Jim.ConnectedSystems.GetPendingExportForObjectAsync(
-                _activityRunProfileExecutionItem.ConnectedSystemObjectId.Value);
+            _activityRunProfileExecutionItem.ConnectedSystemObjectId.Value);
         }
 
         // For deletion/disconnection items, load the object type to show concrete deletion rule information
@@ -830,7 +913,7 @@ else
 
                 // If the deletion rule uses authoritative sources, load their names
                 if (_metaverseObjectType?.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
-                    && _metaverseObjectType.DeletionTriggerConnectedSystemIds.Count > 0)
+                && _metaverseObjectType.DeletionTriggerConnectedSystemIds.Count > 0)
                 {
                     _deletionTriggerSystems = new List<ConnectedSystemHeader>();
                     foreach (var csId in _metaverseObjectType.DeletionTriggerConnectedSystemIds)
@@ -845,21 +928,95 @@ else
     }
 
     /// <summary>
-    /// Gets a preview of MVO attributes for display, excluding displayName and limiting multi-valued attributes.
+    /// Gets grouped CSO attributes for projection display, excluding attributes already shown
+    /// (External ID, Secondary ID, Display Name).
     /// </summary>
-    private IEnumerable<MvoAttributePreview> GetMvoAttributePreview()
+    private List<ProjectionAttributeGroup> GetGroupedCsoAttributes()
+    {
+        var cso = _activityRunProfileExecutionItem?.ConnectedSystemObject;
+        if (cso == null)
+            return new List<ProjectionAttributeGroup>();
+
+        var excludedAttributeIds = new HashSet<int>();
+        if (cso.ExternalIdAttributeId > 0)
+            excludedAttributeIds.Add(cso.ExternalIdAttributeId);
+        if (cso.SecondaryExternalIdAttributeId.HasValue)
+            excludedAttributeIds.Add(cso.SecondaryExternalIdAttributeId.Value);
+
+        return cso.AttributeValues
+        .Where(av => !excludedAttributeIds.Contains(av.AttributeId)
+        && !av.Attribute.Name.Equals("displayname", StringComparison.OrdinalIgnoreCase))
+        .GroupBy(av => av.Attribute.Name)
+        .OrderBy(g => g.Key)
+        .Take(MaxProjectionAttributes)
+        .Select(g => new ProjectionAttributeGroup(
+        g.Key,
+        g.Take(MaxMultiValuePreview).Select(av => FormatCsoAttributeValue(av)).ToList(),
+        g.Count()))
+        .ToList();
+    }
+
+    /// <summary>
+    /// Gets the total number of CSO attribute groups (excluding already-shown attributes).
+    /// </summary>
+    private int GetTotalCsoAttributeGroupCount()
+    {
+        var cso = _activityRunProfileExecutionItem?.ConnectedSystemObject;
+        if (cso == null) return 0;
+
+        var excludedAttributeIds = new HashSet<int>();
+        if (cso.ExternalIdAttributeId > 0)
+            excludedAttributeIds.Add(cso.ExternalIdAttributeId);
+        if (cso.SecondaryExternalIdAttributeId.HasValue)
+            excludedAttributeIds.Add(cso.SecondaryExternalIdAttributeId.Value);
+
+        return cso.AttributeValues
+        .Where(av => !excludedAttributeIds.Contains(av.AttributeId)
+        && !av.Attribute.Name.Equals("displayname", StringComparison.OrdinalIgnoreCase))
+        .GroupBy(av => av.Attribute.Name)
+        .Count();
+    }
+
+    /// <summary>
+    /// Gets grouped MVO attributes for projection display, excluding Display Name (already shown above).
+    /// </summary>
+    private List<ProjectionAttributeGroup> GetGroupedMvoAttributes()
     {
         if (_metaverseObject == null)
-            return Enumerable.Empty<MvoAttributePreview>();
+            return new List<ProjectionAttributeGroup>();
 
         return _metaverseObject.AttributeValues
-            .Where(av => !av.Attribute.Name.Equals(Constants.BuiltInAttributes.DisplayName, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(av => av.Attribute.Name)
-            .Take(MaxPreviewAttributes)
-            .Select(av => new MvoAttributePreview(
-                av.Attribute.Name,
-                FormatAttributeValue(av)
-            ));
+        .Where(av => !av.Attribute.Name.Equals(Constants.BuiltInAttributes.DisplayName, StringComparison.OrdinalIgnoreCase))
+        .GroupBy(av => av.Attribute.Name)
+        .OrderBy(g => g.Key)
+        .Take(MaxProjectionAttributes)
+        .Select(g => new ProjectionAttributeGroup(
+        g.Key,
+        g.Take(MaxMultiValuePreview).Select(av => FormatAttributeValue(av)).ToList(),
+        g.Count()))
+        .ToList();
+    }
+
+    /// <summary>
+    /// Gets the total number of MVO attribute groups (excluding Display Name).
+    /// </summary>
+    private int GetTotalMvoAttributeGroupCount()
+    {
+        if (_metaverseObject == null) return 0;
+
+        return _metaverseObject.AttributeValues
+        .Where(av => !av.Attribute.Name.Equals(Constants.BuiltInAttributes.DisplayName, StringComparison.OrdinalIgnoreCase))
+        .GroupBy(av => av.Attribute.Name)
+        .Count();
+    }
+
+    /// <summary>
+    /// Formats a CSO attribute value for display.
+    /// </summary>
+    private static string FormatCsoAttributeValue(ConnectedSystemObjectAttributeValue attributeValue)
+    {
+        var result = attributeValue.ToStringNoName();
+        return string.IsNullOrEmpty(result) ? "-" : result;
     }
 
     /// <summary>
@@ -890,7 +1047,7 @@ else
     private bool IsSyncContext()
     {
         return _activity?.ConnectedSystemRunType is ConnectedSystemRunType.FullSynchronisation
-            or ConnectedSystemRunType.DeltaSynchronisation;
+        or ConnectedSystemRunType.DeltaSynchronisation;
     }
 
     private Color GetStatusColor()
@@ -899,7 +1056,8 @@ else
             return Color.Error;
 
         // Use the same colour scheme as the Operation chip for consistency
-        return Helpers.GetRunItemMudBlazorColorForType(_activityRunProfileExecutionItem?.ObjectChangeType ?? ObjectChangeType.NotSet);
+        return Helpers.GetRunItemMudBlazorColorForType(_activityRunProfileExecutionItem?.ObjectChangeType ??
+        ObjectChangeType.NotSet);
     }
 
     private string GetStatusIcon()
@@ -914,7 +1072,7 @@ else
             ObjectChangeType.Updated => Icons.Material.Filled.Edit,
             ObjectChangeType.Deleted => Icons.Material.Filled.Delete,
             // Sync operations
-            ObjectChangeType.Projected => Icons.Material.Filled.AccountTree,
+            ObjectChangeType.Projected => Icons.Material.Filled.AirlineStops,
             ObjectChangeType.Joined => Icons.Material.Filled.Link,
             ObjectChangeType.AttributeFlow => Icons.Material.Filled.SwapHoriz,
             ObjectChangeType.Disconnected => Icons.Material.Filled.LinkOff,
@@ -1013,83 +1171,60 @@ else
     {
         // Get the external ID if available
         var externalId = _externalIdAttributeValue?.ToStringNoName()
-            ?? _activityRunProfileExecutionItem?.ExternalIdSnapshot;
+        ?? _activityRunProfileExecutionItem?.ExternalIdSnapshot;
 
         // Only include the identifier in parentheses if we have a specific external ID
         var hasExternalId = !string.IsNullOrEmpty(externalId);
 
         if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
             return hasExternalId
-                ? $"An error occurred while synchronising the connected system object ({externalId})."
-                : "An error occurred while synchronising the connected system object.";
+            ? $"An error occurred while synchronising the connected system object ({externalId})."
+            : "An error occurred while synchronising the connected system object.";
 
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations
             ObjectChangeType.Added => hasExternalId
-                ? $"A new connected system object ({externalId}) was imported and added to the staging area."
-                : "A new connected system object was imported and added to the staging area.",
+            ? $"A new connected system object ({externalId}) was imported and added to the staging area."
+            : "A new connected system object was imported and added to the staging area.",
             ObjectChangeType.Updated => hasExternalId
-                ? $"The connected system object ({externalId}) was updated with new attribute values."
-                : "The connected system object was updated with new attribute values.",
+            ? $"The connected system object ({externalId}) was updated with new attribute values."
+            : "The connected system object was updated with new attribute values.",
             ObjectChangeType.Deleted => IsSyncContext()
-                ? (hasExternalId
-                    ? $"The connected system object ({externalId}) was removed from staging after the source system deletion was confirmed."
-                    : "The connected system object was removed from staging after the source system deletion was confirmed.")
-                : (hasExternalId
-                    ? $"The connected system object ({externalId}) was detected as deleted from the source system and marked for removal."
-                    : "The connected system object was detected as deleted from the source system and marked for removal."),
+            ? (hasExternalId
+            ? $"The connected system object ({externalId}) was removed from staging after the source system deletion was confirmed."
+            : "The connected system object was removed from staging after the source system deletion was confirmed.")
+            : (hasExternalId
+            ? $"The connected system object ({externalId}) was detected as deleted from the source system and marked for removal."
+            : "The connected system object was detected as deleted from the source system and marked for removal."),
             // Sync operations
             ObjectChangeType.Projected => "A new metaverse object was created via projection from the connected system object.",
             ObjectChangeType.Joined => hasExternalId
-                ? $"The connected system object ({externalId}) was joined to an existing metaverse object."
-                : "The connected system object was joined to an existing metaverse object.",
+            ? $"The connected system object ({externalId}) was joined to an existing metaverse object."
+            : "The connected system object was joined to an existing metaverse object.",
             ObjectChangeType.AttributeFlow => hasExternalId
-                ? $"Attributes were flowed for the connected system object ({externalId})."
-                : "Attributes were flowed between the connected system object and metaverse.",
+            ? $"Attributes were flowed for the connected system object ({externalId})."
+            : "Attributes were flowed between the connected system object and metaverse.",
             ObjectChangeType.Disconnected => hasExternalId
-                ? $"The connected system object ({externalId}) was disconnected from the metaverse. Join and metaverse deletion rules were evaluated."
-                : "The connected system object was disconnected from the metaverse. Join and metaverse deletion rules were evaluated.",
+            ? $"The connected system object ({externalId}) was disconnected from the metaverse. Join and metaverse deletion rules were evaluated."
+            : "The connected system object was disconnected from the metaverse. Join and metaverse deletion rules were evaluated.",
             // Export operations
             ObjectChangeType.Provisioned => hasExternalId
-                ? $"A new connected system object ({externalId}) was provisioned in the target system."
-                : "A new connected system object was provisioned in the target system.",
+            ? $"A new connected system object ({externalId}) was provisioned in the target system."
+            : "A new connected system object was provisioned in the target system.",
             ObjectChangeType.Exported => hasExternalId
-                ? $"The connected system object ({externalId}) was exported with updated attributes."
-                : "The connected system object was exported with updated attributes.",
+            ? $"The connected system object ({externalId}) was exported with updated attributes."
+            : "The connected system object was exported with updated attributes.",
             ObjectChangeType.Deprovisioned => hasExternalId
-                ? $"The connected system object ({externalId}) was deprovisioned from the target system."
-                : "The connected system object was deprovisioned from the target system.",
+            ? $"The connected system object ({externalId}) was deprovisioned from the target system."
+            : "The connected system object was deprovisioned from the target system.",
             // Other
             ObjectChangeType.NoChange => hasExternalId
-                ? $"The connected system object ({externalId}) was already up to date."
-                : "The connected system object was already up to date.",
+            ? $"The connected system object ({externalId}) was already up to date."
+            : "The connected system object was already up to date.",
             _ => hasExternalId
-                ? $"Synchronisation completed for the connected system object ({externalId})."
-                : "Synchronisation completed for the connected system object."
-        };
-    }
-
-    private string GetChangeTypeIcon()
-    {
-        return _activityRunProfileExecutionItem?.ObjectChangeType switch
-        {
-            // Import operations
-            ObjectChangeType.Added => Icons.Material.Filled.Add,
-            ObjectChangeType.Updated => Icons.Material.Filled.Edit,
-            ObjectChangeType.Deleted => Icons.Material.Filled.Delete,
-            // Sync operations
-            ObjectChangeType.Projected => Icons.Material.Filled.AccountTree,
-            ObjectChangeType.Joined => Icons.Material.Filled.Link,
-            ObjectChangeType.AttributeFlow => Icons.Material.Filled.SwapHoriz,
-            ObjectChangeType.Disconnected => Icons.Material.Filled.LinkOff,
-            // Export operations
-            ObjectChangeType.Provisioned => Icons.Material.Filled.Add,
-            ObjectChangeType.Exported => Icons.Material.Filled.Publish,
-            ObjectChangeType.Deprovisioned => Icons.Material.Filled.Delete,
-            // Other
-            ObjectChangeType.NoChange => Icons.Material.Filled.CheckCircle,
-            _ => Icons.Material.Filled.QuestionMark
+            ? $"Synchronisation completed for the connected system object ({externalId})."
+            : "Synchronisation completed for the connected system object."
         };
     }
 
@@ -1125,13 +1260,13 @@ else
             return Enumerable.Empty<FlattenedChange>();
 
         return _activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges
-            .OrderBy(c => c.Attribute.Name)
-            .SelectMany(change => change.ValueChanges.Select(vc => new FlattenedChange(
-                change.Attribute.Name,
-                vc.ValueChangeType,
-                vc.ReferenceValue == null ? vc.ToString() : null,
-                vc.ReferenceValue
-            )));
+        .OrderBy(c => c.Attribute.Name)
+        .SelectMany(change => change.ValueChanges.Select(vc => new FlattenedChange(
+        change.Attribute.Name,
+        vc.ValueChangeType,
+        vc.ReferenceValue == null ? vc.ToString() : null,
+        vc.ReferenceValue
+        )));
     }
 
     /// <summary>
@@ -1145,7 +1280,7 @@ else
         {
             // Import operations - changes are to Connected System Object attributes
             ObjectChangeType.Added or ObjectChangeType.Updated or ObjectChangeType.Deleted =>
-                "The following Connected System Object attributes were modified during this import operation.",
+            "The following Connected System Object attributes were modified during this import operation.",
 
             // Sync and export operations - changes flow to/from Metaverse Object
             _ => "The following Metaverse Object attributes were modified during this synchronisation operation."
