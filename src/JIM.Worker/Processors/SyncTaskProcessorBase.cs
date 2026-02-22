@@ -1137,10 +1137,12 @@ public abstract class SyncTaskProcessorBase
         using var span = Diagnostics.Sync.StartSpan("ResolveCrossPageReferences");
         span.SetTag("csoCount", _unresolvedCrossPageReferences.Count);
 
+        var totalCrossPagesToResolve = _unresolvedCrossPageReferences.Count;
         Log.Information("ResolveCrossPageReferences: Resolving cross-page references for {Count} CSOs",
-            _unresolvedCrossPageReferences.Count);
+            totalCrossPagesToResolve);
 
-        await _jim.Activities.UpdateActivityMessageAsync(_activity, "Resolving cross-page references");
+        await _jim.Activities.UpdateActivityMessageAsync(_activity,
+            $"Resolving cross-page references (0 / {totalCrossPagesToResolve})");
 
         // Build sync rule lookup (keyed by ID) for O(1) access
         var requiredSyncRuleIds = _unresolvedCrossPageReferences
@@ -1156,12 +1158,17 @@ public abstract class SyncTaskProcessorBase
         var totalItems = _unresolvedCrossPageReferences.Count;
         var totalBatches = (int)Math.Ceiling((double)totalItems / pageSize);
 
+        var resolvedCount = 0;
+
         for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
         {
             var batch = _unresolvedCrossPageReferences
                 .Skip(batchIndex * pageSize)
                 .Take(pageSize)
                 .ToList();
+
+            await _jim.Activities.UpdateActivityMessageAsync(_activity,
+                $"Resolving cross-page references ({resolvedCount} / {totalCrossPagesToResolve}) - loading batch {batchIndex + 1} of {totalBatches}");
 
             // Reload CSOs from DB — now all MVOs exist, so ReferenceValue.MetaverseObject will be populated
             var csoIds = batch.Select(x => x.CsoId).ToList();
@@ -1276,6 +1283,10 @@ public abstract class SyncTaskProcessorBase
                 }
             }
 
+            resolvedCount += batch.Count;
+            await _jim.Activities.UpdateActivityMessageAsync(_activity,
+                $"Resolving cross-page references ({resolvedCount} / {totalCrossPagesToResolve}) - saving changes");
+
             // Flush this batch (same sequence as per-page processing)
             await PersistPendingMetaverseObjectsAsync();
             await CreatePendingMvoChangeObjectsAsync();
@@ -1287,7 +1298,7 @@ public abstract class SyncTaskProcessorBase
         }
 
         Log.Information("ResolveCrossPageReferences: Completed cross-page reference resolution for {Count} CSOs",
-            _unresolvedCrossPageReferences.Count);
+            totalCrossPagesToResolve);
 
         _unresolvedCrossPageReferences.Clear();
         span.SetSuccess();
