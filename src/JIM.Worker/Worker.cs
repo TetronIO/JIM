@@ -705,11 +705,15 @@ public class Worker : BackgroundService
         activity.TotalProjected = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Projected);
         activity.TotalJoined = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Joined);
 
-        // Attribute flows: count RPEIs with primary type AttributeFlow, plus absorbed flows
-        // from RPEIs where the primary type is something else (e.g. Joined, Projected, Disconnected)
-        // but attribute flows also occurred (tracked via AttributeFlowCount)
-        activity.TotalAttributeFlows = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.AttributeFlow)
-            + rpeis.Where(r => r.AttributeFlowCount is > 0).Sum(r => r.AttributeFlowCount!.Value);
+        // Attribute flows: for AttributeFlow RPEIs, use AttributeFlowCount if set (actual count of
+        // individual reference changes), otherwise count as 1. Then add absorbed flows from RPEIs
+        // where the primary type is something else (e.g. Joined, Projected) but attribute flows
+        // also occurred (tracked via AttributeFlowCount).
+        activity.TotalAttributeFlows = rpeis
+                .Where(r => r.ObjectChangeType is ObjectChangeType.AttributeFlow)
+                .Sum(r => r.AttributeFlowCount > 0 ? r.AttributeFlowCount.Value : 1)
+            + rpeis.Where(r => r.ObjectChangeType is not ObjectChangeType.AttributeFlow && r.AttributeFlowCount is > 0)
+                .Sum(r => r.AttributeFlowCount!.Value);
 
         activity.TotalDisconnected = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Disconnected);
         activity.TotalDisconnectedOutOfScope = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.DisconnectedOutOfScope);

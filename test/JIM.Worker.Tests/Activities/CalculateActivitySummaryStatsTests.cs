@@ -338,6 +338,29 @@ public class CalculateActivitySummaryStatsTests
     }
 
     [Test]
+    public void CalculateActivitySummaryStats_CrossPageReferenceResolution_UsesAttributeFlowCount()
+    {
+        // Arrange - Cross-page reference resolution creates AttributeFlow RPEIs with
+        // AttributeFlowCount set to the actual number of reference changes resolved.
+        // These should use the count (not just count as 1 each).
+        var activity = CreateActivity();
+        AddRpeisAndCalculate(activity,
+            // 2 standalone AttributeFlow RPEIs without count (within-page, each counts as 1)
+            CreateRpei(ObjectChangeType.AttributeFlow),
+            CreateRpei(ObjectChangeType.AttributeFlow),
+            // Cross-page resolution RPEIs with actual reference change counts
+            CreateRpei(ObjectChangeType.AttributeFlow, attributeFlowCount: 15),
+            CreateRpei(ObjectChangeType.AttributeFlow, attributeFlowCount: 8),
+            // A Joined RPEI with absorbed flows
+            CreateRpei(ObjectChangeType.Joined, attributeFlowCount: 3));
+
+        // Assert
+        // Standalone without count: 2, Cross-page with count: 15 + 8 = 23, Absorbed: 3, Total = 28
+        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(28));
+        Assert.That(activity.TotalJoined, Is.EqualTo(1));
+    }
+
+    [Test]
     public void CalculateActivitySummaryStats_AbsorbedFlows_ZeroAttributeFlowCount_NotCounted()
     {
         // Arrange - RPEIs with AttributeFlowCount of 0 or null should not contribute

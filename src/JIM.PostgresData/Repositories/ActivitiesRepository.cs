@@ -550,15 +550,19 @@ public class ActivityRepository : IActivityRepository
         // Sync stats
         var totalProjections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Projected).Sum(x => x.Count);
         var totalJoins = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Joined).Sum(x => x.Count);
-        var totalAttributeFlows = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.AttributeFlow).Sum(x => x.Count);
-
-        // Count absorbed attribute flows: RPEIs where the primary change type is not AttributeFlow
-        // but attribute flows still occurred (e.g. Joined + attribute flow, Projected + attribute flow).
-        // These are tracked via the AttributeFlowCount field on the RPEI.
-        var absorbedAttributeFlows = await rpeiQuery
-            .Where(q => q.AttributeFlowCount != null && q.AttributeFlowCount > 0 && q.ObjectChangeType != ObjectChangeType.AttributeFlow)
+        // Attribute flows have two components:
+        // 1. Standalone AttributeFlow RPEIs: use AttributeFlowCount if set (cross-page resolution
+        //    tracks actual reference change count), otherwise count each RPEI as 1
+        // 2. Absorbed flows: RPEIs with a different primary type (Joined, Projected, etc.)
+        //    but where attribute flows also occurred (tracked via AttributeFlowCount)
+        // Single query sums AttributeFlowCount for all RPEIs that have it, regardless of type.
+        // Then add AttributeFlow RPEIs without a count (each counts as 1).
+        var totalFlowsFromCount = await rpeiQuery
+            .Where(q => q.AttributeFlowCount != null && q.AttributeFlowCount > 0)
             .SumAsync(q => q.AttributeFlowCount!.Value);
-        totalAttributeFlows += absorbedAttributeFlows;
+        var attributeFlowRpeisWithoutCount = await rpeiQuery
+            .CountAsync(q => q.ObjectChangeType == ObjectChangeType.AttributeFlow && (q.AttributeFlowCount == null || q.AttributeFlowCount == 0));
+        var totalAttributeFlows = totalFlowsFromCount + attributeFlowRpeisWithoutCount;
 
         var totalDisconnections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Disconnected).Sum(x => x.Count);
         var totalDisconnectedOutOfScope = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.DisconnectedOutOfScope).Sum(x => x.Count);

@@ -1226,6 +1226,7 @@ public abstract class SyncTaskProcessorBase
                     var rpei = _activity.PrepareRunProfileExecutionItem();
                     rpei.ConnectedSystemObject = cso;
                     rpei.ObjectChangeType = ObjectChangeType.AttributeFlow;
+                    rpei.AttributeFlowCount = additionsCount + removalsCount;
                     _activity.RunProfileExecutionItems.Add(rpei);
 
                     // Track MVO changes for change tracking
