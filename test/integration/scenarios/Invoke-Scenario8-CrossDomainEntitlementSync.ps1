@@ -155,6 +155,29 @@ try {
     $targetDeltaImportProfile = $targetProfiles | Where-Object { $_.name -eq "Delta Import" }
     $targetDeltaSyncProfile = $targetProfiles | Where-Object { $_.name -eq "Delta Sync" }
 
+    # Helper function to check if a group exists in AD with retry.
+    # Samba AD can have brief consistency delays after LDAP writes, so samba-tool
+    # may not immediately see newly exported groups.
+    function Test-ADGroupExists {
+        param(
+            [Parameter(Mandatory)][string]$Container,
+            [Parameter(Mandatory)][string]$GroupName,
+            [int]$MaxRetries = 3,
+            [int]$RetryDelaySeconds = 2
+        )
+        for ($attempt = 1; $attempt -le ($MaxRetries + 1); $attempt++) {
+            docker exec $Container samba-tool group show $GroupName 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                return $true
+            }
+            if ($attempt -le $MaxRetries) {
+                Write-Host "    Group '$GroupName' not yet visible in AD (attempt $attempt/$($MaxRetries + 1)), retrying in ${RetryDelaySeconds}s..." -ForegroundColor Yellow
+                Start-Sleep -Seconds $RetryDelaySeconds
+            }
+        }
+        return $false
+    }
+
     # Helper function to run FULL forward sync (Source -> Metaverse -> Target)
     # Used for initial synchronisation when objects already exist in both systems
     function Invoke-FullForwardSync {
@@ -352,9 +375,8 @@ try {
             if ($validationGroup) {
                 Write-Host "  Validation group: $validationGroup (Source members: $sourceMemberCount)" -ForegroundColor Cyan
 
-                # Check if group exists in Target
-                docker exec $targetContainer samba-tool group show $validationGroup 2>&1 | Out-Null
-                if ($LASTEXITCODE -eq 0) {
+                # Check if group exists in Target (with retry for Samba AD consistency)
+                if (Test-ADGroupExists -Container $targetContainer -GroupName $validationGroup) {
                     Write-Host "  ✓ Group '$validationGroup' exists in Target AD" -ForegroundColor Green
 
                     # Check if members were synced
@@ -512,9 +534,8 @@ try {
         # Step 2.5: Validate changes in Target AD
         Write-Host "  Validating changes in Target AD..." -ForegroundColor Gray
 
-        # Check if the group exists in Target AD
-        docker exec $targetContainer samba-tool group show $testGroupName 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
+        # Check if the group exists in Target AD (with retry for Samba AD consistency)
+        if (-not (Test-ADGroupExists -Container $targetContainer -GroupName $testGroupName)) {
             throw "Test group '$testGroupName' not found in Target AD after sync"
         }
 
@@ -1132,9 +1153,11 @@ try {
 
         $validations = @()
 
-        # Check if group exists in Target AD
-        $targetGroupInfo = docker exec $targetContainer samba-tool group show $newGroupName 2>&1
-        if ($LASTEXITCODE -eq 0) {
+        # Check if group exists in Target AD (with retry for Samba AD consistency)
+        if (Test-ADGroupExists -Container $targetContainer -GroupName $newGroupName) {
+            $targetGroupInfo = docker exec $targetContainer samba-tool group show $newGroupName 2>&1
+        }
+        if ($LASTEXITCODE -eq 0 -and $targetGroupInfo) {
             $validations += @{ Name = "Group exists in Target AD"; Success = $true }
             Write-Host "    ✓ Group '$newGroupName' exists in Target AD" -ForegroundColor Green
 
