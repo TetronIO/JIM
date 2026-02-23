@@ -204,7 +204,12 @@ public class PendingExportReconciliationService
         {
             case PendingExportAttributeChangeType.Add:
             case PendingExportAttributeChangeType.Update:
-                // For Add/Update, the value should exist on the CSO
+                // For Add/Update with a null/empty value (clearing a single-valued attribute),
+                // confirmation means the CSO should have no values for this attribute.
+                if (IsPendingChangeEmpty(attrChange))
+                    return csoAttrValues.Count == 0;
+
+                // For Add/Update with a real value, the value should exist on the CSO
                 return ValueExistsOnCso(csoAttrValues, attrChange);
 
             case PendingExportAttributeChangeType.Remove:
@@ -273,6 +278,22 @@ public class PendingExportReconciliationService
 
             _ => false
         };
+    }
+
+    /// <summary>
+    /// Checks if a pending export attribute value change represents an empty/null value
+    /// (i.e., clearing a single-valued attribute).
+    /// </summary>
+    private static bool IsPendingChangeEmpty(PendingExportAttributeValueChange change)
+    {
+        return change.StringValue == null &&
+               !change.IntValue.HasValue &&
+               !change.LongValue.HasValue &&
+               !change.DateTimeValue.HasValue &&
+               !change.BoolValue.HasValue &&
+               !change.GuidValue.HasValue &&
+               change.ByteValue == null &&
+               change.UnresolvedReferenceValue == null;
     }
 
     /// <summary>

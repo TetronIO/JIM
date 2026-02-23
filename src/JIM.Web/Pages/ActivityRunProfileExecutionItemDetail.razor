@@ -686,17 +686,17 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                                         <text>The following attribute changes were exported but have not yet been confirmed. They will be retried on the
                                             next export run.</text>
                                         }
-    else
+                                        else
                                         {
                                             <text>The following attribute changes failed to export after multiple attempts and may require manual
                                                 intervention.</text>
-                                            }
+                                        }
                                         </MudText>
 
                                         <MudPaper Class="pa-4 mb-4" Outlined="true">
                                             <MudGrid Spacing="3">
                                                 <MudItem xs="12" sm="6" md="3">
-                                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Status</MudText>
+                                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Status</MudText><br />
                                                     <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportStatusColor(_pendingExport.Status)"
                                                              Class="ml-0">
                                                         @_pendingExport.Status.ToString().SplitOnCapitalLetters()
