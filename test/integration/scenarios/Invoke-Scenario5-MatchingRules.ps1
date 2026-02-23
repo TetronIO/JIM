@@ -781,6 +781,13 @@ try {
             Write-Host "    This means the second CSO either joined (shouldn't happen) or projected (created new MVO)" -ForegroundColor Gray
             $testResults.Steps += @{ Name = "JoinConflict"; Success = $false; Error = "No join conflict error was raised" }
         }
+
+        # Clean up Test 5 data - reset CSV to baseline and run import to obsolete leftover CSOs
+        Copy-Item -Path "$scenarioDataPath/scenario5-hr-users.csv" -Destination "$testDataPath/hr-users.csv" -Force
+        docker cp "$testDataPath/hr-users.csv" samba-ad-primary:/connector-files/hr-users.csv
+        $cleanupImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        $cleanupSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Write-Host "  ✓ Reset CSV to baseline and ran cleanup import/sync for subsequent tests" -ForegroundColor Gray
     }
 
     # Test 6: Case Sensitivity
@@ -926,31 +933,24 @@ try {
                     $updatedMvo = Get-JIMMetaverseObject -Id $originalMvoId -ErrorAction SilentlyContinue
 
                     if ($updatedMvo) {
-                        # Check if there's a CSO linked from the second import
-                        $linkedCsos = Get-JIMMetaverseObject -Id $originalMvoId -ConnectedSystemObjects -ErrorAction SilentlyContinue
-                        $secondCso = $linkedCsos | Where-Object {
-                            # Check if this CSO has the second user's hrId as external ID
-                            $_.externalId -match "9031"
-                        }
+                        # Verify case-insensitive matching by checking MVO count.
+                        # If only 1 MVO exists with "Test Case" in the name, the second CSO joined
+                        # the existing MVO instead of projecting a new one.
+                        $allCaseMvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Case" -PageSize 20 -ErrorAction SilentlyContinue
+                        $caseMvoCount = @($allCaseMvos | Where-Object { $_.displayName -match "Test Case" }).Count
 
-                        if ($secondCso -or $linkedCsos.Count -gt 0) {
-                            Write-Host "  ✓ Case-insensitive matching worked! Second CSO (lowercase 'casetest123') joined MVO (UPPERCASE 'CASETEST123')" -ForegroundColor Green
+                        if ($caseMvoCount -eq 1) {
+                            Write-Host "  ✓ Case-insensitive matching worked! Only 1 MVO exists (second CSO with lowercase 'casetest123' joined MVO with UPPERCASE 'CASETEST123')" -ForegroundColor Green
                             $testResults.Steps += @{ Name = "CaseSensitivity"; Success = $true }
                         }
+                        elseif ($caseMvoCount -gt 1) {
+                            Write-Host "  ✗ Case-insensitive matching FAILED - second user projected to NEW MVO instead of joining" -ForegroundColor Red
+                            Write-Host "    Found $caseMvoCount MVOs (expected 1)" -ForegroundColor Gray
+                            $testResults.Steps += @{ Name = "CaseSensitivity"; Success = $false; Error = "Case-insensitive matching did not work - created $caseMvoCount MVOs" }
+                        }
                         else {
-                            # Check if a new MVO was created instead (which would indicate case-sensitive matching)
-                            $allCaseMvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Case" -PageSize 20 -ErrorAction SilentlyContinue
-                            $caseMvoCount = @($allCaseMvos | Where-Object { $_.displayName -match "Test Case" }).Count
-
-                            if ($caseMvoCount -gt 1) {
-                                Write-Host "  ✗ Case-insensitive matching FAILED - second user projected to NEW MVO instead of joining" -ForegroundColor Red
-                                Write-Host "    Found $caseMvoCount MVOs (expected 1)" -ForegroundColor Gray
-                                $testResults.Steps += @{ Name = "CaseSensitivity"; Success = $false; Error = "Case-insensitive matching did not work - created $caseMvoCount MVOs" }
-                            }
-                            else {
-                                Write-Host "  ⚠ Could not verify CSO linkage, but only 1 MVO exists" -ForegroundColor Yellow
-                                $testResults.Steps += @{ Name = "CaseSensitivity"; Success = $true; Warning = "Could not verify CSO linkage" }
-                            }
+                            Write-Host "  ✗ No MVOs found matching 'Test Case'" -ForegroundColor Red
+                            $testResults.Steps += @{ Name = "CaseSensitivity"; Success = $false; Error = "No MVOs found after case sensitivity test" }
                         }
                     }
                     else {
