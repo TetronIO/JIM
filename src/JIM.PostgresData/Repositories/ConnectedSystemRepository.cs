@@ -215,29 +215,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             }
         }
 
-        // After ClearChangeTracker() (e.g. at end of cross-page reference resolution),
-        // the ConnectedSystem becomes detached. Update() would traverse its entire graph
-        // (Objects → MetaverseObject → Type → Attributes) causing PK violations on the
-        // MetaverseObjectType ↔ MetaverseAttribute join table. Use Entry().State for
-        // detached entities to update only scalar properties without graph traversal.
-        try
-        {
-            var entry = Repository.Database.Entry(connectedSystem);
-            if (entry.State == EntityState.Detached)
-            {
-                entry.State = EntityState.Modified;
-            }
-            else
-            {
-                Repository.Database.Update(connectedSystem);
-            }
-        }
-        catch (NullReferenceException)
-        {
-            // Fallback for mocked DbContext in unit tests
-            Repository.Database.Update(connectedSystem);
-        }
-
+        // Use detach-safe update to avoid graph traversal on detached ConnectedSystem entities.
+        // After ClearChangeTracker(), Update() would traverse Objects → MVO → Type → Attributes
+        // causing PK violations on the MetaverseObjectType ↔ MetaverseAttribute join table.
+        Repository.UpdateDetachedSafe(connectedSystem);
         await Repository.Database.SaveChangesAsync();
     }
 
@@ -2295,11 +2276,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             }
             else
             {
-                // Use Entry().State instead of Update() to avoid graph traversal.
-                // Update() traverses navigation properties (AttributeValueChanges → Attribute →
-                // ConnectedSystemObjectTypeAttribute) causing identity conflicts when multiple
-                // PendingExports share the same ConnectedSystemObjectTypeAttribute instances.
-                Repository.Database.Entry(untrackedExport).State = EntityState.Modified;
+                // Use detach-safe update to avoid graph traversal through
+                // AttributeValueChanges → Attribute → ConnectedSystemObjectTypeAttribute.
+                Repository.UpdateDetachedSafe(untrackedExport);
             }
 
             // Update attribute value changes that remain (those not deleted)
@@ -2318,15 +2297,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 }
                 else
                 {
-                    // Use Entry().State instead of Update() to avoid graph traversal into
-                    // Attribute (ConnectedSystemObjectTypeAttribute) navigation properties.
-                    var attrEntry = Repository.Database.Entry(attrChange);
-                    attrEntry.State = EntityState.Modified;
-
-                    // PendingExportId is a shadow FK (not an explicit property on the model).
-                    // When the entity was loaded via AsNoTracking(), shadow property values are lost.
-                    // We must explicitly set it to maintain the parent relationship.
-                    attrEntry.Property("PendingExportId").CurrentValue = untrackedExport.Id;
+                    // Ensure the parent FK is set before attaching.
+                    attrChange.PendingExportId = untrackedExport.Id;
+                    Repository.UpdateDetachedSafe(attrChange);
                 }
             }
         }

@@ -126,6 +126,34 @@ public class PostgresDataRepository : IRepository
         }
     }
 
+    /// <summary>
+    /// Updates an entity safely, avoiding EF Core graph traversal on detached entities.
+    /// When the entity is detached (e.g. after ClearChangeTracker), sets Entry().State = Modified
+    /// to update only scalar properties without traversing navigation properties.
+    /// When the entity is tracked, uses the standard Update() which traverses the full graph.
+    /// Falls back to Update() in unit test environments where Entry() is unavailable (mocked DbContext).
+    /// </summary>
+    internal void UpdateDetachedSafe<T>(T entity) where T : class
+    {
+        try
+        {
+            var entry = Database.Entry(entity);
+            if (entry.State == EntityState.Detached)
+            {
+                entry.State = EntityState.Modified;
+            }
+            else
+            {
+                Database.Update(entity);
+            }
+        }
+        catch (NullReferenceException)
+        {
+            // Fallback for mocked DbContext in unit tests
+            Database.Update(entity);
+        }
+    }
+
     #region IDisposable
 
     private bool _disposed;

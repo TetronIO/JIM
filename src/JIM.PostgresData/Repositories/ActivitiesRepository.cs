@@ -23,36 +23,10 @@ public class ActivityRepository : IActivityRepository
 
     public async Task UpdateActivityAsync(Activity activity)
     {
-        // When the change tracker has been cleared (e.g. during cross-page reference resolution),
-        // the Activity becomes detached. Using Update() on a detached Activity would traverse the
-        // entire object graph (RunProfileExecutionItems → ConnectedSystemObject → MetaverseObject →
-        // Type → Attributes) and attempt to re-insert MetaverseObjectType ↔ MetaverseAttribute
-        // many-to-many join table entries that already exist, causing a PK violation.
-        //
-        // To avoid this, check if the entity is detached via Entry() and set state to Modified
-        // directly — this updates only the Activity's own scalar properties without traversing
-        // navigation properties.
-        //
-        // The try/catch handles unit tests using mocked DbContext where Entry() throws
-        // NullReferenceException (mock doesn't initialise internal DbContext state).
-        try
-        {
-            var entry = Repository.Database.Entry(activity);
-            if (entry.State == EntityState.Detached)
-            {
-                entry.State = EntityState.Modified;
-            }
-            else
-            {
-                Repository.Database.Activities.Update(activity);
-            }
-        }
-        catch (NullReferenceException)
-        {
-            // Fallback for mocked DbContext in unit tests
-            Repository.Database.Activities.Update(activity);
-        }
-
+        // Use detach-safe update to avoid graph traversal on detached Activity entities.
+        // After ClearChangeTracker(), Update() would traverse RPEIs → CSO → MVO → Type → Attributes
+        // causing identity conflicts with shared MetaverseAttribute/MetaverseObjectType instances.
+        Repository.UpdateDetachedSafe(activity);
         await Repository.Database.SaveChangesAsync();
     }
 

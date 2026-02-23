@@ -276,9 +276,7 @@ public class MetaverseRepository : IMetaverseRepository
             {
                 foreach (var mvo in objectList)
                 {
-                    var mvoEntry = Repository.Database.Entry(mvo);
-                    if (mvoEntry.State == EntityState.Detached)
-                        mvoEntry.State = EntityState.Modified;
+                    Repository.UpdateDetachedSafe(mvo);
 
                     foreach (var av in mvo.AttributeValues)
                     {
