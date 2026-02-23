@@ -826,6 +826,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(av => av.ReferenceValue)
                 .ThenInclude(rv => rv!.MetaverseObject)
             .Include(cso => cso.MetaverseObject)
+                .ThenInclude(mvo => mvo!.Type)
+            .Include(cso => cso.MetaverseObject)
                 .ThenInclude(mvo => mvo!.AttributeValues)
                 .ThenInclude(av => av.Attribute)
             .Include(cso => cso.MetaverseObject)
