@@ -990,10 +990,9 @@ html[lang] .mud-dialog .mud-paper-outlined {
     padding: 2px 0;
 }
 
-.jim-attr-collapse-btn {
-    margin-top: 8px;
-    align-self: flex-start;
-    text-transform: none !important;
+/* MVA rows: top-align cells so attribute name stays at top when values stack vertically */
+.jim-attribute-table tbody tr.jim-attr-row-mva td {
+    vertical-align: top;
 }
 
 /* Blazor Server Reconnection UI */
@@ -1224,4 +1223,13 @@ html[lang] .mud-dialog .mud-paper-outlined {
 .jim-interval-unit .mud-input-control {
     width: 100% !important;
     min-width: unset !important;
+}
+
+/* Home page quick link cards - hover fade to inner surface */
+.jim-quick-link {
+    transition: background-color 0.2s ease;
+}
+
+.jim-quick-link:hover {
+    background-color: var(--jim-inner-surface, var(--mud-palette-action-default-hover));
 }
