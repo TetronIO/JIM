@@ -137,9 +137,8 @@
             </div>
         </MudText>
         <MudTable T="MetaverseObjectAttributeValue" Items="@group.Values" Dense="true" Hover="true"
-                  Elevation="0" Outlined="true" FixedHeader="true" Height="400px"
-                  Filter="new Func<MetaverseObjectAttributeValue, bool>(v => FilterMvaTableValue(v, group.AttributeName))"
-                  Virtualize="true">
+                  Elevation="0" Outlined="true"
+                  Filter="new Func<MetaverseObjectAttributeValue, bool>(v => FilterMvaTableValue(v, group.AttributeName))">
             <ToolBarContent>
                 <MudTextField T="string" Value="@searchText"
                               ValueChanged="@(v => OnSearchTextChanged(group.AttributeName, v))"
