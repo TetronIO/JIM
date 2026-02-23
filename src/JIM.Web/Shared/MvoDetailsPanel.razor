@@ -138,6 +138,7 @@
         </MudText>
         <MudTable T="MetaverseObjectAttributeValue" Items="@group.Values" Dense="true" Hover="true"
                   Elevation="0" Outlined="true"
+                  RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChangedAsync"
                   Filter="new Func<MetaverseObjectAttributeValue, bool>(v => FilterMvaTableValue(v, group.AttributeName))">
             <ToolBarContent>
                 <MudTextField T="string" Value="@searchText"
@@ -282,6 +283,7 @@
     public bool IsEditable { get; set; } = false;
 
     private List<CategoryGroup> _categoryGroups = new();
+    private int _rowsPerPage = 10;
 
     /// <summary>
     /// Per-category expanded state loaded from browser localStorage.
@@ -311,6 +313,16 @@
         {
             var expanded = await UserPreferences.GetCategoryExpandedAsync(ObjectTypeId, category.CategoryName);
             _categoryExpandedStates[category.CategoryName] = expanded ?? true; // default expanded
+        }
+
+        // Load global page size preference
+        try
+        {
+            _rowsPerPage = await UserPreferences.GetRowsPerPageAsync();
+        }
+        catch
+        {
+            // JS interop not yet available; keep default
         }
 
         // Pre-load user view mode preferences for all MVAs
@@ -509,6 +521,14 @@
     {
         _categoryExpandedStates[categoryName] = expanded;
         await UserPreferences.SetCategoryExpandedAsync(ObjectTypeId, categoryName, expanded);
+    }
+
+    // ========================== Table Page Size ==========================
+
+    private async Task OnRowsPerPageChangedAsync(int newSize)
+    {
+        _rowsPerPage = newSize;
+        await UserPreferences.SetRowsPerPageAsync(newSize);
     }
 
     // ========================== Table Search ==========================
