@@ -1548,4 +1548,155 @@ public class PendingExportReconciliationTests
     }
 
     #endregion
+
+    #region Null Value Update Tests
+
+    /// <summary>
+    /// Tests that an Update change with null value (clearing a single-valued attribute) is confirmed
+    /// when the CSO has no values for that attribute.
+    /// This is the "managedBy cleared" scenario: export sets managedBy to null, confirming import
+    /// shows no value — should be confirmed, not marked as ExportNotConfirmed.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_UpdateWithNullValue_ConfirmsWhenCsoHasNoValuesAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+
+        // Create a reference attribute (like managedBy)
+        var managedByAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 2001,
+            Name = "managedBy",
+            Type = AttributeDataType.Reference,
+            ConnectedSystemObjectType = TargetUserType
+        };
+        TargetUserType.Attributes.Add(managedByAttr);
+
+        // Pending export has an Update with null value (clearing the attribute)
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = managedByAttr.Id,
+            Attribute = managedByAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            StringValue = null,
+            UnresolvedReferenceValue = null,
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // CSO has no values for managedBy (attribute was cleared)
+        // Don't add any attribute value
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1),
+            "Update with null value should be confirmed when CSO has no values for the attribute");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(0),
+            "No changes should need retry");
+        Assert.That(result.PendingExportDeleted, Is.True,
+            "PendingExport should be deleted when all changes confirmed");
+    }
+
+    /// <summary>
+    /// Tests that an Update with null value for a Text attribute is confirmed when the CSO has no values.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_UpdateWithNullStringValue_ConfirmsWhenCsoHasNoValuesAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+
+        // Pending export has an Update with null string value (clearing the attribute)
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = DisplayNameAttr.Id,
+            Attribute = DisplayNameAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            StringValue = null,
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // CSO has no values for displayName (attribute was cleared)
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1),
+            "Update with null string value should be confirmed when CSO has no values");
+        Assert.That(result.PendingExportDeleted, Is.True);
+    }
+
+    /// <summary>
+    /// Tests that an Update with null value is NOT confirmed when the CSO still has a value
+    /// (attribute wasn't actually cleared in the target system).
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_UpdateWithNullValue_RetriesWhenCsoStillHasValueAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+
+        // Create a reference attribute
+        var managedByAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 2002,
+            Name = "managedBy",
+            Type = AttributeDataType.Reference,
+            ConnectedSystemObjectType = TargetUserType
+        };
+        TargetUserType.Attributes.Add(managedByAttr);
+
+        // Pending export has an Update with null value (clearing the attribute)
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = managedByAttr.Id,
+            Attribute = managedByAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            StringValue = null,
+            UnresolvedReferenceValue = null,
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // CSO still has a value for managedBy (clearing failed)
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = managedByAttr,
+            AttributeId = managedByAttr.Id,
+            UnresolvedReferenceValue = "CN=SomeUser,OU=Users,DC=test,DC=local"
+        });
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(0),
+            "Update with null value should NOT be confirmed when CSO still has a value");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(1),
+            "Should retry when attribute wasn't actually cleared");
+    }
+
+    #endregion
 }
