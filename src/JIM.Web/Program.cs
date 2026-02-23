@@ -510,8 +510,7 @@ static async Task InitialiseJimApplicationAsync()
     if (string.IsNullOrEmpty(uniqueIdentifierMetaverseAttributeName))
         throw new Exception($"{Constants.Config.SsoMvAttribute} environment variable missing");
 
-    var initialAdminClaimValue = Environment.GetEnvironmentVariable(Constants.Config.SsoInitialAdmin);
-    if (string.IsNullOrEmpty(initialAdminClaimValue))
+    if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(Constants.Config.SsoInitialAdmin)))
         throw new Exception($"{Constants.Config.SsoInitialAdmin} environment variable missing");
 
     while (true)
@@ -519,7 +518,7 @@ static async Task InitialiseJimApplicationAsync()
         var jimApplication = new JimApplication(new PostgresDataRepository(new JimDbContext()));
         if (await jimApplication.IsApplicationReadyAsync())
         {
-            await jimApplication.InitialiseSsoAsync(ssoAuthority, ssoClientId, ssoSecret, uniqueIdentifierClaimType, uniqueIdentifierMetaverseAttributeName, initialAdminClaimValue);
+            await jimApplication.InitialiseSsoAsync(ssoAuthority, ssoClientId, ssoSecret, uniqueIdentifierClaimType, uniqueIdentifierMetaverseAttributeName);
             await InitialiseInfrastructureApiKeyAsync(jimApplication);
             break;
         }
@@ -606,9 +605,10 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
     // If we do, then the user's roles are retrieved and added to their identity, if not, they receive no roles and will
     // not be able to access any part of JIM.
     //
-    // Also, if the user has claims that map to the user's Metaverse attributes that have no values, then those attributes
-    // will be set from the claim values, i.e. assign initial values. This ensures initial admins are represented properly,
-    // i.e. have a Display Name.
+    // If the user is the initial admin (matching JIM_SSO_INITIAL_ADMIN) and doesn't exist yet, they are created
+    // just-in-time with all available claims populated in a single operation.
+    //
+    // For existing users, any missing attributes are supplemented from claims on each sign-in.
 
     Log.Verbose("AuthoriseAndUpdateUserAsync: Called.");
 
@@ -643,11 +643,26 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
         throw new Exception("Could not retrieve User object type");
 
     var user = await jim.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(userType, serviceSettings.SSOUniqueIdentifierMetaverseAttribute, uniqueIdClaimValue);
+    var initialAdminClaimValue = Environment.GetEnvironmentVariable(Constants.Config.SsoInitialAdmin);
+    var isInitialAdmin = !string.IsNullOrEmpty(initialAdminClaimValue) && uniqueIdClaimValue == initialAdminClaimValue;
+
+    // if no matching user exists, check if this is the initial admin and create them just-in-time
+    if (user == null && isInitialAdmin)
+    {
+        user = await CreateInitialAdminUserAsync(jim, userType, serviceSettings.SSOUniqueIdentifierMetaverseAttribute, uniqueIdClaimValue, context.Principal);
+    }
+
     if (user != null)
     {
         // we mapped a token user to a Metaverse user, now we need to create a new ASP.NET identity that represents an internal view
         // of the user, with their roles claims. We have to create a new identity as we cannot modify the default ASP.NET one.
         // This will do to start with. When we need a more developed RBAC system later, we might need to extend ClaimsIdentity to accomodate more complex roles.
+
+        // ensure the initial admin always has the Administrator role
+        if (isInitialAdmin && !await jim.Security.IsObjectInRoleAsync(user, Constants.BuiltInRoles.Administrator))
+        {
+            await jim.Security.AddObjectToRoleAsync(user, Constants.BuiltInRoles.Administrator);
+        }
 
         // retrieve the existing JIM role assignments for this user.
         var userRoles = await jim.Security.GetMetaverseObjectRolesAsync(user);
@@ -671,8 +686,87 @@ static async Task AuthoriseAndUpdateUserAsync(TicketReceivedContext context)
         await UpdateUserAttributesFromClaimsAsync(jim, user, context.Principal);
     }
 
-    // we couldn't map the token user to a Metaverse user. Quit
-    // this will be the user will have no roles added, so they won't be able to access JIM.Web
+    // we couldn't map the token user to a Metaverse user and they're not the initial admin. Quit.
+    // the user will have no roles added, so they won't be able to access JIM.Web
+}
+
+/// <summary>
+/// Creates the initial admin user just-in-time on their first sign-in, with all available
+/// OIDC claims populated in a single operation (producing one "Created" change event).
+/// </summary>
+static async Task<MetaverseObject> CreateInitialAdminUserAsync(
+    JimApplication jim,
+    MetaverseObjectType userType,
+    MetaverseAttribute uniqueIdentifierAttribute,
+    string uniqueIdClaimValue,
+    ClaimsPrincipal claimsPrincipal)
+{
+    Log.Information("CreateInitialAdminUserAsync: Creating initial admin user just-in-time ({UniqueId}).", uniqueIdClaimValue);
+
+    // Set Origin to Internal to protect admin from automatic deletion rules
+    var user = new MetaverseObject
+    {
+        Type = userType,
+        Origin = MetaverseObjectOrigin.Internal
+    };
+
+    // unique identifier attribute (required)
+    user.AttributeValues.Add(new MetaverseObjectAttributeValue
+    {
+        MetaverseObject = user,
+        Attribute = uniqueIdentifierAttribute,
+        StringValue = uniqueIdClaimValue
+    });
+
+    // Type attribute (required)
+    var typeAttribute = await jim.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.Type) ??
+                        throw new Exception($"Couldn't get essential attribute: {Constants.BuiltInAttributes.Type}");
+    user.AttributeValues.Add(new MetaverseObjectAttributeValue
+    {
+        MetaverseObject = user,
+        Attribute = typeAttribute,
+        StringValue = "PersonEntity"
+    });
+
+    // populate optional attributes from OIDC claims so everything is set in one go
+    await AddAttributeFromClaimAsync(jim, user, claimsPrincipal, "name", Constants.BuiltInAttributes.DisplayName);
+    await AddAttributeFromClaimAsync(jim, user, claimsPrincipal, "given_name", Constants.BuiltInAttributes.FirstName);
+    await AddAttributeFromClaimAsync(jim, user, claimsPrincipal, "family_name", Constants.BuiltInAttributes.LastName);
+    await AddAttributeFromClaimAsync(jim, user, claimsPrincipal, "preferred_username", Constants.BuiltInAttributes.UserPrincipalName);
+
+    await jim.Metaverse.CreateMetaverseObjectAsync(
+        user,
+        changeInitiatorType: MetaverseObjectChangeInitiatorType.System);
+
+    await jim.Security.AddObjectToRoleAsync(user, Constants.BuiltInRoles.Administrator);
+
+    Log.Information("CreateInitialAdminUserAsync: Initial admin user created and assigned {Role} role.", Constants.BuiltInRoles.Administrator);
+    return user;
+}
+
+/// <summary>
+/// Adds an attribute value to a MetaverseObject from an OIDC claim, if the claim is present.
+/// </summary>
+static async Task AddAttributeFromClaimAsync(
+    JimApplication jim,
+    MetaverseObject user,
+    ClaimsPrincipal claimsPrincipal,
+    string claimType,
+    string metaverseAttributeName)
+{
+    var claim = claimsPrincipal.Claims.FirstOrDefault(q => q.Type == claimType);
+    if (claim == null) return;
+
+    var attribute = await jim.Metaverse.GetMetaverseAttributeAsync(metaverseAttributeName);
+    if (attribute == null) return;
+
+    user.AttributeValues.Add(new MetaverseObjectAttributeValue
+    {
+        MetaverseObject = user,
+        Attribute = attribute,
+        StringValue = claim.Value
+    });
+    Log.Verbose("CreateInitialAdminUserAsync: Added {Attribute} from claim {Claim}.", metaverseAttributeName, claimType);
 }
 
 static async Task UpdateUserAttributesFromClaimsAsync(JimApplication jim, MetaverseObject user, ClaimsPrincipal claimsPrincipal)

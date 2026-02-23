@@ -86,22 +86,20 @@ public class JimApplication : IDisposable
 
     /// <summary>
     /// Copies SSO information provided by Docker configuration to the database so the user can view it in the interface.
-    /// Also ensures there is always a user with an admin role assignment.
     /// </summary>
     public async Task InitialiseSsoAsync(
         string ssoAuthority,
         string ssoClientId,
         string ssoSecret,
-        string uniqueIdentifierClaimType, 
-        string uniqueIdentifierMetaverseAttributeName, 
-        string initialAdminUniqueIdentifierClaimValue)
+        string uniqueIdentifierClaimType,
+        string uniqueIdentifierMetaverseAttributeName)
     {
-        Log.Debug($"InitialiseSSOAsync: uniqueIdentifierClaimType: {uniqueIdentifierClaimType}, initialAdminUniqueIdentifierClaimValue: {initialAdminUniqueIdentifierClaimValue}");
+        Log.Debug($"InitialiseSSOAsync: uniqueIdentifierClaimType: {uniqueIdentifierClaimType}");
 
-        var uniqueIdentifierMetaverseAttribute = await Repository.Metaverse.GetMetaverseAttributeAsync(uniqueIdentifierMetaverseAttributeName) ?? 
+        var uniqueIdentifierMetaverseAttribute = await Repository.Metaverse.GetMetaverseAttributeAsync(uniqueIdentifierMetaverseAttributeName) ??
                                                  throw new Exception("Unsupported SSO unique identifier Metaverse Attribute Name. Please specify one that exists.");
-            
-        var serviceSettings = await ServiceSettings.GetServiceSettingsAsync() ?? 
+
+        var serviceSettings = await ServiceSettings.GetServiceSettingsAsync() ??
                               throw new Exception("ServiceSettings do not exist. Application is not properly initialised. Are you sure the application is ready?");
 
         // SSO AUTHENTICATION PROPERTIES
@@ -122,7 +120,7 @@ public class JimApplication : IDisposable
             await ServiceSettings.UpdateServiceSettingsAsync(serviceSettings);
             Log.Information($"InitialiseSSOAsync: Updated ServiceSettings.SSOClientId to: {ssoClientId}");
         }
-            
+
         if (string.IsNullOrEmpty(serviceSettings.SSOSecret) || serviceSettings.SSOSecret != ssoSecret)
         {
             serviceSettings.SSOSecret = ssoSecret;
@@ -148,51 +146,6 @@ public class JimApplication : IDisposable
             serviceSettings.SSOUniqueIdentifierMetaverseAttribute = uniqueIdentifierMetaverseAttribute;
             Log.Information($"InitialiseSSOAsync: Updating ServiceSettings.SSOUniqueIdentifierMetaverseAttribute to: {uniqueIdentifierMetaverseAttribute.Name}");
             await ServiceSettings.UpdateServiceSettingsAsync(serviceSettings);
-        }
-
-        // check for a matching user, if not create the initial admin user, and check admin role assignment
-        // get user by attribute = get a metaverse object by attribute value
-        var objectType = await Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, false) ??
-                         throw new Exception($"{Constants.BuiltInObjectTypes.User} object type could not be found. Something went wrong with db seeding.");
-
-        var user = await Repository.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(objectType, uniqueIdentifierMetaverseAttribute, initialAdminUniqueIdentifierClaimValue);
-        if (user != null)
-        {
-            // we have a matching user, do they have the Administrator role?
-            if (!await Security.IsObjectInRoleAsync(user, Constants.BuiltInRoles.Administrator))
-                await Security.AddObjectToRoleAsync(user, Constants.BuiltInRoles.Administrator);
-        }
-        else
-        {
-            // no matching user found, create them in stub form; just enough to sign in
-            // Set Origin to Internal to protect admin from automatic deletion rules
-            user = new MetaverseObject
-            {
-                Type = objectType,
-                Origin = MetaverseObjectOrigin.Internal
-            };
-            user.AttributeValues.Add(new MetaverseObjectAttributeValue
-            {
-                MetaverseObject = user,
-                Attribute = uniqueIdentifierMetaverseAttribute,
-                StringValue = initialAdminUniqueIdentifierClaimValue
-            });
-
-            var typeAttribute = await Repository.Metaverse.GetMetaverseAttributeAsync(Constants.BuiltInAttributes.Type) ?? 
-                                throw new Exception($"Couldn't get essential attribute: {Constants.BuiltInAttributes.Type}");
-
-            user.AttributeValues.Add(new MetaverseObjectAttributeValue
-            {
-                MetaverseObject = user,
-                Attribute = typeAttribute,
-                StringValue = "PersonEntity"
-            });
-
-            Log.Information($"InitialiseSSOAsync: Creating metaverse object user ({initialAdminUniqueIdentifierClaimValue}) and assigning the {Constants.BuiltInRoles.Administrator} role.");
-            await Metaverse.CreateMetaverseObjectAsync(
-                user,
-                changeInitiatorType: MetaverseObjectChangeInitiatorType.System);
-            await Security.AddObjectToRoleAsync(user, Constants.BuiltInRoles.Administrator);
         }
     }
 
