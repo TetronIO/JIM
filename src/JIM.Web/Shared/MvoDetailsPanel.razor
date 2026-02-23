@@ -333,7 +333,7 @@
     /// <summary>
     /// Heuristic mapping of built-in attribute names to display categories.
     /// This is a presentation-layer concern that will be replaced by admin-configurable
-    /// layouts in the future (RCDC-like feature).
+    /// layouts in the future.
     /// </summary>
     private static readonly Dictionary<string, string> AttributeCategoryMap = new()
     {
@@ -352,6 +352,7 @@
         { Constants.BuiltInAttributes.Type, "Identity" },
         { Constants.BuiltInAttributes.FirstName, "Identity" },
         { Constants.BuiltInAttributes.LastName, "Identity" },
+        { Constants.BuiltInAttributes.Description, "Identity" },
 
         // Contact
         { Constants.BuiltInAttributes.Email, "Contact" },
