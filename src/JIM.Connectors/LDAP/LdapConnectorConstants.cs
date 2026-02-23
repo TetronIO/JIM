@@ -57,4 +57,39 @@ internal static class LdapConnectorConstants
     /// Required for delta import deletion detection in Active Directory.
     /// </summary>
     internal const string LDAP_SERVER_SHOW_DELETED_OID = "1.2.840.113556.1.4.417";
+
+    /// <summary>
+    /// Attribute names where Active Directory's SAM layer enforces single-valued behaviour despite the
+    /// LDAP schema declaring them as multi-valued. This applies to all SAM-managed object classes
+    /// (user, group, computer, samDomain, samServer, inetOrgPerson).
+    /// <para>
+    /// In both Microsoft AD and Samba AD, the Security Account Manager (SAM) rejects attempts to write
+    /// more than one value to these attributes on security principals. The LDAP schema says multi-valued
+    /// (no SINGLE-VALUE constraint per RFC 4519), but the SAM layer silently enforces single-valued
+    /// semantics. Generic LDAP directories (OpenLDAP, 389DS) treat these as genuinely multi-valued.
+    /// </para>
+    /// <para>
+    /// Currently only 'description' has this behaviour. All other SAM-managed attributes (sAMAccountName,
+    /// userPrincipalName, cn, etc.) are already declared as single-valued in the LDAP schema itself.
+    /// </para>
+    /// </summary>
+    internal static readonly HashSet<string> SAM_ENFORCED_SINGLE_VALUED_ATTRIBUTES = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "description"
+    };
+
+    /// <summary>
+    /// LDAP object class names managed by Active Directory's Security Account Manager (SAM).
+    /// These classes have SAM-layer attribute plurality enforcement that differs from the LDAP schema.
+    /// Includes both structural classes and their common subclasses.
+    /// </summary>
+    internal static readonly HashSet<string> SAM_MANAGED_OBJECT_CLASSES = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "user",
+        "computer",
+        "inetOrgPerson",
+        "group",
+        "samDomain",
+        "samServer"
+    };
 }

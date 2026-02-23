@@ -139,7 +139,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (_connection == null)
             throw new Exception("No connection available to get schema with");
 
-        var ldapConnectorSchema = new LdapConnectorSchema(_connection, logger);
+        var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+        var ldapConnectorSchema = new LdapConnectorSchema(_connection, logger, rootDse);
         var schema = await ldapConnectorSchema.GetSchemaAsync();
         CloseImportConnection();
         return schema;

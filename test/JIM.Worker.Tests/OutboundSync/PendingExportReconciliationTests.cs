@@ -1408,4 +1408,144 @@ public class PendingExportReconciliationTests
     }
 
     #endregion
+
+    #region SVA-to-MVA Confirming Import Tests
+
+    /// <summary>
+    /// Tests that a single-valued export to a multi-valued target attribute is confirmed when the
+    /// exported value exists among the CSO's multiple attribute values.
+    /// This covers the SVA→MVA mapping scenario (e.g., MV Description → CS description on OpenLDAP).
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_SvaToMva_ConfirmsWhenExportedValueExistsAmongMultipleValuesAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var attrChange = CreateTestAttributeChange(pendingExport, DisplayNameAttr, "John Doe");
+
+        // CSO has multiple values for the attribute (simulating a multi-valued target attribute)
+        // The exported value "John Doe" is among them
+        AddCsoAttributeValue(cso, DisplayNameAttr, "Previous Name");
+        AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
+        AddCsoAttributeValue(cso, DisplayNameAttr, "John D");
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1),
+            "Export should be confirmed when the exported value exists among the CSO's multiple values");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(0));
+        Assert.That(result.FailedChanges.Count, Is.EqualTo(0));
+    }
+
+    /// <summary>
+    /// Tests that a single-valued export to a multi-valued target attribute is NOT confirmed when the
+    /// exported value is not present among any of the CSO's attribute values.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_SvaToMva_MarksForRetryWhenExportedValueNotAmongMultipleValuesAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var attrChange = CreateTestAttributeChange(pendingExport, DisplayNameAttr, "John Doe", exportAttemptCount: 1);
+
+        // CSO has multiple values but none match the exported value
+        AddCsoAttributeValue(cso, DisplayNameAttr, "Jane Doe");
+        AddCsoAttributeValue(cso, DisplayNameAttr, "Previous Name");
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(0),
+            "Export should NOT be confirmed when the value doesn't exist among the CSO's values");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(1),
+            "Export should be marked for retry");
+    }
+
+    /// <summary>
+    /// Tests that an Add change type to a multi-valued attribute is confirmed when the value
+    /// exists among the CSO's attribute values.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_SvaToMva_AddChangeType_ConfirmsWhenValueExistsAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = DisplayNameAttr.Id,
+            Attribute = DisplayNameAttr,
+            ChangeType = PendingExportAttributeChangeType.Add,
+            StringValue = "New Value",
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1,
+            LastExportedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+        PendingExportAttributeValueChangesData.Add(attrChange);
+
+        // CSO has the added value among other values
+        AddCsoAttributeValue(cso, DisplayNameAttr, "Existing Value");
+        AddCsoAttributeValue(cso, DisplayNameAttr, "New Value");
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1),
+            "Add to multi-valued attribute should be confirmed when value exists among CSO values");
+    }
+
+    /// <summary>
+    /// Tests that a Remove change type from a multi-valued attribute is confirmed when the value
+    /// no longer exists among the CSO's attribute values.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_SvaToMva_RemoveChangeType_ConfirmsWhenValueNoLongerExistsAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = DisplayNameAttr.Id,
+            Attribute = DisplayNameAttr,
+            ChangeType = PendingExportAttributeChangeType.Remove,
+            StringValue = "Removed Value",
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1,
+            LastExportedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+        PendingExportAttributeValueChangesData.Add(attrChange);
+
+        // CSO still has other values but NOT the removed one
+        AddCsoAttributeValue(cso, DisplayNameAttr, "Remaining Value");
+
+        var service = new PendingExportReconciliationService(Jim);
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1),
+            "Remove from multi-valued attribute should be confirmed when value no longer exists among CSO values");
+    }
+
+    #endregion
 }

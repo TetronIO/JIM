@@ -330,7 +330,7 @@ try {
         $testGroups = @($groupListOutput -split "`n" | Where-Object { $_ -match "^(Company-|Dept-|Location-|Project-)" })
 
         if ($testGroups.Count -eq 0) {
-            Write-Host "  ⚠ No test groups found in Source AD" -ForegroundColor Yellow
+            throw "No test groups found in Source AD — ensure Populate-SambaAD-Scenario8.ps1 ran successfully"
         }
         else {
             # Find a group with members for validation
@@ -378,11 +378,11 @@ try {
                     }
                 }
                 else {
-                    Write-Host "  ⚠ Group '$validationGroup' not found in Target AD" -ForegroundColor Yellow
+                    throw "Group '$validationGroup' not found in Target AD — expected it to be provisioned during initial sync"
                 }
             }
             else {
-                Write-Host "  ⚠ No groups with members found for validation" -ForegroundColor Yellow
+                throw "No groups with members found for validation — Source AD should have groups with members after initial setup"
             }
         }
 
@@ -1138,14 +1138,17 @@ try {
             $validations += @{ Name = "Group exists in Target AD"; Success = $true }
             Write-Host "    ✓ Group '$newGroupName' exists in Target AD" -ForegroundColor Green
 
-            # Verify description attribute
+            # Verify description attribute — should be synced now that the LDAP connector
+            # correctly reports 'description' as single-valued on AD SAM-managed object classes
             if ($targetGroupInfo -match "description:\s*$([regex]::Escape($newGroupDescription))") {
                 $validations += @{ Name = "Group description correct"; Success = $true }
                 Write-Host "    ✓ Group description is correct" -ForegroundColor Green
             }
             else {
-                # Description may not be synced depending on attribute flow configuration
-                Write-Host "    ⚠ Group description may not be synced (attribute flow configuration)" -ForegroundColor Yellow
+                $validations += @{ Name = "Group description correct"; Success = $false }
+                Write-Host "    ✗ Group description not found or incorrect in Target AD" -ForegroundColor Red
+                Write-Host "      Expected: '$newGroupDescription'" -ForegroundColor Red
+                Write-Host "      Actual: $($targetGroupInfo | Select-String 'description:')" -ForegroundColor Red
             }
         }
         else {
