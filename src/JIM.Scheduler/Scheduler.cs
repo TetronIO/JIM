@@ -48,23 +48,29 @@ public class Scheduler : BackgroundService
         // This uses the shared key storage to ensure consistency with JIM.Web and JIM.Worker
         var credentialProtection = new CredentialProtectionService(DataProtectionHelper.CreateProvider());
 
-        // Wait for the database to be ready (JIM.Worker handles initial migration)
-        Log.Information("Waiting for database to be ready...");
-        var databaseReady = false;
-        while (!databaseReady && !stoppingToken.IsCancellationRequested)
+        // Wait for the application to be fully ready (JIM.Worker handles initial migration and seeding).
+        // We must check IsApplicationReadyAsync() rather than just database connectivity, because the
+        // worker needs to complete migrations and seeding before tables like Schedules exist.
+        Log.Information("Waiting for application to be ready...");
+        while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 using var checkJim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
-                // Simple check - if we can create a JimApplication, the database is accessible
-                databaseReady = true;
-                Log.Information("Database is ready.");
+                if (await checkJim.IsApplicationReadyAsync())
+                {
+                    Log.Information("Application is ready.");
+                    break;
+                }
+
+                Log.Information("Application is not ready yet (maintenance mode). Waiting...");
             }
             catch (Exception ex)
             {
-                Log.Debug(ex, "Database not yet ready, waiting...");
-                await Task.Delay(2000, stoppingToken);
+                Log.Debug(ex, "Application not yet ready, waiting...");
             }
+
+            await Task.Delay(2000, stoppingToken);
         }
 
         while (!stoppingToken.IsCancellationRequested)

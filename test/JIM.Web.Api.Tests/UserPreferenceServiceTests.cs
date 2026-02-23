@@ -377,6 +377,163 @@ public class UserPreferenceServiceTests
 
     #endregion
 
+    #region GetDrawerPinnedAsync tests
+
+    [Test]
+    public async Task GetDrawerPinnedAsync_WhenNoValueStored_ReturnsNullAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync((string?)null);
+
+        // Act
+        var result = await _service.GetDrawerPinnedAsync();
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetDrawerPinnedAsync_WhenTrueStored_ReturnsTrueAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync("true");
+
+        // Act
+        var result = await _service.GetDrawerPinnedAsync();
+
+        // Assert
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task GetDrawerPinnedAsync_WhenFalseStored_ReturnsFalseAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync("false");
+
+        // Act
+        var result = await _service.GetDrawerPinnedAsync();
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    [TestCase("")]
+    [TestCase("invalid")]
+    [TestCase("yes")]
+    [TestCase("1")]
+    public async Task GetDrawerPinnedAsync_WhenInvalidValueStored_ReturnsNullAsync(string invalidValue)
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ReturnsAsync(invalidValue);
+
+        // Act
+        var result = await _service.GetDrawerPinnedAsync();
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetDrawerPinnedAsync_WhenJsDisconnected_ReturnsNullAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
+
+        // Act
+        var result = await _service.GetDrawerPinnedAsync();
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetDrawerPinnedAsync_WhenJsNotAvailable_ReturnsNullAsync()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<string?>("jimPreferences.get", It.IsAny<object[]>()))
+            .ThrowsAsync(new InvalidOperationException("JS interop not available"));
+
+        // Act
+        var result = await _service.GetDrawerPinnedAsync();
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    #endregion
+
+    #region SetDrawerPinnedAsync tests
+
+    [Test]
+    [TestCase(true, "true")]
+    [TestCase(false, "false")]
+    public async Task SetDrawerPinnedAsync_StoresCorrectValueAsync(bool isPinned, string expectedValue)
+    {
+        // Arrange
+        object[]? capturedArgs = null;
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "jimPreferences.set",
+                It.IsAny<object[]>()))
+            .Callback<string, object[]>((_, args) => capturedArgs = args)
+            .ReturnsAsync(Mock.Of<Microsoft.JSInterop.Infrastructure.IJSVoidResult>());
+
+        // Act
+        await _service.SetDrawerPinnedAsync(isPinned);
+
+        // Assert
+        _mockJsRuntime.Verify(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+            "jimPreferences.set",
+            It.Is<object[]>(args => args.Length == 2 && (string)args[0] == "drawerPinned")),
+            Times.Once);
+        Assert.That(capturedArgs, Is.Not.Null);
+        Assert.That(capturedArgs![0], Is.EqualTo("drawerPinned"));
+        Assert.That(capturedArgs[1], Is.EqualTo(expectedValue));
+    }
+
+    [Test]
+    public void SetDrawerPinnedAsync_WhenJsDisconnected_DoesNotThrow()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "jimPreferences.set",
+                It.IsAny<object[]>()))
+            .ThrowsAsync(new JSDisconnectedException("Circuit disconnected"));
+
+        // Act & Assert - should not throw
+        Assert.DoesNotThrowAsync(async () => await _service.SetDrawerPinnedAsync(true));
+    }
+
+    [Test]
+    public void SetDrawerPinnedAsync_WhenJsNotAvailable_DoesNotThrow()
+    {
+        // Arrange
+        _mockJsRuntime
+            .Setup(x => x.InvokeAsync<Microsoft.JSInterop.Infrastructure.IJSVoidResult>(
+                "jimPreferences.set",
+                It.IsAny<object[]>()))
+            .ThrowsAsync(new InvalidOperationException("JS interop not available"));
+
+        // Act & Assert - should not throw
+        Assert.DoesNotThrowAsync(async () => await _service.SetDrawerPinnedAsync(false));
+    }
+
+    #endregion
+
     #region GetMvaViewModeAsync tests
 
     [Test]

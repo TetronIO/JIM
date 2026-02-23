@@ -2618,4 +2618,206 @@ public class FullSyncTests
     }
 
     #endregion
+
+    #region cross-page reference resolution
+
+    /// <summary>
+    /// Tests that reference attributes are correctly resolved when the referencing CSO and the
+    /// referenced CSO are on different pages during full sync.
+    ///
+    /// Scenario: CSO-A (a user with a MANAGER reference to CSO-B) sorts before CSO-B in GUID order.
+    /// With page size = 1, CSO-A is on page 1 and CSO-B is on page 2. When CSO-A is processed,
+    /// CSO-B hasn't been projected yet, so ReferenceValue.MetaverseObject is null.
+    /// After all pages, ResolveCrossPageReferencesAsync should reload CSO-A and resolve the reference.
+    /// </summary>
+    [Test]
+    public async Task CrossPageReferenceResolution_ManagerReferenceOnDifferentPage_ResolvedAfterAllPagesAsync()
+    {
+        // Arrange: Set page size to 1 so each CSO is on its own page
+        var pageSizeSetting = ServiceSettingItemsData.Single(s => s.Key == "Sync.PageSize");
+        pageSizeSetting.Value = "1";
+
+        // Create two new CSOs with carefully chosen GUIDs:
+        // CSO-A (the referencing CSO, with Manager) must sort BEFORE CSO-B (the referenced CSO)
+        // so CSO-A is processed on page 1 when CSO-B hasn't been projected yet.
+        // GUID "11111111-..." sorts before "FFFFFFFF-..."
+        var csoB = new ConnectedSystemObject
+        {
+            Id = Guid.Parse("FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF"),
+            ConnectedSystemId = 1,
+            Type = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER"),
+            TypeId = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER").Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            Created = DateTime.UtcNow,
+        };
+        // CSO-B has an HR_ID attribute (for projection)
+        csoB.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.HR_ID,
+            Attribute = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER")
+                .Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.HR_ID),
+            ConnectedSystemObject = csoB,
+            GuidValue = Guid.NewGuid()
+        });
+        // CSO-B has a display name
+        csoB.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
+            Attribute = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER")
+                .Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME),
+            ConnectedSystemObject = csoB,
+            StringValue = "The Manager"
+        });
+
+        var csoA = new ConnectedSystemObject
+        {
+            Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            ConnectedSystemId = 1,
+            Type = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER"),
+            TypeId = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER").Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            Created = DateTime.UtcNow,
+        };
+        // CSO-A has an HR_ID attribute (for projection)
+        csoA.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.HR_ID,
+            Attribute = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER")
+                .Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.HR_ID),
+            ConnectedSystemObject = csoA,
+            GuidValue = Guid.NewGuid()
+        });
+        // CSO-A has a display name
+        csoA.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
+            Attribute = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER")
+                .Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME),
+            ConnectedSystemObject = csoA,
+            StringValue = "The Employee"
+        });
+        // CSO-A has a MANAGER reference to CSO-B (cross-page reference)
+        csoA.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.MANAGER,
+            Attribute = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER")
+                .Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.MANAGER),
+            ConnectedSystemObject = csoA,
+            ReferenceValue = csoB,
+            ReferenceValueId = csoB.Id
+        });
+
+        // Replace the default CSO data with our custom CSOs
+        ConnectedSystemObjectsData.Clear();
+        ConnectedSystemObjectsData.Add(csoA);
+        ConnectedSystemObjectsData.Add(csoB);
+        MockDbSetConnectedSystemObjects = ConnectedSystemObjectsData.BuildMockDbSet();
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(MockDbSetConnectedSystemObjects.Object);
+
+        // Clear existing MVO data (we want clean projections)
+        MetaverseObjectsData.Clear();
+        MockDbSetMetaverseObjects = MetaverseObjectsData.BuildMockDbSet();
+        MockDbSetMetaverseObjects.Setup(m => m.Add(It.IsAny<MetaverseObject>()))
+            .Callback<MetaverseObject>(mvo =>
+            {
+                if (mvo.Id == Guid.Empty) mvo.Id = Guid.NewGuid();
+                MetaverseObjectsData.Add(mvo);
+            });
+        MockDbSetMetaverseObjects.Setup(m => m.AddRange(It.IsAny<IEnumerable<MetaverseObject>>()))
+            .Callback<IEnumerable<MetaverseObject>>(mvos =>
+            {
+                foreach (var mvo in mvos)
+                {
+                    if (mvo.Id == Guid.Empty) mvo.Id = Guid.NewGuid();
+                    MetaverseObjectsData.Add(mvo);
+                }
+            });
+        MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
+
+        // Recreate Jim with updated mocks
+        Jim?.Dispose();
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+
+        // Set up sync rule: enable projection + add Manager reference attribute flow mapping
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+        importSyncRule.ProjectToMetaverse = true;
+
+        var mvUserType = MetaverseObjectTypesData.Single(q => q.Name == "User");
+        var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
+
+        // Manager reference mapping: CSO MANAGER -> MVO Manager
+        var managerMapping = new SyncRuleMapping
+        {
+            Id = 100,
+            SyncRule = importSyncRule,
+            TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.Manager),
+            TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.Manager
+        };
+        managerMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1000,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.MANAGER,
+            ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.MANAGER),
+        });
+        importSyncRule.AttributeFlowRules.Add(managerMapping);
+
+        // DisplayName mapping (for basic attribute flow verification)
+        var displayNameMapping = new SyncRuleMapping
+        {
+            Id = 101,
+            SyncRule = importSyncRule,
+            TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.DisplayName),
+            TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.DisplayName
+        };
+        displayNameMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1001,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
+            ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME),
+        });
+        importSyncRule.AttributeFlowRules.Add(displayNameMapping);
+
+        // Act: Run full sync
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null);
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q =>
+            q.ConnectedSystemId == connectedSystem!.Id &&
+            q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        await syncProcessor.PerformFullSyncAsync();
+
+        // Assert: Both CSOs should be projected to MVOs
+        Assert.That(csoA.MetaverseObject, Is.Not.Null, "CSO-A should be projected to an MVO.");
+        Assert.That(csoB.MetaverseObject, Is.Not.Null, "CSO-B should be projected to an MVO.");
+
+        // CSO-A's MVO should have the Manager reference pointing to CSO-B's MVO.
+        // This verifies cross-page reference resolution: CSO-A was on page 1 (GUID 11111111...)
+        // and CSO-B was on page 2 (GUID FFFFFFFF...). During page 1 processing, CSO-B had no MVO.
+        // The ResolveCrossPageReferencesAsync pass should have resolved this after all pages.
+        var csoAMvo = csoA.MetaverseObject;
+        var csoBMvo = csoB.MetaverseObject;
+        var managerValue = csoAMvo!.AttributeValues
+            .FirstOrDefault(av => av.AttributeId == (int)MockMetaverseAttributeName.Manager);
+        Assert.That(managerValue, Is.Not.Null,
+            "CSO-A's MVO should have a Manager reference attribute (resolved via cross-page reference resolution).");
+        Assert.That(managerValue!.ReferenceValue, Is.EqualTo(csoBMvo),
+            "The Manager reference should point to CSO-B's MVO.");
+
+        // Verify scalar attributes also flowed correctly (basic sanity check)
+        var csoADisplayName = csoAMvo.AttributeValues
+            .FirstOrDefault(av => av.AttributeId == (int)MockMetaverseAttributeName.DisplayName);
+        Assert.That(csoADisplayName?.StringValue, Is.EqualTo("The Employee"));
+
+        var csoBDisplayName = csoBMvo!.AttributeValues
+            .FirstOrDefault(av => av.AttributeId == (int)MockMetaverseAttributeName.DisplayName);
+        Assert.That(csoBDisplayName?.StringValue, Is.EqualTo("The Manager"));
+    }
+
+    #endregion
 }

@@ -404,6 +404,49 @@ internal static class LdapConnectorUtilities
         return long.Parse(stringValue);
     }
 
+    /// <summary>
+    /// Queries the rootDSE to detect directory type (Active Directory, Samba AD, or generic LDAP).
+    /// Used by schema discovery to apply directory-specific attribute overrides.
+    /// </summary>
+    internal static LdapConnectorRootDse GetBasicRootDseInformation(LdapConnection connection, ILogger logger)
+    {
+        var request = new SearchRequest { Scope = SearchScope.Base };
+        request.Attributes.AddRange(["supportedCapabilities", "vendorName"]);
+
+        var response = (SearchResponse)connection.SendRequest(request);
+
+        if (response?.Entries.Count == 0 || response == null)
+        {
+            logger.Warning("GetBasicRootDseInformation: Could not query rootDSE. Directory type detection unavailable.");
+            return new LdapConnectorRootDse();
+        }
+
+        var rootDseEntry = response.Entries[0];
+
+        var capabilities = GetEntryAttributeStringValues(rootDseEntry, "supportedCapabilities");
+        var isActiveDirectory = capabilities != null &&
+            (capabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_OID) ||
+             capabilities.Contains(LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_ADAM_OID));
+
+        var vendorName = GetEntryAttributeStringValue(rootDseEntry, "vendorName");
+
+        var isSambaAd = vendorName != null &&
+            vendorName.Contains("Samba", StringComparison.OrdinalIgnoreCase);
+        var supportsPaging = isActiveDirectory && !isSambaAd;
+
+        var rootDse = new LdapConnectorRootDse
+        {
+            IsActiveDirectory = isActiveDirectory,
+            VendorName = vendorName,
+            SupportsPaging = supportsPaging
+        };
+
+        logger.Debug("GetBasicRootDseInformation: IsActiveDirectory={IsAd}, VendorName={VendorName}",
+            rootDse.IsActiveDirectory, rootDse.VendorName ?? "(not set)");
+
+        return rootDse;
+    }
+
     internal static SearchResultEntry? GetSchemaEntry(LdapConnection connection, string schemaRootDn, string query)
     {
         var request = new SearchRequest(schemaRootDn, query, SearchScope.OneLevel);
@@ -416,6 +459,21 @@ internal static class LdapConnectorUtilities
         return $"{connectedSystemContainer.ExternalId}|{connectedSystemObjectType.Id}";
     }
 
+    /// <summary>
+    /// Determines whether an attribute's plurality should be overridden from multi-valued to single-valued
+    /// based on Active Directory SAM layer enforcement rules.
+    /// </summary>
+    /// <param name="attributeName">The LDAP attribute name (e.g., "description").</param>
+    /// <param name="objectTypeName">The structural object class name (e.g., "user", "group").</param>
+    /// <param name="isActiveDirectory">Whether the directory is Active Directory (AD-DS, AD-LDS, or Samba AD).</param>
+    /// <returns>True if the attribute should be treated as single-valued despite the LDAP schema declaring it as multi-valued.</returns>
+    internal static bool ShouldOverridePluralityToSingleValued(string attributeName, string objectTypeName, bool isActiveDirectory)
+    {
+        return isActiveDirectory &&
+               LdapConnectorConstants.SAM_ENFORCED_SINGLE_VALUED_ATTRIBUTES.Contains(attributeName) &&
+               LdapConnectorConstants.SAM_MANAGED_OBJECT_CLASSES.Contains(objectTypeName);
+    }
+
     internal static AttributeDataType GetLdapAttributeDataType(int omSyntax)
     {
         // map the directory omSyntax to an attribute data type
@@ -425,7 +483,7 @@ internal static class LdapConnectorUtilities
             1 or 10 => AttributeDataType.Boolean,
             2 => AttributeDataType.Number,  // Integer (32-bit)
             65 => AttributeDataType.LongNumber,  // Large Integer (64-bit) - accountExpires, pwdLastSet, lastLogon, etc.
-            3 or 4 => AttributeDataType.Binary, // 3 = Binary, 4 = OctetString (photo, objectSid, logonHours)
+            3 or 4 or 66 => AttributeDataType.Binary, // 3 = Binary, 4 = OctetString (photo, objectSid, logonHours), 66 = Object(Replica-Link) (nTSecurityDescriptor)
             6 or 18 or 19 or 20 or 22 or 27 or 64 => AttributeDataType.Text,
             23 or 24 => AttributeDataType.DateTime,
             127 => AttributeDataType.Reference,

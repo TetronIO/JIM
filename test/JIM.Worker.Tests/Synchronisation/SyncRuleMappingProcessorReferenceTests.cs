@@ -337,4 +337,162 @@ public class SyncRuleMappingProcessorReferenceTests
         Assert.That(addedMvoIds, Does.Contain(userMvo1.Id));
         Assert.That(addedMvoIds, Does.Contain(userMvo2.Id));
     }
+
+    [Test]
+    public void Process_ReferenceAttribute_WithUnresolvedReferences_SkipsRemovalLogicAsync()
+    {
+        // Arrange
+        // Simulate a group CSO with 3 member references:
+        // - 1 resolved (same page) with MetaverseObject populated
+        // - 2 unresolved (cross-page) with MetaverseObject = null
+        // The MVO already has 2 existing references (from a previous sync).
+        // Without the fix, the removal logic would incorrectly remove the 2 existing MVO
+        // references because they don't appear in the resolved CSO references.
+
+        var userMvo1 = new MetaverseObject { Id = Guid.NewGuid(), Type = _mvoUserType };
+        var userMvo2 = new MetaverseObject { Id = Guid.NewGuid(), Type = _mvoUserType };
+        var userMvo3 = new MetaverseObject { Id = Guid.NewGuid(), Type = _mvoUserType };
+
+        // User 1: resolved (same page)
+        var userCso1 = new ConnectedSystemObject
+            { Id = Guid.NewGuid(), Type = _userObjectType, TypeId = _userObjectType.Id, MetaverseObject = userMvo1 };
+        // User 2: unresolved (cross-page) — has ReferenceValue but MetaverseObject is null
+        var userCso2 = new ConnectedSystemObject
+            { Id = Guid.NewGuid(), Type = _userObjectType, TypeId = _userObjectType.Id, MetaverseObject = null };
+        // User 3: unresolved (cross-page) — has ReferenceValue but MetaverseObject is null
+        var userCso3 = new ConnectedSystemObject
+            { Id = Guid.NewGuid(), Type = _userObjectType, TypeId = _userObjectType.Id, MetaverseObject = null };
+
+        // Group MVO with 2 existing references (userMvo2 and userMvo3 from a previous sync)
+        var groupMvo = new MetaverseObject
+        {
+            Id = Guid.NewGuid(),
+            Type = _mvoGroupType,
+            AttributeValues = new List<MetaverseObjectAttributeValue>
+            {
+                new() { Id = Guid.NewGuid(), AttributeId = _staticMembersAttribute.Id, Attribute = _staticMembersAttribute, ReferenceValue = userMvo2 },
+                new() { Id = Guid.NewGuid(), AttributeId = _staticMembersAttribute.Id, Attribute = _staticMembersAttribute, ReferenceValue = userMvo3 }
+            }
+        };
+
+        var groupCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            Type = _groupObjectType,
+            TypeId = _groupObjectType.Id,
+            MetaverseObject = groupMvo
+        };
+
+        // Add member references: 1 resolved, 2 unresolved
+        groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), AttributeId = _memberAttribute.Id, Attribute = _memberAttribute,
+            ConnectedSystemObject = groupCso,
+            ReferenceValue = userCso1, ReferenceValueId = userCso1.Id
+        });
+        groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), AttributeId = _memberAttribute.Id, Attribute = _memberAttribute,
+            ConnectedSystemObject = groupCso,
+            ReferenceValue = userCso2, ReferenceValueId = userCso2.Id  // MetaverseObject is null
+        });
+        groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), AttributeId = _memberAttribute.Id, Attribute = _memberAttribute,
+            ConnectedSystemObject = groupCso,
+            ReferenceValue = userCso3, ReferenceValueId = userCso3.Id  // MetaverseObject is null
+        });
+
+        var syncRuleMapping = new SyncRuleMapping { Id = 1, TargetMetaverseAttribute = _staticMembersAttribute };
+        syncRuleMapping.Sources.Add(new SyncRuleMappingSource
+            { ConnectedSystemAttribute = _memberAttribute, ConnectedSystemAttributeId = _memberAttribute.Id });
+
+        var connectedSystemObjectTypes = new List<ConnectedSystemObjectType> { _userObjectType, _groupObjectType };
+
+        // Act
+        SyncRuleMappingProcessor.Process(groupCso, syncRuleMapping, connectedSystemObjectTypes);
+
+        // Assert
+        // The resolved reference (user1) should be added
+        Assert.That(groupMvo.PendingAttributeValueAdditions, Has.Count.EqualTo(1),
+            "Resolved reference should still be added");
+        Assert.That(groupMvo.PendingAttributeValueAdditions[0].ReferenceValue, Is.EqualTo(userMvo1));
+
+        // CRITICAL: The existing MVO references (user2, user3) should NOT be removed
+        // because some CSO references are unresolved (cross-page). Removal is deferred
+        // to the cross-page resolution pass.
+        Assert.That(groupMvo.PendingAttributeValueRemovals, Has.Count.EqualTo(0),
+            "Should NOT remove existing MVO references when unresolved cross-page references exist");
+    }
+
+    [Test]
+    public void Process_ReferenceAttribute_WithAllResolvedReferences_RemovesObsoleteReferencesAsync()
+    {
+        // Arrange
+        // All references are resolved. An existing MVO reference (user3) is no longer
+        // present in the CSO references, so it should be removed.
+
+        var userMvo1 = new MetaverseObject { Id = Guid.NewGuid(), Type = _mvoUserType };
+        var userMvo2 = new MetaverseObject { Id = Guid.NewGuid(), Type = _mvoUserType };
+        var userMvo3 = new MetaverseObject { Id = Guid.NewGuid(), Type = _mvoUserType }; // obsolete
+
+        var userCso1 = new ConnectedSystemObject
+            { Id = Guid.NewGuid(), Type = _userObjectType, TypeId = _userObjectType.Id, MetaverseObject = userMvo1 };
+        var userCso2 = new ConnectedSystemObject
+            { Id = Guid.NewGuid(), Type = _userObjectType, TypeId = _userObjectType.Id, MetaverseObject = userMvo2 };
+
+        // Group MVO with 3 existing references (user3 is now obsolete - not in CSO)
+        var groupMvo = new MetaverseObject
+        {
+            Id = Guid.NewGuid(),
+            Type = _mvoGroupType,
+            AttributeValues = new List<MetaverseObjectAttributeValue>
+            {
+                new() { Id = Guid.NewGuid(), AttributeId = _staticMembersAttribute.Id, Attribute = _staticMembersAttribute, ReferenceValue = userMvo1 },
+                new() { Id = Guid.NewGuid(), AttributeId = _staticMembersAttribute.Id, Attribute = _staticMembersAttribute, ReferenceValue = userMvo2 },
+                new() { Id = Guid.NewGuid(), AttributeId = _staticMembersAttribute.Id, Attribute = _staticMembersAttribute, ReferenceValue = userMvo3 }
+            }
+        };
+
+        var groupCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            Type = _groupObjectType,
+            TypeId = _groupObjectType.Id,
+            MetaverseObject = groupMvo
+        };
+
+        // Only user1 and user2 are in the CSO — user3 has been removed from the group
+        groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), AttributeId = _memberAttribute.Id, Attribute = _memberAttribute,
+            ConnectedSystemObject = groupCso,
+            ReferenceValue = userCso1, ReferenceValueId = userCso1.Id
+        });
+        groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), AttributeId = _memberAttribute.Id, Attribute = _memberAttribute,
+            ConnectedSystemObject = groupCso,
+            ReferenceValue = userCso2, ReferenceValueId = userCso2.Id
+        });
+
+        var syncRuleMapping = new SyncRuleMapping { Id = 1, TargetMetaverseAttribute = _staticMembersAttribute };
+        syncRuleMapping.Sources.Add(new SyncRuleMappingSource
+            { ConnectedSystemAttribute = _memberAttribute, ConnectedSystemAttributeId = _memberAttribute.Id });
+
+        var connectedSystemObjectTypes = new List<ConnectedSystemObjectType> { _userObjectType, _groupObjectType };
+
+        // Act
+        SyncRuleMappingProcessor.Process(groupCso, syncRuleMapping, connectedSystemObjectTypes);
+
+        // Assert
+        // No new additions (both references already exist on MVO)
+        Assert.That(groupMvo.PendingAttributeValueAdditions, Has.Count.EqualTo(0),
+            "No new references to add — both already exist on MVO");
+
+        // user3 should be removed (obsolete — not in CSO)
+        Assert.That(groupMvo.PendingAttributeValueRemovals, Has.Count.EqualTo(1),
+            "Obsolete MVO reference should be removed when all CSO references are resolved");
+        Assert.That(groupMvo.PendingAttributeValueRemovals[0].ReferenceValue, Is.EqualTo(userMvo3));
+    }
 }

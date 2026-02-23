@@ -1,4 +1,4 @@
-namespace JIM.Application.Expressions;
+namespace JIM.Models.Expressions;
 
 /// <summary>
 /// Result of testing an expression with sample data.

@@ -736,7 +736,6 @@ $groupImportMappings = @(
     @{ LdapAttr = "mail"; MvAttr = "Email" }
     @{ LdapAttr = "member"; MvAttr = "Static Members" }
     @{ LdapAttr = "managedBy"; MvAttr = "Managed By" }
-    @{ LdapAttr = "company"; MvAttr = "Company" }
 )
 
 $groupExportMappings = @(
@@ -748,7 +747,6 @@ $groupExportMappings = @(
     @{ MvAttr = "Email"; LdapAttr = "mail" }
     @{ MvAttr = "Static Members"; LdapAttr = "member" }
     @{ MvAttr = "Managed By"; LdapAttr = "managedBy" }
-    @{ MvAttr = "Company"; LdapAttr = "company" }
 )
 
 # Create group import mappings (Source -> MV)
@@ -769,7 +767,9 @@ foreach ($mapping in $groupImportMappings) {
                     -SourceConnectedSystemAttributeId $ldapAttr.id | Out-Null
                 $groupImportMappingsCreated++
             }
-            catch { }
+            catch {
+                Write-Host "    ⚠ Failed to create group import mapping ($($mapping.LdapAttr) → $($mapping.MvAttr)): $_" -ForegroundColor Yellow
+            }
         }
     }
 }
@@ -841,7 +841,9 @@ foreach ($mapping in $groupExportMappings) {
                     -SourceMetaverseAttributeId $mvAttr.id | Out-Null
                 $groupExportMappingsCreated++
             }
-            catch { }
+            catch {
+                Write-Host "    ⚠ Failed to create group export mapping ($($mapping.MvAttr) → $($mapping.LdapAttr)): $_" -ForegroundColor Yellow
+            }
         }
     }
 }
@@ -1017,20 +1019,6 @@ if ($mvGroupTypeCurrent) {
 }
 else {
     Write-Host "  ⚠ Could not find Group metaverse object type" -ForegroundColor Yellow
-}
-
-# ============================================================================
-# Step 14: Restart Worker
-# ============================================================================
-Write-TestStep "Step 14" "Restarting JIM.Worker to reload schema"
-
-docker restart jim.worker > $null
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "  ✓ JIM.Worker restarted" -ForegroundColor Green
-    Start-Sleep -Seconds 3
-}
-else {
-    Write-Host "  ⚠ Failed to restart JIM.Worker" -ForegroundColor Yellow
 }
 
 # ============================================================================

@@ -16,11 +16,14 @@ else
                     Margin="Margin.Dense" />
             </MudItem>
             <MudItem xs="12" sm="6" md="3">
-                <MudSelect T="ValueChangeType ?" @bind-Value="_filterChangeType" Label="Change type" Variant="Variant.Outlined"
+                <MudSelect T="string" @bind-Value="_filterChangeType" Label="Change type" Variant="Variant.Outlined"
                     Dense="true" Margin="Margin.Dense">
-                    <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)null)">All Changes</MudSelectItem>
-                    <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Add)">Add</MudSelectItem>
-                    <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Remove)">Remove</MudSelectItem>
+                    <MudSelectItem T="string" Value="@((string)null!)">All Changes</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Set")">Set</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Updated")">Updated</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Removed")">Removed</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Add")">Add</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Remove")">Remove</MudSelectItem>
                 </MudSelect>
             </MudItem>
         </MudGrid>
@@ -59,7 +62,7 @@ else
                                         @foreach (var change in GetVisibleDisplayChanges(changeGroup))
                                         {
                                             <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mb-1">
-                                                <MudText Typo="Typo.body2" Class="jim-text-code" Style="min-width: 120px;">
+                                                <MudText Class="mud-text-secondary" Style="min-width: 120px;">
                                                     @change.AttributeName
                                                 </MudText>
                                                 <MudChip T="string" Variant="Variant.Text"
@@ -73,20 +76,20 @@ else
                                                     {
                                                         @if (change.OldReferenceValue != null || change.NewReferenceValue != null)
                                                         {
-                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;">
+                                                            <MudText Class="mud-text-secondary" Style="display: inline;">
                                                                 @(change.OldReferenceValue?.DisplayName ?? "(none)")</MudText>
-                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;"> →
+                                                            <MudText Class="mud-text-secondary" Style="display: inline;"> →
                                                             </MudText>
-                                                            <MudText Typo="Typo.body2" Style="display: inline; font-weight: 600;">
+                                                            <MudText Style="display: inline;">
                                                                 @(change.NewReferenceValue?.DisplayName ?? "(none)")</MudText>
                                                         }
                                                         else
                                                         {
-                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;">
+                                                            <MudText Class="mud-text-secondary" Style="display: inline;">
                                                                 @change.OldValue</MudText>
-                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: inline;"> →
+                                                            <MudText Class="mud-text-secondary" Style="display: inline;"> →
                                                             </MudText>
-                                                            <MudText Typo="Typo.body2" Style="display: inline; font-weight: 600;">
+                                                            <MudText Style="display: inline;">
                                                                 @change.NewValue</MudText>
                                                         }
                                                     }
@@ -95,12 +98,12 @@ else
                                                         @* Set/Add values get bold emphasis, Removed values get de-emphasised *@
                                                         @if (change.DisplayChangeType == "Removed" || change.DisplayChangeType == "Remove")
                                                         {
-                                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@GetDisplayValue(change)
+                                                            <MudText Class="mud-text-secondary">@GetDisplayValue(change)
                                                             </MudText>
                                                         }
                                                         else
                                                         {
-                                                            <MudText Typo="Typo.body2" Style="font-weight: 600;">@GetDisplayValue(change)
+                                                            <MudText>@GetDisplayValue(change)
                                                             </MudText>
                                                         }
                                                     }
@@ -119,7 +122,7 @@ else
                                 }
                                 else if (changeGroup.ChangeType == ObjectChangeType.Deleted)
                                 {
-                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                    <MudText Class="mud-text-secondary">
                                         Object was deleted. Final attribute values were not captured.
                                     </MudText>
                                 }
@@ -197,7 +200,7 @@ else
                         {
                             <MudItem xs="12" sm="6" md="4">
                                 <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                                    <MudText Class="jim-text-code" Style="min-width: 120px;">
+                                    <MudText Class="mud-text-secondary" Style="min-width: 120px;">
                                         @summary.AttributeName
                                     </MudText>
                                     @* SVA terminology: Set, Updated, Removed *@
@@ -259,13 +262,14 @@ else
                     </MudSelect>
                 </div>
                 <div style="width: 150px;">
-                    <MudSelect T="ValueChangeType ?" @bind-Value="_modalFilterChangeType" Label="Change type"
+                    <MudSelect T="string" @bind-Value="_modalFilterChangeType" Label="Change type"
                         Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense">
-                        <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)null)">All</MudSelectItem>
-                        <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Add)">Add
-                        </MudSelectItem>
-                        <MudSelectItem T="ValueChangeType?" Value="@((ValueChangeType?)ValueChangeType.Remove)">Remove
-                        </MudSelectItem>
+                        <MudSelectItem T="string" Value="@((string)null!)">All</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Set")">Set</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Updated")">Updated</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Removed")">Removed</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Add")">Add</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Remove")">Remove</MudSelectItem>
                     </MudSelect>
                 </div>
             </div>
@@ -286,7 +290,7 @@ else
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Attribute">
-                        <MudText Class="jim-text-code">@context.AttributeName</MudText>
+                        <MudText Class="mud-text-secondary">@context.AttributeName</MudText>
                     </MudTd>
                     <MudTd DataLabel="Change">
                         <MudChip T="string" Variant="Variant.Text" Color="@GetDisplayChangeTypeColor(context)">
@@ -312,7 +316,7 @@ else
                                     <MudText Class="mud-text-secondary">→</MudText>
                                     @if (context.NewReferenceValue != null)
                                     {
-                                        <MudLink Href="@context.NewReferenceValue.Href" Style="font-weight: 600;">
+                                        <MudLink Href="@context.NewReferenceValue.Href">
                                             @context.NewReferenceValue.DisplayName</MudLink>
                                     }
                                     else
@@ -327,7 +331,7 @@ else
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                     <MudText Class="mud-text-secondary">@context.OldValue</MudText>
                                     <MudText Class="mud-text-secondary">→</MudText>
-                                    <MudText Style="font-weight: 600;">@context.NewValue</MudText>
+                                    <MudText>@context.NewValue</MudText>
                                 </MudStack>
                             }
                         }
@@ -345,7 +349,7 @@ else
                                 }
                                 else
                                 {
-                                    <MudLink Href="@context.ReferenceValue.Href" Style="font-weight: 600;">
+                                    <MudLink Href="@context.ReferenceValue.Href">
                                         @context.ReferenceValue.DisplayName
                                     </MudLink>
                                 }
@@ -364,7 +368,7 @@ else
                             }
                             else
                             {
-                                <MudText Style="font-weight: 600;">@context.DisplayValue</MudText>
+                                <MudText>@context.DisplayValue</MudText>
                             }
                         }
                     </MudTd>
@@ -397,11 +401,14 @@ else
 
     .cursor-pointer {
         cursor: pointer;
-        transition: box-shadow 0.2s;
     }
 
     .cursor-pointer:hover {
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        background: linear-gradient(
+            to right,
+            var(--mud-palette-surface) 0%,
+            var(--jim-inner-surface, var(--mud-palette-background-grey)) 15%
+        );
     }
 </style>
 
@@ -413,14 +420,14 @@ else
     public List<ChangeGroup> Changes { get; set; } = new();
 
     private string _searchText = string.Empty;
-    private ValueChangeType? _filterChangeType = null;
+    private string? _filterChangeType = null;
     private bool _detailsDialogVisible = false;
     private ChangeGroup? _selectedChange = null;
 
     // Modal filter state
     private string _modalSearchText = string.Empty;
     private string? _modalFilterAttribute = null;
-    private ValueChangeType? _modalFilterChangeType = null;
+    private string? _modalFilterChangeType = null;
 
     private DialogOptions _dialogOptions = new DialogOptions
     {
@@ -650,23 +657,12 @@ else
             }).Where(cg => cg.AttributeChanges.Any() || cg.ChangeType == ObjectChangeType.Deleted);
         }
 
-        // Apply change type filter
-        if (_filterChangeType.HasValue)
+        // Apply change type filter using display terms (Set, Updated, Removed, Add, Remove)
+        if (!string.IsNullOrEmpty(_filterChangeType))
         {
-            filtered = filtered.Select(cg => new ChangeGroup
-            {
-                ChangeType = cg.ChangeType,
-                ChangeTime = cg.ChangeTime,
-                ChangeInitiatorType = cg.ChangeInitiatorType,
-                ChangeInitiatorName = cg.ChangeInitiatorName,
-                ChangeInitiatorId = cg.ChangeInitiatorId,
-                SyncRuleId = cg.SyncRuleId,
-                SyncRuleName = cg.SyncRuleName,
-                ActivityRunProfileExecutionItemId = cg.ActivityRunProfileExecutionItemId,
-                AttributeChanges = cg.AttributeChanges
-            .Where(ac => ac.ChangeType == _filterChangeType.Value)
-            .ToList()
-            }).Where(cg => cg.AttributeChanges.Any() || cg.ChangeType == ObjectChangeType.Deleted);
+            filtered = filtered.Where(cg =>
+                cg.ChangeType == ObjectChangeType.Deleted ||
+                GetDisplayChanges(cg).Any(dc => dc.DisplayChangeType == _filterChangeType));
         }
 
         return filtered.OrderByDescending(cg => cg.ChangeTime);
@@ -857,12 +853,10 @@ else
             displayChanges = displayChanges.Where(c => c.AttributeName == _modalFilterAttribute);
         }
 
-        // Apply change type filter (Update matches Add filter since it represents a value being set)
-        if (_modalFilterChangeType.HasValue)
+        // Apply change type filter using display terms (Set, Updated, Removed, Add, Remove)
+        if (!string.IsNullOrEmpty(_modalFilterChangeType))
         {
-            displayChanges = displayChanges.Where(c =>
-            c.UnderlyingChangeType == _modalFilterChangeType.Value ||
-            (c.IsUpdate && _modalFilterChangeType.Value == ValueChangeType.Add));
+            displayChanges = displayChanges.Where(c => c.DisplayChangeType == _modalFilterChangeType);
         }
 
         return displayChanges.OrderBy(c => c.AttributeName).ThenBy(c => c.DisplayChangeType);

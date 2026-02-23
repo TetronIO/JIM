@@ -14,6 +14,7 @@ using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using JIM.Application.Utilities;
+using Microsoft.Extensions.Caching.Memory;
 using Serilog;
 
 namespace JIM.Application.Servers;
@@ -743,6 +744,96 @@ public class ConnectedSystemServer
             await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage);
 
             // Reset status so deletion can be retried
+            connectedSystem.Status = ConnectedSystemStatus.Active;
+            await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+
+            return ConnectedSystemDeletionResult.Failed($"Failed to delete Connected System: {errorMessage}");
+        }
+    }
+
+    /// <summary>
+    /// Deletes a Connected System (initiated by API key).
+    /// </summary>
+    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, ApiKey initiatedByApiKey, bool deleteChangeHistory = false)
+    {
+        Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by API key {ApiKeyName}, deleteChangeHistory={DeleteHistory}",
+            connectedSystemId, initiatedByApiKey.Name, deleteChangeHistory);
+
+        // Get the Connected System
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+        {
+            Log.Warning("DeleteAsync: Connected System {Id} not found", connectedSystemId);
+            return ConnectedSystemDeletionResult.Failed($"Connected System with ID {connectedSystemId} not found.");
+        }
+
+        // Check if already being deleted
+        if (connectedSystem.Status == ConnectedSystemStatus.Deleting)
+        {
+            Log.Warning("DeleteAsync: Connected System {Id} is already being deleted", connectedSystemId);
+            return ConnectedSystemDeletionResult.Failed("Connected System is already being deleted.");
+        }
+
+        // Set status to Deleting to block new operations
+        connectedSystem.Status = ConnectedSystemStatus.Deleting;
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        Log.Information("DeleteAsync: Set Connected System {Id} status to Deleting", connectedSystemId);
+
+        // Check for running sync operations
+        var runningSyncTask = await Application.Repository.ConnectedSystems.GetRunningSyncTaskAsync(connectedSystemId);
+        if (runningSyncTask != null)
+        {
+            Log.Information("DeleteAsync: Sync task {TaskId} is running for Connected System {CsId}. Queuing deletion.",
+                runningSyncTask.Id, connectedSystemId);
+
+            var deleteTask = DeleteConnectedSystemWorkerTask.ForApiKey(connectedSystemId, initiatedByApiKey.Id, initiatedByApiKey.Name, evaluateMvoDeletionRules: true, deleteChangeHistory);
+            _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
+
+            return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id);
+        }
+
+        // Get CSO count to determine sync vs async deletion
+        var csoCount = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId);
+
+        if (csoCount > BackgroundDeletionThreshold)
+        {
+            Log.Information("DeleteAsync: Connected System {Id} has {Count} CSOs (>{Threshold}). Queueing as background job.",
+                connectedSystemId, csoCount, BackgroundDeletionThreshold);
+
+            var deleteTask = DeleteConnectedSystemWorkerTask.ForApiKey(connectedSystemId, initiatedByApiKey.Id, initiatedByApiKey.Name, evaluateMvoDeletionRules: true, deleteChangeHistory);
+            _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
+
+            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id);
+        }
+
+        // Small system - execute synchronously
+        Log.Information("DeleteAsync: Connected System {Id} has {Count} CSOs (<={Threshold}). Executing synchronously.",
+            connectedSystemId, csoCount, BackgroundDeletionThreshold);
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        try
+        {
+            await Application.Metaverse.MarkOrphanedMvosForDeletionAsync(connectedSystemId);
+            await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId, deleteChangeHistory);
+            await Application.Activities.CompleteActivityAsync(activity);
+
+            Log.Information("DeleteAsync: Connected System {Id} deleted successfully", connectedSystemId);
+            return ConnectedSystemDeletionResult.CompletedImmediately(activity.Id);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "DeleteAsync: Failed to delete Connected System {Id}", connectedSystemId);
+
+            var errorMessage = GetFullExceptionMessage(ex);
+            await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage);
+
             connectedSystem.Status = ConnectedSystemStatus.Active;
             await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
@@ -2436,11 +2527,19 @@ public class ConnectedSystemServer
     /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>
     /// <param name="page">Which page to return results for, i.e. 1-n.</param>
     /// <param name="pageSize">How many Connected System Objects to return in this page of result. By default it's 100.</param>
-    /// <param name="returnAttributes">Controls whether ConnectedSystemObject.AttributeValues[n].Attribute is populated. By default, it isn't for performance reasons.</param>
     /// <exception cref="ArgumentOutOfRangeException"></exception>
-    public async Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page = 1, int pageSize = 100, bool returnAttributes = false)
+    public async Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page = 1, int pageSize = 100)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, returnAttributes);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize);
+    }
+
+    /// <summary>
+    /// Batch loads Connected System Objects by their IDs with navigation properties needed
+    /// for cross-page reference resolution during sync.
+    /// </summary>
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForReferenceResolutionAsync(IList<Guid> csoIds)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsForReferenceResolutionAsync(csoIds);
     }
 
     /// <summary>
@@ -2495,30 +2594,176 @@ public class ConnectedSystemServer
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
+        var cacheKey = BuildCsoCacheKey(connectedSystemId, connectedSystemAttributeId, attributeValue.ToLowerInvariant());
+        return await GetCsoWithCacheLookupAsync(connectedSystemId, cacheKey, () =>
+            Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue));
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
+        var cacheKey = BuildCsoCacheKey(connectedSystemId, connectedSystemAttributeId, attributeValue.ToString());
+        return await GetCsoWithCacheLookupAsync(connectedSystemId, cacheKey, () =>
+            Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue));
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, long attributeValue)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
+        var cacheKey = BuildCsoCacheKey(connectedSystemId, connectedSystemAttributeId, attributeValue.ToString());
+        return await GetCsoWithCacheLookupAsync(connectedSystemId, cacheKey, () =>
+            Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue));
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue)
     {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue);
+        var cacheKey = BuildCsoCacheKey(connectedSystemId, connectedSystemAttributeId, attributeValue.ToString().ToLowerInvariant());
+        return await GetCsoWithCacheLookupAsync(connectedSystemId, cacheKey, () =>
+            Application.Repository.ConnectedSystems.GetConnectedSystemObjectByAttributeAsync(connectedSystemId, connectedSystemAttributeId, attributeValue));
     }
+
+    #region CSO Lookup Cache
+
+    /// <summary>
+    /// Builds the cache key for a CSO external ID lookup.
+    /// Format: "cso:{connectedSystemId}:{attributeId}:{lowerExternalIdValue}"
+    /// </summary>
+    public static string BuildCsoCacheKey(int connectedSystemId, int attributeId, string externalIdValue)
+    {
+        return $"cso:{connectedSystemId}:{attributeId}:{externalIdValue}";
+    }
+
+    /// <summary>
+    /// Looks up a CSO using the cache index. On cache hit, loads the entity by PK.
+    /// On cache miss, falls back to the provided DB query and populates the cache.
+    /// </summary>
+    private async Task<ConnectedSystemObject?> GetCsoWithCacheLookupAsync(int connectedSystemId, string cacheKey, Func<Task<ConnectedSystemObject?>> dbFallback)
+    {
+        var cache = Application.Cache;
+        if (cache == null)
+        {
+            // No cache available (e.g., JIM.Web) — fall back to direct DB query
+            return await dbFallback();
+        }
+
+        // Check cache for CSO GUID
+        if (cache.TryGetValue(cacheKey, out Guid cachedCsoId))
+        {
+            Log.Verbose("GetCsoWithCacheLookupAsync: Cache hit for key '{CacheKey}' → CSO {CsoId}", cacheKey, cachedCsoId);
+
+            // Cache hit — load entity by PK (fast indexed lookup)
+            var cso = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, cachedCsoId);
+            if (cso != null)
+                return cso;
+
+            // CSO was deleted since cached — evict stale entry and fall through to DB query
+            cache.Remove(cacheKey);
+            Log.Debug("GetCsoWithCacheLookupAsync: Cache hit for key '{CacheKey}' but CSO {CsoId} no longer exists. Evicted stale entry.", cacheKey, cachedCsoId);
+        }
+        else
+        {
+            Log.Verbose("GetCsoWithCacheLookupAsync: Cache miss for key '{CacheKey}'. Falling back to DB query.", cacheKey);
+        }
+
+        // Cache miss — query DB by attribute value
+        var result = await dbFallback();
+        if (result != null)
+        {
+            // Populate cache with the result
+            cache.Set(cacheKey, result.Id);
+            Log.Verbose("GetCsoWithCacheLookupAsync: Auto-populated cache for key '{CacheKey}' → CSO {CsoId}", cacheKey, result.Id);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Warms the CSO lookup cache for a connected system by bulk-loading all external ID → GUID mappings.
+    /// Should be called at Worker startup for each connected system.
+    /// </summary>
+    public async Task WarmCsoCacheAsync(int connectedSystemId, string? connectedSystemName = null)
+    {
+        var cache = Application.Cache;
+        if (cache == null) return;
+
+        var csLabel = connectedSystemName != null
+            ? $"{connectedSystemName} ({connectedSystemId})"
+            : connectedSystemId.ToString();
+
+        Log.Debug("WarmCsoCacheAsync: Starting cache warm for connected system {ConnectedSystem}", csLabel);
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var mappings = await Application.Repository.ConnectedSystems.GetAllCsoExternalIdMappingsAsync(connectedSystemId);
+
+        var total = mappings.Count;
+        var processed = 0;
+        var lastReportedPercentage = 0;
+
+        foreach (var mapping in mappings)
+        {
+            cache.Set(mapping.Key, mapping.Value);
+            processed++;
+
+            // Report progress at every 10% increment
+            if (total > 0)
+            {
+                var percentage = processed * 100 / total;
+                if (percentage >= lastReportedPercentage + 10)
+                {
+                    lastReportedPercentage = percentage / 10 * 10; // Round down to nearest 10
+                    Log.Verbose("WarmCsoCacheAsync: Connected system {ConnectedSystem} cache warm progress: {Percentage}% ({Processed}/{Total})",
+                        csLabel, lastReportedPercentage, processed, total);
+                }
+            }
+        }
+
+        stopwatch.Stop();
+        Log.Debug("WarmCsoCacheAsync: Completed cache warm for connected system {ConnectedSystem}. Loaded {Count} mappings in {ElapsedMs}ms",
+            csLabel, total, stopwatch.ElapsedMilliseconds);
+    }
+
+    /// <summary>
+    /// Adds a CSO to the lookup cache after it has been created and persisted.
+    /// </summary>
+    public void AddCsoToCache(int connectedSystemId, int attributeId, string externalIdValue, Guid csoId)
+    {
+        var cache = Application.Cache;
+        if (cache == null) return;
+
+        var cacheKey = BuildCsoCacheKey(connectedSystemId, attributeId, externalIdValue.ToLowerInvariant());
+        cache.Set(cacheKey, csoId);
+        Log.Verbose("AddCsoToCache: Added cache entry '{CacheKey}' → CSO {CsoId}", cacheKey, csoId);
+    }
+
+    /// <summary>
+    /// Evicts a CSO from the lookup cache when it has been deleted.
+    /// </summary>
+    public void EvictCsoFromCache(int connectedSystemId, int attributeId, string externalIdValue)
+    {
+        var cache = Application.Cache;
+        if (cache == null) return;
+
+        var cacheKey = BuildCsoCacheKey(connectedSystemId, attributeId, externalIdValue.ToLowerInvariant());
+        cache.Remove(cacheKey);
+        Log.Verbose("EvictCsoFromCache: Evicted cache entry '{CacheKey}'", cacheKey);
+    }
+
+    #endregion
 
     /// <summary>
     /// Gets a Connected System Object by its secondary external ID attribute value.
     /// Used to find PendingProvisioning CSOs during import reconciliation.
+    /// Routes through the CSO lookup cache using the secondary external ID attribute ID as the cache key component.
     /// </summary>
-    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue)
+    public async Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(int connectedSystemId, int objectTypeId, string secondaryExternalIdValue, int? secondaryExternalIdAttributeId = null)
     {
+        // If we have the attribute ID, route through the cache for O(1) lookup
+        if (secondaryExternalIdAttributeId.HasValue)
+        {
+            var cacheKey = BuildCsoCacheKey(connectedSystemId, secondaryExternalIdAttributeId.Value, secondaryExternalIdValue.ToLowerInvariant());
+            return await GetCsoWithCacheLookupAsync(connectedSystemId, cacheKey, () =>
+                Application.Repository.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(connectedSystemId, objectTypeId, secondaryExternalIdValue));
+        }
+
+        // No attribute ID available — fall back to direct DB query
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(connectedSystemId, objectTypeId, secondaryExternalIdValue);
     }
 
@@ -3302,6 +3547,31 @@ public class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
+    /// <summary>
+    /// Deletes a connected system run profile (initiated by API key).
+    /// </summary>
+    public async Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, ApiKey initiatedByApiKey)
+    {
+        if (connectedSystemRunProfile == null)
+            return;
+
+        // Get connected system name for activity context
+        var connectedSystem = await GetConnectedSystemAsync(connectedSystemRunProfile.ConnectedSystemId);
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystemRunProfile.Name,
+            TargetContext = connectedSystem?.Name,
+            ConnectedSystemRunType = connectedSystemRunProfile.RunType,
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            TargetOperationType = ActivityTargetOperationType.Delete,
+            ConnectedSystemId = connectedSystemRunProfile.ConnectedSystemId
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        await Application.Repository.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
     public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject? initiatedBy)
     {
         if (connectedSystemRunProfile == null)
@@ -3322,6 +3592,32 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         AuditHelper.SetUpdated(connectedSystemRunProfile, initiatedBy);
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Updates a connected system run profile (initiated by API key).
+    /// </summary>
+    public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, ApiKey initiatedByApiKey)
+    {
+        if (connectedSystemRunProfile == null)
+            throw new ArgumentNullException(nameof(connectedSystemRunProfile));
+
+        // Get connected system name for activity context
+        var connectedSystem = await GetConnectedSystemAsync(connectedSystemRunProfile.ConnectedSystemId);
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystemRunProfile.Name,
+            TargetContext = connectedSystem?.Name,
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConnectedSystemRunProfileId = connectedSystemRunProfile.Id,
+            ConnectedSystemId = connectedSystemRunProfile.ConnectedSystemId
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        AuditHelper.SetUpdated(connectedSystemRunProfile, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -3441,6 +3737,16 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Deletes pending exports by their associated Connected System Object IDs using raw SQL.
+    /// Avoids loading PE entities into the change tracker, preventing identity conflicts
+    /// when the change tracker has been cleared (e.g. during cross-page reference resolution).
+    /// </summary>
+    public async Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        return await Application.Repository.ConnectedSystems.DeletePendingExportsByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
+    }
+
+    /// <summary>
     /// Updates multiple Pending Export objects in a single batch operation.
     /// Used to efficiently update pending exports during sync.
     /// </summary>
@@ -3490,6 +3796,11 @@ public class ConnectedSystemServer
     public async Task<PendingExport?> GetPendingExportForObjectAsync(Guid connectedSystemObjectId)
     {
         return await Application.Repository.ConnectedSystems.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
+    }
+
+    public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsForObjectsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportsByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
     }
 
     /// <summary>
@@ -3698,6 +4009,27 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
+
+    /// <summary>
+    /// Deletes a sync rule (initiated by API key).
+    /// </summary>
+    public async Task DeleteSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey)
+    {
+        // Get connected system name for activity context
+        var connectedSystem = syncRule.ConnectedSystem ??
+            (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(syncRule.ConnectedSystemId) : null);
+
+        var activity = new Activity
+        {
+            TargetName = syncRule.Name,
+            TargetContext = connectedSystem?.Name,
+            TargetType = ActivityTargetType.SyncRule,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
     #endregion
 
     #region Object Matching Rules
@@ -3791,6 +4123,24 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Updates an existing object matching rule (initiated by API key).
+    /// </summary>
+    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
+    {
+        var activity = new Activity
+        {
+            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetContext = await GetObjectMatchingRuleContextAsync(rule),
+            TargetType = ActivityTargetType.ObjectMatchingRule,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        AuditHelper.SetUpdated(rule, initiatedByApiKey);
+        await Application.Repository.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
     /// Deletes an object matching rule and its sources.
     /// </summary>
     public async Task DeleteObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
@@ -3803,6 +4153,23 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Delete
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        await Application.Repository.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Deletes an object matching rule and its sources (initiated by API key).
+    /// </summary>
+    public async Task DeleteObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
+    {
+        var activity = new Activity
+        {
+            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetContext = await GetObjectMatchingRuleContextAsync(rule),
+            TargetType = ActivityTargetType.ObjectMatchingRule,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }

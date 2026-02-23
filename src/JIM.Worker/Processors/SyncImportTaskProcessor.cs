@@ -27,6 +27,12 @@ public class SyncImportTaskProcessor
     private readonly List<ActivityRunProfileExecutionItem> _activityRunProfileExecutionItems;
     private readonly CancellationTokenSource _cancellationTokenSource;
 
+    /// <summary>
+    /// When true, the connected system has no existing CSOs, so all imported objects are known to be new.
+    /// This eliminates N unnecessary DB round-trips during first-ever imports.
+    /// </summary>
+    private bool _csIsEmpty;
+
     public SyncImportTaskProcessor(
         JimApplication jimApplication,
         IConnector connector,
@@ -62,6 +68,14 @@ public class SyncImportTaskProcessor
 
         if (_connectedSystem.ObjectTypes == null)
             throw new InvalidDataException("PerformFullImportAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
+
+        // Check if the connected system has any existing CSOs. If it's empty (first-ever import),
+        // we can skip all FindMatchingCso lookups since every object is guaranteed to be new.
+        // This eliminates N unnecessary DB round-trips for initial imports.
+        var csoCountAtStart = await _jim.ConnectedSystems.GetConnectedSystemObjectCountAsync(_connectedSystem.Id);
+        _csIsEmpty = csoCountAtStart == 0;
+        if (_csIsEmpty)
+            Log.Information("PerformFullImportAsync: Connected system {ConnectedSystemId} has no existing CSOs. Skipping CSO lookups for this import.", _connectedSystem.Id);
 
         // we keep track of all processed CSOs here, so we can bulk-persist later, when all waves of CSO changes are prepared
         var connectedSystemObjectsToBeCreated = new List<ConnectedSystemObject>();
@@ -190,10 +204,7 @@ public class SyncImportTaskProcessor
                 totalObjectsImported = result.ImportObjects.Count;
                 connectorSpan.SetTag("objectCount", totalObjectsImported);
 
-                // Update progress - for file-based imports we know the total after reading the file
-                _activity.ObjectsToProcess = totalObjectsImported;
-                _activity.ObjectsProcessed = 0;
-                await _jim.Activities.UpdateActivityMessageAsync(_activity, $"Processing {totalObjectsImported} objects");
+                // Progress is now initialised inside ProcessImportObjectsAsync
 
                 // todo: simplify externalIdsImported. objects are unnecessarily complex
                 // add the external ids from the results to our external id collection for later deletion calculation
@@ -267,10 +278,89 @@ public class SyncImportTaskProcessor
             }
 
             await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activityRunProfileExecutionItems);
+
+            // Add newly created CSOs to the lookup cache so subsequent imports (delta or full) can find them
+            foreach (var newCso in connectedSystemObjectsToBeCreated)
+            {
+                var extIdValue = newCso.ExternalIdAttributeValue;
+                if (extIdValue?.StringValue != null)
+                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.StringValue, newCso.Id);
+                else if (extIdValue?.IntValue != null)
+                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), newCso.Id);
+                else if (extIdValue?.LongValue != null)
+                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), newCso.Id);
+                else if (extIdValue?.GuidValue != null)
+                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), newCso.Id);
+            }
+
             _activity.ObjectsProcessed = connectedSystemObjectsToBeCreated.Count;
             await _jim.Activities.UpdateActivityAsync(_activity);
 
+            // Capture old external ID values BEFORE the update mutates AttributeValues,
+            // so we can evict stale cache entries if external IDs changed during import.
+            var oldExternalIds = new Dictionary<Guid, (string? primaryIdValue, string? secondaryIdValue)>();
+            foreach (var cso in connectedSystemObjectsToBeUpdated)
+            {
+                var oldPrimaryValue = cso.ExternalIdAttributeValue;
+                var oldPrimaryId = oldPrimaryValue?.StringValue
+                    ?? oldPrimaryValue?.IntValue?.ToString()
+                    ?? oldPrimaryValue?.LongValue?.ToString()
+                    ?? oldPrimaryValue?.GuidValue?.ToString();
+
+                string? oldSecondaryId = null;
+                if (cso.SecondaryExternalIdAttributeId.HasValue)
+                {
+                    var oldSecondaryValue = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
+                    oldSecondaryId = oldSecondaryValue?.StringValue;
+                }
+
+                oldExternalIds[cso.Id] = (oldPrimaryId, oldSecondaryId);
+            }
+
             await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activityRunProfileExecutionItems);
+
+            // Update cache for CSOs that were updated during import.
+            // For PendingProvisioning → Normal transitions: the confirming import has assigned a primary
+            // external ID, so evict the old secondary-keyed cache entry and add a primary-keyed one.
+            // For Normal CSOs: refresh the cache with the current primary external ID.
+            // If any external ID changed (e.g. DN rename), evict the stale cache entry.
+            foreach (var updatedCso in connectedSystemObjectsToBeUpdated)
+            {
+                var extIdValue = updatedCso.ExternalIdAttributeValue;
+                if (extIdValue == null)
+                    continue;
+
+                var newPrimaryId = extIdValue.StringValue
+                    ?? extIdValue.IntValue?.ToString()
+                    ?? extIdValue.LongValue?.ToString()
+                    ?? extIdValue.GuidValue?.ToString();
+
+                oldExternalIds.TryGetValue(updatedCso.Id, out var oldIds);
+
+                // Evict old primary cache entry if primary external ID changed
+                if (oldIds.primaryIdValue != null && newPrimaryId != null
+                    && !oldIds.primaryIdValue.Equals(newPrimaryId, StringComparison.OrdinalIgnoreCase))
+                {
+                    _jim.ConnectedSystems.EvictCsoFromCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, oldIds.primaryIdValue);
+                }
+
+                // Evict old secondary cache entry if this CSO has a secondary external ID
+                if (updatedCso.SecondaryExternalIdAttributeId.HasValue && oldIds.secondaryIdValue != null)
+                {
+                    _jim.ConnectedSystems.EvictCsoFromCache(_connectedSystem.Id, updatedCso.SecondaryExternalIdAttributeId.Value, oldIds.secondaryIdValue);
+                }
+
+                // Add/refresh primary external ID cache entry
+                if (extIdValue.StringValue != null)
+                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.StringValue, updatedCso.Id);
+                else if (extIdValue.IntValue != null)
+                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), updatedCso.Id);
+                else if (extIdValue.LongValue != null)
+                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), updatedCso.Id);
+                else if (extIdValue.GuidValue != null)
+                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), updatedCso.Id);
+            }
+
             _activity.ObjectsProcessed = totalChanges;
             await _jim.Activities.UpdateActivityAsync(_activity);
         }
@@ -509,6 +599,15 @@ public class SyncImportTaskProcessor
         var seenExternalIds = new Dictionary<string, (int index, ActivityRunProfileExecutionItem rpei, ConnectedSystemObject? cso)>(StringComparer.OrdinalIgnoreCase);
         var knownDuplicateExternalIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // Set up progress tracking for this batch of imported objects.
+        // At ~50ms per object (cache-miss), 100 objects = ~5 seconds between UI updates.
+        var totalObjectsInBatch = connectedSystemImportResult.ImportObjects.Count;
+        _activity.ObjectsToProcess = totalObjectsInBatch;
+        _activity.ObjectsProcessed = 0;
+        await _jim.Activities.UpdateActivityMessageAsync(_activity,
+            $"Processing imported objects (0 / {totalObjectsInBatch:N0})");
+        const int progressUpdateInterval = 100;
+
         // decision: do we want to load the whole connector space into memory to maximise performance? for now, let's keep it db-centric.
         // todo: experiment with using parallel foreach to see if we can speed up processing
         var importIndex = -1;
@@ -521,6 +620,8 @@ public class SyncImportTaskProcessor
             activityRunProfileExecutionItem.Activity = _activity;  // Set Activity for initiator tracking in CSO change history
             _activityRunProfileExecutionItems.Add(activityRunProfileExecutionItem);
 
+            try
+            {
             try
             {
                 // validate the results.
@@ -837,6 +938,25 @@ public class SyncImportTaskProcessor
                 // still perform system logging.
                 Log.Error(e, $"ProcessImportObjectsAsync: Unhandled {_connectedSystemRunProfile} sync error whilst processing import object {importObject}.");
             }
+            }
+            finally
+            {
+                // Update progress for every object (including errored/skipped via continue).
+                // In-memory assignment is free; DB write only every N objects.
+                _activity.ObjectsProcessed = importIndex + 1;
+                if ((importIndex + 1) % progressUpdateInterval == 0)
+                {
+                    await _jim.Activities.UpdateActivityMessageAsync(_activity,
+                        $"Processing imported objects ({importIndex + 1:N0} / {totalObjectsInBatch:N0})");
+                }
+            }
+        }
+
+        // Final progress update to ensure the UI reflects completion for this batch
+        if (totalObjectsInBatch > 0 && totalObjectsInBatch % progressUpdateInterval != 0)
+        {
+            await _jim.Activities.UpdateActivityMessageAsync(_activity,
+                $"Processing imported objects ({totalObjectsInBatch:N0} / {totalObjectsInBatch:N0})");
         }
 
         // DEBUG: Summary statistics for duplicate detection
@@ -886,6 +1006,11 @@ public class SyncImportTaskProcessor
 
     private async Task<ConnectedSystemObject?> TryAndFindMatchingConnectedSystemObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
     {
+        // If the connected system has no existing CSOs (first-ever import), every object is new.
+        // Skip the DB/cache lookup entirely — there's nothing to match against.
+        if (_csIsEmpty)
+            return null;
+
         // todo: consider support for multiple external id attributes, i.e. compound primary keys
         var externalIdAttribute = connectedSystemObjectType.Attributes.First(a => a.IsExternalId);
 
@@ -939,7 +1064,9 @@ public class SyncImportTaskProcessor
         cso = secondaryExternalIdAttribute.Type switch
         {
             AttributeDataType.Text when secondaryIdImportAttr.StringValues.Count > 0 =>
-                await _jim.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(_connectedSystem.Id, connectedSystemObjectType.Id, secondaryIdImportAttr.StringValues[0]),
+                await _jim.ConnectedSystems.GetConnectedSystemObjectBySecondaryExternalIdAsync(
+                    _connectedSystem.Id, connectedSystemObjectType.Id, secondaryIdImportAttr.StringValues[0],
+                    secondaryExternalIdAttribute.Id),
             _ => null
         };
 
@@ -1598,7 +1725,8 @@ public class SyncImportTaskProcessor
 
                 if (referencedCso != null)
                 {
-                    Log.Debug($"ResolveReferencesAsync: Matched an unresolved reference ({attrValue.UnresolvedReferenceValue}) to CSO: {referencedCso.Id} (from database batch query)");
+                    Log.Debug("ResolveReferencesAsync: Matched an unresolved reference ({UnresolvedRef}) to CSO: {CsoId} (from database batch query)",
+                        attrValue.UnresolvedReferenceValue, referencedCso.Id);
                     attrValue.ReferenceValue = referencedCso;
                 }
                 else
@@ -1714,7 +1842,11 @@ public class SyncImportTaskProcessor
         if (referencedConnectedSystemObject == null)
             return false;
 
-        Log.Debug($"ResolveReferencesAsync: Matched an unresolved reference ({referenceAttributeValue.UnresolvedReferenceValue}) to CSO: {referencedConnectedSystemObject.Id}");
+        var csoIdentifier = referencedConnectedSystemObject.Id != Guid.Empty
+            ? referencedConnectedSystemObject.Id.ToString()
+            : referencedConnectedSystemObject.ExternalIdAttributeValue?.ToString() ?? "(unknown)";
+        Log.Debug("ResolveReferencesAsync: Matched an unresolved reference ({UnresolvedRef}) to CSO: {CsoIdentifier}",
+            referenceAttributeValue.UnresolvedReferenceValue, csoIdentifier);
         referenceAttributeValue.ReferenceValue = referencedConnectedSystemObject;
         return true;
     }

@@ -13,6 +13,7 @@ using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.PostgresData;
 using JIM.Worker.Processors;
+using Microsoft.Extensions.Caching.Memory;
 using Serilog;
 using Serilog.Formatting.Compact;
 using Serilog.Formatting.Json;
@@ -55,7 +56,22 @@ public class Worker : BackgroundService
     /// </summary>
     private List<TaskTask> CurrentTasks { get; } = new();
     private readonly object _currentTasksLock = new();
-    
+
+    /// <summary>
+    /// Service-lifetime memory cache shared across all JimApplication instances.
+    /// Used for CSO external ID lookup indexing to eliminate N+1 import queries.
+    /// </summary>
+    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+
+    /// <summary>
+    /// Maximum number of connected systems to warm concurrently during startup.
+    /// Configurable via JIM_CACHE_WARM_PARALLELISM environment variable.
+    /// </summary>
+    private static int CacheWarmParallelism =>
+        int.TryParse(Environment.GetEnvironmentVariable("JIM_CACHE_WARM_PARALLELISM"), out var value) && value > 0
+            ? value
+            : 3;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         InitialiseLogging();
@@ -73,9 +89,13 @@ public class Worker : BackgroundService
         // as JIM.Worker is the first JimApplication client to start, it's responsible for ensuring the database is initialised.
         // other JimApplication clients will need to check if the app is ready before completing their initialisation.
         // JimApplication instances are ephemeral and should be disposed as soon as a request/batch of work is complete (for database tracking reasons).
-        using var mainLoopJim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
+        using var mainLoopJim = new JimApplication(new PostgresDataRepository(new JimDbContext()), _cache);
         mainLoopJim.CredentialProtection = credentialProtection;
         await mainLoopJim.InitialiseDatabaseAsync();
+
+        // Warm the CSO lookup cache for all connected systems before accepting tasks.
+        // This is a blocking operation — tasks queue until warming is complete.
+        await WarmCsoCacheForAllConnectedSystemsAsync(mainLoopJim);
 
         // first of all check if there's any tasks that have been requested for cancellation but have not yet been processed.
         // this scenario is expected to be for when the worker unexpectedly quits and can't execute cancellations.
@@ -169,7 +189,7 @@ public class Worker : BackgroundService
                             // create an instance of JIM, specific to the processing of this task.
                             // we can't use the main-loop instance, due to Entity Framework having connection sharing issues.
                             // IMPORTANT: taskJim must be disposed to release database connections and prevent deadlocks.
-                            using var taskJim = new JimApplication(new PostgresDataRepository(new JimDbContext()));
+                            using var taskJim = new JimApplication(new PostgresDataRepository(new JimDbContext()), _cache);
                             taskJim.CredentialProtection = credentialProtection;
 
                             // we want to re-retrieve the worker task using this instance of JIM, so there's no chance of any cross-JIM-instance issues
@@ -454,6 +474,55 @@ public class Worker : BackgroundService
     #region private methods
 
     /// <summary>
+    /// Warms the CSO lookup cache for all connected systems at startup.
+    /// Connected systems are warmed with limited parallelism to balance startup speed against database load.
+    /// This is a blocking operation — the Worker does not accept tasks until warming is complete.
+    /// </summary>
+    private async Task WarmCsoCacheForAllConnectedSystemsAsync(JimApplication jim)
+    {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var connectedSystems = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+
+        if (connectedSystems.Count == 0)
+        {
+            Log.Information("WarmCsoCacheForAllConnectedSystemsAsync: No connected systems found. Cache warming skipped.");
+            return;
+        }
+
+        var parallelism = CacheWarmParallelism;
+        Log.Information("WarmCsoCacheForAllConnectedSystemsAsync: Warming CSO lookup cache for {Count} connected system(s) with parallelism {Parallelism}...",
+            connectedSystems.Count, parallelism);
+
+        using var semaphore = new SemaphoreSlim(parallelism);
+        var warmingTasks = connectedSystems.Select(async cs =>
+        {
+            await semaphore.WaitAsync();
+            try
+            {
+                // Each warming task needs its own JimApplication/DbContext to avoid connection sharing issues
+                using var warmJim = new JimApplication(new PostgresDataRepository(new JimDbContext()), _cache);
+                await warmJim.ConnectedSystems.WarmCsoCacheAsync(cs.Id, cs.Name);
+            }
+            catch (Exception ex)
+            {
+                // Log but don't fail startup — the cache will warm on demand for this CS
+                Log.Warning(ex, "WarmCsoCacheForAllConnectedSystemsAsync: Failed to warm cache for connected system {ConnectedSystemName} ({ConnectedSystemId}). Cache will populate on demand.",
+                    cs.Name, cs.Id);
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        await Task.WhenAll(warmingTasks);
+
+        stopwatch.Stop();
+        Log.Information("WarmCsoCacheForAllConnectedSystemsAsync: Cache warming complete for {Count} connected system(s) in {ElapsedMs}ms",
+            connectedSystems.Count, stopwatch.ElapsedMilliseconds);
+    }
+
+    /// <summary>
     /// Tracks when the last housekeeping run occurred to avoid running too frequently.
     /// </summary>
     private DateTime _lastHousekeepingRun = DateTime.MinValue;
@@ -462,8 +531,10 @@ public class Worker : BackgroundService
     /// Tracks when the last history retention cleanup occurred.
     /// History cleanup runs on a longer interval (every 6 hours) as it only
     /// deals with records that are 90+ days old and doesn't need frequent checks.
+    /// Null until the first housekeeping check, at which point it is initialised
+    /// from the database to survive worker restarts.
     /// </summary>
-    private DateTime _lastHistoryCleanupRun = DateTime.MinValue;
+    private DateTime? _lastHistoryCleanupRun;
 
     /// <summary>
     /// Performs housekeeping tasks during worker idle time.
@@ -519,8 +590,24 @@ public class Worker : BackgroundService
             Log.Error(ex, "PerformHousekeepingAsync: Error during housekeeping");
         }
 
-        // History retention cleanup runs on its own schedule (every 6 hours)
-        if ((DateTime.UtcNow - _lastHistoryCleanupRun).TotalHours >= 6)
+        // History retention cleanup runs on its own schedule (every 6 hours).
+        // On first check after worker start, query the database for the last cleanup time
+        // so we don't re-run immediately if the interval hasn't elapsed yet.
+        if (_lastHistoryCleanupRun == null)
+        {
+            try
+            {
+                _lastHistoryCleanupRun = await jim.ChangeHistory.GetLastCleanupTimeAsync() ?? DateTime.MinValue;
+                Log.Debug("PerformHousekeepingAsync: Last history cleanup was at {LastCleanupTime}", _lastHistoryCleanupRun);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "PerformHousekeepingAsync: Failed to query last history cleanup time, will run cleanup on next cycle");
+                _lastHistoryCleanupRun = DateTime.MinValue;
+            }
+        }
+
+        if ((DateTime.UtcNow - _lastHistoryCleanupRun.Value).TotalHours >= 6)
         {
             _lastHistoryCleanupRun = DateTime.UtcNow;
             await PerformChangeHistoryCleanupAsync(jim);
@@ -618,11 +705,15 @@ public class Worker : BackgroundService
         activity.TotalProjected = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Projected);
         activity.TotalJoined = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Joined);
 
-        // Attribute flows: count RPEIs with primary type AttributeFlow, plus absorbed flows
-        // from RPEIs where the primary type is something else (e.g. Joined, Projected, Disconnected)
-        // but attribute flows also occurred (tracked via AttributeFlowCount)
-        activity.TotalAttributeFlows = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.AttributeFlow)
-            + rpeis.Where(r => r.AttributeFlowCount is > 0).Sum(r => r.AttributeFlowCount!.Value);
+        // Attribute flows: for AttributeFlow RPEIs, use AttributeFlowCount if set (actual count of
+        // individual reference changes), otherwise count as 1. Then add absorbed flows from RPEIs
+        // where the primary type is something else (e.g. Joined, Projected) but attribute flows
+        // also occurred (tracked via AttributeFlowCount).
+        activity.TotalAttributeFlows = rpeis
+                .Where(r => r.ObjectChangeType is ObjectChangeType.AttributeFlow)
+                .Sum(r => r.AttributeFlowCount > 0 ? r.AttributeFlowCount.Value : 1)
+            + rpeis.Where(r => r.ObjectChangeType is not ObjectChangeType.AttributeFlow && r.AttributeFlowCount is > 0)
+                .Sum(r => r.AttributeFlowCount!.Value);
 
         activity.TotalDisconnected = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Disconnected);
         activity.TotalDisconnectedOutOfScope = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.DisconnectedOutOfScope);
@@ -706,7 +797,7 @@ public class Worker : BackgroundService
                 try
                 {
                     using var emergencyContext = new JimDbContext();
-                    var emergencyJim = new JimApplication(new PostgresDataRepository(emergencyContext));
+                    var emergencyJim = new JimApplication(new PostgresDataRepository(emergencyContext), _cache);
                     var freshActivity = await emergencyJim.Activities.GetActivityAsync(activity.Id);
                     if (freshActivity != null && freshActivity.Status == ActivityStatus.InProgress)
                     {

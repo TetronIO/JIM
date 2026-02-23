@@ -137,9 +137,9 @@
             </div>
         </MudText>
         <MudTable T="MetaverseObjectAttributeValue" Items="@group.Values" Dense="true" Hover="true"
-                  Elevation="0" Outlined="true" FixedHeader="true" Height="400px"
-                  Filter="new Func<MetaverseObjectAttributeValue, bool>(v => FilterMvaTableValue(v, group.AttributeName))"
-                  Virtualize="true">
+                  Elevation="0" Outlined="true"
+                  RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChangedAsync"
+                  Filter="new Func<MetaverseObjectAttributeValue, bool>(v => FilterMvaTableValue(v, group.AttributeName))">
             <ToolBarContent>
                 <MudTextField T="string" Value="@searchText"
                               ValueChanged="@(v => OnSearchTextChanged(group.AttributeName, v))"
@@ -283,6 +283,7 @@
     public bool IsEditable { get; set; } = false;
 
     private List<CategoryGroup> _categoryGroups = new();
+    private int _rowsPerPage = 10;
 
     /// <summary>
     /// Per-category expanded state loaded from browser localStorage.
@@ -314,6 +315,16 @@
             _categoryExpandedStates[category.CategoryName] = expanded ?? true; // default expanded
         }
 
+        // Load global page size preference
+        try
+        {
+            _rowsPerPage = await UserPreferences.GetRowsPerPageAsync();
+        }
+        catch
+        {
+            // JS interop not yet available; keep default
+        }
+
         // Pre-load user view mode preferences for all MVAs
         var mvaAttributeNames = MetaverseObject.AttributeValues
             .Where(v => v.Attribute.AttributePlurality == AttributePlurality.MultiValued)
@@ -333,7 +344,7 @@
     /// <summary>
     /// Heuristic mapping of built-in attribute names to display categories.
     /// This is a presentation-layer concern that will be replaced by admin-configurable
-    /// layouts in the future (RCDC-like feature).
+    /// layouts in the future.
     /// </summary>
     private static readonly Dictionary<string, string> AttributeCategoryMap = new()
     {
@@ -352,6 +363,7 @@
         { Constants.BuiltInAttributes.Type, "Identity" },
         { Constants.BuiltInAttributes.FirstName, "Identity" },
         { Constants.BuiltInAttributes.LastName, "Identity" },
+        { Constants.BuiltInAttributes.Description, "Identity" },
 
         // Contact
         { Constants.BuiltInAttributes.Email, "Contact" },
@@ -509,6 +521,14 @@
     {
         _categoryExpandedStates[categoryName] = expanded;
         await UserPreferences.SetCategoryExpandedAsync(ObjectTypeId, categoryName, expanded);
+    }
+
+    // ========================== Table Page Size ==========================
+
+    private async Task OnRowsPerPageChangedAsync(int newSize)
+    {
+        _rowsPerPage = newSize;
+        await UserPreferences.SetRowsPerPageAsync(newSize);
     }
 
     // ========================== Table Search ==========================

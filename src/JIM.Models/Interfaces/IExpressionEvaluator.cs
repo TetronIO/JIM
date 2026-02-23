@@ -1,4 +1,6 @@
-namespace JIM.Application.Expressions;
+using JIM.Models.Expressions;
+
+namespace JIM.Models.Interfaces;
 
 /// <summary>
 /// Abstraction for expression evaluation, allowing future replacement of the underlying engine.

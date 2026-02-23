@@ -5,6 +5,13 @@ public class PendingExportAttributeValueChange
 {
     public Guid Id { get; set; }
 
+    /// <summary>
+    /// Foreign key to the parent PendingExport. Explicit FK ensures the relationship is preserved
+    /// when entities are loaded via AsNoTracking and re-attached with Entry().State = Modified
+    /// (shadow FKs are lost in that scenario).
+    /// </summary>
+    public Guid? PendingExportId { get; set; }
+
     public ConnectedSystemObjectTypeAttribute Attribute { get; set; } = null!;
     public int AttributeId { get; set; }
 

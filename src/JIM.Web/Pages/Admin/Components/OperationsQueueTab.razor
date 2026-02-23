@@ -390,7 +390,7 @@ else
         if (result != true)
             return;
 
-        await Jim.Tasking.CancelWorkerTaskAsync(workerTaskHeader.Id);
+        await Jim.Tasking.RequestWorkerTaskCancellationAsync(workerTaskHeader.Id);
         Snackbar.Add("Worker task cancellation requested.", Severity.Success);
     }
 

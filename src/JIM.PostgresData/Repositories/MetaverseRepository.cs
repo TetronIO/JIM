@@ -256,7 +256,47 @@ public class MetaverseRepository : IMetaverseRepository
         if (objectList.Count == 0)
             return;
 
-        Repository.Database.UpdateRange(objectList);
+        // After ClearChangeTracker() (e.g. during cross-page reference resolution), MVOs become
+        // detached. UpdateRange traverses the full object graph (MVO → Type → Attributes, AV →
+        // Attribute → MetaverseObjectTypes) and hits identity conflicts when shared entities like
+        // MetaverseAttribute are reached from multiple MVOs.
+        //
+        // When detached, use Entry().State to attach only MVOs + AttributeValues individually,
+        // completely bypassing graph traversal. The caller is responsible for disabling
+        // AutoDetectChangesEnabled to prevent SaveChangesAsync from re-discovering shared entities
+        // via navigation properties.
+        //
+        // The try/catch handles unit tests using mocked DbContext where Entry() throws
+        // NullReferenceException (mock doesn't initialise internal DbContext state).
+        try
+        {
+            var anyDetached = objectList.Any(mvo => Repository.Database.Entry(mvo).State == EntityState.Detached);
+
+            if (anyDetached)
+            {
+                foreach (var mvo in objectList)
+                {
+                    Repository.UpdateDetachedSafe(mvo);
+
+                    foreach (var av in mvo.AttributeValues)
+                    {
+                        var avEntry = Repository.Database.Entry(av);
+                        if (avEntry.State == EntityState.Detached)
+                            avEntry.State = avEntry.IsKeySet ? EntityState.Modified : EntityState.Added;
+                    }
+                }
+            }
+            else
+            {
+                Repository.Database.UpdateRange(objectList);
+            }
+        }
+        catch (NullReferenceException)
+        {
+            // Fallback for mocked DbContext in unit tests where ChangeTracker is not initialised.
+            Repository.Database.UpdateRange(objectList);
+        }
+
         await Repository.Database.SaveChangesAsync();
     }
 
@@ -684,23 +724,19 @@ public class MetaverseRepository : IMetaverseRepository
                 continue;
             }
 
-            // construct the base query. This much is true, regardless of the matching rule properties.
-            var metaVerseObjects = from o in Repository.Database.MetaverseObjects.
-                    AsSplitQuery(). // Use split query to avoid cartesian explosion from collection includes
-                    Include(mvo => mvo.AttributeValues).
-                    ThenInclude(av => av.Attribute).
-                    Where(mvo => mvo.Type.Id == metaverseObjectType.Id)
-                    select o;
+            // Phase 1: Lightweight match — query only MVO IDs (no Include chains, no entity materialisation).
+            // This avoids the expensive AsSplitQuery + Include overhead when there's no match (common case).
+            var matchQuery = Repository.Database.MetaverseObjects
+                .Where(mvo => mvo.Type.Id == metaverseObjectType.Id);
 
-            // work out what type of attribute it is
+            // Apply attribute-type-specific filter
             switch (source.ConnectedSystemAttribute.Type)
             {
                 case AttributeDataType.Text:
                     // Check case sensitivity setting on the matching rule
                     if (objectMatchingRule.CaseSensitive)
                     {
-                        // Case-sensitive comparison (default) - null check already done above
-                        metaVerseObjects = metaVerseObjects.Where(mvo =>
+                        matchQuery = matchQuery.Where(mvo =>
                             mvo.AttributeValues.Any(av =>
                                 objectMatchingRule.TargetMetaverseAttribute != null &&
                                 av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
@@ -709,8 +745,7 @@ public class MetaverseRepository : IMetaverseRepository
                     }
                     else
                     {
-                        // Case-insensitive comparison using PostgreSQL ILike
-                        metaVerseObjects = metaVerseObjects.Where(mvo =>
+                        matchQuery = matchQuery.Where(mvo =>
                             mvo.AttributeValues.Any(av =>
                                 objectMatchingRule.TargetMetaverseAttribute != null &&
                                 av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
@@ -719,8 +754,7 @@ public class MetaverseRepository : IMetaverseRepository
                     }
                     break;
                 case AttributeDataType.Number:
-                    // Null check already done above
-                    metaVerseObjects = metaVerseObjects.Where(mvo =>
+                    matchQuery = matchQuery.Where(mvo =>
                         mvo.AttributeValues.Any(av =>
                             objectMatchingRule.TargetMetaverseAttribute != null &&
                             av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
@@ -734,8 +768,7 @@ public class MetaverseRepository : IMetaverseRepository
                 case AttributeDataType.Reference:
                     throw new NotSupportedException("Reference attributes are not supported in Object Matching Rules.");
                 case AttributeDataType.Guid:
-                    // Null check already done above
-                    metaVerseObjects = metaVerseObjects.Where(mvo =>
+                    matchQuery = matchQuery.Where(mvo =>
                         mvo.AttributeValues.Any(av =>
                             objectMatchingRule.TargetMetaverseAttribute != null &&
                             av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
@@ -749,16 +782,24 @@ public class MetaverseRepository : IMetaverseRepository
                     throw new InvalidDataException("Unexpected Connected System Attribute Type");
             }
 
-            // execute the search. did we find an MVO?
-            var result = await metaVerseObjects.ToListAsync();
-            switch (result.Count)
+            // Only select IDs — avoids materialising full entity graphs with all attribute values.
+            // Take(2) to detect ambiguous matches without loading more than needed.
+            var matchingIds = await matchQuery.Select(mvo => mvo.Id).Take(2).ToListAsync();
+
+            switch (matchingIds.Count)
             {
-                case 1:
-                    return result[0];
+                case 0:
+                    continue;
                 case > 1:
                     throw new MultipleMatchesException(
                         "Multiple Metaverse Objects were found to match the source attribute.",
-                        result.Select(q => q.Id).ToList());
+                        matchingIds);
+                default:
+                {
+                    // Phase 2: Load the full MVO entity by PK with all navigation properties needed for sync.
+                    var mvo = await GetMetaverseObjectAsync(matchingIds[0]);
+                    return mvo;
+                }
             }
         }
 

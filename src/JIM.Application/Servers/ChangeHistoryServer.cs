@@ -54,6 +54,15 @@ public class ChangeHistoryServer
         return await ExecuteCleanupAsync(activity, olderThan, maxRecordsPerType);
     }
 
+    /// <summary>
+    /// Gets the time of the most recent history retention cleanup.
+    /// Returns null if no cleanup has ever been performed.
+    /// </summary>
+    public async Task<DateTime?> GetLastCleanupTimeAsync()
+    {
+        return await _application.Repository.Activity.GetLastHistoryCleanupTimeAsync();
+    }
+
     private static Activity CreateCleanupActivity()
     {
         return new Activity

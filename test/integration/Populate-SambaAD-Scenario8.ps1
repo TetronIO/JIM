@@ -399,7 +399,7 @@ for ($g = 0; $g -lt $createdGroups.Count; $g++) {
     }
 
     # Add selected candidates to the group (deduplicate first)
-    $uniqueCandidates = $candidates | Sort-Object -Property SamAccountName -Unique
+    $uniqueCandidates = @($candidates | Sort-Object -Property SamAccountName -Unique)
 
     # OPTIMISATION: Batch add all members in a single samba-tool call
     # This reduces Docker exec overhead from O(members) to O(1) per group

@@ -45,6 +45,16 @@ public interface IConnectedSystemRepository
     public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id);
     public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name);
     public Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
+
+    /// <summary>
+    /// Bulk-loads all CSO external ID mappings for a connected system.
+    /// Returns a dictionary mapping cache keys to CSO GUIDs for populating the lookup index.
+    /// Each entry maps "connectedSystemId:attributeId:lowerExternalIdValue" to the CSO GUID.
+    /// Used for cache warming to eliminate N+1 import lookups.
+    /// </summary>
+    /// <param name="connectedSystemId">The connected system to load mappings for.</param>
+    /// <returns>A dictionary of cache key → CSO GUID mappings.</returns>
+    public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId);
     public Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem);
 
     /// <summary>
@@ -95,6 +105,15 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="pendingExports">The Pending Exports to delete.</param>
     public Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
+
+    /// <summary>
+    /// Deletes pending exports by their associated Connected System Object IDs using raw SQL.
+    /// This avoids loading PE entities into the change tracker, preventing identity conflicts
+    /// when the change tracker has been cleared (e.g. during cross-page reference resolution).
+    /// </summary>
+    /// <param name="connectedSystemObjectIds">The CSO IDs whose pending exports should be deleted.</param>
+    /// <returns>The number of pending exports deleted.</returns>
+    public Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
     /// <summary>
     /// Updates multiple Pending Export objects in a single batch operation.
@@ -426,8 +445,16 @@ public interface IConnectedSystemRepository
         string? sortBy = null,
         bool sortDescending = true,
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null);
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, bool returnAttributes = false);
-    
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize);
+
+    /// <summary>
+    /// Batch loads Connected System Objects by their IDs with the full Include chain needed for
+    /// sync reference attribute processing. Used for cross-page reference resolution after all
+    /// pages have been processed and all MVOs exist in the database.
+    /// </summary>
+    /// <param name="csoIds">The CSO IDs to load.</param>
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForReferenceResolutionAsync(IList<Guid> csoIds);
+
     /// <summary>
     /// Returns all the CSOs for a Connected System that are marked as Obsolete.
     /// </summary>

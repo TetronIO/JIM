@@ -1,0 +1,157 @@
+@using JIM.Models.Staging
+@using JIM.Models.Core
+@using JIM.Utilities
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body1" Class="mb-3 mud-text-secondary">
+            @Values.Count.ToString("N0") values
+        </MudText>
+        @if (_isReferenceAttribute)
+        {
+            <MudTable T="ConnectedSystemObjectAttributeValue" Items="@Values"
+                      Dense="true" Hover="true" Elevation="0" Outlined="true"
+                      FixedHeader="true" Height="400px"
+                      Filter="new Func<ConnectedSystemObjectAttributeValue, bool>(FilterValue)"
+                      Virtualize="true">
+                <ToolBarContent>
+                    <MudTextField T="string" Value="@_searchText"
+                                  ValueChanged="@(v => _searchText = v)"
+                                  Placeholder="@($"Search {AttributeName.ToLower()}...")"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Immediate="true" DebounceInterval="300"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </ToolBarContent>
+                <HeaderContent>
+                    <MudTh>Display Name</MudTh>
+                    <MudTh>Object Type</MudTh>
+                    <MudTh>Secondary ID</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Display Name">
+                        @if (context.ReferenceValue != null)
+                        {
+                            <MudLink Href="@Utilities.GetConnectedSystemObjectHref(context.ReferenceValue)">
+                                @context.ReferenceValue.DisplayNameOrId
+                            </MudLink>
+                        }
+                        else if (context.UnresolvedReferenceValue != null)
+                        {
+                            <span class="jim-attr-unresolved">
+                                <MudIcon Icon="@Icons.Material.Filled.LinkOff" Class="mr-1" />
+                                <span class="mud-text-secondary">@context.UnresolvedReferenceValue</span>
+                            </span>
+                        }
+                        else
+                        {
+                            @(context.ToStringNoName())
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Object Type">
+                        @if (context.ReferenceValue != null)
+                        {
+                            <MudChip T="string" Color="Color.Default">
+                                @context.ReferenceValue.Type.Name
+                            </MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Secondary ID">
+                        @if (context.ReferenceValue?.SecondaryExternalIdAttributeValue != null)
+                        {
+                            <span class="mud-text-secondary">
+                                @context.ReferenceValue.SecondaryExternalIdAttributeValue.ToStringNoName()
+                            </span>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager />
+                </PagerContent>
+            </MudTable>
+        }
+        else
+        {
+            <MudTable T="ConnectedSystemObjectAttributeValue" Items="@Values"
+                      Dense="true" Hover="true" Elevation="0" Outlined="true"
+                      FixedHeader="true" Height="400px"
+                      Filter="new Func<ConnectedSystemObjectAttributeValue, bool>(FilterValue)"
+                      Virtualize="true">
+                <ToolBarContent>
+                    <MudTextField T="string" Value="@_searchText"
+                                  ValueChanged="@(v => _searchText = v)"
+                                  Placeholder="@($"Search {AttributeName.ToLower()}...")"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Immediate="true" DebounceInterval="300"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </ToolBarContent>
+                <HeaderContent>
+                    <MudTh>Value</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Value">
+                        <CsoAttributeValue Value="@context" />
+                    </MudTd>
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager />
+                </PagerContent>
+            </MudTable>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public string AttributeName { get; set; } = string.Empty;
+
+    [Parameter]
+    public List<ConnectedSystemObjectAttributeValue> Values { get; set; } = new();
+
+    private string _searchText = string.Empty;
+    private bool _isReferenceAttribute;
+
+    protected override void OnInitialized()
+    {
+        _isReferenceAttribute = Values.Any(v =>
+            v.ReferenceValue != null || v.UnresolvedReferenceValue != null);
+    }
+
+    private bool FilterValue(ConnectedSystemObjectAttributeValue value)
+    {
+        if (string.IsNullOrWhiteSpace(_searchText))
+            return true;
+
+        if (value.ReferenceValue != null)
+        {
+            var displayName = value.ReferenceValue.DisplayNameOrId ?? "";
+            if (displayName.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            var typeName = value.ReferenceValue.Type?.Name ?? "";
+            if (typeName.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            var secondaryId = value.ReferenceValue.SecondaryExternalIdAttributeValue?.ToStringNoName() ?? "";
+            if (secondaryId.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            return false;
+        }
+
+        if (value.UnresolvedReferenceValue != null)
+            return value.UnresolvedReferenceValue.Contains(_searchText, StringComparison.OrdinalIgnoreCase);
+
+        var displayValue = value.ToStringNoName() ?? string.Empty;
+        return displayValue.Contains(_searchText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void Close() => MudDialog.Close();
+}

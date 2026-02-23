@@ -125,6 +125,14 @@ public class LdapConnectorUtilitiesTests
     }
 
     [Test]
+    public void GetLdapAttributeDataType_OmSyntax66_ReturnsBinary()
+    {
+        // omSyntax 66 = Object(Replica-Link) (nTSecurityDescriptor, msExchMailboxSecurityDescriptor)
+        var result = LdapConnectorUtilities.GetLdapAttributeDataType(66);
+        Assert.That(result, Is.EqualTo(AttributeDataType.Binary));
+    }
+
+    [Test]
     public void GetLdapAttributeDataType_UnsupportedOmSyntax_ThrowsInvalidDataException()
     {
         Assert.Throws<InvalidDataException>(() => LdapConnectorUtilities.GetLdapAttributeDataType(999));
@@ -318,6 +326,142 @@ public class LdapConnectorUtilitiesTests
         var result = LdapConnectorUtilities.FindUnescapedComma(",CN=Test");
 
         Assert.That(result, Is.EqualTo(0));
+    }
+
+    #endregion
+
+    #region ShouldOverridePluralityToSingleValued tests
+
+    [Test]
+    public void ShouldOverridePluralityToSingleValued_DescriptionOnUserInAd_ReturnsTrue()
+    {
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "user", isActiveDirectory: true);
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void ShouldOverridePluralityToSingleValued_DescriptionOnGroupInAd_ReturnsTrue()
+    {
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "group", isActiveDirectory: true);
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void ShouldOverridePluralityToSingleValued_DescriptionOnComputerInAd_ReturnsTrue()
+    {
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "computer", isActiveDirectory: true);
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void ShouldOverridePluralityToSingleValued_DescriptionOnInetOrgPersonInAd_ReturnsTrue()
+    {
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "inetOrgPerson", isActiveDirectory: true);
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void ShouldOverridePluralityToSingleValued_DescriptionOnSamDomainInAd_ReturnsTrue()
+    {
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "samDomain", isActiveDirectory: true);
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void ShouldOverridePluralityToSingleValued_DescriptionOnSamServerInAd_ReturnsTrue()
+    {
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "samServer", isActiveDirectory: true);
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void ShouldOverridePluralityToSingleValued_DescriptionOnUserInGenericLdap_ReturnsFalse()
+    {
+        // Generic LDAP directories (OpenLDAP, 389DS) have no SAM layer — description is genuinely multi-valued
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "user", isActiveDirectory: false);
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void ShouldOverridePluralityToSingleValued_DescriptionOnGroupInGenericLdap_ReturnsFalse()
+    {
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "group", isActiveDirectory: false);
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void ShouldOverridePluralityToSingleValued_DescriptionOnNonSamClassInAd_ReturnsFalse()
+    {
+        // Non-SAM-managed classes (e.g., organizationalUnit) should not have the override applied
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "organizationalUnit", isActiveDirectory: true);
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void ShouldOverridePluralityToSingleValued_OtherAttributeOnUserInAd_ReturnsFalse()
+    {
+        // Non-SAM-enforced attributes should not be overridden even on SAM-managed classes
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("member", "user", isActiveDirectory: true);
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void ShouldOverridePluralityToSingleValued_CaseInsensitiveAttributeName_ReturnsTrue()
+    {
+        // LDAP attribute names are case-insensitive
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("Description", "group", isActiveDirectory: true);
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void ShouldOverridePluralityToSingleValued_CaseInsensitiveObjectClass_ReturnsTrue()
+    {
+        // LDAP object class names are case-insensitive
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("description", "Group", isActiveDirectory: true);
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void ShouldOverridePluralityToSingleValued_UpperCaseAttributeAndClass_ReturnsTrue()
+    {
+        var result = LdapConnectorUtilities.ShouldOverridePluralityToSingleValued("DESCRIPTION", "USER", isActiveDirectory: true);
+        Assert.That(result, Is.True);
+    }
+
+    #endregion
+
+    #region SAM constants validation tests
+
+    [Test]
+    public void SamEnforcedSingleValuedAttributes_ContainsDescription()
+    {
+        Assert.That(LdapConnectorConstants.SAM_ENFORCED_SINGLE_VALUED_ATTRIBUTES, Does.Contain("description"));
+    }
+
+    [Test]
+    public void SamManagedObjectClasses_ContainsAllExpectedClasses()
+    {
+        var expected = new[] { "user", "computer", "inetOrgPerson", "group", "samDomain", "samServer" };
+        foreach (var className in expected)
+        {
+            Assert.That(LdapConnectorConstants.SAM_MANAGED_OBJECT_CLASSES, Does.Contain(className),
+                $"Expected SAM_MANAGED_OBJECT_CLASSES to contain '{className}'");
+        }
+    }
+
+    [Test]
+    public void SamManagedObjectClasses_IsCaseInsensitive()
+    {
+        Assert.That(LdapConnectorConstants.SAM_MANAGED_OBJECT_CLASSES.Contains("USER"), Is.True);
+        Assert.That(LdapConnectorConstants.SAM_MANAGED_OBJECT_CLASSES.Contains("Group"), Is.True);
+        Assert.That(LdapConnectorConstants.SAM_MANAGED_OBJECT_CLASSES.Contains("COMPUTER"), Is.True);
+    }
+
+    [Test]
+    public void SamEnforcedSingleValuedAttributes_IsCaseInsensitive()
+    {
+        Assert.That(LdapConnectorConstants.SAM_ENFORCED_SINGLE_VALUED_ATTRIBUTES.Contains("DESCRIPTION"), Is.True);
+        Assert.That(LdapConnectorConstants.SAM_ENFORCED_SINGLE_VALUED_ATTRIBUTES.Contains("Description"), Is.True);
     }
 
     #endregion

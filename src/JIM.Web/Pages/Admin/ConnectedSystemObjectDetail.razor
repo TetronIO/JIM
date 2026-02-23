@@ -10,6 +10,7 @@
 @using JIM.Utilities
 @inject JimApplication Jim
 @inject NavigationManager NavManager
+@inject IDialogService DialogService
 
 <PageTitle>Connected System Object: @GetDisplayIdentifier()</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-primary-text">Connected System Object:</span> @GetDisplayIdentifier()
@@ -148,10 +149,10 @@
                     <thead>
                         <tr>
                             <th class="jim-attr-header-name">Attribute</th>
+                            <th class="jim-attr-header-value">Value</th>
                             <th class="jim-attr-header-type">Type</th>
                             <th class="jim-attr-header-plurality">Plurality</th>
-                            <th class="jim-attr-header-extid">External ID</th>
-                            <th class="jim-attr-header-value">Value</th>
+                            <th class="jim-attr-header-extid">External ID?</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -172,52 +173,14 @@
                             {
                                 <tr class="@(group.Values.Count > 1 ? "jim-attr-row-mva" : "")">
                                     <td class="jim-attr-name">
-                                        <MudText Typo="Typo.body2" Class="jim-text-code">@group.AttributeName</MudText>
-                                    </td>
-                                    <td class="jim-attr-type">
-                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@group.Values[0].Attribute.Type
-                                        </MudText>
-                                    </td>
-                                    <td class="jim-attr-plurality">
-                                        @if (group.IsMultiValued)
-                                        {
-                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Multi</MudText>
-                                        }
-                                        else
-                                        {
-                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Single</MudText>
-                                        }
-                                    </td>
-                                    <td>
-                                        @if (IsExternalId(group.Values[0]))
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
-                                        }
-                                        else if (IsSecondaryExternalId(group.Values[0]))
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
-                                        }
-                                        else
-                                        {
-                                            <span>-</span>
-                                        }
+                                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.AttributeName</MudText>
                                     </td>
                                     <td class="jim-attr-value">
                                         @if (group.Values.Count == 1)
                                         {
                                             <CsoAttributeValue Value="@group.Values[0]" />
                                         }
-                                        else if (group.IsCollapsed)
-                                        {
-                                            <div class="jim-attr-multivalue">
-                                                <CsoAttributeValue Value="@group.Values[0]" />
-                                                <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"
-                                                    OnClick="@(() => ToggleCollapse(group.AttributeName))">
-                                                    +@(group.Values.Count - 1) more
-                                                </MudButton>
-                                            </div>
-                                        }
-                                        else
+                                        else if (group.Values.Count <= MvaInlineThreshold)
                                         {
                                             <div class="jim-attr-expanded">
                                                 @foreach (var val in group.Values)
@@ -226,11 +189,50 @@
                                                         <CsoAttributeValue Value="@val" />
                                                     </div>
                                                 }
-                                                <MudButton Variant="Variant.Outlined" Class="jim-attr-collapse-btn"
-                                                    OnClick="@(() => ToggleCollapse(group.AttributeName))">
-                                                    Collapse
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="jim-attr-expanded">
+                                                @foreach (var val in group.Values.Take(MvaInlineThreshold))
+                                                {
+                                                    <div class="jim-attr-expanded-item">
+                                                        <CsoAttributeValue Value="@val" />
+                                                    </div>
+                                                }
+                                                <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"
+                                                    OnClick="@(() => OpenMvaDialogAsync(group.AttributeName, group.Values))">
+                                                    +@(group.Values.Count - MvaInlineThreshold) more
                                                 </MudButton>
                                             </div>
+                                        }
+                                    </td>
+                                    <td class="jim-attr-type">
+                                        <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.Values[0].Attribute.Type
+                                        </MudText>
+                                    </td>
+                                    <td class="jim-attr-plurality">
+                                        @if (group.IsMultiValued)
+                                        {
+                                            <MudText Typo="Typo.body1" Class="mud-text-secondary">Multi</MudText>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.body1" Class="mud-text-secondary">Single</MudText>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (IsExternalId(group.Values[0]))
+                                        {
+                                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined">External ID</MudChip>
+                                        }
+                                        else if (IsSecondaryExternalId(group.Values[0]))
+                                        {
+                                            <MudChip T="string" Color="Color.Secondary" Variant="Variant.Outlined">Secondary ID</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <span>-</span>
                                         }
                                     </td>
                                 </tr>
@@ -325,14 +327,12 @@
         CsoChanges = await Jim.ConnectedSystems.GetConnectedSystemObjectChangesAsync(connectedSystemObjectId);
     }
 
-    // Tracks which MVAs are collapsed (expanded by default)
-    private readonly HashSet<string> _collapsedAttributes = new();
+    private const int MvaInlineThreshold = 10;
 
     private record AttributeGroup(
     string AttributeName,
     List<ConnectedSystemObjectAttributeValue> Values,
-    bool IsMultiValued,
-    bool IsCollapsed);
+    bool IsMultiValued);
 
     private List<AttributeGroup> GetGroupedAttributes()
     {
@@ -345,8 +345,7 @@
         .Select(g => new AttributeGroup(
         g.Key,
         g.ToList(),
-        g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued,
-        _collapsedAttributes.Contains(g.Key)))
+        g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued))
         .ToList();
     }
 
@@ -364,12 +363,22 @@
         return attributeId == ConnectedSystemObject.SecondaryExternalIdAttributeId;
     }
 
-    private void ToggleCollapse(string attributeName)
+    private async Task OpenMvaDialogAsync(string attributeName, List<ConnectedSystemObjectAttributeValue> values)
     {
-        if (_collapsedAttributes.Contains(attributeName))
-            _collapsedAttributes.Remove(attributeName);
-        else
-            _collapsedAttributes.Add(attributeName);
+        var parameters = new DialogParameters<CsoMvaDialog>
+        {
+            { x => x.AttributeName, attributeName },
+            { x => x.Values, values }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        await DialogService.ShowAsync<CsoMvaDialog>(attributeName, parameters, options);
     }
 
     private static string GetAttributeValue(PendingExportAttributeValueChange change)

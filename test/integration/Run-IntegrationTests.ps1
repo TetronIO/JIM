@@ -527,12 +527,12 @@ Write-Host "  Setup Only:             ${CYAN}$SetupOnly${NC}"
 if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
     Write-Host "  Export Concurrency:     ${CYAN}$ExportConcurrency${NC}"
 } else {
-    Write-Host "  Export Concurrency:     ${GRAY}(JIM default)${NC}"
+    Write-Host "  Export Concurrency:     ${GRAY}(JIM default: 4)${NC}"
 }
 if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
     Write-Host "  Max Export Parallelism: ${CYAN}$MaxExportParallelism${NC}"
 } else {
-    Write-Host "  Max Export Parallelism: ${GRAY}(JIM default)${NC}"
+    Write-Host "  Max Export Parallelism: ${GRAY}(JIM default: 1)${NC}"
 }
 Write-Host "  Service Timeout:        ${CYAN}${TimeoutSeconds}s${NC}"
 Write-Host ""
@@ -1080,32 +1080,38 @@ $logTimestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
 $scenarioLogFile = Join-Path $logDir "$Scenario-$Template-$logTimestamp.log"
 
 Start-Transcript -Path $scenarioLogFile -Append | Out-Null
+$transcriptActive = $true
 try {
-    # Build scenario invocation params — only pass export tuning params to scenarios that accept them
-    $scenarioParams = @{
-        Template = $Template
-        Step = $Step
-        ApiKey = $apiKey
-    }
 
-    # Export tuning params only apply to scenarios that accept them and have LDAP exports
-    # Scenarios 1, 2, 8: pass through to their setup scripts
-    # Scenario 6: passes through to its internal Setup-Scenario1 call
-    $scenariosAcceptingExportParams = @("1", "2", "6", "8")
-    if ($scenarioNumber -and $scenariosAcceptingExportParams -contains $scenarioNumber) {
-        if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
-            $scenarioParams.ExportConcurrency = $ExportConcurrency
-        }
-        if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
-            $scenarioParams.MaxExportParallelism = $MaxExportParallelism
-        }
-    }
+# Build scenario invocation params — only pass export tuning params to scenarios that accept them
+$scenarioParams = @{
+    Template = $Template
+    Step = $Step
+    ApiKey = $apiKey
+}
 
+# Export tuning params only apply to scenarios that accept them and have LDAP exports
+# Scenarios 1, 2, 8: pass through to their setup scripts
+# Scenario 6: passes through to its internal Setup-Scenario1 call
+$scenariosAcceptingExportParams = @("1", "2", "6", "8")
+if ($scenarioNumber -and $scenariosAcceptingExportParams -contains $scenarioNumber) {
+    if ($PSBoundParameters.ContainsKey('ExportConcurrency')) {
+        $scenarioParams.ExportConcurrency = $ExportConcurrency
+    }
+    if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
+        $scenarioParams.MaxExportParallelism = $MaxExportParallelism
+    }
+}
+
+try {
     & $scenarioScript @scenarioParams
     $scenarioExitCode = $LASTEXITCODE
 }
-finally {
-    Stop-Transcript | Out-Null
+catch {
+    $scenarioExitCode = 1
+    Write-Host ""
+    Write-Host "${RED}✗ Scenario failed with error: $_${NC}"
+    Write-Host ""
 }
 $timings["5. Run Tests"] = (Get-Date) - $step5Start
 
@@ -1435,4 +1441,11 @@ else {
 }
 
 Write-Host ""
+
+# Stop transcript so the total execution time and summary are captured in the log file
+} finally {
+    if ($transcriptActive) {
+        Stop-Transcript | Out-Null
+    }
+}
 exit $scenarioExitCode

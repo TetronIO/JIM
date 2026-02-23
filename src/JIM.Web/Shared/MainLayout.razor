@@ -111,9 +111,10 @@
     // Minimum viewport width (in pixels) to have drawer open by default
     // 1400px is a common breakpoint for "large" screens
     private const int LargeScreenBreakpoint = 1400;
-    // Default to closed/unpinned - will be set based on screen size in OnAfterRenderAsync
+    // Default to closed/unpinned - will be set based on screen size or saved preference in OnAfterRenderAsync
     private bool IsDrawerOpen { get; set; }
     private bool IsDrawerPinned { get; set; }
+    private bool _drawerPinnedInitialised;
     private bool _isDarkMode;
     private bool _darkModeInitialised;
     private bool IsDarkMode
@@ -151,12 +152,21 @@
             await UpdateDarkModeClassAsync(_isDarkMode);
             _darkModeInitialised = true;
 
-            // Detect screen width and set drawer state accordingly
-            var windowWidth = await JSRuntime.InvokeAsync<int>("eval", "window.innerWidth");
-            var isLargeScreen = windowWidth >= LargeScreenBreakpoint;
-
-            IsDrawerOpen = isLargeScreen;
-            IsDrawerPinned = isLargeScreen;
+            // Check for a saved drawer pinned preference, fall back to screen size
+            var savedDrawerPinned = await PreferenceService.GetDrawerPinnedAsync();
+            if (savedDrawerPinned.HasValue)
+            {
+                IsDrawerPinned = savedDrawerPinned.Value;
+                IsDrawerOpen = savedDrawerPinned.Value;
+            }
+            else
+            {
+                var windowWidth = await JSRuntime.InvokeAsync<int>("eval", "window.innerWidth");
+                var isLargeScreen = windowWidth >= LargeScreenBreakpoint;
+                IsDrawerOpen = isLargeScreen;
+                IsDrawerPinned = isLargeScreen;
+            }
+            _drawerPinnedInitialised = true;
 
             StateHasChanged();
         }
@@ -192,6 +202,10 @@
         IsDrawerPinned = !IsDrawerPinned;
         // When pinning, ensure drawer stays open. When unpinning, close it.
         IsDrawerOpen = IsDrawerPinned;
+        if (_drawerPinnedInitialised)
+        {
+            _ = PreferenceService.SetDrawerPinnedAsync(IsDrawerPinned);
+        }
     }
 
     private void OnDrawerMouseEnter()

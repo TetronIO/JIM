@@ -972,16 +972,6 @@ try {
             }
         }
 
-        # Restart jim.worker to pick up schema changes
-        Write-Host "  Restarting JIM.Worker to reload schema..." -ForegroundColor Gray
-        docker restart jim.worker > $null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  ✓ JIM.Worker restarted" -ForegroundColor Green
-            Start-Sleep -Seconds 3
-        }
-        else {
-            Write-Host "  ⚠ Failed to restart JIM.Worker" -ForegroundColor Yellow
-        }
     }
 }
 catch {

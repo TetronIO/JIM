@@ -365,18 +365,32 @@ public class SchedulerServer
         execution.ErrorMessage = "Cancelled by user";
         await Application.Repository.Scheduling.UpdateScheduleExecutionAsync(execution);
 
-        // Cancel all tasks — same aggressive approach as individual task cancellation
+        // Cancel all tasks — processing tasks are signalled for graceful cancellation,
+        // queued/waiting tasks are cancelled and removed immediately.
         var tasks = await Application.Repository.Tasking.GetWorkerTasksByScheduleExecutionAsync(executionId);
+        var immediatelyCancelled = 0;
+        var signalledForCancellation = 0;
         foreach (var task in tasks)
         {
-            if (task.Activity != null)
-                await Application.Activities.CancelActivityAsync(task.Activity);
+            if (task.Status == WorkerTaskStatus.Processing)
+            {
+                // Task is actively being processed by the worker — signal it for cancellation.
+                task.Status = WorkerTaskStatus.CancellationRequested;
+                await Application.Repository.Tasking.UpdateWorkerTaskAsync(task);
+                signalledForCancellation++;
+            }
+            else
+            {
+                if (task.Activity != null)
+                    await Application.Activities.CancelActivityAsync(task.Activity);
 
-            await Application.Repository.Tasking.DeleteWorkerTaskAsync(task);
+                await Application.Repository.Tasking.DeleteWorkerTaskAsync(task);
+                immediatelyCancelled++;
+            }
         }
 
-        Log.Information("CancelScheduleExecutionAsync: Cancelled execution {ExecutionId}, deleted {Count} tasks",
-            executionId, tasks.Count);
+        Log.Information("CancelScheduleExecutionAsync: Cancelled execution {ExecutionId} — {ImmediateCount} tasks cancelled immediately, {SignalledCount} processing tasks signalled for cancellation",
+            executionId, immediatelyCancelled, signalledForCancellation);
         return true;
     }
 

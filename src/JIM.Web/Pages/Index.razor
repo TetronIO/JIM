@@ -1,11 +1,556 @@
-﻿@page "/"
+@page "/"
 @attribute [Authorize(Roles = "User")]
+@using JIM.Application
+@using JIM.Models.Core
+@using JIM.Models.Scheduling
+@using JIM.Models.Logic
+@inject JimApplication Jim
+@inject NavigationManager NavManager
+
 <PageTitle>JIM Home</PageTitle>
 
-<MudPaper Class="pa-5" Outlined="true">
-    <MudText Typo="Typo.h2">Welcome</MudText>
-    <MudText Typo="Typo.body1">
-        Junctional Identity Manager (JIM) is a modern Identity &amp; Access Management system for organisations that need to manage 
-        identities and entitlements across business systems and applications.
-    </MudText>
-</MudPaper>
+<MudText Typo="Typo.h4">Home</MudText>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
+    Junctional Identity Manager - Modern, simplified.
+</MudText>
+
+@* ─── Getting Started Checklist (admin-only, hidden when fully configured) ─── *@
+<AuthorizeView Roles="Administrator">
+    @if (_dataLoaded && !_allSetupComplete)
+    {
+        <MudPaper Class="pa-5 mt-5" Outlined="true">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.Checklist" />
+                <MudText Typo="Typo.h5">Getting Started</MudText>
+            </MudStack>
+            <MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
+                Complete these steps to start synchronising identities.
+            </MudText>
+            <MudStack Spacing="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    @if (_connectedSystemCount > 0)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                        <MudText Typo="Typo.body1">Create a Connected System</MudText>
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Outlined.RadioButtonUnchecked" Class="mud-text-disabled" />
+                        <MudLink Typo="Typo.body1" Href="/admin/connected-systems">Create a Connected System</MudLink>
+                    }
+                </MudStack>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    @if (_syncRuleCount > 0)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                        <MudText Typo="Typo.body1">Create Synchronisation Rules</MudText>
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Outlined.RadioButtonUnchecked" Class="mud-text-disabled" />
+                        <MudLink Typo="Typo.body1" Href="/admin/sync-rules">Create Synchronisation Rules</MudLink>
+                    }
+                </MudStack>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    @if (_hasSchedules)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                        <MudText Typo="Typo.body1">Create a Schedule</MudText>
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Outlined.RadioButtonUnchecked" Class="mud-text-disabled" />
+                        <MudLink Typo="Typo.body1" Href="/admin/operations">Create a Schedule</MudLink>
+                    }
+                </MudStack>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    @if (_hasEverRun)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                        <MudText Typo="Typo.body1">Run your first synchronisation</MudText>
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Outlined.RadioButtonUnchecked" Class="mud-text-disabled" />
+                        <MudLink Typo="Typo.body1" Href="/admin/operations">Run your first synchronisation</MudLink>
+                    }
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
+</AuthorizeView>
+
+@* ─── Summary Stat Cards ─── *@
+<MudGrid Class="mt-5" Spacing="4">
+    <MudItem xs="6" md="3">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/t/users"))">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" />
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Users</MudText>
+            </MudStack>
+            @if (_dataLoaded)
+            {
+                <MudText Typo="Typo.h4">@_userCount.ToString("N0")</MudText>
+            }
+            else
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+            }
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" md="3">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/t/groups"))">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Primary" />
+                <MudText Typo="Typo.button" Class="mud-text-secondary">Groups</MudText>
+            </MudStack>
+            @if (_dataLoaded)
+            {
+                <MudText Typo="Typo.h4">@_groupCount.ToString("N0")</MudText>
+            }
+            else
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+            }
+        </MudPaper>
+    </MudItem>
+    <AuthorizeView Roles="Administrator">
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/connected-systems"))">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Storage" Color="Color.Primary" />
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Connected Systems</MudText>
+                </MudStack>
+                @if (_dataLoaded)
+                {
+                    <MudText Typo="Typo.h4">@_connectedSystemCount.ToString("N0")</MudText>
+                }
+                else
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                }
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/sync-rules"))">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.SyncAlt" Color="Color.Primary" />
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Sync Rules</MudText>
+                </MudStack>
+                @if (_dataLoaded)
+                {
+                    <MudText Typo="Typo.h4">@_syncRuleCount.ToString("N0")</MudText>
+                }
+                else
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                }
+            </MudPaper>
+        </MudItem>
+    </AuthorizeView>
+</MudGrid>
+
+@* ─── Schedule Summary (admin-only) ─── *@
+<AuthorizeView Roles="Administrator">
+    <MudText Typo="Typo.h5" Class="mt-8">Schedules</MudText>
+    @if (_dataLoaded)
+    {
+        @if (_schedules.Count > 0)
+        {
+            <MudTable T="Schedule" Items="_schedules" Hover="true" Dense="true" Outlined="true" Elevation="0"
+                      OnRowClick="HandleScheduleRowClick" RowClass="cursor-pointer" Class="mt-3">
+                <HeaderContent>
+                    <MudTh><MudText Typo="Typo.button">Name</MudText></MudTh>
+                    <MudTh><MudText Typo="Typo.button">Trigger</MudText></MudTh>
+                    <MudTh><MudText Typo="Typo.button">Last Run</MudText></MudTh>
+                    <MudTh><MudText Typo="Typo.button">Next Run</MudText></MudTh>
+                    <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
+                </HeaderContent>
+                <RowTemplate Context="schedule">
+                    <MudTd DataLabel="Name">
+                        <MudText Typo="Typo.body1">@schedule.Name</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Trigger">
+                        @if (schedule.TriggerType == ScheduleTriggerType.Cron)
+                        {
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Info"
+                                     Icon="@Icons.Material.Filled.Schedule">
+                                @GetScheduleDescription(schedule)
+                            </MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Default"
+                                     Icon="@Icons.Material.Filled.TouchApp">
+                                Manual
+                            </MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Last Run">
+                        @if (schedule.LastRunTime.HasValue)
+                        {
+                            <MudTooltip Text="@schedule.LastRunTime.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                                <MudText Typo="Typo.body1">@schedule.LastRunTime.Value.ToLocalTime().ToRelativeTime()</MudText>
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body1" Class="mud-text-disabled">Never</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Next Run">
+                        @if (schedule.NextRunTime.HasValue && schedule.IsEnabled && schedule.TriggerType == ScheduleTriggerType.Cron)
+                        {
+                            <MudTooltip Text="@schedule.NextRunTime.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                                <MudText Typo="Typo.body1">@schedule.NextRunTime.Value.ToLocalTime().ToRelativeTime()</MudText>
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body1" Class="mud-text-disabled">-</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        @if (schedule.IsEnabled)
+                        {
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Success">Enabled</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Default">Disabled</MudChip>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Class="pa-4 mud-text-secondary">No schedules configured.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        }
+        else
+        {
+            <MudPaper Class="pa-5 mt-3" Outlined="true">
+                <MudStack AlignItems="AlignItems.Center">
+                    <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Large" Class="mud-text-disabled" />
+                    <MudText Typo="Typo.body1" Class="mud-text-secondary">No schedules have been created yet.</MudText>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                               Href="/admin/operations" Class="mt-2"
+                               StartIcon="@Icons.Material.Filled.Add">
+                        Create a Schedule
+                    </MudButton>
+                </MudStack>
+            </MudPaper>
+        }
+    }
+</AuthorizeView>
+
+@* ─── Quick Links ─── *@
+<MudText Typo="Typo.h5" Class="mt-8">Quick Links</MudText>
+<MudGrid Class="mt-3" Spacing="4">
+    <MudItem xs="6" sm="4" md="3">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/t/users"))">
+            <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" Color="Color.Primary" />
+                <MudText Typo="Typo.body1">Users</MudText>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="4" md="3">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/t/groups"))">
+            <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Large" Color="Color.Primary" />
+                <MudText Typo="Typo.body1">Groups</MudText>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6" sm="4" md="3">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/activity"))">
+            <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.DynamicFeed" Size="Size.Large" Color="Color.Primary" />
+                <MudText Typo="Typo.body1">Activity</MudText>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+    <AuthorizeView Roles="Administrator">
+        <MudItem xs="6" sm="4" md="3">
+            <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/operations"))">
+                <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Large" Color="Color.Primary" />
+                    <MudText Typo="Typo.body1">Operations</MudText>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="4" md="3">
+            <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/connected-systems"))">
+                <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Storage" Size="Size.Large" Color="Color.Primary" />
+                    <MudText Typo="Typo.body1">Connected Systems</MudText>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="4" md="3">
+            <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/settings"))">
+                <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Settings" Size="Size.Large" Color="Color.Primary" />
+                    <MudText Typo="Typo.body1">Settings</MudText>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    </AuthorizeView>
+</MudGrid>
+
+@code {
+    private bool _dataLoaded;
+    private int _userCount;
+    private int _groupCount;
+    private int _connectedSystemCount;
+    private int _syncRuleCount;
+    private List<Schedule> _schedules = new();
+    private bool _hasSchedules;
+    private bool _hasEverRun;
+    private bool _allSetupComplete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load object type counts
+        var userType = await Jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, includeChildObjects: false);
+        var groupType = await Jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Group, includeChildObjects: false);
+        _userCount = userType != null ? await Jim.Metaverse.GetMetaverseObjectOfTypeCountAsync(userType) : 0;
+        _groupCount = groupType != null ? await Jim.Metaverse.GetMetaverseObjectOfTypeCountAsync(groupType) : 0;
+
+        // Load connected system and sync rule counts
+        _connectedSystemCount = Jim.ConnectedSystems.GetConnectedSystemCount();
+        var syncRuleHeaders = await Jim.ConnectedSystems.GetSyncRuleHeadersAsync();
+        _syncRuleCount = syncRuleHeaders.Count;
+
+        // Load schedules
+        _schedules = await Jim.Scheduler.GetAllSchedulesAsync();
+        _hasSchedules = _schedules.Count > 0;
+        _hasEverRun = _schedules.Any(s => s.LastRunTime.HasValue);
+
+        // Determine if all setup steps are complete
+        _allSetupComplete = _connectedSystemCount > 0
+                            && _syncRuleCount > 0
+                            && _hasSchedules
+                            && _hasEverRun;
+
+        _dataLoaded = true;
+    }
+
+    private void HandleScheduleRowClick(TableRowClickEventArgs<Schedule> args)
+    {
+        if (args.Item == null) return;
+        NavManager.NavigateTo("/admin/operations");
+    }
+
+    // ─── Schedule Description Helpers (reused from OperationsSchedulesTab) ───
+
+    private static string GetScheduleDescription(Schedule schedule)
+    {
+        if (schedule.TriggerType != ScheduleTriggerType.Cron)
+            return "Manual";
+
+        var dayDesc = GetDayDescriptionFromSchedule(schedule.DaysOfWeek);
+
+        switch (schedule.PatternType)
+        {
+            case SchedulePatternType.Interval:
+                var unit = schedule.IntervalUnit == ScheduleIntervalUnit.Hours ? "hr" : "min";
+                var intervalDesc = $"Every {schedule.IntervalValue ?? 1} {unit}";
+
+                if (!string.IsNullOrEmpty(schedule.IntervalWindowStart) &&
+                    !string.IsNullOrEmpty(schedule.IntervalWindowEnd))
+                {
+                    var start = FormatTimeString(schedule.IntervalWindowStart);
+                    var end = FormatTimeString(schedule.IntervalWindowEnd);
+                    return $"{dayDesc}, {intervalDesc} ({start}-{end})";
+                }
+                return $"{dayDesc}, {intervalDesc}";
+
+            case SchedulePatternType.SpecificTimes:
+                if (!string.IsNullOrEmpty(schedule.RunTimes))
+                {
+                    var times = schedule.RunTimes.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                    if (times.Length == 1)
+                        return $"{dayDesc} at {FormatTimeString(times[0].Trim())}";
+                    if (times.Length <= 3)
+                    {
+                        var timeList = string.Join(", ", times.Select(t => FormatTimeString(t.Trim())));
+                        return $"{dayDesc} at {timeList}";
+                    }
+                    return $"{dayDesc}, {times.Length} times/day";
+                }
+                break;
+
+            case SchedulePatternType.Custom:
+                return GetCronDescription(schedule.CronExpression);
+        }
+
+        return GetCronDescription(schedule.CronExpression);
+    }
+
+    private static string GetDayDescriptionFromSchedule(string? daysOfWeek)
+    {
+        if (string.IsNullOrEmpty(daysOfWeek))
+            return "Daily";
+
+        var days = daysOfWeek.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Where(d => int.TryParse(d.Trim(), out _))
+            .Select(d => int.Parse(d.Trim()))
+            .OrderBy(d => d)
+            .ToList();
+
+        if (days.Count == 0 || days.Count == 7)
+            return "Daily";
+        if (days.SequenceEqual(new[] { 1, 2, 3, 4, 5 }))
+            return "Weekdays";
+        if (days.SequenceEqual(new[] { 0, 6 }))
+            return "Weekends";
+
+        if (days.Count == 6)
+        {
+            var missing = Enumerable.Range(0, 7).Except(days).First();
+            var missingName = missing switch
+            {
+                0 => "Sun", 1 => "Mon", 2 => "Tue", 3 => "Wed",
+                4 => "Thu", 5 => "Fri", 6 => "Sat", _ => "?"
+            };
+            return $"Daily exc. {missingName}";
+        }
+
+        var dayNames = days.Select(d => d switch
+        {
+            0 => "Sun", 1 => "Mon", 2 => "Tue", 3 => "Wed",
+            4 => "Thu", 5 => "Fri", 6 => "Sat", _ => "?"
+        });
+        return string.Join(", ", dayNames);
+    }
+
+    private static string FormatTimeString(string timeStr)
+    {
+        if (TimeSpan.TryParse(timeStr.Trim(), out var time))
+        {
+            var hour = time.Hours;
+            var minute = time.Minutes;
+            var period = hour >= 12 ? "pm" : "am";
+            var displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+            return minute == 0 ? $"{displayHour}{period}" : $"{displayHour}:{minute:D2}{period}";
+        }
+        return timeStr;
+    }
+
+    private static string GetCronDescription(string? cronExpression)
+    {
+        if (string.IsNullOrWhiteSpace(cronExpression))
+            return "Not configured";
+
+        var parts = cronExpression.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 5)
+            return cronExpression;
+
+        var minute = parts[0];
+        var hour = parts[1];
+        var dayOfMonth = parts[2];
+        var month = parts[3];
+        var dayOfWeek = parts[4];
+
+        var dayDesc = GetDayDescription(dayOfWeek);
+
+        if (dayOfMonth == "*" && month == "*" && hour.Contains(',') && !hour.Contains('/'))
+        {
+            var hours = hour.Split(',')
+                .Where(h => int.TryParse(h.Trim(), out _))
+                .Select(h => int.Parse(h.Trim()))
+                .ToList();
+
+            if (hours.Count > 0)
+            {
+                var timeList = string.Join(", ", hours.Select(h => FormatHour(h, int.TryParse(minute, out var m) ? m : 0)));
+                return $"{dayDesc} at {timeList}";
+            }
+        }
+
+        if (dayOfMonth == "*" && month == "*" && dayOfWeek == "*")
+        {
+            if (hour.StartsWith("*/"))
+                return $"Every {hour[2..]} hours";
+            return $"Daily at {FormatTime(hour, minute)}";
+        }
+
+        if (dayOfMonth == "*" && month == "*" && int.TryParse(hour, out _))
+            return $"{dayDesc} at {FormatTime(hour, minute)}";
+
+        if (hour == "*" && dayOfMonth == "*" && month == "*")
+        {
+            var hourlyDesc = minute == "0" ? "Hourly" : $"Hourly at :{minute.PadLeft(2, '0')}";
+            if (dayOfWeek != "*")
+                return $"{dayDesc}, {hourlyDesc.ToLower()}";
+            return hourlyDesc;
+        }
+
+        if (minute.StartsWith("*/") && hour == "*")
+        {
+            var interval = minute[2..];
+            if (dayOfWeek != "*")
+                return $"{dayDesc}, every {interval} min";
+            return $"Every {interval} minutes";
+        }
+
+        if (hour.StartsWith("*/") && minute == "0")
+        {
+            var interval = hour[2..];
+            if (dayOfWeek != "*")
+                return $"{dayDesc}, every {interval} hrs";
+            return $"Every {interval} hours";
+        }
+
+        return cronExpression;
+    }
+
+    private static string GetDayDescription(string dayOfWeek)
+    {
+        if (dayOfWeek == "*")
+            return "Daily";
+        if (dayOfWeek is "1-5" or "MON-FRI")
+            return "Weekdays";
+        if (dayOfWeek is "0,6" or "SAT,SUN")
+            return "Weekends";
+
+        var dayNumbers = dayOfWeek.Split(',')
+            .Where(d => int.TryParse(d.Trim(), out _))
+            .Select(d => int.Parse(d.Trim()))
+            .ToList();
+
+        if (dayNumbers.Count > 0)
+        {
+            if (dayNumbers.Count == 7)
+                return "Daily";
+            if (dayNumbers.OrderBy(d => d).SequenceEqual(new[] { 1, 2, 3, 4, 5 }))
+                return "Weekdays";
+            if (dayNumbers.OrderBy(d => d).SequenceEqual(new[] { 0, 6 }))
+                return "Weekends";
+
+            var dayNames = dayNumbers.Select(d => d switch
+            {
+                0 => "Sun", 1 => "Mon", 2 => "Tue", 3 => "Wed",
+                4 => "Thu", 5 => "Fri", 6 => "Sat", _ => "?"
+            });
+            return string.Join(", ", dayNames);
+        }
+
+        return dayOfWeek;
+    }
+
+    private static string FormatTime(string hour, string minute)
+    {
+        if (!int.TryParse(hour, out var h) || !int.TryParse(minute, out var m))
+            return $"{hour}:{minute}";
+        return FormatHour(h, m);
+    }
+
+    private static string FormatHour(int hour, int minute)
+    {
+        var period = hour >= 12 ? "PM" : "AM";
+        var displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+        return $"{displayHour}:{minute:D2} {period}";
+    }
+}

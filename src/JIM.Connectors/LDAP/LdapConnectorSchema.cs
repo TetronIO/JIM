@@ -8,13 +8,15 @@ internal class LdapConnectorSchema
 {
     private readonly LdapConnection _connection;
     private readonly ILogger _logger;
+    private readonly LdapConnectorRootDse _rootDse;
     private readonly ConnectorSchema _schema;
     private string _schemaNamingContext = null!;
 
-    internal LdapConnectorSchema(LdapConnection ldapConnection, ILogger logger)
+    internal LdapConnectorSchema(LdapConnection ldapConnection, ILogger logger, LdapConnectorRootDse rootDse)
     {
         _connection = ldapConnection;
         _logger = logger;
+        _rootDse = rootDse;
         _schema = new ConnectorSchema();
     }
 
@@ -119,22 +121,22 @@ internal class LdapConnectorSchema
         if (objectClassEntry.Attributes.Contains("maycontain"))
             foreach (string attributeName in objectClassEntry.Attributes["maycontain"].GetValues(typeof(string)))
                 if (objectType.Attributes.All(q => q.Name != attributeName))
-                    objectType.Attributes.Add(GetSchemaAttribute(attributeName, objectClassName, false));
+                    objectType.Attributes.Add(GetSchemaAttribute(attributeName, objectClassName, false, objectType.Name));
 
         if (objectClassEntry.Attributes.Contains("mustcontain"))
             foreach (string attributeName in objectClassEntry.Attributes["mustcontain"].GetValues(typeof(string)))
                 if (objectType.Attributes.All(q => q.Name != attributeName))
-                    objectType.Attributes.Add(GetSchemaAttribute(attributeName, objectClassName, true));
+                    objectType.Attributes.Add(GetSchemaAttribute(attributeName, objectClassName, true, objectType.Name));
 
         if (objectClassEntry.Attributes.Contains("systemmaycontain"))
             foreach (string attributeName in objectClassEntry.Attributes["systemmaycontain"].GetValues(typeof(string)))
                 if (objectType.Attributes.All(q => q.Name != attributeName))
-                    objectType.Attributes.Add(GetSchemaAttribute(attributeName, objectClassName, false));
+                    objectType.Attributes.Add(GetSchemaAttribute(attributeName, objectClassName, false, objectType.Name));
 
         if (objectClassEntry.Attributes.Contains("systemmustcontain"))
             foreach (string attributeName in objectClassEntry.Attributes["systemmustcontain"].GetValues(typeof(string)))
                 if (objectType.Attributes.All(q => q.Name != attributeName))
-                    objectType.Attributes.Add(GetSchemaAttribute(attributeName, objectClassName, true));
+                    objectType.Attributes.Add(GetSchemaAttribute(attributeName, objectClassName, true, objectType.Name));
 
         // now recurse into any auxiliary and system auxiliary classes
         var auxiliaryClasses = LdapConnectorUtilities.GetEntryAttributeStringValues(objectClassEntry, "auxiliaryclass");
@@ -163,7 +165,7 @@ internal class LdapConnectorSchema
         }
     }
 
-    private ConnectorSchemaAttribute GetSchemaAttribute(string attributeName, string objectClass, bool required)
+    private ConnectorSchemaAttribute GetSchemaAttribute(string attributeName, string objectClass, bool required, string objectTypeName)
     {
         var attributeEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _schemaNamingContext, $"(ldapdisplayname={attributeName})") ??
                              throw new Exception($"Couldn't retrieve schema attribute: {attributeName}");
@@ -181,6 +183,17 @@ internal class LdapConnectorSchema
         }
 
         var attributePlurality = isSingleValued ? AttributePlurality.SingleValued : AttributePlurality.MultiValued;
+
+        // Active Directory SAM layer override: certain attributes are declared as multi-valued in the
+        // LDAP schema but the SAM layer enforces single-valued semantics on security principals.
+        // Override the plurality to match actual runtime behaviour so mapping validation works correctly.
+        if (!isSingleValued && LdapConnectorUtilities.ShouldOverridePluralityToSingleValued(attributeName, objectTypeName, _rootDse.IsActiveDirectory))
+        {
+            attributePlurality = AttributePlurality.SingleValued;
+            _logger.Debug("GetSchemaAttribute: Overriding '{AttributeName}' from multi-valued to single-valued on object type '{ObjectType}' — " +
+                "Active Directory SAM layer enforces single-valued semantics on this attribute for security principals.",
+                attributeName, objectTypeName);
+        }
 
         // work out what data-type the attribute is using the shared utility method
         var omSyntax = LdapConnectorUtilities.GetEntryAttributeIntValue(attributeEntry, "omsyntax");
