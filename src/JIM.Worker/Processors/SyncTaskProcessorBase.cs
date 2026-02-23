@@ -63,6 +63,11 @@ public abstract class SyncTaskProcessorBase
     // Batch collection for deferred CSO deletions (avoid per-CSO database calls)
     protected readonly List<(ConnectedSystemObject Cso, ActivityRunProfileExecutionItem ExecutionItem)> _obsoleteCsosToDelete = [];
 
+    // Tracks MVO IDs that have had CSOs disconnected in-memory during this batch but not yet flushed to the database.
+    // Used by AttemptJoinAsync to avoid false CouldNotJoinDueToExistingJoin errors when an obsolete CSO
+    // is disconnected and a new CSO tries to join the same MVO within the same page.
+    protected readonly List<Guid> _pendingDisconnectedMvoIds = [];
+
     // Batch collection for quiet CSO deletions (pre-disconnected CSOs that don't need RPEIs)
     // These are CSOs that were already disconnected during synchronous MVO deletion and just need cleanup
     protected readonly List<ConnectedSystemObject> _quietCsosToDelete = [];
@@ -512,6 +517,10 @@ public abstract class SyncTaskProcessorBase
         connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.NotJoined;
         connectedSystemObject.DateJoined = null;
         Log.Verbose($"ProcessObsoleteConnectedSystemObjectAsync: Broke join between CSO {connectedSystemObject.Id} and MVO {mvoId}.");
+
+        // Track this disconnection so AttemptJoinAsync can account for it when checking existing joins.
+        // The database still shows this CSO as joined until FlushObsoleteCsoOperationsAsync() runs.
+        _pendingDisconnectedMvoIds.Add(mvoId);
 
         // Queue the CSO for batch deletion (deletion will happen at end of page processing)
         _obsoleteCsosToDelete.Add((connectedSystemObject, deletionExecutionItem));
@@ -1484,6 +1493,7 @@ public abstract class SyncTaskProcessorBase
         Log.Verbose("FlushObsoleteCsoOperationsAsync: Deleted {Count} obsolete CSOs in batch", _obsoleteCsosToDelete.Count);
 
         _obsoleteCsosToDelete.Clear();
+        _pendingDisconnectedMvoIds.Clear();
         span.SetSuccess();
     }
 
@@ -1695,6 +1705,19 @@ public abstract class SyncTaskProcessorBase
             // Use a count query to check for existing joins without loading the CSO entities.
             var existingCsoJoinCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMvoAsync(
                 _connectedSystem.Id, mvo.Id);
+
+            // Account for CSOs that have been disconnected in-memory but not yet flushed to the database.
+            // During batch processing, obsolete CSOs are disconnected from their MVOs in-memory and queued
+            // for deletion, but the database still reflects the old join until the page boundary flush.
+            // _pendingDisconnectedMvoIds tracks which MVOs have had CSOs disconnected in this batch.
+            if (existingCsoJoinCount > 0 && _pendingDisconnectedMvoIds.Contains(mvo.Id))
+            {
+                var pendingDisconnectCount = _pendingDisconnectedMvoIds.Count(id => id == mvo.Id);
+                existingCsoJoinCount -= pendingDisconnectCount;
+                Log.Debug("AttemptJoinAsync: Adjusted existing join count for MVO {MvoId} from {DbCount} to {AdjustedCount} " +
+                    "(accounting for {PendingCount} pending disconnection(s) not yet flushed to database)",
+                    mvo.Id, existingCsoJoinCount + pendingDisconnectCount, existingCsoJoinCount, pendingDisconnectCount);
+            }
 
             if (existingCsoJoinCount > 1)
                 throw new InvalidDataException($"More than one CSO is already joined to the MVO {mvo} we found that matches the matching rules. This is not good!");
