@@ -83,7 +83,7 @@
 @* ─── Summary Stat Cards ─── *@
 <MudGrid Class="mt-5" Spacing="4">
     <MudItem xs="6" md="3">
-        <MudPaper Class="pa-4 cursor-pointer" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/t/users"))">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/t/users"))">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                 <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" />
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Users</MudText>
@@ -99,7 +99,7 @@
         </MudPaper>
     </MudItem>
     <MudItem xs="6" md="3">
-        <MudPaper Class="pa-4 cursor-pointer" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/t/groups"))">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/t/groups"))">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                 <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Primary" />
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Groups</MudText>
@@ -116,7 +116,7 @@
     </MudItem>
     <AuthorizeView Roles="Administrator">
         <MudItem xs="6" md="3">
-            <MudPaper Class="pa-4 cursor-pointer" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/connected-systems"))">
+            <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/connected-systems"))">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                     <MudIcon Icon="@Icons.Material.Filled.Storage" Color="Color.Primary" />
                     <MudText Typo="Typo.button" Class="mud-text-secondary">Connected Systems</MudText>
@@ -132,7 +132,7 @@
             </MudPaper>
         </MudItem>
         <MudItem xs="6" md="3">
-            <MudPaper Class="pa-4 cursor-pointer" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/sync-rules"))">
+            <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/sync-rules"))">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                     <MudIcon Icon="@Icons.Material.Filled.SyncAlt" Color="Color.Primary" />
                     <MudText Typo="Typo.button" Class="mud-text-secondary">Sync Rules</MudText>
@@ -247,7 +247,7 @@
 <MudText Typo="Typo.h5" Class="mt-8">Quick Links</MudText>
 <MudGrid Class="mt-3" Spacing="4">
     <MudItem xs="6" sm="4" md="3">
-        <MudPaper Class="pa-4 cursor-pointer" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/t/users"))">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/t/users"))">
             <MudStack AlignItems="AlignItems.Center" Spacing="2">
                 <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" Color="Color.Primary" />
                 <MudText Typo="Typo.body1">Users</MudText>
@@ -255,7 +255,7 @@
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="4" md="3">
-        <MudPaper Class="pa-4 cursor-pointer" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/t/groups"))">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/t/groups"))">
             <MudStack AlignItems="AlignItems.Center" Spacing="2">
                 <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Large" Color="Color.Primary" />
                 <MudText Typo="Typo.body1">Groups</MudText>
@@ -263,7 +263,7 @@
         </MudPaper>
     </MudItem>
     <MudItem xs="6" sm="4" md="3">
-        <MudPaper Class="pa-4 cursor-pointer" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/activity"))">
+        <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/activity"))">
             <MudStack AlignItems="AlignItems.Center" Spacing="2">
                 <MudIcon Icon="@Icons.Material.Filled.DynamicFeed" Size="Size.Large" Color="Color.Primary" />
                 <MudText Typo="Typo.body1">Activity</MudText>
@@ -272,7 +272,7 @@
     </MudItem>
     <AuthorizeView Roles="Administrator">
         <MudItem xs="6" sm="4" md="3">
-            <MudPaper Class="pa-4 cursor-pointer" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/operations"))">
+            <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/operations"))">
                 <MudStack AlignItems="AlignItems.Center" Spacing="2">
                     <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Large" Color="Color.Primary" />
                     <MudText Typo="Typo.body1">Operations</MudText>
@@ -280,7 +280,7 @@
             </MudPaper>
         </MudItem>
         <MudItem xs="6" sm="4" md="3">
-            <MudPaper Class="pa-4 cursor-pointer" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/connected-systems"))">
+            <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/connected-systems"))">
                 <MudStack AlignItems="AlignItems.Center" Spacing="2">
                     <MudIcon Icon="@Icons.Material.Filled.Storage" Size="Size.Large" Color="Color.Primary" />
                     <MudText Typo="Typo.body1">Connected Systems</MudText>
@@ -288,7 +288,7 @@
             </MudPaper>
         </MudItem>
         <MudItem xs="6" sm="4" md="3">
-            <MudPaper Class="pa-4 cursor-pointer" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/settings"))">
+            <MudPaper Class="pa-4 cursor-pointer jim-quick-link" Outlined="true" @onclick="@(() => NavManager.NavigateTo("/admin/settings"))">
                 <MudStack AlignItems="AlignItems.Center" Spacing="2">
                     <MudIcon Icon="@Icons.Material.Filled.Settings" Size="Size.Large" Color="Color.Primary" />
                     <MudText Typo="Typo.body1">Settings</MudText>
