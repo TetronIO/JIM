@@ -868,7 +868,10 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        var result = await _application.ConnectedSystems.DeleteAsync(connectedSystemId, initiatedBy, deleteChangeHistory);
+        var apiKey = await GetCurrentApiKeyAsync();
+        var result = apiKey != null
+            ? await _application.ConnectedSystems.DeleteAsync(connectedSystemId, apiKey, deleteChangeHistory)
+            : await _application.ConnectedSystems.DeleteAsync(connectedSystemId, initiatedBy, deleteChangeHistory);
 
         if (!result.Success)
             return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage ?? "Deletion failed."));
@@ -1238,7 +1241,11 @@ public class SynchronisationController(
 
         try
         {
-            await _application.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(runProfile, initiatedBy);
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(runProfile, apiKey);
+            else
+                await _application.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(runProfile, initiatedBy);
 
             _logger.LogInformation("Updated run profile: {Id} ({Name})", runProfile.Id, runProfile.Name);
 
@@ -1287,7 +1294,11 @@ public class SynchronisationController(
         if (runProfile == null)
             return NotFound(ApiErrorResponse.NotFound($"Run profile with ID {runProfileId} not found for connected system {connectedSystemId}."));
 
-        await _application.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(runProfile, initiatedBy);
+        var apiKey = await GetCurrentApiKeyAsync();
+        if (apiKey != null)
+            await _application.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(runProfile, apiKey);
+        else
+            await _application.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(runProfile, initiatedBy);
 
         _logger.LogInformation("Deleted run profile: {Id}", runProfileId);
 
@@ -1517,7 +1528,11 @@ public class SynchronisationController(
         if (syncRule == null)
             return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {id} not found."));
 
-        await _application.ConnectedSystems.DeleteSyncRuleAsync(syncRule, initiatedBy);
+        var apiKey = await GetCurrentApiKeyAsync();
+        if (apiKey != null)
+            await _application.ConnectedSystems.DeleteSyncRuleAsync(syncRule, apiKey);
+        else
+            await _application.ConnectedSystems.DeleteSyncRuleAsync(syncRule, initiatedBy);
 
         _logger.LogInformation("Deleted sync rule: {Id}", id);
 
@@ -2483,7 +2498,11 @@ public class SynchronisationController(
 
         try
         {
-            await _application.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, initiatedBy);
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, apiKey);
+            else
+                await _application.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, initiatedBy);
 
             _logger.LogInformation("Updated object matching rule {RuleId} for connected system {SystemId}", ruleId, connectedSystemId);
 
@@ -2532,7 +2551,11 @@ public class SynchronisationController(
         if (rule.ConnectedSystemObjectType?.ConnectedSystemId != connectedSystemId)
             return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found in connected system {connectedSystemId}."));
 
-        await _application.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule, initiatedBy);
+        var apiKey = await GetCurrentApiKeyAsync();
+        if (apiKey != null)
+            await _application.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule, apiKey);
+        else
+            await _application.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule, initiatedBy);
 
         _logger.LogInformation("Deleted object matching rule {RuleId} for connected system {SystemId}", ruleId, connectedSystemId);
 

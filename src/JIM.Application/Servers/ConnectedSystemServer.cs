@@ -752,6 +752,96 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Deletes a Connected System (initiated by API key).
+    /// </summary>
+    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, ApiKey initiatedByApiKey, bool deleteChangeHistory = false)
+    {
+        Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by API key {ApiKeyName}, deleteChangeHistory={DeleteHistory}",
+            connectedSystemId, initiatedByApiKey.Name, deleteChangeHistory);
+
+        // Get the Connected System
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+        {
+            Log.Warning("DeleteAsync: Connected System {Id} not found", connectedSystemId);
+            return ConnectedSystemDeletionResult.Failed($"Connected System with ID {connectedSystemId} not found.");
+        }
+
+        // Check if already being deleted
+        if (connectedSystem.Status == ConnectedSystemStatus.Deleting)
+        {
+            Log.Warning("DeleteAsync: Connected System {Id} is already being deleted", connectedSystemId);
+            return ConnectedSystemDeletionResult.Failed("Connected System is already being deleted.");
+        }
+
+        // Set status to Deleting to block new operations
+        connectedSystem.Status = ConnectedSystemStatus.Deleting;
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        Log.Information("DeleteAsync: Set Connected System {Id} status to Deleting", connectedSystemId);
+
+        // Check for running sync operations
+        var runningSyncTask = await Application.Repository.ConnectedSystems.GetRunningSyncTaskAsync(connectedSystemId);
+        if (runningSyncTask != null)
+        {
+            Log.Information("DeleteAsync: Sync task {TaskId} is running for Connected System {CsId}. Queuing deletion.",
+                runningSyncTask.Id, connectedSystemId);
+
+            var deleteTask = DeleteConnectedSystemWorkerTask.ForApiKey(connectedSystemId, initiatedByApiKey.Id, initiatedByApiKey.Name, evaluateMvoDeletionRules: true, deleteChangeHistory);
+            _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
+
+            return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id);
+        }
+
+        // Get CSO count to determine sync vs async deletion
+        var csoCount = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId);
+
+        if (csoCount > BackgroundDeletionThreshold)
+        {
+            Log.Information("DeleteAsync: Connected System {Id} has {Count} CSOs (>{Threshold}). Queueing as background job.",
+                connectedSystemId, csoCount, BackgroundDeletionThreshold);
+
+            var deleteTask = DeleteConnectedSystemWorkerTask.ForApiKey(connectedSystemId, initiatedByApiKey.Id, initiatedByApiKey.Name, evaluateMvoDeletionRules: true, deleteChangeHistory);
+            _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
+
+            return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id);
+        }
+
+        // Small system - execute synchronously
+        Log.Information("DeleteAsync: Connected System {Id} has {Count} CSOs (<={Threshold}). Executing synchronously.",
+            connectedSystemId, csoCount, BackgroundDeletionThreshold);
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        try
+        {
+            await Application.Metaverse.MarkOrphanedMvosForDeletionAsync(connectedSystemId);
+            await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId, deleteChangeHistory);
+            await Application.Activities.CompleteActivityAsync(activity);
+
+            Log.Information("DeleteAsync: Connected System {Id} deleted successfully", connectedSystemId);
+            return ConnectedSystemDeletionResult.CompletedImmediately(activity.Id);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "DeleteAsync: Failed to delete Connected System {Id}", connectedSystemId);
+
+            var errorMessage = GetFullExceptionMessage(ex);
+            await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage);
+
+            connectedSystem.Status = ConnectedSystemStatus.Active;
+            await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+
+            return ConnectedSystemDeletionResult.Failed($"Failed to delete Connected System: {errorMessage}");
+        }
+    }
+
+    /// <summary>
     /// Executes the deletion of a Connected System. Called by the worker service for background deletions.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to delete.</param>
@@ -3457,6 +3547,31 @@ public class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
+    /// <summary>
+    /// Deletes a connected system run profile (initiated by API key).
+    /// </summary>
+    public async Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, ApiKey initiatedByApiKey)
+    {
+        if (connectedSystemRunProfile == null)
+            return;
+
+        // Get connected system name for activity context
+        var connectedSystem = await GetConnectedSystemAsync(connectedSystemRunProfile.ConnectedSystemId);
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystemRunProfile.Name,
+            TargetContext = connectedSystem?.Name,
+            ConnectedSystemRunType = connectedSystemRunProfile.RunType,
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            TargetOperationType = ActivityTargetOperationType.Delete,
+            ConnectedSystemId = connectedSystemRunProfile.ConnectedSystemId
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        await Application.Repository.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
     public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject? initiatedBy)
     {
         if (connectedSystemRunProfile == null)
@@ -3477,6 +3592,32 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         AuditHelper.SetUpdated(connectedSystemRunProfile, initiatedBy);
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Updates a connected system run profile (initiated by API key).
+    /// </summary>
+    public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, ApiKey initiatedByApiKey)
+    {
+        if (connectedSystemRunProfile == null)
+            throw new ArgumentNullException(nameof(connectedSystemRunProfile));
+
+        // Get connected system name for activity context
+        var connectedSystem = await GetConnectedSystemAsync(connectedSystemRunProfile.ConnectedSystemId);
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystemRunProfile.Name,
+            TargetContext = connectedSystem?.Name,
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConnectedSystemRunProfileId = connectedSystemRunProfile.Id,
+            ConnectedSystemId = connectedSystemRunProfile.ConnectedSystemId
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        AuditHelper.SetUpdated(connectedSystemRunProfile, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -3868,6 +4009,27 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
+
+    /// <summary>
+    /// Deletes a sync rule (initiated by API key).
+    /// </summary>
+    public async Task DeleteSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey)
+    {
+        // Get connected system name for activity context
+        var connectedSystem = syncRule.ConnectedSystem ??
+            (syncRule.ConnectedSystemId > 0 ? await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(syncRule.ConnectedSystemId) : null);
+
+        var activity = new Activity
+        {
+            TargetName = syncRule.Name,
+            TargetContext = connectedSystem?.Name,
+            TargetType = ActivityTargetType.SyncRule,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
     #endregion
 
     #region Object Matching Rules
@@ -3961,6 +4123,24 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Updates an existing object matching rule (initiated by API key).
+    /// </summary>
+    public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
+    {
+        var activity = new Activity
+        {
+            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetContext = await GetObjectMatchingRuleContextAsync(rule),
+            TargetType = ActivityTargetType.ObjectMatchingRule,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        AuditHelper.SetUpdated(rule, initiatedByApiKey);
+        await Application.Repository.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
     /// Deletes an object matching rule and its sources.
     /// </summary>
     public async Task DeleteObjectMatchingRuleAsync(ObjectMatchingRule rule, MetaverseObject? initiatedBy)
@@ -3973,6 +4153,23 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Delete
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        await Application.Repository.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Deletes an object matching rule and its sources (initiated by API key).
+    /// </summary>
+    public async Task DeleteObjectMatchingRuleAsync(ObjectMatchingRule rule, ApiKey initiatedByApiKey)
+    {
+        var activity = new Activity
+        {
+            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetContext = await GetObjectMatchingRuleContextAsync(rule),
+            TargetType = ActivityTargetType.ObjectMatchingRule,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
