@@ -107,6 +107,15 @@ public interface IConnectedSystemRepository
     public Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
+    /// Deletes pending exports by their associated Connected System Object IDs using raw SQL.
+    /// This avoids loading PE entities into the change tracker, preventing identity conflicts
+    /// when the change tracker has been cleared (e.g. during cross-page reference resolution).
+    /// </summary>
+    /// <param name="connectedSystemObjectIds">The CSO IDs whose pending exports should be deleted.</param>
+    /// <returns>The number of pending exports deleted.</returns>
+    public Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
+
+    /// <summary>
     /// Updates multiple Pending Export objects in a single batch operation.
     /// Used to efficiently update pending exports during sync.
     /// </summary>

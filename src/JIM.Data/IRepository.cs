@@ -26,4 +26,17 @@ public interface IRepository : IDisposable
     /// All tracked entities will become detached — any subsequent updates must re-attach them.
     /// </summary>
     public void ClearChangeTracker();
+
+    /// <summary>
+    /// Controls whether SaveChangesAsync automatically calls DetectChanges before saving.
+    /// When disabled, the change tracker will NOT scan navigation properties to discover new/modified
+    /// entities — only explicitly tracked entities (via Entry().State or Add/Update) will be saved.
+    ///
+    /// Use this when manually managing entity states with Entry().State to prevent DetectChanges from
+    /// traversing navigation properties and discovering conflicting entity instances (e.g. shared
+    /// MetaverseAttribute/MetaverseObjectType entities after ClearChangeTracker).
+    ///
+    /// IMPORTANT: Always restore to true after use, ideally in a try/finally block.
+    /// </summary>
+    public void SetAutoDetectChangesEnabled(bool enabled);
 }

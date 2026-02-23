@@ -215,7 +215,29 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             }
         }
 
-        Repository.Database.Update(connectedSystem);
+        // After ClearChangeTracker() (e.g. at end of cross-page reference resolution),
+        // the ConnectedSystem becomes detached. Update() would traverse its entire graph
+        // (Objects → MetaverseObject → Type → Attributes) causing PK violations on the
+        // MetaverseObjectType ↔ MetaverseAttribute join table. Use Entry().State for
+        // detached entities to update only scalar properties without graph traversal.
+        try
+        {
+            var entry = Repository.Database.Entry(connectedSystem);
+            if (entry.State == EntityState.Detached)
+            {
+                entry.State = EntityState.Modified;
+            }
+            else
+            {
+                Repository.Database.Update(connectedSystem);
+            }
+        }
+        catch (NullReferenceException)
+        {
+            // Fallback for mocked DbContext in unit tests
+            Repository.Database.Update(connectedSystem);
+        }
+
         await Repository.Database.SaveChangesAsync();
     }
 
@@ -822,8 +844,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.ReferenceValue)
                 .ThenInclude(rv => rv!.MetaverseObject)
-            .Include(cso => cso.MetaverseObject)
-                .ThenInclude(mvo => mvo!.Type)
             .Include(cso => cso.MetaverseObject)
                 .ThenInclude(mvo => mvo!.AttributeValues)
                 .ThenInclude(av => av.Attribute)
@@ -1759,20 +1779,31 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 @"DELETE FROM ""PendingExports"" WHERE ""Id"" = ANY({0})",
                 ids);
 
-            // Detach deleted entities and their children from change tracker to prevent
-            // stale tracking. Must detach children first to avoid FK constraint issues.
-            foreach (var export in exportList)
+            // Best-effort detach of deleted entities from the change tracker.
+            // After ClearChangeTracker() (e.g. cross-page reference resolution), calling Entry()
+            // can trigger change detection that encounters MetaverseAttribute identity conflicts
+            // (multiple instances with the same key loaded by different queries). Since the rows
+            // are already deleted via raw SQL, a detach failure is non-critical — the entities
+            // will simply remain in the tracker as stale entries until the next clear.
+            try
             {
-                foreach (var avc in export.AttributeValueChanges)
+                foreach (var export in exportList)
                 {
-                    var avcEntry = Repository.Database.Entry(avc);
-                    if (avcEntry.State != EntityState.Detached)
-                        avcEntry.State = EntityState.Detached;
-                }
+                    foreach (var avc in export.AttributeValueChanges)
+                    {
+                        var avcEntry = Repository.Database.Entry(avc);
+                        if (avcEntry.State != EntityState.Detached)
+                            avcEntry.State = EntityState.Detached;
+                    }
 
-                var entry = Repository.Database.Entry(export);
-                if (entry.State != EntityState.Detached)
-                    entry.State = EntityState.Detached;
+                    var entry = Repository.Database.Entry(export);
+                    if (entry.State != EntityState.Detached)
+                        entry.State = EntityState.Detached;
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                // Identity conflict during detach — safe to ignore since rows are already deleted
             }
         }
         catch
@@ -1781,6 +1812,29 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             Repository.Database.PendingExports.RemoveRange(exportList);
             await Repository.Database.SaveChangesAsync();
         }
+    }
+
+    public async Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        var csoIds = connectedSystemObjectIds.ToArray();
+        if (csoIds.Length == 0)
+            return 0;
+
+        // Delete child records first (FK constraint)
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExportAttributeValueChanges""
+              WHERE ""PendingExportId"" IN (
+                  SELECT pe.""Id"" FROM ""PendingExports"" pe
+                  WHERE pe.""ConnectedSystemObjectId"" = ANY({0})
+              )",
+            csoIds);
+
+        // Delete parent records and return count
+        var deleted = await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""PendingExports"" WHERE ""ConnectedSystemObjectId"" = ANY({0})",
+            csoIds);
+
+        return deleted;
     }
 
     public async Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
@@ -2241,7 +2295,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             }
             else
             {
-                Repository.Database.PendingExports.Update(untrackedExport);
+                // Use Entry().State instead of Update() to avoid graph traversal.
+                // Update() traverses navigation properties (AttributeValueChanges → Attribute →
+                // ConnectedSystemObjectTypeAttribute) causing identity conflicts when multiple
+                // PendingExports share the same ConnectedSystemObjectTypeAttribute instances.
+                Repository.Database.Entry(untrackedExport).State = EntityState.Modified;
             }
 
             // Update attribute value changes that remain (those not deleted)
@@ -2260,7 +2318,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 }
                 else
                 {
-                    Repository.Database.PendingExportAttributeValueChanges.Update(attrChange);
+                    // Use Entry().State instead of Update() to avoid graph traversal into
+                    // Attribute (ConnectedSystemObjectTypeAttribute) navigation properties.
+                    var attrEntry = Repository.Database.Entry(attrChange);
+                    attrEntry.State = EntityState.Modified;
+
+                    // PendingExportId is a shadow FK (not an explicit property on the model).
+                    // When the entity was loaded via AsNoTracking(), shadow property values are lost.
+                    // We must explicitly set it to maintain the parent relationship.
+                    attrEntry.Property("PendingExportId").CurrentValue = untrackedExport.Id;
                 }
             }
         }

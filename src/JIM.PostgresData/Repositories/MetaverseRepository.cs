@@ -256,7 +256,49 @@ public class MetaverseRepository : IMetaverseRepository
         if (objectList.Count == 0)
             return;
 
-        Repository.Database.UpdateRange(objectList);
+        // After ClearChangeTracker() (e.g. during cross-page reference resolution), MVOs become
+        // detached. UpdateRange traverses the full object graph (MVO → Type → Attributes, AV →
+        // Attribute → MetaverseObjectTypes) and hits identity conflicts when shared entities like
+        // MetaverseAttribute are reached from multiple MVOs.
+        //
+        // When detached, use Entry().State to attach only MVOs + AttributeValues individually,
+        // completely bypassing graph traversal. The caller is responsible for disabling
+        // AutoDetectChangesEnabled to prevent SaveChangesAsync from re-discovering shared entities
+        // via navigation properties.
+        //
+        // The try/catch handles unit tests using mocked DbContext where Entry() throws
+        // NullReferenceException (mock doesn't initialise internal DbContext state).
+        try
+        {
+            var anyDetached = objectList.Any(mvo => Repository.Database.Entry(mvo).State == EntityState.Detached);
+
+            if (anyDetached)
+            {
+                foreach (var mvo in objectList)
+                {
+                    var mvoEntry = Repository.Database.Entry(mvo);
+                    if (mvoEntry.State == EntityState.Detached)
+                        mvoEntry.State = EntityState.Modified;
+
+                    foreach (var av in mvo.AttributeValues)
+                    {
+                        var avEntry = Repository.Database.Entry(av);
+                        if (avEntry.State == EntityState.Detached)
+                            avEntry.State = avEntry.IsKeySet ? EntityState.Modified : EntityState.Added;
+                    }
+                }
+            }
+            else
+            {
+                Repository.Database.UpdateRange(objectList);
+            }
+        }
+        catch (NullReferenceException)
+        {
+            // Fallback for mocked DbContext in unit tests where ChangeTracker is not initialised.
+            Repository.Database.UpdateRange(objectList);
+        }
+
         await Repository.Database.SaveChangesAsync();
     }
 

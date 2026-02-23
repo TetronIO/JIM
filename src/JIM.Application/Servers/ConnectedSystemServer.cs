@@ -3596,6 +3596,16 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Deletes pending exports by their associated Connected System Object IDs using raw SQL.
+    /// Avoids loading PE entities into the change tracker, preventing identity conflicts
+    /// when the change tracker has been cleared (e.g. during cross-page reference resolution).
+    /// </summary>
+    public async Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+    {
+        return await Application.Repository.ConnectedSystems.DeletePendingExportsByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
+    }
+
+    /// <summary>
     /// Updates multiple Pending Export objects in a single batch operation.
     /// Used to efficiently update pending exports during sync.
     /// </summary>

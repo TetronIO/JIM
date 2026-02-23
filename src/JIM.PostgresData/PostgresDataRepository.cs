@@ -99,9 +99,26 @@ public class PostgresDataRepository : IRepository
     {
         try
         {
-            var trackedCount = Database.ChangeTracker.Entries().Count();
+            // NOTE: Do NOT call ChangeTracker.Entries() before Clear() — Entries() triggers
+            // DetectChanges() which walks navigation properties and can throw identity conflicts
+            // when the tracker contains multiple in-memory instances of the same entity (e.g.
+            // MetaverseAttribute loaded via different Include paths after a prior ClearChangeTracker).
+            // ChangeTracker.Clear() does NOT trigger DetectChanges.
             Database.ChangeTracker.Clear();
-            Log.Debug("ClearChangeTracker: Cleared {Count} tracked entities", trackedCount);
+            Log.Debug("ClearChangeTracker: Cleared change tracker");
+        }
+        catch (NullReferenceException)
+        {
+            // ChangeTracker is unavailable in unit test environments with mocked DbContext
+        }
+    }
+
+    public void SetAutoDetectChangesEnabled(bool enabled)
+    {
+        try
+        {
+            Database.ChangeTracker.AutoDetectChangesEnabled = enabled;
+            Log.Debug("SetAutoDetectChangesEnabled: {Enabled}", enabled);
         }
         catch (NullReferenceException)
         {

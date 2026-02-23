@@ -1148,9 +1148,19 @@ public abstract class SyncTaskProcessorBase
         // After processing all pages, the change tracker accumulates thousands of tracked entities
         // (MVOs, CSOs, attribute values, etc.). This causes EF Core's identity resolution to become
         // extremely slow when loading the cross-page reference CSOs with deep Include chains.
-        // All previous page data has been fully persisted, so clearing is safe. The activity and
-        // any entities loaded below will be re-tracked as needed via Update/Add calls.
+        // All previous page data has been fully persisted, so clearing is safe.
+        //
+        // IMPORTANT: Also clear the Activity's in-memory RPEI collection. RPEIs from all pages have
+        // been persisted to the database, but the in-memory list still holds references to detached
+        // entities (CSO → MVO → Type → Attributes). If any subsequent EF operation (Update, Remove,
+        // SaveChanges) triggers change detection on the Activity, EF will try to re-track those stale
+        // entity references, causing identity conflicts with freshly loaded entities from the
+        // cross-page resolution query.
+        var rpeiCountBeforeClear = _activity.RunProfileExecutionItems.Count;
+        _activity.RunProfileExecutionItems.Clear();
         _jim.Repository.ClearChangeTracker();
+        Log.Debug("ResolveCrossPageReferences: Cleared change tracker and {RpeiCount} persisted RPEIs from activity",
+            rpeiCountBeforeClear);
 
         // Build sync rule lookup (keyed by ID) for O(1) access
         var requiredSyncRuleIds = _unresolvedCrossPageReferences
@@ -1283,34 +1293,70 @@ public abstract class SyncTaskProcessorBase
 
                 if (targetCsoIds.Count > 0)
                 {
-                    var existingPes = await _jim.ConnectedSystems.GetPendingExportsForObjectsAsync(targetCsoIds);
-                    if (existingPes.Count > 0)
+                    // Use raw SQL delete by CSO IDs instead of loading PE entities into the change
+                    // tracker. After ClearChangeTracker(), loading PEs with Include chains would create
+                    // MetaverseAttribute instances that conflict with instances already tracked by the
+                    // cross-page CSO query, causing identity resolution failures.
+                    var deletedCount = await _jim.ConnectedSystems.DeletePendingExportsByConnectedSystemObjectIdsAsync(targetCsoIds);
+                    if (deletedCount > 0)
                     {
-                        Log.Information("ResolveCrossPageReferences: Batch-deleting {Count} existing pending exports " +
-                            "from earlier pages before re-evaluation with resolved references", existingPes.Count);
-                        await _jim.ConnectedSystems.DeletePendingExportsAsync(existingPes.Values.ToList());
+                        Log.Information("ResolveCrossPageReferences: Batch-deleted {Count} existing pending exports " +
+                            "from earlier pages before re-evaluation with resolved references", deletedCount);
                     }
                 }
             }
 
             resolvedCount += batch.Count;
-            await _jim.Activities.UpdateActivityMessageAsync(_activity,
-                $"Resolving cross-page references ({resolvedCount} / {totalCrossPagesToResolve}) - saving changes");
 
-            // Flush this batch (same sequence as per-page processing)
-            await PersistPendingMetaverseObjectsAsync();
-            await CreatePendingMvoChangeObjectsAsync();
-            await EvaluatePendingExportsAsync();
-            await FlushPendingExportOperationsAsync();
+            // Disable AutoDetectChangesEnabled for the flush sequence (including the status update).
+            // After ClearChangeTracker(), the change tracker contains entities loaded by the cross-page
+            // CSO query (with Include chains that bring in MetaverseAttribute, MetaverseObjectType, etc.).
+            // Multiple MVOs sharing the same Type/Attributes create separate in-memory instances of these
+            // shared entities. When SaveChangesAsync calls DetectChanges(), it walks ALL tracked entities'
+            // navigation properties and discovers these conflicting instances, causing identity conflicts.
+            //
+            // By disabling auto-detect, SaveChangesAsync only persists entities we explicitly mark via
+            // Entry().State (in UpdateMetaverseObjectsAsync and UpdateActivityAsync), without scanning
+            // navigation properties that lead to shared MetaverseAttribute/MetaverseObjectType entities.
+            //
+            // IMPORTANT: Must be set BEFORE any SaveChangesAsync call — including the activity message
+            // update — because by this point the tracker already contains conflicting instances from
+            // the batch processing above.
+            _jim.Repository.SetAutoDetectChangesEnabled(false);
+            try
+            {
+                await _jim.Activities.UpdateActivityMessageAsync(_activity,
+                    $"Resolving cross-page references ({resolvedCount} / {totalCrossPagesToResolve}) - saving changes");
 
-            // Update activity progress
-            await _jim.Activities.UpdateActivityAsync(_activity);
+                // Flush this batch (same sequence as per-page processing)
+                await PersistPendingMetaverseObjectsAsync();
+                await CreatePendingMvoChangeObjectsAsync();
+                await EvaluatePendingExportsAsync();
+                await FlushPendingExportOperationsAsync();
+
+                // Update activity progress
+                await _jim.Activities.UpdateActivityAsync(_activity);
+            }
+            finally
+            {
+                _jim.Repository.SetAutoDetectChangesEnabled(true);
+            }
         }
 
         Log.Information("ResolveCrossPageReferences: Completed cross-page reference resolution for {Count} CSOs",
             totalCrossPagesToResolve);
 
         _unresolvedCrossPageReferences.Clear();
+
+        // Clear the change tracker after cross-page resolution completes.
+        // The tracker contains entities loaded by the cross-page CSO query with deep Include chains
+        // that bring in MetaverseAttribute and MetaverseObjectType instances. Multiple MVOs sharing
+        // the same type/attributes create separate in-memory instances that conflict when any
+        // subsequent SaveChangesAsync triggers DetectChanges. Clearing removes all tracked entities
+        // so the caller's next SaveChangesAsync starts with a clean tracker.
+        // The Activity entity will be re-attached by UpdateActivityAsync's detached entity handling.
+        _jim.Repository.ClearChangeTracker();
+
         span.SetSuccess();
     }
 
