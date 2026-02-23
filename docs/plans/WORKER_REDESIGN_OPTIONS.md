@@ -11,15 +11,15 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
 ### Current Architecture Summary
 
 ```
-+---------------------------------------------+
++----------------------------------------------+
 |              JIM.Worker (Host)               |
 |  BackgroundService polling loop (2s)         |
 |  One JimDbContext per main loop              |
 |  One JimDbContext per spawned Task           |
-+---------------------------------------------+
++----------------------------------------------+
          |
          v
-+---------------------------------------------+
++----------------------------------------------+
 |         Task Processors (per work item)      |
 | SyncImportTaskProcessor    ~2,060 LOC        |
 | SyncTaskProcessorBase      ~1,760 LOC        |
@@ -27,29 +27,29 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
 | SyncDeltaSyncTaskProcessor   ~210 LOC        |
 | SyncExportTaskProcessor      ~300 LOC        |
 | SyncRuleMappingProcessor     ~730 LOC        |
-+---------------------------------------------+
++----------------------------------------------+
          |
          v
-+---------------------------------------------+
++----------------------------------------------+
 |       JimApplication (Business Logic)        |
 | ConnectedSystemServer    3,840 LOC           |
 | ExportEvaluationServer   1,790 LOC           |
 | ExportExecutionServer    1,500 LOC           |
 | MetaverseServer            650 LOC           |
 | + 13 other servers                           |
-+---------------------------------------------+
++----------------------------------------------+
          |
          v
-+---------------------------------------------+
++----------------------------------------------+
 |       PostgresDataRepository (EF Core)       |
 |  IRepository -> 13 sub-repositories          |
-|  JimDbContext (single DbContext per scope)    |
-+---------------------------------------------+
+|  JimDbContext (single DbContext per scope)   |
++----------------------------------------------+
          |
          v
-+---------------------------------------------+
++----------------------------------------------+
 |             PostgreSQL Database              |
-+---------------------------------------------+
++----------------------------------------------+
 ```
 
 ### Identified Pain Points
@@ -107,32 +107,32 @@ Keep the current architecture but surgically extract the sync processing logic i
 ### Architecture
 
 ```
-+------------------------------------------------------+
++-------------------------------------------------------+
 |                JIM.Worker (Host)                      |
 |  BackgroundService + .NET Generic Host DI             |
 |  IHostedService with IServiceScopeFactory             |
-+------------------------------------------------------+
++-------------------------------------------------------+
          |
          v
-+------------------------------------------------------+
++-------------------------------------------------------+
 |            Sync Orchestrator (new)                    |
 |  Coordinates phases: Import -> Sync -> Export         |
 |  Manages parallelism per phase                        |
 |  Injected via DI, owns cancellation/progress          |
-+------------------------------------------------------+
++-------------------------------------------------------+
          |
          v
-+------------------------------------------------------+
++-------------------------------------------------------+
 |         Sync Domain Engine (new - pure logic)         |
 |  ISyncEngine interface                                |
 |  ProcessCso() -> SyncDecision (join/project/flow)     |
 |  EvaluateExport() -> ExportDecision                   |
 |  NO database calls - operates on in-memory models     |
 |  100% unit testable with plain C# objects             |
-+------------------------------------------------------+
++-------------------------------------------------------+
          |  produces decisions
          v
-+------------------------------------------------------+
++-------------------------------------------------------+
 |       ISyncDataAccess (new - explicit boundary)       |
 |  GetCsoBatch() -> CsoBatchDto                         |
 |  PersistSyncResults(decisions) -> void                |
@@ -140,13 +140,13 @@ Keep the current architecture but surgically extract the sync processing logic i
 |  Two implementations:                                 |
 |    - PostgresSyncDataAccess (Npgsql bulk + raw SQL)   |
 |    - InMemorySyncDataAccess (for unit/workflow tests) |
-+------------------------------------------------------+
++-------------------------------------------------------+
          |
          v
-+------------------------------------------------------+
++-------------------------------------------------------+
 |  PostgreSQL (hot paths: Npgsql COPY/raw SQL)          |
 |  EF Core retained for admin/config operations         |
-+------------------------------------------------------+
++-------------------------------------------------------+
 ```
 
 ### Key Changes
@@ -220,40 +220,40 @@ Redesign the worker as a pipeline of discrete stages connected by `System.Thread
 |  Exposes health/metrics endpoints                                 |
 +-------------------------------------------------------------------+
          |
-         |  Channel<ImportBatch>     Channel<SyncBatch>     Channel<ExportBatch>
-         v                          v                       v
+         |  Channel<ImportBatch>     Channel<SyncBatch>       Channel<ExportBatch>
+         v                           v                        v
 +----------------+  +-----------------------------+  +------------------+
 |  Import Stage  |  |       Sync Stage            |  |  Export Stage    |
 |  (N readers)   |  | (M parallel processors)     |  |  (P writers)     |
 |                |  |                             |  |                  |
 | Connector.Read |  | For each CSO batch:         |  | Connector.Write  |
 | -> Diff vs DB  |  |   Join/Project/Flow (pure)  |  | -> Confirm       |
-| -> ImportBatch |  |   Batch MVO mutations        |  | -> ExportResult  |
-|                |  |   Evaluate exports           |  |                  |
+| -> ImportBatch |  |   Batch MVO mutations       |  | -> ExportResult  |
+|                |  |   Evaluate exports          |  |                  |
 +-------+--------+  +----------+------------------+  +--------+---------+
         |                      |                              |
         v                      v                              v
-+-------------------------------------------------------------------+
-|              Persistence Layer (batched writes)                    |
-|  ISyncRepository interface                                        |
-|  Implementations:                                                 |
-|    PostgresSyncRepository (Npgsql bulk COPY + raw SQL)             |
-|    InMemorySyncRepository (for testing)                            |
-|  All writes are batch-oriented: flush per page/stage completion   |
-+-------------------------------------------------------------------+
++-----------------------------------------------------------------------+
+|              Persistence Layer (batched writes)                       |
+|  ISyncRepository interface                                            |
+|  Implementations:                                                     |
+|    PostgresSyncRepository (Npgsql bulk COPY + raw SQL)                |
+|    InMemorySyncRepository (for testing)                               |
+|  All writes are batch-oriented: flush per page/stage completion       |
++-----------------------------------------------------------------------+
          |
          v
-+-------------------------------------------------------------------+
-|                         PostgreSQL                                |
-+-------------------------------------------------------------------+
++-----------------------------------------------------------------------+
+|                         PostgreSQL                                    |
++-----------------------------------------------------------------------+
 
-+-------------------------------------------------------------------+
-|                     Telemetry Sidecar                              |
-|  OpenTelemetry traces + metrics                                   |
-|  .NET Health Checks (/healthz, /readyz)                           |
-|  Prometheus metrics exporter                                      |
-|  --> JIM Management UI dashboard or external (Aspire, Grafana)    |
-+-------------------------------------------------------------------+
++-----------------------------------------------------------------------+
+|                     Telemetry Sidecar                                 |
+|  OpenTelemetry traces + metrics                                       |
+|  .NET Health Checks (/healthz, /readyz)                               |
+|  Prometheus metrics exporter                                          |
+|  --> JIM Management UI dashboard or external (Aspire, Grafana)        |
++-----------------------------------------------------------------------+
 ```
 
 ### Key Changes
@@ -337,20 +337,20 @@ Decompose the worker into independent, horizontally scalable processing units co
 ### Architecture
 
 ```
-+------------------------------------------------------------------+
++-------------------------------------------------------------------+
 |                    JIM.Scheduler (existing)                       |
 |  Publishes work items to message bus                              |
-+------------------------------------------------------------------+
++-------------------------------------------------------------------+
          |
          v (messages)
-+------------------------------------------------------------------+
++-------------------------------------------------------------------+
 |                     Message Bus                                   |
 |  Option: Redis Streams (air-gap friendly, no cloud dependency)    |
 |  Queues: import-tasks, sync-batches, export-tasks                 |
 |  Consumer groups for competing consumers                          |
-+------------------------------------------------------------------+
-    |                    |                    |
-    v                    v                    v
++-------------------------------------------------------------------+
+         |                    |                    |
+         v                    v                    v
 +------------------+ +------------------+ +------------------+
 | Import Workers   | | Sync Workers     | | Export Workers   |
 | (N instances)    | | (M instances)    | | (P instances)    |
@@ -362,20 +362,20 @@ Decompose the worker into independent, horizontally scalable processing units co
 |   batches        | | - Publish PEs    | | - Write + confirm|
 | - Ack message    | | - Ack message    | | - Ack message    |
 +------------------+ +------------------+ +------------------+
-    |                    |                    |
-    v                    v                    v
-+------------------------------------------------------------------+
+          |                    |                    |
+          v                    v                    v
++-------------------------------------------------------------------+
 |           Shared Persistence Layer                                |
 |  PostgreSQL (bulk writes via Npgsql)                              |
 |  Redis (optional: shared MVO lookup cache for sync workers)       |
-+------------------------------------------------------------------+
++-------------------------------------------------------------------+
 
-+------------------------------------------------------------------+
-|                    Telemetry + Health                              |
++-------------------------------------------------------------------+
+|                    Telemetry + Health                             |
 |  OpenTelemetry (traces span across workers via message headers)   |
 |  Redis-backed health aggregation                                  |
 |  JIM Management UI: worker fleet status, queue depths, throughput |
-+------------------------------------------------------------------+
++-------------------------------------------------------------------+
 ```
 
 ### Key Changes
