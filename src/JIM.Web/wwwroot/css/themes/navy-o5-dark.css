@@ -159,6 +159,23 @@ html[lang] .mud-button-filled.mud-button-filled-default:not(:disabled):hover {
     background-color: #374d6e;
 }
 
+/* Error-coloured buttons/icon buttons — subtle hover instead of MudBlazor's
+   strong red glow which is too intense on dark navy backgrounds. */
+html[lang] .mud-button-filled.mud-button-filled-error:not(:disabled):hover,
+html[lang] .mud-icon-button.mud-button-filled.mud-icon-button-color-error:not(:disabled):hover {
+    background-color: color-mix(in srgb, var(--mud-palette-error) 85%, #000000) !important;
+}
+
+html[lang] .mud-button-outlined.mud-button-outlined-error:not(:disabled):hover,
+html[lang] .mud-icon-button.mud-button-outlined.mud-icon-button-color-error:not(:disabled):hover {
+    background-color: rgba(var(--mud-palette-error-rgb), 0.08) !important;
+}
+
+html[lang] .mud-button-text.mud-button-text-error:not(:disabled):hover,
+html[lang] .mud-icon-button.mud-icon-button-color-error:not(.mud-button-filled):not(.mud-button-outlined):not(:disabled):hover {
+    background-color: rgba(var(--mud-palette-error-rgb), 0.08) !important;
+}
+
 /* Improve Dark button visibility on dark navy backgrounds */
 html[lang] .mud-button-filled.mud-button-filled-dark:not(:disabled) {
     background-color: #000000;
