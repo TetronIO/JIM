@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="JIM.Worker.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="DynamicExpresso.Core" Version="2.19.3" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="9.0.13" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.Extensions" Version="9.0.13" />

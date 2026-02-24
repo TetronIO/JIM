@@ -987,27 +987,40 @@ public class ExportEvaluationServer
 
             if (existingPendingExport != null)
             {
-                // Merge: for each attribute change from export evaluation, either replace the drift
-                // value (export eval has newer MVO state) or add it if not already present.
-                var existingChangesByAttributeId = existingPendingExport.AttributeValueChanges
-                    .ToDictionary(avc => avc.AttributeId);
-
+                // Merge export eval changes into the existing drift PE.
+                // For multi-valued attributes (e.g., member), both sources can have many changes
+                // for the same AttributeId, so we must merge at the individual value level.
+                // Export eval changes take precedence when both sources target the same value.
                 var mergedCount = 0;
                 var addedCount = 0;
 
+                // Build a lookup of existing drift changes by (AttributeId, value-identity) for deduplication
+                var existingChangeKeys = new HashSet<string>();
+                foreach (var existing in existingPendingExport.AttributeValueChanges)
+                    existingChangeKeys.Add(GetAttributeChangeKey(existing));
+
                 foreach (var newChange in attributeChanges)
                 {
-                    if (existingChangesByAttributeId.TryGetValue(newChange.AttributeId, out var existingChange))
+                    var key = GetAttributeChangeKey(newChange);
+                    if (existingChangeKeys.Contains(key))
                     {
-                        // Same attribute exists in drift PE — replace with export eval value (more current)
-                        existingPendingExport.AttributeValueChanges.Remove(existingChange);
+                        // Same attribute+value exists in drift PE — remove drift version(s) and add export eval version
+                        // (export eval has newer MVO state and may have a different ChangeType)
+                        var toRemove = existingPendingExport.AttributeValueChanges
+                            .Where(avc => GetAttributeChangeKey(avc) == key)
+                            .ToList();
+                        foreach (var r in toRemove)
+                            existingPendingExport.AttributeValueChanges.Remove(r);
                         existingPendingExport.AttributeValueChanges.Add(newChange);
+                        existingChangeKeys.Remove(key);
+                        existingChangeKeys.Add(GetAttributeChangeKey(newChange));
                         mergedCount++;
                     }
                     else
                     {
-                        // New attribute not in drift PE — add it
+                        // New attribute+value not in drift PE — add it
                         existingPendingExport.AttributeValueChanges.Add(newChange);
+                        existingChangeKeys.Add(key);
                         addedCount++;
                     }
                 }
@@ -1047,11 +1060,13 @@ public class ExportEvaluationServer
             {
                 // Build merged attribute changes: start with export eval changes (takes precedence),
                 // then add any drift-only changes not covered by export eval.
+                // For multi-valued attributes (e.g., member), both sources can have many changes
+                // for the same AttributeId, so we must merge at the individual value level.
                 // Clone drift-only changes with new IDs because DeletePendingExportAsync cascade-deletes
                 // child entities, making the tracked instances unusable for a new PE.
-                var exportEvalAttributeIds = attributeChanges.Select(ac => ac.AttributeId).ToHashSet();
+                var exportEvalChangeKeys = attributeChanges.Select(GetAttributeChangeKey).ToHashSet();
                 var driftOnlyChanges = dbPendingExport.AttributeValueChanges
-                    .Where(avc => !exportEvalAttributeIds.Contains(avc.AttributeId))
+                    .Where(avc => !exportEvalChangeKeys.Contains(GetAttributeChangeKey(avc)))
                     .Select(avc => new PendingExportAttributeValueChange
                     {
                         Id = Guid.NewGuid(),
@@ -1798,5 +1813,28 @@ public class ExportEvaluationServer
         }
 
         return attributes;
+    }
+
+    /// <summary>
+    /// Generates a composite key for a PendingExportAttributeValueChange that identifies
+    /// the specific attribute+value combination. Used to deduplicate when merging export
+    /// evaluation changes with drift correction changes. For multi-valued attributes like
+    /// group membership, each individual value (e.g., each member DN) gets a distinct key,
+    /// allowing both sources to contribute different values for the same attribute.
+    /// </summary>
+    internal static string GetAttributeChangeKey(PendingExportAttributeValueChange change)
+    {
+        // Build a value identifier from whichever value field is populated
+        var valueId = change.UnresolvedReferenceValue
+            ?? change.StringValue
+            ?? change.GuidValue?.ToString()
+            ?? change.IntValue?.ToString()
+            ?? change.LongValue?.ToString()
+            ?? change.DateTimeValue?.ToString("O")
+            ?? change.BoolValue?.ToString()
+            ?? (change.ByteValue != null ? Convert.ToBase64String(change.ByteValue) : null)
+            ?? string.Empty;
+
+        return $"{change.AttributeId}:{valueId}";
     }
 }

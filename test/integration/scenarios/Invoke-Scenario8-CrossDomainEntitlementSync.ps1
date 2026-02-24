@@ -391,12 +391,15 @@ try {
                         Write-Host "  ✓ Member count matches: Source=$sourceMemberCount, Target=$targetMemberCount" -ForegroundColor Green
                     }
                     elseif ($targetMemberCount -gt 0) {
-                        Write-Host "  ⚠ Member count mismatch: Source=$sourceMemberCount, Target=$targetMemberCount" -ForegroundColor Yellow
-                        Write-Host "    Some members may not have synced yet (reference resolution)" -ForegroundColor Yellow
+                        $deficit = $sourceMemberCount - $targetMemberCount
+                        Write-Host "  ✗ Member count mismatch: Source=$sourceMemberCount, Target=$targetMemberCount (deficit: $deficit)" -ForegroundColor Red
+                        Write-Host "    Initial sync did not export all group members to Target AD." -ForegroundColor Red
+                        Write-Host "    This may indicate unresolved references or LDAP modify request size limits." -ForegroundColor Red
+                        throw "InitialSync validation failed: group '$validationGroup' has $targetMemberCount members in Target but expected $sourceMemberCount from Source (deficit: $deficit)"
                     }
                     else {
-                        Write-Host "  ⚠ No members in Target group (members may not have synced)" -ForegroundColor Yellow
-                        Write-Host "    This can occur if user CSOs don't exist in Target yet" -ForegroundColor Yellow
+                        Write-Host "  ✗ No members in Target group (expected $sourceMemberCount)" -ForegroundColor Red
+                        throw "InitialSync validation failed: group '$validationGroup' has 0 members in Target but expected $sourceMemberCount from Source"
                     }
                 }
                 else {
@@ -453,6 +456,11 @@ try {
         }
         Write-Host "    Current members in Target: $targetMemberCountBefore" -ForegroundColor Gray
 
+        # Baseline check: Source and Target should match before making changes
+        if ($targetMemberCountBefore -ne $initialMemberCount) {
+            throw "ForwardSync baseline failed: group '$testGroupName' has $targetMemberCountBefore members in Target but $initialMemberCount in Source before any changes were made. InitialSync did not produce a consistent state."
+        }
+
         # Step 2.2: Find users to add and remove
         Write-Host "  Preparing membership changes..." -ForegroundColor Gray
 
@@ -502,7 +510,7 @@ try {
                 $addedCount++
             }
             else {
-                Write-Host "    ⚠ Failed to add '$userToAdd': $result" -ForegroundColor Yellow
+                throw "Failed to add '$userToAdd' to '$testGroupName' in Source AD: $result"
             }
         }
 
@@ -514,7 +522,7 @@ try {
                 $removedCount++
             }
             else {
-                Write-Host "    ⚠ Failed to remove '$userToRemove': $result" -ForegroundColor Yellow
+                throw "Failed to remove '$userToRemove' from '$testGroupName' in Source AD: $result"
             }
         }
 
@@ -579,16 +587,23 @@ try {
             Write-Host "    ✓ Member count matches between Source ($sourceMemberCountAfterChange) and Target ($targetMemberCountAfter)" -ForegroundColor Green
         }
         else {
-            Write-Host "    ⚠ Member count mismatch: Source=$sourceMemberCountAfterChange, Target=$targetMemberCountAfter" -ForegroundColor Yellow
+            $deficit = $sourceMemberCountAfterChange - $targetMemberCountAfter
+            Write-Host "    ✗ Member count mismatch: Source=$sourceMemberCountAfterChange, Target=$targetMemberCountAfter (deficit: $deficit)" -ForegroundColor Red
         }
 
-        # Overall validation
-        if ($addValidationPassed -and $removeValidationPassed -and $countValidationPassed) {
-            Write-Host "✓ ForwardSync test completed successfully" -ForegroundColor Green
+        # Fail immediately with diagnostic detail - don't batch up multiple failures
+        if (-not $addValidationPassed) {
+            throw "ForwardSync failed: added user(s) not found in Target group '$testGroupName'"
         }
-        else {
-            throw "ForwardSync validation failed - membership changes did not propagate correctly"
+        if (-not $removeValidationPassed) {
+            throw "ForwardSync failed: removed user '$userToRemove' still present in Target group '$testGroupName'"
         }
+        if (-not $countValidationPassed) {
+            $deficit = $sourceMemberCountAfterChange - $targetMemberCountAfter
+            throw "ForwardSync failed: group '$testGroupName' has $targetMemberCountAfter members in Target but expected $sourceMemberCountAfterChange from Source (deficit: $deficit). This indicates the confirming sync incorrectly removed $deficit members via drift correction."
+        }
+
+        Write-Host "✓ ForwardSync test completed successfully" -ForegroundColor Green
 
         $testResults.Steps += "ForwardSync"
     }
@@ -753,7 +768,7 @@ try {
         }
 
         if (-not $driftDetectedInAD) {
-            Write-Host "    ⚠ Drift changes not visible in AD (unexpected)" -ForegroundColor Yellow
+            throw "DetectDrift failed: drift changes not visible in Target AD after direct modification. Cannot proceed with drift detection test."
         }
 
         # Step 3.6: Delta Import from Target AD to detect the drift
@@ -1193,8 +1208,9 @@ try {
             Write-Host "    ✓ Group has $targetMemberCount members (matches Source)" -ForegroundColor Green
         }
         elseif ($targetMemberCount -gt 0) {
-            $validations += @{ Name = "Group member count matches"; Success = $true }
-            Write-Host "    ⚠ Group has $targetMemberCount members (expected $addedCount - some may not have synced yet)" -ForegroundColor Yellow
+            $deficit = $addedCount - $targetMemberCount
+            $validations += @{ Name = "Group member count matches"; Success = $false }
+            Write-Host "    ✗ Group has $targetMemberCount members (expected $addedCount, deficit: $deficit)" -ForegroundColor Red
         }
         else {
             $validations += @{ Name = "Group member count matches"; Success = $false }

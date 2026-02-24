@@ -413,10 +413,37 @@ public class ExportExecutionServer
                     }
 
                     // Mark still-unresolved exports as deferred in batch
-                    foreach (var export in stillUnresolvedExports)
+                    if (stillUnresolvedExports.Count > 0)
                     {
-                        await MarkExportDeferredAsync(export);
-                        result.DeferredCount++;
+                        // Collect diagnostic information about what couldn't be resolved
+                        var unresolvedMvoIds = CollectUnresolvedMvoIds(stillUnresolvedExports);
+                        var resolvedMvoIds = csoLookup.Keys.ToHashSet();
+                        var missingMvoIds = unresolvedMvoIds.Except(resolvedMvoIds).ToList();
+
+                        // Information, not Warning: first-pass deferral is normal during initial sync
+                        // when group exports reference user CSOs that haven't been created in the target yet.
+                        // Warnings are reserved for the second pass (ExecuteDeferredReferencesAsync) when
+                        // exports still can't resolve after all immediate exports have completed.
+                        Log.Information("ExecuteExportsViaConnectorAsync: {StillUnresolved} export(s) have unresolved references and will be deferred. " +
+                            "{Resolved} resolved, {TotalDeferred} total deferred this cycle. " +
+                            "{MissingCount} referenced MVO(s) have no CSO in the target system yet: [{MissingIds}]",
+                            stillUnresolvedExports.Count, resolvedExports.Count, stillUnresolvedExports.Count,
+                            missingMvoIds.Count,
+                            string.Join(", ", missingMvoIds.Take(10).Select(id => id.ToString())));
+
+                        foreach (var export in stillUnresolvedExports)
+                        {
+                            // Log per-export detail at Debug level for troubleshooting
+                            var exportUnresolvedCount = export.AttributeValueChanges
+                                .Count(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue));
+                            var exportTotalChanges = export.AttributeValueChanges.Count;
+                            Log.Debug("ExecuteExportsViaConnectorAsync: Deferring export {ExportId} for CSO {CsoId} - " +
+                                "{UnresolvedCount}/{TotalChanges} attribute changes have unresolved references",
+                                export.Id, export.ConnectedSystemObjectId, exportUnresolvedCount, exportTotalChanges);
+
+                            await MarkExportDeferredAsync(export);
+                            result.DeferredCount++;
+                        }
                     }
                 }
 
@@ -1368,7 +1395,8 @@ public class ExportExecutionServer
         if (unresolvedExports.Count == 0)
             return;
 
-        Log.Debug("ExecuteDeferredReferencesAsync: Checking {Count} deferred exports for resolution", unresolvedExports.Count);
+        Log.Information("ExecuteDeferredReferencesAsync: Checking {Count} deferred export(s) from previous cycles for reference resolution",
+            unresolvedExports.Count);
 
         // Bulk pre-fetch all referenced CSOs in a single query
         var mvoIds = CollectUnresolvedMvoIds(unresolvedExports);
@@ -1383,6 +1411,7 @@ public class ExportExecutionServer
 
         // Resolve references using the pre-fetched lookup and collect resolved exports for batch update
         var resolvedExports = new List<PendingExport>();
+        var stillUnresolvedCount = 0;
         foreach (var export in unresolvedExports)
         {
             var resolved = TryResolveReferencesFromLookup(export, csoLookup);
@@ -1392,7 +1421,20 @@ public class ExportExecutionServer
                 resolvedExports.Add(export);
                 Log.Debug("ExecuteDeferredReferencesAsync: Resolved references for export {ExportId}", export.Id);
             }
+            else
+            {
+                stillUnresolvedCount++;
+                var unresolvedRefCount = export.AttributeValueChanges
+                    .Count(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue));
+                Log.Warning("ExecuteDeferredReferencesAsync: Export {ExportId} for CSO {CsoId} still has " +
+                    "{UnresolvedCount} unresolved reference(s) after second-pass resolution attempt",
+                    export.Id, export.ConnectedSystemObjectId, unresolvedRefCount);
+            }
         }
+
+        Log.Information("ExecuteDeferredReferencesAsync: Second-pass resolution complete. " +
+            "{Resolved}/{Total} deferred export(s) resolved, {StillUnresolved} still pending",
+            resolvedExports.Count, unresolvedExports.Count, stillUnresolvedCount);
 
         // Batch update all resolved exports in a single SaveChanges
         if (resolvedExports.Count > 0)
@@ -1467,8 +1509,14 @@ public class ExportExecutionServer
         // Use a shorter retry interval for deferred references
         export.NextRetryAt = DateTime.UtcNow.AddMinutes(5);
 
+        var unresolvedRefCount = export.AttributeValueChanges
+            .Count(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue));
+        var totalChanges = export.AttributeValueChanges.Count;
+
         await Application.Repository.ConnectedSystems.UpdatePendingExportAsync(export);
-        Log.Debug("MarkExportDeferredAsync: Export {ExportId} deferred due to unresolved references", export.Id);
+        Log.Information("MarkExportDeferredAsync: Export {ExportId} for CSO {CsoId} deferred - " +
+            "{UnresolvedCount}/{TotalChanges} attribute changes have unresolved references. Next retry at {NextRetry}",
+            export.Id, export.ConnectedSystemObjectId, unresolvedRefCount, totalChanges, export.NextRetryAt);
     }
 
     /// <summary>

@@ -16,6 +16,7 @@ internal class LdapConnectorExport
     private readonly IList<ConnectedSystemSettingValue> _settings;
     private readonly ILogger _logger;
     private readonly int _exportConcurrency;
+    private readonly int _modifyBatchSize;
 
     // Setting names
     private const string SettingDeleteBehaviour = "Delete Behaviour";
@@ -79,17 +80,25 @@ internal class LdapConnectorExport
         ILdapOperationExecutor executor,
         IList<ConnectedSystemSettingValue> settings,
         ILogger logger,
-        int exportConcurrency = LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY)
+        int exportConcurrency = LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY,
+        int modifyBatchSize = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE)
     {
         _executor = executor;
         _settings = settings;
         _logger = logger;
         _exportConcurrency = Math.Clamp(exportConcurrency, 1, LdapConnectorConstants.MAX_EXPORT_CONCURRENCY);
+        _modifyBatchSize = Math.Clamp(modifyBatchSize, LdapConnectorConstants.MIN_MODIFY_BATCH_SIZE, LdapConnectorConstants.MAX_MODIFY_BATCH_SIZE);
 
         if (exportConcurrency > LdapConnectorConstants.MAX_EXPORT_CONCURRENCY)
         {
             _logger.Warning("LdapConnectorExport: Requested export concurrency {Requested} exceeds maximum {Maximum}. Clamped to {Maximum}",
                 exportConcurrency, LdapConnectorConstants.MAX_EXPORT_CONCURRENCY);
+        }
+
+        if (modifyBatchSize != _modifyBatchSize)
+        {
+            _logger.Warning("LdapConnectorExport: Requested modify batch size {Requested} was clamped to {Actual} (valid range: {Min}-{Max})",
+                modifyBatchSize, _modifyBatchSize, LdapConnectorConstants.MIN_MODIFY_BATCH_SIZE, LdapConnectorConstants.MAX_MODIFY_BATCH_SIZE);
         }
     }
 
@@ -239,17 +248,30 @@ internal class LdapConnectorExport
             wasRenamed = true;
         }
 
-        var modifyRequest = BuildModifyRequest(pendingExport, workingDn);
+        var modifyRequests = BuildModifyRequests(pendingExport, workingDn);
 
-        if (modifyRequest.Modifications.Count == 0)
+        if (modifyRequests.Count == 0)
         {
             _logger.Debug("LdapConnectorExport.ProcessUpdate: No attribute modifications to apply for '{Dn}'", workingDn);
-            // Return the new DN if renamed, so it can be updated on the CSO
             return wasRenamed ? ExportResult.Succeeded(null, workingDn) : ExportResult.Succeeded();
         }
 
-        var response = (ModifyResponse)_executor.SendRequest(modifyRequest);
-        return HandleModifyResponse(response, modifyRequest, workingDn, wasRenamed);
+        // Execute each chunked modify request sequentially
+        ExportResult lastResult = ExportResult.Succeeded();
+        for (var i = 0; i < modifyRequests.Count; i++)
+        {
+            var request = modifyRequests[i];
+            if (modifyRequests.Count > 1)
+            {
+                _logger.Debug("LdapConnectorExport.ProcessUpdate: Sending modify request chunk {Chunk}/{Total} with {Count} modifications for '{Dn}'",
+                    i + 1, modifyRequests.Count, request.Modifications.Count, workingDn);
+            }
+
+            var response = (ModifyResponse)_executor.SendRequest(request);
+            lastResult = HandleModifyResponse(response, request, workingDn, wasRenamed);
+        }
+
+        return lastResult;
     }
 
     /// <summary>
@@ -610,16 +632,30 @@ internal class LdapConnectorExport
             wasRenamed = true;
         }
 
-        var modifyRequest = BuildModifyRequest(pendingExport, workingDn);
+        var modifyRequests = BuildModifyRequests(pendingExport, workingDn);
 
-        if (modifyRequest.Modifications.Count == 0)
+        if (modifyRequests.Count == 0)
         {
             _logger.Debug("LdapConnectorExport.ProcessUpdateAsync: No attribute modifications to apply for '{Dn}'", workingDn);
             return wasRenamed ? ExportResult.Succeeded(null, workingDn) : ExportResult.Succeeded();
         }
 
-        var response = (ModifyResponse)await _executor.SendRequestAsync(modifyRequest);
-        return HandleModifyResponse(response, modifyRequest, workingDn, wasRenamed);
+        // Execute each chunked modify request sequentially
+        ExportResult lastResult = ExportResult.Succeeded();
+        for (var i = 0; i < modifyRequests.Count; i++)
+        {
+            var request = modifyRequests[i];
+            if (modifyRequests.Count > 1)
+            {
+                _logger.Debug("LdapConnectorExport.ProcessUpdateAsync: Sending modify request chunk {Chunk}/{Total} with {Count} modifications for '{Dn}'",
+                    i + 1, modifyRequests.Count, request.Modifications.Count, workingDn);
+            }
+
+            var response = (ModifyResponse)await _executor.SendRequestAsync(request);
+            lastResult = HandleModifyResponse(response, request, workingDn, wasRenamed);
+        }
+
+        return lastResult;
     }
 
     private async Task<string> ProcessRenameAsync(string currentDn, string newDn)
@@ -900,11 +936,38 @@ internal class LdapConnectorExport
     }
 
     /// <summary>
-    /// Builds a ModifyRequest for updating attributes on an existing LDAP object.
+    /// Builds one or more ModifyRequests for updating attributes on an existing LDAP object.
+    /// Consolidates multiple changes to the same attribute with the same operation into a single
+    /// DirectoryAttributeModification with multiple values (per RFC 4511). When a consolidated
+    /// modification exceeds the configured batch size, it is split into multiple ModifyRequests.
     /// </summary>
-    private ModifyRequest BuildModifyRequest(PendingExport pendingExport, string workingDn)
+    internal List<ModifyRequest> BuildModifyRequests(PendingExport pendingExport, string workingDn)
     {
-        var modifyRequest = new ModifyRequest(workingDn);
+        // Step 1: Collect all non-RDN attribute changes, grouped by (attribute name, operation)
+        // This consolidates e.g. 200 individual "member Add" changes into a single modification with 200 values
+        var consolidatedModifications = ConsolidateModifications(pendingExport);
+
+        if (consolidatedModifications.Count == 0)
+            return [];
+
+        // Step 2: Split consolidated modifications into chunks if any exceed the batch size
+        // Single-valued attributes and small multi-valued changes go into the first request.
+        // Large multi-valued changes (e.g., 200 member adds) are split across multiple requests.
+        return ChunkModifyRequests(workingDn, consolidatedModifications);
+    }
+
+    /// <summary>
+    /// Consolidates individual attribute value changes into grouped modifications per RFC 4511.
+    /// Multiple changes to the same attribute with the same operation type are merged into a single
+    /// DirectoryAttributeModification containing all values. This is more efficient and correct
+    /// than sending separate modifications for each value.
+    /// </summary>
+    internal static List<ConsolidatedModification> ConsolidateModifications(PendingExport pendingExport)
+    {
+        // Group changes by (attribute name, operation type), preserving the original attribute changes
+        // for protected attribute handling
+        var groups = new Dictionary<(string Name, DirectoryAttributeOperation Operation), ConsolidatedModification>(
+            EqualityComparer<(string, DirectoryAttributeOperation)>.Default);
 
         foreach (var attrChange in pendingExport.AttributeValueChanges)
         {
@@ -913,26 +976,213 @@ internal class LdapConnectorExport
 
             var attrName = attrChange.Attribute.Name;
 
-            // Skip RDN (Relative Distinguished Name) attributes - they cannot be modified via LDAP ModifyRequest
-            // These require a ModifyDNRequest (rename operation) instead, which is handled above.
-            // - distinguishedName: The full DN, immutable via MODIFY
-            // - cn: Common Name, the RDN for most object types (users, groups, etc.)
-            // - ou: Organisational Unit name, RDN for OUs
-            // - dc: Domain Component, RDN for domain objects
-            if (attrName.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase) ||
-                attrName.Equals("cn", StringComparison.OrdinalIgnoreCase) ||
-                attrName.Equals("ou", StringComparison.OrdinalIgnoreCase) ||
-                attrName.Equals("dc", StringComparison.OrdinalIgnoreCase))
+            // Skip RDN (Relative Distinguished Name) attributes - they cannot be modified via LDAP ModifyRequest.
+            // These require a ModifyDNRequest (rename operation) instead, which is handled separately.
+            if (IsRdnAttribute(attrName))
                 continue;
 
-            var modification = CreateModification(attrChange);
-            if (modification != null)
+            var operation = attrChange.ChangeType switch
             {
-                modifyRequest.Modifications.Add(modification);
+                PendingExportAttributeChangeType.Add => DirectoryAttributeOperation.Add,
+                PendingExportAttributeChangeType.Update => DirectoryAttributeOperation.Replace,
+                PendingExportAttributeChangeType.Remove => DirectoryAttributeOperation.Delete,
+                PendingExportAttributeChangeType.RemoveAll => DirectoryAttributeOperation.Replace,
+                _ => throw new InvalidOperationException($"Unknown attribute change type: {attrChange.ChangeType}")
+            };
+
+            var key = (attrName.ToLowerInvariant(), operation);
+
+            if (!groups.TryGetValue(key, out var consolidated))
+            {
+                consolidated = new ConsolidatedModification
+                {
+                    AttributeName = attrName,
+                    Operation = operation
+                };
+                groups[key] = consolidated;
+            }
+
+            consolidated.AttributeChanges.Add(attrChange);
+        }
+
+        return groups.Values.ToList();
+    }
+
+    /// <summary>
+    /// Splits consolidated modifications into one or more ModifyRequests, chunking any
+    /// multi-valued modifications that exceed the configured batch size.
+    /// </summary>
+    private List<ModifyRequest> ChunkModifyRequests(string workingDn, List<ConsolidatedModification> consolidatedModifications)
+    {
+        // Separate modifications into those that fit in a single request and those that need chunking
+        var singleRequestMods = new List<DirectoryAttributeModification>();
+        var chunkedMods = new List<List<DirectoryAttributeModification>>();
+
+        foreach (var consolidated in consolidatedModifications)
+        {
+            var modifications = BuildConsolidatedModification(consolidated);
+
+            if (modifications.Count <= 1)
+            {
+                // Single modification or empty - goes into the base request
+                singleRequestMods.AddRange(modifications);
+            }
+            else
+            {
+                // Multiple chunks from a large multi-valued attribute
+                // First chunk goes into the base request, rest get their own requests
+                singleRequestMods.Add(modifications[0]);
+                for (var i = 1; i < modifications.Count; i++)
+                {
+                    chunkedMods.Add([modifications[i]]);
+                }
             }
         }
 
-        return modifyRequest;
+        var requests = new List<ModifyRequest>();
+
+        // Base request with single-request mods and first chunks
+        if (singleRequestMods.Count > 0)
+        {
+            var baseRequest = new ModifyRequest(workingDn);
+            foreach (var mod in singleRequestMods)
+                baseRequest.Modifications.Add(mod);
+            requests.Add(baseRequest);
+        }
+
+        // Additional requests for overflow chunks
+        foreach (var chunk in chunkedMods)
+        {
+            var request = new ModifyRequest(workingDn);
+            foreach (var mod in chunk)
+                request.Modifications.Add(mod);
+            requests.Add(request);
+        }
+
+        if (requests.Count > 1)
+        {
+            _logger.Information("LdapConnectorExport.ChunkModifyRequests: Split modifications for '{Dn}' into {RequestCount} " +
+                "LDAP requests (batch size: {BatchSize})", workingDn, requests.Count, _modifyBatchSize);
+        }
+
+        return requests;
+    }
+
+    /// <summary>
+    /// Builds one or more DirectoryAttributeModification objects from a consolidated modification.
+    /// If the number of values exceeds the batch size, returns multiple modifications (one per chunk).
+    /// </summary>
+    private List<DirectoryAttributeModification> BuildConsolidatedModification(ConsolidatedModification consolidated)
+    {
+        var results = new List<DirectoryAttributeModification>();
+
+        // Collect all values from the attribute changes
+        var values = new List<(object? Value, PendingExportAttributeValueChange Change)>();
+
+        foreach (var attrChange in consolidated.AttributeChanges)
+        {
+            // Handle RemoveAll (clear attribute) - uses Replace with no values or a protected default
+            if (attrChange.ChangeType == PendingExportAttributeChangeType.RemoveAll)
+            {
+                var mod = CreateModification(attrChange);
+                if (mod != null)
+                    results.Add(mod);
+                return results; // RemoveAll is a standalone operation
+            }
+
+            var value = GetAttributeValue(attrChange);
+
+            // Handle null values for specific change types
+            if (value == null)
+            {
+                if (attrChange.ChangeType == PendingExportAttributeChangeType.Remove)
+                {
+                    _logger.Warning("LdapConnectorExport.BuildConsolidatedModification: Cannot remove value for '{AttrName}' - no value specified",
+                        consolidated.AttributeName);
+                    continue;
+                }
+
+                if (attrChange.ChangeType == PendingExportAttributeChangeType.Update)
+                {
+                    // Update with no value = clear attribute - handle as standalone
+                    var mod = CreateModification(attrChange);
+                    if (mod != null)
+                        results.Add(mod);
+                    return results;
+                }
+            }
+
+            values.Add((value, attrChange));
+        }
+
+        if (values.Count == 0)
+            return results;
+
+        // If within batch size, create a single modification with all values
+        if (values.Count <= _modifyBatchSize)
+        {
+            var mod = new DirectoryAttributeModification
+            {
+                Name = consolidated.AttributeName,
+                Operation = consolidated.Operation
+            };
+            foreach (var (value, _) in values)
+            {
+                if (value is byte[] bytes)
+                    mod.Add(bytes);
+                else if (value != null)
+                    mod.Add(value.ToString());
+            }
+            results.Add(mod);
+            return results;
+        }
+
+        // Chunk into multiple modifications
+        _logger.Information("LdapConnectorExport.BuildConsolidatedModification: Chunking {Count} values for attribute '{AttrName}' " +
+            "(operation: {Operation}) into batches of {BatchSize}",
+            values.Count, consolidated.AttributeName, consolidated.Operation, _modifyBatchSize);
+
+        for (var i = 0; i < values.Count; i += _modifyBatchSize)
+        {
+            var chunk = values.Skip(i).Take(_modifyBatchSize).ToList();
+            var mod = new DirectoryAttributeModification
+            {
+                Name = consolidated.AttributeName,
+                Operation = consolidated.Operation
+            };
+            foreach (var (value, _) in chunk)
+            {
+                if (value is byte[] bytes)
+                    mod.Add(bytes);
+                else if (value != null)
+                    mod.Add(value.ToString());
+            }
+            results.Add(mod);
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Checks if an attribute name is an RDN (Relative Distinguished Name) attribute.
+    /// RDN attributes cannot be modified via LDAP ModifyRequest - they require ModifyDNRequest.
+    /// </summary>
+    private static bool IsRdnAttribute(string attrName)
+    {
+        return attrName.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase) ||
+               attrName.Equals("cn", StringComparison.OrdinalIgnoreCase) ||
+               attrName.Equals("ou", StringComparison.OrdinalIgnoreCase) ||
+               attrName.Equals("dc", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Represents a group of attribute changes consolidated by attribute name and operation type.
+    /// </summary>
+    internal class ConsolidatedModification
+    {
+        public required string AttributeName { get; init; }
+        public required DirectoryAttributeOperation Operation { get; init; }
+        public List<PendingExportAttributeValueChange> AttributeChanges { get; } = [];
     }
 
     /// <summary>
