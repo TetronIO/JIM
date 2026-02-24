@@ -164,9 +164,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Where(q => q.ConnectedSystemId == id).ToListAsync();
 
-        // supporting 11 levels deep. arbitrary, unless performance profiling identifies issues, or admins need to go deeper
+        // Load partitions with container hierarchy using a single joined query (no AsSplitQuery).
+        // AsSplitQuery() was removed because it causes EF Core identity fixup issues with
+        // self-referencing hierarchies — child containers were getting their PartitionId set
+        // incorrectly during fixup, causing them to appear as duplicates at the partition root.
+        // A single joined query avoids this because EF processes all results in one pass.
+        // Supporting 11 levels deep (arbitrary; increase if admins need deeper hierarchies).
         var partitions = await Repository.Database.ConnectedSystemPartitions
-            .AsSplitQuery() // Use split query to avoid cartesian explosion from nested collection includes
             .Include(p => p.Containers)!
             .ThenInclude(c => c.ChildContainers)
             .ThenInclude(c => c.ChildContainers)
@@ -319,7 +323,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     public async Task CreateObjectMatchingRuleAsync(ObjectMatchingRule rule)
     {
-        Repository.Database.ObjectMatchingRules.Add(rule);
+        // Use Entry().State instead of Add() to avoid graph traversal.
+        // Add() traverses navigation properties and marks detached entities
+        // (e.g. ConnectorDefinition via ConnectedSystemObjectType) as Added,
+        // causing duplicate key violations.
+        var entry = Repository.Database.Entry(rule);
+        entry.State = EntityState.Added;
+
+        foreach (var source in rule.Sources)
+        {
+            Repository.Database.Entry(source).State = EntityState.Added;
+        }
+
         await Repository.Database.SaveChangesAsync();
     }
 
@@ -328,7 +343,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     public async Task UpdateObjectMatchingRuleAsync(ObjectMatchingRule rule)
     {
-        Repository.Database.Update(rule);
+        // Use Entry().State instead of Update() to avoid graph traversal.
+        var entry = Repository.Database.Entry(rule);
+        entry.State = EntityState.Modified;
         await Repository.Database.SaveChangesAsync();
     }
 

@@ -193,8 +193,8 @@ else
         {
             await Jim.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, user);
 
-            // Note: EF Core automatically adds the rule to the ObjectMatchingRules collection
-            // because we set ConnectedSystemObjectType on the rule before saving
+            // Add to the local list for immediate UI update
+            objectType.ObjectMatchingRules.Add(rule);
 
             // Reset the form
             _newMatchingRuleSourceAttribute = null;
@@ -207,7 +207,7 @@ else
         catch (Exception ex)
         {
             Log.Error(ex, "Failed to create matching rule for object type {ObjectTypeId}", objectType.Id);
-            Snackbar.Add($"Failed to create matching rule: {ex.Message}", Severity.Error);
+            Snackbar.Add("Failed to create matching rule. Please try again or check the server logs for details.", Severity.Error);
         }
     }
 
@@ -237,7 +237,7 @@ else
         catch (Exception ex)
         {
             Log.Error(ex, "Failed to delete matching rule {RuleId}", rule.Id);
-            Snackbar.Add($"Failed to delete matching rule: {ex.Message}", Severity.Error);
+            Snackbar.Add("Failed to delete matching rule. Please try again or check the server logs for details.", Severity.Error);
         }
     }
 
@@ -258,7 +258,7 @@ else
             // Revert the change on failure
             rule.CaseSensitive = !caseSensitive;
             Log.Error(ex, "Failed to update matching rule {RuleId}", rule.Id);
-            Snackbar.Add($"Failed to update matching rule: {ex.Message}", Severity.Error);
+            Snackbar.Add("Failed to update matching rule. Please try again or check the server logs for details.", Severity.Error);
         }
     }
 
@@ -301,7 +301,7 @@ else
         catch (Exception ex)
         {
             Log.Error(ex, "Failed to reorder matching rules");
-            Snackbar.Add($"Failed to reorder matching rules: {ex.Message}", Severity.Error);
+            Snackbar.Add("Failed to reorder matching rules. Please try again or check the server logs for details.", Severity.Error);
         }
     }
 
@@ -353,7 +353,7 @@ else
         catch (Exception ex)
         {
             Log.Error(ex, "Failed to switch object matching mode");
-            Snackbar.Add($"Failed to switch mode: {ex.Message}", Severity.Error);
+            Snackbar.Add("Failed to switch mode. Please try again or check the server logs for details.", Severity.Error);
         }
         finally
         {
