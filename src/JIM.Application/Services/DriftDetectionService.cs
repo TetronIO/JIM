@@ -433,13 +433,28 @@ public class DriftDetectionService
 
             // Return a HashSet of all values for set comparison
             var valueSet = new HashSet<object>();
+            var nullValueCount = 0;
+            var duplicateCount = 0;
             foreach (var av in mvoAttrValues)
             {
                 var value = GetTypedValueFromMvoAttributeValue(av, source.MetaverseAttribute.Type);
                 if (value != null)
                 {
-                    valueSet.Add(value);
+                    if (!valueSet.Add(value))
+                        duplicateCount++;
                 }
+                else
+                {
+                    nullValueCount++;
+                }
+            }
+
+            if (nullValueCount > 0 || duplicateCount > 0)
+            {
+                Log.Warning("GetExpectedValue: MVO {MvoId} attribute {AttrName}: " +
+                    "{LoadedCount} attribute values loaded, {NullCount} null values filtered, {DupCount} duplicates",
+                    mvo.Id, source.MetaverseAttribute.Name,
+                    mvoAttrValues.Count, nullValueCount, duplicateCount);
             }
 
             Log.Debug("GetExpectedValue: Multi-valued attribute {AttrName} for MVO {MvoId} has {Count} expected values",

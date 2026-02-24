@@ -34,6 +34,15 @@ public async Task GetObjectAsync_WithValidId_ReturnsObject()
 - Test output appears in the test results under "Standard Output Messages"
 - **IMPORTANT**: Remove all debug statements before committing
 
+## Inspecting Docker Container Binaries
+
+When checking whether compiled code is present in a running Docker container (e.g., verifying a fix was included in the image), **do NOT use `strings`** — it is not installed in the runtime container images and silently returns no output, leading to false conclusions.
+
+Use this approach instead:
+```bash
+docker compose exec jim.worker bash -c 'cat /app/JIM.PostgresData.dll | tr -d "\0" | grep -o "MethodName"'
+```
+
 ## EF Core In-Memory Database Limitation
 
 - Unit and workflow tests use EF Core's in-memory database which **auto-tracks navigation properties**

@@ -256,39 +256,31 @@ public class MetaverseRepository : IMetaverseRepository
         if (objectList.Count == 0)
             return;
 
-        // After ClearChangeTracker() (e.g. during cross-page reference resolution), MVOs become
-        // detached. UpdateRange traverses the full object graph (MVO → Type → Attributes, AV →
-        // Attribute → MetaverseObjectTypes) and hits identity conflicts when shared entities like
-        // MetaverseAttribute are reached from multiple MVOs.
+        // Always use explicit per-entity state management for MVOs and their attribute values.
+        // This avoids two problems:
+        // 1. When entities are detached (after ClearChangeTracker), UpdateRange traverses the
+        //    full object graph and hits identity conflicts on shared MetaverseAttribute entities.
+        // 2. When AutoDetectChangesEnabled is disabled (during cross-page reference resolution),
+        //    UpdateRange marks the MVO as Modified but does NOT detect newly added attribute
+        //    values in the collection, causing them to silently not be persisted.
         //
-        // When detached, use Entry().State to attach only MVOs + AttributeValues individually,
-        // completely bypassing graph traversal. The caller is responsible for disabling
-        // AutoDetectChangesEnabled to prevent SaveChangesAsync from re-discovering shared entities
-        // via navigation properties.
+        // By explicitly setting Entry().State on each attribute value, we ensure new attribute
+        // values (IsKeySet=false → Added) are always persisted regardless of change detection.
         //
         // The try/catch handles unit tests using mocked DbContext where Entry() throws
         // NullReferenceException (mock doesn't initialise internal DbContext state).
         try
         {
-            var anyDetached = objectList.Any(mvo => Repository.Database.Entry(mvo).State == EntityState.Detached);
-
-            if (anyDetached)
+            foreach (var mvo in objectList)
             {
-                foreach (var mvo in objectList)
+                Repository.UpdateDetachedSafe(mvo);
+
+                foreach (var av in mvo.AttributeValues)
                 {
-                    Repository.UpdateDetachedSafe(mvo);
-
-                    foreach (var av in mvo.AttributeValues)
-                    {
-                        var avEntry = Repository.Database.Entry(av);
-                        if (avEntry.State == EntityState.Detached)
-                            avEntry.State = avEntry.IsKeySet ? EntityState.Modified : EntityState.Added;
-                    }
+                    var avEntry = Repository.Database.Entry(av);
+                    if (avEntry.State is EntityState.Detached or EntityState.Unchanged)
+                        avEntry.State = avEntry.IsKeySet ? EntityState.Modified : EntityState.Added;
                 }
-            }
-            else
-            {
-                Repository.Database.UpdateRange(objectList);
             }
         }
         catch (NullReferenceException)
