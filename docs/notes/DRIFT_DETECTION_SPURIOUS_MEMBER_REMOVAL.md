@@ -344,7 +344,8 @@ This is 3 levels deep through AsSplitQuery — prime territory for the materiali
 
 ## Fix Applied
 
-A four-layer fix addressing the confirming sync, confirming import, and MVO-side paths.
+A seven-layer fix addressing the confirming sync, confirming import, sync projection,
+export evaluation, and MVO persistence paths.
 
 ### Layer 1: Repository-Level SQL Repair (primary)
 
@@ -474,6 +475,52 @@ Called from all three page-load methods (same locations as Layer 1):
 - `GetConnectedSystemObjectsForReferenceResolutionAsync` (cross-page reference resolution)
 
 Logs a Warning when any repairs are needed, providing diagnostic visibility.
+
+### Layer 5: Sync Projection — Scalar FK for Reference Resolution
+
+`SyncRuleMappingProcessor.ProcessReferenceAttribute()` was refactored to use
+`MetaverseObjectId` scalar FK instead of requiring the full `MetaverseObject` navigation
+chain for reference resolution. Two helper methods encapsulate the logic:
+
+- `GetReferencedMvoId(csoav)`: Returns `csoav.ReferenceValue?.MetaverseObjectId ??
+  csoav.ReferenceValue?.MetaverseObject?.Id`, preferring the scalar FK.
+- `IsResolved(csoav)`: Returns true when a valid MVO ID can be obtained.
+
+When creating new MVO attribute values from resolved references, the code prefers setting
+the `ReferenceValue` navigation when the full `MetaverseObject` is available, but falls
+back to setting only `ReferenceValueId` (scalar FK) when only `MetaverseObjectId` is
+available from AsSplitQuery repair stubs.
+
+### Layer 6: Export Evaluation — ReferenceValueId Fallback
+
+`ExportEvaluationServer.CreateAttributeValueChanges()` was updated to fall back to the
+scalar FK when the `ReferenceValue` navigation is null on MVO attribute values:
+
+```csharp
+var referencedMvoId = mvoValue.ReferenceValue?.Id ?? mvoValue.ReferenceValueId;
+```
+
+Without this fix, reference attributes where `ReferenceValue` was null (AsSplitQuery
+materialisation failure) were silently skipped during export evaluation, resulting in
+missing member exports.
+
+### Layer 7: MVO Persistence — Explicit State Management
+
+`MetaverseRepository.UpdateMetaverseObjectsAsync()` was changed to always use explicit
+`Entry().State` management for MVO attribute values instead of relying on `UpdateRange()`.
+
+**The bug**: During cross-page reference resolution, `AutoDetectChangesEnabled` is set to
+`false` for performance. MVOs are loaded by EF query (tracked, not detached).
+`UpdateRange()` marks the MVO entity as Modified but does **not** detect newly added
+attribute values in the collection when auto-detect is off. New attribute values from
+`ProcessReferenceAttribute` were silently dropped during persistence.
+
+**The fix**: Always iterate each MVO's attribute values and explicitly set `Entry().State`:
+- `IsKeySet == false` (new entity) → `EntityState.Added`
+- `IsKeySet == true` (existing entity) → `EntityState.Modified`
+
+This ensures new attribute values are always persisted regardless of the
+`AutoDetectChangesEnabled` setting.
 
 ### Test Coverage
 
@@ -665,3 +712,42 @@ performance overhead of deep Include chains. This applies to all affected query 
 The recommended dictionary approach above is designed as a stepping stone towards #338: the
 SQL query and dictionary pattern can be promoted from fallback to primary path when the
 Include chains are removed.
+
+---
+
+## Resolution
+
+**Status: Resolved**
+
+All seven fix layers were applied and validated. The Scenario 8 integration test at Medium
+template size (~1,000 users, ~118 groups, ~200 members per group) passes all six test
+steps:
+
+| Test | Result | Details |
+|------|--------|---------|
+| InitialSync | Pass | Source=200, Target=200 members (correct) |
+| ForwardSync | Pass | Source=201, Target=201 members (+2 adds, -1 remove applied correctly) |
+| DetectDrift | Pass | 2 drift corrections detected and applied |
+| ReassertState | Pass | Drift corrected, 200 members restored |
+| NewGroup | Pass | New group provisioned with 3 members |
+| DeleteGroup | Pass | Group deleted from both Source and Target AD |
+
+**Fix progression during investigation:**
+
+| Fix Applied | Deficit | Notes |
+|-------------|---------|-------|
+| Layers 1-4 only | 113 | CSO/MVO repair + drift scalar FK + import fallback |
+| + Layer 6 (export evaluation) | 18 | Reference attributes no longer silently dropped |
+| + Layer 7 (MVO persistence) | 0 | Cross-page resolution attribute values now persisted |
+
+All 1,582 unit tests pass. No performance regression detected.
+
+### Remaining Work
+
+- **GitHub issue #338 Phase 4**: Replace all `AsSplitQuery()` Include chains with direct
+  SQL queries. This is the definitive fix that eliminates the race condition entirely,
+  rather than repairing its effects after the fact.
+- **DN rename staleness** (documented in Layer 3 design notes): The import reference
+  matching dictionary reads external IDs from the database, which may be stale when a
+  referenced CSO's DN changes earlier in the same import batch. This is not a regression
+  (the existing navigation chain has the same staleness) but warrants investigation.
