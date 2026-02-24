@@ -424,26 +424,26 @@ else
                         </MudTd>
                         <MudTd>
                             <MudTooltip Text="Move up" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton Icon="@Icons.Material.Outlined.ArrowUpward"
-                                               Variant="Variant.Outlined"
-
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
+                                               Variant="Variant.Filled"
+                                                Size="Size.Small"
                                                Color="Color.Default"
                                                Disabled="@(context.Order == 0)"
                                                OnClick="() => HandleMoveMatchingRuleUpAsync(context, objectType)" />
                             </MudTooltip>
                             <MudTooltip Text="Move down" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton Icon="@Icons.Material.Outlined.ArrowDownward"
-                                               Variant="Variant.Outlined"
-
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
+                                               Variant="Variant.Filled"
+                                                Size="Size.Small"
                                                Color="Color.Default"
                                                Disabled="@(context.Order == objectType.ObjectMatchingRules.Max(r => r.Order))"
                                                OnClick="() => HandleMoveMatchingRuleDownAsync(context, objectType)" />
                             </MudTooltip>
                             <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton
-                                    Icon="@Icons.Material.Outlined.Delete"
-                                    Variant="Variant.Outlined"
-
+                                    Icon="@Icons.Material.Filled.Delete"
+                                    Variant="Variant.Filled"
+                                    Size="Size.Small"
                                     Color="Color.Error"
                                     OnClick="() => HandleDeleteMatchingRuleAsync(context, objectType)" />
                             </MudTooltip>
