@@ -58,6 +58,18 @@ internal static class LdapConnectorConstants
     internal const int DEFAULT_EXPORT_CONCURRENCY = 4;
     internal const int MAX_EXPORT_CONCURRENCY = 8;
 
+    // Export modify batch size settings
+    // Controls the maximum number of values per multi-valued attribute modification in a single LDAP ModifyRequest.
+    // Large batch sizes can exceed LDAP server limits (especially Samba AD) causing partial or failed operations.
+    // Default of 100 balances throughput vs compatibility:
+    // - Each member DN is typically 60-150 bytes, so 100 values ≈ 6-15 KB payload
+    // - Well within AD's 5,000-operation transaction limit and typical LDAP message size limits
+    // - Avoids excessive round-trips for large groups (10,000-member group = 100 requests)
+    // - Compatible with Samba AD, Microsoft AD, OpenLDAP, and 389DS
+    internal const int DEFAULT_MODIFY_BATCH_SIZE = 100;
+    internal const int MIN_MODIFY_BATCH_SIZE = 10;
+    internal const int MAX_MODIFY_BATCH_SIZE = 5000;
+
     /// <summary>
     /// LDAP_SERVER_SHOW_DELETED_OID - Server control that allows searching for deleted (tombstone) objects.
     /// When included in a search request, the directory returns objects from the Deleted Objects container.

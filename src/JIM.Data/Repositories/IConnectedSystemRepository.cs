@@ -456,6 +456,16 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForReferenceResolutionAsync(IList<Guid> csoIds);
 
     /// <summary>
+    /// Returns a dictionary mapping ReferenceValueId (the referenced CSO's ID) to its external ID string
+    /// for all reference attribute values on the given CSO. Prefers secondary external ID (e.g., DN)
+    /// over primary external ID (e.g., objectGUID). Uses direct SQL to bypass EF's AsSplitQuery()
+    /// materialisation issues (dotnet/efcore#33826).
+    /// </summary>
+    /// <param name="csoId">The CSO whose reference attribute values should be looked up.</param>
+    /// <returns>Dictionary mapping referenced CSO GUIDs to their external ID strings.</returns>
+    public Task<Dictionary<Guid, string>> GetReferenceExternalIdsAsync(Guid csoId);
+
+    /// <summary>
     /// Returns all the CSOs for a Connected System that are marked as Obsolete.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>

@@ -656,6 +656,519 @@ public class DriftDetectionTests
 
     #endregion
 
+    #region Cross-System Drift Detection Tests
+
+    /// <summary>
+    /// Reproduces the Scenario 8 bug: when a Source system imports group members to
+    /// the MVO (member → Static Members) and a Target system exports them (Static Members → member),
+    /// drift detection on the Target CSO should NOT treat the Target as a non-contributor
+    /// and should NOT create spurious corrective exports.
+    ///
+    /// The bug: during Target confirming sync, drift detection compares the MVO's Static Members
+    /// against the Target CSO's member references. If any Target CSO member references have
+    /// null MetaverseObjectId (unresolved during confirming import), the actual set is smaller
+    /// than the expected set, causing false drift detection and member removal.
+    ///
+    /// Root cause: the isContributor check only considers import rules. Since the Target system
+    /// has no import rules for Static Members (only the Source does), drift detection proceeds
+    /// even though the attribute is managed by JIM's own export pipeline.
+    /// </summary>
+    [Test]
+    public void EvaluateDrift_CrossSystem_TargetExportsSourceImportedAttribute_ShouldNotDetectDriftWhenCsoMembersMatchMvoAsync()
+    {
+        // Arrange: Two-system topology (Source imports, Target exports)
+        var sourceSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Source System");
+
+        // Create multi-valued reference attributes for group membership
+        var staticMembersMvAttr = new MetaverseAttribute
+        {
+            Id = 7000,
+            Name = "Static Members",
+            Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued
+        };
+        MvoUserType.Attributes.Add(staticMembersMvAttr);
+
+        var targetMemberCsoAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 7001,
+            Name = "member",
+            Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued,
+            ConnectedSystemObjectType = TargetUserType
+        };
+        TargetUserType.Attributes.Add(targetMemberCsoAttr);
+
+        // Create Source import rule: member → Static Members
+        // (this is how members flow FROM Source TO Metaverse)
+        var sourceImportMapping = new SyncRuleMapping
+        {
+            Id = 7100,
+            TargetMetaverseAttribute = staticMembersMvAttr,
+            TargetMetaverseAttributeId = staticMembersMvAttr.Id
+        };
+        sourceImportMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 71000,
+            ConnectedSystemAttribute = ConnectedSystemObjectTypesData
+                .Single(t => t.Name == "SOURCE_GROUP").Attributes
+                .Single(a => a.Name == "MEMBER"),
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.MEMBER
+        });
+
+        var sourceImportRule = new SyncRule
+        {
+            Id = 710,
+            Name = "Source Group Import",
+            Direction = SyncRuleDirection.Import,
+            Enabled = true,
+            ConnectedSystemId = sourceSystem.Id,
+            ConnectedSystem = sourceSystem,
+            ConnectedSystemObjectTypeId = 2, // SOURCE_GROUP
+            MetaverseObjectTypeId = MvoUserType.Id,
+            MetaverseObjectType = MvoUserType,
+            AttributeFlowRules = new List<SyncRuleMapping> { sourceImportMapping }
+        };
+        SyncRulesData.Add(sourceImportRule);
+
+        // Create Target export rule: Static Members → member
+        // (this is how members flow FROM Metaverse TO Target)
+        var targetExportMapping = new SyncRuleMapping
+        {
+            Id = 7200,
+            TargetConnectedSystemAttribute = targetMemberCsoAttr,
+            TargetConnectedSystemAttributeId = targetMemberCsoAttr.Id
+        };
+        targetExportMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 72000,
+            MetaverseAttribute = staticMembersMvAttr,
+            MetaverseAttributeId = staticMembersMvAttr.Id
+        });
+
+        var targetExportRule = new SyncRule
+        {
+            Id = 720,
+            Name = "Target Group Export",
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            EnforceState = true,
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            ConnectedSystemObjectTypeId = TargetUserType.Id,
+            ConnectedSystemObjectType = TargetUserType,
+            MetaverseObjectTypeId = MvoUserType.Id,
+            MetaverseObjectType = MvoUserType,
+            AttributeFlowRules = new List<SyncRuleMapping> { targetExportMapping }
+        };
+        SyncRulesData.Add(targetExportRule);
+
+        // Create 5 member MVOs and their Target CSOs
+        var memberMvos = Enumerable.Range(0, 5).Select(_ => CreateTestMvo()).ToList();
+        var memberCsos = memberMvos.Select(mvo =>
+        {
+            var cso = CreateTestCso(mvo);
+            mvo.ConnectedSystemObjects.Add(cso);
+            return cso;
+        }).ToList();
+
+        // Create group MVO with all 5 members in Static Members
+        var groupMvo = CreateTestMvo();
+        foreach (var memberMvo in memberMvos)
+        {
+            groupMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+            {
+                Id = Guid.NewGuid(),
+                MetaverseObject = groupMvo,
+                Attribute = staticMembersMvAttr,
+                AttributeId = staticMembersMvAttr.Id,
+                ReferenceValue = memberMvo
+            });
+        }
+
+        // Create group CSO with all 5 member references (all properly resolved)
+        var groupCso = CreateTestCso(groupMvo);
+        foreach (var memberCso in memberCsos)
+        {
+            groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            {
+                ConnectedSystemObject = groupCso,
+                Attribute = targetMemberCsoAttr,
+                AttributeId = targetMemberCsoAttr.Id,
+                ReferenceValue = memberCso
+            });
+        }
+        groupMvo.ConnectedSystemObjects.Add(groupCso);
+
+        // Build import mapping cache from ALL sync rules (includes Source import rule)
+        var importMappingCache = DriftDetectionService.BuildImportMappingCache(SyncRulesData);
+
+        // Verify cache has Source system's import mapping for Static Members
+        Assert.That(importMappingCache.ContainsKey((sourceSystem.Id, staticMembersMvAttr.Id)), Is.True,
+            "Source system should have import mapping for Static Members");
+        // Verify Target system does NOT have import mapping for Static Members
+        Assert.That(importMappingCache.ContainsKey((TargetSystem.Id, staticMembersMvAttr.Id)), Is.False,
+            "Target system should NOT have import mapping for Static Members");
+
+        // Act: Run drift detection on the Target group CSO
+        var result = Jim.DriftDetection.EvaluateDrift(
+            groupCso,
+            groupMvo,
+            new List<SyncRule> { targetExportRule },
+            importMappingCache);
+
+        // Assert: No drift should be detected because all member references match
+        Assert.That(result.HasDrift, Is.False,
+            "No drift should be detected when Target CSO members exactly match MVO Static Members. " +
+            "The Target system exports this attribute (it doesn't import it), so drift detection " +
+            "should either skip it or find no differences.");
+    }
+
+    /// <summary>
+    /// Regression test for dotnet/efcore#33826: verifies that after the repository-level
+    /// reference repair, drift detection does not create spurious REMOVE exports when all
+    /// CSO member references have MetaverseObjectId properly populated.
+    /// Previously this was a bug reproducer where 2 of 5 CSOs had null MetaverseObjectId,
+    /// causing drift detection to see an incomplete "actual" set.
+    /// </summary>
+    [Test]
+    public void EvaluateDrift_CrossSystem_RepairedTargetCsoReferences_NoDriftWhenAllResolvedAsync()
+    {
+        // Arrange: Same two-system topology
+        var sourceSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Source System");
+
+        var staticMembersMvAttr = new MetaverseAttribute
+        {
+            Id = 8000,
+            Name = "Static Members",
+            Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued
+        };
+        MvoUserType.Attributes.RemoveAll(a => a.Name == "Static Members");
+        MvoUserType.Attributes.Add(staticMembersMvAttr);
+
+        var targetMemberCsoAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 8001,
+            Name = "member",
+            Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued,
+            ConnectedSystemObjectType = TargetUserType
+        };
+        TargetUserType.Attributes.RemoveAll(a => a.Name == "member");
+        TargetUserType.Attributes.Add(targetMemberCsoAttr);
+
+        // Source import rule
+        var sourceImportMapping = new SyncRuleMapping
+        {
+            Id = 8100,
+            TargetMetaverseAttribute = staticMembersMvAttr,
+            TargetMetaverseAttributeId = staticMembersMvAttr.Id
+        };
+        sourceImportMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 81000,
+            ConnectedSystemAttribute = ConnectedSystemObjectTypesData
+                .Single(t => t.Name == "SOURCE_GROUP").Attributes
+                .Single(a => a.Name == "MEMBER"),
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.MEMBER
+        });
+
+        var sourceImportRule = new SyncRule
+        {
+            Id = 810,
+            Name = "Source Group Import",
+            Direction = SyncRuleDirection.Import,
+            Enabled = true,
+            ConnectedSystemId = sourceSystem.Id,
+            ConnectedSystem = sourceSystem,
+            ConnectedSystemObjectTypeId = 2,
+            MetaverseObjectTypeId = MvoUserType.Id,
+            MetaverseObjectType = MvoUserType,
+            AttributeFlowRules = new List<SyncRuleMapping> { sourceImportMapping }
+        };
+        SyncRulesData.Add(sourceImportRule);
+
+        // Target export rule
+        var targetExportMapping = new SyncRuleMapping
+        {
+            Id = 8200,
+            TargetConnectedSystemAttribute = targetMemberCsoAttr,
+            TargetConnectedSystemAttributeId = targetMemberCsoAttr.Id
+        };
+        targetExportMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 82000,
+            MetaverseAttribute = staticMembersMvAttr,
+            MetaverseAttributeId = staticMembersMvAttr.Id
+        });
+
+        var targetExportRule = new SyncRule
+        {
+            Id = 820,
+            Name = "Target Group Export",
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            EnforceState = true,
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            ConnectedSystemObjectTypeId = TargetUserType.Id,
+            ConnectedSystemObjectType = TargetUserType,
+            MetaverseObjectTypeId = MvoUserType.Id,
+            MetaverseObjectType = MvoUserType,
+            AttributeFlowRules = new List<SyncRuleMapping> { targetExportMapping }
+        };
+        SyncRulesData.Add(targetExportRule);
+
+        // Create 5 member MVOs
+        var memberMvos = Enumerable.Range(0, 5).Select(_ => CreateTestMvo()).ToList();
+
+        // Create Target user CSOs: all 5 properly joined (simulating post-repair state where
+        // RepairReferenceValueMaterialisationAsync has fixed any AsSplitQuery materialisation failures)
+        var memberCsos = new List<ConnectedSystemObject>();
+        for (var i = 0; i < 5; i++)
+        {
+            var cso = CreateTestCso(memberMvos[i]);
+            memberMvos[i].ConnectedSystemObjects.Add(cso);
+            memberCsos.Add(cso);
+        }
+
+        // Create group MVO with all 5 members
+        var groupMvo = CreateTestMvo();
+        foreach (var memberMvo in memberMvos)
+        {
+            groupMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+            {
+                Id = Guid.NewGuid(),
+                MetaverseObject = groupMvo,
+                Attribute = staticMembersMvAttr,
+                AttributeId = staticMembersMvAttr.Id,
+                ReferenceValue = memberMvo
+            });
+        }
+
+        // Create group CSO with all 5 member references
+        var groupCso = CreateTestCso(groupMvo);
+        foreach (var memberCso in memberCsos)
+        {
+            groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            {
+                ConnectedSystemObject = groupCso,
+                Attribute = targetMemberCsoAttr,
+                AttributeId = targetMemberCsoAttr.Id,
+                ReferenceValue = memberCso
+            });
+        }
+        groupMvo.ConnectedSystemObjects.Add(groupCso);
+
+        // Build import mapping cache (includes Source import rule only)
+        var importMappingCache = DriftDetectionService.BuildImportMappingCache(SyncRulesData);
+
+        // Act
+        var result = Jim.DriftDetection.EvaluateDrift(
+            groupCso,
+            groupMvo,
+            new List<SyncRule> { targetExportRule },
+            importMappingCache);
+
+        // Assert: After the repository repair ensures all MetaverseObjectIds are populated,
+        // drift detection should find no differences between actual and expected member sets.
+        Assert.That(result.HasDrift, Is.False,
+            "No drift should be detected when all CSO member references have MetaverseObjectId " +
+            "properly populated (post-repair state). Previously this test demonstrated a bug where " +
+            "null MetaverseObjectId caused spurious REMOVE exports.");
+        Assert.That(result.CorrectiveExports, Has.Count.EqualTo(0),
+            "No corrective exports should be created when all references are properly resolved.");
+    }
+
+    /// <summary>
+    /// Documents the known behaviour when ReferenceValue is completely null on CSO attribute
+    /// values (i.e., the repository repair did not run or failed). Drift detection will see
+    /// an incomplete "actual" set and create spurious REMOVE exports. This is the raw EF Core
+    /// AsSplitQuery bug behaviour (dotnet/efcore#33826) before the repair.
+    /// </summary>
+    [Test]
+    public void EvaluateDrift_CrossSystem_NullReferenceValueNavigation_CreatesSpuriousRemovalsAsync()
+    {
+        // Arrange: Same two-system topology as the repaired test above
+        var sourceSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Source System");
+
+        var staticMembersMvAttr = new MetaverseAttribute
+        {
+            Id = 9000,
+            Name = "Static Members",
+            Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued
+        };
+        MvoUserType.Attributes.RemoveAll(a => a.Name == "Static Members");
+        MvoUserType.Attributes.Add(staticMembersMvAttr);
+
+        var targetMemberCsoAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 9001,
+            Name = "member",
+            Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued,
+            ConnectedSystemObjectType = TargetUserType
+        };
+        TargetUserType.Attributes.RemoveAll(a => a.Name == "member");
+        TargetUserType.Attributes.Add(targetMemberCsoAttr);
+
+        var sourceImportMapping = new SyncRuleMapping
+        {
+            Id = 9100,
+            TargetMetaverseAttribute = staticMembersMvAttr,
+            TargetMetaverseAttributeId = staticMembersMvAttr.Id
+        };
+        sourceImportMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 91000,
+            ConnectedSystemAttribute = ConnectedSystemObjectTypesData
+                .Single(t => t.Name == "SOURCE_GROUP").Attributes
+                .Single(a => a.Name == "MEMBER"),
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.MEMBER
+        });
+        var sourceImportRule = new SyncRule
+        {
+            Id = 910,
+            Name = "Source Group Import",
+            Direction = SyncRuleDirection.Import,
+            Enabled = true,
+            ConnectedSystemId = sourceSystem.Id,
+            ConnectedSystem = sourceSystem,
+            ConnectedSystemObjectTypeId = 2,
+            MetaverseObjectTypeId = MvoUserType.Id,
+            MetaverseObjectType = MvoUserType,
+            AttributeFlowRules = new List<SyncRuleMapping> { sourceImportMapping }
+        };
+        SyncRulesData.Add(sourceImportRule);
+
+        var targetExportMapping = new SyncRuleMapping
+        {
+            Id = 9200,
+            TargetConnectedSystemAttribute = targetMemberCsoAttr,
+            TargetConnectedSystemAttributeId = targetMemberCsoAttr.Id
+        };
+        targetExportMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 92000,
+            MetaverseAttribute = staticMembersMvAttr,
+            MetaverseAttributeId = staticMembersMvAttr.Id
+        });
+        var targetExportRule = new SyncRule
+        {
+            Id = 920,
+            Name = "Target Group Export",
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            EnforceState = true,
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            ConnectedSystemObjectTypeId = TargetUserType.Id,
+            ConnectedSystemObjectType = TargetUserType,
+            MetaverseObjectTypeId = MvoUserType.Id,
+            MetaverseObjectType = MvoUserType,
+            AttributeFlowRules = new List<SyncRuleMapping> { targetExportMapping }
+        };
+        SyncRulesData.Add(targetExportRule);
+
+        // Create 5 member MVOs
+        var memberMvos = Enumerable.Range(0, 5).Select(_ => CreateTestMvo()).ToList();
+
+        // Create Target user CSOs: 3 properly joined, 2 with null ReferenceValue
+        // (simulating AsSplitQuery failing to materialise the navigation)
+        var memberCsos = new List<ConnectedSystemObject>();
+        for (var i = 0; i < 5; i++)
+        {
+            if (i < 3)
+            {
+                var cso = CreateTestCso(memberMvos[i]);
+                memberMvos[i].ConnectedSystemObjects.Add(cso);
+                memberCsos.Add(cso);
+            }
+            else
+            {
+                // ReferenceValue will be null on the attribute value pointing to this CSO.
+                // This simulates the AsSplitQuery materialisation failure.
+                memberCsos.Add(null!); // placeholder — we'll set ReferenceValue = null directly below
+            }
+        }
+
+        // Create group MVO with all 5 members
+        var groupMvo = CreateTestMvo();
+        foreach (var memberMvo in memberMvos)
+        {
+            groupMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+            {
+                Id = Guid.NewGuid(),
+                MetaverseObject = groupMvo,
+                Attribute = staticMembersMvAttr,
+                AttributeId = staticMembersMvAttr.Id,
+                ReferenceValue = memberMvo,
+                ReferenceValueId = memberMvo.Id
+            });
+        }
+
+        // Create group CSO: 3 member refs with ReferenceValue populated, 2 with null
+        var groupCso = CreateTestCso(groupMvo);
+        for (var i = 0; i < 5; i++)
+        {
+            if (i < 3)
+            {
+                groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                {
+                    Id = Guid.NewGuid(),
+                    ConnectedSystemObject = groupCso,
+                    Attribute = targetMemberCsoAttr,
+                    AttributeId = targetMemberCsoAttr.Id,
+                    ReferenceValue = memberCsos[i],
+                    ReferenceValueId = memberCsos[i].Id
+                });
+            }
+            else
+            {
+                // Simulate AsSplitQuery failure: ReferenceValueId is set but ReferenceValue is null
+                groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                {
+                    Id = Guid.NewGuid(),
+                    ConnectedSystemObject = groupCso,
+                    Attribute = targetMemberCsoAttr,
+                    AttributeId = targetMemberCsoAttr.Id,
+                    ReferenceValue = null,
+                    ReferenceValueId = Guid.NewGuid() // FK is set but navigation is null
+                });
+            }
+        }
+        groupMvo.ConnectedSystemObjects.Add(groupCso);
+
+        var importMappingCache = DriftDetectionService.BuildImportMappingCache(SyncRulesData);
+
+        // Act
+        var result = Jim.DriftDetection.EvaluateDrift(
+            groupCso,
+            groupMvo,
+            new List<SyncRule> { targetExportRule },
+            importMappingCache);
+
+        // Assert: Without the repository repair, drift IS detected because the actual set
+        // is incomplete (3 instead of 5). This documents the known EF Core bug behaviour.
+        // The 2 members with null ReferenceValue are missing from the actual set, so drift
+        // detection sees them as "expected but not present" and creates corrective ADD exports.
+        Assert.That(result.HasDrift, Is.True,
+            "Without the repository repair, drift is incorrectly detected because 2 of 5 " +
+            "CSO member references have null ReferenceValue navigation.");
+
+        var addChanges = result.CorrectiveExports
+            .SelectMany(pe => pe.AttributeValueChanges)
+            .Where(c => c.ChangeType == PendingExportAttributeChangeType.Add)
+            .ToList();
+        Assert.That(addChanges, Has.Count.EqualTo(2),
+            "2 spurious ADD changes created for the members with null ReferenceValue " +
+            "(drift detection sees them as missing from the actual set).");
+    }
+
+    #endregion
+
     #region Multi-Valued Attribute Drift Tests
 
     /// <summary>

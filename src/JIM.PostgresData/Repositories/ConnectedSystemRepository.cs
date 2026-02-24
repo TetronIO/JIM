@@ -636,6 +636,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var pagedObjects = objects.Skip(offset).Take(itemsToGet);
         var results = await pagedObjects.ToListAsync();
 
+        // Repair any reference attribute values where EF AsSplitQuery() failed to materialise
+        // the ReferenceValue navigation due to concurrent writes (dotnet/efcore#33826)
+        await RepairReferenceValueMaterialisationAsync(results);
+
+        // Repair any MVO attribute values that were dropped entirely by AsSplitQuery()
+        // (entire rows missing from MVO.AttributeValues, not just null navigations)
+        await RepairMvoAttributeValueMaterialisationAsync(results);
+
         // now with all the ids we know how many total results there are and so can populate paging info
         var pagedResultSet = new PagedResultSet<ConnectedSystemObject>
         {
@@ -649,9 +657,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return pagedResultSet;
 
         // don't let callers try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages) 
+        if (page <= pagedResultSet.TotalPages)
             return pagedResultSet;
-            
+
         pagedResultSet.TotalResults = 0;
         pagedResultSet.Results.Clear();
         return pagedResultSet;
@@ -786,6 +794,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var pagedObjects = query.Skip(offset).Take(itemsToGet);
         var results = await pagedObjects.ToListAsync();
 
+        // Repair any reference attribute values where EF AsSplitQuery() failed to materialise
+        // the ReferenceValue navigation due to concurrent writes (dotnet/efcore#33826)
+        await RepairReferenceValueMaterialisationAsync(results);
+
+        // Repair any MVO attribute values that were dropped entirely by AsSplitQuery()
+        // (entire rows missing from MVO.AttributeValues, not just null navigations)
+        await RepairMvoAttributeValueMaterialisationAsync(results);
+
         // Build the paged result set
         var pagedResultSet = new PagedResultSet<ConnectedSystemObject>
         {
@@ -817,7 +833,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (csoIds.Count == 0)
             return [];
 
-        return await Repository.Database.ConnectedSystemObjects
+        var results = await Repository.Database.ConnectedSystemObjects
             .AsSplitQuery()
             .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
@@ -838,6 +854,269 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(av => av.ContributedBySystem)
             .Where(cso => csoIds.Contains(cso.Id))
             .ToListAsync();
+
+        // Repair any reference attribute values where EF AsSplitQuery() failed to materialise
+        // the ReferenceValue navigation due to concurrent writes (dotnet/efcore#33826)
+        await RepairReferenceValueMaterialisationAsync(results);
+
+        // Repair any MVO attribute values that were dropped entirely by AsSplitQuery()
+        await RepairMvoAttributeValueMaterialisationAsync(results);
+
+        return results;
+    }
+
+    /// <summary>
+    /// Repairs reference attribute values on CSOs where EF Core's AsSplitQuery() failed to
+    /// materialise the ReferenceValue navigation property due to concurrent writes
+    /// (see dotnet/efcore#33826). Runs a direct SQL query to get the definitive
+    /// MetaverseObjectId for each referenced CSO, then patches any attribute values where
+    /// ReferenceValue is null or has a null MetaverseObjectId.
+    /// </summary>
+    private async Task RepairReferenceValueMaterialisationAsync(List<ConnectedSystemObject> csos)
+    {
+        if (csos.Count == 0)
+            return;
+
+        var csoIds = csos.Select(cso => cso.Id).ToArray();
+
+        // Use a direct SQL query to get the definitive MetaverseObjectId for every
+        // reference attribute value in this page. This bypasses EF materialisation entirely.
+        // Skip when running against a non-relational provider (e.g., in-memory for tests)
+        // since the AsSplitQuery bug only affects relational providers.
+        List<ReferenceRepairRow> referenceData;
+        try
+        {
+            if (!Repository.Database.Database.IsRelational())
+                return;
+
+            referenceData = await Repository.Database.Database
+                .SqlQueryRaw<ReferenceRepairRow>(
+                    """
+                    SELECT av."Id" AS "AttributeValueId", ref_cso."MetaverseObjectId"
+                    FROM "ConnectedSystemObjectAttributeValues" av
+                    JOIN "ConnectedSystemObjects" ref_cso ON av."ReferenceValueId" = ref_cso."Id"
+                    WHERE av."ConnectedSystemObjectId" = ANY({0})
+                      AND av."ReferenceValueId" IS NOT NULL
+                    """,
+                    csoIds)
+                .ToListAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        {
+            // Non-relational providers (e.g., in-memory for tests) do not support raw SQL
+            // and may throw during provider detection. Safe to skip since the AsSplitQuery
+            // materialisation bug only affects relational database providers.
+            return;
+        }
+
+        var lookupByAvId = referenceData.ToDictionary(r => r.AttributeValueId, r => r.MetaverseObjectId);
+
+        var repairedCount = 0;
+        foreach (var cso in csos)
+        {
+            foreach (var av in cso.AttributeValues)
+            {
+                if (!av.ReferenceValueId.HasValue)
+                    continue;
+
+                if (!lookupByAvId.TryGetValue(av.Id, out var expectedMvoId))
+                    continue;
+
+                if (av.ReferenceValue == null)
+                {
+                    // Navigation property was not materialised by EF - create a detached stub
+                    av.ReferenceValue = new ConnectedSystemObject
+                    {
+                        Id = av.ReferenceValueId.Value,
+                        MetaverseObjectId = expectedMvoId
+                    };
+                    repairedCount++;
+                }
+                else if (av.ReferenceValue.MetaverseObjectId == null && expectedMvoId != null)
+                {
+                    // Navigation loaded but MetaverseObjectId was not populated
+                    av.ReferenceValue.MetaverseObjectId = expectedMvoId;
+                    repairedCount++;
+                }
+            }
+        }
+
+        if (repairedCount > 0)
+        {
+            Log.Warning("RepairReferenceValueMaterialisation: Repaired {Count} reference attribute values " +
+                "where EF AsSplitQuery() failed to materialise ReferenceValue navigation (dotnet/efcore#33826). " +
+                "Page contained {CsoCount} CSOs",
+                repairedCount, csos.Count);
+        }
+    }
+
+    /// <summary>
+    /// DTO for the reference repair SQL query. Properties must match the SQL column aliases exactly.
+    /// </summary>
+    private record ReferenceRepairRow(Guid AttributeValueId, Guid? MetaverseObjectId);
+
+    /// <summary>
+    /// Post-load repair for MVO attribute values that were dropped entirely by EF Core's
+    /// AsSplitQuery() materialisation bug (dotnet/efcore#33826). Unlike the CSO repair above
+    /// which fixes null navigations on loaded entities, this method detects when entire
+    /// MetaverseObjectAttributeValue rows are missing from the MVO.AttributeValues collection.
+    ///
+    /// This manifests as drift detection seeing fewer "expected" member references than actually
+    /// exist in the metaverse, causing spurious corrective exports that delete valid members.
+    ///
+    /// The repair queries the database for the definitive set of reference-type attribute values
+    /// per MVO and adds any missing ones as detached entities with their scalar FK populated.
+    /// Drift detection only needs ReferenceValueId (the scalar FK), not the full ReferenceValue
+    /// navigation, so stub entities are sufficient.
+    /// </summary>
+    private async Task RepairMvoAttributeValueMaterialisationAsync(List<ConnectedSystemObject> csos)
+    {
+        if (csos.Count == 0)
+            return;
+
+        // Collect distinct MVO IDs from loaded CSOs
+        var mvoIds = csos
+            .Where(cso => cso.MetaverseObject != null)
+            .Select(cso => cso.MetaverseObject!.Id)
+            .Distinct()
+            .ToArray();
+
+        if (mvoIds.Length == 0)
+            return;
+
+        // Query the database for all reference-type attribute values for these MVOs.
+        // We only care about reference attributes (ReferenceValueId IS NOT NULL) because
+        // those are the ones affected by drift detection member comparisons.
+        List<MvoAttributeValueRepairRow> dbRows;
+        try
+        {
+            if (!Repository.Database.Database.IsRelational())
+                return;
+
+            dbRows = await Repository.Database.Database
+                .SqlQueryRaw<MvoAttributeValueRepairRow>(
+                    """
+                    SELECT av."Id", av."MetaverseObjectId" AS "MvoId", av."AttributeId",
+                           av."ReferenceValueId"
+                    FROM "MetaverseObjectAttributeValues" av
+                    WHERE av."MetaverseObjectId" = ANY({0})
+                      AND av."ReferenceValueId" IS NOT NULL
+                    """,
+                    mvoIds)
+                .ToListAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        {
+            return;
+        }
+
+        if (dbRows.Count == 0)
+            return;
+
+        // Group by MVO ID for fast lookup
+        var dbRowsByMvo = dbRows.GroupBy(r => r.MvoId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var repairedCount = 0;
+        foreach (var cso in csos)
+        {
+            if (cso.MetaverseObject == null)
+                continue;
+
+            var mvo = cso.MetaverseObject;
+
+            if (!dbRowsByMvo.TryGetValue(mvo.Id, out var expectedRows))
+                continue;
+
+            // Build a set of attribute value IDs that EF actually loaded
+            var loadedAvIds = new HashSet<Guid>(mvo.AttributeValues.Select(av => av.Id));
+
+            // Find rows that the database has but EF didn't materialise
+            var missingRows = expectedRows.Where(r => !loadedAvIds.Contains(r.Id)).ToList();
+
+            if (missingRows.Count == 0)
+                continue;
+
+            // Add stub attribute values for the missing rows.
+            // These are NOT tracked by the DbContext — they're detached in-memory patches.
+            // Drift detection only needs AttributeId and ReferenceValueId (the scalar FK).
+            foreach (var missing in missingRows)
+            {
+                mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+                {
+                    Id = missing.Id,
+                    AttributeId = missing.AttributeId,
+                    MetaverseObject = mvo,
+                    ReferenceValueId = missing.ReferenceValueId,
+                });
+                repairedCount++;
+            }
+        }
+
+        if (repairedCount > 0)
+        {
+            Log.Warning("RepairMvoAttributeValueMaterialisation: Repaired {RepairedCount} missing MVO attribute values " +
+                "across {MvoCount} MVOs where EF AsSplitQuery() failed to materialise (dotnet/efcore#33826)",
+                repairedCount, mvoIds.Length);
+        }
+    }
+
+    /// <summary>
+    /// DTO for the MVO attribute value repair SQL query.
+    /// </summary>
+    private record MvoAttributeValueRepairRow(Guid Id, Guid MvoId, int AttributeId, Guid? ReferenceValueId);
+
+    /// <summary>
+    /// DTO for the reference external ID lookup SQL query.
+    /// </summary>
+    private record ReferenceExternalIdRow(Guid ReferenceValueId, string? ExternalId);
+
+    /// <inheritdoc/>
+    public async Task<Dictionary<Guid, string>> GetReferenceExternalIdsAsync(Guid csoId)
+    {
+        // Use a direct SQL query to get the external ID string (preferring secondary, falling
+        // back to primary) for every CSO referenced by the given CSO's attribute values.
+        // This bypasses EF's AsSplitQuery() materialisation which can silently drop navigations
+        // (see dotnet/efcore#33826), providing a reliable fallback for ImportRefMatchesCsoValue.
+        List<ReferenceExternalIdRow> rows;
+        try
+        {
+            if (!Repository.Database.Database.IsRelational())
+                return new Dictionary<Guid, string>();
+
+            rows = await Repository.Database.Database
+                .SqlQueryRaw<ReferenceExternalIdRow>(
+                    """
+                    SELECT av."ReferenceValueId",
+                           COALESCE(sec_av."StringValue", pri_av."StringValue") AS "ExternalId"
+                    FROM "ConnectedSystemObjectAttributeValues" av
+                    JOIN "ConnectedSystemObjects" ref_cso ON av."ReferenceValueId" = ref_cso."Id"
+                    LEFT JOIN "ConnectedSystemObjectAttributeValues" sec_av
+                        ON sec_av."ConnectedSystemObjectId" = ref_cso."Id"
+                       AND sec_av."AttributeId" = ref_cso."SecondaryExternalIdAttributeId"
+                    LEFT JOIN "ConnectedSystemObjectAttributeValues" pri_av
+                        ON pri_av."ConnectedSystemObjectId" = ref_cso."Id"
+                       AND pri_av."AttributeId" = ref_cso."ExternalIdAttributeId"
+                    WHERE av."ConnectedSystemObjectId" = {0}
+                      AND av."ReferenceValueId" IS NOT NULL
+                    """,
+                    csoId)
+                .ToListAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        {
+            // Non-relational providers (e.g., in-memory for tests) do not support raw SQL.
+            // Return empty dictionary so callers fall back to navigation chain only.
+            return new Dictionary<Guid, string>();
+        }
+
+        var result = new Dictionary<Guid, string>();
+        foreach (var row in rows)
+        {
+            if (row.ExternalId != null)
+                result.TryAdd(row.ReferenceValueId, row.ExternalId);
+        }
+        return result;
     }
 
     /// <summary>
@@ -1803,7 +2082,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (csoIds.Length == 0)
             return 0;
 
-        // Delete child records first (FK constraint)
+        // Use raw SQL for performance and to avoid change tracker identity conflicts.
+        // After ClearChangeTracker(), loading PEs with Include chains would create
+        // MetaverseAttribute instances that conflict with instances already tracked by the
+        // cross-page CSO query, causing identity resolution failures.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""PendingExportAttributeValueChanges""
               WHERE ""PendingExportId"" IN (

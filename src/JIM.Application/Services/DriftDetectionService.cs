@@ -433,13 +433,28 @@ public class DriftDetectionService
 
             // Return a HashSet of all values for set comparison
             var valueSet = new HashSet<object>();
+            var nullValueCount = 0;
+            var duplicateCount = 0;
             foreach (var av in mvoAttrValues)
             {
                 var value = GetTypedValueFromMvoAttributeValue(av, source.MetaverseAttribute.Type);
                 if (value != null)
                 {
-                    valueSet.Add(value);
+                    if (!valueSet.Add(value))
+                        duplicateCount++;
                 }
+                else
+                {
+                    nullValueCount++;
+                }
+            }
+
+            if (nullValueCount > 0 || duplicateCount > 0)
+            {
+                Log.Warning("GetExpectedValue: MVO {MvoId} attribute {AttrName}: " +
+                    "{LoadedCount} attribute values loaded, {NullCount} null values filtered, {DupCount} duplicates",
+                    mvo.Id, source.MetaverseAttribute.Name,
+                    mvoAttrValues.Count, nullValueCount, duplicateCount);
             }
 
             Log.Debug("GetExpectedValue: Multi-valued attribute {AttrName} for MVO {MvoId} has {Count} expected values",
@@ -474,7 +489,10 @@ public class DriftDetectionService
             AttributeDataType.Boolean => av.BoolValue,
             AttributeDataType.Guid => av.GuidValue,
             AttributeDataType.Binary => av.ByteValue,
-            AttributeDataType.Reference => av.ReferenceValue?.Id,
+            // Prefer the scalar FK (avoids dependency on ReferenceValue navigation being
+            // materialised), fall back to navigation property for compatibility with
+            // in-memory test data where FK may not be explicitly set.
+            AttributeDataType.Reference => av.ReferenceValueId ?? av.ReferenceValue?.Id,
             _ => null
         };
     }
@@ -513,7 +531,7 @@ public class DriftDetectionService
                 AttributeDataType.Boolean => attributeValue.BoolValue,
                 AttributeDataType.Guid => attributeValue.GuidValue,
                 AttributeDataType.Binary => attributeValue.ByteValue,
-                AttributeDataType.Reference => attributeValue.ReferenceValue?.Id.ToString(),
+                AttributeDataType.Reference => (attributeValue.ReferenceValueId ?? attributeValue.ReferenceValue?.Id)?.ToString(),
                 _ => null
             };
 
@@ -591,9 +609,34 @@ public class DriftDetectionService
             // For references, return the MVO ID that the referenced CSO is joined to.
             // This enables comparison with the expected MVO reference ID from GetExpectedValue.
             // The referenced CSO's MetaverseObjectId tells us which MVO it represents.
-            AttributeDataType.Reference => av.ReferenceValue?.MetaverseObjectId,
+            // The repository repair (RepairReferenceValueMaterialisationAsync) should ensure
+            // ReferenceValue is always populated, but log a warning if it's still null.
+            AttributeDataType.Reference => GetCsoReferenceMetaverseObjectId(av),
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Gets the MetaverseObjectId for a CSO reference attribute value.
+    /// Uses the ReferenceValue navigation if loaded; logs a warning if the navigation
+    /// is null despite ReferenceValueId being set (indicates the repository-level repair
+    /// for AsSplitQuery materialisation failures did not cover this value).
+    /// </summary>
+    private static Guid? GetCsoReferenceMetaverseObjectId(ConnectedSystemObjectAttributeValue av)
+    {
+        if (av.ReferenceValue != null)
+            return av.ReferenceValue.MetaverseObjectId;
+
+        if (av.ReferenceValueId.HasValue)
+        {
+            Log.Warning("GetCsoReferenceMetaverseObjectId: ReferenceValueId {RefId} is set but " +
+                "ReferenceValue navigation is null on attribute value {AvId}. " +
+                "This indicates the AsSplitQuery materialisation repair did not cover this value " +
+                "(dotnet/efcore#33826)",
+                av.ReferenceValueId.Value, av.Id);
+        }
+
+        return null;
     }
 
     /// <summary>

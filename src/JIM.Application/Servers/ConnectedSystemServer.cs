@@ -2549,6 +2549,16 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Returns a dictionary mapping ReferenceValueId (the referenced CSO's ID) to its external ID string
+    /// for all reference attribute values on the given CSO. Uses direct SQL to bypass EF's AsSplitQuery()
+    /// materialisation issues.
+    /// </summary>
+    public async Task<Dictionary<Guid, string>> GetReferenceExternalIdsAsync(Guid csoId)
+    {
+        return await Application.Repository.ConnectedSystems.GetReferenceExternalIdsAsync(csoId);
+    }
+
+    /// <summary>
     /// Returns all the CSOs for a Connected System that are marked as Obsolete.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the system to return CSOs for.</param>

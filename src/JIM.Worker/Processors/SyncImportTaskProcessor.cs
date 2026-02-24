@@ -890,8 +890,14 @@ public class SyncImportTaskProcessor
                         statusTransitioned = true;
                     }
 
+                    // Pre-load a dictionary of referenced CSO external IDs via direct SQL.
+                    // This provides a reliable fallback when EF's AsSplitQuery() fails to materialise
+                    // ReferenceValue navigations (dotnet/efcore#33826), preventing spurious
+                    // removal and re-addition of resolved reference attribute values.
+                    var refExternalIds = await _jim.ConnectedSystems.GetReferenceExternalIdsAsync(connectedSystemObject.Id);
+
                     // Calculate attribute changes before processing
-                    UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, csObjectType, activityRunProfileExecutionItem);
+                    UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, csObjectType, activityRunProfileExecutionItem, refExternalIds);
 
                     // Check if there are any actual attribute changes
                     var hasAttributeChanges = connectedSystemObject.PendingAttributeValueAdditions.Count > 0 ||
@@ -1254,7 +1260,7 @@ public class SyncImportTaskProcessor
         return connectedSystemObject;
     }
 
-    private static void UpdateConnectedSystemObjectFromImportObject(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObject connectedSystemObject, ConnectedSystemObjectType connectedSystemObjectType, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
+    private static void UpdateConnectedSystemObjectFromImportObject(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObject connectedSystemObject, ConnectedSystemObjectType connectedSystemObjectType, ActivityRunProfileExecutionItem activityRunProfileExecutionItem, IReadOnlyDictionary<Guid, string>? referenceExternalIdLookup = null)
     {
         // Defensively deduplicate imported attribute values before processing
         // This prevents corrupt source data from propagating duplicates to the CSO
@@ -1366,9 +1372,11 @@ public class SyncImportTaskProcessor
                                 refCsoId, secExtId, unresolved);
                         }
 
-                        // Helper: Check if an import reference string matches an existing CSO attribute value
-                        // This handles both unresolved references and resolved references
-                        static bool ImportRefMatchesCsoValue(string importRef, ConnectedSystemObjectAttributeValue av)
+                        // Helper: Check if an import reference string matches an existing CSO attribute value.
+                        // This handles both unresolved references and resolved references.
+                        // The refExtIdLookup parameter provides a SQL-based fallback when EF's AsSplitQuery()
+                        // fails to materialise the ReferenceValue navigation (dotnet/efcore#33826).
+                        static bool ImportRefMatchesCsoValue(string importRef, ConnectedSystemObjectAttributeValue av, IReadOnlyDictionary<Guid, string>? refExtIdLookup)
                         {
                             // Check unresolved reference (case-sensitive to preserve data fidelity)
                             if (av.UnresolvedReferenceValue != null &&
@@ -1388,20 +1396,42 @@ public class SyncImportTaskProcessor
                                     return true;
                             }
 
+                            // Fallback: when AsSplitQuery() dropped the ReferenceValue navigation,
+                            // use the pre-loaded SQL dictionary to match by referenced CSO's external ID
+                            if (av.ReferenceValueId.HasValue &&
+                                refExtIdLookup != null &&
+                                refExtIdLookup.TryGetValue(av.ReferenceValueId.Value, out var fallbackExternalId) &&
+                                fallbackExternalId.Equals(importRef, StringComparison.OrdinalIgnoreCase))
+                                return true;
+
                             return false;
                         }
 
                         // Find CSO reference values that aren't in the import - mark for removal
                         var missingReferenceValues = csoRefAttrValues
-                            .Where(av => (av.UnresolvedReferenceValue != null || av.ReferenceValue != null) &&
-                                        !importedObjectAttribute.ReferenceValues.Any(importRef => ImportRefMatchesCsoValue(importRef, av)))
+                            .Where(av => (av.UnresolvedReferenceValue != null || av.ReferenceValue != null || av.ReferenceValueId.HasValue) &&
+                                        !importedObjectAttribute.ReferenceValues.Any(importRef => ImportRefMatchesCsoValue(importRef, av, referenceExternalIdLookup)))
                             .ToList();
                         connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingReferenceValues);
 
                         // Find imported reference values that aren't on the CSO - mark for addition
                         var newReferenceValues = importedObjectAttribute.ReferenceValues
-                            .Where(importRef => !csoRefAttrValues.Any(av => ImportRefMatchesCsoValue(importRef, av)))
+                            .Where(importRef => !csoRefAttrValues.Any(av => ImportRefMatchesCsoValue(importRef, av, referenceExternalIdLookup)))
                             .ToList();
+
+                        // Count how many resolved refs were saved by the SQL dictionary fallback
+                        // (i.e., ReferenceValue was null but ReferenceValueId matched via the dictionary)
+                        if (referenceExternalIdLookup != null && referenceExternalIdLookup.Count > 0)
+                        {
+                            var nullNavigationCount = csoRefAttrValues.Count(av => av.ReferenceValueId.HasValue && av.ReferenceValue == null);
+                            if (nullNavigationCount > 0)
+                            {
+                                Log.Warning("UpdateConnectedSystemObjectFromImportObject: {NullCount} of {TotalCount} reference values " +
+                                    "for attribute '{AttrName}' on CSO {CsoId} had null ReferenceValue navigation (AsSplitQuery materialisation failure). " +
+                                    "SQL dictionary fallback was used for matching.",
+                                    nullNavigationCount, csoRefAttrValues.Count, csoAttribute.Name, connectedSystemObject.Id);
+                            }
+                        }
 
                         Log.Debug("UpdateConnectedSystemObjectFromImportObject: Reference comparison result for '{AttrName}': " +
                             "Removals={Removals}, Additions={Additions}",
