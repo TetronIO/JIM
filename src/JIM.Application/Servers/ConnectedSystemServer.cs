@@ -1035,6 +1035,7 @@ public class ConnectedSystemServer
                         existingAttribute.AttributePlurality = schemaAttribute.AttributePlurality;
                         existingAttribute.Type = schemaAttribute.Type;
                         existingAttribute.ClassName = schemaAttribute.ClassName;
+                        existingAttribute.Writability = schemaAttribute.Writability;
                         connectedSystemObjectType.Attributes.Add(existingAttribute);
                     }
                     else
@@ -1047,7 +1048,8 @@ public class ConnectedSystemServer
                             Description = schemaAttribute.Description,
                             AttributePlurality = schemaAttribute.AttributePlurality,
                             Type = schemaAttribute.Type,
-                            ClassName = schemaAttribute.ClassName
+                            ClassName = schemaAttribute.ClassName,
+                            Writability = schemaAttribute.Writability
                         });
                     }
                 }
@@ -1070,7 +1072,8 @@ public class ConnectedSystemServer
                         Description = a.Description,
                         AttributePlurality = a.AttributePlurality,
                         Type = a.Type,
-                        ClassName = a.ClassName
+                        ClassName = a.ClassName,
+                        Writability = a.Writability
                     }).ToList()
                 };
 
@@ -1191,6 +1194,7 @@ public class ConnectedSystemServer
                         existingAttribute.AttributePlurality = schemaAttribute.AttributePlurality;
                         existingAttribute.Type = schemaAttribute.Type;
                         existingAttribute.ClassName = schemaAttribute.ClassName;
+                        existingAttribute.Writability = schemaAttribute.Writability;
                         connectedSystemObjectType.Attributes.Add(existingAttribute);
                     }
                     else
@@ -1202,7 +1206,8 @@ public class ConnectedSystemServer
                             Description = schemaAttribute.Description,
                             AttributePlurality = schemaAttribute.AttributePlurality,
                             Type = schemaAttribute.Type,
-                            ClassName = schemaAttribute.ClassName
+                            ClassName = schemaAttribute.ClassName,
+                            Writability = schemaAttribute.Writability
                         });
                     }
                 }
@@ -1224,7 +1229,8 @@ public class ConnectedSystemServer
                         Description = a.Description,
                         AttributePlurality = a.AttributePlurality,
                         Type = a.Type,
-                        ClassName = a.ClassName
+                        ClassName = a.ClassName,
+                        Writability = a.Writability
                     }).ToList()
                 };
 
@@ -3325,6 +3331,25 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Validates that export attribute flow mappings do not target read-only attributes.
+    /// Read-only attributes (system-managed, constructed, back-links) cannot be written to
+    /// and will cause export failures at runtime.
+    /// </summary>
+    /// <param name="mapping">The mapping to validate.</param>
+    /// <exception cref="ArgumentException">Thrown when the target attribute is read-only.</exception>
+    private static void ValidateMappingWritability(SyncRuleMapping mapping)
+    {
+        // only applies to export rules (target is a connected system attribute)
+        if (mapping.TargetConnectedSystemAttribute == null)
+            return;
+
+        if (mapping.TargetConnectedSystemAttribute.Writability == AttributeWritability.ReadOnly)
+            throw new ArgumentException(
+                $"Cannot create export attribute flow to read-only attribute '{mapping.TargetConnectedSystemAttribute.Name}'. " +
+                $"This attribute is marked as read-only by the connected system and cannot be written to.");
+    }
+
+    /// <summary>
     /// Creates a new sync rule mapping.
     /// </summary>
     /// <param name="mapping">The mapping to create.</param>
@@ -3335,6 +3360,7 @@ public class ConnectedSystemServer
             throw new ArgumentNullException(nameof(mapping));
 
         ValidateMappingTypeCompatibility(mapping);
+        ValidateMappingWritability(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for sync rule {SyncRuleId}", mapping.SyncRule?.Id);
 
@@ -3363,6 +3389,7 @@ public class ConnectedSystemServer
             throw new ArgumentNullException(nameof(mapping));
 
         ValidateMappingTypeCompatibility(mapping);
+        ValidateMappingWritability(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for sync rule {SyncRuleId} (API key initiated)", mapping.SyncRule?.Id);
 
@@ -3393,6 +3420,7 @@ public class ConnectedSystemServer
             throw new ArgumentNullException(nameof(mapping));
 
         ValidateMappingTypeCompatibility(mapping);
+        ValidateMappingWritability(mapping);
 
         Log.Debug("UpdateSyncRuleMappingAsync() called for mapping {Id}", mapping.Id);
 

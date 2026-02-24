@@ -1110,6 +1110,10 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
         if (_attributeFlowMappingSource?.MetaverseAttribute == null)
             return true;
 
+        // read-only attributes cannot be targeted by export attribute flows
+        if (targetConnectedSystemObjectTypeAttribute.Writability == AttributeWritability.ReadOnly)
+            return true;
+
         if (targetConnectedSystemObjectTypeAttribute.Type != _attributeFlowMappingSource.MetaverseAttribute.Type)
             return true;
 

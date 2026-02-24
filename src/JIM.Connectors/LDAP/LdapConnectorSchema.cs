@@ -30,8 +30,8 @@ internal class LdapConnectorSchema
                 throw new Exception($"Couldn't get schema naming context from rootDSE.");
             _schemaNamingContext = schemaNamingContext;
 
-            // query: classes, structural, don't return hidden by default classes
-            var filter = "(&(objectClass=classSchema)(objectClassCategory=1)(defaultHidingValue=FALSE))";
+            // query: classes, structural, don't return hidden by default classes, exclude defunct classes
+            var filter = "(&(objectClass=classSchema)(objectClassCategory=1)(defaultHidingValue=FALSE)(!(isDefunct=TRUE)))";
             var request = new SearchRequest(_schemaNamingContext, filter, SearchScope.Subtree);
             var response = (SearchResponse)_connection.SendRequest(request);
 
@@ -59,9 +59,14 @@ internal class LdapConnectorSchema
                     var dnSchemaAttribute = objectType.Attributes.Single(a => a.Name.Equals("distinguishedname", StringComparison.OrdinalIgnoreCase));
                     objectType.RecommendedSecondaryExternalIdAttribute = dnSchemaAttribute;
 
-                    // override the object type for distinguishedName, we want to handle it as a string, not a reference type
+                    // override the data type for distinguishedName, we want to handle it as a string, not a reference type
                     // we do this as a DN attribute on an object cannot be a reference to itself. that would make no sense.
                     dnSchemaAttribute.Type = AttributeDataType.Text;
+
+                    // override writability for distinguishedName: AD marks it as systemOnly but the LDAP connector
+                    // needs it writable because the DN is provided by the client in Add requests to specify where
+                    // the object is created. It's not written as an attribute — it's the target of the LDAP Add operation.
+                    dnSchemaAttribute.Writability = AttributeWritability.Writable;
 
                     // object type looks good to go, add it to the schema
                     _schema.ObjectTypes.Add(objectType);
@@ -118,25 +123,10 @@ internal class LdapConnectorSchema
         var objectClassName = LdapConnectorUtilities.GetEntryAttributeStringValue(objectClassEntry, "ldapdisplayname") ??
                               throw new Exception($"No ldapdisplayname value on {objectClassEntry.DistinguishedName}");
 
-        if (objectClassEntry.Attributes.Contains("maycontain"))
-            foreach (string attributeName in objectClassEntry.Attributes["maycontain"].GetValues(typeof(string)))
-                if (objectType.Attributes.All(q => q.Name != attributeName))
-                    objectType.Attributes.Add(GetSchemaAttribute(attributeName, objectClassName, false, objectType.Name));
-
-        if (objectClassEntry.Attributes.Contains("mustcontain"))
-            foreach (string attributeName in objectClassEntry.Attributes["mustcontain"].GetValues(typeof(string)))
-                if (objectType.Attributes.All(q => q.Name != attributeName))
-                    objectType.Attributes.Add(GetSchemaAttribute(attributeName, objectClassName, true, objectType.Name));
-
-        if (objectClassEntry.Attributes.Contains("systemmaycontain"))
-            foreach (string attributeName in objectClassEntry.Attributes["systemmaycontain"].GetValues(typeof(string)))
-                if (objectType.Attributes.All(q => q.Name != attributeName))
-                    objectType.Attributes.Add(GetSchemaAttribute(attributeName, objectClassName, false, objectType.Name));
-
-        if (objectClassEntry.Attributes.Contains("systemmustcontain"))
-            foreach (string attributeName in objectClassEntry.Attributes["systemmustcontain"].GetValues(typeof(string)))
-                if (objectType.Attributes.All(q => q.Name != attributeName))
-                    objectType.Attributes.Add(GetSchemaAttribute(attributeName, objectClassName, true, objectType.Name));
+        AddAttributesFromSchemaProperty(objectClassEntry, "maycontain", objectClassName, false, objectType);
+        AddAttributesFromSchemaProperty(objectClassEntry, "mustcontain", objectClassName, true, objectType);
+        AddAttributesFromSchemaProperty(objectClassEntry, "systemmaycontain", objectClassName, false, objectType);
+        AddAttributesFromSchemaProperty(objectClassEntry, "systemmustcontain", objectClassName, true, objectType);
 
         // now recurse into any auxiliary and system auxiliary classes
         var auxiliaryClasses = LdapConnectorUtilities.GetEntryAttributeStringValues(objectClassEntry, "auxiliaryclass");
@@ -165,10 +155,38 @@ internal class LdapConnectorSchema
         }
     }
 
-    private ConnectorSchemaAttribute GetSchemaAttribute(string attributeName, string objectClass, bool required, string objectTypeName)
+    private void AddAttributesFromSchemaProperty(SearchResultEntry objectClassEntry, string propertyName, string objectClassName, bool required, ConnectorSchemaObjectType objectType)
+    {
+        if (!objectClassEntry.Attributes.Contains(propertyName))
+            return;
+
+        foreach (string attributeName in objectClassEntry.Attributes[propertyName].GetValues(typeof(string)))
+        {
+            if (objectType.Attributes.All(q => q.Name != attributeName))
+            {
+                var attr = GetSchemaAttribute(attributeName, objectClassName, required, objectType.Name);
+                if (attr != null)
+                    objectType.Attributes.Add(attr);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Looks up the schema entry for an attribute and returns a ConnectorSchemaAttribute with full metadata.
+    /// Returns null if the attribute is defunct (should be excluded from the schema entirely).
+    /// </summary>
+    private ConnectorSchemaAttribute? GetSchemaAttribute(string attributeName, string objectClass, bool required, string objectTypeName)
     {
         var attributeEntry = LdapConnectorUtilities.GetSchemaEntry(_connection, _schemaNamingContext, $"(ldapdisplayname={attributeName})") ??
                              throw new Exception($"Couldn't retrieve schema attribute: {attributeName}");
+
+        // filter out defunct attributes — these are deprecated and should not be presented to users
+        var isDefunctRawValue = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "isdefunct");
+        if (bool.TryParse(isDefunctRawValue, out var isDefunct) && isDefunct)
+        {
+            _logger.Debug("GetSchemaAttribute: Skipping defunct attribute '{AttributeName}'.", attributeName);
+            return null;
+        }
 
         var description = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "description");
         var adminDescription = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "admindescription");
@@ -217,7 +235,14 @@ internal class LdapConnectorSchema
         if (attributeName.Equals("objectguid", StringComparison.OrdinalIgnoreCase))
             attributeDataType = AttributeDataType.Guid;
 
-        var attribute = new ConnectorSchemaAttribute(attributeName, attributeDataType, attributePlurality, required, objectClass);
+        // determine writability from schema metadata: systemOnly, systemFlags (constructed bit), and linkID (back-links)
+        var systemOnlyRawValue = LdapConnectorUtilities.GetEntryAttributeStringValue(attributeEntry, "systemonly");
+        bool.TryParse(systemOnlyRawValue, out var systemOnly);
+        var systemFlags = LdapConnectorUtilities.GetEntryAttributeIntValue(attributeEntry, "systemflags");
+        var linkId = LdapConnectorUtilities.GetEntryAttributeIntValue(attributeEntry, "linkid");
+        var writability = LdapConnectorUtilities.DetermineAttributeWritability(systemOnly, systemFlags, linkId);
+
+        var attribute = new ConnectorSchemaAttribute(attributeName, attributeDataType, attributePlurality, required, objectClass, writability);
 
         if (!string.IsNullOrEmpty(description))
             attribute.Description = description;

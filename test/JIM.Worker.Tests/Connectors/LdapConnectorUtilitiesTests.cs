@@ -465,4 +465,84 @@ public class LdapConnectorUtilitiesTests
     }
 
     #endregion
+
+    #region DetermineAttributeWritability tests
+
+    [Test]
+    public void DetermineAttributeWritability_SystemOnlyTrue_ReturnsReadOnly()
+    {
+        var result = LdapConnectorUtilities.DetermineAttributeWritability(true, null, null);
+        Assert.That(result, Is.EqualTo(AttributeWritability.ReadOnly));
+    }
+
+    [Test]
+    public void DetermineAttributeWritability_SystemOnlyFalse_ReturnsWritable()
+    {
+        var result = LdapConnectorUtilities.DetermineAttributeWritability(false, null, null);
+        Assert.That(result, Is.EqualTo(AttributeWritability.Writable));
+    }
+
+    [Test]
+    public void DetermineAttributeWritability_ConstructedFlag_ReturnsReadOnly()
+    {
+        // systemFlags = 0x4 (FLAG_ATTR_IS_CONSTRUCTED)
+        var result = LdapConnectorUtilities.DetermineAttributeWritability(false, 0x4, null);
+        Assert.That(result, Is.EqualTo(AttributeWritability.ReadOnly));
+    }
+
+    [Test]
+    public void DetermineAttributeWritability_ConstructedWithOtherFlags_ReturnsReadOnly()
+    {
+        // systemFlags = 0x5 (constructed + not-replicated)
+        var result = LdapConnectorUtilities.DetermineAttributeWritability(false, 0x5, null);
+        Assert.That(result, Is.EqualTo(AttributeWritability.ReadOnly));
+    }
+
+    [Test]
+    public void DetermineAttributeWritability_NonConstructedFlags_ReturnsWritable()
+    {
+        // systemFlags = 0x1 (not-replicated only, no constructed bit)
+        var result = LdapConnectorUtilities.DetermineAttributeWritability(false, 0x1, null);
+        Assert.That(result, Is.EqualTo(AttributeWritability.Writable));
+    }
+
+    [Test]
+    public void DetermineAttributeWritability_OddLinkId_ReturnsReadOnly()
+    {
+        // odd linkID = back-link attribute (e.g. memberOf)
+        var result = LdapConnectorUtilities.DetermineAttributeWritability(false, null, 3);
+        Assert.That(result, Is.EqualTo(AttributeWritability.ReadOnly));
+    }
+
+    [Test]
+    public void DetermineAttributeWritability_EvenLinkId_ReturnsWritable()
+    {
+        // even linkID = forward-link attribute (e.g. member)
+        var result = LdapConnectorUtilities.DetermineAttributeWritability(false, null, 2);
+        Assert.That(result, Is.EqualTo(AttributeWritability.Writable));
+    }
+
+    [Test]
+    public void DetermineAttributeWritability_AllNull_ReturnsWritable()
+    {
+        var result = LdapConnectorUtilities.DetermineAttributeWritability(null, null, null);
+        Assert.That(result, Is.EqualTo(AttributeWritability.Writable));
+    }
+
+    [Test]
+    public void DetermineAttributeWritability_AllDefaults_ReturnsWritable()
+    {
+        var result = LdapConnectorUtilities.DetermineAttributeWritability(false, 0, null);
+        Assert.That(result, Is.EqualTo(AttributeWritability.Writable));
+    }
+
+    [Test]
+    public void DetermineAttributeWritability_SystemOnlyTakesPrecedence()
+    {
+        // systemOnly=true should return ReadOnly even with writable flags otherwise
+        var result = LdapConnectorUtilities.DetermineAttributeWritability(true, 0, 2);
+        Assert.That(result, Is.EqualTo(AttributeWritability.ReadOnly));
+    }
+
+    #endregion
 }

@@ -19,6 +19,25 @@ public enum AttributePlurality
     MultiValued = 1
 }
 
+/// <summary>
+/// Indicates whether an attribute can be written to in the connected system.
+/// Attributes may be read-only due to being system-managed, constructed (computed),
+/// or back-link attributes that can only be modified from the forward-link side.
+/// </summary>
+public enum AttributeWritability
+{
+    /// <summary>
+    /// The attribute can be read and written by clients.
+    /// </summary>
+    Writable = 0,
+
+    /// <summary>
+    /// The attribute is read-only and cannot be written to.
+    /// It may still be useful for import (e.g. whenCreated, objectSid).
+    /// </summary>
+    ReadOnly = 1
+}
+
 public enum MetaverseObjectStatus
 {
     Normal = 0,

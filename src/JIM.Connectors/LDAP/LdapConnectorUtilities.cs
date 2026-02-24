@@ -474,6 +474,31 @@ internal static class LdapConnectorUtilities
                LdapConnectorConstants.SAM_MANAGED_OBJECT_CLASSES.Contains(objectTypeName);
     }
 
+    /// <summary>
+    /// Determines the writability of an LDAP attribute based on its schema metadata.
+    /// An attribute is read-only if any of the following are true:
+    /// - systemOnly is TRUE (server-managed attribute, e.g. objectGUID, whenCreated)
+    /// - systemFlags has the constructed bit set (0x4) (computed attribute, e.g. canonicalName, tokenGroups)
+    /// - linkID is an odd number (back-link attribute, e.g. memberOf — must be modified from the forward-link side)
+    /// </summary>
+    /// <param name="systemOnly">The value of the systemOnly attribute on the attributeSchema entry (TRUE/FALSE string, or null).</param>
+    /// <param name="systemFlags">The value of the systemFlags attribute on the attributeSchema entry (integer, or null).</param>
+    /// <param name="linkId">The value of the linkID attribute on the attributeSchema entry (integer, or null).</param>
+    /// <returns>The writability classification for the attribute.</returns>
+    internal static AttributeWritability DetermineAttributeWritability(bool? systemOnly, int? systemFlags, int? linkId)
+    {
+        if (systemOnly == true)
+            return AttributeWritability.ReadOnly;
+
+        if (systemFlags.HasValue && (systemFlags.Value & LdapConnectorConstants.SYSTEM_FLAGS_CONSTRUCTED) != 0)
+            return AttributeWritability.ReadOnly;
+
+        if (linkId.HasValue && linkId.Value % 2 != 0)
+            return AttributeWritability.ReadOnly;
+
+        return AttributeWritability.Writable;
+    }
+
     internal static AttributeDataType GetLdapAttributeDataType(int omSyntax)
     {
         // map the directory omSyntax to an attribute data type

@@ -66,7 +66,7 @@
     <MudAlert Severity="@(result.Success ? (result.HasChanges ? Severity.Info : Severity.Success) : Severity.Error)"
               Variant="Variant.Outlined"
               Icon="@(result.Success ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Error)"
-              Class="mt-3 jim-alert-schema-refresh"
+              Class="mt-5 jim-alert-schema-refresh"
               ShowCloseIcon="true"
               CloseIconClicked="HandleCloseSchemaRefreshResult">
         <MudText Typo="Typo.subtitle1" Class="mb-2">
@@ -361,6 +361,26 @@
                     </MudChipSet>
                 </div>
 
+                @if (_selectedObjectTypeHasReadOnlyAttributes)
+                {
+                    <div>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Writability:</MudText>
+                        <MudChipSet T="AttributeWritability"
+                                    SelectionMode="SelectionMode.MultiSelection"
+                                    SelectedValues="_selectedSchemaWritabilities"
+                                    SelectedValuesChanged="OnSchemaWritabilityFilterChanged">
+                            @foreach (var writability in GetAvailableSchemaWritabilities())
+                            {
+                                <MudChip Value="@writability.Key"
+                                         Color="@(writability.Key == AttributeWritability.ReadOnly ? Color.Warning : Color.Success)"
+                                         Variant="@(_selectedSchemaWritabilities.Contains(writability.Key) ? Variant.Outlined : Variant.Text)">
+                                    @(writability.Key == AttributeWritability.ReadOnly ? "Read-Only" : "Writable") (@writability.Value)
+                                </MudChip>
+                            }
+                        </MudChipSet>
+                    </div>
+                }
+
                 @{
                     var selectionCounts = GetSchemaSelectionCounts();
                 }
@@ -407,6 +427,10 @@
                 }
                 <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Type)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.AttributePlurality)"><MudText Typo="Typo.button">Plurality</MudText></MudTableSortLabel></MudTh>
+                @if (_selectedObjectTypeHasReadOnlyAttributes)
+                {
+                    <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Writability)"><MudText Typo="Typo.button">Writability</MudText></MudTableSortLabel></MudTh>
+                }
                 @if (_selectedObjectTypeHasDescriptions)
                 {
                     <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemObjectTypeAttribute, object>(x => x.Description!)"><MudText Typo="Typo.button">Description</MudText></MudTableSortLabel></MudTh>
@@ -460,6 +484,16 @@
                         @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
                     </MudChip>
                 </MudTd>
+                @if (_selectedObjectTypeHasReadOnlyAttributes)
+                {
+                    <MudTd DataLabel="Writability">
+                        <MudChip T="string"
+                                 Color="@(context.Writability == AttributeWritability.ReadOnly ? Color.Warning : Color.Success)"
+                                 Variant="Variant.Outlined">
+                            @(context.Writability == AttributeWritability.ReadOnly ? "Read-Only" : "Writable")
+                        </MudChip>
+                    </MudTd>
+                }
                 @if (_selectedObjectTypeHasDescriptions)
                 {
                     <MudTd DataLabel="Description">
@@ -518,6 +552,8 @@
     private ConnectedSystemObjectType? _selectedObjectType;
     private bool _selectedObjectTypeHasClasses;
     private bool _selectedObjectTypeHasDescriptions;
+    private bool _selectedObjectTypeHasReadOnlyAttributes;
+    private IReadOnlyCollection<AttributeWritability> _selectedSchemaWritabilities = new List<AttributeWritability>();
     private string _schemaSearchString = "";
     private IEnumerable<string> AttributeClassFilterSelectedValues { get; set; } = new HashSet<string>();
     private bool _attributeSelectedFilter;
@@ -541,6 +577,7 @@
         {
             _selectedObjectTypeHasClasses = _selectedObjectType.Attributes.Any(q => q.ClassName != null);
             _selectedObjectTypeHasDescriptions = _selectedObjectType.Attributes.Any(q => q.Description != null);
+            _selectedObjectTypeHasReadOnlyAttributes = _selectedObjectType.Attributes.Any(q => q.Writability == AttributeWritability.ReadOnly);
         }
     }
 
@@ -667,7 +704,7 @@
     }
 
     private bool SchemaFilterFuncHandler(ConnectedSystemObjectTypeAttribute element) =>
-        SchemaFilterFunc(element, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter, _selectedSchemaTypes, _selectedSchemaPluralites);
+        SchemaFilterFunc(element, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter, _selectedSchemaTypes, _selectedSchemaPluralites, _selectedSchemaWritabilities);
 
     private static bool SchemaFilterFunc(
         ConnectedSystemObjectTypeAttribute element,
@@ -675,7 +712,8 @@
         IEnumerable<string> attributeClassFilterSelectedValues,
         bool attributeSelectedFilter,
         IReadOnlyCollection<AttributeDataType> selectedTypes,
-        IReadOnlyCollection<AttributePlurality> selectedPluralites)
+        IReadOnlyCollection<AttributePlurality> selectedPluralites,
+        IReadOnlyCollection<AttributeWritability> selectedWritabilities)
     {
         // All filters must pass (AND logic)
         var classHashset = (HashSet<string>)attributeClassFilterSelectedValues;
@@ -700,6 +738,10 @@
         if (selectedPluralites.Count > 0 && !selectedPluralites.Contains(element.AttributePlurality))
             return false;
 
+        // Filter by writability selection
+        if (selectedWritabilities.Count > 0 && !selectedWritabilities.Contains(element.Writability))
+            return false;
+
         return true;
     }
 
@@ -721,7 +763,7 @@
         // Apply all filters EXCEPT type filter to get contextual counts
         var filteredAttributes = _selectedObjectType.Attributes
             .Where(a => SchemaFilterFunc(a, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter,
-                new List<AttributeDataType>(), _selectedSchemaPluralites));
+                new List<AttributeDataType>(), _selectedSchemaPluralites, _selectedSchemaWritabilities));
 
         return filteredAttributes
             .GroupBy(a => a.Type)
@@ -737,12 +779,33 @@
         // Apply all filters EXCEPT plurality filter to get contextual counts
         var filteredAttributes = _selectedObjectType.Attributes
             .Where(a => SchemaFilterFunc(a, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter,
-                _selectedSchemaTypes, new List<AttributePlurality>()));
+                _selectedSchemaTypes, new List<AttributePlurality>(), _selectedSchemaWritabilities));
 
         return filteredAttributes
             .GroupBy(a => a.AttributePlurality)
             .Select(g => new KeyValuePair<AttributePlurality, int>(g.Key, g.Count()))
             .OrderBy(x => x.Key);
+    }
+
+    private IEnumerable<KeyValuePair<AttributeWritability, int>> GetAvailableSchemaWritabilities()
+    {
+        if (_selectedObjectType == null)
+            return Enumerable.Empty<KeyValuePair<AttributeWritability, int>>();
+
+        // Apply all filters EXCEPT writability filter to get contextual counts
+        var filteredAttributes = _selectedObjectType.Attributes
+            .Where(a => SchemaFilterFunc(a, _schemaSearchString, AttributeClassFilterSelectedValues, _attributeSelectedFilter,
+                _selectedSchemaTypes, _selectedSchemaPluralites, new List<AttributeWritability>()));
+
+        return filteredAttributes
+            .GroupBy(a => a.Writability)
+            .Select(g => new KeyValuePair<AttributeWritability, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key);
+    }
+
+    private void OnSchemaWritabilityFilterChanged(IReadOnlyCollection<AttributeWritability> selectedWritabilities)
+    {
+        _selectedSchemaWritabilities = selectedWritabilities;
     }
 
     private (int allCount, int selectedCount) GetSchemaSelectionCounts()
@@ -753,7 +816,7 @@
         // Apply all filters EXCEPT selection filter to get contextual counts
         var filteredAttributes = _selectedObjectType.Attributes
             .Where(a => SchemaFilterFunc(a, _schemaSearchString, AttributeClassFilterSelectedValues, false,
-                _selectedSchemaTypes, _selectedSchemaPluralites))
+                _selectedSchemaTypes, _selectedSchemaPluralites, _selectedSchemaWritabilities))
             .ToList();
 
         return (filteredAttributes.Count, filteredAttributes.Count(a => a.Selected));

@@ -35,6 +35,13 @@ internal static class LdapConnectorConstants
     /// </summary>
     internal const int UAC_ACCOUNTDISABLE = 0x2;
 
+    /// <summary>
+    /// Active Directory systemFlags bit indicating a constructed (computed) attribute.
+    /// Constructed attributes are calculated by the directory server on the fly and cannot be written to.
+    /// Examples: canonicalName, tokenGroups, primaryGroupToken, allowedAttributes.
+    /// </summary>
+    internal const int SYSTEM_FLAGS_CONSTRUCTED = 0x00000004;
+
     // LDAPS settings
     internal const int DEFAULT_LDAPS_PORT = 636;
     internal const int DEFAULT_LDAP_PORT = 389;

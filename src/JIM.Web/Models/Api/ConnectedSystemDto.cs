@@ -110,6 +110,12 @@ public class ConnectedSystemAttributeDto
     /// </summary>
     public bool SelectionLocked { get; set; }
 
+    /// <summary>
+    /// Indicates whether this attribute can be written to in the connected system.
+    /// Read-only attributes can be imported but cannot be targeted by export attribute flows.
+    /// </summary>
+    public string Writability { get; set; } = null!;
+
     public static ConnectedSystemAttributeDto FromEntity(ConnectedSystemObjectTypeAttribute entity)
     {
         return new ConnectedSystemAttributeDto
@@ -124,7 +130,8 @@ public class ConnectedSystemAttributeDto
             Selected = entity.Selected,
             IsExternalId = entity.IsExternalId,
             IsSecondaryExternalId = entity.IsSecondaryExternalId,
-            SelectionLocked = entity.SelectionLocked
+            SelectionLocked = entity.SelectionLocked,
+            Writability = entity.Writability.ToString()
         };
     }
 }
