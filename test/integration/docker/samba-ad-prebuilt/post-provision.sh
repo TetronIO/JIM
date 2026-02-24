@@ -113,7 +113,8 @@ echo "  OU structure created"
 
 # Install SSH public key schema (optional, may already exist)
 echo "Checking SSH public key schema..."
-if ! ${SAMBA_BIN}/ldbsearch -H ${SAMBA_PRIVATE}/sam.ldb "cn=sshPublicKey" 2>/dev/null | grep -q sshPublicKey; then
+sshkey_check=$(${SAMBA_BIN}/ldbsearch -H ${SAMBA_PRIVATE}/sam.ldb "cn=sshPublicKey" 2>/dev/null || true)
+if ! echo "$sshkey_check" | grep -q sshPublicKey 2>/dev/null; then
     echo "Installing SSH public key schema..."
 
     echo "dn: CN=sshPublicKey,CN=Schema,CN=Configuration,${DOMAIN_DC}

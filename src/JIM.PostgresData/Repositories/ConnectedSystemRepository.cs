@@ -1803,7 +1803,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (csoIds.Length == 0)
             return 0;
 
-        // Delete child records first (FK constraint)
+        // Use raw SQL for performance and to avoid change tracker identity conflicts.
+        // After ClearChangeTracker(), loading PEs with Include chains would create
+        // MetaverseAttribute instances that conflict with instances already tracked by the
+        // cross-page CSO query, causing identity resolution failures.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""PendingExportAttributeValueChanges""
               WHERE ""PendingExportId"" IN (
