@@ -1496,8 +1496,7 @@ public class ConnectedSystemServer
                 {
                     ExternalId = containerExternalId,
                     Name = containerName,
-                    Selected = shouldSelect,
-                    Partition = partition
+                    Selected = shouldSelect
                 };
 
                 if (parentContainer != null)
@@ -1506,7 +1505,8 @@ public class ConnectedSystemServer
                 }
                 else
                 {
-                    // Top-level container in partition
+                    // Top-level container in partition — only root containers get Partition set
+                    newContainer.Partition = partition;
                     partition.Containers ??= new HashSet<ConnectedSystemContainer>();
                     partition.Containers.Add(newContainer);
                 }
@@ -1619,8 +1619,7 @@ public class ConnectedSystemServer
                 {
                     ExternalId = containerExternalId,
                     Name = containerName,
-                    Selected = shouldSelect,
-                    Partition = partition
+                    Selected = shouldSelect
                 };
 
                 if (parentContainer != null)
@@ -1629,7 +1628,8 @@ public class ConnectedSystemServer
                 }
                 else
                 {
-                    // Top-level container in partition
+                    // Top-level container in partition — only root containers get Partition set
+                    newContainer.Partition = partition;
                     partition.Containers ??= new HashSet<ConnectedSystemContainer>();
                     partition.Containers.Add(newContainer);
                 }

@@ -201,7 +201,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)
     {
         // Handle new partitions and containers explicitly - EF Core doesn't automatically detect new items
-        // in collections that were loaded from a separate query and then modified
+        // in collections that were loaded from a separate query and then modified.
+        // Also handle existing partitions/containers that are detached (e.g. when the entity was loaded
+        // by a different DbContext instance, as happens with Blazor component decomposition where parent
+        // and child components inject separate transient JimApplication instances).
         if (connectedSystem.Partitions != null)
         {
             foreach (var partition in connectedSystem.Partitions)
@@ -211,10 +214,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     // New partition - add it to the context
                     Repository.Database.ConnectedSystemPartitions.Add(partition);
                 }
-                else if (partition.Containers != null)
+                else
                 {
-                    // Existing partition - check for new containers
-                    AddNewContainersRecursively(partition.Containers);
+                    // Existing partition - ensure it's tracked and marked as modified
+                    Repository.UpdateDetachedSafe(partition);
+
+                    if (partition.Containers != null)
+                    {
+                        // Check for new containers and update existing ones
+                        UpdateContainersRecursively(partition.Containers);
+                    }
                 }
             }
         }
@@ -227,9 +236,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Recursively adds new containers (with Id=0) to the DbContext for change tracking.
+    /// Recursively processes containers: adds new ones (Id=0) and updates existing ones
+    /// that may be detached from the current DbContext.
     /// </summary>
-    private void AddNewContainersRecursively(IEnumerable<ConnectedSystemContainer>? containers)
+    private void UpdateContainersRecursively(IEnumerable<ConnectedSystemContainer>? containers)
     {
         if (containers == null) return;
 
@@ -239,7 +249,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 Repository.Database.ConnectedSystemContainers.Add(container);
             }
-            AddNewContainersRecursively(container.ChildContainers);
+            else
+            {
+                Repository.UpdateDetachedSafe(container);
+            }
+            UpdateContainersRecursively(container.ChildContainers);
         }
     }
     #endregion
