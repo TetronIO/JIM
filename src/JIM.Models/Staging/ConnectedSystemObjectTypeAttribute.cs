@@ -48,6 +48,12 @@ public class ConnectedSystemObjectTypeAttribute
     /// </summary>
     public bool SelectionLocked { get; set; }
 
+    /// <summary>
+    /// Indicates whether this attribute can be written to in the connected system.
+    /// Read-only attributes (system-managed, constructed, back-links) can still be imported but cannot be targeted by export attribute flows.
+    /// </summary>
+    public AttributeWritability Writability { get; set; }
+
     public override string ToString()
     {
         return Name;

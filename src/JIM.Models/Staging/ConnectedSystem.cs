@@ -37,6 +37,8 @@ public class ConnectedSystem : IAuditable
 
     public List<PendingExport> PendingExports { get; set; } = null!;
 
+    public int ConnectorDefinitionId { get; set; }
+
     public ConnectorDefinition ConnectorDefinition { get; set; } = null!;
 
     public List<ConnectedSystemSettingValue> SettingValues { get; set; } = new();

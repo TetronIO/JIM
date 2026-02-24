@@ -29,12 +29,19 @@ public class ConnectorSchemaAttribute
     /// </summary>
     public bool Required { get; set; }
 
-    public ConnectorSchemaAttribute(string name, AttributeDataType type, AttributePlurality attributePlurality, bool required = false, string? className = null)
+    /// <summary>
+    /// Indicates whether this attribute can be written to in the connected system.
+    /// Read-only attributes (system-managed, constructed, back-links) can still be imported but cannot be targeted by export attribute flows.
+    /// </summary>
+    public AttributeWritability Writability { get; set; }
+
+    public ConnectorSchemaAttribute(string name, AttributeDataType type, AttributePlurality attributePlurality, bool required = false, string? className = null, AttributeWritability writability = AttributeWritability.Writable)
     {
         Name = name;
         Type = type;
         Required = required;
         AttributePlurality = attributePlurality;
         ClassName = className;
+        Writability = writability;
     }
 }
