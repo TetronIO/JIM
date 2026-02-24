@@ -203,58 +203,71 @@ the same entity graph loaded by the original split query.
 
 ---
 
-## Potential Fixes
+## Fix Applied
 
-### Option A: Replace Include Chain with Direct SQL (recommended)
+A two-layer fix combining Option A (direct SQL) and Option D (post-query validation):
 
-As proposed in GitHub issue #338 Phase 4, replace the `AsSplitQuery()` Include chain for
-sync page loading with a direct SQL query that loads all required data in a single
-round-trip. This eliminates the split query race condition entirely.
+### Layer 1: Repository-Level SQL Repair (primary)
 
-For drift detection specifically, the referenced CSO's `MetaverseObjectId` could be loaded
-via a single JOIN rather than a nested Include:
+`ConnectedSystemRepository.RepairReferenceValueMaterialisationAsync()` runs a direct SQL
+query immediately after each EF page load to get the definitive `MetaverseObjectId` for
+every reference attribute value in the page:
 
 ```sql
-SELECT av."ReferenceValueId", ref_cso."MetaverseObjectId"
+SELECT av."Id" AS "AttributeValueId", ref_cso."MetaverseObjectId"
 FROM "ConnectedSystemObjectAttributeValues" av
 JOIN "ConnectedSystemObjects" ref_cso ON av."ReferenceValueId" = ref_cso."Id"
-WHERE av."ConnectedSystemObjectId" = @groupCsoId
-  AND av."AttributeId" = @memberAttributeId
+WHERE av."ConnectedSystemObjectId" = ANY({0})
+  AND av."ReferenceValueId" IS NOT NULL
 ```
 
-This returns all member CSO IDs and their `MetaverseObjectId` values in one query, with
-no materialisation issues.
+For any attribute value where EF failed to materialise the `ReferenceValue` navigation,
+the repair creates a detached stub `ConnectedSystemObject` with the correct `Id` and
+`MetaverseObjectId` and assigns it to `av.ReferenceValue`. This stub is not tracked by
+the DbContext — it exists only to satisfy the in-memory navigation chain that drift
+detection (and other sync processors) depend on.
 
-### Option B: Wrap Page Load in Snapshot Transaction
+Called from all three page-load methods:
+- `GetConnectedSystemObjectsAsync` (full sync)
+- `GetConnectedSystemObjectsModifiedSinceAsync` (delta sync)
+- `GetConnectedSystemObjectsForReferenceResolutionAsync` (cross-page reference resolution)
 
-Wrap the `AsSplitQuery()` call in a snapshot or repeatable-read transaction to ensure
-all split queries see a consistent database snapshot:
+Logs a Warning when any repairs are needed, providing diagnostic visibility that the
+AsSplitQuery bug was triggered.
 
-```csharp
-await using var transaction = await Repository.Database.Database
-    .BeginTransactionAsync(IsolationLevel.RepeatableRead);
-// ... execute query ...
-await transaction.CommitAsync();
-```
+### Layer 2: DriftDetectionService Defence-in-Depth (secondary)
 
-This is a smaller change but doesn't address the underlying performance issues of deep
-Include chains. It also adds transaction overhead.
+- `GetTypedValueFromMvoAttributeValue`: Prefers the scalar FK `av.ReferenceValueId` over
+  the navigation `av.ReferenceValue?.Id` (with fallback) for the "expected" set.
+- `GetTypedValueFromCsoAttributeValue`: Calls `GetCsoReferenceMetaverseObjectId()` which
+  logs a Warning if `ReferenceValueId` is set but `ReferenceValue` is null (indicating
+  the repository repair did not cover this value).
+- `BuildAttributeDictionary`: Same scalar FK preference for expression evaluation.
 
-### Option C: Switch to `AsSingleQuery()` for Reference Loads
+### Why Not the Other Options
 
-Use `AsSingleQuery()` instead of `AsSplitQuery()` for the CSO page load query. This
-generates a single large JOIN query that returns all data in one round-trip, eliminating
-the split query race condition.
+- **Option B (Snapshot Transaction)**: Adds transaction overhead and doesn't address the
+  underlying performance issues of deep Include chains. A potential future improvement.
+- **Option C (AsSingleQuery)**: Would cause cartesian explosion for groups with many
+  members and attributes (200 members x 10 attributes = 2,000 rows per group).
+- **Full Option A (replace entire Include chain with SQL)**: Planned for GitHub issue #338
+  Phase 4. The repair approach is a targeted fix that can be applied now without the larger
+  refactoring effort, while remaining compatible with a future full SQL migration.
 
-**Trade-off**: Single queries with multiple one-to-many collections cause cartesian
-explosion — a group with 200 members and 10 other attributes would generate 2,000 rows.
-This may be worse than the split query issue for large groups.
+### Test Coverage
 
-### Option D: Post-Query Validation and Re-fetch
+- `EvaluateDrift_CrossSystem_RepairedTargetCsoReferences_NoDriftWhenAllResolvedAsync`:
+  Regression test verifying no spurious drift after the repository repair (all 5 CSO
+  member references have `MetaverseObjectId` properly populated).
+- `EvaluateDrift_CrossSystem_NullReferenceValueNavigation_CreatesSpuriousRemovalsAsync`:
+  Documents the raw EF Core bug behaviour — when `ReferenceValue` is null (repair not
+  applied), drift detection sees an incomplete actual set and creates spurious exports.
+- `EvaluateDrift_CrossSystem_TargetExportsSourceImportedAttribute_ShouldNotDetectDriftWhenCsoMembersMatchMvoAsync`:
+  Positive case — all references fully resolved, no drift detected.
 
-After loading the page, scan for attribute values where `ReferenceValueId` is set but
-`ReferenceValue` is null (indicating failed materialisation). Re-fetch those specific
-CSOs by ID in a targeted query.
+### Remaining Work
 
-This is a workaround rather than a fix, but would be quick to implement and would catch
-the exact condition that causes spurious drift detection.
+The repository repair is a targeted workaround for the AsSplitQuery materialisation bug.
+The definitive fix is to replace the `AsSplitQuery()` Include chain entirely with direct
+SQL queries (GitHub issue #338 Phase 4), which would eliminate both the race condition and
+the performance overhead of deep Include chains.

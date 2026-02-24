@@ -636,6 +636,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var pagedObjects = objects.Skip(offset).Take(itemsToGet);
         var results = await pagedObjects.ToListAsync();
 
+        // Repair any reference attribute values where EF AsSplitQuery() failed to materialise
+        // the ReferenceValue navigation due to concurrent writes (dotnet/efcore#33826)
+        await RepairReferenceValueMaterialisationAsync(results);
+
         // now with all the ids we know how many total results there are and so can populate paging info
         var pagedResultSet = new PagedResultSet<ConnectedSystemObject>
         {
@@ -649,9 +653,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return pagedResultSet;
 
         // don't let callers try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages) 
+        if (page <= pagedResultSet.TotalPages)
             return pagedResultSet;
-            
+
         pagedResultSet.TotalResults = 0;
         pagedResultSet.Results.Clear();
         return pagedResultSet;
@@ -786,6 +790,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var pagedObjects = query.Skip(offset).Take(itemsToGet);
         var results = await pagedObjects.ToListAsync();
 
+        // Repair any reference attribute values where EF AsSplitQuery() failed to materialise
+        // the ReferenceValue navigation due to concurrent writes (dotnet/efcore#33826)
+        await RepairReferenceValueMaterialisationAsync(results);
+
         // Build the paged result set
         var pagedResultSet = new PagedResultSet<ConnectedSystemObject>
         {
@@ -817,7 +825,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (csoIds.Count == 0)
             return [];
 
-        return await Repository.Database.ConnectedSystemObjects
+        var results = await Repository.Database.ConnectedSystemObjects
             .AsSplitQuery()
             .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
@@ -838,7 +846,103 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(av => av.ContributedBySystem)
             .Where(cso => csoIds.Contains(cso.Id))
             .ToListAsync();
+
+        // Repair any reference attribute values where EF AsSplitQuery() failed to materialise
+        // the ReferenceValue navigation due to concurrent writes (dotnet/efcore#33826)
+        await RepairReferenceValueMaterialisationAsync(results);
+
+        return results;
     }
+
+    /// <summary>
+    /// Repairs reference attribute values on CSOs where EF Core's AsSplitQuery() failed to
+    /// materialise the ReferenceValue navigation property due to concurrent writes
+    /// (see dotnet/efcore#33826). Runs a direct SQL query to get the definitive
+    /// MetaverseObjectId for each referenced CSO, then patches any attribute values where
+    /// ReferenceValue is null or has a null MetaverseObjectId.
+    /// </summary>
+    private async Task RepairReferenceValueMaterialisationAsync(List<ConnectedSystemObject> csos)
+    {
+        if (csos.Count == 0)
+            return;
+
+        var csoIds = csos.Select(cso => cso.Id).ToArray();
+
+        // Use a direct SQL query to get the definitive MetaverseObjectId for every
+        // reference attribute value in this page. This bypasses EF materialisation entirely.
+        // Skip when running against a non-relational provider (e.g., in-memory for tests)
+        // since the AsSplitQuery bug only affects relational providers.
+        List<ReferenceRepairRow> referenceData;
+        try
+        {
+            if (!Repository.Database.Database.IsRelational())
+                return;
+
+            referenceData = await Repository.Database.Database
+                .SqlQueryRaw<ReferenceRepairRow>(
+                    """
+                    SELECT av."Id" AS "AttributeValueId", ref_cso."MetaverseObjectId"
+                    FROM "ConnectedSystemObjectAttributeValues" av
+                    JOIN "ConnectedSystemObjects" ref_cso ON av."ReferenceValueId" = ref_cso."Id"
+                    WHERE av."ConnectedSystemObjectId" = ANY({0})
+                      AND av."ReferenceValueId" IS NOT NULL
+                    """,
+                    csoIds)
+                .ToListAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        {
+            // Non-relational providers (e.g., in-memory for tests) do not support raw SQL
+            // and may throw during provider detection. Safe to skip since the AsSplitQuery
+            // materialisation bug only affects relational database providers.
+            return;
+        }
+
+        var lookupByAvId = referenceData.ToDictionary(r => r.AttributeValueId, r => r.MetaverseObjectId);
+
+        var repairedCount = 0;
+        foreach (var cso in csos)
+        {
+            foreach (var av in cso.AttributeValues)
+            {
+                if (!av.ReferenceValueId.HasValue)
+                    continue;
+
+                if (!lookupByAvId.TryGetValue(av.Id, out var expectedMvoId))
+                    continue;
+
+                if (av.ReferenceValue == null)
+                {
+                    // Navigation property was not materialised by EF - create a detached stub
+                    av.ReferenceValue = new ConnectedSystemObject
+                    {
+                        Id = av.ReferenceValueId.Value,
+                        MetaverseObjectId = expectedMvoId
+                    };
+                    repairedCount++;
+                }
+                else if (av.ReferenceValue.MetaverseObjectId == null && expectedMvoId != null)
+                {
+                    // Navigation loaded but MetaverseObjectId was not populated
+                    av.ReferenceValue.MetaverseObjectId = expectedMvoId;
+                    repairedCount++;
+                }
+            }
+        }
+
+        if (repairedCount > 0)
+        {
+            Log.Warning("RepairReferenceValueMaterialisation: Repaired {Count} reference attribute values " +
+                "where EF AsSplitQuery() failed to materialise ReferenceValue navigation (dotnet/efcore#33826). " +
+                "Page contained {CsoCount} CSOs",
+                repairedCount, csos.Count);
+        }
+    }
+
+    /// <summary>
+    /// DTO for the reference repair SQL query. Properties must match the SQL column aliases exactly.
+    /// </summary>
+    private record ReferenceRepairRow(Guid AttributeValueId, Guid? MetaverseObjectId);
 
     /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System that have been created or modified since a given timestamp.
