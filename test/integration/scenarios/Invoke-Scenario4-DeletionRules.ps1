@@ -276,7 +276,7 @@ function Invoke-RemoveUserFromSource {
 }
 
 # -----------------------------------------------------------------------------------------------------------------
-# Helper: Check if an MVO still exists
+# Helper: Check if an MVO still exists (by display name search)
 # -----------------------------------------------------------------------------------------------------------------
 function Test-MvoExists {
     param(
@@ -299,6 +299,22 @@ function Test-MvoExists {
 }
 
 # -----------------------------------------------------------------------------------------------------------------
+# Helper: Check if an MVO still exists (by ID - used when display name may have been recalled)
+# -----------------------------------------------------------------------------------------------------------------
+function Test-MvoExistsById {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$MvoId
+    )
+
+    $mvo = Get-JIMMetaverseObject -Id $MvoId -ErrorAction SilentlyContinue
+    if ($mvo) {
+        return $true
+    }
+    return $false
+}
+
+# -----------------------------------------------------------------------------------------------------------------
 # Helper: Get pending export count for a connected system
 # -----------------------------------------------------------------------------------------------------------------
 function Get-PendingExportCount {
@@ -312,6 +328,23 @@ function Get-PendingExportCount {
         return [int]$cs.pendingExportCount
     }
     return 0
+}
+
+# -----------------------------------------------------------------------------------------------------------------
+# Helper: Drain any stale pending exports from prior tests to prevent cascade failures
+# -----------------------------------------------------------------------------------------------------------------
+function Invoke-DrainPendingExports {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Config
+    )
+
+    $stalePending = Get-PendingExportCount -ConnectedSystemId $Config.LDAPSystemId
+    if ($stalePending -gt 0) {
+        Write-Host "  Draining $stalePending stale pending export(s) from prior test..." -ForegroundColor Gray
+        $drainExport = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
+        Start-Sleep -Seconds 2
+    }
 }
 
 # -----------------------------------------------------------------------------------------------------------------
@@ -498,51 +531,52 @@ try {
         Start-Sleep -Seconds 3
 
         # Assert 1: MVO still exists (LDAP CSO still joined - not the last connector)
-        $mvoStillExists = Test-MvoExists -DisplayName "Test WLCD Recall" -ObjectTypeName "User"
+        # Note: We search by MVO ID rather than display name because attribute recall removes
+        # all CSV-contributed attributes, including Display Name.
+        $mvoStillExists = Test-MvoExistsById -MvoId $test1MvoId
 
-        if ($mvoStillExists) {
-            Write-Host "  PASSED: MVO still exists (LDAP CSO still joined, not the last connector)" -ForegroundColor Green
-        } else {
+        if (-not $mvoStillExists) {
             Write-Host "  FAILED: MVO was deleted despite LDAP CSO still being joined" -ForegroundColor Red
             $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $false; Error = "MVO deleted when LDAP CSO still joined" }
-            # Skip remaining assertions for this test
-            if ($Step -ne "All") { throw "Test 1 failed" }
+            throw "Test 1 Assert 1 failed: MVO deleted when LDAP CSO still joined"
         }
+        Write-Host "  PASSED: MVO still exists (LDAP CSO still joined, not the last connector)" -ForegroundColor Green
 
-        if ($mvoStillExists) {
-            # Assert 2: Check that CSV-contributed attributes were recalled
-            # After recall, attributes like department, title etc. contributed by CSV should be removed
-            $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test WLCD Recall" -Attributes Department -PageSize 10 -ErrorAction SilentlyContinue) |
-                Where-Object { $_.displayName -eq "Test WLCD Recall" } | Select-Object -First 1
+        # Assert 2: Check that CSV-contributed attributes were recalled
+        # After recall, attributes like department, title etc. contributed by CSV should be removed
+        # Use ID-based lookup since display name was also recalled
+        $mvoDetail = Get-JIMMetaverseObject -Id $test1MvoId -ErrorAction SilentlyContinue
 
-            if ($mvoDetail) {
-                # Check if source-contributed attributes (e.g., department, title) are now empty/null
-                # The API returns requested attributes in the 'attributes' dictionary property
-                $deptValue = $null
-                if ($mvoDetail.attributes -and $mvoDetail.attributes.PSObject.Properties.Name -contains 'Department') {
-                    $deptValue = $mvoDetail.attributes.Department
-                }
-                if (-not $deptValue) {
-                    Write-Host "  PASSED: CSV-contributed attribute 'department' has been recalled (empty/null)" -ForegroundColor Green
-                } else {
-                    Write-Host "  FAILED: CSV-contributed attribute 'department' still has value: $deptValue" -ForegroundColor Red
-                    Write-Host "  Expected: null/empty (attributes should be recalled after source CSO obsoletion)" -ForegroundColor Red
+        if ($mvoDetail) {
+            # Check if source-contributed attributes (e.g., department, title) are now empty/null
+            # The -Id endpoint returns attributeValues (array of MetaverseObjectAttributeValueDto)
+            $deptValue = $null
+            if ($mvoDetail.attributeValues) {
+                $deptAttr = $mvoDetail.attributeValues | Where-Object { $_.attributeName -eq 'Department' } | Select-Object -First 1
+                if ($deptAttr) {
+                    $deptValue = $deptAttr.stringValue
                 }
             }
-
-            # Assert 3: Check for pending exports on LDAP (attribute changes should flow to target)
-            $pendingExportsAfter = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
-            Write-Host "  LDAP pending exports after: $pendingExportsAfter" -ForegroundColor Gray
-
-            if ($pendingExportsAfter -gt $pendingExportsBefore) {
-                Write-Host "  PASSED: Pending exports created on LDAP target (attribute changes flowing to target)" -ForegroundColor Green
+            if (-not $deptValue) {
+                Write-Host "  PASSED: CSV-contributed attribute 'department' has been recalled (empty/null)" -ForegroundColor Green
             } else {
-                Write-Host "  FAILED: No new pending exports on LDAP target" -ForegroundColor Red
-                Write-Host "  Expected: Pending exports for recalled attribute values" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $false; Error = "CSV-contributed attribute 'department' still has value: $deptValue" }
+                throw "Test 1 Assert 2 failed: CSV-contributed attribute 'department' still has value: $deptValue"
             }
-
-            $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $true }
         }
+
+        # Assert 3: Check for pending exports on LDAP (attribute changes should flow to target)
+        $pendingExportsAfter = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+        Write-Host "  LDAP pending exports after: $pendingExportsAfter" -ForegroundColor Gray
+
+        if ($pendingExportsAfter -gt $pendingExportsBefore) {
+            Write-Host "  PASSED: Pending exports created on LDAP target (attribute changes flowing to target)" -ForegroundColor Green
+        } else {
+            $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $false; Error = "No new pending exports on LDAP target after attribute recall" }
+            throw "Test 1 Assert 3 failed: No new pending exports on LDAP target. Recalled attributes must flow to target systems."
+        }
+
+        $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $true }
     }
 
     # =============================================================================================================
@@ -557,6 +591,8 @@ try {
         Write-Host "RemoveContributedAttributesOnObsoletion: false" -ForegroundColor Gray
         Write-Host "Expected: MVO remains (LDAP CSO still joined), attributes stay, no pending exports" -ForegroundColor Gray
         Write-Host ""
+
+        Invoke-DrainPendingExports -Config $config
 
         # Configure deletion rules
         Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
@@ -592,45 +628,43 @@ try {
         # Assert 1: MVO still exists
         $mvoStillExists = Test-MvoExists -DisplayName "Test WLCD NoRecall" -ObjectTypeName "User"
 
-        if ($mvoStillExists) {
-            Write-Host "  PASSED: MVO still exists (LDAP CSO still joined, not the last connector)" -ForegroundColor Green
-        } else {
+        if (-not $mvoStillExists) {
             Write-Host "  FAILED: MVO was deleted despite LDAP CSO still being joined" -ForegroundColor Red
             $testResults.Steps += @{ Name = "WhenLastConnectorNoRecall"; Success = $false; Error = "MVO deleted when LDAP CSO still joined" }
-            if ($Step -ne "All") { throw "Test 2 failed" }
+            throw "Test 2 Assert 1 failed: MVO deleted when LDAP CSO still joined"
         }
+        Write-Host "  PASSED: MVO still exists (LDAP CSO still joined, not the last connector)" -ForegroundColor Green
 
-        if ($mvoStillExists) {
-            # Assert 2: Attributes should remain on MVO (not recalled)
-            $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test WLCD NoRecall" -Attributes Department -PageSize 10 -ErrorAction SilentlyContinue) |
-                Where-Object { $_.displayName -eq "Test WLCD NoRecall" } | Select-Object -First 1
+        # Assert 2: Attributes should remain on MVO (not recalled)
+        $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test WLCD NoRecall" -Attributes Department -PageSize 10 -ErrorAction SilentlyContinue) |
+            Where-Object { $_.displayName -eq "Test WLCD NoRecall" } | Select-Object -First 1
 
-            if ($mvoDetail) {
-                # The API returns requested attributes in the 'attributes' dictionary property
-                $deptValue = $null
-                if ($mvoDetail.attributes -and $mvoDetail.attributes.PSObject.Properties.Name -contains 'Department') {
-                    $deptValue = $mvoDetail.attributes.Department
-                }
-                if ($deptValue) {
-                    Write-Host "  PASSED: CSV-contributed attribute 'department' retained: $deptValue" -ForegroundColor Green
-                } else {
-                    Write-Host "  FAILED: CSV-contributed attribute 'department' was removed despite RemoveContributedAttributesOnObsoletion=false" -ForegroundColor Red
-                }
+        if ($mvoDetail) {
+            # The API returns requested attributes in the 'attributes' dictionary property
+            $deptValue = $null
+            if ($mvoDetail.attributes -and $mvoDetail.attributes.PSObject.Properties.Name -contains 'Department') {
+                $deptValue = $mvoDetail.attributes.Department
             }
-
-            # Assert 3: No new pending exports (nothing changed on MVO)
-            $pendingExportsAfter = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
-            Write-Host "  LDAP pending exports after: $pendingExportsAfter" -ForegroundColor Gray
-
-            if ($pendingExportsAfter -le $pendingExportsBefore) {
-                Write-Host "  PASSED: No new pending exports on LDAP target (attributes unchanged)" -ForegroundColor Green
+            if ($deptValue) {
+                Write-Host "  PASSED: CSV-contributed attribute 'department' retained: $deptValue" -ForegroundColor Green
             } else {
-                Write-Host "  FAILED: Unexpected pending exports created on LDAP target" -ForegroundColor Red
-                Write-Host "  Expected: No new pending exports (RemoveContributedAttributesOnObsoletion=false)" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "WhenLastConnectorNoRecall"; Success = $false; Error = "department was removed despite RemoveContributedAttributesOnObsoletion=false" }
+                throw "Test 2 Assert 2 failed: CSV-contributed attribute 'department' was removed despite RemoveContributedAttributesOnObsoletion=false"
             }
-
-            $testResults.Steps += @{ Name = "WhenLastConnectorNoRecall"; Success = $true }
         }
+
+        # Assert 3: No new pending exports (nothing changed on MVO)
+        $pendingExportsAfter = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+        Write-Host "  LDAP pending exports after: $pendingExportsAfter" -ForegroundColor Gray
+
+        if ($pendingExportsAfter -le $pendingExportsBefore) {
+            Write-Host "  PASSED: No new pending exports on LDAP target (attributes unchanged)" -ForegroundColor Green
+        } else {
+            $testResults.Steps += @{ Name = "WhenLastConnectorNoRecall"; Success = $false; Error = "Unexpected pending exports created on LDAP target" }
+            throw "Test 2 Assert 3 failed: Unexpected pending exports created on LDAP target"
+        }
+
+        $testResults.Steps += @{ Name = "WhenLastConnectorNoRecall"; Success = $true }
     }
 
     # =============================================================================================================
@@ -646,6 +680,8 @@ try {
         Write-Host "Authoritative source: CSV (HR System)" -ForegroundColor Gray
         Write-Host "Expected: MVO deleted immediately when CSV CSO disconnects, LDAP deprovisioned" -ForegroundColor Gray
         Write-Host ""
+
+        Invoke-DrainPendingExports -Config $config
 
         # Configure deletion rules - CSV is the authoritative source
         Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
@@ -675,9 +711,8 @@ try {
         $mvoStillExists = Test-MvoExists -DisplayName "Test Auth Immediate" -ObjectTypeName "User"
 
         if ($mvoStillExists) {
-            Write-Host "  FAILED: MVO still exists after authoritative source disconnected" -ForegroundColor Red
-            Write-Host "  Expected: MVO deleted immediately when CSV (authoritative) CSO disconnected" -ForegroundColor Red
             $testResults.Steps += @{ Name = "AuthoritativeImmediate"; Success = $false; Error = "MVO not deleted when authoritative source disconnected" }
+            throw "Test 3 Assert 1 failed: MVO still exists after authoritative source disconnected (expected immediate deletion)"
         } else {
             Write-Host "  PASSED: MVO deleted when authoritative source disconnected" -ForegroundColor Green
             Write-Host "  LDAP connector was still present but deletion triggered by authoritative CSV disconnect" -ForegroundColor Gray
@@ -727,6 +762,8 @@ try {
         Write-Host "Expected: MVO marked for deletion, then deleted after 1-minute grace period" -ForegroundColor Gray
         Write-Host ""
 
+        Invoke-DrainPendingExports -Config $config
+
         # Configure deletion rules - CSV is the authoritative source, 1-minute grace period
         Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
             -DeletionRule "WhenAuthoritativeSourceDisconnected" `
@@ -753,60 +790,55 @@ try {
         $mvoStillExists = Test-MvoExists -DisplayName "Test Auth Grace" -ObjectTypeName "User"
 
         if (-not $mvoStillExists) {
-            Write-Host "  FAILED: MVO was deleted immediately despite 1-minute grace period" -ForegroundColor Red
             $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $false; Error = "MVO deleted immediately despite grace period" }
-        } else {
-            Write-Host "  PASSED: MVO still exists (grace period not yet elapsed)" -ForegroundColor Green
+            throw "Test 4 Assert 1 failed: MVO was deleted immediately despite 1-minute grace period"
+        }
+        Write-Host "  PASSED: MVO still exists (grace period not yet elapsed)" -ForegroundColor Green
 
-            # Verify MVO is marked for pending deletion
-            $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Auth Grace" -PageSize 10 -ErrorAction SilentlyContinue) |
-                Where-Object { $_.displayName -eq "Test Auth Grace" } | Select-Object -First 1
+        # Verify MVO is marked for pending deletion
+        $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Auth Grace" -PageSize 10 -ErrorAction SilentlyContinue) |
+            Where-Object { $_.displayName -eq "Test Auth Grace" } | Select-Object -First 1
 
-            if ($mvoDetail -and $mvoDetail.PSObject.Properties.Name -contains 'isPendingDeletion') {
-                if ($mvoDetail.isPendingDeletion) {
-                    Write-Host "  PASSED: MVO isPendingDeletion=true (correctly marked for deferred deletion)" -ForegroundColor Green
-                } else {
-                    Write-Host "  FAILED: MVO isPendingDeletion=false (should be marked for deletion)" -ForegroundColor Red
-                }
-            }
-
-            # Wait for the grace period to elapse (1 minute + buffer for housekeeping)
-            Write-Host "  Waiting for 1-minute grace period to elapse..." -ForegroundColor Gray
-            Write-Host "  (Housekeeping will delete the MVO after the grace period)" -ForegroundColor Gray
-            $waitTime = 90  # 1 minute + 30 seconds buffer for housekeeping cycle
-            for ($i = 0; $i -lt $waitTime; $i += 10) {
-                Start-Sleep -Seconds 10
-                $remaining = $waitTime - $i - 10
-                if ($remaining -gt 0) {
-                    Write-Host "  Waiting... ($remaining seconds remaining)" -ForegroundColor Gray
-                }
-            }
-
-            # Assert 2: MVO should now be deleted (grace period elapsed, housekeeping ran)
-            $mvoDeletedAfterGrace = -not (Test-MvoExists -DisplayName "Test Auth Grace" -ObjectTypeName "User")
-
-            if ($mvoDeletedAfterGrace) {
-                Write-Host "  PASSED: MVO deleted after grace period elapsed (housekeeping processed it)" -ForegroundColor Green
-
-                # Verify it appears in deleted objects
-                $deletedMvos = Get-JIMDeletedObject -ObjectType MVO -Search "Test Auth Grace" -PageSize 10
-                if ($deletedMvos -and $deletedMvos.items) {
-                    $deletedEntry = $deletedMvos.items | Where-Object { $_.displayName -eq "Test Auth Grace" } | Select-Object -First 1
-                    if ($deletedEntry) {
-                        Write-Host "  PASSED: Deleted MVO found in Deleted Objects view" -ForegroundColor Green
-                    }
-                }
-
-                $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $true }
+        if ($mvoDetail -and $mvoDetail.PSObject.Properties.Name -contains 'isPendingDeletion') {
+            if ($mvoDetail.isPendingDeletion) {
+                Write-Host "  PASSED: MVO isPendingDeletion=true (correctly marked for deferred deletion)" -ForegroundColor Green
             } else {
-                Write-Host "  FAILED: MVO still exists after grace period should have elapsed" -ForegroundColor Red
-                Write-Host "  Possible causes:" -ForegroundColor Yellow
-                Write-Host "    - Housekeeping service not running" -ForegroundColor Yellow
-                Write-Host "    - Grace period calculation incorrect" -ForegroundColor Yellow
-                Write-Host "    - MVO not correctly marked for deletion" -ForegroundColor Yellow
-                $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $false; Error = "MVO not deleted after grace period elapsed" }
+                $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $false; Error = "MVO isPendingDeletion=false (should be marked for deletion)" }
+                throw "Test 4 Assert 1b failed: MVO isPendingDeletion=false (should be marked for deletion)"
             }
         }
+
+        # Wait for the grace period to elapse (1 minute + buffer for housekeeping)
+        Write-Host "  Waiting for 1-minute grace period to elapse..." -ForegroundColor Gray
+        Write-Host "  (Housekeeping will delete the MVO after the grace period)" -ForegroundColor Gray
+        $waitTime = 90  # 1 minute + 30 seconds buffer for housekeeping cycle
+        for ($i = 0; $i -lt $waitTime; $i += 10) {
+            Start-Sleep -Seconds 10
+            $remaining = $waitTime - $i - 10
+            if ($remaining -gt 0) {
+                Write-Host "  Waiting... ($remaining seconds remaining)" -ForegroundColor Gray
+            }
+        }
+
+        # Assert 2: MVO should now be deleted (grace period elapsed, housekeeping ran)
+        $mvoDeletedAfterGrace = -not (Test-MvoExists -DisplayName "Test Auth Grace" -ObjectTypeName "User")
+
+        if (-not $mvoDeletedAfterGrace) {
+            $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $false; Error = "MVO not deleted after grace period elapsed" }
+            throw "Test 4 Assert 2 failed: MVO still exists after grace period should have elapsed"
+        }
+        Write-Host "  PASSED: MVO deleted after grace period elapsed (housekeeping processed it)" -ForegroundColor Green
+
+        # Verify it appears in deleted objects
+        $deletedMvos = Get-JIMDeletedObject -ObjectType MVO -Search "Test Auth Grace" -PageSize 10
+        if ($deletedMvos -and $deletedMvos.items) {
+            $deletedEntry = $deletedMvos.items | Where-Object { $_.displayName -eq "Test Auth Grace" } | Select-Object -First 1
+            if ($deletedEntry) {
+                Write-Host "  PASSED: Deleted MVO found in Deleted Objects view" -ForegroundColor Green
+            }
+        }
+
+        $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $true }
     }
 
     # =============================================================================================================
@@ -822,6 +854,8 @@ try {
         Write-Host "RemoveContributedAttributesOnObsoletion: true" -ForegroundColor Gray
         Write-Host "Expected: MVO remains (Manual = never auto-delete), attributes recalled, pending exports on LDAP" -ForegroundColor Gray
         Write-Host ""
+
+        Invoke-DrainPendingExports -Config $config
 
         # Configure deletion rules
         Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
@@ -849,57 +883,60 @@ try {
         Start-Sleep -Seconds 3
 
         # Assert 1: MVO still exists (Manual rule - never auto-deleted)
-        $mvoStillExists = Test-MvoExists -DisplayName "Test Manual Recall" -ObjectTypeName "User"
+        # Note: We search by MVO ID rather than display name because attribute recall removes
+        # all CSV-contributed attributes, including Display Name.
+        $mvoStillExists = Test-MvoExistsById -MvoId $test5MvoId
 
-        if ($mvoStillExists) {
-            Write-Host "  PASSED: MVO still exists (Manual deletion rule - never auto-deleted)" -ForegroundColor Green
-        } else {
-            Write-Host "  FAILED: MVO was deleted despite Manual deletion rule" -ForegroundColor Red
+        if (-not $mvoStillExists) {
             $testResults.Steps += @{ Name = "ManualRecall"; Success = $false; Error = "MVO deleted with Manual deletion rule" }
-            if ($Step -ne "All") { throw "Test 5 failed" }
+            throw "Test 5 Assert 1 failed: MVO was deleted despite Manual deletion rule"
         }
+        Write-Host "  PASSED: MVO still exists (Manual deletion rule - never auto-deleted)" -ForegroundColor Green
 
-        if ($mvoStillExists) {
-            # Assert 2: Check that CSV-contributed attributes were recalled
-            $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Manual Recall" -Attributes Department -PageSize 10 -ErrorAction SilentlyContinue) |
-                Where-Object { $_.displayName -eq "Test Manual Recall" } | Select-Object -First 1
+        # Assert 2: Check that CSV-contributed attributes were recalled
+        # Use ID-based lookup since display name was also recalled
+        $mvoDetail = Get-JIMMetaverseObject -Id $test5MvoId -ErrorAction SilentlyContinue
 
-            if ($mvoDetail) {
-                # The API returns requested attributes in the 'attributes' dictionary property
-                $deptValue = $null
-                if ($mvoDetail.attributes -and $mvoDetail.attributes.PSObject.Properties.Name -contains 'Department') {
-                    $deptValue = $mvoDetail.attributes.Department
-                }
-                if (-not $deptValue) {
-                    Write-Host "  PASSED: CSV-contributed attribute 'department' has been recalled (empty/null)" -ForegroundColor Green
-                } else {
-                    Write-Host "  FAILED: CSV-contributed attribute 'department' still has value: $deptValue" -ForegroundColor Red
-                    Write-Host "  Expected: null/empty (attributes should be recalled after source CSO obsoletion)" -ForegroundColor Red
+        if ($mvoDetail) {
+            # The -Id endpoint returns attributeValues (array of MetaverseObjectAttributeValueDto)
+            $deptValue = $null
+            if ($mvoDetail.attributeValues) {
+                $deptAttr = $mvoDetail.attributeValues | Where-Object { $_.attributeName -eq 'Department' } | Select-Object -First 1
+                if ($deptAttr) {
+                    $deptValue = $deptAttr.stringValue
                 }
             }
-
-            # Assert 3: Check for pending exports on LDAP
-            $pendingExportsAfter = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
-            Write-Host "  LDAP pending exports after: $pendingExportsAfter" -ForegroundColor Gray
-
-            if ($pendingExportsAfter -gt $pendingExportsBefore) {
-                Write-Host "  PASSED: Pending exports created on LDAP target (attribute changes flowing to target)" -ForegroundColor Green
+            if (-not $deptValue) {
+                Write-Host "  PASSED: CSV-contributed attribute 'department' has been recalled (empty/null)" -ForegroundColor Green
             } else {
-                Write-Host "  FAILED: No new pending exports on LDAP target" -ForegroundColor Red
-                Write-Host "  Expected: Pending exports for recalled attribute values" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "ManualRecall"; Success = $false; Error = "CSV-contributed attribute 'department' still has value: $deptValue" }
+                throw "Test 5 Assert 2 failed: CSV-contributed attribute 'department' still has value: $deptValue"
             }
-
-            # Assert 4: MVO should NOT be marked as pending deletion (Manual rule)
-            if ($mvoDetail -and $mvoDetail.PSObject.Properties.Name -contains 'isPendingDeletion') {
-                if (-not $mvoDetail.isPendingDeletion) {
-                    Write-Host "  PASSED: MVO isPendingDeletion=false (Manual rule does not mark for deletion)" -ForegroundColor Green
-                } else {
-                    Write-Host "  WARNING: MVO isPendingDeletion=true despite Manual deletion rule" -ForegroundColor Yellow
-                }
-            }
-
-            $testResults.Steps += @{ Name = "ManualRecall"; Success = $true }
         }
+
+        # Assert 3: Check for pending exports on LDAP
+        # Assert 3: Check for pending exports on LDAP
+        $pendingExportsAfter = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+        Write-Host "  LDAP pending exports after: $pendingExportsAfter" -ForegroundColor Gray
+
+        if ($pendingExportsAfter -gt $pendingExportsBefore) {
+            Write-Host "  PASSED: Pending exports created on LDAP target (attribute changes flowing to target)" -ForegroundColor Green
+        } else {
+            $testResults.Steps += @{ Name = "ManualRecall"; Success = $false; Error = "No new pending exports on LDAP target after attribute recall" }
+            throw "Test 5 Assert 3 failed: No new pending exports on LDAP target. Recalled attributes must flow to target systems."
+        }
+
+        # Assert 4: MVO should NOT be marked as pending deletion (Manual rule)
+        if ($mvoDetail -and $mvoDetail.PSObject.Properties.Name -contains 'isPendingDeletion') {
+            if (-not $mvoDetail.isPendingDeletion) {
+                Write-Host "  PASSED: MVO isPendingDeletion=false (Manual rule does not mark for deletion)" -ForegroundColor Green
+            } else {
+                $testResults.Steps += @{ Name = "ManualRecall"; Success = $false; Error = "MVO isPendingDeletion=true despite Manual deletion rule" }
+                throw "Test 5 Assert 4 failed: MVO isPendingDeletion=true despite Manual deletion rule"
+            }
+        }
+
+        $testResults.Steps += @{ Name = "ManualRecall"; Success = $true }
     }
 
     # =============================================================================================================
@@ -914,6 +951,8 @@ try {
         Write-Host "RemoveContributedAttributesOnObsoletion: false" -ForegroundColor Gray
         Write-Host "Expected: MVO remains, attributes stay, no pending exports" -ForegroundColor Gray
         Write-Host ""
+
+        Invoke-DrainPendingExports -Config $config
 
         # Configure deletion rules
         Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
@@ -945,53 +984,52 @@ try {
         # Assert 1: MVO still exists (Manual rule - never auto-deleted)
         $mvoStillExists = Test-MvoExists -DisplayName "Test Manual NoRecall" -ObjectTypeName "User"
 
-        if ($mvoStillExists) {
-            Write-Host "  PASSED: MVO still exists (Manual deletion rule - never auto-deleted)" -ForegroundColor Green
-        } else {
-            Write-Host "  FAILED: MVO was deleted despite Manual deletion rule" -ForegroundColor Red
+        if (-not $mvoStillExists) {
             $testResults.Steps += @{ Name = "ManualNoRecall"; Success = $false; Error = "MVO deleted with Manual deletion rule" }
-            if ($Step -ne "All") { throw "Test 6 failed" }
+            throw "Test 6 Assert 1 failed: MVO was deleted despite Manual deletion rule"
         }
+        Write-Host "  PASSED: MVO still exists (Manual deletion rule - never auto-deleted)" -ForegroundColor Green
 
-        if ($mvoStillExists) {
-            # Assert 2: Attributes should remain on MVO (not recalled)
-            $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Manual NoRecall" -Attributes Department -PageSize 10 -ErrorAction SilentlyContinue) |
-                Where-Object { $_.displayName -eq "Test Manual NoRecall" } | Select-Object -First 1
+        # Assert 2: Attributes should remain on MVO (not recalled)
+        $mvoDetail = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Manual NoRecall" -Attributes Department -PageSize 10 -ErrorAction SilentlyContinue) |
+            Where-Object { $_.displayName -eq "Test Manual NoRecall" } | Select-Object -First 1
 
-            if ($mvoDetail) {
-                # The API returns requested attributes in the 'attributes' dictionary property
-                $deptValue = $null
-                if ($mvoDetail.attributes -and $mvoDetail.attributes.PSObject.Properties.Name -contains 'Department') {
-                    $deptValue = $mvoDetail.attributes.Department
-                }
-                if ($deptValue) {
-                    Write-Host "  PASSED: CSV-contributed attribute 'department' retained: $deptValue" -ForegroundColor Green
-                } else {
-                    Write-Host "  FAILED: CSV-contributed attribute 'department' was removed despite RemoveContributedAttributesOnObsoletion=false" -ForegroundColor Red
-                }
+        if ($mvoDetail) {
+            # The API returns requested attributes in the 'attributes' dictionary property
+            $deptValue = $null
+            if ($mvoDetail.attributes -and $mvoDetail.attributes.PSObject.Properties.Name -contains 'Department') {
+                $deptValue = $mvoDetail.attributes.Department
             }
-
-            # Assert 3: No new pending exports (nothing changed on MVO)
-            $pendingExportsAfter = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
-            Write-Host "  LDAP pending exports after: $pendingExportsAfter" -ForegroundColor Gray
-
-            if ($pendingExportsAfter -le $pendingExportsBefore) {
-                Write-Host "  PASSED: No new pending exports on LDAP target (attributes unchanged)" -ForegroundColor Green
+            if ($deptValue) {
+                Write-Host "  PASSED: CSV-contributed attribute 'department' retained: $deptValue" -ForegroundColor Green
             } else {
-                Write-Host "  FAILED: Unexpected pending exports created on LDAP target" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "ManualNoRecall"; Success = $false; Error = "department was removed despite RemoveContributedAttributesOnObsoletion=false" }
+                throw "Test 6 Assert 2 failed: CSV-contributed attribute 'department' was removed despite RemoveContributedAttributesOnObsoletion=false"
             }
-
-            # Assert 4: MVO should NOT be marked as pending deletion
-            if ($mvoDetail -and $mvoDetail.PSObject.Properties.Name -contains 'isPendingDeletion') {
-                if (-not $mvoDetail.isPendingDeletion) {
-                    Write-Host "  PASSED: MVO isPendingDeletion=false (Manual rule does not mark for deletion)" -ForegroundColor Green
-                } else {
-                    Write-Host "  WARNING: MVO isPendingDeletion=true despite Manual deletion rule" -ForegroundColor Yellow
-                }
-            }
-
-            $testResults.Steps += @{ Name = "ManualNoRecall"; Success = $true }
         }
+
+        # Assert 3: No new pending exports (nothing changed on MVO)
+        $pendingExportsAfter = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+        Write-Host "  LDAP pending exports after: $pendingExportsAfter" -ForegroundColor Gray
+
+        if ($pendingExportsAfter -le $pendingExportsBefore) {
+            Write-Host "  PASSED: No new pending exports on LDAP target (attributes unchanged)" -ForegroundColor Green
+        } else {
+            $testResults.Steps += @{ Name = "ManualNoRecall"; Success = $false; Error = "Unexpected pending exports created on LDAP target" }
+            throw "Test 6 Assert 3 failed: Unexpected pending exports created on LDAP target"
+        }
+
+        # Assert 4: MVO should NOT be marked as pending deletion
+        if ($mvoDetail -and $mvoDetail.PSObject.Properties.Name -contains 'isPendingDeletion') {
+            if (-not $mvoDetail.isPendingDeletion) {
+                Write-Host "  PASSED: MVO isPendingDeletion=false (Manual rule does not mark for deletion)" -ForegroundColor Green
+            } else {
+                $testResults.Steps += @{ Name = "ManualNoRecall"; Success = $false; Error = "MVO isPendingDeletion=true despite Manual deletion rule" }
+                throw "Test 6 Assert 4 failed: MVO isPendingDeletion=true despite Manual deletion rule"
+            }
+        }
+
+        $testResults.Steps += @{ Name = "ManualNoRecall"; Success = $true }
     }
 
     # =============================================================================================================

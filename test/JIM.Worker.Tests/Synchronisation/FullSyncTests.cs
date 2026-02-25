@@ -1111,7 +1111,7 @@ public class FullSyncTests
             Attribute = displayNameAttr,
             AttributeId = displayNameAttr.Id,
             StringValue = "Joe Bloggs",
-            ContributedBySystem = connectedSystem
+            ContributedBySystemId = connectedSystem.Id
         });
         mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
@@ -1120,13 +1120,13 @@ public class FullSyncTests
             Attribute = employeeNumberAttr,
             AttributeId = employeeNumberAttr.Id,
             IntValue = 123,
-            ContributedBySystem = connectedSystem
+            ContributedBySystemId = connectedSystem.Id
         });
 
         // verify setup
         Assert.That(cso.MetaverseObject, Is.Not.Null, "Expected CSO to be joined to an MVO.");
         Assert.That(mvo.AttributeValues.Count, Is.EqualTo(2), "Expected MVO to have 2 attribute values.");
-        Assert.That(mvo.AttributeValues.All(av => av.ContributedBySystem?.Id == connectedSystem.Id), Is.True,
+        Assert.That(mvo.AttributeValues.All(av => av.ContributedBySystemId == connectedSystem.Id), Is.True,
             "Expected all MVO attribute values to be contributed by the connected system.");
 
         // mark the joined CSO as obsolete
@@ -1195,7 +1195,7 @@ public class FullSyncTests
             Attribute = displayNameAttr,
             AttributeId = displayNameAttr.Id,
             StringValue = "Joe Bloggs",
-            ContributedBySystem = connectedSystem
+            ContributedBySystemId = connectedSystem.Id
         });
         mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
@@ -1204,13 +1204,13 @@ public class FullSyncTests
             Attribute = employeeNumberAttr,
             AttributeId = employeeNumberAttr.Id,
             IntValue = 123,
-            ContributedBySystem = connectedSystem
+            ContributedBySystemId = connectedSystem.Id
         });
 
         // verify setup
         Assert.That(cso.MetaverseObject, Is.Not.Null, "Expected CSO to be joined to an MVO.");
         Assert.That(mvo.AttributeValues.Count, Is.EqualTo(2), "Expected MVO to have 2 attribute values.");
-        Assert.That(mvo.AttributeValues.All(av => av.ContributedBySystem?.Id == connectedSystem.Id), Is.True,
+        Assert.That(mvo.AttributeValues.All(av => av.ContributedBySystemId == connectedSystem.Id), Is.True,
             "Expected all MVO attribute values to be contributed by the connected system.");
 
         // mark the joined CSO as obsolete

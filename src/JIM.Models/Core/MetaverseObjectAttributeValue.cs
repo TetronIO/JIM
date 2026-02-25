@@ -41,8 +41,10 @@ public class MetaverseObjectAttributeValue
 
     /// <summary>
     /// If this attribute value was contributed to the Metaverse by a connected system, then this identifies that system.
+    /// Null when the attribute value is managed internally (not contributed by any connected system).
     /// </summary>
     public ConnectedSystem? ContributedBySystem { get; set; }
+    public int? ContributedBySystemId { get; set; }
 
     public override string ToString()
     {

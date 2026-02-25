@@ -896,7 +896,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// - Type: Required for deletion rule evaluation and export rule filtering
     /// - AttributeValues.Attribute: Required for attribute name/type lookup during sync and expression evaluation
     /// - AttributeValues.ReferenceValue: Required for detecting existing MVO reference values
-    /// - AttributeValues.ContributedBySystem: Required for attribute contributor tracking on disconnect
     /// </summary>
     private async Task LoadMetaverseObjectsForCsosAsync(List<ConnectedSystemObject> csos)
     {
@@ -912,14 +911,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Loading MVOs into the same DbContext triggers EF Core relationship fixup,
         // which automatically populates cso.MetaverseObject for all tracked CSOs
         // whose MetaverseObjectId matches a loaded MVO's primary key.
+        // Note: ContributedBySystem navigation is NOT included — the sync path uses the
+        // scalar FK (ContributedBySystemId) directly, avoiding the need to load the full entity.
         await Repository.Database.MetaverseObjects
             .Include(mvo => mvo.Type)
             .Include(mvo => mvo.AttributeValues)
                 .ThenInclude(av => av.Attribute)
             .Include(mvo => mvo.AttributeValues)
                 .ThenInclude(av => av.ReferenceValue)
-            .Include(mvo => mvo.AttributeValues)
-                .ThenInclude(av => av.ContributedBySystem)
             .Where(mvo => mvoIds.Contains(mvo.Id))
             .ToListAsync();
     }

@@ -475,7 +475,7 @@ public abstract class SyncTaskProcessorBase
         {
             // Find all MVO attribute values contributed by this connected system and mark them for removal
             var contributedAttributes = mvo.AttributeValues
-                .Where(av => av.ContributedBySystem?.Id == connectedSystemId)
+                .Where(av => av.ContributedBySystemId == connectedSystemId)
                 .ToList();
 
             foreach (var attributeValue in contributedAttributes)
@@ -1849,7 +1849,7 @@ public abstract class SyncTaskProcessorBase
             if (syncRuleMapping.TargetMetaverseAttribute == null)
                 throw new InvalidDataException("SyncRuleMapping.TargetMetaverseAttribute must not be null.");
 
-            SyncRuleMappingProcessor.Process(connectedSystemObject, syncRuleMapping, _objectTypes, _expressionEvaluator, skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass);
+            SyncRuleMappingProcessor.Process(connectedSystemObject, syncRuleMapping, _objectTypes, _expressionEvaluator, skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass, connectedSystemObject.ConnectedSystemId);
         }
     }
 
@@ -1978,7 +1978,7 @@ public abstract class SyncTaskProcessorBase
                 if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion)
                 {
                     var contributedAttributes = mvo.AttributeValues
-                        .Where(av => av.ContributedBySystem?.Id == _connectedSystem.Id)
+                        .Where(av => av.ContributedBySystemId == _connectedSystem.Id)
                         .ToList();
 
                     foreach (var attributeValue in contributedAttributes)

@@ -341,3 +341,72 @@ no longer compensates for repository-level EF bugs.
 - `MetaverseRepository`: 6 uses (header queries, matching queries)
 - `DataGenerationRepository`: 2 uses (template queries)
 - `ActivitiesRepository`: 2 uses (activity queries)
+
+### 2026-02-25: ContributedBySystemId Bug Fix
+
+**Problem**: Integration test Scenario 4 (Deletion Rules) Tests 1 and 5 failed — `RemoveContributedAttributesOnObsoletion`
+was enabled but no attributes were recalled when a CSO was obsoleted. Investigation confirmed this is a **pre-existing bug**
+(test ran against `bd1c78c8` on main, before Phase 4 changes).
+
+**Root cause**: `ContributedBySystem` navigation property on `MetaverseObjectAttributeValue` was never set during
+sync attribute flow. `SyncRuleMappingProcessor.Process()` creates `new MetaverseObjectAttributeValue` at 14 locations
+but none set the contributor. The recall code in `SyncTaskProcessorBase.ProcessObsoleteConnectedSystemObjectAsync`
+filters by `av.ContributedBySystem?.Id == connectedSystemId` which always evaluates to false (null != int).
+
+**Fix**:
+1. **`MetaverseObjectAttributeValue.cs`** — Added explicit `int? ContributedBySystemId` scalar FK property
+   (previously a shadow property managed by EF convention). This avoids needing to `.Include(ConnectedSystem)`.
+2. **`SyncRuleMappingProcessor.cs`** — Added `int? contributingSystemId` parameter to `Process()` and all
+   14 private methods that create `MetaverseObjectAttributeValue`. Each creation now sets
+   `ContributedBySystemId = contributingSystemId`. Nullable to support future internally-managed MVOs.
+3. **`SyncTaskProcessorBase.cs`** — Passes `connectedSystemObject.ConnectedSystemId` at the call site.
+   Updated both recall sites (`ProcessObsoleteConnectedSystemObjectAsync` line 478 and
+   `HandleCsoOutOfScopeAsync` line 1981) to use `av.ContributedBySystemId` instead of `av.ContributedBySystem?.Id`.
+4. **`ConnectedSystemRepository.cs`** — Removed `.Include(av => av.ContributedBySystem)` from
+   `LoadMetaverseObjectsForCsosAsync` since the sync path uses the scalar FK directly.
+5. **`MetaverseObjectDto.cs`** — Updated `ContributedBySystemId` mapping to use scalar FK.
+6. **Tests** — Updated existing obsoletion tests to use `ContributedBySystemId`. Added 8 new unit tests
+   (`SyncRuleMappingProcessorContributorTests`) covering all attribute types + null contributor.
+
+**Design decision**: Used scalar FK (`int? ContributedBySystemId`) rather than the navigation property
+(`ConnectedSystem? ContributedBySystem`) throughout. The CSO already has `ConnectedSystemId` as an int
+available without any Include, so passing a scalar avoids loading the full `ConnectedSystem` entity.
+
+**Test results**: All 1,802 unit tests pass (0 failures, +8 new tests)
+
+### 2026-02-25: Integration Test Fix for Attribute Recall
+
+**Problem**: After the `ContributedBySystemId` fix, integration test Scenario 4 Tests 1 and 5 reported
+"FAILED: MVO was deleted despite LDAP CSO still being joined". Investigation confirmed the **MVO was NOT deleted** —
+worker logs showed "Applying 12 attribute removals to MVO" with no deletion activity.
+
+**Root cause**: The `Test-MvoExists` helper function searched for the MVO by display name
+(`Get-JIMMetaverseObject -Search "Test WLCD Recall"`). But Display Name is a CSV-contributed attribute, so
+attribute recall now correctly removes it. The MVO still exists but can no longer be found by display name search.
+
+This is a **test verification issue**, not a data integrity issue. Before the `ContributedBySystemId` fix,
+attribute recall silently did nothing (contributor was always null), so Display Name remained and the test found
+the MVO. Now that recall works correctly, the test needs to search by MVO ID instead.
+
+**Fix**: Added `Test-MvoExistsById` function and updated Tests 1 and 5 (the two recall-enabled tests) to:
+1. Use `Test-MvoExistsById -MvoId $testNMvoId` for existence checks (instead of display name search)
+2. Use `Get-JIMMetaverseObject -Id $testNMvoId` for subsequent attribute assertions
+   (the `-Id` endpoint returns `attributeValues` array, not `attributes` dictionary)
+
+Tests 2 and 6 (`RemoveContributedAttributesOnObsoletion=false`) are unaffected — display name is not recalled.
+
+**Additional fixes to Scenario 4 test harness:**
+
+1. **Fail-fast**: Converted all soft assertion failures (Write-Host red text that didn't throw) to terminating
+   errors. Every assertion failure now records `Success = $false` in `$testResults` and `throw`s immediately.
+   Previously, the `if ($Step -ne "All") { throw }` guard deliberately swallowed failures when running all
+   tests, causing cascade corruption between tests.
+
+2. **Pending export drain**: Added `Invoke-DrainPendingExports` helper called before each test to clear any
+   stale pending exports from a prior test. This prevents cascade failures where Test N's LDAP Export picks
+   up unrelated pending exports from Test N-1.
+
+3. **Open issue — recall pending exports**: Tests 1 and 5 Assert 3 ("pending exports created on LDAP target
+   after recall") is a hard failure. The code has the plumbing (`_pendingExportEvaluations` is populated
+   during recall in `ProcessObsoleteConnectedSystemObjectAsync`) but pending exports are not materialising
+   in the database. Under investigation — see findings below.
