@@ -540,6 +540,75 @@ public class ExportEvaluationNoChangeTests
 
     #endregion
 
+    #region Single-Valued Recall (Null-Clearing) Tests
+
+    /// <summary>
+    /// When an attribute is recalled (removed from MVO), the export should send a null Update
+    /// to clear it on the target. This test verifies that a null Update is NOT treated as
+    /// no-net-change when the target CSO has a non-null value.
+    /// </summary>
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_NullUpdateAgainstExistingString_ReturnsFalseAsync()
+    {
+        // Arrange - target CSO has "Information Technology", recall sends null to clear it
+        var csoAttributeValue = CreateCsoAttributeValue(stringValue: "Information Technology");
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update);
+        // All value fields null — this represents clearing the attribute
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
+
+        // Assert
+        Assert.That(result, Is.False,
+            "Null Update should NOT be treated as no-net-change when target has a value (attribute recall must propagate)");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_NullUpdateAgainstExistingInt_ReturnsFalseAsync()
+    {
+        // Arrange - target CSO has int value 42, recall sends null to clear it
+        var csoAttributeValue = CreateCsoAttributeValue(intValue: 42);
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update);
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
+
+        // Assert
+        Assert.That(result, Is.False,
+            "Null Update should NOT be treated as no-net-change when target has an int value");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_NullUpdateAgainstExistingDateTime_ReturnsFalseAsync()
+    {
+        // Arrange - target CSO has a DateTime, recall sends null to clear it
+        var csoAttributeValue = CreateCsoAttributeValue(dateTimeValue: new DateTime(2024, 6, 15, 0, 0, 0, DateTimeKind.Utc));
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update);
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
+
+        // Assert
+        Assert.That(result, Is.False,
+            "Null Update should NOT be treated as no-net-change when target has a DateTime value");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_NullUpdateAgainstNoExistingValue_ReturnsTrueAsync()
+    {
+        // Arrange - target CSO has no value for this attribute, null Update is a no-op
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update);
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, Array.Empty<ConnectedSystemObjectAttributeValue>());
+
+        // Assert
+        Assert.That(result, Is.True,
+            "Null Update should be treated as no-net-change when target also has no value (already cleared)");
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static ConnectedSystemObjectAttributeValue CreateCsoAttributeValue(
