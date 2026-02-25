@@ -540,12 +540,12 @@ public class ExportEvaluationNoChangeTests
 
     #endregion
 
-    #region Single-Valued Recall (Null-Clearing) Tests
+    #region Null-Valued Update Tests
 
     /// <summary>
-    /// When an attribute is recalled (removed from MVO), the export should send a null Update
-    /// to clear it on the target. This test verifies that a null Update is NOT treated as
-    /// no-net-change when the target CSO has a non-null value.
+    /// Verifies that a null-valued Update is NOT treated as no-net-change when the target
+    /// CSO has a non-null value. This is a general edge case test for no-net-change detection
+    /// with null values.
     /// </summary>
     [Test]
     public void IsCsoAttributeAlreadyCurrent_NullUpdateAgainstExistingString_ReturnsFalseAsync()
@@ -605,6 +605,312 @@ public class ExportEvaluationNoChangeTests
         // Assert
         Assert.That(result, Is.True,
             "Null Update should be treated as no-net-change when target also has no value (already cleared)");
+    }
+
+    #endregion
+
+    #region CreateAttributeValueChanges - Recall Tests
+
+    /// <summary>
+    /// When attributes are recalled (removed from MVO), CreateAttributeValueChanges should
+    /// generate null-clearing Update changes for each recalled attribute. This ensures target
+    /// systems receive exports that clear the recalled values.
+    /// </summary>
+    [Test]
+    public void CreateAttributeValueChanges_RecalledSingleValuedAttributes_GeneratesNullClearingChangesAsync()
+    {
+        // Arrange
+        var sourceSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Source System");
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var mvUserType = MetaverseObjectTypesData.Single(q => q.Name == "User");
+        var displayNameMvAttr = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.DisplayName);
+        var employeeIdMvAttr = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
+
+        var targetDisplayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        var targetEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.EmployeeId.ToString());
+
+        // Set up export sync rule with attribute flow mappings
+        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportSyncRule.ConnectedSystemId = targetSystem.Id;
+        exportSyncRule.ConnectedSystem = targetSystem;
+        exportSyncRule.AttributeFlowRules.Clear();
+        exportSyncRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 100,
+            SyncRule = exportSyncRule,
+            TargetConnectedSystemAttribute = targetDisplayNameAttr,
+            TargetConnectedSystemAttributeId = targetDisplayNameAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Id = 200,
+                Order = 0,
+                MetaverseAttribute = displayNameMvAttr,
+                MetaverseAttributeId = displayNameMvAttr.Id
+            }}
+        });
+        exportSyncRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 101,
+            SyncRule = exportSyncRule,
+            TargetConnectedSystemAttribute = targetEmployeeIdAttr,
+            TargetConnectedSystemAttributeId = targetEmployeeIdAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Id = 201,
+                Order = 0,
+                MetaverseAttribute = employeeIdMvAttr,
+                MetaverseAttributeId = employeeIdMvAttr.Id
+            }}
+        });
+
+        // Set up the MVO (post-recall: AttributeValues cleared)
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear(); // Post-recall state
+
+        // Create the removed attribute values (snapshots taken before recall)
+        var removedDisplayName = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = displayNameMvAttr,
+            AttributeId = displayNameMvAttr.Id,
+            StringValue = "Joe Bloggs",
+            ContributedBySystemId = sourceSystem.Id
+        };
+        var removedEmployeeId = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = employeeIdMvAttr,
+            AttributeId = employeeIdMvAttr.Id,
+            StringValue = "EMP001",
+            ContributedBySystemId = sourceSystem.Id
+        };
+
+        // changedAttributes and removedAttributes contain the same objects (as in real recall flow)
+        var changedAttributes = new List<MetaverseObjectAttributeValue> { removedDisplayName, removedEmployeeId };
+        var removedAttributes = new HashSet<MetaverseObjectAttributeValue> { removedDisplayName, removedEmployeeId };
+
+        // Set up the existing target CSO
+        var existingCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            Status = ConnectedSystemObjectStatus.Normal
+        };
+
+        // Set up CSO attribute cache with target CSO's current (non-null) values
+        var csoAttrValues = new List<ConnectedSystemObjectAttributeValue>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                AttributeId = targetDisplayNameAttr.Id,
+                StringValue = "Joe Bloggs",
+                ConnectedSystemObject = existingCso
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                AttributeId = targetEmployeeIdAttr.Id,
+                StringValue = "EMP001",
+                ConnectedSystemObject = existingCso
+            }
+        };
+        var csoAttributeCache = csoAttrValues.ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId));
+
+        // Act: call CreateAttributeValueChanges with Update (existing CSO) and recall parameters
+        var changes = Jim.ExportEvaluation.CreateAttributeValueChanges(
+            mvo,
+            exportSyncRule,
+            changedAttributes,
+            PendingExportChangeType.Update,
+            existingCso: existingCso,
+            csoAttributeCache: csoAttributeCache,
+            csoAlreadyCurrentCount: out var skippedCount,
+            removedAttributes: removedAttributes);
+
+        // Assert: 2 null-clearing changes should be generated (one per recalled attribute)
+        Assert.That(changes, Has.Count.EqualTo(2),
+            "Expected 2 null-clearing changes — one for each recalled attribute");
+        Assert.That(skippedCount, Is.EqualTo(0),
+            "No attributes should be skipped (target has non-null values that differ from null)");
+
+        // Verify changes are Updates with null values targeting the correct attributes
+        var displayNameChange = changes.SingleOrDefault(c => c.AttributeId == targetDisplayNameAttr.Id);
+        Assert.That(displayNameChange, Is.Not.Null, "Expected a change for DisplayName");
+        Assert.That(displayNameChange!.ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Update));
+        Assert.That(displayNameChange.StringValue, Is.Null, "DisplayName should be cleared to null");
+
+        var employeeIdChange = changes.SingleOrDefault(c => c.AttributeId == targetEmployeeIdAttr.Id);
+        Assert.That(employeeIdChange, Is.Not.Null, "Expected a change for EmployeeId");
+        Assert.That(employeeIdChange!.ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Update));
+        Assert.That(employeeIdChange.StringValue, Is.Null, "EmployeeId should be cleared to null");
+    }
+
+    /// <summary>
+    /// Tests the full export evaluation flow for recalled attributes. When attributes are recalled,
+    /// the evaluation should create a PendingExport with null-clearing attribute value changes
+    /// targeting the downstream connected system.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRules_RecalledAttributes_CreatesPendingExportAsync()
+    {
+        // Arrange
+        var sourceSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Source System");
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var mvUserType = MetaverseObjectTypesData.Single(q => q.Name == "User");
+        var displayNameMvAttr = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.DisplayName);
+        var employeeIdMvAttr = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
+
+        var targetDisplayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        var targetEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.EmployeeId.ToString());
+
+        // Set up export sync rule on the TARGET system
+        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportSyncRule.ConnectedSystemId = targetSystem.Id;
+        exportSyncRule.ConnectedSystem = targetSystem;
+        exportSyncRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportSyncRule.AttributeFlowRules.Clear();
+        exportSyncRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 100,
+            SyncRule = exportSyncRule,
+            TargetConnectedSystemAttribute = targetDisplayNameAttr,
+            TargetConnectedSystemAttributeId = targetDisplayNameAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Id = 200,
+                Order = 0,
+                MetaverseAttribute = displayNameMvAttr,
+                MetaverseAttributeId = displayNameMvAttr.Id
+            }}
+        });
+        exportSyncRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 101,
+            SyncRule = exportSyncRule,
+            TargetConnectedSystemAttribute = targetEmployeeIdAttr,
+            TargetConnectedSystemAttributeId = targetEmployeeIdAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Id = 201,
+                Order = 0,
+                MetaverseAttribute = employeeIdMvAttr,
+                MetaverseAttributeId = employeeIdMvAttr.Id
+            }}
+        });
+
+        // Set up the MVO (post-recall: AttributeValues cleared)
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+
+        // Create removed attribute values (snapshots from before recall)
+        var removedDisplayName = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = displayNameMvAttr,
+            AttributeId = displayNameMvAttr.Id,
+            StringValue = "Joe Bloggs",
+            ContributedBySystemId = sourceSystem.Id
+        };
+        var removedEmployeeId = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = employeeIdMvAttr,
+            AttributeId = employeeIdMvAttr.Id,
+            StringValue = "EMP001",
+            ContributedBySystemId = sourceSystem.Id
+        };
+
+        var changedAttributes = new List<MetaverseObjectAttributeValue> { removedDisplayName, removedEmployeeId };
+        var removedAttributes = new HashSet<MetaverseObjectAttributeValue> { removedDisplayName, removedEmployeeId };
+
+        // Set up existing target CSO (already provisioned)
+        var existingCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            Status = ConnectedSystemObjectStatus.Normal,
+            MetaverseObjectId = mvo.Id,
+            MetaverseObject = mvo
+        };
+
+        // Mock PendingExports.AddAsync to capture created pending exports
+        MockDbSetPendingExports.Setup(set => set.AddAsync(It.IsAny<PendingExport>(), It.IsAny<CancellationToken>()))
+            .Callback((PendingExport entity, CancellationToken _) => { PendingExportsData.Add(entity); })
+            .ReturnsAsync((PendingExport entity, CancellationToken _) => null!);
+
+        // Mock PendingExports.AddAsync to capture created pending exports
+        MockDbSetPendingExports.Setup(set => set.AddAsync(It.IsAny<PendingExport>(), It.IsAny<CancellationToken>()))
+            .Callback((PendingExport entity, CancellationToken _) => { PendingExportsData.Add(entity); })
+            .ReturnsAsync((PendingExport entity, CancellationToken _) => null!);
+
+        // Build the ExportEvaluationCache manually
+        var exportRulesByMvoTypeId = new Dictionary<int, List<SyncRule>>
+        {
+            { mvUserType.Id, new List<SyncRule> { exportSyncRule } }
+        };
+        var csoLookup = new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>
+        {
+            { (mvo.Id, targetSystem.Id), existingCso }
+        };
+        var csoAttrValues = new List<ConnectedSystemObjectAttributeValue>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                AttributeId = targetDisplayNameAttr.Id,
+                StringValue = "Joe Bloggs",
+                ConnectedSystemObject = existingCso
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                AttributeId = targetEmployeeIdAttr.Id,
+                StringValue = "EMP001",
+                ConnectedSystemObject = existingCso
+            }
+        };
+        var csoAttributeValues = csoAttrValues.ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId));
+
+        var cache = new ExportEvaluationServer.ExportEvaluationCache(
+            exportRulesByMvoTypeId, csoLookup, csoAttributeValues);
+
+        // Act: evaluate export rules with recall (sourceSystem = CSV source, excluded by Q3)
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            mvo, changedAttributes, sourceSystem, cache,
+            removedAttributes: removedAttributes);
+
+        // Assert: should create exactly 1 pending export with 2 null-clearing attribute changes
+        Assert.That(result.PendingExports, Has.Count.EqualTo(1),
+            "Expected 1 PendingExport on the target system");
+
+        var pendingExport = result.PendingExports[0];
+        Assert.That(pendingExport.ConnectedSystemId, Is.EqualTo(targetSystem.Id));
+        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+        Assert.That(pendingExport.AttributeValueChanges, Has.Count.EqualTo(2),
+            "Expected 2 null-clearing attribute value changes");
+
+        // Verify all changes are Updates with null values
+        foreach (var change in pendingExport.AttributeValueChanges)
+        {
+            Assert.That(change.ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Update));
+            Assert.That(change.StringValue, Is.Null,
+                $"Attribute {change.AttributeId} should have null value (clearing recalled attribute)");
+        }
     }
 
     #endregion

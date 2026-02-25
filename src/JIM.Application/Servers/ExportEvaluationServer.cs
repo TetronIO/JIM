@@ -1282,7 +1282,7 @@ public class ExportEvaluationServer
     /// <param name="removedAttributes">Optional list of attribute values that were removed from the MVO.
     /// For multi-valued attributes, values in this list will create Remove changes instead of Add changes.</param>
     /// <returns>List of attribute value changes to export.</returns>
-    private List<PendingExportAttributeValueChange> CreateAttributeValueChanges(
+    internal List<PendingExportAttributeValueChange> CreateAttributeValueChanges(
         MetaverseObject mvo,
         SyncRule exportRule,
         List<MetaverseObjectAttributeValue> changedAttributes,
