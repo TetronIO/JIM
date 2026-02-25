@@ -115,10 +115,9 @@ jobs:
         uses: sigstore/cosign-installer@v3
 
       - name: Sign container image
-        env:
-          DIGEST: ${{ steps.build.outputs.digest }}
         run: |
-          cosign sign --yes ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}@${{ steps.build.outputs.digest }}
+          IMAGE_REF=$(echo "${{ env.IMAGE_PREFIX }}/${{ matrix.image }}" | tr '[:upper:]' '[:lower:]')
+          cosign sign --yes "${IMAGE_REF}@${{ steps.build.outputs.digest }}"
 
   # Job 3: Publish PowerShell module to PSGallery
   publish-powershell:
