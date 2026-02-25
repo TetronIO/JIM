@@ -4,6 +4,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Security;
+using JIM.Connectors;
 using JIM.Models.Staging;
 using Moq;
 using NUnit.Framework;
@@ -242,6 +243,76 @@ public class ConnectedSystemActivityTests
         Assert.That(_capturedActivity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Update));
         Assert.That(_capturedActivity.ConnectedSystemId, Is.EqualTo(2));
         Assert.That(_capturedActivity.Message, Is.EqualTo("Update attribute: person.employeeId"));
+    }
+
+    #endregion
+
+    #region UpdateConnectedSystemAsync Tests
+
+    [Test]
+    public async Task UpdateConnectedSystemAsync_WithSettingValues_PassesSettingValuesToRepositoryAsync()
+    {
+        // Arrange
+        var filePathSetting = new ConnectorDefinitionSetting { Name = "File Path", Required = true, Type = ConnectedSystemSettingType.File };
+        var modeSetting = new ConnectorDefinitionSetting { Name = "Mode", Required = true, Type = ConnectedSystemSettingType.DropDown };
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test CS",
+            ConnectorDefinition = new ConnectorDefinition { Name = ConnectorConstants.FileConnectorName },
+            SettingValues = new List<ConnectedSystemSettingValue>
+            {
+                new() { Id = 10, Setting = filePathSetting, StringValue = "/data/updated-file.csv" },
+                new() { Id = 11, Setting = modeSetting, StringValue = "Import Only" }
+            }
+        };
+
+        ConnectedSystem? capturedCs = null;
+        _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>()))
+            .Callback<ConnectedSystem>(cs => capturedCs = cs)
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await _jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, _initiatedBy);
+
+        // Assert
+        Assert.That(capturedCs, Is.Not.Null);
+        Assert.That(capturedCs!.SettingValues, Is.Not.Null);
+        Assert.That(capturedCs.SettingValues, Has.Count.EqualTo(2));
+        Assert.That(capturedCs.SettingValues.First(sv => sv.Setting.Name == "File Path").StringValue,
+            Is.EqualTo("/data/updated-file.csv"));
+    }
+
+    [Test]
+    public async Task UpdateConnectedSystemAsync_CreatesActivityWithCorrectTargetNameAsync()
+    {
+        // Arrange
+        var filePathSetting = new ConnectorDefinitionSetting { Name = "File Path", Required = true, Type = ConnectedSystemSettingType.File };
+        var modeSetting = new ConnectorDefinitionSetting { Name = "Mode", Required = true, Type = ConnectedSystemSettingType.DropDown };
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "HR System",
+            ConnectorDefinition = new ConnectorDefinition { Name = ConnectorConstants.FileConnectorName },
+            SettingValues = new List<ConnectedSystemSettingValue>
+            {
+                new() { Id = 1, Setting = filePathSetting, StringValue = "/data/users.csv" },
+                new() { Id = 2, Setting = modeSetting, StringValue = "Import Only" }
+            }
+        };
+
+        _mockCsRepo.Setup(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await _jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, _initiatedBy);
+
+        // Assert
+        Assert.That(_capturedActivity, Is.Not.Null);
+        Assert.That(_capturedActivity!.TargetName, Is.EqualTo("HR System"));
+        Assert.That(_capturedActivity.TargetType, Is.EqualTo(ActivityTargetType.ConnectedSystem));
+        Assert.That(_capturedActivity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Update));
+        Assert.That(_capturedActivity.ConnectedSystemId, Is.EqualTo(1));
     }
 
     #endregion

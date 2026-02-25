@@ -228,6 +228,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             }
         }
 
+        // Explicitly mark setting values as modified since UpdateDetachedSafe only marks the
+        // parent entity without traversing the object graph. Without this, setting value changes
+        // are silently discarded on save.
+        if (connectedSystem.SettingValues != null)
+        {
+            foreach (var settingValue in connectedSystem.SettingValues)
+            {
+                Repository.UpdateDetachedSafe(settingValue);
+            }
+        }
+
         // Use detach-safe update to avoid graph traversal on detached ConnectedSystem entities.
         // After ClearChangeTracker(), Update() would traverse Objects → MVO → Type → Attributes
         // causing PK violations on the MetaverseObjectType ↔ MetaverseAttribute join table.
