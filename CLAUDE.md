@@ -495,6 +495,36 @@ Use `./test/integration/Run-IntegrationTests.ps1` (PowerShell) - never invoke sc
 8. **NEVER** create a PR with failing tests or build errors
 9. **NEVER** merge PRs without explicit user instruction
 
+## Changelog Maintenance
+
+The project uses [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Entries must be kept up to date as changes are made, not deferred until release time.
+
+**When to add an entry:**
+- Add an entry under `## [Unreleased]` with each commit or PR that introduces user-facing changes
+- This includes: new features, bug fixes, performance improvements, changed behaviour, and removed functionality
+
+**When NOT to add an entry:**
+- Documentation-only changes (`.md` files, `docs/` updates)
+- CI/CD workflow changes (`.github/workflows/`)
+- Development tooling changes (`.editorconfig`, devcontainer config)
+- Refactoring with no user-facing impact
+- Test-only changes
+
+**Categories (use as applicable):**
+- **Added** — new features or capabilities
+- **Changed** — modifications to existing behaviour
+- **Fixed** — bug fixes
+- **Performance** — optimisations and performance improvements
+- **Removed** — removed features (use sparingly)
+
+**Formatting conventions (match existing style):**
+- Use `####` subheadings to group related entries under a larger feature (e.g., `#### Scheduler Service (#168)`)
+- Reference GitHub issue numbers where applicable (e.g., `(#123)`)
+- Keep entries concise — one line per change, describe what changed from the user's perspective
+- Use imperative mood is not required — describe what was added/changed/fixed naturally
+
+**At release time:** Move all `[Unreleased]` entries to a new version section and update comparison links at the bottom of the file. See Release Process below.
+
 ## Release Process
 
 **CRITICAL: NEVER modify the `VERSION` file without explicit user instruction to create a release.**
