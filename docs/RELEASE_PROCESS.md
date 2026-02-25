@@ -16,6 +16,7 @@ JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the Git
 
 | Version | Date | Notes |
 |---------|------|-------|
+| `0.3.0` | 2026-02-25 | First stable release. Scheduler service, change history, progress indication, dashboard redesign, major sync engine performance optimisations, 75 PowerShell cmdlets. First tag-based release via GitHub Actions. |
 | `0.2.0-alpha` | 2026-01-27 | PowerShell module expanded from 3 to 64 cmdlets. Published to [PSGallery](https://www.powershellgallery.com/packages/JIM/0.2.0-alpha) manually (no git tag created). |
 | `0.1.0-alpha` | 2025-12-12 | Initial preview. PowerShell module published to [PSGallery](https://www.powershellgallery.com/packages/JIM/0.1.0-alpha) with 3 connection cmdlets. Published manually (no git tag created). |
 
@@ -108,21 +109,24 @@ The release bundle (`jim-release-X.Y.Z.tar.gz`) contains:
 
 ```
 jim-release-X.Y.Z/
-+-- images/
++-- docker-images/
 |   +-- jim-web.tar           # Docker image for web/API service
 |   +-- jim-worker.tar        # Docker image for worker service
 |   +-- jim-scheduler.tar     # Docker image for scheduler service
+|   +-- postgres-18.tar       # PostgreSQL image (if IncludePostgres)
 +-- compose/
 |   +-- docker-compose.yml    # Main compose file
+|   +-- docker-compose.override.yml
+|   +-- docker-compose.production.yml  # Production override (pre-built images)
 |   +-- .env.example          # Environment template
 +-- powershell/
 |   +-- JIM/                  # PowerShell module directory
 +-- docs/
 |   +-- README.md
 |   +-- CHANGELOG.md
-|   +-- docs/                 # Full documentation
+|   +-- INSTALL.md            # Installation instructions
 +-- checksums.sha256          # SHA256 checksums for verification
-+-- INSTALL.md                # Installation instructions
++-- README.txt                # Quick start guide
 ```
 
 ### Deploying in an Air-Gapped Environment
@@ -154,12 +158,12 @@ sha256sum -c checksums.sha256
 
 ```bash
 # Load JIM images
-docker load -i images/jim-web.tar
-docker load -i images/jim-worker.tar
-docker load -i images/jim-scheduler.tar
+docker load -i docker-images/jim-web.tar
+docker load -i docker-images/jim-worker.tar
+docker load -i docker-images/jim-scheduler.tar
 
 # If using bundled PostgreSQL (optional)
-docker load -i images/postgres.tar
+docker load -i docker-images/postgres-18.tar
 ```
 
 #### Step 3: Set Up PostgreSQL

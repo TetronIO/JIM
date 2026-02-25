@@ -7,40 +7,149 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-02-25
+
 ### Added
 
-#### Export Performance Optimisation (Post-MVP)
+#### Scheduler Service (#168)
+- Schedule data model with cron and interval-based trigger support
+- Background scheduler service with 30-second polling cycle
+- Multi-step schedule execution with sequential and parallel step modes
+- Schedule management REST API (CRUD, enable/disable, manual trigger, execution monitoring)
+- Schedule management UI integrated into Operations page with tabbed interface
+- Custom cron expression support with pattern-based UI
+- Queue all schedule steps upfront for near-instant step transitions
+- PowerShell cmdlets: `New-JIMSchedule`, `Get-JIMSchedule`, `Set-JIMSchedule`, `Remove-JIMSchedule`, `Enable-JIMSchedule`, `Disable-JIMSchedule`, `Add-JIMScheduleStep`, `Remove-JIMScheduleStep`, `Start-JIMSchedule`, `Get-JIMScheduleExecution`, `Stop-JIMScheduleExecution`
+- Scheduler integration tests (Scenario 6)
+
+#### Change History (#14, #269)
+- Full change tracking for metaverse objects and connected system objects with timeline UI
+- Initiator and mechanism tracking (User, API, Sync, System)
+- Deleted objects view with change audit trail
+- Configurable retention and cleanup
+- Change history records for data generation operations
+- Granular per-change-type statistics replacing aggregate activity stats
+
+#### Progress Indication (#246)
+- Real-time progress bars for running operations on Operations page
+- Percentage tracking and contextual messages
+- Progress reporting for deferred exports and cross-page reference resolution
+- Import progress tracking with pagination support
+- Hidden page number indicator for single-page imports
+
+#### Dashboard
+- Home page redesigned as an informative dashboard
+- Hover effect on clickable dashboard cards
+- Application version displayed in page footer
+
+#### Security and Authentication
+- Interactive browser-based authentication for the PowerShell module
+- API key authentication support for sync endpoints
+- Just-in-time initial admin creation on first sign-in (replaces startup-time creation)
+
+#### LDAP Schema Discovery
+- Attribute writability detection during schema discovery
+- Support for LDAP omSyntax 66 (Object(Replica-Link)) mapping to Binary data type
+- LDAP description attribute plurality override on AD SAM-managed classes
+
+#### Data Generation
+- `Split` and `Join` functions for multi-valued attribute transforms
+- Centralised GUID/UUID handling with `IdentifierParser` utility
+
+#### PowerShell Module
+- Flattened module directory structure
+- Version endpoint with server version display on `Connect-JIM`
+- Module now includes 75 cmdlets (11 new scheduler cmdlets added to the 64 from 0.2.0)
+
+#### UI Enhancements
+- Searchable dialog for large multi-valued CSO attributes
+- CSO attribute table sizing and column order improvements
+- Persist navigation drawer pin state to user preferences
+- Persist category expansion state per object type in user preferences
+- Show all attributes on RPEI projection detail page
+- Culture-aware thousand separators on all numeric statistics
+- Culture-specific day-of-week ordering in schedule configuration
+- Theme preview page at `/admin/theme-preview`
+- Demo mode for Operations Queue
+
+#### Integration Testing
+- `-SetupOnly` flag for integration test runner
+- `-CaptureMetrics` flag for performance metrics on large templates
+- `-ExportConcurrency` and `-MaxExportParallelism` runner parameters
+- Scenario 8: Samba AD group existence checks with retry
+- `Assert-ParallelExecutionTiming` validation helper
+- `jim-test-all` alias for comprehensive test runs (unit + workflow + Pester)
+
+#### Logging and Observability
+- PostgreSQL logs integrated into unified Logs UI
+- Diagnostic logging for cache operations and stale entry invalidation
+- Separate Disconnected RPEI recorded when processing source deletions
+
+#### Infrastructure
+- Automated Structurizr diagram export via `jim-diagrams` alias
+- Review-dependabot Claude Code skill for dependency PR review
+
+### Changed
+- Purple theme refresh with vibrant logo-inspired colours
+- Navy-o5 dark theme improvements
+- Execution detail API returns all parallel sub-steps with `ExecutionMode` and `ConnectedSystemId`
+- Expression models and `IExpressionEvaluator` moved to JIM.Models for broader use
+- Change tracking built into `MetaverseServer` Create/Update methods
+- JIM version injected into diagram metadata from VERSION file
+- Build timestamp added to dev version suffix
+- Reduced logging level for high-rate sync events to improve log readability
+- Removed hardcoded `JIM_LOG_LEVEL` overrides from compose files
+- Removed fixed height constraint from MVA table on MVO detail page
+- Description attribute categorised under Identity on MVO detail page
+
+### Fixed
+- Cross-page reference persistence and export evaluation for `AsSplitQuery` materialisation failures
+- Post-load SQL repair for `AsSplitQuery` materialisation failures
+- LDAP export consolidation and drift merge for multi-valued attributes
+- Null-value Update exports now correctly confirmed during reconciliation
+- MVO Type included in cross-page reference resolution query
+- EF Core identity conflicts during cross-page reference resolution and pending export reconciliation
+- Pending CSO disconnections now accounted for when validating join constraints
+- Connected System settings not persisting on save
+- Partition column hidden on Run Profiles tab when connector doesn't support partitions
+- Run profile create/delete and dropdown positioning
+- Container tree duplicates and selection not persisting
+- Matching rule creation failing with duplicate key violation
+- `ExecuteDeleteAsync` used for pending export deletion with inner exception unwrapping
+- Split child/parent `SaveChanges` calls to prevent FK constraint violation
+- `FindTrackedOrAttach` used for untracked pending export persistence
+- History cleanup interval respected across worker restarts
+- Scheduler waits for full application readiness on startup
+- Graceful worker cancellation instead of immediate task deletion
+- Transient unresolved reference warnings downgraded to debug level
+- Button styling improvements and error alert panel overflow prevention
+- Visited link hover colour consistency
+- Log external ID instead of empty GUID for unpersisted CSOs in reference resolution
+- MVA table page size wired to global user preference
+- Cache diagnostic logging and stale entry invalidation on external ID changes
+- Integration test runner try/finally structure repaired
+- Total execution time captured in integration test log files
+
+### Performance
 - Batch database operations for export processing (single `SaveChangesAsync` per batch instead of per-object)
 - Bulk reference resolution for deferred exports (single query instead of N+1)
 - LDAP connector async pipelining with configurable "Export Concurrency" setting (1-16)
 - Parallel batch export processing with per-system `MaxExportParallelism` setting (1-16)
 - `SupportsParallelExport` connector capability flag (LDAP: true, File: false)
 - Parallel schedule step execution (steps at the same index run concurrently via `Task.WhenAll`)
-- Execution detail API returns all parallel sub-steps with `ExecutionMode` and `ConnectedSystemId`
-- Integration test parallel timing validation (`Assert-ParallelExecutionTiming`)
-- `-ExportConcurrency` and `-MaxExportParallelism` integration test runner parameters
-
-#### Scheduler Service (#168)
-- Schedule data model with cron and interval-based trigger support
-- Background scheduler service with 30-second polling cycle
-- Multi-step schedule execution (sequential and parallel step modes)
-- Schedule management REST API (CRUD, enable/disable, manual trigger, execution monitoring)
-- Schedule management UI integrated into Operations page
-- PowerShell cmdlets: `New-JIMSchedule`, `Get-JIMSchedule`, `Set-JIMSchedule`, `Remove-JIMSchedule`, `Enable-JIMSchedule`, `Disable-JIMSchedule`, `Add-JIMScheduleStep`, `Remove-JIMScheduleStep`, `Start-JIMSchedule`, `Get-JIMScheduleExecution`, `Stop-JIMScheduleExecution`
-- Scheduler integration tests (Scenario 6)
-
-#### Change History (#14, #269)
-- Full change tracking for MVOs and CSOs with timeline UI
-- Initiator and mechanism tracking (User, API, Sync, System)
-- Deleted objects view with change audit trail
-- Configurable retention and cleanup
-
-#### Progress Indication (#246)
-- Real-time progress bars for running operations
-- Percentage tracking and contextual messages on Operations page
-
-### Changed
-- PowerShell module now includes 46 cmdlets (11 new scheduler cmdlets)
+- Raw SQL for import and export bulk write operations (replacing EF Core bulk writes)
+- Lightweight ID-only matching for MVO join lookups
+- Skip CSO lookups entirely for first-ever imports on empty connected systems
+- Service-lifetime CSO lookup index to eliminate N+1 import queries
+- Tracker-aware persistence for untracked pending export entities
+- Parallel in-memory pending export reconciliation using `Parallel.ForEach`
+- Lightweight `AsNoTracking` query for pending export reconciliation
+- Skip pending export reconciliation for CSOs without exports
+- Parallel in-memory reference resolution using `Parallel.ForEach`
+- Lightweight DB queries for batch reference resolution
+- Raw SQL for `MarkBatchAsExecuting` status update
+- Diagnostic instrumentation spans for export DB operations
+- Worker heartbeat-based stale task detection and crash recovery
 
 ## [0.2.0-alpha] - 2026-01-27
 
@@ -105,6 +214,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.2.0-alpha...HEAD
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/TetronIO/JIM/compare/v0.2.0-alpha...v0.3.0
 [0.2.0-alpha]: https://github.com/TetronIO/JIM/compare/v0.1.0-alpha...v0.2.0-alpha
 [0.1.0-alpha]: https://github.com/TetronIO/JIM/releases/tag/v0.1.0-alpha

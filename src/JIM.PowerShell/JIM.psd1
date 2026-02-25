@@ -3,7 +3,7 @@
     RootModule = 'JIM.psm1'
 
     # Version number of this module.
-    ModuleVersion = '0.2.0'
+    ModuleVersion = '0.3.0'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Core', 'Desktop')
@@ -164,75 +164,35 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
-## 0.2.0 - Full Management Cmdlets
+## 0.3.0
 
-Major expansion from 3 to 64 cmdlets, providing complete administrative coverage of JIM.
+### New Features
+- Scheduler service with cron and interval-based triggers, multi-step execution, and full management UI
+- Change history with full audit trail, timeline UI, and configurable retention
+- Real-time progress indication for running operations
+- Dashboard redesign with informative cards and version display
+- Interactive browser-based authentication for PowerShell module
+- API key authentication for sync endpoints
+- LDAP schema discovery enhancements (writability detection, omSyntax 66 support)
+- Split and Join functions for multi-valued attribute transforms
 
-### New in 0.2.0
+### Performance
+- Raw SQL for import/export bulk writes (replacing EF Core)
+- Parallel batch export processing and reference resolution
+- LDAP async pipelining with configurable concurrency
+- CSO lookup index eliminating N+1 import queries
+- Worker heartbeat-based crash recovery
 
-#### Connected Systems (12 cmdlets)
-- Full CRUD for connected systems
-- Schema import and attribute/object type configuration
-- Hierarchy import with partition and container management
-- Connector definition discovery
+### Module Changes
+- 75 cmdlets (11 new scheduler cmdlets)
+- Flattened directory structure
+- Server version display on Connect-JIM
 
-#### Sync Rules (4 cmdlets)
-- Full CRUD for synchronisation rules
-
-#### Sync Rule Mappings (3 cmdlets)
-- Mapping management with expression support
-
-#### Object Matching Rules (4 cmdlets)
-- Full CRUD for object matching rules with reordering
-
-#### Scoping Criteria (5 cmdlets)
-- Group and criterion management for sync rule scoping
-
-#### Run Profiles (5 cmdlets)
-- Full CRUD plus execution with real-time progress tracking
-
-#### Schedules (11 cmdlets)
-- Full CRUD for schedule management
-- Enable/disable and manual trigger
-- Step management (add/remove)
-- Execution monitoring and cancellation
-
-#### Metaverse (7 cmdlets)
-- Object and object type queries
-- Full attribute CRUD (create, update, remove)
-- MVO deletion rule configuration
-
-#### Activities (2 cmdlets)
-- Activity queries with pagination and filtering
-- Execution statistics
-
-#### API Keys (4 cmdlets)
-- Full CRUD for API key management
-
-#### Certificates (6 cmdlets)
-- Full CRUD plus validation and export
-
-#### Security (1 cmdlet)
-- Role definitions
-
-#### Data Generation (3 cmdlets)
-- Example data sets, templates, and execution
-
-#### Expressions (1 cmdlet)
-- Expression testing and validation
-
-#### History (3 cmdlets)
-- Deleted object queries, history counts, and cleanup
-
-#### General
-- Name-based parameter alternatives for all cmdlets
-- Consistent error handling and pagination support
-
-For full documentation, see: https://github.com/TetronIO/JIM
+For full changelog, see: https://github.com/TetronIO/JIM/blob/main/CHANGELOG.md
 '@
 
             # Prerelease string of this module
-            Prerelease = 'alpha'
+            # Prerelease = ''
 
             # Flag to indicate whether the module requires explicit user acceptance for install/update/save
             RequireLicenseAcceptance = $false

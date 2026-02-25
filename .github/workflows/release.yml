@@ -97,9 +97,10 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
 
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -137,18 +138,37 @@ jobs:
         shell: pwsh
         run: |
           $manifestPath = './src/JIM.PowerShell/JIM.psd1'
-          $version = '${{ steps.version.outputs.VERSION }}'
+          $fullVersion = '${{ steps.version.outputs.VERSION }}'
+
+          # Split version and prerelease (e.g., "0.3.0-alpha" -> "0.3.0" + "alpha")
+          if ($fullVersion -match '^(\d+\.\d+\.\d+)(?:-(.+))?$') {
+            $moduleVersion = $Matches[1]
+            $prerelease = $Matches[2]
+          } else {
+            throw "Invalid version format: $fullVersion"
+          }
 
           # Read the manifest content
           $content = Get-Content $manifestPath -Raw
 
-          # Update ModuleVersion
-          $content = $content -replace "ModuleVersion\s*=\s*'[^']*'", "ModuleVersion = '$version'"
+          # Update ModuleVersion (numeric part only - PSGallery requires X.Y.Z format)
+          $content = $content -replace "ModuleVersion\s*=\s*'[^']*'", "ModuleVersion = '$moduleVersion'"
+
+          # Update or set Prerelease tag
+          if ($prerelease) {
+            # Set prerelease (uncomment if commented, or update value)
+            $content = $content -replace "#?\s*Prerelease\s*=\s*'[^']*'", "Prerelease = '$prerelease'"
+            Write-Host "Set Prerelease to '$prerelease'"
+          } else {
+            # Remove prerelease (comment it out)
+            $content = $content -replace "(\s*)Prerelease\s*=\s*'[^']*'", "`$1# Prerelease = ''"
+            Write-Host "Removed Prerelease (stable release)"
+          }
 
           # Write back
           Set-Content $manifestPath -Value $content
 
-          Write-Host "Updated module version to $version"
+          Write-Host "Updated module version to $moduleVersion (full: $fullVersion)"
 
       - name: Publish to PSGallery
         shell: pwsh
