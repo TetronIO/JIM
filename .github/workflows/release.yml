@@ -281,12 +281,11 @@ jobs:
           $changelog = Get-Content ./CHANGELOG.md -Raw
 
           # Extract section for this version
-          $pattern = "(?ms)## \[$version\].*?(?=## \[|$)"
+          # Use (?s) (single-line) so . matches newlines, and \z for absolute end-of-string
+          # This avoids (?m) multiline mode where $ matches every line boundary
+          $pattern = "(?s)## \[$([regex]::Escape($version))\][^\n]*\n(.*?)(?=\n## \[|\z)"
           if ($changelog -match $pattern) {
-            $notes = $Matches[0]
-            # Remove the header line
-            $notes = $notes -replace "## \[$version\].*?\n", ""
-            $notes = $notes.Trim()
+            $notes = $Matches[1].Trim()
           } else {
             $notes = "Release $version"
           }
