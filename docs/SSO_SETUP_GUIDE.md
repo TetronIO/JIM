@@ -439,7 +439,7 @@ If you configured PowerShell module authentication:
 
 ```powershell
 # Import the module
-Import-Module ./src/JIM.PowerShell/JIM -Force
+Import-Module ./src/JIM.PowerShell -Force
 
 # Connect interactively - opens browser for SSO
 Connect-JIM -Url "https://your-jim-url"

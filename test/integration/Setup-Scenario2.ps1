@@ -61,7 +61,7 @@ Write-TestSection "Scenario 2 Setup: Directory to Directory Synchronisation"
 # Step 1: Import JIM PowerShell module
 Write-TestStep "Step 1" "Importing JIM PowerShell module"
 
-$modulePath = "$PSScriptRoot/../../src/JIM.PowerShell/JIM/JIM.psd1"
+$modulePath = "$PSScriptRoot/../../src/JIM.PowerShell/JIM.psd1"
 if (-not (Test-Path $modulePath)) {
     throw "JIM PowerShell module not found at: $modulePath"
 }

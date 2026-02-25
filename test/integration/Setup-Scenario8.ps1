@@ -62,7 +62,7 @@ Write-TestSection "Scenario 8 Setup: Cross-domain Entitlement Synchronisation"
 # ============================================================================
 Write-TestStep "Step 1" "Importing JIM PowerShell module"
 
-$modulePath = "$PSScriptRoot/../../src/JIM.PowerShell/JIM/JIM.psd1"
+$modulePath = "$PSScriptRoot/../../src/JIM.PowerShell/JIM.psd1"
 if (-not (Test-Path $modulePath)) {
     throw "JIM PowerShell module not found at: $modulePath"
 }

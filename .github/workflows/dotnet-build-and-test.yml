@@ -39,7 +39,7 @@ jobs:
       shell: pwsh
       run: |
         $config = New-PesterConfiguration
-        $config.Run.Path = "./src/JIM.PowerShell/JIM/Tests"
+        $config.Run.Path = "./src/JIM.PowerShell/Tests"
         $config.Run.Exit = $true
         $config.Output.Verbosity = "Detailed"
         $config.TestResult.Enabled = $true

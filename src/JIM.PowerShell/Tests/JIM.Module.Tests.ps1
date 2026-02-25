@@ -9,7 +9,7 @@
 #>
 
 BeforeAll {
-    $ModulePath = Join-Path $PSScriptRoot '..'
+    $ModulePath = Join-Path $PSScriptRoot '..' 'JIM.psd1'
     $ModuleName = 'JIM'
 
     # Remove module if already loaded
@@ -44,7 +44,7 @@ Describe 'Module: JIM' {
         }
 
         It 'Should import without errors' {
-            { Import-Module (Join-Path $PSScriptRoot '..') -Force -ErrorAction Stop } | Should -Not -Throw
+            { Import-Module (Join-Path $PSScriptRoot '..' 'JIM.psd1') -Force -ErrorAction Stop } | Should -Not -Throw
         }
     }
 

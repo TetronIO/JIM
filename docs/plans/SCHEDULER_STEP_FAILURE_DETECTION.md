@@ -75,7 +75,7 @@ Activities are already the source of truth for operation outcomes (status, timin
 
 #### Integration Tests
 
-- **`src/JIM.PowerShell/JIM/Public/RunProfiles/Start-JIMRunProfile.ps1`** -- Changed `Write-Error` to `throw` for fail-fast error propagation
+- **`src/JIM.PowerShell/Public/RunProfiles/Start-JIMRunProfile.ps1`** -- Changed `Write-Error` to `throw` for fail-fast error propagation
 - **`test/integration/utils/Test-Helpers.ps1`** -- Added `Assert-ScheduleExecutionSuccess` function that validates both overall execution status AND each step's activity status
 - **`test/integration/scenarios/Invoke-Scenario6-SchedulerService.ps1`** -- Uses `Assert-ScheduleExecutionSuccess` at 3 validation points (manual trigger, multi-step, parallel)
 

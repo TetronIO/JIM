@@ -6,12 +6,13 @@
 #>
 
 BeforeAll {
-    $ModulePath = Join-Path $PSScriptRoot '..'
+    $ModulePath = Join-Path $PSScriptRoot '..' 'JIM.psd1'
     Get-Module JIM -ErrorAction SilentlyContinue | Remove-Module -Force
     Import-Module $ModulePath -Force
 
     # Import private functions for testing
-    . (Join-Path $ModulePath 'Private' 'Invoke-OAuthBrowserFlow.ps1')
+    $ModuleRoot = Split-Path $ModulePath -Parent
+    . (Join-Path $ModuleRoot 'Private' 'Invoke-OAuthBrowserFlow.ps1')
 }
 
 AfterAll {

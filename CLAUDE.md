@@ -523,7 +523,7 @@ The `VERSION` file is the single source of truth for JIM's version number. It fe
 **Release checklist (all steps require user approval):**
 1. Update `VERSION` file with new version
 2. Move `[Unreleased]` items in `CHANGELOG.md` to a new version section
-3. Update `src/JIM.PowerShell/JIM/JIM.psd1` — `ModuleVersion` field
+3. Update `src/JIM.PowerShell/JIM.psd1` — `ModuleVersion` field
 4. Commit: `git commit -m "Release vX.Y.Z"`
 5. Tag: `git tag vX.Y.Z`
 6. Push: `git push origin main --tags`

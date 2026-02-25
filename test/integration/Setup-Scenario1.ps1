@@ -62,7 +62,7 @@ Write-TestSection "Scenario 1 Setup: HR to Enterprise Directory"
 # Step 1: Import JIM PowerShell module
 Write-TestStep "Step 1" "Importing JIM PowerShell module"
 
-$modulePath = "$PSScriptRoot/../../src/JIM.PowerShell/JIM/JIM.psd1"
+$modulePath = "$PSScriptRoot/../../src/JIM.PowerShell/JIM.psd1"
 if (-not (Test-Path $modulePath)) {
     throw "JIM PowerShell module not found at: $modulePath"
 }
