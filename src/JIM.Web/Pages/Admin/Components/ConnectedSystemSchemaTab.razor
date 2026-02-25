@@ -263,9 +263,9 @@
                 <MudSwitch
                     @bind-Value="@_selectedObjectType.RemoveContributedAttributesOnObsoletion"
                     Color="@Color.Primary"
-                    Label="Remove contributed attributes when objects are obsoleted" />
+                    Label="Remove contributed attributes when source objects are deleted" />
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                    When enabled, attribute values contributed by objects of this type will be removed from the Metaverse when the source object is deleted or no longer present in the connected system.
+                    When enabled, this will remove attribute values on joined Metaverse objects contributed by this system, for this object type when the source object is deleted.
                 </MudText>
             </MudPaper>
         }

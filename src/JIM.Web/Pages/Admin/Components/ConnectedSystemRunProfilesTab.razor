@@ -85,7 +85,7 @@
                               Class="mt-3" Required="true" RequiredError="A name for the run profile is required" />
 
                 <MudSelect T="ConnectedSystemRunType" @bind-Value="_newRunProfile.RunType" Label="Run Type"
-                           Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" Class="mt-5" Required="true"
+                           Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Class="mt-5" Required="true"
                            RequiredError="A run profile type is required"
                            Validation="@(new Func<ConnectedSystemRunType, string?>(ValidateRunType))" Immediate="true">
                     <MudSelectItem Value="ConnectedSystemRunType.NotSet" Disabled="true">Select run type</MudSelectItem>
@@ -129,7 +129,7 @@
                 @if (ConnectedSystem.ConnectorDefinition.SupportsPartitions && ConnectedSystem.Partitions != null)
                 {
                     <MudSelect T="ConnectedSystemPartition" @bind-Value="_newRunProfile.Partition" Label="Partition"
-                               Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomCenter"
+                               Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomLeft"
                                Required="@ConnectedSystem.ConnectorDefinition.SupportsPartitions"
                                RequiredError="A run profile partition is required">
                         @foreach (var partition in ConnectedSystem.Partitions.Where(p => p.Selected))
@@ -167,7 +167,7 @@
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
     private bool IsNewRunProfileFormValid { get; set; }
-    private ConnectedSystemRunProfile _newRunProfile = new() { PageSize = 500, RunType = ConnectedSystemRunType.NotSet };
+    private ConnectedSystemRunProfile _newRunProfile = new() { RunType = ConnectedSystemRunType.NotSet };
     private readonly DialogOptions _newRunProfileDialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Small };
     private bool _newRunProfileDialogVisible;
 
@@ -181,7 +181,7 @@
 
     private Task HandleShowNewRunProfileDialogAsync()
     {
-        _newRunProfile = new ConnectedSystemRunProfile { PageSize = 500, RunType = ConnectedSystemRunType.NotSet };
+        _newRunProfile = new ConnectedSystemRunProfile { RunType = ConnectedSystemRunType.NotSet };
         _newRunProfileDialogVisible = true;
         return Task.CompletedTask;
     }
@@ -191,23 +191,37 @@
         if (ConnectedSystem.RunProfiles == null)
             return;
 
+        // Keep a reference to the partition for UI display after save
+        // (the repository nulls the navigation property to avoid EF identity conflicts)
+        var selectedPartition = _newRunProfile.Partition;
+
         var runProfile = new ConnectedSystemRunProfile
         {
             ConnectedSystemId = ConnectedSystem.Id,
             Name = _newRunProfile.Name,
             RunType = _newRunProfile.RunType,
-            Partition = _newRunProfile.Partition,
+            Partition = selectedPartition,
             PageSize = _newRunProfile.PageSize,
             FilePath = _newRunProfile.FilePath
         };
 
-        var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-        await Jim.ConnectedSystems.CreateConnectedSystemRunProfileAsync(runProfile, user);
+        try
+        {
+            var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
+            await Jim.ConnectedSystems.CreateConnectedSystemRunProfileAsync(runProfile, user);
 
-        Snackbar.Add("New run profile added.", Severity.Success);
+            // Restore partition reference for UI display, then add to local collection
+            runProfile.Partition = selectedPartition;
+            ConnectedSystem.RunProfiles.Add(runProfile);
 
-        _newRunProfileDialogVisible = false;
-        _newRunProfile = new ConnectedSystemRunProfile { PageSize = 500, RunType = ConnectedSystemRunType.NotSet };
+            Snackbar.Add("New run profile added.", Severity.Success);
+            _newRunProfileDialogVisible = false;
+            _newRunProfile = new ConnectedSystemRunProfile { RunType = ConnectedSystemRunType.NotSet };
+        }
+        catch
+        {
+            Snackbar.Add("Failed to create run profile. Please try again.", Severity.Error);
+        }
     }
 
     private async Task HandleRunProfileDeleteAsync(ConnectedSystemRunProfile connectedSystemRunProfile)

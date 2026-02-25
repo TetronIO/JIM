@@ -68,7 +68,7 @@ public class ConnectedSystemRunProfile : IAuditable
     /// <summary>
     /// How many items to process in one go via the Connector.
     /// </summary>
-    public int PageSize { get; set; }
+    public int PageSize { get; set; } = 100;
 
     /// <summary>
     /// If this run profile is for a file-based connector, then a full path to the file to read from/write to is required.

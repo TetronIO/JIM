@@ -1905,16 +1905,24 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     #region Connected System Run Profiles
     public async Task CreateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile)
     {
-        Repository.Database.ConnectedSystemRunProfiles.Add(runProfile);
+        // Use Entry().State instead of Add() to avoid EF Core graph traversal.
+        // The Partition navigation property may reference an entity already tracked
+        // by a different DbContext instance (from the Blazor page load), causing
+        // identity conflicts when Add() traverses the object graph.
+        var partitionId = runProfile.Partition?.Id;
+        runProfile.Partition = null;
+
+        var entry = Repository.Database.Entry(runProfile);
+        entry.State = EntityState.Added;
+
+        if (partitionId.HasValue)
+            entry.Property("PartitionId").CurrentValue = partitionId.Value;
+
         await Repository.Database.SaveChangesAsync();
     }
 
     public async Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile)
     {
-        // is there any work to do?
-        if (!Repository.Database.ConnectedSystemRunProfiles.Any(q => q.Id == runProfile.Id))
-            return;
-
         // Null out the FK reference in Activities to preserve audit history
         // Only execute raw SQL if we have a real database connection (not mocked)
         try
@@ -1928,7 +1936,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // Expected when running with mocked DbContext in tests
         }
 
-        Repository.Database.ConnectedSystemRunProfiles.Remove(runProfile);
+        // Find the tracked instance if one exists (e.g. loaded by GetConnectedSystemAsync
+        // in the application layer), otherwise use the passed-in entity.
+        // This avoids identity conflicts when the caller's entity came from a different context.
+        var tracked = await Repository.Database.ConnectedSystemRunProfiles
+            .FirstOrDefaultAsync(q => q.Id == runProfile.Id);
+
+        if (tracked == null)
+            return;
+
+        Repository.Database.Entry(tracked).State = EntityState.Deleted;
         await Repository.Database.SaveChangesAsync();
     }
 
