@@ -26,11 +26,14 @@
                     <MudText Typo="Typo.button">Run Type</MudText>
                 </MudTableSortLabel>
             </MudTh>
-            <MudTh>
-                <MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Partition?.Name!)">
-                    <MudText Typo="Typo.button">Partition</MudText>
-                </MudTableSortLabel>
-            </MudTh>
+            @if (ConnectedSystem.ConnectorDefinition.SupportsPartitions)
+            {
+                <MudTh>
+                    <MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.Partition?.Name!)">
+                        <MudText Typo="Typo.button">Partition</MudText>
+                    </MudTableSortLabel>
+                </MudTh>
+            }
             <MudTh>
                 <MudTableSortLabel SortBy="new Func<ConnectedSystemRunProfile, object>(x => x.PageSize)">
                     <MudText Typo="Typo.button">Page Size</MudText>
@@ -48,7 +51,10 @@
         <RowTemplate>
             <MudTd DataLabel="Name">@context.Name</MudTd>
             <MudTd DataLabel="Run Type">@context.RunType.ToString().SplitOnCapitalLetters()</MudTd>
-            <MudTd DataLabel="Partition">@(context.Partition != null ? context.Partition.Name : "-")</MudTd>
+            @if (ConnectedSystem.ConnectorDefinition.SupportsPartitions)
+            {
+                <MudTd DataLabel="Partition">@(context.Partition != null ? context.Partition.Name : "-")</MudTd>
+            }
             <MudTd DataLabel="Page Size">@context.PageSize</MudTd>
             <MudTd DataLabel="File Path">
                 @if (!string.IsNullOrEmpty(context.FilePath))
@@ -111,15 +117,15 @@
                             @runType.ToString().SplitOnCapitalLetters()
                             @if (!runTypeSupported)
                             {
-                                <span> (not supported by Connector)</span>
+                                <span> (not supported by the connector)</span>
                             }
                         </MudSelectItem>
                     }
                 </MudSelect>
 
                 @if (_newRunProfile.RunType == ConnectedSystemRunType.FullImport ||
-                                                 _newRunProfile.RunType == ConnectedSystemRunType.DeltaImport ||
-                                                 _newRunProfile.RunType == ConnectedSystemRunType.Export)
+                                                                                 _newRunProfile.RunType == ConnectedSystemRunType.DeltaImport ||
+                                                                                 _newRunProfile.RunType == ConnectedSystemRunType.Export)
                 {
                     <MudTextField T="string" @bind-Value="_newRunProfile.FilePath" Label="File Path" Variant="Variant.Outlined"
                                   Class="mt-3"
@@ -140,8 +146,8 @@
                 }
 
                 @if (_newRunProfile.RunType == ConnectedSystemRunType.FullImport ||
-                                                 _newRunProfile.RunType == ConnectedSystemRunType.DeltaImport ||
-                                                 _newRunProfile.RunType == ConnectedSystemRunType.Export)
+                                                                                 _newRunProfile.RunType == ConnectedSystemRunType.DeltaImport ||
+                                                                                 _newRunProfile.RunType == ConnectedSystemRunType.Export)
                 {
                     <MudNumericField @bind-Value="_newRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined"
                                      Class="mt-3" Min="0" Step="100" Required="true"
