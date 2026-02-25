@@ -1282,7 +1282,7 @@ public class ExportEvaluationServer
     /// <param name="removedAttributes">Optional list of attribute values that were removed from the MVO.
     /// For multi-valued attributes, values in this list will create Remove changes instead of Add changes.</param>
     /// <returns>List of attribute value changes to export.</returns>
-    internal List<PendingExportAttributeValueChange> CreateAttributeValueChanges(
+    private List<PendingExportAttributeValueChange> CreateAttributeValueChanges(
         MetaverseObject mvo,
         SyncRule exportRule,
         List<MetaverseObjectAttributeValue> changedAttributes,
@@ -1478,13 +1478,60 @@ public class ExportEvaluationServer
                         mvoValue = changedValue;
                     }
 
-                    // NOTE: When attributes are recalled (removedAttributes != null), the MVO values are
-                    // already cleared by the sync processor. We do NOT generate null-clearing exports here
-                    // because target systems (e.g., LDAP/AD) may reject null values for mandatory attributes,
-                    // causing perpetual export failures. Proper handling of recall exports requires attribute
-                    // priority (Issue #91) to determine replacement values from alternative contributors.
-                    // For now, the target retains its existing values until the next full sync or until
-                    // attribute priority is implemented.
+                    // For single-valued attributes that were removed (recall), check if this attribute
+                    // is in the removals set. If so, generate an Update with null values to clear the
+                    // attribute on the target system. Without this, the old value gets sent as an Update
+                    // and no-net-change detection skips it (target already has the same value).
+                    if (mvoValue != null && removedAttributes != null && !isCreateOperation)
+                    {
+                        var isRemoval = removedAttributes.Any(rv =>
+                            rv.AttributeId == source.MetaverseAttribute.Id &&
+                            ((rv.Id != Guid.Empty && rv.Id == mvoValue.Id) ||
+                             (rv.Id == Guid.Empty &&
+                              rv.StringValue == mvoValue.StringValue &&
+                              rv.IntValue == mvoValue.IntValue &&
+                              rv.LongValue == mvoValue.LongValue &&
+                              rv.GuidValue == mvoValue.GuidValue &&
+                              rv.BoolValue == mvoValue.BoolValue &&
+                              rv.DateTimeValue == mvoValue.DateTimeValue)));
+
+                        if (isRemoval)
+                        {
+                            Log.Debug("CreateAttributeValueChanges: Single-valued attribute {AttrName} (Id={AttrId}) was recalled - " +
+                                "generating null Update to clear value on target",
+                                source.MetaverseAttribute.Name, source.MetaverseAttribute.Id);
+
+                            // Create an Update change with all-null values to clear the attribute on the target.
+                            // No-net-change detection will correctly see this as different from the target's
+                            // current (non-null) value and allow the export through.
+                            var clearChange = new PendingExportAttributeValueChange
+                            {
+                                Id = Guid.NewGuid(),
+                                AttributeId = mapping.TargetConnectedSystemAttribute.Id,
+                                ChangeType = PendingExportAttributeChangeType.Update
+                                // All value fields left null — this clears the attribute
+                            };
+
+                            // Apply no-net-change detection (target might already be cleared)
+                            if (canDetectNoNetChange)
+                            {
+                                var cacheKey = (existingCso!.Id, clearChange.AttributeId);
+                                var existingCsoValues = csoAttributeCache![cacheKey];
+
+                                if (IsCsoAttributeAlreadyCurrent(clearChange, existingCsoValues))
+                                {
+                                    Log.Debug("CreateAttributeValueChanges: Skipping recall clear for attribute {AttrId} on CSO {CsoId} - " +
+                                        "target already has no value",
+                                        clearChange.AttributeId, existingCso.Id);
+                                    csoAlreadyCurrentCount++;
+                                    continue;
+                                }
+                            }
+
+                            changes.Add(clearChange);
+                            continue;
+                        }
+                    }
 
                     mvoValues = mvoValue != null ? [mvoValue] : [];
                 }

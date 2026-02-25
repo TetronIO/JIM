@@ -23,12 +23,7 @@ public class ConnectedSystemDetailDto
     /// <summary>
     /// Creates a detailed DTO from a ConnectedSystem entity.
     /// </summary>
-    /// <param name="entity">The connected system entity.</param>
-    /// <param name="pendingExportCount">
-    /// Pre-computed pending export count. Required because GetConnectedSystemAsync
-    /// doesn't load the PendingExports navigation property (too expensive).
-    /// </param>
-    public static ConnectedSystemDetailDto FromEntity(ConnectedSystem entity, int pendingExportCount = 0)
+    public static ConnectedSystemDetailDto FromEntity(ConnectedSystem entity)
     {
         return new ConnectedSystemDetailDto
         {
@@ -49,7 +44,7 @@ public class ConnectedSystemDetailDto
                 .Select(ConnectedSystemObjectTypeDto.FromEntity)
                 .ToList() ?? new(),
             ObjectCount = entity.Objects?.Count ?? 0,
-            PendingExportCount = pendingExportCount
+            PendingExportCount = entity.PendingExports?.Count ?? 0
         };
     }
 }
