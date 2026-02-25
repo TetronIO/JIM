@@ -53,7 +53,7 @@ jobs:
         run: |
           Install-Module -Name Pester -MinimumVersion 5.0 -Force -Scope CurrentUser
           $config = New-PesterConfiguration
-          $config.Run.Path = './src/JIM.PowerShell/JIM/Tests'
+          $config.Run.Path = './src/JIM.PowerShell/Tests'
           $config.Run.Exit = $true
           $config.Output.Verbosity = 'Detailed'
           Invoke-Pester -Configuration $config
@@ -136,7 +136,7 @@ jobs:
       - name: Update module version
         shell: pwsh
         run: |
-          $manifestPath = './src/JIM.PowerShell/JIM/JIM.psd1'
+          $manifestPath = './src/JIM.PowerShell/JIM.psd1'
           $version = '${{ steps.version.outputs.VERSION }}'
 
           # Read the manifest content
@@ -160,13 +160,16 @@ jobs:
             exit 0
           }
 
-          $modulePath = './src/JIM.PowerShell/JIM'
+          # Publish-Module requires the folder name to match the module name ('JIM')
+          $stagingPath = './publish-staging/JIM'
+          New-Item -ItemType Directory -Path $stagingPath -Force | Out-Null
+          Copy-Item -Path './src/JIM.PowerShell/*' -Destination $stagingPath -Recurse -Exclude 'Tests'
 
           # Test the module can be imported
-          Import-Module $modulePath -Force
+          Import-Module $stagingPath -Force
 
           # Publish to PSGallery
-          Publish-Module -Path $modulePath -NuGetApiKey $env:PSGALLERY_API_KEY -Verbose
+          Publish-Module -Path $stagingPath -NuGetApiKey $env:PSGALLERY_API_KEY -Verbose
 
   # Job 4: Create release bundle for air-gapped deployments
   create-bundle:

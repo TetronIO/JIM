@@ -62,7 +62,7 @@ jim-test-all() {
 
   echo ""
   echo "=== Running Pester tests ==="
-  pwsh -NoProfile -Command "Import-Module Pester; \$config = New-PesterConfiguration; \$config.Run.Path = './src/JIM.PowerShell/JIM/Tests'; \$config.Output.Verbosity = 'Detailed'; Invoke-Pester -Configuration \$config" 2>&1 | tee "$pester_log"
+  pwsh -NoProfile -Command "Import-Module Pester; \$config = New-PesterConfiguration; \$config.Run.Path = './src/JIM.PowerShell/Tests'; \$config.Output.Verbosity = 'Detailed'; Invoke-Pester -Configuration \$config" 2>&1 | tee "$pester_log"
   pester_rc=$?
 
   dotnet_summary=$(grep -E "^(Passed!|Failed!)" "$dotnet_log")
@@ -100,7 +100,7 @@ jim-test-all() {
   [ "$dotnet_rc" -ne 0 ] || [ "$pester_rc" -ne 0 ] && return 1
   return 0
 }
-alias jim-test-ps='pwsh -NoProfile -Command "Import-Module Pester; \$config = New-PesterConfiguration; \$config.Run.Path = \"./src/JIM.PowerShell/JIM/Tests\"; \$config.Output.Verbosity = \"Detailed\"; Invoke-Pester -Configuration \$config"'
+alias jim-test-ps='pwsh -NoProfile -Command "Import-Module Pester; \$config = New-PesterConfiguration; \$config.Run.Path = \"./src/JIM.PowerShell/Tests\"; \$config.Output.Verbosity = \"Detailed\"; Invoke-Pester -Configuration \$config"'
 alias jim-clean='dotnet clean JIM.sln && dotnet build JIM.sln'
 
 # Local run aliases - source .env and override DB hostname for local access

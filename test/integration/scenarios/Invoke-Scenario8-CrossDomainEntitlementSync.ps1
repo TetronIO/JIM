@@ -124,7 +124,7 @@ try {
     Write-Host "✓ JIM configured for Scenario 8" -ForegroundColor Green
 
     # Re-import module to ensure we have connection
-    $modulePath = "$PSScriptRoot/../../../src/JIM.PowerShell/JIM/JIM.psd1"
+    $modulePath = "$PSScriptRoot/../../../src/JIM.PowerShell/JIM.psd1"
     Import-Module $modulePath -Force -ErrorAction Stop
     Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 

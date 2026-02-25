@@ -562,20 +562,20 @@ Enable-JimSchedule -Id $schedule.Id
 ```
 
 ### Files Created
-- `src/JIM.PowerShell/JIM/Public/Schedules/Get-JIMSchedule.ps1`
-- `src/JIM.PowerShell/JIM/Public/Schedules/New-JIMSchedule.ps1`
-- `src/JIM.PowerShell/JIM/Public/Schedules/Set-JIMSchedule.ps1`
-- `src/JIM.PowerShell/JIM/Public/Schedules/Remove-JIMSchedule.ps1`
-- `src/JIM.PowerShell/JIM/Public/Schedules/Enable-JIMSchedule.ps1`
-- `src/JIM.PowerShell/JIM/Public/Schedules/Disable-JIMSchedule.ps1`
-- `src/JIM.PowerShell/JIM/Public/Schedules/Start-JIMSchedule.ps1`
-- `src/JIM.PowerShell/JIM/Public/Schedules/Add-JIMScheduleStep.ps1`
-- `src/JIM.PowerShell/JIM/Public/Schedules/Remove-JIMScheduleStep.ps1`
-- `src/JIM.PowerShell/JIM/Public/Schedules/Get-JIMScheduleExecution.ps1`
-- `src/JIM.PowerShell/JIM/Public/Schedules/Stop-JIMScheduleExecution.ps1`
+- `src/JIM.PowerShell/Public/Schedules/Get-JIMSchedule.ps1`
+- `src/JIM.PowerShell/Public/Schedules/New-JIMSchedule.ps1`
+- `src/JIM.PowerShell/Public/Schedules/Set-JIMSchedule.ps1`
+- `src/JIM.PowerShell/Public/Schedules/Remove-JIMSchedule.ps1`
+- `src/JIM.PowerShell/Public/Schedules/Enable-JIMSchedule.ps1`
+- `src/JIM.PowerShell/Public/Schedules/Disable-JIMSchedule.ps1`
+- `src/JIM.PowerShell/Public/Schedules/Start-JIMSchedule.ps1`
+- `src/JIM.PowerShell/Public/Schedules/Add-JIMScheduleStep.ps1`
+- `src/JIM.PowerShell/Public/Schedules/Remove-JIMScheduleStep.ps1`
+- `src/JIM.PowerShell/Public/Schedules/Get-JIMScheduleExecution.ps1`
+- `src/JIM.PowerShell/Public/Schedules/Stop-JIMScheduleExecution.ps1`
 
 ### Files Modified
-- `src/JIM.PowerShell/JIM/JIM.psd1` - Added 11 new cmdlets to FunctionsToExport
+- `src/JIM.PowerShell/JIM.psd1` - Added 11 new cmdlets to FunctionsToExport
 
 ---
 

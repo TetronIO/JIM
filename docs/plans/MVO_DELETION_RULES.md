@@ -185,7 +185,7 @@ API and PowerShell support:
 - `/workspaces/JIM/src/JIM.Models/Logic/SyncRule.cs`
 - `/workspaces/JIM/src/JIM.Application/JimApplication.cs`
 - `/workspaces/JIM/src/JIM.Web/Controllers/Api/MetaverseController.cs`
-- `/workspaces/JIM/src/JIM.PowerShell/JIM/Public/Metaverse/Set-JIMMetaverseObjectType.ps1`
+- `/workspaces/JIM/src/JIM.PowerShell/Public/Metaverse/Set-JIMMetaverseObjectType.ps1`
 - `/workspaces/JIM/src/JIM.Worker/Worker.cs`
 - `/workspaces/JIM/src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs`
 - `/workspaces/JIM/test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1`

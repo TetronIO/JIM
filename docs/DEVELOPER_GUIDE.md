@@ -888,27 +888,26 @@ For production deployments, consider using Docker volume drivers or bind mounts 
 
 ## PowerShell Module Development
 
-The JIM PowerShell module (`src/JIM.PowerShell/JIM/`) provides cmdlets for scripting and automation. It's designed to work with the JIM API.
+The JIM PowerShell module (`src/JIM.PowerShell/`) provides cmdlets for scripting and automation. It's designed to work with the JIM API.
 
 ### Module Structure
 
 ```
 src/JIM.PowerShell/
-+-- JIM/
-    +-- JIM.psd1              # Module manifest
-    +-- JIM.psm1              # Module loader
-    +-- Public/               # Exported cmdlets
-    |   +-- Activities/       # Get-JIMActivity, Get-JIMActivityItem
-    |   +-- ApiKeys/          # *-JIMApiKey cmdlets
-    |   +-- Certificates/     # *-JIMCertificate cmdlets
-    |   +-- Connection/       # Connect-JIM, Disconnect-JIM, Test-JIMConnection
-    |   +-- ConnectedSystems/ # *-JIMConnectedSystem cmdlets
-    |   +-- DataGeneration/   # *-JIMDataGeneration* cmdlets
-    |   +-- Metaverse/        # *-JIMMetaverse* cmdlets
-    |   +-- RunProfiles/      # *-JIMRunProfile cmdlets
-    |   +-- SyncRules/        # *-JIMSyncRule cmdlets
-    +-- Private/              # Internal helper functions
-    +-- Tests/                # Pester tests
++-- JIM.psd1              # Module manifest
++-- JIM.psm1              # Module loader
++-- Public/               # Exported cmdlets
+|   +-- Activities/       # Get-JIMActivity, Get-JIMActivityItem
+|   +-- ApiKeys/          # *-JIMApiKey cmdlets
+|   +-- Certificates/     # *-JIMCertificate cmdlets
+|   +-- Connection/       # Connect-JIM, Disconnect-JIM, Test-JIMConnection
+|   +-- ConnectedSystems/ # *-JIMConnectedSystem cmdlets
+|   +-- DataGeneration/   # *-JIMDataGeneration* cmdlets
+|   +-- Metaverse/        # *-JIMMetaverse* cmdlets
+|   +-- RunProfiles/      # *-JIMRunProfile cmdlets
+|   +-- SyncRules/        # *-JIMSyncRule cmdlets
++-- Private/              # Internal helper functions
++-- Tests/                # Pester tests
 ```
 
 ### Loading the Module in Devcontainer
@@ -917,7 +916,7 @@ The module is automatically available. Import it with:
 
 ```powershell
 # Import from the repository
-Import-Module ./src/JIM.PowerShell/JIM -Force
+Import-Module ./src/JIM.PowerShell -Force
 
 # Verify it loaded
 Get-Module JIM
@@ -1026,7 +1025,7 @@ jim-test-ps
 
 4. **Test the cmdlet**:
    ```powershell
-   Import-Module ./src/JIM.PowerShell/JIM -Force
+   Import-Module ./src/JIM.PowerShell -Force
    # Start JIM stack first: jim-stack
    Connect-JIM -BaseUrl "http://localhost:5200" -ApiKey "your-api-key"
    Verb-JIMNoun -RequiredParam "value"

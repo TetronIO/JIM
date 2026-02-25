@@ -183,7 +183,7 @@ services:
 
     # Copy PowerShell module
     Write-Host "`nCopying PowerShell module..." -ForegroundColor Cyan
-    $psModuleSrc = Join-Path $RepoRoot "src/JIM.PowerShell/JIM"
+    $psModuleSrc = Join-Path $RepoRoot "src/JIM.PowerShell"
     $psModuleDst = Join-Path $bundlePath "powershell/JIM"
 
     if (Test-Path $psModuleSrc) {
