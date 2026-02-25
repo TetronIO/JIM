@@ -612,12 +612,13 @@ public class ExportEvaluationNoChangeTests
     #region CreateAttributeValueChanges - Recall Tests
 
     /// <summary>
-    /// When attributes are recalled (removed from MVO), CreateAttributeValueChanges should
-    /// generate null-clearing Update changes for each recalled attribute. This ensures target
-    /// systems receive exports that clear the recalled values.
+    /// When ALL changed attributes are removals (pure recall), CreateAttributeValueChanges should
+    /// return an empty list. Recall clears MVO attributes which would cause expression mappings
+    /// to evaluate against incomplete data. Until attribute priority (Issue #91) is implemented,
+    /// the target retains its existing values.
     /// </summary>
     [Test]
-    public void CreateAttributeValueChanges_RecalledSingleValuedAttributes_GeneratesNullClearingChangesAsync()
+    public void CreateAttributeValueChanges_RecalledSingleValuedAttributes_ProducesNoChangesAsync()
     {
         // Arrange
         var sourceSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Source System");
@@ -735,31 +736,20 @@ public class ExportEvaluationNoChangeTests
             csoAlreadyCurrentCount: out var skippedCount,
             removedAttributes: removedAttributes);
 
-        // Assert: 2 null-clearing changes should be generated (one per recalled attribute)
-        Assert.That(changes, Has.Count.EqualTo(2),
-            "Expected 2 null-clearing changes — one for each recalled attribute");
+        // Assert: no changes should be generated (pure recall = early return)
+        Assert.That(changes, Is.Empty,
+            "Pure recall should produce no export changes (target retains existing values until Issue #91)");
         Assert.That(skippedCount, Is.EqualTo(0),
-            "No attributes should be skipped (target has non-null values that differ from null)");
-
-        // Verify changes are Updates with null values targeting the correct attributes
-        var displayNameChange = changes.SingleOrDefault(c => c.AttributeId == targetDisplayNameAttr.Id);
-        Assert.That(displayNameChange, Is.Not.Null, "Expected a change for DisplayName");
-        Assert.That(displayNameChange!.ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Update));
-        Assert.That(displayNameChange.StringValue, Is.Null, "DisplayName should be cleared to null");
-
-        var employeeIdChange = changes.SingleOrDefault(c => c.AttributeId == targetEmployeeIdAttr.Id);
-        Assert.That(employeeIdChange, Is.Not.Null, "Expected a change for EmployeeId");
-        Assert.That(employeeIdChange!.ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Update));
-        Assert.That(employeeIdChange.StringValue, Is.Null, "EmployeeId should be cleared to null");
+            "No attributes should be skipped (early return before evaluation)");
     }
 
     /// <summary>
-    /// Tests the full export evaluation flow for recalled attributes. When attributes are recalled,
-    /// the evaluation should create a PendingExport with null-clearing attribute value changes
-    /// targeting the downstream connected system.
+    /// Tests the full export evaluation flow for recalled attributes. When ALL changed attributes
+    /// are removals (pure recall), no pending exports should be created because the target retains
+    /// its existing values until attribute priority (Issue #91) is implemented.
     /// </summary>
     [Test]
-    public async Task EvaluateExportRules_RecalledAttributes_CreatesPendingExportAsync()
+    public async Task EvaluateExportRules_RecalledAttributes_ProducesNoPendingExportAsync()
     {
         // Arrange
         var sourceSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Source System");
@@ -894,23 +884,9 @@ public class ExportEvaluationNoChangeTests
             mvo, changedAttributes, sourceSystem, cache,
             removedAttributes: removedAttributes);
 
-        // Assert: should create exactly 1 pending export with 2 null-clearing attribute changes
-        Assert.That(result.PendingExports, Has.Count.EqualTo(1),
-            "Expected 1 PendingExport on the target system");
-
-        var pendingExport = result.PendingExports[0];
-        Assert.That(pendingExport.ConnectedSystemId, Is.EqualTo(targetSystem.Id));
-        Assert.That(pendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
-        Assert.That(pendingExport.AttributeValueChanges, Has.Count.EqualTo(2),
-            "Expected 2 null-clearing attribute value changes");
-
-        // Verify all changes are Updates with null values
-        foreach (var change in pendingExport.AttributeValueChanges)
-        {
-            Assert.That(change.ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Update));
-            Assert.That(change.StringValue, Is.Null,
-                $"Attribute {change.AttributeId} should have null value (clearing recalled attribute)");
-        }
+        // Assert: no pending exports should be created (pure recall = early return, no changes)
+        Assert.That(result.PendingExports, Is.Empty,
+            "Pure recall should produce no pending exports (target retains existing values until Issue #91)");
     }
 
     #endregion

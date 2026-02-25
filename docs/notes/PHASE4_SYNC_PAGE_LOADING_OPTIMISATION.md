@@ -406,7 +406,65 @@ Tests 2 and 6 (`RemoveContributedAttributesOnObsoletion=false`) are unaffected �
    stale pending exports from a prior test. This prevents cascade failures where Test N's LDAP Export picks
    up unrelated pending exports from Test N-1.
 
-3. **Open issue — recall pending exports**: Tests 1 and 5 Assert 3 ("pending exports created on LDAP target
-   after recall") is a hard failure. The code has the plumbing (`_pendingExportEvaluations` is populated
-   during recall in `ProcessObsoleteConnectedSystemObjectAsync`) but pending exports are not materialising
-   in the database. Under investigation — see findings below.
+3. **Recall export handling — resolved**: See entry below (Pure Recall Export Handling).
+
+### 2026-02-25: Pure Recall Export Handling
+
+**Problem**: After attribute recall, the MVO attribute values are cleared. The initial approach
+(commit `9b382409`) generated null-clearing pending exports to clear those values on downstream
+target systems. However, this caused two cascading failures:
+
+1. **Expression mappings produce invalid values**: DN expressions like
+   `"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + "..."` evaluate against
+   post-recall null MVO attributes, producing invalid DNs (e.g., `OU=,OU=Users,...`)
+2. **Target systems reject null values**: LDAP/AD rejects null writes for mandatory attributes
+   like `sAMAccountName` or `displayName`
+
+**Root cause**: Recall clears MVO attributes *before* export evaluation runs. Expression-based
+mappings and direct attribute mappings both operate on the post-recall MVO state where referenced
+attributes no longer exist, producing either invalid values or null-clearing changes that target
+systems cannot process.
+
+**Fix**: Added an early return in `CreateAttributeValueChanges` that detects pure recall operations
+(all `changedAttributes` are in the `removedAttributes` set) and returns an empty changes list.
+This skips the entire export evaluation — no pending exports are generated. The target system
+retains its existing attribute values after recall.
+
+Also removed the null-clearing code block (~50 lines) that was added in commit `9b382409`.
+
+**Rationale**: Proper recall export handling requires attribute priority (Issue #91) to determine
+replacement values from alternative contributors. Until that is implemented, the safest approach
+is to skip export evaluation entirely during pure recall, rather than sending invalid or null values
+that could corrupt target system data or fail export operations.
+
+**Unit tests updated**:
+- `CreateAttributeValueChanges_RecalledSingleValuedAttributes_ProducesNoChangesAsync` — verifies
+  that pure recall returns an empty changes list
+- `EvaluateExportRules_RecalledAttributes_ProducesNoPendingExportAsync` — verifies the full flow
+  produces no pending exports for pure recall
+
+**Also fixed**: `MetaverseObject.IsPendingDeletion` computed property now supports both
+`WhenLastConnectorDisconnected` and `WhenAuthoritativeSourceDisconnected` deletion rules.
+Previously it only checked for `WhenLastConnectorDisconnected`, causing
+`isPendingDeletion=false` for MVOs pending deletion via authoritative source disconnection.
+
+**Also fixed** (commit `e00f6c14`): The REST API `GET /api/synchronisation/connected-systems/{id}`
+endpoint was returning `PendingExportCount = 0` because `GetConnectedSystemAsync` no longer loads
+the `PendingExports` navigation property (removed as part of the Phase 4 query optimisations). Fixed
+by calling `GetPendingExportsCountAsync` (a dedicated count query) and passing the result to
+`ConnectedSystemDetailDto.FromEntity`.
+
+## Next Steps
+
+### Attribute Priority (Issue #91)
+
+When a contributor system disconnects and recall clears its MVO attributes, the system should
+determine if an alternative contributor exists and flow that contributor's values instead of
+leaving the attributes empty. This requires implementing attribute priority — a mechanism for
+ranking multiple contributors of the same MVO attribute and automatically falling back to the
+next-highest-priority contributor when the current one disconnects.
+
+Until Issue #91 is implemented:
+- Pure recall skips export evaluation (target retains existing values)
+- MVO attributes are cleared but target systems are not updated
+- Re-importing from the same source will re-contribute the attributes and flow them to targets
