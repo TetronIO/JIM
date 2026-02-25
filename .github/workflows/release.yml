@@ -179,6 +179,15 @@ jobs:
             exit 0
           }
 
+          $fullVersion = '${{ steps.version.outputs.VERSION }}'
+
+          # Check if this version already exists on PSGallery (idempotency for re-runs)
+          $existing = Find-Module -Name JIM -RequiredVersion $fullVersion -ErrorAction SilentlyContinue
+          if ($existing) {
+            Write-Host "Version $fullVersion already published to PSGallery - skipping"
+            exit 0
+          }
+
           # Publish-Module requires the folder name to match the module name ('JIM')
           $stagingPath = './publish-staging/JIM'
           New-Item -ItemType Directory -Path $stagingPath -Force | Out-Null
