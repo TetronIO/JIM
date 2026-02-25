@@ -276,25 +276,31 @@ var result = await metaVerseObjects.ToListAsync();
 
 ### Phase 4: Optimise Sync Page Loading ✅
 
-**Target**: `GetConnectedSystemObjectsAsync` and `GetConnectedSystemObjectsModifiedSinceAsync`
+**Target**: `GetConnectedSystemObjectsAsync`, `GetConnectedSystemObjectsModifiedSinceAsync`, and `GetConnectedSystemObjectsForReferenceResolutionAsync`
 
-**Status**: Quick wins implemented. Deeper optimisation (raw SQL page loading) deferred — requires extensive integration testing and the Include chains are still necessary for sync processor correctness.
+**Status**: Complete. AsSplitQuery materialisation bug eliminated at source. All post-load repair code removed.
 
-**Changes made**:
+**Changes made (prior)**:
 1. ✅ Fixed synchronous `.Count()` → `CountAsync()` in `GetConnectedSystemObjectsAsync` (was blocking a thread pool thread)
 2. ✅ Removed dead `returnAttributes` branching — the `if/else` branches were identical and the only caller always passed `false`. Eliminated the parameter from the interface, application layer, and repository, consolidating to a single query
-3. ✅ Added missing `ContributedBySystem` include to `GetConnectedSystemObjectsModifiedSinceAsync` (delta sync method) — without this, `ProcessObsoleteConnectedSystemObjectAsync` cannot identify attributes contributed by a disconnecting system when `RemoveContributedAttributesOnObsoletion` is enabled during delta sync
+3. ✅ Added missing `ContributedBySystem` include to `GetConnectedSystemObjectsModifiedSinceAsync` (delta sync method)
+
+**Changes made (AsSplitQuery elimination)**:
+4. ✅ Replaced `AsSplitQuery()` + 8-branch deep Include chains with two separate queries inside a `RepeatableRead` transaction across all 3 sync page-load methods
+5. ✅ Added `LoadMetaverseObjectsForCsosAsync()` helper — loads MVOs separately, EF relationship fixup auto-populates `cso.MetaverseObject` navigations
+6. ✅ Removed `RepairReferenceValueMaterialisationAsync` (~80 lines of post-load SQL patching)
+7. ✅ Removed `RepairMvoAttributeValueMaterialisationAsync` (~90 lines of post-load SQL patching)
+8. ✅ Removed `ReferenceRepairRow` and `MvoAttributeValueRepairRow` DTOs
+9. ✅ Updated AsSplitQuery workaround comments in DriftDetectionService, ExportEvaluationServer, and SyncRuleMappingProcessor
 
 **Files changed**:
-- `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` — query consolidation + missing include
-- `src/JIM.Data/Repositories/IConnectedSystemRepository.cs` — removed `returnAttributes` parameter
-- `src/JIM.Application/Servers/ConnectedSystemServer.cs` — removed `returnAttributes` parameter
-- `src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs` — removed `returnAttributes: false` argument
+- `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` — query refactoring, repair removal, helper addition
+- `src/JIM.Application/Services/DriftDetectionService.cs` — comment cleanup
+- `src/JIM.Application/Servers/ExportEvaluationServer.cs` — comment cleanup
+- `src/JIM.Worker/Processors/SyncRuleMappingProcessor.cs` — comment cleanup
+- `test/JIM.Worker.Tests/OutboundSync/DriftDetectionTests.cs` — test comment update
 
-**Deeper optimisation** (deferred):
-- Replace the 7+ split queries with 2-3 explicit raw SQL queries with manual mapping
-- Load CSOs and their attribute values in separate queries, then stitch in C#
-- Avoid loading reference value chains unless the sync processor actually needs them for the current operation
+**Design notes**: See `docs/notes/PHASE4_SYNC_PAGE_LOADING_OPTIMISATION.md` for the full rationale and implementation details
 
 ---
 

@@ -1555,9 +1555,9 @@ public class ExportEvaluationServer
                             attributeChange.LongValue = mvoValue.LongValue;
                             break;
                         case AttributeDataType.Reference:
-                            // For reference attributes, store the MVO ID as unresolved reference - will be resolved during export execution.
-                            // Prefer navigation property, fall back to scalar FK (handles AsSplitQuery materialisation bug
-                            // where ReferenceValue navigation may be null but ReferenceValueId is populated).
+                            // For reference attributes, store the MVO ID as unresolved reference — will be
+                            // resolved during export execution. Use navigation with scalar FK fallback for
+                            // test compatibility.
                             var referencedMvoId = mvoValue.ReferenceValue?.Id ?? mvoValue.ReferenceValueId;
                             if (referencedMvoId.HasValue)
                             {

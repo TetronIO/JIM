@@ -404,8 +404,7 @@ public static class SyncRuleMappingProcessor
         bool isFinalReferencePass)
     {
         // Helper: get the target MVO ID for a CSO attribute value's reference.
-        // Uses MetaverseObjectId scalar FK (preferred, always set by repository repair)
-        // with MetaverseObject navigation as fallback.
+        // Uses MetaverseObjectId scalar FK (preferred), with MetaverseObject navigation as fallback.
         static Guid? GetReferencedMvoId(ConnectedSystemObjectAttributeValue csoav)
         {
             if (csoav.ReferenceValue == null)
@@ -414,10 +413,6 @@ public static class SyncRuleMappingProcessor
         }
 
         // A reference is "resolved" if ReferenceValue exists AND has a MetaverseObjectId.
-        // Previously this required ReferenceValue.MetaverseObject (the navigation property),
-        // but AsSplitQuery() (dotnet/efcore#33826) can fail to materialise the deeper
-        // navigation. The repository repair populates MetaverseObjectId on stub CSOs,
-        // so using the scalar FK makes reference resolution resilient to the bug.
         static bool IsResolved(ConnectedSystemObjectAttributeValue csoav)
             => csoav.ReferenceValue != null && GetReferencedMvoId(csoav).HasValue;
 
@@ -524,7 +519,7 @@ public static class SyncRuleMappingProcessor
             };
 
             // Prefer setting the navigation property when available (EF can track the relationship).
-            // Fall back to scalar FK when only MetaverseObjectId is available (AsSplitQuery repair stubs).
+            // Fall back to scalar FK when only MetaverseObjectId is available.
             if (newCsoNewAttributeValue.ReferenceValue?.MetaverseObject != null)
             {
                 newMvoAv.ReferenceValue = newCsoNewAttributeValue.ReferenceValue.MetaverseObject;
