@@ -406,13 +406,19 @@ Tests 2 and 6 (`RemoveContributedAttributesOnObsoletion=false`) are unaffected �
    stale pending exports from a prior test. This prevents cascade failures where Test N's LDAP Export picks
    up unrelated pending exports from Test N-1.
 
-3. **Recall export handling — resolved**: See entry below (Pure Recall Export Handling).
+3. **Recall export handling — revised**: See entries below (Pure Recall Export Handling, then
+   Null-Clearing Recall Exports).
 
-### 2026-02-25: Pure Recall Export Handling
+### 2026-02-25: Pure Recall Export Handling (SUPERSEDED)
+
+> **Note**: This blanket skip approach was superseded by the targeted null-clearing logic described
+> in "Null-Clearing Recall Exports" below. The blanket skip was removed because it prevented
+> legitimate recall exports for secondary/supplementary source attributes.
 
 **Problem**: After attribute recall, the MVO attribute values are cleared. The initial approach
 (commit `9b382409`) generated null-clearing pending exports to clear those values on downstream
-target systems. However, this caused two cascading failures:
+target systems. However, this caused two cascading failures when recalling ALL attributes from
+the **sole/primary** source (a non-representative test scenario):
 
 1. **Expression mappings produce invalid values**: DN expressions like
    `"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + "..."` evaluate against
@@ -420,28 +426,41 @@ target systems. However, this caused two cascading failures:
 2. **Target systems reject null values**: LDAP/AD rejects null writes for mandatory attributes
    like `sAMAccountName` or `displayName`
 
-**Root cause**: Recall clears MVO attributes *before* export evaluation runs. Expression-based
-mappings and direct attribute mappings both operate on the post-recall MVO state where referenced
-attributes no longer exist, producing either invalid values or null-clearing changes that target
-systems cannot process.
+**Root cause**: The test scenario was non-representative — it recalled ALL attributes from a
+sole/primary source. In real-world usage, recall applies to secondary/supplementary sources whose
+attributes are non-critical. With a representative two-source topology, expression-based mappings
+reference primary source attributes (which remain intact) and evaluate correctly.
 
-**Fix**: Added an early return in `CreateAttributeValueChanges` that detects pure recall operations
-(all `changedAttributes` are in the `removedAttributes` set) and returns an empty changes list.
-This skips the entire export evaluation — no pending exports are generated. The target system
-retains its existing attribute values after recall.
+**Temporary fix**: Added a blanket early return in `CreateAttributeValueChanges` that skipped all
+export evaluation during pure recall. This was later replaced with targeted null-clearing logic.
 
-Also removed the null-clearing code block (~50 lines) that was added in commit `9b382409`.
+### 2026-02-25: Null-Clearing Recall Exports
 
-**Rationale**: Proper recall export handling requires attribute priority (Issue #91) to determine
-replacement values from alternative contributors. Until that is implemented, the safest approach
-is to skip export evaluation entirely during pure recall, rather than sending invalid or null values
-that could corrupt target system data or fail export operations.
+**Replaces**: The blanket "pure recall export skip" described above.
+
+**Problem**: The blanket skip prevented ALL export evaluation during recall, which blocked
+legitimate recall exports. When a secondary source (e.g., Training Records) contributes
+supplementary attributes exported to LDAP (`description`), recalling those attributes
+should generate null-clearing exports to clear them from the target system.
+
+**Fix**: Removed the blanket skip and added targeted null-clearing logic in
+`CreateAttributeValueChanges`:
+
+- When a single-valued attribute is in the `removedAttributes` set (i.e., it has been recalled),
+  the value assignment is skipped — all value fields remain null. This creates a null-clearing
+  `Update` change that differs from the CSO's current value, so no-net-change detection correctly
+  allows it through.
+- Expression-based mappings build their attribute dictionary from `mvo.AttributeValues` (post-recall
+  state). Since recalled attributes have been removed, expressions referencing primary-source
+  attributes (Display Name, Department, etc.) evaluate to unchanged values, and no-net-change
+  detection correctly skips them.
+- Multi-valued recall attributes already used the correct `Remove` change type and were unaffected.
 
 **Unit tests updated**:
-- `CreateAttributeValueChanges_RecalledSingleValuedAttributes_ProducesNoChangesAsync` — verifies
-  that pure recall returns an empty changes list
-- `EvaluateExportRules_RecalledAttributes_ProducesNoPendingExportAsync` — verifies the full flow
-  produces no pending exports for pure recall
+- `CreateAttributeValueChanges_RecalledSingleValuedAttributes_ProducesNullClearingChangesAsync` —
+  verifies that recalled single-valued attributes produce null-clearing export changes
+- `EvaluateExportRules_RecalledAttributes_ProducesPendingExportWithNullClearingChangesAsync` —
+  verifies the full flow produces a pending export with null-clearing attribute changes
 
 **Also fixed**: `MetaverseObject.IsPendingDeletion` computed property now supports both
 `WhenLastConnectorDisconnected` and `WhenAuthoritativeSourceDisconnected` deletion rules.
@@ -456,59 +475,50 @@ by calling `GetPendingExportsCountAsync` (a dedicated count query) and passing t
 
 ## Next Steps
 
-### LDAP Export Failure After Attribute Recall (Scenario 4, Test 3)
+### LDAP Export Failure After Attribute Recall (Scenario 4, Test 3) - RESOLVED
 
 Integration test Scenario 4 Test 3 (`WhenAuthoritativeSourceDisconnected` + immediate deletion)
-intermittently fails at the LDAP Export step. The failure occurs after attribute recall has cleared
-MVO attributes and the system attempts to export deprovisioning changes to LDAP.
+intermittently failed at the LDAP Export step. The failure occurred after attribute recall cleared
+ALL MVO attributes and the system attempted to export deprovisioning changes to LDAP.
 
-**Activity summary:**
-- Status: `CompleteWithWarning`
-- Result: `Export complete: 1 succeeded, 1 failed, 0 deferred`
-- Objects processed: 2 (1 deprovisioned successfully, 1 failed with `UnhandledError`)
+**Root cause:** The test scenario was **non-representative**. It used HR CSV as the sole source for
+all MVO attributes, then triggered recall on that primary source. This cleared ALL attributes
+(including identity-critical ones like `sAMAccountName`, `Display Name`, `Department`) before the
+deprovisioning export ran. Expression-based mappings (DN, `userAccountControl`, `accountExpires`)
+evaluated against null MVO values, producing invalid exports that LDAP rejected.
 
-**Attributes mapped for export (14 total):**
+In real-world usage, attribute recall applies to a **secondary/supplementary** source (e.g.,
+Training Records, Phonebook) that contributes non-critical attributes. The primary source (HR)
+controls identity-critical attributes and its disconnection triggers **deprovisioning**, not recall.
 
-Direct attribute mappings (11):
-| Metaverse Attribute | LDAP Attribute |
-|---|---|
-| Account Name | sAMAccountName |
-| First Name | givenName |
-| Last Name | sn |
-| Display Name | displayName |
-| Display Name | cn |
-| Email | mail |
-| Email | userPrincipalName |
-| Job Title | title |
-| Department | department |
-| Company | company |
-| Employee ID | employeeID |
+**Resolution (two changes):**
 
-Expression-based mappings (3):
-| LDAP Attribute | Source |
-|---|---|
-| distinguishedName | Expression (constructs DN from MV attributes) |
-| userAccountControl | Expression |
-| accountExpires | Expression |
+1. **Test revision:** Scenario 4 recall tests (Tests 1, 5) now use a two-source topology — HR CSV
+   (primary, identity-critical attributes) + Training CSV (secondary, supplementary attributes).
+   Recall is configured on the Training system's object type only. When Training data is removed,
+   only Training-contributed attributes (Training Status, Training Course Count) are recalled from
+   the MVO and cleared in LDAP. HR attributes remain intact and the AD user continues to function
+   correctly. Tests 3 and 4 (authoritative source disconnection) now set `recall=false` since recall
+   is irrelevant when the MVO is immediately deleted or pending deletion.
 
-**Error details:** The test infrastructure captures only the `UnhandledError` error type from the
-Activity Run Profile Execution Item — the underlying exception message and stack trace are only
-available in the worker container logs, which were not captured during these test runs.
+2. **Code fix:** Replaced the blanket "pure recall export skip" (which prevented ALL export evaluation
+   during recall) with targeted null-clearing logic. When single-valued attributes are recalled, the
+   export evaluation now creates pending exports with null values to clear them from target systems,
+   rather than copying the old (pre-recall) values. This works correctly because:
+   - Expression-based mappings (DN, `userAccountControl`) reference HR attributes which remain intact
+     after secondary-source recall, so they evaluate to unchanged values and no-net-change detection
+     correctly skips them.
+   - Direct mappings for recalled attributes create null-clearing changes which differ from the
+     target CSO's current values, generating pending exports that clear the attributes in LDAP.
+   - Multi-valued recall attributes already used the correct `Remove` change type and were unaffected.
 
-**Behaviour:** The failure is **intermittent** — some integration test runs pass Test 3 while others
-fail (confirmed across multiple runs on 2026-02-25). This suggests a timing or race condition
-rather than a deterministic logic error.
+**Training -> LDAP export mapping added:**
+| Metaverse Attribute | LDAP Attribute | Purpose |
+|---|---|---|
+| Training Status | `description` | Supplementary, safe to clear |
 
-**Likely cause:** After recall clears MVO attributes, expression-based mappings (particularly
-`distinguishedName`, which builds a DN from `Display Name`, `Department`, etc.) evaluate against
-null MVO attribute values, producing invalid values. LDAP rejects writes for mandatory attributes
-(`sAMAccountName`, `displayName`) with null or invalid values. This was the primary motivation for
-the "Pure Recall Export Handling" fix described above — skipping export evaluation entirely during
-pure recall avoids sending invalid or null values to target systems.
-
-**To investigate further:** Capture worker container logs during the export step
-(`docker compose logs jim.worker --tail=5000`) to get the full exception stack trace and identify
-which specific LDAP attribute or operation triggers the `UnhandledError`.
+Note: `Training Course Count` (Integer) cannot be mapped to `info` (Text) due to type mismatch.
+One Text mapping is sufficient to test end-to-end recall.
 
 ### Attribute Priority (Issue #91)
 
@@ -519,6 +529,5 @@ ranking multiple contributors of the same MVO attribute and automatically fallin
 next-highest-priority contributor when the current one disconnects.
 
 Until Issue #91 is implemented:
-- Pure recall skips export evaluation (target retains existing values)
-- MVO attributes are cleared but target systems are not updated
+- Recalled attributes are cleared from the MVO and null-clearing exports are sent to target systems
 - Re-importing from the same source will re-contribute the attributes and flow them to targets

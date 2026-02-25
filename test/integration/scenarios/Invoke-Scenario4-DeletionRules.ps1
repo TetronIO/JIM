@@ -3,46 +3,60 @@
     Test Scenario 4: MVO Deletion Rules - Comprehensive Coverage
 
 .DESCRIPTION
-    Validates ALL MVO deletion rule scenarios in a Source -> Target topology (CSV -> MVO -> LDAP).
+    Validates ALL MVO deletion rule scenarios using a representative two-source topology:
+      - HR CSV (primary source) -> MVO (User) -> LDAP (Samba AD)
+      - Training CSV (secondary source) -> joins to same MVO (supplementary attributes)
 
-    IMPORTANT: In this topology, each MVO has TWO connectors (CSV CSO + LDAP CSO). Removing a user
-    from the CSV source and running CSV import+sync only disconnects the CSV CSO. The LDAP CSO
-    remains joined. This is critical for understanding WhenLastConnectorDisconnected behaviour -
-    the MVO will NOT be deleted because the last connector has NOT disconnected.
+    The Training system contributes non-identity-critical attributes (Training Status -> description
+    in AD). These are safe to recall without breaking the AD user.
+    The HR system contributes identity-critical attributes (sAMAccountName, Display Name, Department
+    used in DN expression, etc.). HR disconnection triggers deprovisioning, not recall.
 
-    Test 1: WhenLastConnectorDisconnected + RemoveContributedAttributesOnObsoletion=true + GracePeriod=0
-        - Remove user from CSV, run CSV import+sync only
-        - Assert: MVO still exists (LDAP CSO still joined - this is NOT the last connector)
-        - Assert: CSV-contributed attributes are recalled (RemoveContributedAttributesOnObsoletion=true)
-        - Assert: No new pending exports on LDAP (recall skips export evaluation - Issue #91)
-        - NOTE: This is an UNDESIRABLE CONFIGURATION for Source->Target. The user is removed from
-          source but MVO persists with no source attributes. Target retains existing values until
-          attribute priority (Issue #91) enables proper recall export handling.
+    Recall tests (Tests 1, 5) use the Training source to test end-to-end attribute recall:
+    Training attributes are recalled from the MVO AND cleared from AD via LDAP export, with no
+    adverse effect on the AD user's identity (DN, sAMAccountName remain intact).
+
+    Deletion tests (Tests 3, 4) use the HR source as the authoritative deletion trigger with
+    recall disabled (recall is irrelevant when the MVO is being deleted).
+
+    IMPORTANT: In this topology, each MVO has up to THREE connectors (HR CSV CSO + Training CSV CSO
+    + LDAP CSO). Removing a user from one source disconnects only that source's CSO. The other
+    connectors remain joined.
+
+    Test 1: WhenLastConnectorDisconnected + Recall (Training source, end-to-end)
+        - Provision user via HR + Training, export Training attrs to LDAP
+        - Remove training record, run Training import+sync (obsoletes Training CSO)
+        - Assert: MVO still exists (HR CSO + LDAP CSO still joined)
+        - Assert: Training-contributed attributes recalled from MVO
+        - Assert: HR-contributed attributes retained on MVO
+        - Assert: Pending exports created on LDAP to clear Training attrs
+        - Assert: LDAP export succeeds, AD user functional, Training attrs cleared from AD
 
     Test 2: WhenLastConnectorDisconnected + RemoveContributedAttributesOnObsoletion=false + GracePeriod=0
-        - Remove user from CSV, run CSV import+sync only
+        - Remove user from HR CSV, run CSV import+sync only
         - Assert: MVO still exists (LDAP CSO still joined)
         - Assert: Attributes remain on MVO (RemoveContributedAttributesOnObsoletion=false)
         - Assert: No pending exports on LDAP (nothing changed on MVO)
 
     Test 3: WhenAuthoritativeSourceDisconnected + GracePeriod=0 + immediate deletion
-        - Configure CSV as authoritative source
+        - Configure CSV as authoritative source, recall=false
         - Remove user from CSV, run CSV import+sync only
         - Assert: MVO is deleted immediately (authoritative source disconnected, 0 grace period)
         - Assert: LDAP target is deprovisioned (pending export created for delete)
 
     Test 4: WhenAuthoritativeSourceDisconnected + GracePeriod=1 minute + deferred deletion
-        - Configure CSV as authoritative source with 1-minute grace period
+        - Configure CSV as authoritative source with 1-minute grace period, recall=false
         - Remove user from CSV, run CSV import+sync only
         - Assert: MVO exists but is marked for deletion (grace period not elapsed)
         - Wait for housekeeping to process (grace period expires)
         - Assert: MVO is deleted after grace period elapses
 
-    Test 5: Manual + RemoveContributedAttributesOnObsoletion=true + GracePeriod=0
-        - Remove user from CSV, run CSV import+sync only
+    Test 5: Manual + Recall (Training source, end-to-end)
+        - Same as Test 1 but with Manual deletion rule
         - Assert: MVO still exists (Manual rule never auto-deletes)
-        - Assert: CSV-contributed attributes are recalled (RemoveContributedAttributesOnObsoletion=true)
-        - Assert: No new pending exports on LDAP (recall skips export evaluation - Issue #91)
+        - Assert: Training-contributed attributes recalled and cleared from AD
+        - Assert: HR-contributed attributes retained, AD user functional
+        - Assert: isPendingDeletion=false
 
     Test 6: Manual + RemoveContributedAttributesOnObsoletion=false + GracePeriod=0
         - Remove user from CSV, run CSV import+sync only
@@ -277,6 +291,106 @@ function Invoke-RemoveUserFromSource {
 }
 
 # -----------------------------------------------------------------------------------------------------------------
+# Helper: Provision training data for a user and export to LDAP
+# Adds a training record to the Training CSV, runs Training import+sync, then LDAP export
+# to push supplementary Training attributes (description) to AD.
+# -----------------------------------------------------------------------------------------------------------------
+function Invoke-ProvisionTrainingData {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Config,
+
+        [Parameter(Mandatory=$true)]
+        [string]$EmployeeId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$SamAccountName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$TestName
+    )
+
+    $trainingCsvPath = "$PSScriptRoot/../../test-data/training-records.csv"
+
+    # Add training record to CSV
+    $csv = Import-Csv $trainingCsvPath
+    $newRecord = [PSCustomObject]@{
+        employeeId            = $EmployeeId
+        samAccountName        = $SamAccountName
+        coursesCompleted      = "SEC101|COMP101"
+        trainingStatus        = "Pass"
+        completionDate        = "2025-01-15T10:00:00Z"
+        totalCoursesCompleted = "2"
+    }
+    $csv = @($csv) + $newRecord
+    $csv | Export-Csv -Path $trainingCsvPath -NoTypeInformation -Encoding UTF8
+    docker cp $trainingCsvPath samba-ad-primary:/connector-files/training-records.csv | Out-Null
+    Write-Host "  Added training record for $SamAccountName to Training CSV" -ForegroundColor Gray
+
+    # Training Import + Sync (joins Training CSO to existing MVO)
+    Write-Host "  Running Training import+sync ($TestName)..." -ForegroundColor Gray
+    $importResult = Start-JIMRunProfile -ConnectedSystemId $Config.TrainingSystemId -RunProfileId $Config.TrainingImportProfileId -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Training Import ($TestName)"
+
+    $syncResult = Start-JIMRunProfile -ConnectedSystemId $Config.TrainingSystemId -RunProfileId $Config.TrainingSyncProfileId -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Training Sync ($TestName)"
+
+    # LDAP Export to push Training attributes (description) to AD
+    $exportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "LDAP Export ($TestName training)"
+
+    # Confirming import: updates the LDAP CSO attribute cache with exported Training values.
+    # Without this, the no-net-change detection during recall would see the CSO as having no
+    # 'description' attribute, causing the null-clearing recall export to be incorrectly skipped.
+    $ldapImportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPFullImportProfileId -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $ldapImportResult.activityId -Name "LDAP Import ($TestName training confirm)"
+
+    Start-Sleep -Seconds 2
+
+    # Verify Training attributes reached AD
+    $adOutput = & docker exec samba-ad-primary bash -c "samba-tool user show '$SamAccountName' 2>&1"
+    if ($adOutput -match "description:\s*(.+)") {
+        Write-Host "  Training attributes exported to AD (description: $($Matches[1]))" -ForegroundColor Green
+    } else {
+        Write-Host "  WARNING: Training attribute 'description' not found on AD user" -ForegroundColor Yellow
+    }
+}
+
+# -----------------------------------------------------------------------------------------------------------------
+# Helper: Remove training data for a user and run Training import+sync to obsolete the Training CSO
+# This triggers attribute recall if RemoveContributedAttributesOnObsoletion=true on the Training object type.
+# -----------------------------------------------------------------------------------------------------------------
+function Invoke-RemoveTrainingData {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Config,
+
+        [Parameter(Mandatory=$true)]
+        [string]$EmployeeId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$TestName
+    )
+
+    $trainingCsvPath = "$PSScriptRoot/../../test-data/training-records.csv"
+
+    # Remove training record from CSV by employeeId
+    $csv = Import-Csv $trainingCsvPath
+    $csv = @($csv | Where-Object { $_.employeeId -ne $EmployeeId })
+    $csv | Export-Csv -Path $trainingCsvPath -NoTypeInformation -Encoding UTF8
+    docker cp $trainingCsvPath samba-ad-primary:/connector-files/training-records.csv | Out-Null
+    Write-Host "  Removed training record for $EmployeeId from Training CSV" -ForegroundColor Gray
+
+    # Training Import + Sync (obsoletes Training CSO, triggers recall if configured)
+    Write-Host "  Running Training import+sync ($TestName removal)..." -ForegroundColor Gray
+    $importResult = Start-JIMRunProfile -ConnectedSystemId $Config.TrainingSystemId -RunProfileId $Config.TrainingImportProfileId -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Training Import ($TestName removal)"
+
+    $syncResult = Start-JIMRunProfile -ConnectedSystemId $Config.TrainingSystemId -RunProfileId $Config.TrainingSyncProfileId -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Training Sync ($TestName removal)"
+}
+
+# -----------------------------------------------------------------------------------------------------------------
 # Helper: Check if an MVO still exists (by display name search)
 # -----------------------------------------------------------------------------------------------------------------
 function Test-MvoExists {
@@ -308,11 +422,17 @@ function Test-MvoExistsById {
         [string]$MvoId
     )
 
-    $mvo = Get-JIMMetaverseObject -Id $MvoId -ErrorAction SilentlyContinue
-    if ($mvo) {
-        return $true
+    try {
+        $mvo = Get-JIMMetaverseObject -Id $MvoId -ErrorAction SilentlyContinue
+        if ($mvo) {
+            return $true
+        }
+        return $false
     }
-    return $false
+    catch {
+        # API throws terminating errors for 404 Not Found — treat as "does not exist"
+        return $false
+    }
 }
 
 # -----------------------------------------------------------------------------------------------------------------
@@ -350,6 +470,8 @@ function Invoke-DrainPendingExports {
 
 # -----------------------------------------------------------------------------------------------------------------
 # Helper: Configure deletion rules on the MVO object type and optionally the CSO type
+# -RecallConnectedSystemId: Which connected system's object type gets RemoveContributedAttributesOnObsoletion.
+#   Defaults to CSV system if not specified (backwards compatible with existing tests).
 # -----------------------------------------------------------------------------------------------------------------
 function Set-DeletionRuleConfig {
     param(
@@ -369,7 +491,10 @@ function Set-DeletionRuleConfig {
         [string]$DeletionTriggerConnectedSystemIds,
 
         [Parameter(Mandatory=$false)]
-        [Nullable[bool]]$RemoveContributedAttributesOnObsoletion
+        [Nullable[bool]]$RemoveContributedAttributesOnObsoletion,
+
+        [Parameter(Mandatory=$false)]
+        [int]$RecallConnectedSystemId = 0
     )
 
     # Set MVO type deletion rule
@@ -385,18 +510,19 @@ function Set-DeletionRuleConfig {
 
     Write-Host "  Configured MVO type: DeletionRule=$DeletionRule, GracePeriod=$GracePeriod" -ForegroundColor Green
 
-    # Set RemoveContributedAttributesOnObsoletion on the CSV object type if specified
+    # Set RemoveContributedAttributesOnObsoletion on the specified connected system's object type
     if ($null -ne $RemoveContributedAttributesOnObsoletion) {
-        # Get CSV object types to find the User type ID
-        $csvObjectTypes = Get-JIMConnectedSystem -Id $Config.CSVSystemId -ObjectTypes
-        $csvUserType = $csvObjectTypes | Where-Object { $_.name -match "^(user|person|record)$" } | Select-Object -First 1
-        if ($csvUserType) {
-            Set-JIMConnectedSystemObjectType -ConnectedSystemId $Config.CSVSystemId -ObjectTypeId $csvUserType.id `
+        $targetSystemId = if ($RecallConnectedSystemId -gt 0) { $RecallConnectedSystemId } else { $Config.CSVSystemId }
+        $targetObjectTypes = Get-JIMConnectedSystem -Id $targetSystemId -ObjectTypes
+        $targetObjType = $targetObjectTypes | Where-Object { $_.name -match "^(user|person|record|trainingRecord)$" } | Select-Object -First 1
+        if ($targetObjType) {
+            Set-JIMConnectedSystemObjectType -ConnectedSystemId $targetSystemId -ObjectTypeId $targetObjType.id `
                 -RemoveContributedAttributesOnObsoletion $RemoveContributedAttributesOnObsoletion
-            Write-Host "  Configured CSV object type: RemoveContributedAttributesOnObsoletion=$RemoveContributedAttributesOnObsoletion" -ForegroundColor Green
+            $systemLabel = if ($targetSystemId -eq $Config.TrainingSystemId) { "Training" } else { "CSV" }
+            Write-Host "  Configured $systemLabel object type: RemoveContributedAttributesOnObsoletion=$RemoveContributedAttributesOnObsoletion" -ForegroundColor Green
         }
         else {
-            Write-Host "  WARNING: Could not find CSV User object type to set RemoveContributedAttributesOnObsoletion" -ForegroundColor Yellow
+            Write-Host "  WARNING: Could not find object type on system $targetSystemId to set RemoveContributedAttributesOnObsoletion" -ForegroundColor Yellow
         }
     }
 }
@@ -422,13 +548,16 @@ try {
         New-Item -ItemType Directory -Path $testDataPath -Force | Out-Null
     }
 
-    # Copy empty scenario-specific CSV as the starting point
+    # Copy scenario-specific CSVs as the starting point
     Copy-Item -Path "$scenarioDataPath/scenario4-hr-users.csv" -Destination "$testDataPath/hr-users.csv" -Force
+    Copy-Item -Path "$scenarioDataPath/scenario4-training-records.csv" -Destination "$testDataPath/training-records.csv" -Force
 
     # Copy to container volume
     $csvPath = "$testDataPath/hr-users.csv"
+    $trainingCsvPath = "$testDataPath/training-records.csv"
     docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv
-    Write-Host "  CSV initialised (1 baseline user for schema discovery)" -ForegroundColor Green
+    docker cp $trainingCsvPath samba-ad-primary:/connector-files/training-records.csv
+    Write-Host "  CSVs initialised (HR + Training, 1 baseline user each)" -ForegroundColor Green
 
     # Clean up test-specific AD users from previous test runs
     Write-Host "Cleaning up test-specific AD users from previous runs..." -ForegroundColor Gray
@@ -469,6 +598,7 @@ try {
     Write-Host "  Department OUs ready" -ForegroundColor Green
 
     Write-Host "  CSV System ID: $($config.CSVSystemId)" -ForegroundColor Gray
+    Write-Host "  Training System ID: $($config.TrainingSystemId)" -ForegroundColor Gray
     Write-Host "  LDAP System ID: $($config.LDAPSystemId)" -ForegroundColor Gray
 
     # Re-import module to ensure we have connection
@@ -482,40 +612,47 @@ try {
         throw "User object type not found - cannot configure deletion rules"
     }
 
-    # Run initial import to establish baseline CSO
-    Write-Host "Running initial import to establish baseline..." -ForegroundColor Gray
+    # Run initial imports to establish baseline CSOs for both HR and Training
+    Write-Host "Running initial imports to establish baseline..." -ForegroundColor Gray
     $initImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
     Assert-ActivitySuccess -ActivityId $initImport.activityId -Name "CSV Import (baseline)"
     $initSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
     Assert-ActivitySuccess -ActivityId $initSync.activityId -Name "Full Sync (baseline)"
 
+    $initTrainingImport = Start-JIMRunProfile -ConnectedSystemId $config.TrainingSystemId -RunProfileId $config.TrainingImportProfileId -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $initTrainingImport.activityId -Name "Training Import (baseline)"
+    $initTrainingSync = Start-JIMRunProfile -ConnectedSystemId $config.TrainingSystemId -RunProfileId $config.TrainingSyncProfileId -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $initTrainingSync.activityId -Name "Training Sync (baseline)"
+
     # =============================================================================================================
     # Test 1: WhenLastConnectorDisconnected + RemoveContributedAttributesOnObsoletion=true + GracePeriod=0
     # =============================================================================================================
-    # In Source->Target topology, removing from source disconnects the CSV CSO only.
-    # The LDAP CSO remains joined. So this is NOT the "last connector disconnected".
-    # MVO should remain, but CSV-contributed attributes should be recalled and
-    # pending exports should be created on the LDAP target.
-    # NOTE: This is an UNDESIRABLE CONFIGURATION for Source->Target topologies.
+    # End-to-end recall test using a SECONDARY source (Training Records).
+    # The Training system contributes supplementary attributes (Training Status -> description)
+    # that are exported to LDAP but are NOT identity-critical. When Training CSO is obsoleted,
+    # these supplementary attributes are recalled from the MVO and cleared from AD, with no
+    # adverse effect on the AD user (DN, sAMAccountName, etc. intact).
+    #
+    # Topology: HR CSV (primary) + Training CSV (secondary) -> MVO -> LDAP
+    # Each MVO has 3 connectors: HR CSV CSO + Training CSV CSO + LDAP CSO
+    # Removing Training data obsoletes the Training CSO only. HR + LDAP CSOs remain.
     # =============================================================================================================
     if ($Step -eq "WhenLastConnectorRecall" -or $Step -eq "All") {
-        Write-TestSection "Test 1: WhenLastConnectorDisconnected + Recall Attributes"
+        Write-TestSection "Test 1: WhenLastConnectorDisconnected + Recall Attributes (Training Source)"
         Write-Host "DeletionRule: WhenLastConnectorDisconnected, GracePeriod: 0" -ForegroundColor Gray
-        Write-Host "RemoveContributedAttributesOnObsoletion: true" -ForegroundColor Gray
-        Write-Host "Expected: MVO remains (LDAP CSO still joined), attributes recalled, pending exports on LDAP" -ForegroundColor Gray
+        Write-Host "RemoveContributedAttributesOnObsoletion: true (on Training object type)" -ForegroundColor Gray
+        Write-Host "Expected: MVO remains, Training attributes recalled from MVO and cleared from AD" -ForegroundColor Gray
+        Write-Host "Expected: HR attributes and AD identity (DN, sAMAccountName) remain intact" -ForegroundColor Gray
         Write-Host ""
 
-        # Configure deletion rules
+        # Configure deletion rules - recall enabled on Training system's object type
         Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
             -DeletionRule "WhenLastConnectorDisconnected" `
             -GracePeriod ([TimeSpan]::Zero) `
-            -RemoveContributedAttributesOnObsoletion $true
+            -RemoveContributedAttributesOnObsoletion $true `
+            -RecallConnectedSystemId $config.TrainingSystemId
 
-        # Record pending export count before test
-        $pendingExportsBefore = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
-        Write-Host "  LDAP pending exports before: $pendingExportsBefore" -ForegroundColor Gray
-
-        # Provision a test user
+        # Provision a test user via HR CSV (creates MVO + LDAP CSO)
         $test1Mvo = Invoke-ProvisionUser -Config $config `
             -EmployeeId "WLCD001" `
             -SamAccountName "test.wlcd.recall" `
@@ -525,32 +662,52 @@ try {
         $test1MvoId = $test1Mvo.id
         Write-Host "  MVO ID: $test1MvoId" -ForegroundColor Gray
 
-        # Remove user from CSV source - CSV import+sync only (NOT full cycle)
-        # This disconnects the CSV CSO but leaves the LDAP CSO joined
-        Invoke-RemoveUserFromSource -Config $config -SamAccountName "test.wlcd.recall" -TestName "Test1"
+        # Provision training data (creates Training CSO joined to same MVO, exports to LDAP)
+        Invoke-ProvisionTrainingData -Config $config `
+            -EmployeeId "WLCD001" `
+            -SamAccountName "test.wlcd.recall" `
+            -TestName "Test1"
+
+        # Record pending export count before recall
+        Invoke-DrainPendingExports -Config $config
+        $pendingExportsBefore = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+        Write-Host "  LDAP pending exports before recall: $pendingExportsBefore" -ForegroundColor Gray
+
+        # Remove training data - Training import+sync only (obsoletes Training CSO, triggers recall)
+        Invoke-RemoveTrainingData -Config $config -EmployeeId "WLCD001" -TestName "Test1"
 
         Start-Sleep -Seconds 3
 
-        # Assert 1: MVO still exists (LDAP CSO still joined - not the last connector)
-        # Note: We search by MVO ID rather than display name because attribute recall removes
-        # all CSV-contributed attributes, including Display Name.
-        $mvoStillExists = Test-MvoExistsById -MvoId $test1MvoId
+        # Assert 1: MVO still exists (HR CSO + LDAP CSO still joined - not the last connector)
+        $mvoStillExists = Test-MvoExists -DisplayName "Test WLCD Recall" -ObjectTypeName "User"
 
         if (-not $mvoStillExists) {
-            Write-Host "  FAILED: MVO was deleted despite LDAP CSO still being joined" -ForegroundColor Red
-            $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $false; Error = "MVO deleted when LDAP CSO still joined" }
-            throw "Test 1 Assert 1 failed: MVO deleted when LDAP CSO still joined"
+            $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $false; Error = "MVO deleted when HR + LDAP CSOs still joined" }
+            throw "Test 1 Assert 1 failed: MVO deleted when HR + LDAP CSOs still joined"
         }
-        Write-Host "  PASSED: MVO still exists (LDAP CSO still joined, not the last connector)" -ForegroundColor Green
+        Write-Host "  PASSED: MVO still exists (HR CSO + LDAP CSO still joined)" -ForegroundColor Green
 
-        # Assert 2: Check that CSV-contributed attributes were recalled
-        # After recall, attributes like department, title etc. contributed by CSV should be removed
-        # Use ID-based lookup since display name was also recalled
+        # Assert 2: Training-contributed attributes were recalled from MVO
         $mvoDetail = Get-JIMMetaverseObject -Id $test1MvoId -ErrorAction SilentlyContinue
 
         if ($mvoDetail) {
-            # Check if source-contributed attributes (e.g., department, title) are now empty/null
-            # The -Id endpoint returns attributeValues (array of MetaverseObjectAttributeValueDto)
+            $trainingStatusValue = $null
+            if ($mvoDetail.attributeValues) {
+                $trainingStatusAttr = $mvoDetail.attributeValues | Where-Object { $_.attributeName -eq 'Training Status' } | Select-Object -First 1
+                if ($trainingStatusAttr) {
+                    $trainingStatusValue = $trainingStatusAttr.stringValue
+                }
+            }
+            if (-not $trainingStatusValue) {
+                Write-Host "  PASSED: Training-contributed attribute 'Training Status' has been recalled (empty/null)" -ForegroundColor Green
+            } else {
+                $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $false; Error = "Training attribute 'Training Status' still has value: $trainingStatusValue" }
+                throw "Test 1 Assert 2 failed: Training attribute 'Training Status' still has value: $trainingStatusValue"
+            }
+        }
+
+        # Assert 3: HR-contributed attributes are retained (Display Name, Department still present)
+        if ($mvoDetail) {
             $deptValue = $null
             if ($mvoDetail.attributeValues) {
                 $deptAttr = $mvoDetail.attributeValues | Where-Object { $_.attributeName -eq 'Department' } | Select-Object -First 1
@@ -558,26 +715,47 @@ try {
                     $deptValue = $deptAttr.stringValue
                 }
             }
-            if (-not $deptValue) {
-                Write-Host "  PASSED: CSV-contributed attribute 'department' has been recalled (empty/null)" -ForegroundColor Green
+            if ($deptValue) {
+                Write-Host "  PASSED: HR-contributed attribute 'Department' retained: $deptValue" -ForegroundColor Green
             } else {
-                $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $false; Error = "CSV-contributed attribute 'department' still has value: $deptValue" }
-                throw "Test 1 Assert 2 failed: CSV-contributed attribute 'department' still has value: $deptValue"
+                $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $false; Error = "HR-contributed attribute 'Department' was incorrectly recalled" }
+                throw "Test 1 Assert 3 failed: HR-contributed attribute 'Department' was incorrectly recalled"
             }
         }
 
-        # Assert 3: No new pending exports on LDAP after recall
-        # Pure recall skips export evaluation entirely - target retains existing values.
-        # Proper recall exports require attribute priority (Issue #91) to determine replacement
-        # values from alternative contributors. Until then, no exports are generated.
+        # Assert 4: Pending exports created on LDAP to clear Training attributes
         $pendingExportsAfter = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
-        Write-Host "  LDAP pending exports after: $pendingExportsAfter" -ForegroundColor Gray
+        Write-Host "  LDAP pending exports after recall: $pendingExportsAfter" -ForegroundColor Gray
 
-        if ($pendingExportsAfter -le $pendingExportsBefore) {
-            Write-Host "  PASSED: No new pending exports on LDAP (recall skips export evaluation until Issue #91)" -ForegroundColor Green
+        if ($pendingExportsAfter -gt $pendingExportsBefore) {
+            Write-Host "  PASSED: Pending exports created on LDAP to clear recalled Training attributes" -ForegroundColor Green
         } else {
-            $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $false; Error = "Unexpected pending exports on LDAP after recall" }
-            throw "Test 1 Assert 3 failed: Unexpected pending exports on LDAP. Recall should skip export evaluation until attribute priority (Issue #91)."
+            $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $false; Error = "No pending exports created on LDAP after Training attribute recall" }
+            throw "Test 1 Assert 4 failed: Expected pending exports on LDAP to clear Training attributes (description)"
+        }
+
+        # Assert 5: Run LDAP Export and verify AD user is still functional with Training attrs cleared
+        Write-Host "  Running LDAP export to apply recall exports..." -ForegroundColor Gray
+        $recallExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $recallExport.activityId -Name "LDAP Export (Test1 recall)"
+
+        Start-Sleep -Seconds 3
+
+        # Verify AD user still exists and identity is intact
+        $adOutput = & docker exec samba-ad-primary bash -c "samba-tool user show 'test.wlcd.recall' 2>&1"
+        if ($adOutput -match "sAMAccountName:\s*test\.wlcd\.recall") {
+            Write-Host "  PASSED: AD user still exists with sAMAccountName intact" -ForegroundColor Green
+        } else {
+            $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $false; Error = "AD user not found or sAMAccountName missing after recall export" }
+            throw "Test 1 Assert 5 failed: AD user not found or sAMAccountName missing after recall export"
+        }
+
+        # Verify Training attributes cleared from AD (description should be absent/empty)
+        if ($adOutput -match "description:\s*(.+)") {
+            $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $false; Error = "AD 'description' still has value after recall: $($Matches[1])" }
+            throw "Test 1 Assert 5 failed: AD 'description' attribute still has value after recall export: $($Matches[1])"
+        } else {
+            Write-Host "  PASSED: Training attribute 'description' cleared from AD after recall export" -ForegroundColor Green
         }
 
         $testResults.Steps += @{ Name = "WhenLastConnectorRecall"; Success = $true }
@@ -677,22 +855,29 @@ try {
     # Configure CSV as the authoritative source. When the CSV CSO disconnects (user removed from
     # source), the MVO should be deleted immediately (0 grace period) even though the LDAP CSO
     # still exists. This is the correct rule for Source->Target topologies.
+    #
+    # RemoveContributedAttributesOnObsoletion=false: Recall is irrelevant when the MVO is being
+    # immediately deleted. The MVO and all its attributes are removed entirely — there is no
+    # persisted state for recall to operate on. Setting recall=false avoids the broken state
+    # where identity-critical attributes (DN, sAMAccountName) are cleared before the
+    # deprovisioning export runs.
     # =============================================================================================================
     if ($Step -eq "AuthoritativeImmediate" -or $Step -eq "All") {
         Write-TestSection "Test 3: WhenAuthoritativeSourceDisconnected + Immediate Deletion"
         Write-Host "DeletionRule: WhenAuthoritativeSourceDisconnected, GracePeriod: 0" -ForegroundColor Gray
         Write-Host "Authoritative source: CSV (HR System)" -ForegroundColor Gray
+        Write-Host "RemoveContributedAttributesOnObsoletion: false (recall irrelevant for immediate deletion)" -ForegroundColor Gray
         Write-Host "Expected: MVO deleted immediately when CSV CSO disconnects, LDAP deprovisioned" -ForegroundColor Gray
         Write-Host ""
 
         Invoke-DrainPendingExports -Config $config
 
-        # Configure deletion rules - CSV is the authoritative source
+        # Configure deletion rules - CSV is the authoritative source, recall disabled
         Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
             -DeletionRule "WhenAuthoritativeSourceDisconnected" `
             -GracePeriod ([TimeSpan]::Zero) `
             -DeletionTriggerConnectedSystemIds "$($config.CSVSystemId)" `
-            -RemoveContributedAttributesOnObsoletion $true
+            -RemoveContributedAttributesOnObsoletion $false
 
         # Provision a test user (creates both CSV CSO and LDAP CSO via export)
         $test3Mvo = Invoke-ProvisionUser -Config $config `
@@ -758,22 +943,28 @@ try {
     # =============================================================================================================
     # Same as Test 3 but with a 1-minute grace period. The MVO should be marked for deletion
     # but not deleted until the grace period elapses and housekeeping runs.
+    #
+    # RemoveContributedAttributesOnObsoletion=false: Same rationale as Test 3 — the MVO is
+    # being deleted (just deferred). Recall would clear identity-critical attributes during
+    # the grace period, leaving LDAP exports in a broken state. Real-world authoritative
+    # source disconnection should trigger deprovisioning, not recall.
     # =============================================================================================================
     if ($Step -eq "AuthoritativeGracePeriod" -or $Step -eq "All") {
         Write-TestSection "Test 4: WhenAuthoritativeSourceDisconnected + 1-Minute Grace Period"
         Write-Host "DeletionRule: WhenAuthoritativeSourceDisconnected, GracePeriod: 1 minute" -ForegroundColor Gray
         Write-Host "Authoritative source: CSV (HR System)" -ForegroundColor Gray
+        Write-Host "RemoveContributedAttributesOnObsoletion: false (recall irrelevant for deletion)" -ForegroundColor Gray
         Write-Host "Expected: MVO marked for deletion, then deleted after 1-minute grace period" -ForegroundColor Gray
         Write-Host ""
 
         Invoke-DrainPendingExports -Config $config
 
-        # Configure deletion rules - CSV is the authoritative source, 1-minute grace period
+        # Configure deletion rules - CSV is the authoritative source, 1-minute grace period, recall disabled
         Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
             -DeletionRule "WhenAuthoritativeSourceDisconnected" `
             -GracePeriod ([TimeSpan]::FromMinutes(1)) `
             -DeletionTriggerConnectedSystemIds "$($config.CSVSystemId)" `
-            -RemoveContributedAttributesOnObsoletion $true
+            -RemoveContributedAttributesOnObsoletion $false
 
         # Provision a test user
         $test4Mvo = Invoke-ProvisionUser -Config $config `
@@ -791,9 +982,8 @@ try {
         Start-Sleep -Seconds 3
 
         # Assert 1: MVO should still exist (grace period not yet elapsed)
-        # Note: We search by MVO ID rather than display name because RemoveContributedAttributesOnObsoletion=true
-        # causes attribute recall, which clears all CSV-contributed attributes including Display Name.
-        $mvoStillExists = Test-MvoExistsById -MvoId $test4MvoId
+        # With recall=false, display name is retained so we can search by name
+        $mvoStillExists = Test-MvoExists -DisplayName "Test Auth Grace" -ObjectTypeName "User"
 
         if (-not $mvoStillExists) {
             $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $false; Error = "MVO deleted immediately despite grace period" }
@@ -801,7 +991,7 @@ try {
         }
         Write-Host "  PASSED: MVO still exists (grace period not yet elapsed)" -ForegroundColor Green
 
-        # Verify MVO is marked for pending deletion (use ID-based lookup since display name was recalled)
+        # Verify MVO is marked for pending deletion
         $mvoDetail = Get-JIMMetaverseObject -Id $test4MvoId -ErrorAction SilentlyContinue
 
         if ($mvoDetail -and $mvoDetail.PSObject.Properties.Name -contains 'isPendingDeletion') {
@@ -813,10 +1003,12 @@ try {
             }
         }
 
-        # Wait for the grace period to elapse (1 minute + buffer for housekeeping)
-        Write-Host "  Waiting for 1-minute grace period to elapse..." -ForegroundColor Gray
-        Write-Host "  (Housekeeping will delete the MVO after the grace period)" -ForegroundColor Gray
-        $waitTime = 90  # 1 minute + 30 seconds buffer for housekeeping cycle
+        # Wait for the grace period to elapse + housekeeping cycle to run.
+        # Grace period = 60s after disconnect. Housekeeping runs every 60s when worker is idle.
+        # Worst case: 60s grace + 60s housekeeping cycle = 120s. Add 30s buffer = 150s.
+        Write-Host "  Waiting for 1-minute grace period + housekeeping cycle..." -ForegroundColor Gray
+        Write-Host "  (Housekeeping runs every 60s when idle, deletes MVOs past grace period)" -ForegroundColor Gray
+        $waitTime = 150  # 1 minute grace + 60 seconds housekeeping cycle + 30 seconds buffer
         for ($i = 0; $i -lt $waitTime; $i += 10) {
             Start-Sleep -Seconds 10
             $remaining = $waitTime - $i - 10
@@ -826,7 +1018,6 @@ try {
         }
 
         # Assert 2: MVO should now be deleted (grace period elapsed, housekeeping ran)
-        # Use ID-based lookup since display name was recalled
         $mvoDeletedAfterGrace = -not (Test-MvoExistsById -MvoId $test4MvoId)
 
         if (-not $mvoDeletedAfterGrace) {
@@ -850,30 +1041,31 @@ try {
     # =============================================================================================================
     # Test 5: Manual + RemoveContributedAttributesOnObsoletion=true + GracePeriod=0
     # =============================================================================================================
-    # Manual deletion rule means MVOs are NEVER automatically deleted. But if
-    # RemoveContributedAttributesOnObsoletion=true, the CSV-contributed attributes should still
-    # be recalled when the CSV CSO is obsoleted, and pending exports should be created.
+    # End-to-end recall test with Manual deletion rule using SECONDARY source (Training Records).
+    # Manual rule means MVOs are NEVER automatically deleted. But when
+    # RemoveContributedAttributesOnObsoletion=true on the Training object type, supplementary
+    # Training attributes should be recalled from the MVO and cleared from AD when the Training
+    # CSO is obsoleted. HR attributes and AD identity remain intact.
+    #
+    # Topology: HR CSV (primary) + Training CSV (secondary) -> MVO -> LDAP
     # =============================================================================================================
     if ($Step -eq "ManualRecall" -or $Step -eq "All") {
-        Write-TestSection "Test 5: Manual Deletion Rule + Recall Attributes"
+        Write-TestSection "Test 5: Manual Deletion Rule + Recall Attributes (Training Source)"
         Write-Host "DeletionRule: Manual, GracePeriod: 0" -ForegroundColor Gray
-        Write-Host "RemoveContributedAttributesOnObsoletion: true" -ForegroundColor Gray
-        Write-Host "Expected: MVO remains (Manual = never auto-delete), attributes recalled, pending exports on LDAP" -ForegroundColor Gray
+        Write-Host "RemoveContributedAttributesOnObsoletion: true (on Training object type)" -ForegroundColor Gray
+        Write-Host "Expected: MVO remains (Manual = never auto-delete), Training attributes recalled and cleared from AD" -ForegroundColor Gray
         Write-Host ""
 
         Invoke-DrainPendingExports -Config $config
 
-        # Configure deletion rules
+        # Configure deletion rules - recall enabled on Training system's object type
         Set-DeletionRuleConfig -Config $config -ObjectTypeId $userObjectType.id `
             -DeletionRule "Manual" `
             -GracePeriod ([TimeSpan]::Zero) `
-            -RemoveContributedAttributesOnObsoletion $true
+            -RemoveContributedAttributesOnObsoletion $true `
+            -RecallConnectedSystemId $config.TrainingSystemId
 
-        # Record pending export count before test
-        $pendingExportsBefore = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
-        Write-Host "  LDAP pending exports before: $pendingExportsBefore" -ForegroundColor Gray
-
-        # Provision a test user
+        # Provision a test user via HR CSV (creates MVO + LDAP CSO)
         $test5Mvo = Invoke-ProvisionUser -Config $config `
             -EmployeeId "MANUAL001" `
             -SamAccountName "test.manual.recall" `
@@ -883,15 +1075,24 @@ try {
         $test5MvoId = $test5Mvo.id
         Write-Host "  MVO ID: $test5MvoId" -ForegroundColor Gray
 
-        # Remove user from CSV source - CSV import+sync only
-        Invoke-RemoveUserFromSource -Config $config -SamAccountName "test.manual.recall" -TestName "Test5"
+        # Provision training data (creates Training CSO, exports Training attrs to LDAP)
+        Invoke-ProvisionTrainingData -Config $config `
+            -EmployeeId "MANUAL001" `
+            -SamAccountName "test.manual.recall" `
+            -TestName "Test5"
+
+        # Record pending export count before recall
+        Invoke-DrainPendingExports -Config $config
+        $pendingExportsBefore = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
+        Write-Host "  LDAP pending exports before recall: $pendingExportsBefore" -ForegroundColor Gray
+
+        # Remove training data - Training import+sync only (obsoletes Training CSO, triggers recall)
+        Invoke-RemoveTrainingData -Config $config -EmployeeId "MANUAL001" -TestName "Test5"
 
         Start-Sleep -Seconds 3
 
         # Assert 1: MVO still exists (Manual rule - never auto-deleted)
-        # Note: We search by MVO ID rather than display name because attribute recall removes
-        # all CSV-contributed attributes, including Display Name.
-        $mvoStillExists = Test-MvoExistsById -MvoId $test5MvoId
+        $mvoStillExists = Test-MvoExists -DisplayName "Test Manual Recall" -ObjectTypeName "User"
 
         if (-not $mvoStillExists) {
             $testResults.Steps += @{ Name = "ManualRecall"; Success = $false; Error = "MVO deleted with Manual deletion rule" }
@@ -899,12 +1100,27 @@ try {
         }
         Write-Host "  PASSED: MVO still exists (Manual deletion rule - never auto-deleted)" -ForegroundColor Green
 
-        # Assert 2: Check that CSV-contributed attributes were recalled
-        # Use ID-based lookup since display name was also recalled
+        # Assert 2: Training-contributed attributes were recalled from MVO
         $mvoDetail = Get-JIMMetaverseObject -Id $test5MvoId -ErrorAction SilentlyContinue
 
         if ($mvoDetail) {
-            # The -Id endpoint returns attributeValues (array of MetaverseObjectAttributeValueDto)
+            $trainingStatusValue = $null
+            if ($mvoDetail.attributeValues) {
+                $trainingStatusAttr = $mvoDetail.attributeValues | Where-Object { $_.attributeName -eq 'Training Status' } | Select-Object -First 1
+                if ($trainingStatusAttr) {
+                    $trainingStatusValue = $trainingStatusAttr.stringValue
+                }
+            }
+            if (-not $trainingStatusValue) {
+                Write-Host "  PASSED: Training-contributed attribute 'Training Status' has been recalled (empty/null)" -ForegroundColor Green
+            } else {
+                $testResults.Steps += @{ Name = "ManualRecall"; Success = $false; Error = "Training attribute 'Training Status' still has value: $trainingStatusValue" }
+                throw "Test 5 Assert 2 failed: Training attribute 'Training Status' still has value: $trainingStatusValue"
+            }
+        }
+
+        # Assert 3: HR-contributed attributes are retained
+        if ($mvoDetail) {
             $deptValue = $null
             if ($mvoDetail.attributeValues) {
                 $deptAttr = $mvoDetail.attributeValues | Where-Object { $_.attributeName -eq 'Department' } | Select-Object -First 1
@@ -912,35 +1128,56 @@ try {
                     $deptValue = $deptAttr.stringValue
                 }
             }
-            if (-not $deptValue) {
-                Write-Host "  PASSED: CSV-contributed attribute 'department' has been recalled (empty/null)" -ForegroundColor Green
+            if ($deptValue) {
+                Write-Host "  PASSED: HR-contributed attribute 'Department' retained: $deptValue" -ForegroundColor Green
             } else {
-                $testResults.Steps += @{ Name = "ManualRecall"; Success = $false; Error = "CSV-contributed attribute 'department' still has value: $deptValue" }
-                throw "Test 5 Assert 2 failed: CSV-contributed attribute 'department' still has value: $deptValue"
+                $testResults.Steps += @{ Name = "ManualRecall"; Success = $false; Error = "HR-contributed attribute 'Department' was incorrectly recalled" }
+                throw "Test 5 Assert 3 failed: HR-contributed attribute 'Department' was incorrectly recalled"
             }
         }
 
-        # Assert 3: No new pending exports on LDAP after recall
-        # Pure recall skips export evaluation entirely - target retains existing values.
-        # Proper recall exports require attribute priority (Issue #91) to determine replacement
-        # values from alternative contributors. Until then, no exports are generated.
+        # Assert 4: Pending exports created on LDAP to clear Training attributes
         $pendingExportsAfter = Get-PendingExportCount -ConnectedSystemId $config.LDAPSystemId
-        Write-Host "  LDAP pending exports after: $pendingExportsAfter" -ForegroundColor Gray
+        Write-Host "  LDAP pending exports after recall: $pendingExportsAfter" -ForegroundColor Gray
 
-        if ($pendingExportsAfter -le $pendingExportsBefore) {
-            Write-Host "  PASSED: No new pending exports on LDAP (recall skips export evaluation until Issue #91)" -ForegroundColor Green
+        if ($pendingExportsAfter -gt $pendingExportsBefore) {
+            Write-Host "  PASSED: Pending exports created on LDAP to clear recalled Training attributes" -ForegroundColor Green
         } else {
-            $testResults.Steps += @{ Name = "ManualRecall"; Success = $false; Error = "Unexpected pending exports on LDAP after recall" }
-            throw "Test 5 Assert 3 failed: Unexpected pending exports on LDAP. Recall should skip export evaluation until attribute priority (Issue #91)."
+            $testResults.Steps += @{ Name = "ManualRecall"; Success = $false; Error = "No pending exports created on LDAP after Training attribute recall" }
+            throw "Test 5 Assert 4 failed: Expected pending exports on LDAP to clear Training attributes (description)"
         }
 
-        # Assert 4: MVO should NOT be marked as pending deletion (Manual rule)
+        # Assert 5: Run LDAP Export and verify AD user is still functional with Training attrs cleared
+        Write-Host "  Running LDAP export to apply recall exports..." -ForegroundColor Gray
+        $recallExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $recallExport.activityId -Name "LDAP Export (Test5 recall)"
+
+        Start-Sleep -Seconds 3
+
+        # Verify AD user still exists and identity is intact
+        $adOutput = & docker exec samba-ad-primary bash -c "samba-tool user show 'test.manual.recall' 2>&1"
+        if ($adOutput -match "sAMAccountName:\s*test\.manual\.recall") {
+            Write-Host "  PASSED: AD user still exists with sAMAccountName intact" -ForegroundColor Green
+        } else {
+            $testResults.Steps += @{ Name = "ManualRecall"; Success = $false; Error = "AD user not found or sAMAccountName missing after recall export" }
+            throw "Test 5 Assert 5 failed: AD user not found or sAMAccountName missing after recall export"
+        }
+
+        # Verify Training attributes cleared from AD
+        if ($adOutput -match "description:\s*(.+)") {
+            $testResults.Steps += @{ Name = "ManualRecall"; Success = $false; Error = "AD 'description' still has value after recall: $($Matches[1])" }
+            throw "Test 5 Assert 5 failed: AD 'description' attribute still has value after recall export: $($Matches[1])"
+        } else {
+            Write-Host "  PASSED: Training attribute 'description' cleared from AD after recall export" -ForegroundColor Green
+        }
+
+        # Assert 6: MVO should NOT be marked as pending deletion (Manual rule)
         if ($mvoDetail -and $mvoDetail.PSObject.Properties.Name -contains 'isPendingDeletion') {
             if (-not $mvoDetail.isPendingDeletion) {
                 Write-Host "  PASSED: MVO isPendingDeletion=false (Manual rule does not mark for deletion)" -ForegroundColor Green
             } else {
                 $testResults.Steps += @{ Name = "ManualRecall"; Success = $false; Error = "MVO isPendingDeletion=true despite Manual deletion rule" }
-                throw "Test 5 Assert 4 failed: MVO isPendingDeletion=true despite Manual deletion rule"
+                throw "Test 5 Assert 6 failed: MVO isPendingDeletion=true despite Manual deletion rule"
             }
         }
 
@@ -1074,7 +1311,7 @@ try {
             -DeletionRule "WhenLastConnectorDisconnected" `
             -DeletionGracePeriod ([TimeSpan]::FromDays(7))
 
-        # Reset RemoveContributedAttributesOnObsoletion to default (true)
+        # Reset RemoveContributedAttributesOnObsoletion to default (true) on both CSV and Training
         $csvObjectTypes = Get-JIMConnectedSystem -Id $config.CSVSystemId -ObjectTypes
         $csvUserType = $csvObjectTypes | Where-Object { $_.name -match "^(user|person|record)$" } | Select-Object -First 1
         if ($csvUserType) {
@@ -1082,11 +1319,19 @@ try {
                 -RemoveContributedAttributesOnObsoletion $true
         }
 
+        $trainingObjectTypes = Get-JIMConnectedSystem -Id $config.TrainingSystemId -ObjectTypes
+        $trainingRecordType = $trainingObjectTypes | Where-Object { $_.name -match "^(trainingRecord|record)$" } | Select-Object -First 1
+        if ($trainingRecordType) {
+            Set-JIMConnectedSystemObjectType -ConnectedSystemId $config.TrainingSystemId -ObjectTypeId $trainingRecordType.id `
+                -RemoveContributedAttributesOnObsoletion $true
+        }
+
         Write-Host "  Reset to: DeletionRule=WhenLastConnectorDisconnected, GracePeriod=7 days" -ForegroundColor Green
-        Write-Host "  Reset to: RemoveContributedAttributesOnObsoletion=true" -ForegroundColor Green
+        Write-Host "  Reset to: RemoveContributedAttributesOnObsoletion=true (CSV + Training)" -ForegroundColor Green
     }
     catch {
-        Write-Host "  WARNING: Could not reset deletion rules: $_" -ForegroundColor Yellow
+        Write-Host "  ✗ Could not reset deletion rules: $_" -ForegroundColor Red
+        throw
     }
 
     # =============================================================================================================

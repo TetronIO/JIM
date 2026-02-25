@@ -657,7 +657,8 @@ try {
             'employeeID',         # Employee ID - required for LDAP matching rule (join to existing AD accounts)
             'distinguishedName',  # DN - required for LDAP provisioning
             'accountExpires',     # Account expiry (Large Integer/Int64) - populated from HR Employee End Date via ToFileTime
-            'userAccountControl'  # Account control flags (Number/Int32) - tests integer data type flow
+            'userAccountControl', # Account control flags (Number/Int32) - tests integer data type flow
+            'description'         # Training Status - supplementary attribute from Training source (recall testing)
         )
 
         $ldapAttrUpdates = @{}
@@ -798,7 +799,7 @@ try {
 catch {
     Write-Host "  ✗ Failed to create sync rules: $_" -ForegroundColor Red
     Write-Host "    Error details: $($_.Exception.Message)" -ForegroundColor Red
-    # Continue - sync rules can be created manually if needed
+    throw
 }
 
 # Step 6c: Configure Attribute Flow Mappings
@@ -825,17 +826,19 @@ try {
         )
 
         $exportMappings = @(
-            @{ MvAttr = "Account Name";  LdapAttr = "sAMAccountName" }
-            @{ MvAttr = "First Name";    LdapAttr = "givenName" }
-            @{ MvAttr = "Last Name";     LdapAttr = "sn" }
-            @{ MvAttr = "Display Name";  LdapAttr = "displayName" }
-            @{ MvAttr = "Display Name";  LdapAttr = "cn" }
-            @{ MvAttr = "Email";         LdapAttr = "mail" }
-            @{ MvAttr = "Email";         LdapAttr = "userPrincipalName" }  # UPN = email for AD login
-            @{ MvAttr = "Job Title";     LdapAttr = "title" }
-            @{ MvAttr = "Department";    LdapAttr = "department" }
-            @{ MvAttr = "Company";       LdapAttr = "company" }  # Company name exported to AD
-            @{ MvAttr = "Employee ID";   LdapAttr = "employeeID" }  # Required for LDAP matching rule
+            @{ MvAttr = "Account Name";          LdapAttr = "sAMAccountName" }
+            @{ MvAttr = "First Name";            LdapAttr = "givenName" }
+            @{ MvAttr = "Last Name";             LdapAttr = "sn" }
+            @{ MvAttr = "Display Name";          LdapAttr = "displayName" }
+            @{ MvAttr = "Display Name";          LdapAttr = "cn" }
+            @{ MvAttr = "Email";                 LdapAttr = "mail" }
+            @{ MvAttr = "Email";                 LdapAttr = "userPrincipalName" }  # UPN = email for AD login
+            @{ MvAttr = "Job Title";             LdapAttr = "title" }
+            @{ MvAttr = "Department";            LdapAttr = "department" }
+            @{ MvAttr = "Company";               LdapAttr = "company" }  # Company name exported to AD
+            @{ MvAttr = "Employee ID";           LdapAttr = "employeeID" }  # Required for LDAP matching rule
+            # Training export mappings (Training Status → description, Training Course Count → info)
+            # are created later in the Training configuration section, after Training MV attributes exist.
         )
 
         # Expression-based mappings for computed values
@@ -1172,6 +1175,55 @@ try {
                     Write-Host "  Training object matching rule already exists" -ForegroundColor Gray
                 }
             }
+
+            # Training → LDAP export mappings (supplementary attributes for recall testing)
+            # These must be created here (not in the main export mappings loop) because Training
+            # MV attributes are created above and don't exist when the main loop runs.
+            if ($exportRule) {
+                Write-Host "  Configuring Training → LDAP export attribute mappings..." -ForegroundColor Gray
+
+                $trainingExportMappings = @(
+                    @{ MvAttr = "Training Status";       LdapAttr = "description" }  # Supplementary (recall testing)
+                    # Training Course Count (Integer) cannot map to info (Text) — type mismatch.
+                    # One Text mapping is sufficient to test end-to-end recall.
+                )
+
+                $existingExportMappings = Get-JIMSyncRuleMapping -SyncRuleId $exportRule.id
+                $trainingExportCreated = 0
+
+                foreach ($mapping in $trainingExportMappings) {
+                    $ldapAttr = $ldapUserType.attributes | Where-Object { $_.name -eq $mapping.LdapAttr }
+                    $mvAttr = $mvAttributes | Where-Object { $_.name -eq $mapping.MvAttr }
+
+                    if (-not $ldapAttr) {
+                        throw "Setup failed: LDAP attribute '$($mapping.LdapAttr)' not found in schema - ensure it is in `$requiredLdapAttributes"
+                    }
+                    if (-not $mvAttr) {
+                        throw "Setup failed: MV attribute '$($mapping.MvAttr)' not found - Training MV attributes must be created first"
+                    }
+
+                    Write-Host "    Export: MV '$($mapping.MvAttr)' (ID:$($mvAttr.id)) → LDAP '$($mapping.LdapAttr)' (ID:$($ldapAttr.id))" -ForegroundColor DarkGray
+
+                    $existsAlready = $existingExportMappings | Where-Object {
+                        $_.targetConnectedSystemAttributeId -eq $ldapAttr.id -and
+                        ($_.sources | Where-Object { $_.metaverseAttributeId -eq $mvAttr.id })
+                    }
+
+                    if (-not $existsAlready) {
+                        try {
+                            New-JIMSyncRuleMapping -SyncRuleId $exportRule.id `
+                                -TargetConnectedSystemAttributeId $ldapAttr.id `
+                                -SourceMetaverseAttributeId $mvAttr.id | Out-Null
+                            $trainingExportCreated++
+                        }
+                        catch {
+                            Write-Host "    ✗ Failed to create Training export mapping $($mapping.MvAttr) → $($mapping.LdapAttr): $_" -ForegroundColor Red
+                            throw "Setup failed: Could not create Training export mapping '$($mapping.MvAttr)' → '$($mapping.LdapAttr)'"
+                        }
+                    }
+                }
+                Write-Host "  ✓ Training → LDAP export mappings configured ($trainingExportCreated new)" -ForegroundColor Green
+            }
         }
 
         # Configure Cross-Domain export attribute mappings
@@ -1251,7 +1303,7 @@ try {
 catch {
     Write-Host "  ✗ Failed to configure attribute mappings: $_" -ForegroundColor Red
     Write-Host "  Error details: $($_.Exception.Message)" -ForegroundColor Red
-    # Continue - mappings can be configured manually if needed
+    throw
 }
 
 # Step 6d: Configure Deletion Rules
@@ -1524,7 +1576,7 @@ try {
 catch {
     Write-Host "  ✗ Failed to create run profiles: $_" -ForegroundColor Red
     Write-Host "  Error details: $($_.Exception.Message)" -ForegroundColor Red
-    # Continue - run profiles might need manual configuration
+    throw
 }
 
 # Summary

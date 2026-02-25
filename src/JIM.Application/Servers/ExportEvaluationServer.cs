@@ -1296,23 +1296,6 @@ public class ExportEvaluationServer
         var isCreateOperation = changeType == PendingExportChangeType.Create;
         csoAlreadyCurrentCount = 0;
 
-        // When ALL changed attributes are removals (pure recall), skip export evaluation entirely.
-        // Recall clears MVO attributes, which causes expression mappings (e.g., DN expressions that
-        // reference the recalled attribute) to evaluate against incomplete data and produce invalid
-        // values. Additionally, target systems may reject null values for mandatory attributes.
-        // Proper handling of recall exports requires attribute priority (Issue #91) to determine
-        // replacement values from alternative contributors. Until then, the target retains its
-        // existing values after recall.
-        if (!isCreateOperation && removedAttributes != null && changedAttributes.Count > 0 &&
-            changedAttributes.All(ca => removedAttributes.Contains(ca)))
-        {
-            Log.Debug("CreateAttributeValueChanges: All {Count} changed attributes are removals (recall) - " +
-                "skipping export evaluation for MVO {MvoId}. Target retains existing values until attribute " +
-                "priority (Issue #91) is implemented",
-                changedAttributes.Count, mvo.Id);
-            return changes;
-        }
-
         // For no-net-change detection, we need both the CSO and the attribute cache
         var canDetectNoNetChange = !isCreateOperation && existingCso != null && csoAttributeCache != null;
 
@@ -1541,6 +1524,20 @@ public class ExportEvaluationServer
                         attrChangeType = PendingExportAttributeChangeType.Update;
                     }
 
+                    // For single-valued attributes, check if this is a removal (recall).
+                    // The changedAttributes list contains the original MetaverseObjectAttributeValue
+                    // objects with their OLD values (before recall cleared them from the MVO).
+                    // For removals, we must create a null-clearing export — not copy the old value —
+                    // so the target system clears the attribute.
+                    var isSingleValuedRecall = !isMultiValued && removedAttributes?.Contains(mvoValue) == true;
+
+                    if (isSingleValuedRecall)
+                    {
+                        Log.Debug("CreateAttributeValueChanges: Single-valued attribute {AttrName} is a removal (recall) - " +
+                            "creating null-clearing export change",
+                            source.MetaverseAttribute.Name);
+                    }
+
                     var attributeChange = new PendingExportAttributeValueChange
                     {
                         Id = Guid.NewGuid(),
@@ -1548,40 +1545,45 @@ public class ExportEvaluationServer
                         ChangeType = attrChangeType
                     };
 
-                    // Set the appropriate value based on data type
-                    switch (source.MetaverseAttribute.Type)
+                    // Set the appropriate value based on data type.
+                    // For single-valued removals (recall), skip value assignment — all fields remain
+                    // null, which tells the target system to clear the attribute.
+                    if (!isSingleValuedRecall)
                     {
-                        case AttributeDataType.Text:
-                            attributeChange.StringValue = mvoValue.StringValue;
-                            break;
-                        case AttributeDataType.Number:
-                            attributeChange.IntValue = mvoValue.IntValue;
-                            break;
-                        case AttributeDataType.DateTime:
-                            attributeChange.DateTimeValue = mvoValue.DateTimeValue;
-                            break;
-                        case AttributeDataType.Boolean:
-                            attributeChange.BoolValue = mvoValue.BoolValue;
-                            break;
-                        case AttributeDataType.Guid:
-                            attributeChange.GuidValue = mvoValue.GuidValue;
-                            break;
-                        case AttributeDataType.Binary:
-                            attributeChange.ByteValue = mvoValue.ByteValue;
-                            break;
-                        case AttributeDataType.LongNumber:
-                            attributeChange.LongValue = mvoValue.LongValue;
-                            break;
-                        case AttributeDataType.Reference:
-                            // For reference attributes, store the MVO ID as unresolved reference — will be
-                            // resolved during export execution. Use navigation with scalar FK fallback for
-                            // test compatibility.
-                            var referencedMvoId = mvoValue.ReferenceValue?.Id ?? mvoValue.ReferenceValueId;
-                            if (referencedMvoId.HasValue)
-                            {
-                                attributeChange.UnresolvedReferenceValue = referencedMvoId.Value.ToString();
-                            }
-                            break;
+                        switch (source.MetaverseAttribute.Type)
+                        {
+                            case AttributeDataType.Text:
+                                attributeChange.StringValue = mvoValue.StringValue;
+                                break;
+                            case AttributeDataType.Number:
+                                attributeChange.IntValue = mvoValue.IntValue;
+                                break;
+                            case AttributeDataType.DateTime:
+                                attributeChange.DateTimeValue = mvoValue.DateTimeValue;
+                                break;
+                            case AttributeDataType.Boolean:
+                                attributeChange.BoolValue = mvoValue.BoolValue;
+                                break;
+                            case AttributeDataType.Guid:
+                                attributeChange.GuidValue = mvoValue.GuidValue;
+                                break;
+                            case AttributeDataType.Binary:
+                                attributeChange.ByteValue = mvoValue.ByteValue;
+                                break;
+                            case AttributeDataType.LongNumber:
+                                attributeChange.LongValue = mvoValue.LongValue;
+                                break;
+                            case AttributeDataType.Reference:
+                                // For reference attributes, store the MVO ID as unresolved reference — will be
+                                // resolved during export execution. Use navigation with scalar FK fallback for
+                                // test compatibility.
+                                var referencedMvoId = mvoValue.ReferenceValue?.Id ?? mvoValue.ReferenceValueId;
+                                if (referencedMvoId.HasValue)
+                                {
+                                    attributeChange.UnresolvedReferenceValue = referencedMvoId.Value.ToString();
+                                }
+                                break;
+                        }
                     }
 
                     // No-net-change detection for direct attribute mappings
