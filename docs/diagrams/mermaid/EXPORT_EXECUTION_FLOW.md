@@ -1,6 +1,6 @@
 # Export Execution Flow
 
-> Generated against JIM v0.2.0 (`5a4788e9`). If the codebase has changed significantly since then, these diagrams may be out of date.
+> Generated against JIM v0.3.0 (`0d1c88e9`). If the codebase has changed significantly since then, these diagrams may be out of date.
 
 This diagram shows how pending exports are executed against connected systems via connectors. The export processor (`SyncExportTaskProcessor`) delegates to the `ExportExecutionServer` for the core execution logic, which supports batching, parallelism, deferred reference resolution, and retry with backoff.
 
@@ -110,6 +110,28 @@ flowchart TD
     CaptureItems --> Done([Batch complete])
 ```
 
+## LDAP Export Consolidation and Chunking
+
+For LDAP connectors, individual attribute changes are consolidated and chunked before being sent to the directory server. This ensures RFC 4511 compliance and prevents server rejection of oversized modify requests.
+
+```mermaid
+flowchart TD
+    Input([Pending Export<br/>with attribute changes]) --> Consolidate[ConsolidateModifications:<br/>Group changes by attribute name<br/>and operation type]
+
+    Consolidate --> Example1[Example: 200 individual<br/>member Add changes]
+    Example1 --> Merged[Consolidated into single<br/>DirectoryAttributeModification<br/>with 200 values]
+
+    Merged --> CheckSize{Values ><br/>batch size?}
+    CheckSize -->|No| SingleRequest[Single ModifyRequest<br/>with all values]
+    CheckSize -->|Yes| Chunk[ChunkModifyRequests:<br/>Split into batches<br/>of configurable size<br/>Default: 100]
+    Chunk --> MultiRequest[Multiple ModifyRequests<br/>sent sequentially<br/>e.g., 2 requests of 100 values]
+
+    SingleRequest --> Send([Send to LDAP server])
+    MultiRequest --> Send
+```
+
+**Batch size** is configurable via the "Modify Batch Size" connector setting (default: 100, range: 10-5000).
+
 ## Parallel Batch Architecture
 
 When `MaxParallelism > 1`, batches are distributed across concurrent tasks. Each task is fully isolated to avoid EF Core thread-safety issues.
@@ -149,3 +171,7 @@ flowchart TD
 - **Preview mode**: `SyncRunMode.PreviewOnly` returns the list of exports that would be processed without executing them, enabling dry-run functionality.
 
 - **Per-batch isolation**: Each parallel batch gets its own `DbContext` and connector instance. EF Core is not thread-safe, so sharing a context across batches would cause data corruption.
+
+- **LDAP consolidation**: Multiple changes to the same attribute with the same operation type (e.g., 200 individual "member Add" operations) are consolidated into a single `DirectoryAttributeModification` before sending to the directory server. This is the correct RFC 4511 pattern and dramatically reduces the number of LDAP modify requests.
+
+- **LDAP chunking**: Consolidated modifications that exceed the configurable batch size (default: 100) are split into multiple `ModifyRequest` objects sent sequentially. This prevents LDAP server rejection of oversized requests — important for large group membership changes.

@@ -1,6 +1,6 @@
 # MVO Deletion and Grace Period
 
-> Generated against JIM v0.2.0 (`988472e3`). If the codebase has changed significantly since then, these diagrams may be out of date.
+> Generated against JIM v0.3.0 (`0d1c88e9`). If the codebase has changed significantly since then, these diagrams may be out of date.
 
 This diagram shows the full lifecycle of Metaverse Object (MVO) deletion, from the trigger event (CSO disconnection) through deletion rule evaluation, grace period handling, and deferred housekeeping cleanup.
 
@@ -25,10 +25,11 @@ flowchart TD
 
     OosAction -->|RemainJoined| KeepJoin[Delete CSO<br/>Preserve MVO join state<br/>Once managed always managed<br/>No deletion evaluation]
 
-    OosAction -->|Disconnect| RemoveAttrs{RemoveContributed<br/>Attributes enabled<br/>on object type?}
-    RemoveAttrs -->|Yes| RecallAttrs[Remove contributed attributes<br/>from MVO<br/>Queue MVO for export evaluation]
+    OosAction -->|Disconnect| RemoveAttrs{RemoveContributed<br/>AttributesOnObsoletion<br/>enabled on object type?}
+    RemoveAttrs -->|Yes| RecallAttrs[Attribute Recall:<br/>Find MVO attributes where<br/>ContributedBySystemId = this system<br/>Add to PendingAttributeValueRemovals<br/>Track removedAttributes set]
     RemoveAttrs -->|No| BreakJoin
-    RecallAttrs --> BreakJoin[Break CSO-MVO join<br/>Set JoinType = NotJoined]
+    RecallAttrs --> QueueRecall[Queue MVO for export evaluation<br/>with removedAttributes set<br/>Pure recalls skip export evaluation]
+    QueueRecall --> BreakJoin[Break CSO-MVO join<br/>Set JoinType = NotJoined]
 
     BreakJoin --> CountRemaining[Count remaining CSOs<br/>before break, subtract 1]
     CountRemaining --> EvalDeletion[ProcessMvoDeletionRuleAsync]
@@ -159,3 +160,7 @@ stateDiagram-v2
 - **WhenAuthoritativeSourceDisconnected fallback**: If `DeletionTriggerConnectedSystemIds` is empty, the rule falls back to `WhenLastConnectorDisconnected` behaviour. This prevents misconfiguration from causing unexpected deletions.
 
 - **Dedup within page**: Multiple CSOs from the same MVO can disconnect in the same sync page. The dedup check in `MarkMvoForDeletionAsync` prevents the same MVO from being queued for immediate deletion twice.
+
+- **Attribute recall via ContributedBySystemId**: When `RemoveContributedAttributesOnObsoletion` is enabled on the object type, all MVO attribute values contributed by the disconnecting system (identified by `ContributedBySystemId`) are recalled. The `removedAttributes` set is tracked and passed to export evaluation, where pure recall operations skip evaluation entirely to avoid expression mapping errors against incomplete data.
+
+- **IsPendingDeletion**: An MVO is considered pending deletion when it has `LastConnectorDisconnectedDate` set, has `Origin = Projected` (not `Internal`), and its type's deletion rule is either `WhenLastConnectorDisconnected` or `WhenAuthoritativeSourceDisconnected`.

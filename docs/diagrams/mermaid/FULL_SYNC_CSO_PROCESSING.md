@@ -1,6 +1,6 @@
 # Full Synchronisation - CSO Processing Flow
 
-> Generated against JIM v0.2.0 (`5a4788e9`). If the codebase has changed significantly since then, these diagrams may be out of date.
+> Generated against JIM v0.3.0 (`0d1c88e9`). If the codebase has changed significantly since then, these diagrams may be out of date.
 
 This diagram shows the core decision tree for processing a single Connected System Object (CSO) during Full or Delta Synchronisation. This is the central flow of JIM's identity management engine.
 
@@ -34,7 +34,8 @@ flowchart TD
     FlushMVO --> UpdateProgress[Update activity progress<br/>in database]
     UpdateProgress --> PageLoop
 
-    PageLoop -->|No| Watermark[Update delta sync watermark<br/>LastDeltaSyncCompletedAt = UtcNow]
+    PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>Resolve MVO references across page boundaries<br/>Re-run flush pipeline for resolved references]
+    CrossPage --> Watermark[Update delta sync watermark<br/>LastDeltaSyncCompletedAt = UtcNow]
     Watermark --> End([Sync Complete])
 ```
 
@@ -54,11 +55,12 @@ flowchart TD
     CheckJoined -->|Yes| CheckOosAction{InboundOutOfScope<br/>Action?}
 
     CheckOosAction -->|RemainJoined| KeepJoin[Delete CSO but preserve<br/>MVO join state<br/>Once managed always managed]
-    CheckOosAction -->|Disconnect| RemoveAttrs{Remove contributed<br/>attributes setting?}
+    CheckOosAction -->|Disconnect| RemoveAttrs{RemoveContributed<br/>AttributesOnObsoletion<br/>enabled on object type?}
 
-    RemoveAttrs -->|Yes| RecallAttrs[Remove contributed attributes<br/>from MVO<br/>Queue MVO for export evaluation]
+    RemoveAttrs -->|Yes| RecallAttrs[Attribute Recall:<br/>Find MVO attributes where<br/>ContributedBySystemId = this system<br/>Add to PendingAttributeValueRemovals<br/>Track removedAttributes set]
     RemoveAttrs -->|No| BreakJoin
-    RecallAttrs --> BreakJoin[Break CSO-MVO join<br/>Set JoinType = NotJoined]
+    RecallAttrs --> QueueRecall[Queue MVO for export evaluation<br/>with removedAttributes set<br/>Pure recalls skip export evaluation]
+    QueueRecall --> BreakJoin[Break CSO-MVO join<br/>Set JoinType = NotJoined]
     BreakJoin --> EvalDeletion[Evaluate MVO deletion rule]
     EvalDeletion --> DeletionRule{MVO deletion<br/>rule?}
 
@@ -86,7 +88,7 @@ flowchart TD
     OosJoined -->|No| Done
     OosJoined -->|Yes| OosAction{InboundOutOfScope<br/>Action?}
     OosAction -->|RemainJoined| RetainJoin[OutOfScopeRetainJoin<br/>No attribute flow, preserve join]
-    OosAction -->|Disconnect| DisconnectOOS[DisconnectedOutOfScope<br/>Remove contributed attributes<br/>Break join, evaluate deletion]
+    OosAction -->|Disconnect| DisconnectOOS[DisconnectedOutOfScope<br/>Recall contributed attributes<br/>if enabled on object type<br/>Break join, evaluate deletion]
 
     InScope -->|Yes| CheckMvo{CSO joined<br/>to MVO?}
 
@@ -105,7 +107,7 @@ flowchart TD
     %% --- Attribute Flow path ---
     EstablishJoin --> AttrFlow
     Project --> AttrFlow
-    CheckMvo -->|Yes| AttrFlow[Inbound Attribute Flow<br/>Pass 1: scalar attributes only<br/>For each sync rule mapping:<br/>- Direct: CSO attr --> MVO attr<br/>- Expression: evaluate --> MVO attr<br/>Skip reference attributes]
+    CheckMvo -->|Yes| AttrFlow[Inbound Attribute Flow<br/>Pass 1: scalar attributes only<br/>For each sync rule mapping:<br/>- Direct: CSO attr --> MVO attr<br/>- Expression: evaluate --> MVO attr<br/>- ContributedBySystemId set on all new values<br/>Skip reference attributes]
 
     AttrFlow --> QueueRef[Queue CSO for deferred<br/>reference attribute processing<br/>Pass 2 at end of page]
     QueueRef --> ApplyChanges[Apply pending attribute<br/>additions and removals to MVO]
@@ -127,5 +129,9 @@ flowchart TD
 - **No-net-change detection**: Before creating pending exports, the system checks if the target CSO already has the expected values (using pre-cached data). This avoids unnecessary export operations.
 
 - **Drift detection**: After inbound attribute flow, the system checks whether CSO values match expected MVO state. If an `EnforceState` export rule exists and the CSO has drifted, a corrective pending export is created.
+
+- **Attribute recall via ContributedBySystemId**: Every MVO attribute value tracks which connected system contributed it. When a CSO is obsoleted and `RemoveContributedAttributesOnObsoletion` is enabled on the object type, all attributes contributed by that system are recalled (removed from the MVO). The `removedAttributes` set is passed to export evaluation, where pure recall operations (all changes are removals) skip export evaluation entirely to avoid expression mapping errors against incomplete data.
+
+- **Cross-page reference resolution**: After all pages are processed, CSOs with unresolved reference attributes are reloaded from the database. At this point, all MVOs exist, so cross-page references can be resolved. The standard flush pipeline (persist MVOs, evaluate exports, flush PEs) runs again for the resolved references.
 
 - **Error isolation**: Each CSO is processed within its own try/catch. Errors create RPEIs but do not halt processing of remaining CSOs.
