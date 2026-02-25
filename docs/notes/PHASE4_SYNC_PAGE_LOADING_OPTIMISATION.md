@@ -456,6 +456,60 @@ by calling `GetPendingExportsCountAsync` (a dedicated count query) and passing t
 
 ## Next Steps
 
+### LDAP Export Failure After Attribute Recall (Scenario 4, Test 3)
+
+Integration test Scenario 4 Test 3 (`WhenAuthoritativeSourceDisconnected` + immediate deletion)
+intermittently fails at the LDAP Export step. The failure occurs after attribute recall has cleared
+MVO attributes and the system attempts to export deprovisioning changes to LDAP.
+
+**Activity summary:**
+- Status: `CompleteWithWarning`
+- Result: `Export complete: 1 succeeded, 1 failed, 0 deferred`
+- Objects processed: 2 (1 deprovisioned successfully, 1 failed with `UnhandledError`)
+
+**Attributes mapped for export (14 total):**
+
+Direct attribute mappings (11):
+| Metaverse Attribute | LDAP Attribute |
+|---|---|
+| Account Name | sAMAccountName |
+| First Name | givenName |
+| Last Name | sn |
+| Display Name | displayName |
+| Display Name | cn |
+| Email | mail |
+| Email | userPrincipalName |
+| Job Title | title |
+| Department | department |
+| Company | company |
+| Employee ID | employeeID |
+
+Expression-based mappings (3):
+| LDAP Attribute | Source |
+|---|---|
+| distinguishedName | Expression (constructs DN from MV attributes) |
+| userAccountControl | Expression |
+| accountExpires | Expression |
+
+**Error details:** The test infrastructure captures only the `UnhandledError` error type from the
+Activity Run Profile Execution Item — the underlying exception message and stack trace are only
+available in the worker container logs, which were not captured during these test runs.
+
+**Behaviour:** The failure is **intermittent** — some integration test runs pass Test 3 while others
+fail (confirmed across multiple runs on 2026-02-25). This suggests a timing or race condition
+rather than a deterministic logic error.
+
+**Likely cause:** After recall clears MVO attributes, expression-based mappings (particularly
+`distinguishedName`, which builds a DN from `Display Name`, `Department`, etc.) evaluate against
+null MVO attribute values, producing invalid values. LDAP rejects writes for mandatory attributes
+(`sAMAccountName`, `displayName`) with null or invalid values. This was the primary motivation for
+the "Pure Recall Export Handling" fix described above — skipping export evaluation entirely during
+pure recall avoids sending invalid or null values to target systems.
+
+**To investigate further:** Capture worker container logs during the export step
+(`docker compose logs jim.worker --tail=5000`) to get the full exception stack trace and identify
+which specific LDAP attribute or operation triggers the `UnhandledError`.
+
 ### Attribute Priority (Issue #91)
 
 When a contributor system disconnects and recall clears its MVO attributes, the system should
