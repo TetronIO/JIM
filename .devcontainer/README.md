@@ -132,27 +132,25 @@ Just create `.env` manually in the Codespace. It's gitignored and persists for 3
 
 The setup creates these handy aliases:
 
-### Build & Test
+### .NET Local Development
 ```bash
-jim-build          # Build entire solution
-jim-test           # Run all tests
+jim-compile        # Build entire solution (dotnet build)
+jim-test           # Run unit + workflow tests (excludes Explicit)
+jim-test-all       # Run ALL tests (incl. Explicit + Pester)
+jim-test-ps        # Run PowerShell Pester tests
 jim-clean          # Clean and rebuild
+jim-web            # Run JIM.Web locally (sources .env)
+jim-worker         # Run JIM.Worker locally (sources .env)
+jim-scheduler      # Run JIM.Scheduler locally (sources .env)
 ```
 
-### Run Services
-```bash
-jim-web            # Run Blazor web app
-jim-api            # Run REST API
-jim-worker         # Run background worker
-```
-
-### Database (Local Development)
+### Database Management
 ```bash
 jim-db             # Start PostgreSQL (for local debugging)
 jim-db-stop        # Stop PostgreSQL
 jim-db-logs        # View database logs
 jim-migrate        # Apply migrations
-jim-migration [N]  # Create new migration
+jim-migration      # Create new migration
 ```
 
 ### Docker Stack Management
@@ -160,27 +158,31 @@ jim-migration [N]  # Create new migration
 jim-stack          # Start Docker stack (production-like)
 jim-stack-logs     # View all Docker service logs
 jim-stack-down     # Stop all Docker services
+jim-restart        # Recreate stack (re-reads .env, no rebuild)
 ```
 
-### Development Builds (fast - skips publish stage)
+### Docker Builds (rebuild + start)
 ```bash
-jim-dev            # Build all services in dev mode + start
-jim-dev-web        # Build jim.web in dev mode + start
-jim-dev-worker     # Build jim.worker in dev mode + start
-jim-dev-scheduler  # Build jim.scheduler in dev mode + start
-```
-
-### Release Builds (production-ready)
-```bash
-jim-release        # Build all services for release + start
-jim-release-web    # Build jim.web for release + start
-jim-release-worker # Build jim.worker for release + start
-jim-release-scheduler # Build jim.scheduler for release + start
+jim-build          # Rebuild all services + start
+jim-build-web      # Rebuild jim.web + start
+jim-build-worker   # Rebuild jim.worker + start
+jim-build-scheduler # Rebuild jim.scheduler + start
 ```
 
 ### Reset
 ```bash
-jim-reset          # Reset JIM (delete database & logs volumes)
+jim-reset          # Full reset (containers, images, volumes)
+jim-wipe           # Wipe JIM data (reset CSOs/MVOs/config, keep schema)
+```
+
+### Diagrams
+```bash
+jim-diagrams       # Export Structurizr C4 diagrams as SVG
+```
+
+### Help
+```bash
+jim                # Show all available aliases
 ```
 
 ## 🔀 Development Workflows
@@ -230,16 +232,17 @@ JIM supports two different development workflows. Choose the one that fits your 
 ### Debug Single Service
 
 1. Open Debug panel (`Ctrl+Shift+D`)
-2. Select configuration (e.g., "JIM Web (Blazor)")
+2. Select configuration (e.g., "JIM Web")
 3. Press `F5`
 4. Set breakpoints and debug!
 
+Available configurations: JIM Web, JIM Worker, JIM Scheduler, Attach to JIM Process.
+
 ### Debug Multiple Services
 
-Use compound configurations:
+Use the compound configuration:
 
-- **"JIM Full Stack"** - Web + API + Worker
-- **"JIM Web Stack"** - Web + API only
+- **"JIM Full Stack"** - Web + Worker
 
 Select from debug dropdown and press `F5` to debug all at once.
 
@@ -282,7 +285,7 @@ Edit `devcontainer.json`:
 
 ### Add More Shell Aliases
 
-Edit `setup.sh`, add to the aliases section:
+Edit `jim-aliases.sh`, add your alias:
 ```bash
 alias your-alias='your-command'
 ```
