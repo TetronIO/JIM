@@ -1,10 +1,8 @@
 using JIM.Application.Expressions;
 using JIM.Models.Core;
-using JIM.Models.Enums;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
-using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using Serilog;
