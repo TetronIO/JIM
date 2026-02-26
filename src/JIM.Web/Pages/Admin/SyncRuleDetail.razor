@@ -151,29 +151,29 @@ else if (_syncRule != null)
                     </MudGrid>
                 }
 
-                @if (_syncRule.Direction == SyncRuleDirection.Import)
-                {
-                    <MudSwitch @bind-Value="@_syncRule.ProjectToMetaverse" Color="Color.Primary"
-                        Label="Create imported objects in the Metaverse?" />
-                    <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Outlined">By default, objects imported from this
-                        Connected System matched in this synchronisation rule will not result in a Metaverse object being created.
-                        Enabling this option causes the object to be projected to the Metaverse, allowing it to be managed within
-                        JIM and synchronised to other Connected Systems. You would typically enable this for a source system, i.e. a
-                        HR system.</MudAlert>
-                }
-
-                @if (_syncRule.Direction == SyncRuleDirection.Export)
-                {
-                    <MudSwitch @bind-Value="@_syncRule.ProvisionToConnectedSystem" Color="Color.Primary"
-                        Label="Create objects in the Connected System?" />
-                    <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Outlined">By default, Metaverse objects matched
-                        in this synchronisation rule will not be created (provisioned) in the Connected Systems. Enabling this
-                        option will cause the Metaverse object to be created in the Connected System. You would typically enable
-                        this option for a destination system, i.e. when trying to implement a HR to Active Directory flow.
-                    </MudAlert>
-                }
             }
         </MudForm>
+        @if (_syncRule.Direction == SyncRuleDirection.Import)
+        {
+            <MudSwitch Class="mt-5" @bind-Value="@_syncRule.ProjectToMetaverse" Color="Color.Primary"
+                Label="Create imported objects in the Metaverse?" />
+            <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Outlined">By default, objects imported from this
+                Connected System matched in this synchronisation rule will not result in a Metaverse object being created.
+                Enabling this option causes the object to be projected to the Metaverse, allowing it to be managed within
+                JIM and synchronised to other Connected Systems. You would typically enable this for a source system, i.e. a
+                HR system.</MudAlert>
+        }
+
+        @if (_syncRule.Direction == SyncRuleDirection.Export)
+        {
+            <MudSwitch Class="mt-5" @bind-Value="@_syncRule.ProvisionToConnectedSystem" Color="Color.Primary"
+                Label="Provision objects in the Connected System?" />
+            <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Outlined">By default, Metaverse objects matched
+                in this synchronisation rule will not be created (provisioned) in the Connected Systems. Enabling this
+                option will cause the Metaverse object to be created in the Connected System. You would typically enable
+                this option for a destination system, i.e. when trying to implement a HR to Active Directory flow.
+            </MudAlert>
+        }
         <MudTooltip Text="Synchronisation Rules will not be evaluated when disabled. This allows to either prepare a rule in advance of it being needed, or to temporarily stop a sync rule from being evaluated."
                     Arrow="true" Placement="Placement.Top">
             <MudSwitch Class="mt-5" @bind-Value="@_syncRule.Enabled" Color="Color.Primary" Label="Enabled?" />
