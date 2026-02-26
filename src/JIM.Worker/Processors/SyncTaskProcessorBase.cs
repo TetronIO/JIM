@@ -133,18 +133,15 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Attempts to join/project/delete/flow attributes to the Metaverse for a single Connected System Object.
-    /// Records successful operations (joins, projections, attribute flow) and errors to ActivityRunProfileExecutionItems.
-    /// Only creates execution items for CSOs that had actual changes to avoid unnecessary allocations.
+    /// Pass 1: Processes pending export confirmations and obsolete CSO teardown for a single Connected System Object.
+    /// This must run for ALL CSOs in the page BEFORE Pass 2 (ProcessActiveConnectedSystemObjectAsync) runs,
+    /// so that all disconnections are recorded in _pendingDisconnectedMvoIds before any join attempts.
+    /// Without this ordering guarantee, a new CSO processed before an obsolete CSO (due to GUID ordering)
+    /// would see a stale join count and incorrectly throw CouldNotJoinDueToExistingJoin.
     /// </summary>
-    protected async Task ProcessConnectedSystemObjectAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
+    protected async Task ProcessObsoleteAndExportConfirmationAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
-        Log.Verbose($"ProcessConnectedSystemObjectAsync: Performing sync on Connected System Object: {connectedSystemObject}.");
-
-        // Track changes to determine if we need to create an execution item.
-        // Only create items for CSOs that had actual changes (optimisation to avoid allocations for unchanged objects).
-        var changeResult = MetaverseObjectChangeResult.NoChanges();
-        List<ActivityRunProfileExecutionItem> obsoleteExecutionItems = [];
+        Log.Verbose($"ProcessObsoleteAndExportConfirmationAsync: Pass 1 for CSO: {connectedSystemObject}.");
 
         try
         {
@@ -155,19 +152,10 @@ public abstract class SyncTaskProcessorBase
                 ProcessPendingExport(connectedSystemObject);
             }
 
+            List<ActivityRunProfileExecutionItem> obsoleteExecutionItems;
             using (Diagnostics.Sync.StartSpan("ProcessObsoleteConnectedSystemObject"))
             {
                 obsoleteExecutionItems = await ProcessObsoleteConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
-            }
-
-            // if the CSO isn't marked as obsolete (it might just have been), look to see if we need to make any related Metaverse Object changes.
-            // this requires that we have sync rules defined.
-            if (activeSyncRules.Count > 0 && connectedSystemObject.Status != ConnectedSystemObjectStatus.Obsolete)
-            {
-                using (Diagnostics.Sync.StartSpan("ProcessMetaverseObjectChanges"))
-                {
-                    changeResult = await ProcessMetaverseObjectChangesAsync(activeSyncRules, connectedSystemObject);
-                }
             }
 
             // Add execution items for obsolete CSO (created by ProcessObsoleteConnectedSystemObjectAsync)
@@ -177,8 +165,50 @@ public abstract class SyncTaskProcessorBase
                 foreach (var item in obsoleteExecutionItems)
                     _activity.RunProfileExecutionItems.Add(item);
             }
+        }
+        catch (Exception e)
+        {
+            // Create execution item for unhandled error tracking
+            var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+            runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+            runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
+            runProfileExecutionItem.ErrorMessage = e.Message;
+            runProfileExecutionItem.ErrorStackTrace = e.StackTrace;
+            _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+            Log.Error(e, "ProcessObsoleteAndExportConfirmationAsync: Unhandled error during pass 1 for {Cso}.",
+                connectedSystemObject);
+        }
+    }
+
+    /// <summary>
+    /// Pass 2: Processes joins, projections, and attribute flow for a single non-obsolete Connected System Object.
+    /// This must run AFTER Pass 1 (ProcessObsoleteAndExportConfirmationAsync) has completed for ALL CSOs in the page,
+    /// ensuring _pendingDisconnectedMvoIds is fully populated before any join attempts.
+    /// Skips obsolete CSOs (already handled in Pass 1).
+    /// </summary>
+    protected async Task ProcessActiveConnectedSystemObjectAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
+    {
+        // Skip obsolete CSOs - already fully handled in Pass 1
+        if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
+            return;
+
+        // Skip if no sync rules defined - nothing to join/project/flow
+        if (activeSyncRules.Count == 0)
+            return;
+
+        Log.Verbose($"ProcessActiveConnectedSystemObjectAsync: Pass 2 for CSO: {connectedSystemObject}.");
+
+        try
+        {
+            MetaverseObjectChangeResult changeResult;
+            using (Diagnostics.Sync.StartSpan("ProcessMetaverseObjectChanges"))
+            {
+                changeResult = await ProcessMetaverseObjectChangesAsync(activeSyncRules, connectedSystemObject);
+            }
+
             // Handle execution item for successful changes (join, projection, attribute flow)
-            else if (changeResult.HasChanges)
+            if (changeResult.HasChanges)
             {
                 // Check if an RPEI was already created for this CSO (in ProcessMetaverseObjectChangesAsync when MVO changes were captured)
                 var existingRpei = _activity.RunProfileExecutionItems.FirstOrDefault(r => r.ConnectedSystemObject?.Id == connectedSystemObject.Id);
@@ -219,7 +249,7 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ErrorMessage = joinEx.Message;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
-            Log.Warning(joinEx, "ProcessConnectedSystemObjectAsync: Join error for {Cso}: {Message}",
+            Log.Warning(joinEx, "ProcessActiveConnectedSystemObjectAsync: Join error for {Cso}: {Message}",
                 connectedSystemObject, joinEx.Message);
         }
         catch (Exception e)
@@ -232,8 +262,8 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ErrorStackTrace = e.StackTrace;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
-            Log.Error(e, "ProcessConnectedSystemObjectAsync: Unhandled {RunProfile} sync error whilst processing {Cso}.",
-                _connectedSystemRunProfile, connectedSystemObject);
+            Log.Error(e, "ProcessActiveConnectedSystemObjectAsync: Unhandled error during pass 2 for {Cso}.",
+                connectedSystemObject);
         }
     }
 
@@ -1514,6 +1544,34 @@ public abstract class SyncTaskProcessorBase
         {
             try
             {
+                // Safeguard: If this MVO was re-joined by a new CSO during Pass 2 of the same page
+                // (e.g., an obsolete CSO disconnected in Pass 1 triggered 0-grace-period deletion,
+                // then a different CSO joined the same MVO in Pass 2), skip the deletion.
+                // Check specifically for CSOs joined during THIS sync page — identified by JoinType=Joined
+                // which is set by AttemptJoinAsync. Other join types (Provisioned, Projected) predate this page.
+                // We must also verify the CSO belongs to the current connected system being synced,
+                // because CSOs from other systems (e.g., a Provisioned AD CSO) were not processed
+                // in this sync run and should not prevent intentional deletion rules.
+                if (mvo.ConnectedSystemObjects.Any(cso =>
+                    cso.JoinType == ConnectedSystemObjectJoinType.Joined &&
+                    cso.ConnectedSystemId == _connectedSystem.Id &&
+                    cso.Status != ConnectedSystemObjectStatus.Obsolete))
+                {
+                    Log.Information(
+                        "FlushPendingMvoDeletionsAsync: Skipping deletion of MVO {MvoId} — it was reconnected during this page " +
+                        "({ConnectorCount} active connector(s) from this system). Clearing deletion markers.",
+                        mvo.Id, mvo.ConnectedSystemObjects.Count(cso =>
+                            cso.JoinType == ConnectedSystemObjectJoinType.Joined &&
+                            cso.ConnectedSystemId == _connectedSystem.Id));
+
+                    // Clear any deletion markers set during Pass 1
+                    mvo.LastConnectorDisconnectedDate = null;
+                    mvo.DeletionInitiatedByType = ActivityInitiatorType.NotSet;
+                    mvo.DeletionInitiatedById = null;
+                    mvo.DeletionInitiatedByName = null;
+                    continue;
+                }
+
                 // Create delete pending exports for any remaining Provisioned CSOs
                 // This handles WhenAuthoritativeSourceDisconnected where target CSOs still exist
                 var deleteExports = await _jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);

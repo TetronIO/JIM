@@ -2986,4 +2986,222 @@ public class FullSyncTests
     }
 
     #endregion
+
+    #region Two-Pass CSO Processing Tests
+
+    /// <summary>
+    /// Tests that when an obsolete CSO and a new active CSO both target the same MVO in the same page,
+    /// the active CSO successfully joins regardless of GUID ordering.
+    ///
+    /// Before the two-pass fix, if the active CSO had a lower GUID than the obsolete CSO,
+    /// it would be processed first, see the stale join count from the DB, and throw
+    /// CouldNotJoinDueToExistingJoin. The two-pass approach processes all obsolete CSOs first
+    /// (populating _pendingDisconnectedMvoIds) before any join attempts in the second pass.
+    /// </summary>
+    [Test]
+    public async Task TwoPassProcessing_ObsoleteCsoAndNewActiveCso_JoinsSuccessfullyAsync()
+    {
+        // Arrange: Set up MVO with an existing joined CSO
+        var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
+        mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
+        mvoType.DeletionGracePeriod = TimeSpan.FromDays(7);
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvoType;
+        mvo.Origin = MetaverseObjectOrigin.Projected;
+        mvo.ConnectedSystemObjects.Clear();
+
+        // CSO #1: Already joined to MVO, will be marked obsolete (simulating removal from source)
+        var cso1 = ConnectedSystemObjectsData[0];
+        cso1.MetaverseObject = mvo;
+        cso1.MetaverseObjectId = mvo.Id;
+        cso1.JoinType = ConnectedSystemObjectJoinType.Joined;
+        cso1.DateJoined = DateTime.UtcNow;
+        cso1.Status = ConnectedSystemObjectStatus.Obsolete;
+        mvo.ConnectedSystemObjects.Add(cso1);
+
+        // CSO #2: New active CSO that should join the same MVO via matching rule
+        var cso2 = ConnectedSystemObjectsData[1];
+        cso2.MetaverseObject = null;
+        cso2.MetaverseObjectId = null;
+        cso2.JoinType = ConnectedSystemObjectJoinType.NotJoined;
+        cso2.Status = ConnectedSystemObjectStatus.Normal;
+
+        // Ensure CSO #2 has the same EmployeeId as MVO (for matching)
+        var mvoEmployeeIdAttr = mvoType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
+        var mvoEmployeeIdValue = mvo.AttributeValues.FirstOrDefault(av => av.AttributeId == (int)MockMetaverseAttributeName.EmployeeId);
+        var matchValue = mvoEmployeeIdValue?.StringValue ?? "E123";
+
+        // Ensure CSO #2 has a matching EMPLOYEE_ID
+        var cso2EmployeeId = cso2.AttributeValues.FirstOrDefault(av => av.AttributeId == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID);
+        if (cso2EmployeeId != null)
+            cso2EmployeeId.StringValue = matchValue;
+
+        // Configure import sync rule with object matching rule on EmployeeId
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+        importSyncRule.Direction = SyncRuleDirection.Import;
+        importSyncRule.Enabled = true;
+        importSyncRule.MetaverseObjectTypeId = mvoType.Id;
+        importSyncRule.MetaverseObjectType = mvoType;
+
+        var csotAttr = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER")
+            .Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID);
+        importSyncRule.ObjectMatchingRules.Clear();
+        var objectMatchingRule = new ObjectMatchingRule
+        {
+            Id = 200,
+            SyncRule = importSyncRule,
+            CaseSensitive = true, // Required for in-memory test database (EF.Functions.ILike not supported)
+            TargetMetaverseAttribute = mvoEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvoEmployeeIdAttr.Id
+        };
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
+        {
+            Id = 200,
+            Order = 1,
+            ConnectedSystemAttribute = csotAttr,
+            ConnectedSystemAttributeId = csotAttr.Id
+        });
+        importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
+
+        // Setup mock to handle batch CSO deletion
+        MockDbSetConnectedSystemObjects.Setup(set => set.RemoveRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback(
+            (IEnumerable<ConnectedSystemObject> entities) => {
+                foreach (var entity in entities.ToList())
+                    ConnectedSystemObjectsData.Remove(entity);
+            });
+
+        // Act: Run full sync
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // Assert: CSO #1 should be disconnected and deleted
+        Assert.That(cso1.MetaverseObject, Is.Null, "Expected obsolete CSO to be disconnected from MVO.");
+        Assert.That(cso1.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined), "Expected obsolete CSO join type to be NotJoined.");
+
+        // Assert: CSO #2 should have joined the MVO
+        Assert.That(cso2.MetaverseObject, Is.EqualTo(mvo), "Expected new CSO to join the existing MVO.");
+        Assert.That(cso2.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined), "Expected new CSO join type to be Joined.");
+
+        // Assert: No CouldNotJoinDueToExistingJoin errors
+        var joinErrors = activity.RunProfileExecutionItems
+            .Where(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin)
+            .ToList();
+        Assert.That(joinErrors, Is.Empty, "Expected no CouldNotJoinDueToExistingJoin errors — the two-pass processing should handle this.");
+
+        // Assert: MVO should not be marked for deletion (new connector joined)
+        Assert.That(mvo.LastConnectorDisconnectedDate, Is.Null, "Expected deletion marker to be cleared after reconnection.");
+    }
+
+    /// <summary>
+    /// Tests that FlushPendingMvoDeletionsAsync skips deletion of an MVO that was reconnected
+    /// during Pass 2 of the same page. This guards against the edge case where:
+    /// 1. Pass 1 disconnects the last CSO and queues MVO for 0-grace-period deletion
+    /// 2. Pass 2 joins a different CSO to the same MVO
+    /// 3. FlushPendingMvoDeletionsAsync should NOT delete the MVO because it now has a live connector
+    /// </summary>
+    [Test]
+    public async Task FlushPendingMvoDeletions_SkipsDeletionWhenMvoReconnected_ZeroGracePeriodAsync()
+    {
+        // Arrange: Set up MVO with 0-grace-period deletion rule
+        var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
+        mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
+        mvoType.DeletionGracePeriod = TimeSpan.Zero; // immediate deletion
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvoType;
+        mvo.Origin = MetaverseObjectOrigin.Projected;
+        mvo.ConnectedSystemObjects.Clear();
+
+        // CSO #1: Joined to MVO, will be obsoleted (triggers 0-grace-period deletion queuing)
+        var cso1 = ConnectedSystemObjectsData[0];
+        cso1.MetaverseObject = mvo;
+        cso1.MetaverseObjectId = mvo.Id;
+        cso1.JoinType = ConnectedSystemObjectJoinType.Joined;
+        cso1.DateJoined = DateTime.UtcNow;
+        cso1.Status = ConnectedSystemObjectStatus.Obsolete;
+        mvo.ConnectedSystemObjects.Add(cso1);
+
+        // CSO #2: New active CSO that should join the same MVO via matching rule
+        var cso2 = ConnectedSystemObjectsData[1];
+        cso2.MetaverseObject = null;
+        cso2.MetaverseObjectId = null;
+        cso2.JoinType = ConnectedSystemObjectJoinType.NotJoined;
+        cso2.Status = ConnectedSystemObjectStatus.Normal;
+
+        // Set up matching on EmployeeId
+        var mvoEmployeeIdAttr = mvoType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
+        var mvoEmployeeIdValue = mvo.AttributeValues.FirstOrDefault(av => av.AttributeId == (int)MockMetaverseAttributeName.EmployeeId);
+        var matchValue = mvoEmployeeIdValue?.StringValue ?? "E123";
+
+        var cso2EmployeeId = cso2.AttributeValues.FirstOrDefault(av => av.AttributeId == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID);
+        if (cso2EmployeeId != null)
+            cso2EmployeeId.StringValue = matchValue;
+
+        // Configure import sync rule with matching rule
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+        importSyncRule.Direction = SyncRuleDirection.Import;
+        importSyncRule.Enabled = true;
+        importSyncRule.MetaverseObjectTypeId = mvoType.Id;
+        importSyncRule.MetaverseObjectType = mvoType;
+
+        var csotAttr = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER")
+            .Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID);
+        importSyncRule.ObjectMatchingRules.Clear();
+        var objectMatchingRule = new ObjectMatchingRule
+        {
+            Id = 300,
+            SyncRule = importSyncRule,
+            CaseSensitive = true,
+            TargetMetaverseAttribute = mvoEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvoEmployeeIdAttr.Id
+        };
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
+        {
+            Id = 300,
+            Order = 1,
+            ConnectedSystemAttribute = csotAttr,
+            ConnectedSystemAttributeId = csotAttr.Id
+        });
+        importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
+
+        // Setup mocks for batch CSO deletion
+        MockDbSetConnectedSystemObjects.Setup(set => set.RemoveRange(It.IsAny<IEnumerable<ConnectedSystemObject>>())).Callback(
+            (IEnumerable<ConnectedSystemObject> entities) => {
+                foreach (var entity in entities.ToList())
+                    ConnectedSystemObjectsData.Remove(entity);
+            });
+
+        // Setup mock for MVO deletion (should NOT be called thanks to safeguard)
+        MockDbSetMetaverseObjects.Setup(set => set.Remove(It.IsAny<MetaverseObject>())).Callback(
+            (MetaverseObject entity) => {
+                MetaverseObjectsData.Remove(entity);
+            });
+
+        var initialMvoCount = MetaverseObjectsData.Count;
+
+        // Act: Run full sync
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncFullSyncTaskProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        await syncFullSyncTaskProcessor.PerformFullSyncAsync();
+
+        // Assert: MVO should NOT have been deleted (reconnected during Pass 2)
+        Assert.That(MetaverseObjectsData.Count, Is.EqualTo(initialMvoCount),
+            "Expected MVO to survive — it was reconnected by a new CSO during the same page.");
+
+        // Assert: CSO #2 should be joined to the MVO
+        Assert.That(cso2.MetaverseObject, Is.EqualTo(mvo), "Expected new CSO to join the existing MVO.");
+        Assert.That(cso2.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined), "Expected new CSO join type to be Joined.");
+
+        // Assert: No deletion markers on the MVO
+        Assert.That(mvo.LastConnectorDisconnectedDate, Is.Null,
+            "Expected deletion markers to be cleared after reconnection.");
+    }
+
+    #endregion
 }
