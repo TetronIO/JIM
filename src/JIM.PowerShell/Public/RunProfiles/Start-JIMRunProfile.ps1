@@ -176,7 +176,7 @@ function Start-JIMRunProfile {
 
                         # Use object counts for progress if available
                         if ($objectsToProcess -gt 0) {
-                            $percent = [int](($objectsProcessed / $objectsToProcess) * 100)
+                            $percent = [Math]::Max(0, [Math]::Min(100, [int](($objectsProcessed / $objectsToProcess) * 100)))
                             $progressParams.Status = "$status - $objectsProcessed of $objectsToProcess objects"
                             $progressParams.PercentComplete = $percent
 
