@@ -1,8 +1,8 @@
 using JIM.Application.Expressions;
-using JIM.Models.Expressions;
-using JIM.Models.Interfaces;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Expressions;
+using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Search;
 using JIM.Models.Staging;
@@ -1279,8 +1279,9 @@ public class ExportEvaluationServer
     /// <param name="csoAttributeCache">Optional cache of CSO attribute values for no-net-change detection.
     /// Uses ILookup to support multi-valued attributes where a single (CsoId, AttributeId) can have multiple values.</param>
     /// <param name="csoAlreadyCurrentCount">Output: count of attributes skipped because CSO already has the value.</param>
-    /// <param name="removedAttributes">Optional list of attribute values that were removed from the MVO.
-    /// For multi-valued attributes, values in this list will create Remove changes instead of Add changes.</param>
+    /// <param name="removedAttributes">Optional set of attribute values that were removed from the MVO.
+    /// For multi-valued attributes, values in this set create Remove changes instead of Add changes.
+    /// For single-valued attributes, values in this set create null-clearing Update changes.</param>
     /// <returns>List of attribute value changes to export.</returns>
     internal List<PendingExportAttributeValueChange> CreateAttributeValueChanges(
         MetaverseObject mvo,
@@ -1461,7 +1462,7 @@ public class ExportEvaluationServer
                 }
                 else
                 {
-                    // For single-valued attributes, only get the first value (original behaviour)
+                    // For single-valued attributes, only get the first value
                     var changedValue = changedAttributes
                         .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id);
 
@@ -1524,16 +1525,17 @@ public class ExportEvaluationServer
                         attrChangeType = PendingExportAttributeChangeType.Update;
                     }
 
-                    // For single-valued attributes, check if this is a removal (recall).
-                    // The changedAttributes list contains the original MetaverseObjectAttributeValue
-                    // objects with their OLD values (before recall cleared them from the MVO).
-                    // For removals, we must create a null-clearing export — not copy the old value —
-                    // so the target system clears the attribute.
-                    var isSingleValuedRecall = !isMultiValued && removedAttributes?.Contains(mvoValue) == true;
+                    // For single-valued attributes, check if this value was removed from the MVO.
+                    // Removals occur when an attribute value is no longer contributed by any source
+                    // (e.g. attribute recall on CSO obsoletion, source no longer returning the value,
+                    // CSO falling out of sync rule scope). The changedAttributes list contains the
+                    // original values (pre-removal) — we must create a null-clearing export so the
+                    // target system clears the attribute, rather than copying the stale old value.
+                    var isSingleValuedRemoval = !isMultiValued && removedAttributes?.Contains(mvoValue) == true;
 
-                    if (isSingleValuedRecall)
+                    if (isSingleValuedRemoval)
                     {
-                        Log.Debug("CreateAttributeValueChanges: Single-valued attribute {AttrName} is a removal (recall) - " +
+                        Log.Debug("CreateAttributeValueChanges: Single-valued attribute {AttrName} is a removal - " +
                             "creating null-clearing export change",
                             source.MetaverseAttribute.Name);
                     }
@@ -1546,9 +1548,9 @@ public class ExportEvaluationServer
                     };
 
                     // Set the appropriate value based on data type.
-                    // For single-valued removals (recall), skip value assignment — all fields remain
+                    // For single-valued removals, skip value assignment — all fields remain
                     // null, which tells the target system to clear the attribute.
-                    if (!isSingleValuedRecall)
+                    if (!isSingleValuedRemoval)
                     {
                         switch (source.MetaverseAttribute.Type)
                         {
