@@ -1116,7 +1116,7 @@ catch {
 $timings["5. Run Tests"] = (Get-Date) - $step5Start
 
 Write-Host ""
-Write-Step "Scenario log saved to: results/logs/$Scenario-$Template-$logTimestamp.log"
+Write-Step "Scenario log saved to: $scenarioLogFile"
 
 # Step 6: Capture Performance Metrics
 $step6Start = Get-Date

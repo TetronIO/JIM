@@ -157,9 +157,9 @@ else if (_syncRule != null)
         @if (_syncRule.Direction == SyncRuleDirection.Import)
         {
             <MudSwitch Class="mt-5" @bind-Value="@_syncRule.ProjectToMetaverse" Color="Color.Primary"
-                Label="Create imported objects in the Metaverse?" />
+                Label="@($"Project {_syncRule.MetaverseObjectType?.PluralName ?? "objects"} to the Metaverse?")" />
             <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Outlined">By default, objects imported from this
-                Connected System matched in this synchronisation rule will not result in a Metaverse object being created.
+                Connected System will not result in a Metaverse object being projected if no match is found.
                 Enabling this option causes the object to be projected to the Metaverse, allowing it to be managed within
                 JIM and synchronised to other Connected Systems. You would typically enable this for a source system, i.e. a
                 HR system.</MudAlert>
@@ -169,8 +169,8 @@ else if (_syncRule != null)
         {
             <MudSwitch Class="mt-5" @bind-Value="@_syncRule.ProvisionToConnectedSystem" Color="Color.Primary"
                 Label="@($"Provision {(_syncRule.ConnectedSystemObjectType?.Name ?? "objects").Pluralise()} to the Connected System?")" />
-            <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Outlined">By default, Metaverse objects matched
-                in this synchronisation rule will not be created (provisioned) in the Connected Systems. Enabling this
+            <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Outlined">By default, Metaverse objects scoped to
+                this synchronisation rule will not be created (provisioned) in the Connected Systems. Enabling this
                 option will cause the Metaverse object to be created in the Connected System. You would typically enable
                 this option for a destination system, i.e. when trying to implement a HR to Active Directory flow.
             </MudAlert>
