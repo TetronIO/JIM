@@ -1,6 +1,6 @@
 # Worker Database Performance Optimisation
 
-- **Status**: In Progress — Phases 1–4 Complete, Phase 5 In Testing
+- **Status**: Complete — Phases 1–5 Complete
 - **Milestone**: Post-MVP
 - **GitHub Issue**: [#338](https://github.com/TetronIO/JIM/issues/338)
 - **Related**: `docs/plans/EXPORT_PERFORMANCE_OPTIMISATION.md`
@@ -304,11 +304,11 @@ var result = await metaVerseObjects.ToListAsync();
 
 ---
 
-### Phase 5: RPEI Persistence Optimisation — In Testing
+### Phase 5: RPEI Persistence Optimisation ✅
 
 **Target**: Activity `RunProfileExecutionItem` creation during sync
 
-**Status**: In Testing. Core implementation complete, unit tests pass (1,844/1,844). Integration test Scenario 8 passes all sync operations. One remaining integration test failure (`Target Export (DeleteGroup)`) is a pre-existing LDAP export ordering bug unrelated to Phase 5.
+**Status**: Complete. Unit tests pass (1,844/1,844). Integration tests (Scenarios 1 and 8) pass all sync operations. Performance metrics show ~34% improvement in FullSync and ~37% improvement in ProcessConnectedSystemObjects.
 
 **Problem**: RPEIs were added to the `Activity.RunProfileExecutionItems` collection and persisted via `UpdateActivityAsync`, which calls `SaveChangesAsync()`. For large sync runs (10,000+ objects), the change tracker had to diff the entire growing RPEI collection on every call. For imports, all RPEIs were accumulated in memory and persisted in one massive `SaveChangesAsync` at the end.
 

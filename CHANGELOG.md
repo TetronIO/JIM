@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Sortable columns on Attribute Flow table
+- Synchronisation Rules quick link on homepage dashboard
+
+### Performance
+
+#### Worker Database Performance Optimisation Phase 5: RPEI Persistence (#338)
+- Persist `ActivityRunProfileExecutionItem` entities via raw SQL bulk INSERT at natural batch boundaries instead of EF Core change tracker
+- Sync processors flush RPEIs per-page, import flushes per-phase (creates, updates, reconciliation) — eliminates unbounded RPEI accumulation in memory
+- Parameterised multi-row INSERT with auto-chunking (5,454 rows per statement) and EF fallback for unit tests
+- Disable `AutoDetectChanges` during page flush sequences to prevent premature RPEI insertion
+- Use `Entry().State = Modified` instead of `Database.Update()` to avoid EF graph traversal on detached entities
+- ~34% faster FullSync, ~37% faster ProcessConnectedSystemObjects in integration benchmarks
+
 ## [0.3.0] - 2026-02-25
 
 ### Added
