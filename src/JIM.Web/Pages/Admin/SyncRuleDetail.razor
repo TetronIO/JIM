@@ -583,7 +583,7 @@ else if (_syncRule != null)
                     {
                         if (_syncRule.Direction == SyncRuleDirection.Import && source.ConnectedSystemAttribute != null)
                         {
-                            <MudTooltip Text="@($"CS: {source.ConnectedSystemAttribute.Type.ToString().SplitOnCapitalLetters()}, {(source.ConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@($"Connected System: {source.ConnectedSystemAttribute.Type.ToString().SplitOnCapitalLetters()}, {(source.ConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
                                 <MudChip T="string">
                                     <AvatarContent>
                                         <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
@@ -594,7 +594,7 @@ else if (_syncRule != null)
                         }
                         else if (_syncRule.Direction == SyncRuleDirection.Export && source.MetaverseAttribute != null)
                         {
-                            <MudTooltip Text="@($"MV: {source.MetaverseAttribute.Type.ToString().SplitOnCapitalLetters()}, {(source.MetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@($"Metaverse: {source.MetaverseAttribute.Type.ToString().SplitOnCapitalLetters()}, {(source.MetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
                                 <MudChip T="string">
                                     <AvatarContent>
                                         <MudAvatar Color="Color.Primary">MV</MudAvatar>
@@ -620,7 +620,7 @@ else if (_syncRule != null)
                 <MudTd DataLabel="Target">
                     @if (_syncRule.Direction == SyncRuleDirection.Import && context.TargetMetaverseAttribute != null)
                     {
-                        <MudTooltip Text="@($"MV: {context.TargetMetaverseAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetMetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@($"Metaverse: {context.TargetMetaverseAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetMetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
                             <MudChip T="string">
                                 <AvatarContent>
                                     <MudAvatar Color="Color.Primary">MV</MudAvatar>
@@ -631,7 +631,7 @@ else if (_syncRule != null)
                     }
                     else if (_syncRule.Direction == SyncRuleDirection.Export && context.TargetConnectedSystemAttribute != null)
                     {
-                        <MudTooltip Text="@($"CS: {context.TargetConnectedSystemAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@($"Connected System: {context.TargetConnectedSystemAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
                             <MudChip T="string">
                                 <AvatarContent>
                                     <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
