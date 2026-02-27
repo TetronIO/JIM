@@ -1,6 +1,6 @@
 # Worker Database Performance Optimisation
 
-- **Status**: Planned
+- **Status**: In Progress — Phases 1–4 Complete
 - **Milestone**: Post-MVP
 - **GitHub Issue**: [#338](https://github.com/TetronIO/JIM/issues/338)
 - **Related**: `docs/plans/EXPORT_PERFORMANCE_OPTIMISATION.md`
@@ -304,25 +304,37 @@ var result = await metaVerseObjects.ToListAsync();
 
 ---
 
-### Phase 5: RPEI Persistence Optimisation
+### Phase 5: RPEI Persistence Optimisation ✅
 
 **Target**: Activity `RunProfileExecutionItem` creation during sync
 
-**Problem**: RPEIs are added to the `Activity.RunProfileExecutionItems` collection and persisted via `UpdateActivityAsync`, which calls `Repository.Database.Activities.Update(activity)`. For large sync runs (10,000+ objects), the change tracker must diff the entire RPEI collection (which grows throughout the sync run) to find new items on every `SaveChangesAsync` call.
+**Status**: Complete. RPEIs are now persisted via raw SQL bulk INSERT at natural batch boundaries, bypassing the EF change tracker entirely.
 
-**Proposed approach**:
-- Add a dedicated `CreateRunProfileExecutionItemsAsync(List<ActivityRunProfileExecutionItem>)` method to the repository
-- Use `AddRangeAsync` (or raw SQL bulk INSERT) to persist new RPEIs directly, bypassing the Activity entity's change tracker
-- Clear the Activity's RPEI collection from the change tracker after each batch persist to prevent accumulation
+**Problem**: RPEIs were added to the `Activity.RunProfileExecutionItems` collection and persisted via `UpdateActivityAsync`, which calls `SaveChangesAsync()`. For large sync runs (10,000+ objects), the change tracker had to diff the entire growing RPEI collection on every call. For imports, all RPEIs were accumulated in memory and persisted in one massive `SaveChangesAsync` at the end.
 
-**Estimated impact**: Moderate -- reduces change tracker pressure on large sync runs. The benefit grows with sync run size.
+**Changes made**:
+1. ✅ Added `BulkInsertRpeisAsync` to `IActivityRepository` and `ActivityRepository` — parameterised multi-row INSERT with auto-chunking (5,454 rows per statement), try/catch fallback to EF for unit tests
+2. ✅ Added `BulkInsertRpeisAsync` pass-through to `ActivityServer` (n-tier compliance)
+3. ✅ Added `FlushRpeisAsync()` to `SyncTaskProcessorBase` — flushes current page's RPEIs via bulk insert, moves to `_allPersistedRpeis`, clears Activity collection
+4. ✅ Updated `SyncFullSyncTaskProcessor` and `SyncDeltaSyncTaskProcessor` — flush at each page boundary and after cross-page resolution, restore RPEIs at end for summary stats
+5. ✅ Updated `SyncImportTaskProcessor` — incremental flush after CSO creates, CSO updates, and reconciliation (instead of one massive persist at the end)
+6. ✅ Updated `SyncExportTaskProcessor` — bulk insert before final `UpdateActivityAsync`
+7. ✅ Added cross-page resolution flush in `ResolveCrossPageReferencesAsync` batch loop
+
+**Estimated impact**: Moderate-High — eliminates unbounded RPEI accumulation in memory and change tracker. Import of 10,000 objects no longer requires persisting 10,000+ RPEIs in a single `SaveChangesAsync`. Sync page boundaries no longer scan the growing RPEI collection.
 
 **Complexity**: Low-Moderate
 
-**Files affected**:
-- `src/JIM.PostgresData/Repositories/ActivitiesRepository.cs`
-- `src/JIM.Data/Repositories/IActivityRepository.cs`
-- Sync processor code that creates RPEIs
+**Files changed**:
+- `src/JIM.Data/Repositories/IActivityRepository.cs` — new method signature
+- `src/JIM.PostgresData/Repositories/ActivitiesRepository.cs` — bulk insert implementation + raw SQL helper
+- `src/JIM.Application/Servers/ActivityServer.cs` — pass-through method
+- `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs` — `_allPersistedRpeis` field + `FlushRpeisAsync()` method + cross-page batch flush
+- `src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs` — page boundary flush + RPEI restore
+- `src/JIM.Worker/Processors/SyncDeltaSyncTaskProcessor.cs` — same as full sync
+- `src/JIM.Worker/Processors/SyncImportTaskProcessor.cs` — incremental flush + `FlushImportRpeisAsync()`
+- `src/JIM.Worker/Processors/SyncExportTaskProcessor.cs` — bulk insert before final persist
+- `test/JIM.Worker.Tests/Activities/BulkInsertRpeisTests.cs` — unit tests
 
 ---
 

@@ -95,6 +95,11 @@ public abstract class SyncTaskProcessorBase
     // and reference attributes are re-processed in ResolveCrossPageReferencesAsync.
     protected readonly List<(Guid CsoId, List<int> SyncRuleIds)> _unresolvedCrossPageReferences = [];
 
+    // Accumulates all RPEIs persisted via bulk insert across pages.
+    // Used to compute summary stats at the end of processing via CalculateActivitySummaryStats.
+    // RPEIs are NOT restored to Activity.RunProfileExecutionItems to avoid EF tracking conflicts.
+    protected readonly List<ActivityRunProfileExecutionItem> _allPersistedRpeis = [];
+
     // Expression evaluator for expression-based sync rule mappings
     protected readonly IExpressionEvaluator _expressionEvaluator = new DynamicExpressoEvaluator();
 
@@ -110,6 +115,50 @@ public abstract class SyncTaskProcessorBase
         _connectedSystemRunProfile = connectedSystemRunProfile;
         _activity = activity;
         _cancellationTokenSource = cancellationTokenSource;
+    }
+
+    /// <summary>
+    /// Flushes the current page's RPEIs to the database via raw SQL bulk insert,
+    /// then moves them to _allPersistedRpeis for later summary stat computation.
+    ///
+    /// In production (raw SQL): clears RPEIs from Activity.RunProfileExecutionItems to prevent
+    /// EF from re-persisting them via the navigation property on subsequent SaveChangesAsync calls.
+    ///
+    /// In tests (EF fallback): leaves RPEIs in Activity.RunProfileExecutionItems because they're
+    /// tracked by EF and will be persisted through the normal navigation property mechanism.
+    /// Clearing them in a tracked EF context marks them as Deleted (required FK orphan), which
+    /// corrupts the change tracker and causes DbUpdateConcurrencyException on subsequent saves.
+    /// </summary>
+    protected async Task FlushRpeisAsync()
+    {
+        var pageRpeis = _activity.RunProfileExecutionItems.ToList();
+        if (pageRpeis.Count == 0)
+            return;
+
+        // Ensure all RPEIs have ActivityId set and IDs pre-generated
+        foreach (var rpei in pageRpeis)
+        {
+            rpei.ActivityId = _activity.Id;
+            if (rpei.Id == Guid.Empty)
+                rpei.Id = Guid.NewGuid();
+        }
+
+        // Bulk insert this page's RPEIs via raw SQL (or EF fallback for tests).
+        // Returns true if raw SQL was used, false if EF fallback was used.
+        var usedRawSql = await _jim.Activities.BulkInsertRpeisAsync(pageRpeis);
+
+        if (usedRawSql)
+        {
+            // Production: RPEIs are persisted via raw SQL outside the EF change tracker.
+            // Clear from Activity to prevent EF from re-inserting them on next SaveChangesAsync.
+            _activity.RunProfileExecutionItems.Clear();
+        }
+        // Tests (EF fallback): RPEIs stay in Activity.RunProfileExecutionItems.
+        // They are already tracked by EF and will be persisted normally.
+        // Do NOT clear — clearing marks them as Deleted in EF's change tracker.
+
+        // Move to accumulated list for summary stats at activity completion
+        _allPersistedRpeis.AddRange(pageRpeis);
     }
 
     /// <summary>
@@ -1372,6 +1421,9 @@ public abstract class SyncTaskProcessorBase
                 await CreatePendingMvoChangeObjectsAsync();
                 await EvaluatePendingExportsAsync();
                 await FlushPendingExportOperationsAsync();
+
+                // Flush RPEIs from cross-page resolution via bulk insert
+                await FlushRpeisAsync();
 
                 // Update activity progress
                 await _jim.Activities.UpdateActivityAsync(_activity);

@@ -692,4 +692,121 @@ public class ActivityRepository : IActivityRepository
             .SingleOrDefaultAsync(q => q.Id == id);
     }
     #endregion
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Bulk RPEI persistence (Phase 5 - Worker Database Performance Optimisation)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Maximum number of parameters per SQL statement to stay under PostgreSQL's 65,535 limit.
+    /// </summary>
+    private const int MaxParametersPerStatement = 60000;
+
+    public async Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    {
+        if (rpeis.Count == 0)
+            return true;
+
+        // Pre-generate IDs for all RPEIs (bypasses EF ValueGeneratedOnAdd)
+        foreach (var rpei in rpeis)
+        {
+            if (rpei.Id == Guid.Empty)
+                rpei.Id = Guid.NewGuid();
+        }
+
+        try
+        {
+            await using var transaction = await Repository.Database.Database.BeginTransactionAsync();
+            await BulkInsertRpeisRawAsync(rpeis);
+            await transaction.CommitAsync();
+            return true; // Raw SQL used — RPEIs persisted outside EF change tracker
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        {
+            // Fallback for tests where raw SQL / transactions are not available.
+            // In test environments using in-memory or mocked providers, RPEIs are typically
+            // already tracked by EF through the Activity's navigation property.
+            // We only need to add truly untracked RPEIs.
+            var untracked = new List<ActivityRunProfileExecutionItem>();
+            foreach (var rpei in rpeis)
+            {
+                try
+                {
+                    var entry = Repository.Database.Entry(rpei);
+                    if (entry.State == EntityState.Detached)
+                        untracked.Add(rpei);
+                }
+                catch (NullReferenceException)
+                {
+                    // Mocked DbContext: Entry() not available — treat as untracked
+                    untracked.Add(rpei);
+                }
+            }
+
+            if (untracked.Count > 0)
+            {
+                // Use DbContext.AddRange() directly rather than DbSet<T>.AddRange() because
+                // EF runtime proxies (JimDbContextProxy) may return null from Set<T>() and
+                // may not initialise DbSet properties.
+                Repository.Database.AddRange(untracked);
+
+                // NOTE: We intentionally do NOT call SaveChangesAsync() here. In the test
+                // fallback path, calling SaveChangesAsync triggers a full change tracker flush
+                // which can cause unwanted side-effect persists (e.g., prematurely persisting
+                // CSO attribute changes during import). The RPEIs will be persisted by the
+                // next regular SaveChangesAsync call in the processing pipeline.
+            }
+
+            return false; // EF fallback used — RPEIs remain tracked by EF
+        }
+    }
+
+    /// <summary>
+    /// Bulk inserts ActivityRunProfileExecutionItem rows using parameterised multi-row INSERT.
+    /// Chunks automatically to stay within the PostgreSQL parameter limit.
+    /// </summary>
+    private async Task BulkInsertRpeisRawAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    {
+        const int columnsPerRow = 11;
+        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+
+        foreach (var chunk in ChunkList(rpeis, chunkSize))
+        {
+            var sql = new System.Text.StringBuilder();
+            sql.Append(@"INSERT INTO ""ActivityRunProfileExecutionItems"" (""Id"", ""ActivityId"", ""ObjectChangeType"", ""NoChangeReason"", ""ConnectedSystemObjectId"", ""ExternalIdSnapshot"", ""DataSnapshot"", ""ErrorType"", ""ErrorMessage"", ""ErrorStackTrace"", ""AttributeFlowCount"") VALUES ");
+
+            var parameters = new List<object>();
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                if (i > 0) sql.Append(", ");
+                var offset = i * columnsPerRow;
+                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}})");
+
+                var rpei = chunk[i];
+                parameters.Add(rpei.Id);
+                parameters.Add(rpei.ActivityId);
+                parameters.Add((int)rpei.ObjectChangeType);
+                parameters.Add(rpei.NoChangeReason.HasValue ? (object)(int)rpei.NoChangeReason.Value : DBNull.Value);
+                parameters.Add((object?)rpei.ConnectedSystemObjectId ?? DBNull.Value);
+                parameters.Add((object?)rpei.ExternalIdSnapshot ?? DBNull.Value);
+                parameters.Add((object?)rpei.DataSnapshot ?? DBNull.Value);
+                parameters.Add(rpei.ErrorType.HasValue ? (object)(int)rpei.ErrorType.Value : DBNull.Value);
+                parameters.Add((object?)rpei.ErrorMessage ?? DBNull.Value);
+                parameters.Add((object?)rpei.ErrorStackTrace ?? DBNull.Value);
+                parameters.Add((object?)rpei.AttributeFlowCount ?? DBNull.Value);
+            }
+
+            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
+    }
+
+    private static List<List<T>> ChunkList<T>(List<T> source, int chunkSize)
+    {
+        var chunks = new List<List<T>>();
+        for (var i = 0; i < source.Count; i += chunkSize)
+        {
+            chunks.Add(source.GetRange(i, Math.Min(chunkSize, source.Count - i)));
+        }
+        return chunks;
+    }
 }

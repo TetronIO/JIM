@@ -206,6 +206,9 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             // batch delete MVOs marked for immediate deletion (0-grace-period)
             await FlushPendingMvoDeletionsAsync();
 
+            // Flush this page's RPEIs via bulk insert before updating progress
+            await FlushRpeisAsync();
+
             // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
             using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
             {
@@ -216,11 +219,18 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // Resolve cross-page reference attributes (same as full sync — see full sync for detailed explanation)
         await ResolveCrossPageReferencesAsync(activeSyncRules);
 
+        // Flush any RPEIs from cross-page resolution
+        await FlushRpeisAsync();
+
         // Ensure the activity and any pending db updates are applied after all pages are processed
         await _jim.Activities.UpdateActivityAsync(_activity);
 
         // Update the watermark to mark this sync as complete
         await UpdateDeltaSyncWatermarkAsync();
+
+        // Compute summary stats from all RPEIs (flushed + any remaining in Activity).
+        var allRpeis = _allPersistedRpeis.Concat(_activity.RunProfileExecutionItems).ToList();
+        Worker.CalculateActivitySummaryStats(_activity, allRpeis);
 
         syncSpan.SetSuccess();
     }

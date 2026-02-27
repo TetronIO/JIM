@@ -69,4 +69,13 @@ public interface IActivityRepository
     /// preventing immediate re-execution after worker restarts.
     /// </summary>
     public Task<DateTime?> GetLastHistoryCleanupTimeAsync();
+
+    /// <summary>
+    /// Bulk inserts ActivityRunProfileExecutionItems directly via raw SQL,
+    /// bypassing the EF change tracker for performance during large sync runs.
+    /// RPEIs must have ActivityId set before calling. IDs are pre-generated if empty.
+    /// Returns true if raw SQL was used (RPEIs are persisted outside EF's change tracker),
+    /// false if the EF fallback was used (RPEIs remain tracked by EF).
+    /// </summary>
+    public Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis);
 }

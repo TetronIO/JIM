@@ -649,18 +649,48 @@ public class Worker : BackgroundService
     /// Determines whether to mark as complete, complete with warning, or failed based on error counts.
     /// Also calculates and persists summary stats for display in the activity list view.
     /// This method is wrapped in robust error handling to ensure activities are always finalised.
+    ///
+    /// Summary stats may already be computed by the processor (e.g., sync processors pre-compute
+    /// from their accumulated RPEI list). If RunProfileExecutionItems is populated, stats are
+    /// recomputed from the collection. If empty but TotalErrors is already set, the pre-computed
+    /// stats are used directly.
     /// </summary>
     private async Task CompleteActivityBasedOnExecutionResultsAsync(JimApplication jim, Activity activity)
     {
         try
         {
-            // Calculate summary stats from RPEIs for activity list display
-            CalculateActivitySummaryStats(activity);
+            // Calculate summary stats from RPEIs for activity list display.
+            // Sync processors may have already computed stats from their accumulated RPEI list
+            // (via Worker.CalculateActivitySummaryStats(activity, rpeis)) because RPEIs were
+            // flushed via raw SQL and cleared from Activity.RunProfileExecutionItems.
+            // Import/export processors still have RPEIs in the collection, so we recompute.
+            if (activity.RunProfileExecutionItems.Count > 0)
+            {
+                CalculateActivitySummaryStats(activity);
+            }
+            // else: stats were pre-computed by the processor — use as-is
 
-            // Note: .All() returns true for empty collections, so we must check for Any() first
-            var hasItems = activity.RunProfileExecutionItems.Count > 0;
-            var hasErrors = activity.RunProfileExecutionItems.Any(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
-            var allErrors = hasItems && activity.RunProfileExecutionItems.All(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
+            // Determine final status using summary stats (TotalErrors) which are always available
+            // whether RPEIs are in the collection or were pre-computed by the processor.
+            // Note: .All() returns true for empty collections, so we must check hasItems first.
+            bool hasItems, hasErrors, allErrors;
+
+            if (activity.RunProfileExecutionItems.Count > 0)
+            {
+                // RPEIs available in collection — use precise per-RPEI error checking
+                hasItems = true;
+                hasErrors = activity.RunProfileExecutionItems.Any(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
+                allErrors = activity.RunProfileExecutionItems.All(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
+            }
+            else
+            {
+                // RPEIs flushed via raw SQL — use pre-computed summary stats
+                hasItems = activity.TotalErrors > 0 || activity.ObjectsProcessed > 0;
+                hasErrors = activity.TotalErrors > 0;
+                // Without per-RPEI granularity, we can't distinguish "all errors" from "some errors".
+                // Conservatively treat as partial errors (CompleteWithWarning) unless nothing succeeded.
+                allErrors = hasErrors && activity.ObjectsProcessed == 0;
+            }
 
             if (allErrors)
             {
@@ -692,9 +722,23 @@ public class Worker : BackgroundService
     /// TotalAttributeFlows includes both standalone AttributeFlow RPEIs and absorbed flows
     /// (tracked via RPEI.AttributeFlowCount) that occurred alongside other operations.
     /// </summary>
+    /// <summary>
+    /// Overload that accepts an explicit list of RPEIs, avoiding the need to load them
+    /// into Activity.RunProfileExecutionItems (which would trigger EF change tracking).
+    /// Used by sync processors that persist RPEIs via bulk insert and accumulate them separately.
+    /// </summary>
+    internal static void CalculateActivitySummaryStats(Activity activity, IReadOnlyList<ActivityRunProfileExecutionItem> rpeis)
+    {
+        CalculateActivitySummaryStatsInternal(activity, rpeis);
+    }
+
     internal static void CalculateActivitySummaryStats(Activity activity)
     {
-        var rpeis = activity.RunProfileExecutionItems;
+        CalculateActivitySummaryStatsInternal(activity, activity.RunProfileExecutionItems);
+    }
+
+    private static void CalculateActivitySummaryStatsInternal(Activity activity, IReadOnlyList<ActivityRunProfileExecutionItem> rpeis)
+    {
 
         // Import stats
         activity.TotalAdded = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Added);

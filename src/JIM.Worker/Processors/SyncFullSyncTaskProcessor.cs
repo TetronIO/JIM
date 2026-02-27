@@ -213,6 +213,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // batch delete MVOs marked for immediate deletion (0-grace-period)
             await FlushPendingMvoDeletionsAsync();
 
+            // Flush this page's RPEIs via bulk insert before updating progress
+            await FlushRpeisAsync();
+
             // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
             using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
             {
@@ -226,11 +229,22 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // and all MVOs exist in the database, reload those CSOs and resolve their references.
         await ResolveCrossPageReferencesAsync(activeSyncRules);
 
+        // Flush any RPEIs from cross-page resolution
+        await FlushRpeisAsync();
+
         // Ensure the activity and any pending db updates are applied after all pages are processed
         await _jim.Activities.UpdateActivityAsync(_activity);
 
         // Update the delta sync watermark to establish baseline for future delta syncs
         await UpdateDeltaSyncWatermarkAsync();
+
+        // Compute summary stats from all RPEIs (flushed + any remaining in Activity).
+        // In production, flushed RPEIs were cleared from Activity.RunProfileExecutionItems
+        // (persisted via raw SQL) so we must use _allPersistedRpeis.
+        // In tests, RPEIs remain in Activity.RunProfileExecutionItems (EF fallback path).
+        // Combine both to cover all scenarios.
+        var allRpeis = _allPersistedRpeis.Concat(_activity.RunProfileExecutionItems).ToList();
+        Worker.CalculateActivitySummaryStats(_activity, allRpeis);
 
         syncSpan.SetSuccess();
     }

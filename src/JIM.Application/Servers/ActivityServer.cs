@@ -209,6 +209,16 @@ public class ActivityServer
     }
 
     /// <summary>
+    /// Bulk inserts ActivityRunProfileExecutionItems directly via raw SQL,
+    /// bypassing the EF change tracker for performance during large sync runs.
+    /// Returns true if raw SQL was used (RPEIs persisted outside EF), false if EF fallback was used.
+    /// </summary>
+    public async Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    {
+        return await Application.Repository.Activity.BulkInsertRpeisAsync(rpeis);
+    }
+
+    /// <summary>
     /// Updates the message on an Activity.
     /// </summary>
     public async Task UpdateActivityMessageAsync(Activity activity, string message)
