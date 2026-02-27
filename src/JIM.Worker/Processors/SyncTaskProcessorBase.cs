@@ -150,6 +150,20 @@ public abstract class SyncTaskProcessorBase
         if (usedRawSql)
         {
             // Production: RPEIs are persisted via raw SQL outside the EF change tracker.
+            // Detach navigation properties BEFORE clearing the collection. When Clear() runs,
+            // EF's NavigationFixer traverses each removed RPEI's navigation chain:
+            // RPEI → ConnectedSystemObject → MetaverseObject → MetaverseObjectType → MetaverseAttributes.
+            // During cross-page resolution, the change tracker has conflicting MetaverseAttribute
+            // instances (shared by multiple MVOs), causing identity conflicts. Nulling nav props
+            // prevents NavigationFixer from traversing beyond the RPEI itself.
+            foreach (var rpei in pageRpeis)
+            {
+                rpei.Activity = null!;
+                rpei.ConnectedSystemObject = null;
+                rpei.ConnectedSystemObjectChange = null;
+                rpei.MetaverseObjectChange = null;
+            }
+
             // Clear from Activity to prevent EF from re-inserting them on next SaveChangesAsync.
             _activity.RunProfileExecutionItems.Clear();
         }
