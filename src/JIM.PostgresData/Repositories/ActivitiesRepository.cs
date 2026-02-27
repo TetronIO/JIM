@@ -749,8 +749,9 @@ public class ActivityRepository : IActivityRepository
             if (transaction != null)
                 throw; // Transaction was created but SQL failed — real production error
 
-            // Test environment fallback: RPEIs are typically already tracked by EF through
-            // the Activity's navigation property. Only add truly untracked RPEIs.
+            // Test environment fallback: RPEIs need explicit AddRange to be tracked by EF.
+            // List<T> navigation properties don't trigger automatic change detection in
+            // the in-memory provider — items must be explicitly added to the change tracker.
             var untracked = new List<ActivityRunProfileExecutionItem>();
             foreach (var rpei in rpeis)
             {
@@ -768,20 +769,9 @@ public class ActivityRepository : IActivityRepository
             }
 
             if (untracked.Count > 0)
-            {
-                // Use DbContext.AddRange() directly rather than DbSet<T>.AddRange() because
-                // EF runtime proxies (JimDbContextProxy) may return null from Set<T>() and
-                // may not initialise DbSet properties.
                 Repository.Database.AddRange(untracked);
 
-                // NOTE: We intentionally do NOT call SaveChangesAsync() here. In the test
-                // fallback path, calling SaveChangesAsync triggers a full change tracker flush
-                // which can cause unwanted side-effect persists (e.g., prematurely persisting
-                // CSO attribute changes during import). The RPEIs will be persisted by the
-                // next regular SaveChangesAsync call in the processing pipeline.
-            }
-
-            return false; // EF fallback used — RPEIs remain tracked by EF
+            return false; // EF fallback used — RPEIs tracked by EF via AddRange
         }
         finally
         {

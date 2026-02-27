@@ -1,6 +1,6 @@
 # Worker Database Performance Optimisation
 
-- **Status**: In Progress — Phases 1–4 Complete
+- **Status**: In Progress — Phases 1–4 Complete, Phase 5 In Testing
 - **Milestone**: Post-MVP
 - **GitHub Issue**: [#338](https://github.com/TetronIO/JIM/issues/338)
 - **Related**: `docs/plans/EXPORT_PERFORMANCE_OPTIMISATION.md`
@@ -304,11 +304,11 @@ var result = await metaVerseObjects.ToListAsync();
 
 ---
 
-### Phase 5: RPEI Persistence Optimisation ✅
+### Phase 5: RPEI Persistence Optimisation — In Testing
 
 **Target**: Activity `RunProfileExecutionItem` creation during sync
 
-**Status**: Complete. RPEIs are now persisted via raw SQL bulk INSERT at natural batch boundaries, bypassing the EF change tracker entirely.
+**Status**: In Testing. Core implementation complete, unit tests pass (1,844/1,844). Integration test Scenario 8 passes all sync operations. One remaining integration test failure (`Target Export (DeleteGroup)`) is a pre-existing LDAP export ordering bug unrelated to Phase 5.
 
 **Problem**: RPEIs were added to the `Activity.RunProfileExecutionItems` collection and persisted via `UpdateActivityAsync`, which calls `SaveChangesAsync()`. For large sync runs (10,000+ objects), the change tracker had to diff the entire growing RPEI collection on every call. For imports, all RPEIs were accumulated in memory and persisted in one massive `SaveChangesAsync` at the end.
 
@@ -320,17 +320,36 @@ var result = await metaVerseObjects.ToListAsync();
 5. ✅ Updated `SyncImportTaskProcessor` — incremental flush after CSO creates, CSO updates, and reconciliation (instead of one massive persist at the end)
 6. ✅ Updated `SyncExportTaskProcessor` — bulk insert before final `UpdateActivityAsync`
 7. ✅ Added cross-page resolution flush in `ResolveCrossPageReferencesAsync` batch loop
+8. ✅ `SurfacePendingExportsAsExecutionItems` — immediate flush after surfacing RPEIs in full sync
+9. ✅ `SetAutoDetectChangesEnabled(false)` during page flush sequences to prevent `DetectChanges()` from discovering RPEIs
+10. ✅ `ClearChangeTracker()` after MVO deletions (production only) to prevent stale entity concurrency errors
+
+**EF Change Tracker Issues Resolved During Integration Testing**:
+
+The following issues were discovered and resolved during production integration testing. They are documented here for future reference as they represent EF Core pitfalls when mixing raw SQL with tracked entities.
+
+1. **RPEI duplicate key violation** (PK_ActivityRunProfileExecutionItems): `SaveChangesAsync` → `DetectChanges()` scans the tracked Activity's `RunProfileExecutionItems` collection, discovers new RPEIs, marks them as Added, and inserts them prematurely. Later, `FlushRpeisAsync()` attempts raw SQL insert of the same RPEIs.
+   - **Fix**: `SetAutoDetectChangesEnabled(false)` during the page flush sequence. This prevents `DetectChanges()` from scanning navigation property collections. `SaveChangesAsync` only processes explicitly-marked entities.
+   - **Additional fix**: `SurfacePendingExportsAsExecutionItems` RPEIs are flushed immediately (before subsequent `UpdateActivityMessageAsync` calls that trigger `SaveChangesAsync`).
+
+2. **Graph traversal by `Database.Update(entity)` and `DbSet.Update(entity)`**: Both perform full graph traversal regardless of `AutoDetectChangesEnabled`. They discover navigation properties, mark reachable entities as Added/Modified, causing identity conflicts and premature insertion.
+   - **Fix**: Changed `UpdateDetachedSafe` to always use `Entry().State = Modified` (no graph traversal). Changed `UpdateConnectedSystemObjectAsync` to use `UpdateDetachedSafe` instead of `DbSet.Update()`.
+
+3. **Concurrency exception after MVO deletion**: MVO deletion involves raw SQL (`UPDATE Activities SET MetaverseObjectId = NULL`) followed by `Remove(mvo)` + `SaveChangesAsync`. The raw SQL modifies rows still tracked in memory, and cascade deletes at the DB level remove rows the tracker still references as Modified. Subsequent `SaveChangesAsync` tries to UPDATE ghost rows → 0 rows affected.
+   - **Fix**: `ClearChangeTracker()` after pages with MVO deletions (production only, not in tests). `_hasRawSqlSupport` flag distinguishes production (raw SQL available) from test (in-memory provider). In-memory provider cannot handle re-attachment of previously-tracked entities after clear.
 
 **Estimated impact**: Moderate-High — eliminates unbounded RPEI accumulation in memory and change tracker. Import of 10,000 objects no longer requires persisting 10,000+ RPEIs in a single `SaveChangesAsync`. Sync page boundaries no longer scan the growing RPEI collection.
 
-**Complexity**: Low-Moderate
+**Complexity**: Low-Moderate (implementation), High (debugging EF change tracker interactions)
 
 **Files changed**:
 - `src/JIM.Data/Repositories/IActivityRepository.cs` — new method signature
 - `src/JIM.PostgresData/Repositories/ActivitiesRepository.cs` — bulk insert implementation + raw SQL helper
+- `src/JIM.PostgresData/PostgresDataRepository.cs` — `UpdateDetachedSafe` always uses `Entry().State = Modified`
+- `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` — `UpdateConnectedSystemObjectAsync` uses `UpdateDetachedSafe`
 - `src/JIM.Application/Servers/ActivityServer.cs` — pass-through method
-- `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs` — `_allPersistedRpeis` field + `FlushRpeisAsync()` method + cross-page batch flush
-- `src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs` — page boundary flush + RPEI restore
+- `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs` — `_allPersistedRpeis` field, `_hasRawSqlSupport` flag, `FlushRpeisAsync()` method, cross-page batch flush
+- `src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs` — page boundary flush, auto-detect disable, ClearChangeTracker after MVO deletions, immediate flush after SurfacePendingExports
 - `src/JIM.Worker/Processors/SyncDeltaSyncTaskProcessor.cs` — same as full sync
 - `src/JIM.Worker/Processors/SyncImportTaskProcessor.cs` — incremental flush + `FlushImportRpeisAsync()`
 - `src/JIM.Worker/Processors/SyncExportTaskProcessor.cs` — bulk insert before final persist

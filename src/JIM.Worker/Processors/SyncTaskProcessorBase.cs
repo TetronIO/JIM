@@ -100,6 +100,11 @@ public abstract class SyncTaskProcessorBase
     // RPEIs are NOT restored to Activity.RunProfileExecutionItems to avoid EF tracking conflicts.
     protected readonly List<ActivityRunProfileExecutionItem> _allPersistedRpeis = [];
 
+    // Set to true when raw SQL is available (production with real database).
+    // Used to conditionally apply ClearChangeTracker after MVO deletions — only needed in
+    // production where raw SQL operations create stale change tracker entries.
+    protected bool _hasRawSqlSupport;
+
     // Expression evaluator for expression-based sync rule mappings
     protected readonly IExpressionEvaluator _expressionEvaluator = new DynamicExpressoEvaluator();
 
@@ -121,13 +126,17 @@ public abstract class SyncTaskProcessorBase
     /// Flushes the current page's RPEIs to the database via raw SQL bulk insert,
     /// then moves them to _allPersistedRpeis for later summary stat computation.
     ///
-    /// In production (raw SQL): clears RPEIs from Activity.RunProfileExecutionItems to prevent
-    /// EF from re-persisting them via the navigation property on subsequent SaveChangesAsync calls.
+    /// IMPORTANT: This method MUST be called BEFORE any SaveChangesAsync that might trigger
+    /// DetectChanges() while RPEIs are in Activity.RunProfileExecutionItems. DetectChanges()
+    /// scans the tracked Activity's collection, discovers RPEIs as new items, marks them as
+    /// Added, and inserts them prematurely. If this method later attempts raw SQL insert of
+    /// the same RPEIs, it causes duplicate key violations.
     ///
-    /// In tests (EF fallback): leaves RPEIs in Activity.RunProfileExecutionItems because they're
-    /// tracked by EF and will be persisted through the normal navigation property mechanism.
-    /// Clearing them in a tracked EF context marks them as Deleted (required FK orphan), which
-    /// corrupts the change tracker and causes DbUpdateConcurrencyException on subsequent saves.
+    /// In production (raw SQL): clears RPEIs from Activity.RunProfileExecutionItems and detaches
+    /// from change tracker to prevent re-insertion by subsequent SaveChangesAsync calls.
+    ///
+    /// In tests (EF fallback): leaves RPEIs in Activity.RunProfileExecutionItems for test
+    /// assertions. They're tracked by EF (via AddRange) and persisted by next SaveChangesAsync.
     /// </summary>
     protected async Task FlushRpeisAsync()
     {
@@ -149,32 +158,15 @@ public abstract class SyncTaskProcessorBase
 
         if (usedRawSql)
         {
-            // Production: RPEIs were persisted via raw SQL, but EF auto-tracked them as Added
-            // when they were added to Activity.RunProfileExecutionItems. We must:
-            // 1. Disable auto-detect to prevent NavigationFixer from traversing nav properties
-            //    during Clear() (which would hit MetaverseAttribute identity conflicts)
-            // 2. Clear the collection so new RPEIs aren't mixed with already-persisted ones
-            // 3. Detach each RPEI so SaveChangesAsync doesn't try to INSERT them again
-            //
-            // The order matters: Clear FIRST (while items are still in the collection), then
-            // detach (after they're removed from the navigation collection).
-            _jim.Repository.SetAutoDetectChangesEnabled(false);
-            try
-            {
-                _activity.RunProfileExecutionItems.Clear();
-
-                // Detach RPEIs from change tracker. Without this, SaveChangesAsync would find
-                // them as Added entities and attempt to INSERT, causing duplicate key violations.
-                _jim.Activities.DetachRpeisFromChangeTracker(pageRpeis);
-            }
-            finally
-            {
-                _jim.Repository.SetAutoDetectChangesEnabled(true);
-            }
+            // Production: RPEIs are persisted via raw SQL. Clear from Activity's collection
+            // and detach from change tracker so no subsequent SaveChangesAsync re-inserts them.
+            _activity.RunProfileExecutionItems.Clear();
+            _jim.Activities.DetachRpeisFromChangeTracker(pageRpeis);
+            _hasRawSqlSupport = true;
         }
-        // Tests (EF fallback): RPEIs stay in Activity.RunProfileExecutionItems.
-        // They are already tracked by EF and will be persisted normally.
-        // Do NOT clear — clearing marks them as Deleted in EF's change tracker.
+        // Tests (EF fallback): RPEIs stay in Activity.RunProfileExecutionItems for test
+        // assertions. They're tracked by EF (via AddRange in fallback) and will be persisted
+        // by the next SaveChangesAsync (typically UpdateActivityAsync).
 
         // Move to accumulated list for summary stats at activity completion
         _allPersistedRpeis.AddRange(pageRpeis);
@@ -1435,13 +1427,17 @@ public abstract class SyncTaskProcessorBase
                 await _jim.Activities.UpdateActivityMessageAsync(_activity,
                     $"Resolving cross-page references ({resolvedCount} / {totalCrossPagesToResolve}) - saving changes");
 
+                // Flush RPEIs FIRST to prevent DetectChanges() from discovering them during
+                // subsequent SaveChangesAsync calls (same pattern as per-page processing).
+                await FlushRpeisAsync();
+
                 // Flush this batch (same sequence as per-page processing)
                 await PersistPendingMetaverseObjectsAsync();
                 await CreatePendingMvoChangeObjectsAsync();
                 await EvaluatePendingExportsAsync();
                 await FlushPendingExportOperationsAsync();
 
-                // Flush RPEIs from cross-page resolution via bulk insert
+                // Flush any RPEIs generated during the flush sequence
                 await FlushRpeisAsync();
 
                 // Update activity progress
