@@ -133,16 +133,34 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             int processedInPage = 0;
             using (Diagnostics.Sync.StartSpan("ProcessCsoLoop").SetTag("csoCount", csoPagedResult.Results.Count))
             {
+                // Two-pass processing ensures all CSO disconnections are recorded before any join attempts.
+                // Without this, GUID-based page ordering could cause a new CSO to be processed before an
+                // obsolete CSO, seeing a stale join count and incorrectly throwing CouldNotJoinDueToExistingJoin.
+
+                // Pass 1: Process pending export confirmations and obsolete CSO teardown.
+                // This populates _pendingDisconnectedMvoIds so Pass 2 join checks account for disconnections.
                 foreach (var connectedSystemObject in csoPagedResult.Results)
                 {
-                    // check for cancellation request, and stop work if cancelled.
                     if (_cancellationTokenSource.IsCancellationRequested)
                     {
                         Log.Information("PerformFullSyncAsync: Cancellation requested. Stopping CSO enumeration.");
                         return;
                     }
 
-                    await ProcessConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
+                    await ProcessObsoleteAndExportConfirmationAsync(activeSyncRules, connectedSystemObject);
+                }
+
+                // Pass 2: Process joins, projections, and attribute flow for non-obsolete CSOs.
+                // All disconnections from Pass 1 are now visible via _pendingDisconnectedMvoIds.
+                foreach (var connectedSystemObject in csoPagedResult.Results)
+                {
+                    if (_cancellationTokenSource.IsCancellationRequested)
+                    {
+                        Log.Information("PerformFullSyncAsync: Cancellation requested. Stopping CSO enumeration.");
+                        return;
+                    }
+
+                    await ProcessActiveConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
 
                     _activity.ObjectsProcessed++;
                     processedInPage++;

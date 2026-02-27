@@ -150,16 +150,31 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             int processedInPage = 0;
             using (Diagnostics.Sync.StartSpan("ProcessCsoLoop").SetTag("csoCount", csoPagedResult.Results.Count))
             {
+                // Two-pass processing ensures all CSO disconnections are recorded before any join attempts.
+                // See SyncFullSyncTaskProcessor for detailed rationale.
+
+                // Pass 1: Process pending export confirmations and obsolete CSO teardown.
                 foreach (var connectedSystemObject in csoPagedResult.Results)
                 {
-                    // Check for cancellation request
                     if (_cancellationTokenSource.IsCancellationRequested)
                     {
                         Log.Information("PerformDeltaSyncAsync: Cancellation requested. Stopping CSO enumeration.");
                         return;
                     }
 
-                    await ProcessConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
+                    await ProcessObsoleteAndExportConfirmationAsync(activeSyncRules, connectedSystemObject);
+                }
+
+                // Pass 2: Process joins, projections, and attribute flow for non-obsolete CSOs.
+                foreach (var connectedSystemObject in csoPagedResult.Results)
+                {
+                    if (_cancellationTokenSource.IsCancellationRequested)
+                    {
+                        Log.Information("PerformDeltaSyncAsync: Cancellation requested. Stopping CSO enumeration.");
+                        return;
+                    }
+
+                    await ProcessActiveConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
                     _activity.ObjectsProcessed++;
                     processedInPage++;
                 }

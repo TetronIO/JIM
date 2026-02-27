@@ -18,6 +18,7 @@ public static class SyncRuleMappingProcessor
     /// <param name="expressionEvaluator">Optional expression evaluator for expression-based mappings.</param>
     /// <param name="skipReferenceAttributes">If true, skip reference attribute processing (deferred to second pass).</param>
     /// <param name="onlyReferenceAttributes">If true, process ONLY reference attributes (for deferred second pass). Takes precedence over skipReferenceAttributes.</param>
+    /// <param name="contributingSystemId">The ID of the connected system contributing these attribute values. Null for internally-managed MVO attributes.</param>
     /// <param name="isFinalReferencePass">If true, this is the final cross-page resolution pass — unresolved references are logged as warnings. If false (within-page deferred pass), unresolved references are expected and logged at debug level.</param>
     public static void Process(
         ConnectedSystemObject connectedSystemObject,
@@ -26,7 +27,8 @@ public static class SyncRuleMappingProcessor
         IExpressionEvaluator? expressionEvaluator = null,
         bool skipReferenceAttributes = false,
         bool onlyReferenceAttributes = false,
-        bool isFinalReferencePass = false)
+        bool isFinalReferencePass = false,
+        int? contributingSystemId = null)
     {
         if (connectedSystemObject.MetaverseObject == null)
         {
@@ -81,19 +83,19 @@ public static class SyncRuleMappingProcessor
                         switch (csotAttribute.Type)
                         {
                             case AttributeDataType.Text:
-                                ProcessTextAttribute(mvo, syncRuleMapping, sourceAttributeId, connectedSystemObject, csoAttributeValues, csotAttribute);
+                                ProcessTextAttribute(mvo, syncRuleMapping, sourceAttributeId, connectedSystemObject, csoAttributeValues, csotAttribute, contributingSystemId);
                                 break;
 
                             case AttributeDataType.Number:
-                                ProcessNumberAttribute(mvo, syncRuleMapping, sourceAttributeId, connectedSystemObject, csoAttributeValues);
+                                ProcessNumberAttribute(mvo, syncRuleMapping, sourceAttributeId, connectedSystemObject, csoAttributeValues, contributingSystemId);
                                 break;
 
                             case AttributeDataType.DateTime:
-                                ProcessDateTimeAttribute(mvo, syncRuleMapping, csoAttributeValues);
+                                ProcessDateTimeAttribute(mvo, syncRuleMapping, csoAttributeValues, contributingSystemId);
                                 break;
 
                             case AttributeDataType.Binary:
-                                ProcessBinaryAttribute(mvo, syncRuleMapping, sourceAttributeId, connectedSystemObject, csoAttributeValues);
+                                ProcessBinaryAttribute(mvo, syncRuleMapping, sourceAttributeId, connectedSystemObject, csoAttributeValues, contributingSystemId);
                                 break;
 
                             case AttributeDataType.Reference:
@@ -103,16 +105,16 @@ public static class SyncRuleMappingProcessor
                                 // we ensure all referenced MVOs exist.
                                 if (!skipReferenceAttributes)
                                 {
-                                    ProcessReferenceAttribute(mvo, syncRuleMapping, source, connectedSystemObject, csoAttributeValues, isFinalReferencePass);
+                                    ProcessReferenceAttribute(mvo, syncRuleMapping, source, connectedSystemObject, csoAttributeValues, isFinalReferencePass, contributingSystemId);
                                 }
                                 break;
 
                             case AttributeDataType.Guid:
-                                ProcessGuidAttribute(mvo, syncRuleMapping, sourceAttributeId, connectedSystemObject, csoAttributeValues);
+                                ProcessGuidAttribute(mvo, syncRuleMapping, sourceAttributeId, connectedSystemObject, csoAttributeValues, contributingSystemId);
                                 break;
 
                             case AttributeDataType.Boolean:
-                                ProcessBooleanAttribute(mvo, syncRuleMapping, csoAttributeValues);
+                                ProcessBooleanAttribute(mvo, syncRuleMapping, csoAttributeValues, contributingSystemId);
                                 break;
 
                             case AttributeDataType.NotSet:
@@ -168,11 +170,11 @@ public static class SyncRuleMappingProcessor
                     // This enables multi-valued attribute flow from expressions
                     if (result is string[] stringArrayResult)
                     {
-                        ProcessExpressionArrayResult(mvo, syncRuleMapping.TargetMetaverseAttribute, stringArrayResult);
+                        ProcessExpressionArrayResult(mvo, syncRuleMapping.TargetMetaverseAttribute, stringArrayResult, contributingSystemId);
                     }
                     else if (result is IEnumerable<string> stringEnumerableResult && result is not string)
                     {
-                        ProcessExpressionArrayResult(mvo, syncRuleMapping.TargetMetaverseAttribute, stringEnumerableResult.ToArray());
+                        ProcessExpressionArrayResult(mvo, syncRuleMapping.TargetMetaverseAttribute, stringEnumerableResult.ToArray(), contributingSystemId);
                     }
                     else
                     {
@@ -193,7 +195,7 @@ public static class SyncRuleMappingProcessor
 
                             // Add the new value based on the target attribute type (result is non-null)
                             var newMvoValue = CreateMvoAttributeValueFromExpressionResult(
-                                mvo, syncRuleMapping.TargetMetaverseAttribute, result!);
+                                mvo, syncRuleMapping.TargetMetaverseAttribute, result!, contributingSystemId);
 
                             if (newMvoValue != null)
                             {
@@ -228,7 +230,8 @@ public static class SyncRuleMappingProcessor
         int sourceAttributeId,
         ConnectedSystemObject connectedSystemObject,
         List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
-        ConnectedSystemObjectTypeAttribute csotAttribute)
+        ConnectedSystemObjectTypeAttribute csotAttribute,
+        int? contributingSystemId)
     {
         // Debug: Log comparison for all text attributes
         var existingMvoValues = mvo.AttributeValues
@@ -269,7 +272,8 @@ public static class SyncRuleMappingProcessor
                 MetaverseObject = mvo,
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                StringValue = newCsoNewAttributeValue.StringValue
+                StringValue = newCsoNewAttributeValue.StringValue,
+                ContributedBySystemId = contributingSystemId
             });
         }
     }
@@ -283,7 +287,8 @@ public static class SyncRuleMappingProcessor
         SyncRuleMapping syncRuleMapping,
         int sourceAttributeId,
         ConnectedSystemObject connectedSystemObject,
-        List<ConnectedSystemObjectAttributeValue> csoAttributeValues)
+        List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
+        int? contributingSystemId)
     {
         // find values on the MVO of type int that aren't on the CSO and remove them
         var mvoObsoleteAttributeValues = mvo.AttributeValues.Where(mvoav =>
@@ -306,7 +311,8 @@ public static class SyncRuleMappingProcessor
                 MetaverseObject = mvo,
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                IntValue = newCsoNewAttributeValue.IntValue
+                IntValue = newCsoNewAttributeValue.IntValue,
+                ContributedBySystemId = contributingSystemId
             });
         }
     }
@@ -318,7 +324,8 @@ public static class SyncRuleMappingProcessor
     private static void ProcessDateTimeAttribute(
         MetaverseObject mvo,
         SyncRuleMapping syncRuleMapping,
-        List<ConnectedSystemObjectAttributeValue> csoAttributeValues)
+        List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
+        int? contributingSystemId)
     {
         var csoValue = csoAttributeValues.FirstOrDefault();
         var mvoValue = mvo.AttributeValues.SingleOrDefault(mvoav => mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id);
@@ -336,7 +343,8 @@ public static class SyncRuleMappingProcessor
                 MetaverseObject = mvo,
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                DateTimeValue = csoValue.DateTimeValue
+                DateTimeValue = csoValue.DateTimeValue,
+                ContributedBySystemId = contributingSystemId
             });
         }
         else if (csoValue != null && mvoValue != null && mvoValue.DateTimeValue != csoValue.DateTimeValue)
@@ -348,7 +356,8 @@ public static class SyncRuleMappingProcessor
                 MetaverseObject = mvo,
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                DateTimeValue = csoValue.DateTimeValue
+                DateTimeValue = csoValue.DateTimeValue,
+                ContributedBySystemId = contributingSystemId
             });
         }
     }
@@ -362,7 +371,8 @@ public static class SyncRuleMappingProcessor
         SyncRuleMapping syncRuleMapping,
         int sourceAttributeId,
         ConnectedSystemObject connectedSystemObject,
-        List<ConnectedSystemObjectAttributeValue> csoAttributeValues)
+        List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
+        int? contributingSystemId)
     {
         // find values on the MVO of type binary that aren't on the CSO and remove them
         var mvoObsoleteAttributeValues = mvo.AttributeValues.Where(mvoav =>
@@ -386,7 +396,8 @@ public static class SyncRuleMappingProcessor
                 MetaverseObject = mvo,
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                ByteValue = newCsoNewAttributeValue.ByteValue
+                ByteValue = newCsoNewAttributeValue.ByteValue,
+                ContributedBySystemId = contributingSystemId
             });
         }
     }
@@ -401,11 +412,11 @@ public static class SyncRuleMappingProcessor
         SyncRuleMappingSource source,
         ConnectedSystemObject connectedSystemObject,
         List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
-        bool isFinalReferencePass)
+        bool isFinalReferencePass,
+        int? contributingSystemId)
     {
         // Helper: get the target MVO ID for a CSO attribute value's reference.
-        // Uses MetaverseObjectId scalar FK (preferred, always set by repository repair)
-        // with MetaverseObject navigation as fallback.
+        // Uses MetaverseObjectId scalar FK (preferred), with MetaverseObject navigation as fallback.
         static Guid? GetReferencedMvoId(ConnectedSystemObjectAttributeValue csoav)
         {
             if (csoav.ReferenceValue == null)
@@ -414,10 +425,6 @@ public static class SyncRuleMappingProcessor
         }
 
         // A reference is "resolved" if ReferenceValue exists AND has a MetaverseObjectId.
-        // Previously this required ReferenceValue.MetaverseObject (the navigation property),
-        // but AsSplitQuery() (dotnet/efcore#33826) can fail to materialise the deeper
-        // navigation. The repository repair populates MetaverseObjectId on stub CSOs,
-        // so using the scalar FK makes reference resolution resilient to the bug.
         static bool IsResolved(ConnectedSystemObjectAttributeValue csoav)
             => csoav.ReferenceValue != null && GetReferencedMvoId(csoav).HasValue;
 
@@ -521,10 +528,11 @@ public static class SyncRuleMappingProcessor
                 MetaverseObject = mvo,
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
+                ContributedBySystemId = contributingSystemId
             };
 
             // Prefer setting the navigation property when available (EF can track the relationship).
-            // Fall back to scalar FK when only MetaverseObjectId is available (AsSplitQuery repair stubs).
+            // Fall back to scalar FK when only MetaverseObjectId is available.
             if (newCsoNewAttributeValue.ReferenceValue?.MetaverseObject != null)
             {
                 newMvoAv.ReferenceValue = newCsoNewAttributeValue.ReferenceValue.MetaverseObject;
@@ -548,7 +556,8 @@ public static class SyncRuleMappingProcessor
         SyncRuleMapping syncRuleMapping,
         int sourceAttributeId,
         ConnectedSystemObject connectedSystemObject,
-        List<ConnectedSystemObjectAttributeValue> csoAttributeValues)
+        List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
+        int? contributingSystemId)
     {
         // find values on the MVO of type guid that aren't on the CSO and remove them.
         var mvoObsoleteAttributeValues = mvo.AttributeValues.Where(mvoav =>
@@ -571,7 +580,8 @@ public static class SyncRuleMappingProcessor
                 MetaverseObject = mvo,
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                GuidValue = newCsoNewAttributeValue.GuidValue
+                GuidValue = newCsoNewAttributeValue.GuidValue,
+                ContributedBySystemId = contributingSystemId
             });
         }
     }
@@ -583,7 +593,8 @@ public static class SyncRuleMappingProcessor
     private static void ProcessBooleanAttribute(
         MetaverseObject mvo,
         SyncRuleMapping syncRuleMapping,
-        List<ConnectedSystemObjectAttributeValue> csoAttributeValues)
+        List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
+        int? contributingSystemId)
     {
         var csoValue = csoAttributeValues.FirstOrDefault();
         var mvoValue = mvo.AttributeValues.SingleOrDefault(mvoav => mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id);
@@ -601,7 +612,8 @@ public static class SyncRuleMappingProcessor
                 MetaverseObject = mvo,
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                BoolValue = csoValue.BoolValue
+                BoolValue = csoValue.BoolValue,
+                ContributedBySystemId = contributingSystemId
             });
         }
         else if (csoValue != null && mvoValue != null && mvoValue.BoolValue != csoValue.BoolValue)
@@ -613,7 +625,8 @@ public static class SyncRuleMappingProcessor
                 MetaverseObject = mvo,
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                BoolValue = csoValue.BoolValue
+                BoolValue = csoValue.BoolValue,
+                ContributedBySystemId = contributingSystemId
             });
         }
     }
@@ -674,7 +687,8 @@ public static class SyncRuleMappingProcessor
     private static void ProcessExpressionArrayResult(
         MetaverseObject mvo,
         MetaverseAttribute targetAttribute,
-        string[] values)
+        string[] values,
+        int? contributingSystemId)
     {
         if (values.Length == 0)
         {
@@ -710,7 +724,8 @@ public static class SyncRuleMappingProcessor
                 MetaverseObject = mvo,
                 Attribute = targetAttribute,
                 AttributeId = targetAttribute.Id,
-                StringValue = value
+                StringValue = value,
+                ContributedBySystemId = contributingSystemId
             };
             mvo.PendingAttributeValueAdditions.Add(newMvoValue);
         }
@@ -728,13 +743,15 @@ public static class SyncRuleMappingProcessor
     private static MetaverseObjectAttributeValue? CreateMvoAttributeValueFromExpressionResult(
         MetaverseObject mvo,
         MetaverseAttribute targetAttribute,
-        object result)
+        object result,
+        int? contributingSystemId)
     {
         var newMvoValue = new MetaverseObjectAttributeValue
         {
             MetaverseObject = mvo,
             Attribute = targetAttribute,
-            AttributeId = targetAttribute.Id
+            AttributeId = targetAttribute.Id,
+            ContributedBySystemId = contributingSystemId
         };
 
         // Convert result to appropriate type based on target attribute type

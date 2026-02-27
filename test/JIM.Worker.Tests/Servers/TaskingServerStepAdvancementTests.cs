@@ -258,7 +258,7 @@ public class TaskingServerStepAdvancementTests
     }
 
     [Test]
-    public async Task CompleteWorkerTask_AdvancementFails_DoesNotThrowAsync()
+    public void CompleteWorkerTask_AdvancementFails_DoesNotThrowAsync()
     {
         // Arrange: The advancement logic throws, but the task completion should not fail
         var executionId = Guid.NewGuid();
@@ -268,8 +268,8 @@ public class TaskingServerStepAdvancementTests
             .ThrowsAsync(new InvalidOperationException("DB error"));
 
         // Act & Assert: Should not throw
-        Assert.DoesNotThrowAsync(async () =>
-            await _application.Tasking.CompleteWorkerTaskAsync(task));
+        Assert.DoesNotThrowAsync(() =>
+            _application.Tasking.CompleteWorkerTaskAsync(task));
     }
 
     #region Helper methods

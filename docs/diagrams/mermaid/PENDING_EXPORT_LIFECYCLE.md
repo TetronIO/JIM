@@ -1,6 +1,6 @@
 # Pending Export Lifecycle
 
-> Generated against JIM v0.2.0 (`5a4788e9`). If the codebase has changed significantly since then, these diagrams may be out of date.
+> Generated against JIM v0.3.0 (`0d1c88e9`). If the codebase has changed significantly since then, these diagrams may be out of date.
 
 This diagram shows the full lifecycle of a Pending Export from creation during synchronisation, through export execution, to confirmation during a confirming import. Pending Exports are the mechanism by which JIM propagates changes from the metaverse to target connected systems.
 
@@ -58,7 +58,9 @@ A Pending Export's journey typically spans three separate run profile executions
 ```mermaid
 flowchart LR
     subgraph "1. Sync (Full or Delta)"
-        SyncStart[MVO attribute changes<br/>during inbound flow] --> EvalExport[EvaluateExportRules:<br/>Find export sync rules<br/>for MVO type]
+        SyncStart[MVO attribute changes<br/>during inbound flow] --> CheckRecall{Pure recall?<br/>All changes are<br/>attribute removals}
+        CheckRecall -->|Yes| SkipRecall[Skip export evaluation<br/>Prevents expression mapping<br/>errors against incomplete data<br/>No PE created]
+        CheckRecall -->|No| EvalExport[EvaluateExportRules:<br/>Find export sync rules<br/>for MVO type]
         EvalExport --> InScope{MVO in scope<br/>for export rule?}
         InScope -->|No| EvalDeprov[Evaluate deprovisioning:<br/>Create Delete PE if CSO exists]
         InScope -->|Yes| MapAttrs[Map MVO attributes<br/>to CSO attributes<br/>via export sync rule mappings]
@@ -165,6 +167,20 @@ flowchart TD
     CheckContributor -->|No| CreateCorrective[Create corrective PE:<br/>ChangeType = Update<br/>Status = Pending<br/>RPEI: DriftCorrection]
 ```
 
+## Drift Correction and Export Evaluation Merge
+
+When both drift corrections and export evaluation produce changes for the same pending export, they are merged at the **value level** using composite keys:
+
+```mermaid
+flowchart TD
+    DriftChanges[Drift corrections<br/>e.g., 117 member removals] --> MergeKey[Merge key =<br/>AttributeId + value identity<br/>e.g., member:user1, member:user2]
+    ExportChanges[Export evaluation changes<br/>e.g., 1 member addition] --> MergeKey
+    MergeKey --> Deduplicate[Union with value-level dedup<br/>All contributions preserved]
+    Deduplicate --> MergedPE[Merged PE contains<br/>all 117 removals + 1 addition]
+```
+
+This prevents silent loss of drift corrections when merging with export evaluation changes. Previously, merging by `AttributeId` alone would keep only one side's changes for multi-valued attributes.
+
 ## Key Design Decisions
 
 - **Three-operation lifecycle**: A pending export typically spans Sync (creation), Export (execution), and Confirming Import (confirmation). This design ensures changes are verified end-to-end.
@@ -176,5 +192,9 @@ flowchart TD
 - **No-net-change detection**: Before creating a PE during sync, the system checks if the target CSO already has the expected values (using pre-cached data in `ExportEvaluationCache`). This avoids unnecessary export operations and reduces connector load.
 
 - **Drift correction**: When `EnforceState` is enabled on an export sync rule and the CSO has values that don't match the MVO, a corrective PE is created to reassert the correct values. This detects and corrects unauthorised changes made directly in target systems.
+
+- **Pure recall skip**: When all changed attributes on an MVO are removals (attribute recall due to CSO disconnection), export evaluation is skipped entirely. Expression-based mappings (e.g., DN templates) would evaluate against post-recall null attributes and produce invalid values. Target systems retain their existing attribute values until attribute priority (Issue #91) enables replacement value resolution.
+
+- **Value-level drift merge**: When merging drift corrections with export evaluation changes, the merge key is a composite of `AttributeId` + value identity (not just `AttributeId`). This prevents silent loss of multi-valued attribute drift corrections — e.g., 117 member removals would be dropped if merged by `AttributeId` alone.
 
 - **Exponential backoff**: Failed exports use increasing retry delays (`NextRetryAt`) to avoid hammering a target system that's experiencing issues.

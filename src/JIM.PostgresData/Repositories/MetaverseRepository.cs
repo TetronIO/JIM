@@ -678,15 +678,14 @@ public class MetaverseRepository : IMetaverseRepository
     /// <param name="metaverseObjectType">The type of Metaverse Object to search for.</param>
     /// <param name="syncRuleMapping">The Sync Rule Mapping contains the logic needed to construct a Metaverse Object query.</param>
     /// <returns>A Metaverse Object if a single result is found, otherwise null.</returns>
-    /// <exception cref="NotImplementedException">Will be thrown if more than one source is specified. This is not yet supported.</exception>
+    /// <exception cref="NotImplementedException">Will be thrown if more than one source is specified (advanced matching). This is not yet supported.</exception>
     /// <exception cref="ArgumentNullException">Will be thrown if the sync rule mapping source connected system attribute is null.</exception>
-    /// <exception cref="NotSupportedException">Will be thrown if functions or expressions are in use in the matching rule. These are not yet supported.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Will be thrown if an unsupported attribute type is specified.</exception>
     /// <exception cref="MultipleMatchesException">Will be thrown if there's more than one Metaverse Object that matches the matching rule criteria.</exception>
     public async Task<MetaverseObject?> FindMetaverseObjectUsingMatchingRuleAsync(ConnectedSystemObject connectedSystemObject, MetaverseObjectType metaverseObjectType, ObjectMatchingRule objectMatchingRule)
     {
         if (objectMatchingRule.Sources.Count > 1)
-            throw new NotImplementedException("Object Matching Rules with more than one Source are not yet supported (i.e. functions).");
+            throw new NotImplementedException("Object Matching Rules with more than one source are not yet supported (advanced matching).");
 
         // at this point in development, we expect and can process a single source.
         var source = objectMatchingRule.Sources[0];

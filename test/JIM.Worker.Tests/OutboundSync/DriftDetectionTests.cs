@@ -923,8 +923,7 @@ public class DriftDetectionTests
         // Create 5 member MVOs
         var memberMvos = Enumerable.Range(0, 5).Select(_ => CreateTestMvo()).ToList();
 
-        // Create Target user CSOs: all 5 properly joined (simulating post-repair state where
-        // RepairReferenceValueMaterialisationAsync has fixed any AsSplitQuery materialisation failures)
+        // Create Target user CSOs: all 5 properly joined with MetaverseObjectId populated
         var memberCsos = new List<ConnectedSystemObject>();
         for (var i = 0; i < 5; i++)
         {

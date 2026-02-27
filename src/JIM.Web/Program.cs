@@ -177,6 +177,10 @@ try
             // to Microsoft's legacy XML-based claim URIs. This makes JIM IDP-agnostic.
             options.MapInboundClaims = false;
 
+            // With MapInboundClaims disabled, Identity.Name won't resolve automatically because
+            // .NET looks for the legacy XML URI by default. Point it at the standard OIDC claim.
+            options.TokenValidationParameters.NameClaimType = "name";
+
             // intercept the user login when a token is received and validate we can map them to a JIM user
             options.Events.OnTicketReceived = async ctx =>
             {

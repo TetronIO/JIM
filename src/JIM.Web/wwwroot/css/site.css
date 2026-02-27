@@ -893,6 +893,51 @@ html[lang] .mud-dialog .mud-paper-outlined {
     color: var(--mud-palette-text-primary);
 }
 
+/* Expression syntax highlighting (attribute flow rules) */
+.jim-expr-chip {
+    max-width: 500px;
+}
+
+.jim-expr-chip .mud-chip-content {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.jim-expr-syntax {
+    font-family: "Lucida Console", "Courier New", monospace;
+    display: inline;
+}
+
+.jim-expr-string {
+    color: var(--jim-expr-string);
+}
+
+.jim-expr-number {
+    color: var(--jim-expr-number);
+}
+
+.jim-expr-function {
+    color: var(--jim-expr-function);
+}
+
+.jim-expr-variable {
+    color: var(--jim-expr-variable);
+}
+
+.jim-expr-keyword {
+    color: var(--jim-expr-keyword);
+}
+
+.jim-expr-operator {
+    color: var(--jim-expr-operator);
+}
+
+.jim-expr-punctuation {
+    color: var(--mud-palette-text-primary);
+}
+
 /* CSO Attribute Table Styles */
 .jim-attribute-table {
     border-radius: 8px;

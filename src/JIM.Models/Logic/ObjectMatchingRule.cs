@@ -80,7 +80,7 @@ public class ObjectMatchingRule : IAuditable
 
     /// <summary>
     /// The sources that provide the value(s) to match against. Typically a Connected System attribute
-    /// or a function that transforms attribute values.
+    /// or an expression that transforms attribute values.
     /// </summary>
     public List<ObjectMatchingRuleSource> Sources { get; set; } = new();
 

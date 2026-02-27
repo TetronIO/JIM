@@ -101,11 +101,13 @@ public class MetaverseObject
 
     /// <summary>
     /// Indicates if this MVO is pending deletion (has disconnection date and awaiting grace period expiry).
+    /// Applies to both WhenLastConnectorDisconnected and WhenAuthoritativeSourceDisconnected deletion rules.
     /// </summary>
     [NotMapped]
     public bool IsPendingDeletion => LastConnectorDisconnectedDate.HasValue &&
         Origin == MetaverseObjectOrigin.Projected &&
-        Type?.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
+        (Type?.DeletionRule == MetaverseObjectDeletionRule.WhenLastConnectorDisconnected ||
+         Type?.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected);
 
     /// <summary>
     /// The date when this MVO becomes eligible for deletion (after grace period expires).

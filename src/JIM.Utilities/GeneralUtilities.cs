@@ -7,6 +7,26 @@ namespace JIM.Utilities;
 
 public static class Utilities
 {
+    public static string Pluralise(this string word)
+    {
+        if (string.IsNullOrEmpty(word))
+            return word;
+
+        if (word.EndsWith("s", StringComparison.OrdinalIgnoreCase) ||
+            word.EndsWith("x", StringComparison.OrdinalIgnoreCase) ||
+            word.EndsWith("z", StringComparison.OrdinalIgnoreCase) ||
+            word.EndsWith("ch", StringComparison.OrdinalIgnoreCase) ||
+            word.EndsWith("sh", StringComparison.OrdinalIgnoreCase))
+            return word + "es";
+
+        if (word.EndsWith("y", StringComparison.OrdinalIgnoreCase) &&
+            word.Length > 1 &&
+            !"aeiou".Contains(word[^2], StringComparison.OrdinalIgnoreCase))
+            return word[..^1] + "ies";
+
+        return word + "s";
+    }
+
     public static string SplitOnCapitalLetters(this string inputString)
     {
         if (string.IsNullOrEmpty(inputString))

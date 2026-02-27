@@ -1,6 +1,6 @@
 # Delta Sync Flow
 
-> Generated against JIM v0.2.0 (`988472e3`). If the codebase has changed significantly since then, these diagrams may be out of date.
+> Generated against JIM v0.3.0 (`0d1c88e9`). If the codebase has changed significantly since then, these diagrams may be out of date.
 
 This diagram shows how Delta Synchronisation differs from Full Synchronisation. Both use identical per-CSO processing logic; the only difference is CSO selection and a few lifecycle steps.
 
@@ -43,7 +43,8 @@ flowchart TD
     CsoLoop -->|No| PageFlush[Page flush pipeline:<br/>1. Deferred reference attributes<br/>2. Batch persist MVOs<br/>3. Create MVO change objects<br/>4. Evaluate exports<br/>5. Flush PE operations<br/>6. Flush obsolete CSOs<br/>7. Flush MVO deletions<br/>8. Update activity progress]
     PageFlush --> PageLoop
 
-    PageLoop -->|No| UpdateWatermark[Update watermark<br/>LastDeltaSyncCompletedAt = UtcNow]
+    PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>Resolve MVO references across page boundaries<br/>Re-run flush pipeline for resolved references]
+    CrossPage --> UpdateWatermark[Update watermark<br/>LastDeltaSyncCompletedAt = UtcNow]
     UpdateWatermark --> Done([Sync Complete])
 ```
 
@@ -89,3 +90,5 @@ flowchart TD
 - **First delta sync processes everything**: If `LastDeltaSyncCompletedAt` is null (no previous sync), the watermark defaults to `DateTime.MinValue`, effectively selecting all CSOs — the same set as a full sync.
 
 - **No pending export surfacing**: Delta sync skips `SurfacePendingExportsAsExecutionItems()` since it's a lightweight incremental operation. Full sync surfaces pending exports as RPEIs so operators can see what changes are staged for the next export run.
+
+- **Cross-page reference resolution**: Both full and delta sync perform cross-page reference resolution after all pages are processed. CSOs with reference attributes that couldn't be resolved during page processing (because the referenced CSO was on a different page) are reloaded and resolved once all MVOs exist. The standard flush pipeline runs again for the resolved references.

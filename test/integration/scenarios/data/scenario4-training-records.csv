@@ -1,0 +1,2 @@
+employeeId,samAccountName,coursesCompleted,trainingStatus,completionDate,totalCoursesCompleted
+EMP000001,baseline.user1,SEC101,Pass,2025-01-15T10:00:00Z,1

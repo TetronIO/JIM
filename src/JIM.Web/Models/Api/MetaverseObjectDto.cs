@@ -101,7 +101,7 @@ public class MetaverseObjectAttributeValueDto
             BoolValue = entity.BoolValue,
             ReferenceValueId = entity.ReferenceValueId,
             ReferenceValueDisplayName = entity.ReferenceValue?.DisplayName,
-            ContributedBySystemId = entity.ContributedBySystem?.Id,
+            ContributedBySystemId = entity.ContributedBySystemId,
             ContributedBySystemName = entity.ContributedBySystem?.Name
         };
     }

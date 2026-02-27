@@ -1,7 +1,7 @@
 # Drift Detection and Attribute Priority Design Document
 
-> **Status**: Drift Detection implemented; Attribute Priority design approved but implementation deferred
-> **Last Updated**: 2026-01-17
+- **Status**: Drift Detection implemented; Attribute Priority design approved but implementation deferred
+- **Last Updated**: 2026-01-17
 
 ## Overview
 
@@ -176,13 +176,16 @@ With `EnforceState` flag:
 ### Current State
 
 **Existing Infrastructure:**
-- `ContributedBySystem` property already exists on `MetaverseObjectAttributeValue` ([MetaverseObjectAttributeValue.cs:45](../src/JIM.Models/Core/MetaverseObjectAttributeValue.cs#L45)) - tracks which connected system contributed each attribute value
+- `ContributedBySystem` navigation property exists on `MetaverseObjectAttributeValue` ([MetaverseObjectAttributeValue.cs:45](../src/JIM.Models/Core/MetaverseObjectAttributeValue.cs#L45)) - tracks which connected system contributed each attribute value
+- `ContributedBySystemId` scalar FK (added Feb 2026, commit `41116255`) — explicit `int?` property that avoids the need to `.Include(ContributedBySystem)`. All 14 attribute creation paths in `SyncRuleMappingProcessor` now set this scalar FK via a `contributingSystemId` parameter. Recall logic in `SyncTaskProcessorBase` uses the scalar FK directly (`av.ContributedBySystemId == connectedSystemId`).
 
 **Current Behaviour (Temporary):**
 As noted in [SyncRuleMappingProcessor.cs:56](../src/JIM.Worker/Processors/SyncRuleMappingProcessor.cs#L56):
 > *"NOTE: attribute priority has not been implemented yet and will come in a later effort. For now, all mappings will be applied, meaning if there are multiple mappings to a MVO attribute, the last to be processed will win."*
 
 This "last-writer-wins" behaviour is intentionally temporary and will be replaced by proper priority resolution.
+
+**Known Limitation (Feb 2026):** When attributes are recalled (CSO obsoleted with `RemoveContributedAttributesOnObsoletion=true`), the system does not attempt to find an alternative contributor from another connected system with inbound attribute flow for the same MVO attribute. This requires the attribute priority infrastructure (Issue #91). Until then, recalled attributes are simply cleared.
 
 ### The Problem
 
@@ -662,6 +665,8 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 
 #### Future Phase 1: Schema and Model Changes
 
+- [x] Add `ContributedBySystemId` scalar FK to `MetaverseObjectAttributeValue` (prerequisite — Feb 2026, commit `41116255`)
+- [x] Thread `contributingSystemId` through all 14 attribute creation paths in `SyncRuleMappingProcessor`
 - [ ] Add `Priority` property to `SyncRuleMapping` model (default: int.MaxValue)
 - [ ] Add `NullIsValue` property to `SyncRuleMapping` model (default: false)
 - [ ] Create database migration

@@ -42,7 +42,7 @@ public class ObjectMatchingRuleSource
     public string? Expression { get; set; }
 
     /// <summary>
-    /// Parameter values for legacy function calls. Not used with expression-based matching.
+    /// Parameter values for advanced matching rules with multiple sources. Not used with expression-based matching.
     /// </summary>
     public List<ObjectMatchingRuleSourceParamValue> ParameterValues { get; set; } = new();
 

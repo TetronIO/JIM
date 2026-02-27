@@ -10,6 +10,7 @@ using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 namespace JIM.PostgresData.Repositories;
@@ -628,63 +629,51 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (pageSize > 500)
             pageSize = 500;
 
-        // start building the query for all the CSOs for a particular system.
-        // Include AttributeValues for the CSO, MetaverseObject (if joined), and the MVO's AttributeValues.
-        // The MVO AttributeValues are needed during full sync to detect attribute changes and create PendingExports.
-        // IMPORTANT: We also include the MVO's Attribute navigation property so that expression-based
-        // mappings (like DN generation) can access attribute values by name during export evaluation.
-        // Include Attribute navigation property for both CSO and MVO AttributeValues.
-        // Also include ReferenceValue and ReferenceValue.MetaverseObject for reference attribute
-        // flow during sync - without these, SyncRuleMappingProcessor cannot resolve CSO references
-        // to MVO references and will silently skip them.
-        // IMPORTANT: MVO AttributeValues must also include ReferenceValue so that reference comparison
-        // in SyncRuleMappingProcessor.ProcessReferenceAttribute can detect existing MVO reference values
-        // and avoid creating spurious "new" values for unchanged references.
-        // IMPORTANT: MVO Type must be included for deletion rule evaluation in ProcessMvoDeletionRuleAsync.
-        // IMPORTANT: MVO AttributeValues must include ContributedBySystem so that
-        // ProcessObsoleteConnectedSystemObjectAsync can identify and recall attributes contributed
-        // by the disconnecting system when RemoveContributedAttributesOnObsoletion is enabled.
-        // Include Type for sync processors that access CSO.Type.RemoveContributedAttributesOnObsoletion.
-        var query = Repository.Database.ConnectedSystemObjects
-            .AsSplitQuery()
+        // Load CSOs and their related data using two separate queries within a repeatable-read
+        // transaction to ensure a consistent snapshot. This replaces the previous AsSplitQuery()
+        // approach which suffered from a materialisation bug (dotnet/efcore#33826) where concurrent
+        // writes between split query executions caused navigation properties to fail to materialise.
+        //
+        // Query 1: CSOs with their own attribute values and reference navigations
+        // Query 2: MVOs (loaded separately) — EF Core relationship fixup automatically populates
+        //          cso.MetaverseObject navigations for entities tracked in the same DbContext
+        var csoQuery = Repository.Database.ConnectedSystemObjects
             .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.Attribute)
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.ReferenceValue)
                 .ThenInclude(rv => rv!.MetaverseObject)
-            .Include(cso => cso.MetaverseObject)
-                .ThenInclude(mvo => mvo!.Type)
-            .Include(cso => cso.MetaverseObject)
-                .ThenInclude(mvo => mvo!.AttributeValues)
-                .ThenInclude(av => av.Attribute)
-            .Include(cso => cso.MetaverseObject)
-                .ThenInclude(mvo => mvo!.AttributeValues)
-                .ThenInclude(av => av.ReferenceValue)
-            .Include(cso => cso.MetaverseObject)
-                .ThenInclude(mvo => mvo!.AttributeValues)
-                .ThenInclude(av => av.ContributedBySystem);
-
-        // add the Connected System filter and order by Id for consistent pagination
-        // Without ordering, Skip/Take can return inconsistent results across pages
-        var objects = query
             .Where(q => q.ConnectedSystemId == connectedSystemId)
             .OrderBy(cso => cso.Id);
 
-        // now just add a page's worth of results filter to the query and project to a list we can return.
-        var grossCount = await objects.CountAsync();
+        // Get count first (lightweight, no includes needed)
+        var grossCount = await Repository.Database.ConnectedSystemObjects
+            .CountAsync(q => q.ConnectedSystemId == connectedSystemId);
         var offset = (page - 1) * pageSize;
         var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
-        var pagedObjects = objects.Skip(offset).Take(itemsToGet);
-        var results = await pagedObjects.ToListAsync();
+        var pagedCsoQuery = csoQuery.Skip(offset).Take(itemsToGet);
 
-        // Repair any reference attribute values where EF AsSplitQuery() failed to materialise
-        // the ReferenceValue navigation due to concurrent writes (dotnet/efcore#33826)
-        await RepairReferenceValueMaterialisationAsync(results);
+        List<ConnectedSystemObject> results;
+        try
+        {
+            await using var transaction = await Repository.Database.Database
+                .BeginTransactionAsync(IsolationLevel.RepeatableRead);
 
-        // Repair any MVO attribute values that were dropped entirely by AsSplitQuery()
-        // (entire rows missing from MVO.AttributeValues, not just null navigations)
-        await RepairMvoAttributeValueMaterialisationAsync(results);
+            results = await pagedCsoQuery.ToListAsync();
+
+            // Load MVOs separately — EF relationship fixup populates cso.MetaverseObject automatically.
+            // This avoids the deep Include chain that caused AsSplitQuery materialisation failures.
+            await LoadMetaverseObjectsForCsosAsync(results);
+
+            await transaction.CommitAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        {
+            // Fallback for unit tests with mocked/in-memory provider where transactions are not supported.
+            results = await pagedCsoQuery.ToListAsync();
+            await LoadMetaverseObjectsForCsosAsync(results);
+        }
 
         // now with all the ids we know how many total results there are and so can populate paging info
         var pagedResultSet = new PagedResultSet<ConnectedSystemObject>
@@ -783,66 +772,53 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (pageSize > 500)
             pageSize = 500;
 
-        // Build the query for CSOs created or modified since the given timestamp.
-        // Include AttributeValues for the CSO, MetaverseObject (if joined), and the MVO's AttributeValues.
-        // The MVO AttributeValues are needed during sync to detect attribute changes and create PendingExports.
-        // IMPORTANT: We also include the MVO's Attribute navigation property so that expression-based
-        // mappings (like DN generation) can access attribute values by name during export evaluation.
+        // Load CSOs modified since the given timestamp using two separate queries within a
+        // repeatable-read transaction (same approach as GetConnectedSystemObjectsAsync — see that
+        // method for the rationale on avoiding AsSplitQuery).
         //
-        // IMPORTANT: We check BOTH Created AND LastUpdated because:
+        // We check BOTH Created AND LastUpdated because:
         // - Created > watermark: Captures newly created CSOs that haven't been modified yet
         // - LastUpdated > watermark: Captures existing CSOs that have been modified
-        // This ensures delta sync processes both new and updated objects.
-        // Order by Id for consistent pagination - without ordering, Skip/Take can return inconsistent results.
-        //
-        // Include Type for sync processors that access CSO.Type.RemoveContributedAttributesOnObsoletion.
-        //
-        // IMPORTANT: Must include the same navigation properties as GetConnectedSystemObjectsAsync:
-        // - CSO AttributeValues.Attribute: For attribute name lookup during sync rule processing
-        // - CSO AttributeValues.ReferenceValue.MetaverseObject: For CSO reference → MVO reference resolution
-        // - MVO AttributeValues.ReferenceValue: For detecting existing MVO reference values during comparison
-        // Without these, SyncRuleMappingProcessor.ProcessReferenceAttribute cannot properly compare
-        // CSO reference values against existing MVO reference values.
-        var query = Repository.Database.ConnectedSystemObjects
-            .AsSplitQuery()
+        // Order by Id for consistent pagination.
+        var csoQuery = Repository.Database.ConnectedSystemObjects
             .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.Attribute)
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.ReferenceValue)
                 .ThenInclude(rv => rv!.MetaverseObject)
-            .Include(cso => cso.MetaverseObject)
-                .ThenInclude(mvo => mvo!.Type) // Required for drift detection export rule filtering
-            .Include(cso => cso.MetaverseObject)
-                .ThenInclude(mvo => mvo!.AttributeValues)
-                .ThenInclude(av => av.Attribute)
-            .Include(cso => cso.MetaverseObject)
-                .ThenInclude(mvo => mvo!.AttributeValues)
-                .ThenInclude(av => av.ReferenceValue)
-            .Include(cso => cso.MetaverseObject)
-                .ThenInclude(mvo => mvo!.AttributeValues)
-                .ThenInclude(av => av.ContributedBySystem)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
                          (cso.Created > modifiedSince ||
                           (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)))
             .OrderBy(cso => cso.Id);
 
-        // Get total count for paging
-        var grossCount = await query.CountAsync();
+        // Get count with lightweight query (no includes)
+        var grossCount = await Repository.Database.ConnectedSystemObjects
+            .CountAsync(cso => cso.ConnectedSystemId == connectedSystemId &&
+                              (cso.Created > modifiedSince ||
+                               (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)));
 
-        // Now page the results
         var offset = (page - 1) * pageSize;
         var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
-        var pagedObjects = query.Skip(offset).Take(itemsToGet);
-        var results = await pagedObjects.ToListAsync();
+        var pagedCsoQuery = csoQuery.Skip(offset).Take(itemsToGet);
 
-        // Repair any reference attribute values where EF AsSplitQuery() failed to materialise
-        // the ReferenceValue navigation due to concurrent writes (dotnet/efcore#33826)
-        await RepairReferenceValueMaterialisationAsync(results);
+        List<ConnectedSystemObject> results;
+        try
+        {
+            await using var transaction = await Repository.Database.Database
+                .BeginTransactionAsync(IsolationLevel.RepeatableRead);
 
-        // Repair any MVO attribute values that were dropped entirely by AsSplitQuery()
-        // (entire rows missing from MVO.AttributeValues, not just null navigations)
-        await RepairMvoAttributeValueMaterialisationAsync(results);
+            results = await pagedCsoQuery.ToListAsync();
+            await LoadMetaverseObjectsForCsosAsync(results);
+
+            await transaction.CommitAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        {
+            // Fallback for unit tests with mocked/in-memory provider where transactions are not supported.
+            results = await pagedCsoQuery.ToListAsync();
+            await LoadMetaverseObjectsForCsosAsync(results);
+        }
 
         // Build the paged result set
         var pagedResultSet = new PagedResultSet<ConnectedSystemObject>
@@ -875,238 +851,78 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (csoIds.Count == 0)
             return [];
 
-        var results = await Repository.Database.ConnectedSystemObjects
-            .AsSplitQuery()
+        // Load CSOs by ID using two separate queries within a repeatable-read transaction
+        // (same approach as GetConnectedSystemObjectsAsync — see that method for the rationale).
+        var csoQuery = Repository.Database.ConnectedSystemObjects
             .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.Attribute)
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.ReferenceValue)
                 .ThenInclude(rv => rv!.MetaverseObject)
-            .Include(cso => cso.MetaverseObject)
-                .ThenInclude(mvo => mvo!.Type)
-            .Include(cso => cso.MetaverseObject)
-                .ThenInclude(mvo => mvo!.AttributeValues)
-                .ThenInclude(av => av.Attribute)
-            .Include(cso => cso.MetaverseObject)
-                .ThenInclude(mvo => mvo!.AttributeValues)
-                .ThenInclude(av => av.ReferenceValue)
-            .Include(cso => cso.MetaverseObject)
-                .ThenInclude(mvo => mvo!.AttributeValues)
-                .ThenInclude(av => av.ContributedBySystem)
-            .Where(cso => csoIds.Contains(cso.Id))
-            .ToListAsync();
+            .Where(cso => csoIds.Contains(cso.Id));
 
-        // Repair any reference attribute values where EF AsSplitQuery() failed to materialise
-        // the ReferenceValue navigation due to concurrent writes (dotnet/efcore#33826)
-        await RepairReferenceValueMaterialisationAsync(results);
+        List<ConnectedSystemObject> results;
+        try
+        {
+            await using var transaction = await Repository.Database.Database
+                .BeginTransactionAsync(IsolationLevel.RepeatableRead);
 
-        // Repair any MVO attribute values that were dropped entirely by AsSplitQuery()
-        await RepairMvoAttributeValueMaterialisationAsync(results);
+            results = await csoQuery.ToListAsync();
+            await LoadMetaverseObjectsForCsosAsync(results);
+
+            await transaction.CommitAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        {
+            // Fallback for unit tests with mocked/in-memory provider where transactions are not supported.
+            results = await csoQuery.ToListAsync();
+            await LoadMetaverseObjectsForCsosAsync(results);
+        }
 
         return results;
     }
 
     /// <summary>
-    /// Repairs reference attribute values on CSOs where EF Core's AsSplitQuery() failed to
-    /// materialise the ReferenceValue navigation property due to concurrent writes
-    /// (see dotnet/efcore#33826). Runs a direct SQL query to get the definitive
-    /// MetaverseObjectId for each referenced CSO, then patches any attribute values where
-    /// ReferenceValue is null or has a null MetaverseObjectId.
-    /// </summary>
-    private async Task RepairReferenceValueMaterialisationAsync(List<ConnectedSystemObject> csos)
-    {
-        if (csos.Count == 0)
-            return;
-
-        var csoIds = csos.Select(cso => cso.Id).ToArray();
-
-        // Use a direct SQL query to get the definitive MetaverseObjectId for every
-        // reference attribute value in this page. This bypasses EF materialisation entirely.
-        // Skip when running against a non-relational provider (e.g., in-memory for tests)
-        // since the AsSplitQuery bug only affects relational providers.
-        List<ReferenceRepairRow> referenceData;
-        try
-        {
-            if (!Repository.Database.Database.IsRelational())
-                return;
-
-            referenceData = await Repository.Database.Database
-                .SqlQueryRaw<ReferenceRepairRow>(
-                    """
-                    SELECT av."Id" AS "AttributeValueId", ref_cso."MetaverseObjectId"
-                    FROM "ConnectedSystemObjectAttributeValues" av
-                    JOIN "ConnectedSystemObjects" ref_cso ON av."ReferenceValueId" = ref_cso."Id"
-                    WHERE av."ConnectedSystemObjectId" = ANY({0})
-                      AND av."ReferenceValueId" IS NOT NULL
-                    """,
-                    csoIds)
-                .ToListAsync();
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
-        {
-            // Non-relational providers (e.g., in-memory for tests) do not support raw SQL
-            // and may throw during provider detection. Safe to skip since the AsSplitQuery
-            // materialisation bug only affects relational database providers.
-            return;
-        }
-
-        var lookupByAvId = referenceData.ToDictionary(r => r.AttributeValueId, r => r.MetaverseObjectId);
-
-        var repairedCount = 0;
-        foreach (var cso in csos)
-        {
-            foreach (var av in cso.AttributeValues)
-            {
-                if (!av.ReferenceValueId.HasValue)
-                    continue;
-
-                if (!lookupByAvId.TryGetValue(av.Id, out var expectedMvoId))
-                    continue;
-
-                if (av.ReferenceValue == null)
-                {
-                    // Navigation property was not materialised by EF - create a detached stub
-                    av.ReferenceValue = new ConnectedSystemObject
-                    {
-                        Id = av.ReferenceValueId.Value,
-                        MetaverseObjectId = expectedMvoId
-                    };
-                    repairedCount++;
-                }
-                else if (av.ReferenceValue.MetaverseObjectId == null && expectedMvoId != null)
-                {
-                    // Navigation loaded but MetaverseObjectId was not populated
-                    av.ReferenceValue.MetaverseObjectId = expectedMvoId;
-                    repairedCount++;
-                }
-            }
-        }
-
-        if (repairedCount > 0)
-        {
-            Log.Warning("RepairReferenceValueMaterialisation: Repaired {Count} reference attribute values " +
-                "where EF AsSplitQuery() failed to materialise ReferenceValue navigation (dotnet/efcore#33826). " +
-                "Page contained {CsoCount} CSOs",
-                repairedCount, csos.Count);
-        }
-    }
-
-    /// <summary>
-    /// DTO for the reference repair SQL query. Properties must match the SQL column aliases exactly.
-    /// </summary>
-    private record ReferenceRepairRow(Guid AttributeValueId, Guid? MetaverseObjectId);
-
-    /// <summary>
-    /// Post-load repair for MVO attribute values that were dropped entirely by EF Core's
-    /// AsSplitQuery() materialisation bug (dotnet/efcore#33826). Unlike the CSO repair above
-    /// which fixes null navigations on loaded entities, this method detects when entire
-    /// MetaverseObjectAttributeValue rows are missing from the MVO.AttributeValues collection.
+    /// Loads Metaverse Objects and their attribute values for a set of CSOs in a separate query.
+    /// EF Core relationship fixup automatically populates cso.MetaverseObject navigations for
+    /// entities tracked in the same DbContext, so no manual stitching is required.
     ///
-    /// This manifests as drift detection seeing fewer "expected" member references than actually
-    /// exist in the metaverse, causing spurious corrective exports that delete valid members.
+    /// This replaces the previous approach of loading MVOs as part of the CSO query's Include
+    /// chain with AsSplitQuery(), which suffered from a materialisation bug (dotnet/efcore#33826).
+    /// By loading MVOs in a dedicated query, we avoid the deep Include nesting that triggered the bug.
     ///
-    /// The repair queries the database for the definitive set of reference-type attribute values
-    /// per MVO and adds any missing ones as detached entities with their scalar FK populated.
-    /// Drift detection only needs ReferenceValueId (the scalar FK), not the full ReferenceValue
-    /// navigation, so stub entities are sufficient.
+    /// The MVO query includes:
+    /// - Type: Required for deletion rule evaluation and export rule filtering
+    /// - AttributeValues.Attribute: Required for attribute name/type lookup during sync and expression evaluation
+    /// - AttributeValues.ReferenceValue: Required for detecting existing MVO reference values
     /// </summary>
-    private async Task RepairMvoAttributeValueMaterialisationAsync(List<ConnectedSystemObject> csos)
+    private async Task LoadMetaverseObjectsForCsosAsync(List<ConnectedSystemObject> csos)
     {
-        if (csos.Count == 0)
-            return;
-
-        // Collect distinct MVO IDs from loaded CSOs
         var mvoIds = csos
-            .Where(cso => cso.MetaverseObject != null)
-            .Select(cso => cso.MetaverseObject!.Id)
+            .Where(cso => cso.MetaverseObjectId != null)
+            .Select(cso => cso.MetaverseObjectId!.Value)
             .Distinct()
-            .ToArray();
+            .ToList();
 
-        if (mvoIds.Length == 0)
+        if (mvoIds.Count == 0)
             return;
 
-        // Query the database for all reference-type attribute values for these MVOs.
-        // We only care about reference attributes (ReferenceValueId IS NOT NULL) because
-        // those are the ones affected by drift detection member comparisons.
-        List<MvoAttributeValueRepairRow> dbRows;
-        try
-        {
-            if (!Repository.Database.Database.IsRelational())
-                return;
-
-            dbRows = await Repository.Database.Database
-                .SqlQueryRaw<MvoAttributeValueRepairRow>(
-                    """
-                    SELECT av."Id", av."MetaverseObjectId" AS "MvoId", av."AttributeId",
-                           av."ReferenceValueId"
-                    FROM "MetaverseObjectAttributeValues" av
-                    WHERE av."MetaverseObjectId" = ANY({0})
-                      AND av."ReferenceValueId" IS NOT NULL
-                    """,
-                    mvoIds)
-                .ToListAsync();
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
-        {
-            return;
-        }
-
-        if (dbRows.Count == 0)
-            return;
-
-        // Group by MVO ID for fast lookup
-        var dbRowsByMvo = dbRows.GroupBy(r => r.MvoId)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
-        var repairedCount = 0;
-        foreach (var cso in csos)
-        {
-            if (cso.MetaverseObject == null)
-                continue;
-
-            var mvo = cso.MetaverseObject;
-
-            if (!dbRowsByMvo.TryGetValue(mvo.Id, out var expectedRows))
-                continue;
-
-            // Build a set of attribute value IDs that EF actually loaded
-            var loadedAvIds = new HashSet<Guid>(mvo.AttributeValues.Select(av => av.Id));
-
-            // Find rows that the database has but EF didn't materialise
-            var missingRows = expectedRows.Where(r => !loadedAvIds.Contains(r.Id)).ToList();
-
-            if (missingRows.Count == 0)
-                continue;
-
-            // Add stub attribute values for the missing rows.
-            // These are NOT tracked by the DbContext — they're detached in-memory patches.
-            // Drift detection only needs AttributeId and ReferenceValueId (the scalar FK).
-            foreach (var missing in missingRows)
-            {
-                mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
-                {
-                    Id = missing.Id,
-                    AttributeId = missing.AttributeId,
-                    MetaverseObject = mvo,
-                    ReferenceValueId = missing.ReferenceValueId,
-                });
-                repairedCount++;
-            }
-        }
-
-        if (repairedCount > 0)
-        {
-            Log.Warning("RepairMvoAttributeValueMaterialisation: Repaired {RepairedCount} missing MVO attribute values " +
-                "across {MvoCount} MVOs where EF AsSplitQuery() failed to materialise (dotnet/efcore#33826)",
-                repairedCount, mvoIds.Length);
-        }
+        // Loading MVOs into the same DbContext triggers EF Core relationship fixup,
+        // which automatically populates cso.MetaverseObject for all tracked CSOs
+        // whose MetaverseObjectId matches a loaded MVO's primary key.
+        // Note: ContributedBySystem navigation is NOT included — the sync path uses the
+        // scalar FK (ContributedBySystemId) directly, avoiding the need to load the full entity.
+        await Repository.Database.MetaverseObjects
+            .Include(mvo => mvo.Type)
+            .Include(mvo => mvo.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+            .Include(mvo => mvo.AttributeValues)
+                .ThenInclude(av => av.ReferenceValue)
+            .Where(mvo => mvoIds.Contains(mvo.Id))
+            .ToListAsync();
     }
 
-    /// <summary>
-    /// DTO for the MVO attribute value repair SQL query.
-    /// </summary>
-    private record MvoAttributeValueRepairRow(Guid Id, Guid MvoId, int AttributeId, Guid? ReferenceValueId);
 
     /// <summary>
     /// DTO for the reference external ID lookup SQL query.
@@ -2834,7 +2650,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             throw new InvalidDataException("ObjectMatchingRule has no sources.");
 
         if (objectMatchingRule.Sources.Count > 1)
-            throw new NotImplementedException("Object Matching Rules with more than one Source are not yet supported (i.e. functions).");
+            throw new NotImplementedException("Object Matching Rules with more than one source are not yet supported (advanced matching).");
 
         var source = objectMatchingRule.Sources[0];
 
