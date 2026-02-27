@@ -127,10 +127,17 @@ public class PostgresDataRepository : IRepository
     }
 
     /// <summary>
-    /// Updates an entity safely, avoiding EF Core graph traversal on detached entities.
-    /// When the entity is detached (e.g. after ClearChangeTracker), sets Entry().State = Modified
-    /// to update only scalar properties without traversing navigation properties.
-    /// When the entity is tracked, uses the standard Update() which traverses the full graph.
+    /// Updates an entity safely, avoiding EF Core graph traversal in all cases.
+    /// Uses Entry().State = Modified which only marks the single entity without
+    /// traversing navigation properties. This prevents EF from discovering and
+    /// prematurely inserting related entities (e.g., RPEIs in Activity.RunProfileExecutionItems)
+    /// during SaveChangesAsync.
+    ///
+    /// In contrast, Database.Update() traverses the full object graph and marks all
+    /// reachable entities, which can cause identity conflicts with shared entities
+    /// (MetaverseAttribute, MetaverseObjectType) and premature insertion of entities
+    /// that should be persisted separately (RPEIs via raw SQL bulk insert).
+    ///
     /// Falls back to Update() in unit test environments where Entry() is unavailable (mocked DbContext).
     /// </summary>
     internal void UpdateDetachedSafe<T>(T entity) where T : class
@@ -138,14 +145,7 @@ public class PostgresDataRepository : IRepository
         try
         {
             var entry = Database.Entry(entity);
-            if (entry.State == EntityState.Detached)
-            {
-                entry.State = EntityState.Modified;
-            }
-            else
-            {
-                Database.Update(entity);
-            }
+            entry.State = EntityState.Modified;
         }
         catch (NullReferenceException)
         {

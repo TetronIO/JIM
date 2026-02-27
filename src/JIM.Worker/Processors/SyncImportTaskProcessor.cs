@@ -25,6 +25,7 @@ public class SyncImportTaskProcessor
     private readonly string? _initiatedByName;
     private readonly JIM.Models.Activities.Activity _activity;
     private readonly List<ActivityRunProfileExecutionItem> _activityRunProfileExecutionItems;
+    private List<ActivityRunProfileExecutionItem> _allPersistedImportRpeis;
     private readonly CancellationTokenSource _cancellationTokenSource;
 
     /// <summary>
@@ -51,10 +52,12 @@ public class SyncImportTaskProcessor
         _initiatedByName = workerTask.InitiatedByName;
         _activity = workerTask.Activity;
 
-        // we will maintain this list separate from the activity, and add the items to the activity when all CSOs are persisted
-        // this is so we don't create a dependency on CSOs with the Activity whilst we're still processing and updating the activity status, which would cause EF to persist
-        // CSOs before we're ready to do so.
+        // RPEIs are maintained separately during processing and flushed incrementally via raw SQL bulk insert
+        // at natural boundaries (after CSO creates, updates, and reconciliation). This avoids accumulating
+        // the entire run's RPEIs in memory before persisting. The raw SQL bulk insert only uses scalar FKs,
+        // so there is no risk of EF persisting CSOs prematurely via navigation properties.
         _activityRunProfileExecutionItems = new List<ActivityRunProfileExecutionItem>();
+        _allPersistedImportRpeis = new List<ActivityRunProfileExecutionItem>();
     }
 
     public async Task PerformFullImportAsync()
@@ -279,6 +282,11 @@ public class SyncImportTaskProcessor
 
             await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activityRunProfileExecutionItems);
 
+            // NOTE: Do NOT flush RPEIs here. The _activityRunProfileExecutionItems list contains RPEIs
+            // for BOTH creates and updates (added during import processing). UpdateConnectedSystemObjectsAsync
+            // below needs to look up RPEIs by CSO ID to attach change objects. Flushing here would remove
+            // the update RPEIs prematurely.
+
             // Add newly created CSOs to the lookup cache so subsequent imports (delta or full) can find them
             foreach (var newCso in connectedSystemObjectsToBeCreated)
             {
@@ -318,6 +326,12 @@ public class SyncImportTaskProcessor
             }
 
             await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activityRunProfileExecutionItems);
+
+            // Flush all RPEIs (creates + updates) now that both operations have processed them.
+            // Both CreateConnectedSystemObjectsAsync and UpdateConnectedSystemObjectsAsync search
+            // _activityRunProfileExecutionItems by CSO ID to attach change objects, so we must
+            // wait until both are complete before flushing.
+            await FlushImportRpeisAsync();
 
             // Update cache for CSOs that were updated during import.
             // For PendingProvisioning → Normal transitions: the confirming import has assigned a primary
@@ -396,9 +410,13 @@ public class SyncImportTaskProcessor
             }
         }
 
-        // now persist the activity run profile execution items with the activity
+        // Flush any remaining RPEIs (e.g., from reconciliation or validation)
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Creating activity run profile execution items");
-        _activity.AddRunProfileExecutionItems(_activityRunProfileExecutionItems);
+        await FlushImportRpeisAsync();
+
+        // Restore all persisted RPEIs to the Activity for CalculateActivitySummaryStats
+        // and for tests that verify activity.RunProfileExecutionItems.
+        _activity.AddRunProfileExecutionItems(_allPersistedImportRpeis);
         await _jim.Activities.UpdateActivityAsync(_activity);
 
         importSpan.SetTag("totalObjectsImported", totalObjectsImported);
@@ -506,6 +524,27 @@ public class SyncImportTaskProcessor
                     throw new ArgumentOutOfRangeException();
             }
         }
+    }
+
+    /// <summary>
+    /// Flushes accumulated import RPEIs to the database via raw SQL bulk insert,
+    /// then clears _activityRunProfileExecutionItems for the next phase.
+    /// </summary>
+    private async Task FlushImportRpeisAsync()
+    {
+        if (_activityRunProfileExecutionItems.Count == 0)
+            return;
+
+        foreach (var rpei in _activityRunProfileExecutionItems)
+        {
+            rpei.ActivityId = _activity.Id;
+            if (rpei.Id == Guid.Empty)
+                rpei.Id = Guid.NewGuid();
+        }
+
+        await _jim.Activities.BulkInsertRpeisAsync(_activityRunProfileExecutionItems);
+        _allPersistedImportRpeis.AddRange(_activityRunProfileExecutionItems);
+        _activityRunProfileExecutionItems.Clear();
     }
 
     /// <summary>

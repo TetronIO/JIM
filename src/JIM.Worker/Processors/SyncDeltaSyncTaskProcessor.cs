@@ -186,41 +186,69 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             // This enables a single sync run to fully reconcile all objects including references.
             ProcessDeferredReferenceAttributes();
 
-            // Batch persist all MVOs collected during this page.
-            // See SyncFullSyncTaskProcessor for design notes on why progress updates
-            // cannot be decoupled from batch persistence boundaries.
-            await PersistPendingMetaverseObjectsAsync();
-
-            // create MVO change objects for change tracking (after MVOs persisted so IDs available)
-            await CreatePendingMvoChangeObjectsAsync();
-
-            // Batch evaluate exports for all MVOs that changed during this page
-            await EvaluatePendingExportsAsync();
-
-            // batch process pending export confirmations (deletes and updates)
-            await FlushPendingExportOperationsAsync();
-
-            // batch delete obsolete CSOs
-            await FlushObsoleteCsoOperationsAsync();
-
-            // batch delete MVOs marked for immediate deletion (0-grace-period)
-            await FlushPendingMvoDeletionsAsync();
-
-            // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
-            using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
+            // Disable AutoDetectChangesEnabled for the page flush sequence.
+            // See SyncFullSyncTaskProcessor for detailed explanation of why this is necessary
+            // to prevent DetectChanges() from discovering RPEIs and causing duplicate key violations.
+            _jim.Repository.SetAutoDetectChangesEnabled(false);
+            try
             {
-                await _jim.Activities.UpdateActivityAsync(_activity);
+                // Batch persist all MVOs collected during this page.
+                // See SyncFullSyncTaskProcessor for design notes on why progress updates
+                // cannot be decoupled from batch persistence boundaries.
+                await PersistPendingMetaverseObjectsAsync();
+
+                // create MVO change objects for change tracking (after MVOs persisted so IDs available)
+                await CreatePendingMvoChangeObjectsAsync();
+
+                // Batch evaluate exports for all MVOs that changed during this page
+                await EvaluatePendingExportsAsync();
+
+                // batch process pending export confirmations (deletes and updates)
+                await FlushPendingExportOperationsAsync();
+
+                // batch delete obsolete CSOs
+                await FlushObsoleteCsoOperationsAsync();
+
+                // batch delete MVOs marked for immediate deletion (0-grace-period)
+                var hadMvoDeletions = _pendingMvoDeletions.Count > 0;
+                await FlushPendingMvoDeletionsAsync();
+
+                // Flush this page's RPEIs via bulk insert before updating progress
+                await FlushRpeisAsync();
+
+                // Clear the change tracker after MVO deletions to prevent stale entity conflicts.
+                // See SyncFullSyncTaskProcessor for detailed explanation.
+                if (hadMvoDeletions && _hasRawSqlSupport)
+                    _jim.Repository.ClearChangeTracker();
+
+                // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
+                using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
+                {
+                    await _jim.Activities.UpdateActivityAsync(_activity);
+                }
+            }
+            finally
+            {
+                _jim.Repository.SetAutoDetectChangesEnabled(true);
             }
         }
 
         // Resolve cross-page reference attributes (same as full sync — see full sync for detailed explanation)
         await ResolveCrossPageReferencesAsync(activeSyncRules);
 
+        // Flush any RPEIs from cross-page resolution
+        await FlushRpeisAsync();
+
         // Ensure the activity and any pending db updates are applied after all pages are processed
         await _jim.Activities.UpdateActivityAsync(_activity);
 
         // Update the watermark to mark this sync as complete
         await UpdateDeltaSyncWatermarkAsync();
+
+        // Compute summary stats from all RPEIs (flushed + any remaining in Activity).
+        // _allPersistedRpeis contains RPEIs from all pages; Activity may have unflushed RPEIs.
+        var allRpeis = _allPersistedRpeis.Concat(_activity.RunProfileExecutionItems).ToList();
+        Worker.CalculateActivitySummaryStats(_activity, allRpeis);
 
         syncSpan.SetSuccess();
     }

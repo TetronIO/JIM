@@ -4,6 +4,8 @@ using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
 namespace JIM.PostgresData.Repositories;
 
 public class ActivityRepository : IActivityRepository
@@ -692,4 +694,158 @@ public class ActivityRepository : IActivityRepository
             .SingleOrDefaultAsync(q => q.Id == id);
     }
     #endregion
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Bulk RPEI persistence (Phase 5 - Worker Database Performance Optimisation)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Maximum number of parameters per SQL statement to stay under PostgreSQL's 65,535 limit.
+    /// </summary>
+    private const int MaxParametersPerStatement = 60000;
+
+    public async Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    {
+        if (rpeis.Count == 0)
+            return true;
+
+        // Pre-generate IDs for all RPEIs (bypasses EF ValueGeneratedOnAdd)
+        foreach (var rpei in rpeis)
+        {
+            if (rpei.Id == Guid.Empty)
+                rpei.Id = Guid.NewGuid();
+        }
+
+        // Try raw SQL path first (production with real database).
+        // BeginTransactionAsync throws InvalidOperationException in test environments (in-memory/mocked
+        // providers) and NullReferenceException with mocked DbContext. We catch those narrowly to
+        // detect the test environment, then fall back to EF tracking.
+        //
+        // IMPORTANT: Once raw SQL succeeds, any subsequent failure MUST propagate — never fall back
+        // to EF's AddRange in production, as it triggers graph traversal causing identity conflicts
+        // with shared MetaverseAttribute/MetaverseObjectType entities.
+        IDbContextTransaction? transaction = null;
+        try
+        {
+            // If a transaction is already active (e.g., caller opened one), reuse it.
+            // Otherwise start a new one. This prevents InvalidOperationException when
+            // FlushRpeisAsync is called during cross-page resolution where preceding
+            // operations may have left a transaction open.
+            var existingTransaction = Repository.Database.Database.CurrentTransaction;
+            if (existingTransaction == null)
+                transaction = await Repository.Database.Database.BeginTransactionAsync();
+
+            await BulkInsertRpeisRawAsync(rpeis);
+
+            if (transaction != null)
+                await transaction.CommitAsync();
+
+            return true; // Raw SQL used — RPEIs persisted outside EF change tracker
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        {
+            // This catch ONLY handles test environment detection where transactions/raw SQL
+            // are not available. If we already executed any SQL, this is a real error — rethrow.
+            if (transaction != null)
+                throw; // Transaction was created but SQL failed — real production error
+
+            // Test environment fallback: RPEIs need explicit AddRange to be tracked by EF.
+            // List<T> navigation properties don't trigger automatic change detection in
+            // the in-memory provider — items must be explicitly added to the change tracker.
+            var untracked = new List<ActivityRunProfileExecutionItem>();
+            foreach (var rpei in rpeis)
+            {
+                try
+                {
+                    var entry = Repository.Database.Entry(rpei);
+                    if (entry.State == EntityState.Detached)
+                        untracked.Add(rpei);
+                }
+                catch (NullReferenceException)
+                {
+                    // Mocked DbContext: Entry() not available — treat as untracked
+                    untracked.Add(rpei);
+                }
+            }
+
+            if (untracked.Count > 0)
+                Repository.Database.AddRange(untracked);
+
+            return false; // EF fallback used — RPEIs tracked by EF via AddRange
+        }
+        finally
+        {
+            if (transaction != null)
+                await transaction.DisposeAsync();
+        }
+    }
+
+    public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis)
+    {
+        foreach (var rpei in rpeis)
+        {
+            try
+            {
+                var entry = Repository.Database.Entry(rpei);
+                if (entry.State != EntityState.Detached)
+                    entry.State = EntityState.Detached;
+            }
+            catch (NullReferenceException)
+            {
+                // Mocked DbContext in tests — Entry() not available, nothing to detach
+            }
+        }
+    }
+
+    /// <summary>
+    /// Bulk inserts ActivityRunProfileExecutionItem rows using parameterised multi-row INSERT.
+    /// Chunks automatically to stay within the PostgreSQL parameter limit.
+    /// </summary>
+    private async Task BulkInsertRpeisRawAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    {
+        const int columnsPerRow = 11;
+        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+
+        foreach (var chunk in ChunkList(rpeis, chunkSize))
+        {
+            var sql = new System.Text.StringBuilder();
+            sql.Append(@"INSERT INTO ""ActivityRunProfileExecutionItems"" (""Id"", ""ActivityId"", ""ObjectChangeType"", ""NoChangeReason"", ""ConnectedSystemObjectId"", ""ExternalIdSnapshot"", ""DataSnapshot"", ""ErrorType"", ""ErrorMessage"", ""ErrorStackTrace"", ""AttributeFlowCount"") VALUES ");
+
+            // Use NpgsqlParameter objects with explicit NpgsqlDbType for nullable columns.
+            // EF Core's RawSqlCommandBuilder passes DbParameter objects through directly to the
+            // provider, bypassing the CLR type → store type mapping that fails for DBNull.Value.
+            var parameters = new List<NpgsqlParameter>();
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                if (i > 0) sql.Append(", ");
+                var offset = i * columnsPerRow;
+                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10})");
+
+                var rpei = chunk[i];
+                parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = rpei.Id });
+                parameters.Add(new NpgsqlParameter($"p{offset + 1}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = rpei.ActivityId });
+                parameters.Add(new NpgsqlParameter($"p{offset + 2}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)rpei.ObjectChangeType });
+                parameters.Add(new NpgsqlParameter($"p{offset + 3}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = rpei.NoChangeReason.HasValue ? (object)(int)rpei.NoChangeReason.Value : DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 4}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)rpei.ConnectedSystemObjectId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 5}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ExternalIdSnapshot ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 6}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.DataSnapshot ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 7}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = rpei.ErrorType.HasValue ? (object)(int)rpei.ErrorType.Value : DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 8}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ErrorMessage ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 9}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ErrorStackTrace ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 10}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)rpei.AttributeFlowCount ?? DBNull.Value });
+            }
+
+            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
+    }
+
+    private static List<List<T>> ChunkList<T>(List<T> source, int chunkSize)
+    {
+        var chunks = new List<List<T>>();
+        for (var i = 0; i < source.Count; i += chunkSize)
+        {
+            chunks.Add(source.GetRange(i, Math.Min(chunkSize, source.Count - i)));
+        }
+        return chunks;
+    }
 }

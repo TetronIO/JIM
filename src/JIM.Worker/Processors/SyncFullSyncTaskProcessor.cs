@@ -95,6 +95,14 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // Surface pending exports awaiting confirmation as RPEIs for operator visibility.
             // This gives operators insight into what changes will be made on the next export run.
             SurfacePendingExportsAsExecutionItems(allPendingExports);
+
+            // Flush surfaced RPEIs immediately via bulk insert. These RPEIs must be persisted
+            // and cleared from Activity.RunProfileExecutionItems BEFORE any subsequent
+            // UpdateActivityAsync/UpdateActivityMessageAsync call, because those calls trigger
+            // SaveChangesAsync → DetectChanges() which discovers RPEIs in the tracked Activity's
+            // collection and inserts them. Later FlushRpeisAsync would then attempt raw SQL insert
+            // of the same RPEIs, causing duplicate key violations.
+            await FlushRpeisAsync();
         }
 
         // Pre-load export evaluation cache (export rules + CSO lookups) for O(1) access
@@ -173,50 +181,84 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // This enables a single sync run to fully reconcile all objects including references.
             ProcessDeferredReferenceAttributes();
 
-            // Batch persist all MVOs collected during this page.
+            // Disable AutoDetectChangesEnabled for the page flush sequence.
+            // Without this, every SaveChangesAsync call below triggers DetectChanges() which
+            // scans ALL tracked entities' navigation properties. The tracked Activity entity's
+            // RunProfileExecutionItems collection contains RPEIs accumulated during CSO processing.
+            // DetectChanges() discovers these as new items, marks them as Added, and inserts them
+            // during SaveChangesAsync. Later, FlushRpeisAsync attempts raw SQL bulk insert of the
+            // same RPEIs, causing duplicate key violations.
             //
-            // IMPORTANT DESIGN NOTE (Jan 2026):
-            // We previously attempted to decouple progress updates from batch size by calling
-            // UpdateActivityAsync mid-loop (every N objects). This DOES NOT WORK because:
-            //
-            // 1. When we set cso.MetaverseObject = mvo, EF's "relationship fixup" automatically
-            //    adds the CSO to mvo.ConnectedSystemObjects (bidirectional nav property sync).
-            //
-            // 2. During SaveChangesAsync (triggered by activity updates), EF calls DetectChanges()
-            //    which traverses all navigation properties to discover changes.
-            //
-            // 3. If CSOs were loaded with AsNoTracking() to improve query performance, EF will
-            //    try to attach them when it discovers them via the MVO navigation, causing
-            //    "another instance with same key is already tracked" errors.
-            //
-            // 4. Attempts to work around this (clearing collections, removing CSOs from collections,
-            //    deferring FK updates) all failed because EF's relationship fixup is automatic
-            //    and cannot be prevented without breaking the navigation property assignments.
-            //
-            // The solution is to use AsSplitQuery() instead of AsNoTracking() so all entities
-            // are properly tracked, and only persist at page boundaries to batch database writes.
-            // Progress updates at finer granularity would require a separate DbContext instance.
-            await PersistPendingMetaverseObjectsAsync();
-
-            // create MVO change objects for change tracking (after MVOs persisted so IDs available)
-            await CreatePendingMvoChangeObjectsAsync();
-
-            // batch evaluate exports for all MVOs that changed during this page
-            await EvaluatePendingExportsAsync();
-
-            // batch process pending export confirmations (deletes and updates)
-            await FlushPendingExportOperationsAsync();
-
-            // batch delete obsolete CSOs
-            await FlushObsoleteCsoOperationsAsync();
-
-            // batch delete MVOs marked for immediate deletion (0-grace-period)
-            await FlushPendingMvoDeletionsAsync();
-
-            // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
-            using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
+            // With AutoDetectChanges disabled, SaveChangesAsync only persists entities we explicitly
+            // mark (AddRange for creates, Entry().State = Modified for updates) without scanning
+            // navigation property collections.
+            _jim.Repository.SetAutoDetectChangesEnabled(false);
+            try
             {
-                await _jim.Activities.UpdateActivityAsync(_activity);
+                // Batch persist all MVOs collected during this page.
+                //
+                // IMPORTANT DESIGN NOTE (Jan 2026):
+                // We previously attempted to decouple progress updates from batch size by calling
+                // UpdateActivityAsync mid-loop (every N objects). This DOES NOT WORK because:
+                //
+                // 1. When we set cso.MetaverseObject = mvo, EF's "relationship fixup" automatically
+                //    adds the CSO to mvo.ConnectedSystemObjects (bidirectional nav property sync).
+                //
+                // 2. During SaveChangesAsync (triggered by activity updates), EF calls DetectChanges()
+                //    which traverses all navigation properties to discover changes.
+                //
+                // 3. If CSOs were loaded with AsNoTracking() to improve query performance, EF will
+                //    try to attach them when it discovers them via the MVO navigation, causing
+                //    "another instance with same key is already tracked" errors.
+                //
+                // 4. Attempts to work around this (clearing collections, removing CSOs from collections,
+                //    deferring FK updates) all failed because EF's relationship fixup is automatic
+                //    and cannot be prevented without breaking the navigation property assignments.
+                //
+                // The solution is to use AsSplitQuery() instead of AsNoTracking() so all entities
+                // are properly tracked, and only persist at page boundaries to batch database writes.
+                // Progress updates at finer granularity would require a separate DbContext instance.
+                await PersistPendingMetaverseObjectsAsync();
+
+                // create MVO change objects for change tracking (after MVOs persisted so IDs available)
+                await CreatePendingMvoChangeObjectsAsync();
+
+                // batch evaluate exports for all MVOs that changed during this page
+                await EvaluatePendingExportsAsync();
+
+                // batch process pending export confirmations (deletes and updates)
+                await FlushPendingExportOperationsAsync();
+
+                // batch delete obsolete CSOs
+                await FlushObsoleteCsoOperationsAsync();
+
+                // batch delete MVOs marked for immediate deletion (0-grace-period)
+                var hadMvoDeletions = _pendingMvoDeletions.Count > 0;
+                await FlushPendingMvoDeletionsAsync();
+
+                // Flush this page's RPEIs via bulk insert before updating progress
+                await FlushRpeisAsync();
+
+                // Clear the change tracker after MVO deletions to prevent stale entity conflicts.
+                // MVO deletion involves raw SQL (nulling FK references in Activities and
+                // MetaverseObjectChanges tables) followed by EF Remove + SaveChanges. The raw SQL
+                // modifies rows that may still be tracked in memory, and cascade deletes at the
+                // database level remove rows that are still in the tracker as Modified.
+                // Without clearing, the next SaveChangesAsync tries to UPDATE these ghost rows
+                // and fails with DbUpdateConcurrencyException.
+                // UpdateDetachedSafe will re-attach the Activity in Modified state.
+                if (hadMvoDeletions && _hasRawSqlSupport)
+                    _jim.Repository.ClearChangeTracker();
+
+                // Update progress with page completion - this persists ObjectsProcessed to database (including MVO changes)
+                using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
+                {
+                    await _jim.Activities.UpdateActivityAsync(_activity);
+                }
+            }
+            finally
+            {
+                _jim.Repository.SetAutoDetectChangesEnabled(true);
             }
         }
 
@@ -226,11 +268,19 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // and all MVOs exist in the database, reload those CSOs and resolve their references.
         await ResolveCrossPageReferencesAsync(activeSyncRules);
 
+        // Flush any RPEIs from cross-page resolution
+        await FlushRpeisAsync();
+
         // Ensure the activity and any pending db updates are applied after all pages are processed
         await _jim.Activities.UpdateActivityAsync(_activity);
 
         // Update the delta sync watermark to establish baseline for future delta syncs
         await UpdateDeltaSyncWatermarkAsync();
+
+        // Compute summary stats from all RPEIs (flushed + any remaining in Activity).
+        // _allPersistedRpeis contains RPEIs from all pages; Activity may have unflushed RPEIs.
+        var allRpeis = _allPersistedRpeis.Concat(_activity.RunProfileExecutionItems).ToList();
+        Worker.CalculateActivitySummaryStats(_activity, allRpeis);
 
         syncSpan.SetSuccess();
     }

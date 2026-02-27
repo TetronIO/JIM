@@ -566,10 +566,10 @@ else if (_syncRule != null)
                   Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-2"
                   Filter="new Func<SyncRuleMapping, bool>(FilterAttributeFlowRules)">
             <HeaderContent>
-                <MudTh><MudText Typo="Typo.button">Type</MudText></MudTh>
-                <MudTh><MudText Typo="Typo.button">Source</MudText></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleMapping, object>(x => x.GetSourceType().ToString())"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleMapping, object>(x => GetSortableSourceName(x))"><MudText Typo="Typo.button">Source</MudText></MudTableSortLabel></MudTh>
                 <MudTh></MudTh>
-                <MudTh><MudText Typo="Typo.button">Target</MudText></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<SyncRuleMapping, object>(x => GetSortableTargetName(x))"><MudText Typo="Typo.button">Target</MudText></MudTableSortLabel></MudTh>
                 <MudTh></MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -1418,6 +1418,29 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
             return false;
 
         return true;
+    }
+
+    private string GetSortableSourceName(SyncRuleMapping mapping)
+    {
+        var firstSource = mapping.Sources.OrderBy(s => s.Order).FirstOrDefault();
+        if (firstSource == null) return string.Empty;
+
+        if (_syncRule?.Direction == SyncRuleDirection.Import && firstSource.ConnectedSystemAttribute != null)
+            return firstSource.ConnectedSystemAttribute.Name;
+        if (_syncRule?.Direction == SyncRuleDirection.Export && firstSource.MetaverseAttribute != null)
+            return firstSource.MetaverseAttribute.Name;
+        if (!string.IsNullOrWhiteSpace(firstSource.Expression))
+            return firstSource.Expression;
+
+        return string.Empty;
+    }
+
+    private string GetSortableTargetName(SyncRuleMapping mapping)
+    {
+        if (_syncRule?.Direction == SyncRuleDirection.Import)
+            return mapping.TargetMetaverseAttribute?.Name ?? string.Empty;
+
+        return mapping.TargetConnectedSystemAttribute?.Name ?? string.Empty;
     }
 
     private IEnumerable<KeyValuePair<SyncRuleMappingSourcesType, int>> GetAvailableMappingTypes()

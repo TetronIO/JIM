@@ -259,6 +259,20 @@ public class SyncExportTaskProcessor
             completionMessage = $"Export complete: {result.SuccessCount} succeeded, {result.FailedCount} failed, {result.DeferredCount} deferred";
         }
 
+        // Bulk insert RPEIs via raw SQL (bypasses change tracker for performance)
+        var exportRpeis = _activity.RunProfileExecutionItems.ToList();
+        if (exportRpeis.Count > 0)
+        {
+            foreach (var rpei in exportRpeis)
+            {
+                rpei.ActivityId = _activity.Id;
+                if (rpei.Id == Guid.Empty)
+                    rpei.Id = Guid.NewGuid();
+            }
+            await _jim.Activities.BulkInsertRpeisAsync(exportRpeis);
+        }
+
+        // RPEIs remain in _activity.RunProfileExecutionItems for CalculateActivitySummaryStats
         await _jim.Activities.UpdateActivityMessageAsync(_activity, completionMessage);
         await _jim.Activities.UpdateActivityAsync(_activity);
 

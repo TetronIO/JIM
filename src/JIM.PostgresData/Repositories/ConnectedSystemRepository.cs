@@ -1460,7 +1460,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
     {
-        Repository.Database.ConnectedSystemObjects.Update(connectedSystemObject);
+        // Use UpdateDetachedSafe to avoid graph traversal. DbSet.Update() traverses the entire
+        // entity graph, which can discover and re-mark entities that were already deleted by
+        // preceding batch operations (e.g., obsolete CSOs deleted by FlushObsoleteCsoOperationsAsync).
+        // This causes DbUpdateConcurrencyException ("expected 1 row, affected 0") when
+        // SaveChangesAsync tries to UPDATE the deleted row.
+        Repository.UpdateDetachedSafe(connectedSystemObject);
         await Repository.Database.SaveChangesAsync();
     }
 

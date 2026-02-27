@@ -95,6 +95,16 @@ public abstract class SyncTaskProcessorBase
     // and reference attributes are re-processed in ResolveCrossPageReferencesAsync.
     protected readonly List<(Guid CsoId, List<int> SyncRuleIds)> _unresolvedCrossPageReferences = [];
 
+    // Accumulates all RPEIs persisted via bulk insert across pages.
+    // Used to compute summary stats at the end of processing via CalculateActivitySummaryStats.
+    // RPEIs are NOT restored to Activity.RunProfileExecutionItems to avoid EF tracking conflicts.
+    protected readonly List<ActivityRunProfileExecutionItem> _allPersistedRpeis = [];
+
+    // Set to true when raw SQL is available (production with real database).
+    // Used to conditionally apply ClearChangeTracker after MVO deletions — only needed in
+    // production where raw SQL operations create stale change tracker entries.
+    protected bool _hasRawSqlSupport;
+
     // Expression evaluator for expression-based sync rule mappings
     protected readonly IExpressionEvaluator _expressionEvaluator = new DynamicExpressoEvaluator();
 
@@ -110,6 +120,56 @@ public abstract class SyncTaskProcessorBase
         _connectedSystemRunProfile = connectedSystemRunProfile;
         _activity = activity;
         _cancellationTokenSource = cancellationTokenSource;
+    }
+
+    /// <summary>
+    /// Flushes the current page's RPEIs to the database via raw SQL bulk insert,
+    /// then moves them to _allPersistedRpeis for later summary stat computation.
+    ///
+    /// IMPORTANT: This method MUST be called BEFORE any SaveChangesAsync that might trigger
+    /// DetectChanges() while RPEIs are in Activity.RunProfileExecutionItems. DetectChanges()
+    /// scans the tracked Activity's collection, discovers RPEIs as new items, marks them as
+    /// Added, and inserts them prematurely. If this method later attempts raw SQL insert of
+    /// the same RPEIs, it causes duplicate key violations.
+    ///
+    /// In production (raw SQL): clears RPEIs from Activity.RunProfileExecutionItems and detaches
+    /// from change tracker to prevent re-insertion by subsequent SaveChangesAsync calls.
+    ///
+    /// In tests (EF fallback): leaves RPEIs in Activity.RunProfileExecutionItems for test
+    /// assertions. They're tracked by EF (via AddRange) and persisted by next SaveChangesAsync.
+    /// </summary>
+    protected async Task FlushRpeisAsync()
+    {
+        var pageRpeis = _activity.RunProfileExecutionItems.ToList();
+        if (pageRpeis.Count == 0)
+            return;
+
+        // Ensure all RPEIs have ActivityId set and IDs pre-generated
+        foreach (var rpei in pageRpeis)
+        {
+            rpei.ActivityId = _activity.Id;
+            if (rpei.Id == Guid.Empty)
+                rpei.Id = Guid.NewGuid();
+        }
+
+        // Bulk insert this page's RPEIs via raw SQL (or EF fallback for tests).
+        // Returns true if raw SQL was used, false if EF fallback was used.
+        var usedRawSql = await _jim.Activities.BulkInsertRpeisAsync(pageRpeis);
+
+        if (usedRawSql)
+        {
+            // Production: RPEIs are persisted via raw SQL. Clear from Activity's collection
+            // and detach from change tracker so no subsequent SaveChangesAsync re-inserts them.
+            _activity.RunProfileExecutionItems.Clear();
+            _jim.Activities.DetachRpeisFromChangeTracker(pageRpeis);
+            _hasRawSqlSupport = true;
+        }
+        // Tests (EF fallback): RPEIs stay in Activity.RunProfileExecutionItems for test
+        // assertions. They're tracked by EF (via AddRange in fallback) and will be persisted
+        // by the next SaveChangesAsync (typically UpdateActivityAsync).
+
+        // Move to accumulated list for summary stats at activity completion
+        _allPersistedRpeis.AddRange(pageRpeis);
     }
 
     /// <summary>
@@ -1367,11 +1427,18 @@ public abstract class SyncTaskProcessorBase
                 await _jim.Activities.UpdateActivityMessageAsync(_activity,
                     $"Resolving cross-page references ({resolvedCount} / {totalCrossPagesToResolve}) - saving changes");
 
+                // Flush RPEIs FIRST to prevent DetectChanges() from discovering them during
+                // subsequent SaveChangesAsync calls (same pattern as per-page processing).
+                await FlushRpeisAsync();
+
                 // Flush this batch (same sequence as per-page processing)
                 await PersistPendingMetaverseObjectsAsync();
                 await CreatePendingMvoChangeObjectsAsync();
                 await EvaluatePendingExportsAsync();
                 await FlushPendingExportOperationsAsync();
+
+                // Flush any RPEIs generated during the flush sequence
+                await FlushRpeisAsync();
 
                 // Update activity progress
                 await _jim.Activities.UpdateActivityAsync(_activity);
