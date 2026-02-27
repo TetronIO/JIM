@@ -740,6 +740,17 @@ public class ActivityRepository : IActivityRepository
             if (transaction != null)
                 await transaction.CommitAsync();
 
+            // Detach RPEIs from the EF change tracker. When RPEIs are added to
+            // Activity.RunProfileExecutionItems, EF auto-tracks them as Added entities.
+            // Without detaching, the next SaveChangesAsync would try to INSERT them again,
+            // causing "duplicate key" violations since raw SQL already persisted them.
+            foreach (var rpei in rpeis)
+            {
+                var entry = Repository.Database.Entry(rpei);
+                if (entry.State != EntityState.Detached)
+                    entry.State = EntityState.Detached;
+            }
+
             return true; // Raw SQL used — RPEIs persisted outside EF change tracker
         }
         catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
