@@ -1,9 +1,12 @@
-﻿using JIM.Application;
+﻿using System.Net;
+using System.Text;
+using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Logic;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Components.Authorization;
 using MudBlazor;
@@ -258,6 +261,20 @@ public static class Helpers
             _ => Color.Default
         };
     }
+
+    /// <summary>
+    /// Returns a MudBlazor colour for attribute flow mapping type chips.
+    /// </summary>
+    public static Color GetMappingTypeChipColour(SyncRuleMappingSourcesType sourceType)
+    {
+        return sourceType switch
+        {
+            SyncRuleMappingSourcesType.AttributeMapping => Color.Info,
+            SyncRuleMappingSourcesType.ExpressionMapping => Color.Tertiary,
+            SyncRuleMappingSourcesType.AdvancedMapping => Color.Warning,
+            _ => Color.Default
+        };
+    }
     #endregion
 
     #region Initiator Icon Helpers
@@ -288,6 +305,126 @@ public static class Helpers
             _ => Icons.Material.Filled.HelpOutline
         };
     }
+    #endregion
+
+    #region Expression Syntax Highlighting
+
+    /// <summary>
+    /// Highlights a DynamicExpresso expression with HTML span elements for syntax colouring.
+    /// Returns HTML markup string intended for use with <c>@((MarkupString)...)</c>.
+    /// </summary>
+    public static string HighlightExpression(string expression)
+    {
+        if (string.IsNullOrEmpty(expression))
+            return string.Empty;
+
+        var result = new StringBuilder();
+
+        for (var i = 0; i < expression.Length; i++)
+        {
+            var c = expression[i];
+
+            // String literals
+            if (c == '"')
+            {
+                var end = FindClosingQuote(expression, i);
+                var literal = WebUtility.HtmlEncode(expression[i..(end + 1)]);
+                result.Append($"<span class=\"jim-expr-string\">{literal}</span>");
+                i = end;
+                continue;
+            }
+
+            // Numbers
+            if (char.IsDigit(c) || (c == '-' && i + 1 < expression.Length && char.IsDigit(expression[i + 1])
+                && (i == 0 || !char.IsLetterOrDigit(expression[i - 1]))))
+            {
+                var numStart = i;
+                if (c == '-') i++;
+                while (i < expression.Length && (char.IsDigit(expression[i]) || expression[i] == '.'))
+                    i++;
+                var num = WebUtility.HtmlEncode(expression[numStart..i]);
+                result.Append($"<span class=\"jim-expr-number\">{num}</span>");
+                i--;
+                continue;
+            }
+
+            // Identifiers, keywords, functions, variables
+            if (char.IsLetter(c) || c == '_')
+            {
+                var idStart = i;
+                while (i < expression.Length && (char.IsLetterOrDigit(expression[i]) || expression[i] == '_'))
+                    i++;
+                var identifier = expression[idStart..i];
+
+                // Look ahead for '(' to detect function calls
+                var lookAhead = i;
+                while (lookAhead < expression.Length && char.IsWhiteSpace(expression[lookAhead]))
+                    lookAhead++;
+                var isFunction = lookAhead < expression.Length && expression[lookAhead] == '(';
+
+                var encoded = WebUtility.HtmlEncode(identifier);
+
+                if (identifier is "true" or "false" or "null")
+                    result.Append($"<span class=\"jim-expr-keyword\">{encoded}</span>");
+                else if (identifier is "mv" or "cs")
+                    result.Append($"<span class=\"jim-expr-variable\">{encoded}</span>");
+                else if (isFunction)
+                    result.Append($"<span class=\"jim-expr-function\">{encoded}</span>");
+                else
+                    result.Append(encoded);
+
+                i--;
+                continue;
+            }
+
+            // Multi-character operators
+            if (i + 1 < expression.Length)
+            {
+                var twoChar = expression[i..(i + 2)];
+                if (twoChar is "==" or "!=" or ">=" or "<=" or "&&" or "||" or "??")
+                {
+                    result.Append($"<span class=\"jim-expr-operator\">{WebUtility.HtmlEncode(twoChar)}</span>");
+                    i++;
+                    continue;
+                }
+            }
+
+            // Single-character operators
+            if (c is '+' or '-' or '*' or '/' or '%' or '>' or '<' or '!' or '?')
+            {
+                result.Append($"<span class=\"jim-expr-operator\">{WebUtility.HtmlEncode(c.ToString())}</span>");
+                continue;
+            }
+
+            // Punctuation
+            if (c is '(' or ')' or '[' or ']' or ',')
+            {
+                result.Append($"<span class=\"jim-expr-punctuation\">{c}</span>");
+                continue;
+            }
+
+            // Whitespace and other characters
+            result.Append(WebUtility.HtmlEncode(c.ToString()));
+        }
+
+        return result.ToString();
+    }
+
+    private static int FindClosingQuote(string text, int openQuoteIndex)
+    {
+        for (var i = openQuoteIndex + 1; i < text.Length; i++)
+        {
+            if (text[i] == '\\' && i + 1 < text.Length)
+            {
+                i++; // skip escaped character
+                continue;
+            }
+            if (text[i] == '"')
+                return i;
+        }
+        return text.Length - 1; // unclosed string — return end
+    }
+
     #endregion
 
     #region Run Type Helpers

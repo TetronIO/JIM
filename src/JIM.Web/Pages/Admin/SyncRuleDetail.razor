@@ -13,6 +13,7 @@
 @inject NavigationManager NavManager
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <PageTitle>Synchronisation Rule: @_syncRuleNameOrCreate</PageTitle>
 <MudText Typo="Typo.h4"><span class="mud-primary-text">Synchronisation Rule:</span> @_syncRuleNameOrCreate</MudText>
@@ -167,7 +168,7 @@ else if (_syncRule != null)
         @if (_syncRule.Direction == SyncRuleDirection.Export)
         {
             <MudSwitch Class="mt-5" @bind-Value="@_syncRule.ProvisionToConnectedSystem" Color="Color.Primary"
-                Label="Provision objects in the Connected System?" />
+                Label="@($"Provision {(_syncRule.ConnectedSystemObjectType?.Name ?? "objects").Pluralise()} to the Connected System?")" />
             <MudAlert Class="mt-5" Severity="Severity.Normal" Variant="Variant.Outlined">By default, Metaverse objects matched
                 in this synchronisation rule will not be created (provisioned) in the Connected Systems. Enabling this
                 option will cause the Metaverse object to be created in the Connected System. You would typically enable
@@ -479,9 +480,115 @@ else if (_syncRule != null)
     }
 
     <MudText Typo="Typo.h5" Class="mt-5">Attribute Flow</MudText>
-    <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled"
-        OnClick="HandleOpenAddAttributeFlowRuleDialog" Color="Color.Default" Class="mt-5 mb-5"
-        Disabled="DisableAddAttributeFlowButton()" DropShadow="false">Add Attribute Flow</MudButton>
+    <div class="d-flex align-center justify-space-between mt-5">
+        <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled"
+            OnClick="HandleOpenAddAttributeFlowRuleDialog" Color="Color.Default"
+            Disabled="DisableAddAttributeFlowButton()" DropShadow="false">Add Attribute Flow</MudButton>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudTooltip Text="Table view" Arrow="true" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.TableRows"
+                               Color="@(_attributeFlowTableView ? Color.Primary : Color.Default)"
+                               OnClick="@(() => ToggleAttributeFlowViewAsync(true))" />
+            </MudTooltip>
+            <MudTooltip Text="Card view" Arrow="true" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.GridView"
+                               Color="@(!_attributeFlowTableView ? Color.Primary : Color.Default)"
+                               OnClick="@(() => ToggleAttributeFlowViewAsync(false))" />
+            </MudTooltip>
+        </MudStack>
+    </div>
+
+    @if (_attributeFlowTableView)
+    {
+        <MudTable Items="@_syncRule.AttributeFlowRules" Hover="true" Outlined="true" Elevation="0"
+                  Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-2 mb-5">
+            <HeaderContent>
+                <MudTh><MudText Typo="Typo.button">Type</MudText></MudTh>
+                <MudTh><MudText Typo="Typo.button">Source</MudText></MudTh>
+                <MudTh></MudTh>
+                <MudTh><MudText Typo="Typo.button">Target</MudText></MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Type">
+                    <MudChip T="string" Variant="Variant.Text" Color="@Helpers.GetMappingTypeChipColour(context.GetSourceType())">
+                        @context.GetSourceType().ToString().SplitOnCapitalLetters()
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Source">
+                    @foreach (var source in context.Sources.OrderBy(q => q.Order))
+                    {
+                        if (_syncRule.Direction == SyncRuleDirection.Import && source.ConnectedSystemAttribute != null)
+                        {
+                            <MudChip T="string">
+                                <AvatarContent>
+                                    <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
+                                        <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                    </MudTooltip>
+                                </AvatarContent>
+                                <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
+                            </MudChip>
+                        }
+                        else if (_syncRule.Direction == SyncRuleDirection.Export && source.MetaverseAttribute != null)
+                        {
+                            <MudChip T="string">
+                                <AvatarContent>
+                                    <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
+                                        <MudAvatar Color="Color.Primary">MV</MudAvatar>
+                                    </MudTooltip>
+                                </AvatarContent>
+                                <ChildContent>@source.MetaverseAttribute.Name</ChildContent>
+                            </MudChip>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(source.Expression))
+                        {
+                            <MudTooltip Text="@source.Expression" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Class="jim-expr-chip">
+                                    <AvatarContent>
+                                        <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
+                                    </AvatarContent>
+                                    <ChildContent><span class="jim-expr-syntax">@((MarkupString)Helpers.HighlightExpression(source.Expression!))</span></ChildContent>
+                                </MudChip>
+                            </MudTooltip>
+                        }
+                    }
+                </MudTd>
+                <MudTd><MudText Class="mud-text-secondary">→</MudText></MudTd>
+                <MudTd DataLabel="Target">
+                    @if (_syncRule.Direction == SyncRuleDirection.Import && context.TargetMetaverseAttribute != null)
+                    {
+                        <MudChip T="string">
+                            <AvatarContent>
+                                <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
+                                    <MudAvatar Color="Color.Primary">MV</MudAvatar>
+                                </MudTooltip>
+                            </AvatarContent>
+                            <ChildContent>@context.TargetMetaverseAttribute.Name</ChildContent>
+                        </MudChip>
+                    }
+                    else if (_syncRule.Direction == SyncRuleDirection.Export && context.TargetConnectedSystemAttribute != null)
+                    {
+                        <MudChip T="string">
+                            <AvatarContent>
+                                <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
+                                    <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
+                                </MudTooltip>
+                            </AvatarContent>
+                            <ChildContent>@context.TargetConnectedSystemAttribute.Name</ChildContent>
+                        </MudChip>
+                    }
+                </MudTd>
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error"
+                        Size="Size.Small" aria-label="delete"
+                        OnClick="@(() => HandleAttributeFlowRuleDeleteClick(context))" />
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                No attribute flow rules defined yet.
+            </NoRecordsContent>
+        </MudTable>
+    }
 
     <MudDialog @bind-Visible="_addAttributeFlowRuleDialogVisible" Options="_dialogOptions">
         <TitleContent>
@@ -591,7 +698,9 @@ else if (_syncRule != null)
         </DialogActions>
     </MudDialog>
 
-    <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="3">
+    @if (!_attributeFlowTableView)
+    {
+    <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="3" Class="mt-5">
         @foreach (var attributeFlowRule in _syncRule.AttributeFlowRules)
         {
             <MudPaper Class="pa-3" Elevation="0" Outlined="true" Style="min-width: 200px;">
@@ -639,7 +748,7 @@ else if (_syncRule != null)
                                             <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
                                         </MudTooltip>
                                     </AvatarContent>
-                                    <ChildContent>@source.Expression</ChildContent>
+                                    <ChildContent><span class="jim-expr-syntax">@((MarkupString)Helpers.HighlightExpression(source.Expression!))</span></ChildContent>
                                 </MudChip>
                             }
 
@@ -671,7 +780,7 @@ else if (_syncRule != null)
                                             <MudAvatar Color="Color.Secondary">Ex</MudAvatar>
                                         </MudTooltip>
                                     </AvatarContent>
-                                    <ChildContent>@source.Expression</ChildContent>
+                                    <ChildContent><span class="jim-expr-syntax">@((MarkupString)Helpers.HighlightExpression(source.Expression!))</span></ChildContent>
                                 </MudChip>
                             }
 
@@ -693,6 +802,7 @@ else if (_syncRule != null)
             </MudPaper>
         }
     </MudStack>
+    }
 
     @if (_syncRule.Validate().Count > 0)
     {
@@ -762,6 +872,7 @@ else if (_syncRule != null)
     private SyncRuleMapping? _attributeFlowMapping;
     private SyncRuleMappingSource? _attributeFlowMappingSource;
     private string? _attributeFlowMappingSourceType;
+    private bool _attributeFlowTableView = true;
 
     protected override async Task OnInitializedAsync()
     {
@@ -798,7 +909,16 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
             _metaverseObjectTypes = await Jim.Metaverse.GetMetaverseObjectTypesAsync(true);
         }
 
+        var storedView = await JS.InvokeAsync<string?>("localStorage.getItem", "attributeFlowView");
+        _attributeFlowTableView = storedView != "cards";
+
         _isLoading = false;
+    }
+
+    private async Task ToggleAttributeFlowViewAsync(bool tableView)
+    {
+        _attributeFlowTableView = tableView;
+        await JS.InvokeVoidAsync("localStorage.setItem", "attributeFlowView", tableView ? "table" : "cards");
     }
 
     private async Task HandleConnectedSystemSelectedAsync(string connectedSystemId)

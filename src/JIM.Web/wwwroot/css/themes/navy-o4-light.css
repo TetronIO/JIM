@@ -98,6 +98,14 @@ html[lang] {
     --jim-json-boolean: #6a329f;
     --jim-json-null: #6a329f;
 
+    /* === JIM Custom: Expression Syntax Highlighting === */
+    --jim-expr-string: var(--jim-json-string);
+    --jim-expr-number: var(--jim-json-number);
+    --jim-expr-function: #795e26;
+    --jim-expr-variable: #001080;
+    --jim-expr-keyword: var(--jim-json-boolean);
+    --jim-expr-operator: #af00db;
+
     /* === JIM Custom: Navigation === */
     --jim-nav-top-level-color: #4a5568;
     --jim-nav-child-color: #4a5568;
