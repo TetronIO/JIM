@@ -563,7 +563,7 @@ else if (_syncRule != null)
     @if (_attributeFlowTableView)
     {
         <MudTable Items="@_syncRule.AttributeFlowRules" Hover="true" Outlined="true" Elevation="0"
-                  Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-2 mb-5"
+                  Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-2"
                   Filter="new Func<SyncRuleMapping, bool>(FilterAttributeFlowRules)">
             <HeaderContent>
                 <MudTh><MudText Typo="Typo.button">Type</MudText></MudTh>
