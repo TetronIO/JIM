@@ -583,25 +583,25 @@ else if (_syncRule != null)
                     {
                         if (_syncRule.Direction == SyncRuleDirection.Import && source.ConnectedSystemAttribute != null)
                         {
-                            <MudChip T="string">
-                                <AvatarContent>
-                                    <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@($"CS: {source.ConnectedSystemAttribute.Type.ToString().SplitOnCapitalLetters()}, {(source.ConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string">
+                                    <AvatarContent>
                                         <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
-                                    </MudTooltip>
-                                </AvatarContent>
-                                <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
-                            </MudChip>
+                                    </AvatarContent>
+                                    <ChildContent>@source.ConnectedSystemAttribute.Name</ChildContent>
+                                </MudChip>
+                            </MudTooltip>
                         }
                         else if (_syncRule.Direction == SyncRuleDirection.Export && source.MetaverseAttribute != null)
                         {
-                            <MudChip T="string">
-                                <AvatarContent>
-                                    <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@($"MV: {source.MetaverseAttribute.Type.ToString().SplitOnCapitalLetters()}, {(source.MetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string">
+                                    <AvatarContent>
                                         <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                                    </MudTooltip>
-                                </AvatarContent>
-                                <ChildContent>@source.MetaverseAttribute.Name</ChildContent>
-                            </MudChip>
+                                    </AvatarContent>
+                                    <ChildContent>@source.MetaverseAttribute.Name</ChildContent>
+                                </MudChip>
+                            </MudTooltip>
                         }
                         else if (!string.IsNullOrWhiteSpace(source.Expression))
                         {
@@ -620,25 +620,25 @@ else if (_syncRule != null)
                 <MudTd DataLabel="Target">
                     @if (_syncRule.Direction == SyncRuleDirection.Import && context.TargetMetaverseAttribute != null)
                     {
-                        <MudChip T="string">
-                            <AvatarContent>
-                                <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@($"MV: {context.TargetMetaverseAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetMetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string">
+                                <AvatarContent>
                                     <MudAvatar Color="Color.Primary">MV</MudAvatar>
-                                </MudTooltip>
-                            </AvatarContent>
-                            <ChildContent>@context.TargetMetaverseAttribute.Name</ChildContent>
-                        </MudChip>
+                                </AvatarContent>
+                                <ChildContent>@context.TargetMetaverseAttribute.Name</ChildContent>
+                            </MudChip>
+                        </MudTooltip>
                     }
                     else if (_syncRule.Direction == SyncRuleDirection.Export && context.TargetConnectedSystemAttribute != null)
                     {
-                        <MudChip T="string">
-                            <AvatarContent>
-                                <MudTooltip Text="Connected System Attribute" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@($"CS: {context.TargetConnectedSystemAttribute.Type.ToString().SplitOnCapitalLetters()}, {(context.TargetConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")}")" Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string">
+                                <AvatarContent>
                                     <MudAvatar Color="Color.Tertiary">CS</MudAvatar>
-                                </MudTooltip>
-                            </AvatarContent>
-                            <ChildContent>@context.TargetConnectedSystemAttribute.Name</ChildContent>
-                        </MudChip>
+                                </AvatarContent>
+                                <ChildContent>@context.TargetConnectedSystemAttribute.Name</ChildContent>
+                            </MudChip>
+                        </MudTooltip>
                     }
                 </MudTd>
                 <MudTd>
