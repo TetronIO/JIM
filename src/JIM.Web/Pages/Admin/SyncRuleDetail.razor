@@ -498,10 +498,73 @@ else if (_syncRule != null)
         </MudStack>
     </div>
 
+    @if (_attributeFlowTableView && _syncRule.AttributeFlowRules.Count > 0)
+    {
+        <MudStack Row="true" Spacing="6" Class="mt-3 mb-1 flex-wrap" AlignItems="AlignItems.Start">
+            <div>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Mapping Type:</MudText>
+                <MudChipSet T="SyncRuleMappingSourcesType"
+                            SelectionMode="SelectionMode.MultiSelection"
+                            SelectedValues="_selectedMappingTypes"
+                            SelectedValuesChanged="OnMappingTypeFilterChanged">
+                    @foreach (var type in GetAvailableMappingTypes())
+                    {
+                        <MudChip Value="@type.Key"
+                                 Color="@(_selectedMappingTypes.Contains(type.Key) ? Color.Default : Helpers.GetMappingTypeChipColour(type.Key))"
+                                 Variant="@(_selectedMappingTypes.Contains(type.Key) ? Variant.Outlined : Variant.Text)"
+                                 SelectedColor="@Helpers.GetMappingTypeChipColour(type.Key)">
+                            @type.Key.ToString().SplitOnCapitalLetters()
+                            <MudText Typo="Typo.caption" Class="ml-1">(@type.Value)</MudText>
+                        </MudChip>
+                    }
+                </MudChipSet>
+            </div>
+
+            <div>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Data Type:</MudText>
+                <MudChipSet T="AttributeDataType"
+                            SelectionMode="SelectionMode.MultiSelection"
+                            SelectedValues="_selectedDataTypes"
+                            SelectedValuesChanged="OnFlowDataTypeFilterChanged">
+                    @foreach (var type in GetAvailableFlowDataTypes())
+                    {
+                        <MudChip Value="@type.Key"
+                                 Color="@(_selectedDataTypes.Contains(type.Key) ? Color.Default : Helpers.GetAttributeTypeChipColour(type.Key))"
+                                 Variant="@(_selectedDataTypes.Contains(type.Key) ? Variant.Outlined : Variant.Text)"
+                                 SelectedColor="@Helpers.GetAttributeTypeChipColour(type.Key)">
+                            @type.Key.ToString().SplitOnCapitalLetters()
+                            <MudText Typo="Typo.caption" Class="ml-1">(@type.Value)</MudText>
+                        </MudChip>
+                    }
+                </MudChipSet>
+            </div>
+
+            <div>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Plurality:</MudText>
+                <MudChipSet T="AttributePlurality"
+                            SelectionMode="SelectionMode.MultiSelection"
+                            SelectedValues="_selectedPluralities"
+                            SelectedValuesChanged="OnFlowPluralityFilterChanged">
+                    @foreach (var plurality in GetAvailableFlowPluralities())
+                    {
+                        <MudChip Value="@plurality.Key"
+                                 Color="@(_selectedPluralities.Contains(plurality.Key) ? Color.Default : Helpers.GetAttributePluralityChipColour(plurality.Key))"
+                                 Variant="@(_selectedPluralities.Contains(plurality.Key) ? Variant.Outlined : Variant.Text)"
+                                 SelectedColor="@Helpers.GetAttributePluralityChipColour(plurality.Key)">
+                            @(plurality.Key == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                            <MudText Typo="Typo.caption" Class="ml-1">(@plurality.Value)</MudText>
+                        </MudChip>
+                    }
+                </MudChipSet>
+            </div>
+        </MudStack>
+    }
+
     @if (_attributeFlowTableView)
     {
         <MudTable Items="@_syncRule.AttributeFlowRules" Hover="true" Outlined="true" Elevation="0"
-                  Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-2 mb-5">
+                  Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-2 mb-5"
+                  Filter="new Func<SyncRuleMapping, bool>(FilterAttributeFlowRules)">
             <HeaderContent>
                 <MudTh><MudText Typo="Typo.button">Type</MudText></MudTh>
                 <MudTh><MudText Typo="Typo.button">Source</MudText></MudTh>
@@ -883,6 +946,9 @@ else if (_syncRule != null)
 
     private bool _addAttributeFlowRuleDialogVisible;
     private SyncRuleMapping? _attributeFlowMapping;
+    private IReadOnlyCollection<SyncRuleMappingSourcesType> _selectedMappingTypes = new List<SyncRuleMappingSourcesType>();
+    private IReadOnlyCollection<AttributeDataType> _selectedDataTypes = new List<AttributeDataType>();
+    private IReadOnlyCollection<AttributePlurality> _selectedPluralities = new List<AttributePlurality>();
     private SyncRuleMappingSource? _attributeFlowMappingSource;
     private string? _attributeFlowMappingSourceType;
     private bool _attributeFlowTableView = true;
@@ -1331,6 +1397,69 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
     {
         _syncRule?.AttributeFlowRules.Remove(attributeFlowRule);
     }
+
+    private bool FilterAttributeFlowRules(SyncRuleMapping mapping)
+    {
+        if (_selectedMappingTypes.Count > 0 && !_selectedMappingTypes.Contains(mapping.GetSourceType()))
+            return false;
+
+        AttributeDataType? dataType = _syncRule?.Direction == SyncRuleDirection.Import
+            ? mapping.TargetMetaverseAttribute?.Type
+            : mapping.TargetConnectedSystemAttribute?.Type;
+
+        AttributePlurality? plurality = _syncRule?.Direction == SyncRuleDirection.Import
+            ? mapping.TargetMetaverseAttribute?.AttributePlurality
+            : mapping.TargetConnectedSystemAttribute?.AttributePlurality;
+
+        if (_selectedDataTypes.Count > 0 && (dataType == null || !_selectedDataTypes.Contains(dataType.Value)))
+            return false;
+
+        if (_selectedPluralities.Count > 0 && (plurality == null || !_selectedPluralities.Contains(plurality.Value)))
+            return false;
+
+        return true;
+    }
+
+    private IEnumerable<KeyValuePair<SyncRuleMappingSourcesType, int>> GetAvailableMappingTypes()
+    {
+        return _syncRule!.AttributeFlowRules
+            .GroupBy(m => m.GetSourceType())
+            .Select(g => new KeyValuePair<SyncRuleMappingSourcesType, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key.ToString());
+    }
+
+    private IEnumerable<KeyValuePair<AttributeDataType, int>> GetAvailableFlowDataTypes()
+    {
+        return _syncRule!.AttributeFlowRules
+            .Select(m => _syncRule.Direction == SyncRuleDirection.Import
+                ? m.TargetMetaverseAttribute?.Type
+                : m.TargetConnectedSystemAttribute?.Type)
+            .Where(t => t.HasValue)
+            .GroupBy(t => t!.Value)
+            .Select(g => new KeyValuePair<AttributeDataType, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key.ToString());
+    }
+
+    private IEnumerable<KeyValuePair<AttributePlurality, int>> GetAvailableFlowPluralities()
+    {
+        return _syncRule!.AttributeFlowRules
+            .Select(m => _syncRule.Direction == SyncRuleDirection.Import
+                ? m.TargetMetaverseAttribute?.AttributePlurality
+                : m.TargetConnectedSystemAttribute?.AttributePlurality)
+            .Where(p => p.HasValue)
+            .GroupBy(p => p!.Value)
+            .Select(g => new KeyValuePair<AttributePlurality, int>(g.Key, g.Count()))
+            .OrderBy(x => x.Key);
+    }
+
+    private void OnMappingTypeFilterChanged(IReadOnlyCollection<SyncRuleMappingSourcesType> selected)
+        => _selectedMappingTypes = selected;
+
+    private void OnFlowDataTypeFilterChanged(IReadOnlyCollection<AttributeDataType> selected)
+        => _selectedDataTypes = selected;
+
+    private void OnFlowPluralityFilterChanged(IReadOnlyCollection<AttributePlurality> selected)
+        => _selectedPluralities = selected;
 
     private async Task HandleDeleteSyncRuleAsync()
     {
