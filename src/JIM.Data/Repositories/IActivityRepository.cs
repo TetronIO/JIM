@@ -78,4 +78,10 @@ public interface IActivityRepository
     /// false if the EF fallback was used (RPEIs remain tracked by EF).
     /// </summary>
     public Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis);
+
+    /// <summary>
+    /// Detaches RPEIs from the EF change tracker so they are not persisted by subsequent
+    /// SaveChangesAsync calls. Call this after raw SQL bulk insert has persisted them.
+    /// </summary>
+    public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis);
 }

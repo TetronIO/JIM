@@ -149,23 +149,28 @@ public abstract class SyncTaskProcessorBase
 
         if (usedRawSql)
         {
-            // Production: RPEIs are persisted via raw SQL outside the EF change tracker.
-            // Detach navigation properties BEFORE clearing the collection. When Clear() runs,
-            // EF's NavigationFixer traverses each removed RPEI's navigation chain:
-            // RPEI → ConnectedSystemObject → MetaverseObject → MetaverseObjectType → MetaverseAttributes.
-            // During cross-page resolution, the change tracker has conflicting MetaverseAttribute
-            // instances (shared by multiple MVOs), causing identity conflicts. Nulling nav props
-            // prevents NavigationFixer from traversing beyond the RPEI itself.
-            foreach (var rpei in pageRpeis)
+            // Production: RPEIs were persisted via raw SQL, but EF auto-tracked them as Added
+            // when they were added to Activity.RunProfileExecutionItems. We must:
+            // 1. Disable auto-detect to prevent NavigationFixer from traversing nav properties
+            //    during Clear() (which would hit MetaverseAttribute identity conflicts)
+            // 2. Clear the collection so new RPEIs aren't mixed with already-persisted ones
+            // 3. Detach each RPEI so SaveChangesAsync doesn't try to INSERT them again
+            //
+            // The order matters: Clear FIRST (while items are still in the collection), then
+            // detach (after they're removed from the navigation collection).
+            _jim.Repository.SetAutoDetectChangesEnabled(false);
+            try
             {
-                rpei.Activity = null!;
-                rpei.ConnectedSystemObject = null;
-                rpei.ConnectedSystemObjectChange = null;
-                rpei.MetaverseObjectChange = null;
-            }
+                _activity.RunProfileExecutionItems.Clear();
 
-            // Clear from Activity to prevent EF from re-inserting them on next SaveChangesAsync.
-            _activity.RunProfileExecutionItems.Clear();
+                // Detach RPEIs from change tracker. Without this, SaveChangesAsync would find
+                // them as Added entities and attempt to INSERT, causing duplicate key violations.
+                _jim.Activities.DetachRpeisFromChangeTracker(pageRpeis);
+            }
+            finally
+            {
+                _jim.Repository.SetAutoDetectChangesEnabled(true);
+            }
         }
         // Tests (EF fallback): RPEIs stay in Activity.RunProfileExecutionItems.
         // They are already tracked by EF and will be persisted normally.

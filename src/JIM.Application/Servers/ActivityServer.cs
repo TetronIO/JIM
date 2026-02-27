@@ -218,6 +218,11 @@ public class ActivityServer
         return await Application.Repository.Activity.BulkInsertRpeisAsync(rpeis);
     }
 
+    public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis)
+    {
+        Application.Repository.Activity.DetachRpeisFromChangeTracker(rpeis);
+    }
+
     /// <summary>
     /// Updates the message on an Activity.
     /// </summary>
