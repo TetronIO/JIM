@@ -808,7 +808,9 @@ public class ActivityRepository : IActivityRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}})");
+                // Explicit PostgreSQL type casts ensure DBNull.Value parameters are handled correctly.
+                // Without casts, ExecuteSqlRawAsync cannot infer the store type for null parameters.
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::uuid, {{{offset + 2}}}::integer, {{{offset + 3}}}::integer, {{{offset + 4}}}::uuid, {{{offset + 5}}}::text, {{{offset + 6}}}::text, {{{offset + 7}}}::integer, {{{offset + 8}}}::text, {{{offset + 9}}}::text, {{{offset + 10}}}::integer)");
 
                 var rpei = chunk[i];
                 parameters.Add(rpei.Id);
