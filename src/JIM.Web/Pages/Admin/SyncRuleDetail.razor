@@ -713,7 +713,7 @@ else if (_syncRule != null)
         @foreach (var attributeFlowRule in _syncRule.AttributeFlowRules)
         {
             <MudPaper Class="pa-3" Elevation="0" Outlined="true" Style="min-width: 200px;">
-                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Class="mb-2">
                     <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span>
                         @attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
                     <div class="d-flex gap-2" style="flex-shrink: 0;">
