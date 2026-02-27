@@ -902,7 +902,7 @@ html[lang] .mud-dialog .mud-paper-outlined {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    display: block;
+    min-width: 0;
 }
 
 .jim-expr-syntax {
