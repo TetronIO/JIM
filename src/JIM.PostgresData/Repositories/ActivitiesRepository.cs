@@ -5,6 +5,7 @@ using JIM.Models.Enums;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
 namespace JIM.PostgresData.Repositories;
 
 public class ActivityRepository : IActivityRepository
@@ -803,27 +804,28 @@ public class ActivityRepository : IActivityRepository
             var sql = new System.Text.StringBuilder();
             sql.Append(@"INSERT INTO ""ActivityRunProfileExecutionItems"" (""Id"", ""ActivityId"", ""ObjectChangeType"", ""NoChangeReason"", ""ConnectedSystemObjectId"", ""ExternalIdSnapshot"", ""DataSnapshot"", ""ErrorType"", ""ErrorMessage"", ""ErrorStackTrace"", ""AttributeFlowCount"") VALUES ");
 
-            var parameters = new List<object>();
+            // Use NpgsqlParameter objects with explicit NpgsqlDbType for nullable columns.
+            // EF Core's RawSqlCommandBuilder passes DbParameter objects through directly to the
+            // provider, bypassing the CLR type → store type mapping that fails for DBNull.Value.
+            var parameters = new List<NpgsqlParameter>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                // Explicit PostgreSQL type casts ensure DBNull.Value parameters are handled correctly.
-                // Without casts, ExecuteSqlRawAsync cannot infer the store type for null parameters.
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::uuid, {{{offset + 2}}}::integer, {{{offset + 3}}}::integer, {{{offset + 4}}}::uuid, {{{offset + 5}}}::text, {{{offset + 6}}}::text, {{{offset + 7}}}::integer, {{{offset + 8}}}::text, {{{offset + 9}}}::text, {{{offset + 10}}}::integer)");
+                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10})");
 
                 var rpei = chunk[i];
-                parameters.Add(rpei.Id);
-                parameters.Add(rpei.ActivityId);
-                parameters.Add((int)rpei.ObjectChangeType);
-                parameters.Add(rpei.NoChangeReason.HasValue ? (object)(int)rpei.NoChangeReason.Value : DBNull.Value);
-                parameters.Add((object?)rpei.ConnectedSystemObjectId ?? DBNull.Value);
-                parameters.Add((object?)rpei.ExternalIdSnapshot ?? DBNull.Value);
-                parameters.Add((object?)rpei.DataSnapshot ?? DBNull.Value);
-                parameters.Add(rpei.ErrorType.HasValue ? (object)(int)rpei.ErrorType.Value : DBNull.Value);
-                parameters.Add((object?)rpei.ErrorMessage ?? DBNull.Value);
-                parameters.Add((object?)rpei.ErrorStackTrace ?? DBNull.Value);
-                parameters.Add((object?)rpei.AttributeFlowCount ?? DBNull.Value);
+                parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = rpei.Id });
+                parameters.Add(new NpgsqlParameter($"p{offset + 1}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = rpei.ActivityId });
+                parameters.Add(new NpgsqlParameter($"p{offset + 2}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)rpei.ObjectChangeType });
+                parameters.Add(new NpgsqlParameter($"p{offset + 3}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = rpei.NoChangeReason.HasValue ? (object)(int)rpei.NoChangeReason.Value : DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 4}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)rpei.ConnectedSystemObjectId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 5}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ExternalIdSnapshot ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 6}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.DataSnapshot ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 7}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = rpei.ErrorType.HasValue ? (object)(int)rpei.ErrorType.Value : DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 8}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ErrorMessage ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 9}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ErrorStackTrace ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 10}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)rpei.AttributeFlowCount ?? DBNull.Value });
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
