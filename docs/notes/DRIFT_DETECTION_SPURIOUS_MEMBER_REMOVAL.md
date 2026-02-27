@@ -1,5 +1,9 @@
 # Drift Detection Spurious Member Removal
 
+## Status: ✅ RESOLVED
+
+All seven fix layers applied and validated. Scenario 8 integration test (Medium template: ~1,000 users, ~118 groups, ~200 members per group) passes all six test steps: InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup.
+
 ## Reported Issue
 
 Integration test Scenario 8 (Cross-Domain Entitlement Synchronisation) fails at the

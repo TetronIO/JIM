@@ -1,7 +1,11 @@
 # LDAP Connector Schema Discovery Review
 
-**Related Issue**: [#346 - Review the LDAP Connector schema discovery feature WRT objectClass attributes](https://github.com/TetronIO/JIM/issues/346)
-**Date**: 2026-02-24
+- **Related Issue**: [#346 - Review the LDAP Connector schema discovery feature WRT objectClass attributes](https://github.com/TetronIO/JIM/issues/346)
+- **Date**: 2026-02-24
+
+## Status: ✅ RESOLVED
+
+All recommendations implemented: defunct attribute filtering, constructed attribute detection, back-link detection, system-only detection, and writability indication (`AttributeWritability`) are all in place. The optional schema query optimisation (Section 5.5 — request only needed attributes) was not implemented but is non-critical.
 
 ## Executive Summary
 
