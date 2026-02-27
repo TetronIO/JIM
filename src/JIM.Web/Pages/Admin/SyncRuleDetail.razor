@@ -579,9 +579,14 @@ else if (_syncRule != null)
                     }
                 </MudTd>
                 <MudTd>
-                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error"
-                        Size="Size.Small" aria-label="delete"
-                        OnClick="@(() => HandleAttributeFlowRuleDeleteClick(context))" />
+                    <div class="d-flex justify-end gap-2">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Color="Color.Primary"
+                            Size="Size.Small" aria-label="edit"
+                            OnClick="@(() => HandleEditAttributeFlowRule(context))" />
+                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error"
+                            Size="Size.Small" aria-label="delete"
+                            OnClick="@(() => HandleAttributeFlowRuleDeleteClick(context))" />
+                    </div>
                 </MudTd>
             </RowTemplate>
             <NoRecordsContent>
@@ -593,14 +598,13 @@ else if (_syncRule != null)
     <MudDialog @bind-Visible="_addAttributeFlowRuleDialogVisible" Options="_dialogOptions">
         <TitleContent>
             <MudText Typo="Typo.h6">
-                <MudIcon Icon="@Icons.Material.Filled.Map" Class="mr-3" /> Add Attribute Flow
+                <MudIcon Icon="@Icons.Material.Filled.Map" Class="mr-3" /> @(_isEditingAttributeFlow ? "Edit Attribute Flow" : "Add Attribute Flow")
             </MudText>
         </TitleContent>
         <DialogContent>
             <MudSelect T="string" Label="Source Type" Placeholder="Please select the type of source for this attribute flow"
-                Required="true" @bind-Value="_attributeFlowMappingSourceType" Variant="Variant.Outlined">
+                Required="true" Value="_attributeFlowMappingSourceType" ValueChanged="HandleSourceTypeChanged" Variant="Variant.Outlined">
                 <MudSelectItem Value="@("Attribute")">Attribute</MudSelectItem>
-                <MudSelectItem Value="@("Function")">Function</MudSelectItem>
                 <MudSelectItem Value="@("Expression")">Expression</MudSelectItem>
             </MudSelect>
 
@@ -641,17 +645,18 @@ else if (_syncRule != null)
                             }
                             break;
                         }
-                    case "Function":
-                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-5">Sorry, functions are no yet supported.</MudAlert>
-                        break;
                     case "Expression":
-                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-5">Sorry, expressions are no yet supported.</MudAlert>
+                        <MudTextField T="string" @bind-Value="_attributeFlowMappingSource.Expression"
+                            Label="Expression" Placeholder="e.g. IIF(mv[&quot;Active&quot;] == true, Upper(cs[&quot;Name&quot;]), null)"
+                            Required="true" Class="mt-5" Variant="Variant.Outlined"
+                            Lines="3" />
                         break;
                 }
 
-                // user must have chosen the source attribute before being shown the target attribute controls
+                // user must have chosen the source attribute or entered an expression before being shown the target attribute controls
                 if (_attributeFlowMappingSource.ConnectedSystemAttribute != null ||
-                _attributeFlowMappingSource.MetaverseAttribute != null)
+                _attributeFlowMappingSource.MetaverseAttribute != null ||
+                !string.IsNullOrWhiteSpace(_attributeFlowMappingSource.Expression))
                 {
                     <MudText Class="mt-5">Will flow to:</MudText>
                     if (_syncRule.Direction == SyncRuleDirection.Import)
@@ -660,7 +665,8 @@ else if (_syncRule != null)
                             Label="Metaverse Attribute" Placeholder="Please select the target Metaverse attribute" Required="true"
                             Class="mt-5" Variant="Variant.Outlined">
                             @foreach (var metaverseAttribute in _syncRule.MetaverseObjectType.Attributes.Where(q =>
-                                        !_syncRule.AttributeFlowRules.Any(afr => afr.TargetMetaverseAttribute != null &&
+                                        !_syncRule.AttributeFlowRules.Any(afr => afr != _attributeFlowMapping &&
+                                        afr.TargetMetaverseAttribute != null &&
                                         afr.TargetMetaverseAttribute.Id == q.Id)))
                             {
                                 <MudSelectItem Disabled="IsAttributeFlowTargetDisabled(metaverseAttribute)" Value="@metaverseAttribute">
@@ -676,7 +682,10 @@ else if (_syncRule != null)
                             @bind-Value="_attributeFlowMapping.TargetConnectedSystemAttribute" Label="Connected System Attribute"
                             Placeholder="Please select the target Connected System attribute" Required="true" Class="mt-5"
                             Variant="Variant.Outlined">
-                            @foreach (var connectedSystemAttribute in _syncRule.ConnectedSystemObjectType!.Attributes)
+                            @foreach (var connectedSystemAttribute in _syncRule.ConnectedSystemObjectType!.Attributes.Where(q =>
+                                        !_syncRule.AttributeFlowRules.Any(afr => afr != _attributeFlowMapping &&
+                                        afr.TargetConnectedSystemAttribute != null &&
+                                        afr.TargetConnectedSystemAttribute.Id == q.Id)))
                             {
                                 <MudSelectItem Disabled="IsAttributeFlowTargetDisabled(connectedSystemAttribute)"
                                     Value="@connectedSystemAttribute">
@@ -694,7 +703,7 @@ else if (_syncRule != null)
             <MudButton DropShadow="false" Variant="Variant.Filled" Color="Color.Default"
                 OnClick="@(() => _addAttributeFlowRuleDialogVisible = false)" Class="me-2">Cancel</MudButton>
             <MudButton Disabled="DisableAddAttributeFlowMappingButton()" DropShadow="false" Variant="Variant.Filled"
-                Color="Color.Primary" OnClick="HandleAddAttributeFlowMappingButtonClick">Add Attribute Flow</MudButton>
+                Color="Color.Primary" OnClick="HandleAddAttributeFlowMappingButtonClick">@(_isEditingAttributeFlow ? "Update Attribute Flow" : "Add Attribute Flow")</MudButton>
         </DialogActions>
     </MudDialog>
 
@@ -707,10 +716,14 @@ else if (_syncRule != null)
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
                     <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span>
                         @attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
-                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error"
-                        Size="Size.Small" Style="flex-shrink: 0;" aria-label="delete"
-                        OnClick="@(() => HandleAttributeFlowRuleDeleteClick(attributeFlowRule))">
-                    </MudIconButton>
+                    <div class="d-flex gap-2" style="flex-shrink: 0;">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Color="Color.Primary"
+                            Size="Size.Small" aria-label="edit"
+                            OnClick="@(() => HandleEditAttributeFlowRule(attributeFlowRule))" />
+                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error"
+                            Size="Size.Small" aria-label="delete"
+                            OnClick="@(() => HandleAttributeFlowRuleDeleteClick(attributeFlowRule))" />
+                    </div>
                 </MudStack>
 
                 @if (_syncRule.Direction == SyncRuleDirection.Import)
@@ -806,7 +819,7 @@ else if (_syncRule != null)
 
     @if (_syncRule.Validate().Count > 0)
     {
-        <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Class="mt-5">
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" NoIcon="true" Class="mt-5">
             <MudText Class="mb-3">There are issues:</MudText>
             @foreach (var item in _syncRule.Validate())
             {
@@ -873,6 +886,7 @@ else if (_syncRule != null)
     private SyncRuleMappingSource? _attributeFlowMappingSource;
     private string? _attributeFlowMappingSourceType;
     private bool _attributeFlowTableView = true;
+    private bool _isEditingAttributeFlow;
 
     protected override async Task OnInitializedAsync()
     {
@@ -1190,18 +1204,62 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
         _attributeFlowMapping = new SyncRuleMapping();
         _attributeFlowMappingSource = new SyncRuleMappingSource();
         _attributeFlowMapping.Sources.Add(_attributeFlowMappingSource);
+        _attributeFlowMappingSourceType = null;
+        _isEditingAttributeFlow = false;
         _addAttributeFlowRuleDialogVisible = true;
+    }
+
+    private void HandleEditAttributeFlowRule(SyncRuleMapping mapping)
+    {
+        if (_syncRule == null)
+            return;
+
+        _attributeFlowMapping = mapping;
+        _attributeFlowMappingSource = mapping.Sources.FirstOrDefault();
+
+        var sourceType = mapping.GetSourceType();
+        _attributeFlowMappingSourceType = sourceType switch
+        {
+            SyncRuleMappingSourcesType.ExpressionMapping => "Expression",
+            SyncRuleMappingSourcesType.AttributeMapping => "Attribute",
+            SyncRuleMappingSourcesType.AdvancedMapping => "Advanced",
+            _ => null
+        };
+
+        _isEditingAttributeFlow = true;
+        _addAttributeFlowRuleDialogVisible = true;
+    }
+
+    private void HandleSourceTypeChanged(string newSourceType)
+    {
+        _attributeFlowMappingSourceType = newSourceType;
+        if (_attributeFlowMappingSource == null) return;
+
+        // Clear previous source data when switching types
+        _attributeFlowMappingSource.ConnectedSystemAttribute = null;
+        _attributeFlowMappingSource.MetaverseAttribute = null;
+        _attributeFlowMappingSource.Expression = null;
     }
 
     private bool DisableAddAttributeFlowMappingButton()
     {
-        if (_attributeFlowMapping == null)
+        if (_attributeFlowMapping == null || _attributeFlowMappingSource == null || _attributeFlowMappingSourceType == null)
             return true;
 
-        if (_attributeFlowMappingSource == null)
+        // Validate source is configured
+        if (_attributeFlowMappingSourceType == "Attribute" &&
+            _attributeFlowMappingSource.ConnectedSystemAttribute == null &&
+            _attributeFlowMappingSource.MetaverseAttribute == null)
             return true;
 
-        if (_attributeFlowMappingSourceType == null)
+        if (_attributeFlowMappingSourceType == "Expression" &&
+            string.IsNullOrWhiteSpace(_attributeFlowMappingSource.Expression))
+            return true;
+
+        // Validate target is configured
+        if (_syncRule?.Direction == SyncRuleDirection.Import && _attributeFlowMapping.TargetMetaverseAttribute == null)
+            return true;
+        if (_syncRule?.Direction == SyncRuleDirection.Export && _attributeFlowMapping.TargetConnectedSystemAttribute == null)
             return true;
 
         return false;
@@ -1210,6 +1268,10 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
     // import rules: the user can choose an invalid target attribute, depending on the makeup of the source attribute
     private bool IsAttributeFlowTargetDisabled(MetaverseAttribute targetMetaverseAttribute)
     {
+        // Expression mappings can target any attribute (type compatibility is the user's responsibility)
+        if (_attributeFlowMappingSourceType == "Expression")
+            return false;
+
         if (_attributeFlowMappingSource?.ConnectedSystemAttribute == null)
             return true;
 
@@ -1227,11 +1289,15 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
     // export rules: the user can choose an invalid target attribute, depending on the makeup of the source attribute
     private bool IsAttributeFlowTargetDisabled(ConnectedSystemObjectTypeAttribute targetConnectedSystemObjectTypeAttribute)
     {
-        if (_attributeFlowMappingSource?.MetaverseAttribute == null)
-            return true;
-
         // read-only attributes cannot be targeted by export attribute flows
         if (targetConnectedSystemObjectTypeAttribute.Writability == AttributeWritability.ReadOnly)
+            return true;
+
+        // Expression mappings can target any writable attribute (type compatibility is the user's responsibility)
+        if (_attributeFlowMappingSourceType == "Expression")
+            return false;
+
+        if (_attributeFlowMappingSource?.MetaverseAttribute == null)
             return true;
 
         if (targetConnectedSystemObjectTypeAttribute.Type != _attributeFlowMappingSource.MetaverseAttribute.Type)
@@ -1250,15 +1316,15 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
         if (_syncRule == null || _attributeFlowMapping == null)
             return;
 
-        // add the mapping to the rule
-        _syncRule.AttributeFlowRules.Add(_attributeFlowMapping);
+        // Only add to the list if this is a new mapping (not editing an existing one)
+        if (!_isEditingAttributeFlow)
+            _syncRule.AttributeFlowRules.Add(_attributeFlowMapping);
 
-        // close the add attribute flow dialog
+        // close the dialog and reset state
         _addAttributeFlowRuleDialogVisible = false;
-
-        // re-initialise the attribute flow rule and source, ready for the next use
         _attributeFlowMapping = null;
         _attributeFlowMappingSource = null;
+        _isEditingAttributeFlow = false;
     }
 
     private void HandleAttributeFlowRuleDeleteClick(SyncRuleMapping attributeFlowRule)

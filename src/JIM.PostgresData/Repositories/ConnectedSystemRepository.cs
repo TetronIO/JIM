@@ -2650,7 +2650,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             throw new InvalidDataException("ObjectMatchingRule has no sources.");
 
         if (objectMatchingRule.Sources.Count > 1)
-            throw new NotImplementedException("Object Matching Rules with more than one Source are not yet supported (i.e. functions).");
+            throw new NotImplementedException("Object Matching Rules with more than one source are not yet supported (advanced matching).");
 
         var source = objectMatchingRule.Sources[0];
 
