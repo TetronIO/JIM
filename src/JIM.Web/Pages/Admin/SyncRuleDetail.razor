@@ -480,16 +480,27 @@ else if (_syncRule != null)
     }
 
     <MudText Typo="Typo.h5" Class="mt-5">Attribute Flow</MudText>
-    <div class="mt-5">
+    <div class="d-flex align-center justify-space-between mt-5">
         <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled"
             OnClick="HandleOpenAddAttributeFlowRuleDialog" Color="Color.Default"
             Disabled="DisableAddAttributeFlowButton()" DropShadow="false">Add Attribute Flow</MudButton>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudTooltip Text="Table view" Arrow="true" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.TableRows"
+                               Color="@(_attributeFlowTableView ? Color.Primary : Color.Default)"
+                               OnClick="@(() => ToggleAttributeFlowViewAsync(true))" />
+            </MudTooltip>
+            <MudTooltip Text="Card view" Arrow="true" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.GridView"
+                               Color="@(!_attributeFlowTableView ? Color.Primary : Color.Default)"
+                               OnClick="@(() => ToggleAttributeFlowViewAsync(false))" />
+            </MudTooltip>
+        </MudStack>
     </div>
 
-    <div class="d-flex justify-space-between align-start mt-3">
-        @if (_attributeFlowTableView && _syncRule.AttributeFlowRules.Count > 0)
-        {
-            <MudStack Row="true" Spacing="6" Class="flex-wrap" AlignItems="AlignItems.Start">
+    @if (_attributeFlowTableView && _syncRule.AttributeFlowRules.Count > 0)
+    {
+        <MudStack Row="true" Spacing="6" Class="mt-3 mb-1 flex-wrap" AlignItems="AlignItems.Start">
             <div>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Mapping Type:</MudText>
                 <MudChipSet T="SyncRuleMappingSourcesType"
@@ -546,25 +557,8 @@ else if (_syncRule != null)
                     }
                 </MudChipSet>
             </div>
-            </MudStack>
-        }
-        else
-        {
-            <div></div>
-        }
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="flex-shrink: 0;">
-            <MudTooltip Text="Table view" Arrow="true" Placement="Placement.Top">
-                <MudIconButton Icon="@Icons.Material.Filled.TableRows"
-                               Color="@(_attributeFlowTableView ? Color.Primary : Color.Default)"
-                               OnClick="@(() => ToggleAttributeFlowViewAsync(true))" />
-            </MudTooltip>
-            <MudTooltip Text="Card view" Arrow="true" Placement="Placement.Top">
-                <MudIconButton Icon="@Icons.Material.Filled.GridView"
-                               Color="@(!_attributeFlowTableView ? Color.Primary : Color.Default)"
-                               OnClick="@(() => ToggleAttributeFlowViewAsync(false))" />
-            </MudTooltip>
         </MudStack>
-    </div>
+    }
 
     @if (_attributeFlowTableView)
     {
