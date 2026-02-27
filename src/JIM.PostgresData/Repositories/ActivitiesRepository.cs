@@ -4,6 +4,7 @@ using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 namespace JIM.PostgresData.Repositories;
 
 public class ActivityRepository : IActivityRepository
@@ -714,19 +715,41 @@ public class ActivityRepository : IActivityRepository
                 rpei.Id = Guid.NewGuid();
         }
 
+        // Try raw SQL path first (production with real database).
+        // BeginTransactionAsync throws InvalidOperationException in test environments (in-memory/mocked
+        // providers) and NullReferenceException with mocked DbContext. We catch those narrowly to
+        // detect the test environment, then fall back to EF tracking.
+        //
+        // IMPORTANT: Once raw SQL succeeds, any subsequent failure MUST propagate — never fall back
+        // to EF's AddRange in production, as it triggers graph traversal causing identity conflicts
+        // with shared MetaverseAttribute/MetaverseObjectType entities.
+        IDbContextTransaction? transaction = null;
         try
         {
-            await using var transaction = await Repository.Database.Database.BeginTransactionAsync();
+            // If a transaction is already active (e.g., caller opened one), reuse it.
+            // Otherwise start a new one. This prevents InvalidOperationException when
+            // FlushRpeisAsync is called during cross-page resolution where preceding
+            // operations may have left a transaction open.
+            var existingTransaction = Repository.Database.Database.CurrentTransaction;
+            if (existingTransaction == null)
+                transaction = await Repository.Database.Database.BeginTransactionAsync();
+
             await BulkInsertRpeisRawAsync(rpeis);
-            await transaction.CommitAsync();
+
+            if (transaction != null)
+                await transaction.CommitAsync();
+
             return true; // Raw SQL used — RPEIs persisted outside EF change tracker
         }
         catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
         {
-            // Fallback for tests where raw SQL / transactions are not available.
-            // In test environments using in-memory or mocked providers, RPEIs are typically
-            // already tracked by EF through the Activity's navigation property.
-            // We only need to add truly untracked RPEIs.
+            // This catch ONLY handles test environment detection where transactions/raw SQL
+            // are not available. If we already executed any SQL, this is a real error — rethrow.
+            if (transaction != null)
+                throw; // Transaction was created but SQL failed — real production error
+
+            // Test environment fallback: RPEIs are typically already tracked by EF through
+            // the Activity's navigation property. Only add truly untracked RPEIs.
             var untracked = new List<ActivityRunProfileExecutionItem>();
             foreach (var rpei in rpeis)
             {
@@ -758,6 +781,11 @@ public class ActivityRepository : IActivityRepository
             }
 
             return false; // EF fallback used — RPEIs remain tracked by EF
+        }
+        finally
+        {
+            if (transaction != null)
+                await transaction.DisposeAsync();
         }
     }
 
