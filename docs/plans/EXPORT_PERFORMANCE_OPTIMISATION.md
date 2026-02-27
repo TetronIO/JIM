@@ -7,7 +7,7 @@
 
 ## Overview
 
-Export operations to Connected Systems are significantly slower than they need to be. P rofiling of Scenario 8 (MediumLarge cross-domain entitlement sync) shows worker processes consuming minimal CPU and memory while exports take a long time to complete. The root cause is that the export pipeline is entirely I/O-bound - the system spends most of its time waiting for individual LDAP responses and individual database saves, with no pipelining or parallelism.
+Export operations to Connected Systems are significantly slower than they need to be. Profiling of Scenario 8 (MediumLarge cross-domain entitlement sync) shows worker processes consuming minimal CPU and memory while exports take a long time to complete. The root cause is that the export pipeline is entirely I/O-bound - the system spends most of its time waiting for individual LDAP responses and individual database saves, with no pipelining or parallelism.
 
 This plan addresses the performance bottlenecks identified in the export pipeline, progressing from low-risk quick wins to more complex parallel processing changes.
 
@@ -86,7 +86,7 @@ This is fundamentally an **I/O latency problem**, not a compute problem. The CPU
 1. **Made export interfaces async (clean break)**
    - `IConnectorExportUsingCalls`: `Export()` -> `ExportAsync()` with `CancellationToken`
    - `IConnectorExportUsingFiles`: `Export()` -> `ExportAsync()` with `CancellationToken`
-   - Updated all implementors (MockCallConnector, FileConnector, LdapConnector)
+   - Updated all implementers (MockCallConnector, FileConnector, LdapConnector)
    - Updated all 3 call sites in `ExportExecutionServer.cs`
 
 2. **Async LDAP operations with configurable concurrency**
