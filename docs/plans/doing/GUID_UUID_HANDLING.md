@@ -1,8 +1,8 @@
 # GUID/UUID Handling Strategy
 
-> **Status**: Phases 1-3 Implemented
-> **Last Updated**: 2026-01-28
-> **Milestone**: Pre-connector expansion (before SCIM, database, or web service connectors)
+- **Status:** Doing (Phases 1–3 complete)
+- **Last Updated**: 2026-01-28
+- **Milestone**: Pre-connector expansion (before SCIM, database, or web service connectors)
 
 ## Overview
 
@@ -129,7 +129,7 @@ However, planned connectors introduce systems that use RFC 4122 byte order or no
 
 ## Implementation Plan
 
-### Phase 1: Documentation and Defensive Comments (Do Now)
+### Phase 1: Documentation and Defensive Comments (Do Now) ✅
 
 Add byte order documentation to existing code. No functional changes.
 
@@ -153,7 +153,7 @@ Add comment at line 244 noting that `new Guid(guidBytes)` expects Microsoft byte
 
 ---
 
-### Phase 2: Central Identifier Utility (Before New Connectors)
+### Phase 2: Central Identifier Utility (Before New Connectors) ✅
 
 Create a shared utility class that all connectors use for GUID/UUID operations.
 
@@ -205,7 +205,7 @@ Test cases:
 
 ---
 
-### Phase 3: Migrate Existing Code to Central Utility (Before New Connectors)
+### Phase 3: Migrate Existing Code to Central Utility (Before New Connectors) ✅
 
 Replace inline GUID operations with `IdentifierParser` calls. Functional behaviour unchanged.
 

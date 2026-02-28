@@ -1,5 +1,7 @@
 # File Connector Improvements
 
+- **Status:** Done
+
 > Code review findings and improvement plan for the JIM File Connector
 
 ## Executive Summary

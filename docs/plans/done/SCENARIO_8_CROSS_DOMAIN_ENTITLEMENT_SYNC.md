@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Implemented** |
+| **Status** | **Done** |
 | **Milestone** | MVP |
 | **Related Issue** | [#173](https://github.com/TetronIO/JIM/issues/173) |
 | **Dependencies** | Source/Target AD containers (samba-ad-source, samba-ad-target) |

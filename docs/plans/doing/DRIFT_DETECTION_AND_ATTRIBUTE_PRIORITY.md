@@ -1,6 +1,6 @@
 # Drift Detection and Attribute Priority Design Document
 
-- **Status**: Drift Detection implemented; Attribute Priority design approved but implementation deferred
+- **Status:** Doing (Drift detection complete; attribute priority deferred)
 - **Last Updated**: 2026-01-17
 
 ## Overview

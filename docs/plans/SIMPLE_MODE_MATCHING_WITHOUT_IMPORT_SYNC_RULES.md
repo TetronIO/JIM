@@ -1,5 +1,7 @@
 # Simple Mode Object Matching Without Import Sync Rules
 
+- **Status:** Planned
+
 ## Context
 
 Scenario 8 integration test failed because a confirming sync on the target AD created a spurious rename `PendingExport` that collided with a subsequent delete export for the same object. Investigation revealed the root cause: the test setup creates an empty "EMEA AD Import Groups" sync rule (no attribute mappings) solely to enable joining target CSOs back to MVOs after export.

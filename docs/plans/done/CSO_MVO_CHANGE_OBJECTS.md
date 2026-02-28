@@ -1,6 +1,6 @@
 # CSO and MVO Change Objects - Implemented Design
 
-> **Status:** Implemented
+- **Status:** Done
 > **Milestone:** Post-MVP
 > **GitHub Issue:** #269
 > **Created:** 2026-01-06

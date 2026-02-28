@@ -1,6 +1,6 @@
 # Case Sensitivity Strategy
 
-> **Status**: Implemented
+- **Status:** Done
 > **Milestone**: MVP
 > **Related Issue**: #203 (Phase 8)
 > **Branch**: `feature/case-sensitivity-strategy`

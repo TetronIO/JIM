@@ -1,5 +1,7 @@
 # JIM Certificate Store
 
+- **Status:** Done
+
 > Centralised certificate management for secure connector communications
 
 ## Overview

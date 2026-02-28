@@ -1,6 +1,6 @@
 # CSO Attribute Table Redesign
 
-**Status:** Planned
+- **Status:** Done
 **Milestone:** Post-MVP
 **Created:** 2026-01-23
 

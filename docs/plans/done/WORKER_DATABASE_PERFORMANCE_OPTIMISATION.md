@@ -1,6 +1,6 @@
 # Worker Database Performance Optimisation
 
-- **Status**: Complete — Phases 1–5 Complete
+- **Status:** Done
 - **Milestone**: Post-MVP
 - **GitHub Issue**: [#338](https://github.com/TetronIO/JIM/issues/338)
 - **Related**: `docs/plans/EXPORT_PERFORMANCE_OPTIMISATION.md`

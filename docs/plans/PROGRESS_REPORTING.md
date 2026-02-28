@@ -1,6 +1,6 @@
 # Run Profile Progress Reporting (Post-MVP)
 
-> **Status**: Planned
+- **Status:** Planned
 > **Milestone**: Post-MVP
 > **Priority**: Medium
 > **Effort**: Large (8+ phases)

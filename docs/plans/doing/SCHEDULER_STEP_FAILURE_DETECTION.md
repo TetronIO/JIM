@@ -1,6 +1,6 @@
 # Plan: Scheduler Step Failure Detection (Activity-Based)
 
-- **Status:** Phase 1 Implemented
+- **Status:** Doing (Phase 1 complete)
 - **Milestone:** MVP
 - **Branch:** `feature/scheduler-step-failure-detection`
 
@@ -46,7 +46,7 @@ Activities are already the source of truth for operation outcomes (status, timin
 - **Follows existing patterns** -- `ScheduleExecutionId` on Activity mirrors existing context fields (`ConnectedSystemId`, `SyncRuleId`, `MetaverseObjectId`)
 - **Enables future UX** -- the Activity-to-ScheduleExecution link supports drill-down in the UI
 
-## Phase 1: Core Fix (Complete)
+## Phase 1: Core Fix ✅
 
 ### Changes Made
 
