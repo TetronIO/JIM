@@ -1,6 +1,6 @@
 # Connected System Deletion Design
 
-> **Status**: Implemented
+- **Status:** Done
 > **Created**: 2025-12-06
 > **GitHub Issue**: #135
 > **Related**: #134 (Attribute Impact Analysis), #136 (Activity Serialization)

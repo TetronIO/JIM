@@ -1,6 +1,6 @@
 # Import ChangeType Design
 
-> **Status**: Implemented
+- **Status:** Done
 >
 > Design decisions for handling ObjectChangeType during import operations
 

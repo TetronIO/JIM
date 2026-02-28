@@ -4,7 +4,7 @@
 
 Implement comprehensive deletion rule and deprovisioning functionality for JIM's identity lifecycle management. This addresses critical gaps preventing proper user deprovisioning when employees leave organisations or fall out of sync rule scope.
 
-**Status**: Implemented
+- **Status:** Done
 **Milestone**: MVP
 **Related Issues**: #120 (scheduled deletion cleanup), #173 (integration testing), #203 (main tracking issue)
 

@@ -1,6 +1,6 @@
 # JIM.Worker Redesign - High-Level Design Options
 
-- **Status**: RFC (Request for Comments)
+- **Status:** Planned
 - **Created**: 2026-02-23
 - **Author**: Architecture Review
 

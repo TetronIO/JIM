@@ -1,6 +1,6 @@
 # Deletion Rules Design
 
-> **Status**: Partially Implemented
+- **Status:** Doing (Phase 1 complete)
 >
 > Design document for automatic Metaverse Object deletion based on connector disconnections.
 

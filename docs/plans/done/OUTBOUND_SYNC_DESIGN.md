@@ -1,6 +1,6 @@
 # Outbound Sync Design Document
 
-> **Status**: Implemented
+- **Status:** Done
 > **Issue**: #121
 > **Last Updated**: 2025-12-04
 

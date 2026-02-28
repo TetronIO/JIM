@@ -1,6 +1,6 @@
 # Plan: FileConnector Export Redesign + Related Fixes
 
-- **Status:** Implemented
+- **Status:** Done
 - **Milestone:** MVP
 - **Branch:** `feature/scheduler-service-168`
 

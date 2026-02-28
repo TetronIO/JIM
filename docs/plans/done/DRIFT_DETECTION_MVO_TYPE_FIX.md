@@ -1,6 +1,6 @@
 # Drift Detection MVO Type Loading Fix
 
-- **Status:** Completed
+- **Status:** Done
 - **Created:** 2026-01-19
 - **Related Issue:** Scenario 8 drift detection fails - no corrective pending exports created
 

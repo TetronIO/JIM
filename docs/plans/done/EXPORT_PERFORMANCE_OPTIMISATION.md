@@ -1,6 +1,6 @@
 # Export Performance Optimisation
 
-- **Status**: Implemented (All 5 phases)
+- **Status:** Done
 - **Milestone**: Post-MVP
 - **Related**: `docs/plans/OUTBOUND_SYNC_DESIGN.md` (Q8 - Parallelism Decision)
 - **Last Updated**: 2026-02-19

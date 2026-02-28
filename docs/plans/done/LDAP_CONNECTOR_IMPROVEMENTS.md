@@ -1,5 +1,7 @@
 # LDAP Connector Improvements
 
+- **Status:** Done
+
 > Code review findings and improvement plan for the JIM LDAP Connector
 
 ## Executive Summary
