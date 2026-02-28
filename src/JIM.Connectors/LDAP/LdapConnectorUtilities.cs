@@ -1,4 +1,5 @@
-﻿using JIM.Models.Core;
+﻿using CPI.DirectoryServices;
+using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
@@ -563,8 +564,6 @@ internal static class LdapConnectorUtilities
     /// <summary>
     /// Validates that a Distinguished Name does not contain empty RDN values.
     /// Empty RDN values (e.g., "OU=,OU=Users,...") are invalid and will be rejected by LDAP servers.
-    /// This can occur when expression-based DN mappings evaluate against incomplete MVO state
-    /// (e.g., after attribute recall during deprovisioning).
     /// </summary>
     /// <param name="dn">The Distinguished Name to validate.</param>
     /// <returns>True if the DN is valid (no empty RDN values); false otherwise.</returns>
@@ -573,24 +572,24 @@ internal static class LdapConnectorUtilities
         if (string.IsNullOrEmpty(dn))
             return false;
 
-        // Split the DN into RDN components, respecting escaped commas
-        var remaining = dn;
-        while (!string.IsNullOrEmpty(remaining))
+        try
         {
-            var commaIndex = FindUnescapedComma(remaining);
-            var component = commaIndex >= 0 ? remaining[..commaIndex] : remaining;
-            remaining = commaIndex >= 0 ? remaining[(commaIndex + 1)..] : string.Empty;
+            var parsedDn = new DN(dn);
+            foreach (var rdn in parsedDn.RDNs)
+            {
+                foreach (var component in rdn.Components)
+                {
+                    if (string.IsNullOrWhiteSpace(component.ComponentValue))
+                        return false;
+                }
+            }
 
-            // Each component should be in the form "TYPE=VALUE"
-            var equalsIndex = component.IndexOf('=');
-            if (equalsIndex < 0)
-                return false;
-
-            var value = component[(equalsIndex + 1)..];
-            if (string.IsNullOrWhiteSpace(value))
-                return false;
+            return true;
         }
-
-        return true;
+        catch
+        {
+            // If DNParser cannot parse the DN, it's malformed
+            return false;
+        }
     }
 }

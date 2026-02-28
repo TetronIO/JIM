@@ -563,7 +563,7 @@ public class LdapConnectorUtilitiesTests
     [Test]
     public void HasValidRdnValues_EmptyOuComponent_ReturnsFalse()
     {
-        // This is the key scenario: attribute recall produces "OU=,OU=Users,..."
+        // This is the key scenario: an empty RDN component like "OU=,OU=Users,..."
         Assert.That(LdapConnectorUtilities.HasValidRdnValues("CN=John Smith,OU=,OU=Users,OU=Corp,DC=example,DC=local"), Is.False);
     }
 
