@@ -20,9 +20,9 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
 |  Heartbeat + stale task crash recovery       |
 |  One JimDbContext per main loop              |
 |  One JimDbContext per spawned Task           |
-+----------------------------------------------+
-         |
-         v
++---------------------+------------------------+
+                      |
+                      v
 +----------------------------------------------+
 |         Task Processors (per work item)      |
 | SyncImportTaskProcessor    ~2,260 LOC        |
@@ -32,9 +32,9 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
 | SyncExportTaskProcessor      ~320 LOC        |
 | SyncRuleMappingProcessor     ~820 LOC        |
 | Worker.cs (host)             ~925 LOC        |
-+----------------------------------------------+
-         |
-         v
++---------------------+------------------------+
+                      |
+                      v
 +----------------------------------------------+
 |       JimApplication (Business Logic)        |
 | ConnectedSystemServer    4,240 LOC           |
@@ -42,17 +42,17 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
 | ExportExecutionServer    1,590 LOC           |
 | MetaverseServer            650 LOC           |
 | + 13 other servers                           |
-+----------------------------------------------+
-         |
-         v
++---------------------+------------------------+
+                      |
+                      v
 +----------------------------------------------+
 |       PostgresDataRepository (EF Core)       |
 |  IRepository -> 13 sub-repositories          |
 |  JimDbContext (single DbContext per scope)   |
 |  + Raw SQL bulk ops on hot paths (#338)      |
 +----------------------------------------------+
-         |
-         v
+                      |
+                      v
 +----------------------------------------------+
 |             PostgreSQL Database              |
 +----------------------------------------------+
@@ -125,16 +125,16 @@ Keep the current architecture but surgically extract the sync processing logic i
 |  BackgroundService + .NET Generic Host DI             |
 |  IHostedService with IServiceScopeFactory             |
 +-------------------------------------------------------+
-         |
-         v
+                          |
+                          v
 +-------------------------------------------------------+
 |            Sync Orchestrator (new)                    |
 |  Coordinates phases: Import -> Sync -> Export         |
 |  Manages parallelism per phase                        |
 |  Injected via DI, owns cancellation/progress          |
 +-------------------------------------------------------+
-         |
-         v
+                          |
+                          v
 +-------------------------------------------------------+
 |         Sync Domain Engine (new - pure logic)         |
 |  ISyncEngine interface                                |
@@ -143,8 +143,8 @@ Keep the current architecture but surgically extract the sync processing logic i
 |  NO database calls - operates on in-memory models     |
 |  100% unit testable with plain C# objects             |
 +-------------------------------------------------------+
-         |  produces decisions
-         v
+                          |  produces decisions
+                          v
 +-------------------------------------------------------+
 |       ISyncDataAccess (new - explicit boundary)       |
 |  GetCsoBatch() -> CsoBatchDto                         |
@@ -154,8 +154,8 @@ Keep the current architecture but surgically extract the sync processing logic i
 |    - PostgresSyncDataAccess (Npgsql bulk + raw SQL)   |
 |    - InMemorySyncDataAccess (for unit/workflow tests) |
 +-------------------------------------------------------+
-         |
-         v
+                          |
+                          v
 +-------------------------------------------------------+
 |  PostgreSQL (hot paths: Npgsql COPY/raw SQL)          |
 |  EF Core retained for admin/config operations         |
