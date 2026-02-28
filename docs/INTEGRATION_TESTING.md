@@ -1747,7 +1747,7 @@ All remaining Scenario 8 test steps have been implemented:
 
 **Synchronous MVO Deletion** (2026-01-20): For MVOs with `DeletionGracePeriodDays = 0` (or null), deletion now happens immediately during sync rather than being deferred to housekeeping. This provides immediate consistency - when an authoritative source deletes an object, the MVO and downstream delete exports are created in the same sync cycle. MVOs with a grace period > 0 continue to use the housekeeping worker for deferred deletion.
 
-See full plan: [`docs/plans/SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md`](docs/plans/SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md)
+See full plan: [`docs/plans/done/SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md`](plans/done/SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md)
 
 ### Completed Fixes (2026-01-15)
 

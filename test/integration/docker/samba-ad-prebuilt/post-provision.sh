@@ -157,6 +157,313 @@ else
     echo "  SSH public key schema already exists"
 fi
 
+# Install Exchange extensionAttribute1-15 schema (for integration testing)
+# In real AD these come from the Exchange schema extension. We add them to Samba AD
+# so integration tests can use extensionAttribute1-15 on user objects (e.g., for
+# storing pronouns, custom HR data, etc.)
+#
+# OIDs and schemaIdGUIDs sourced from Microsoft Exchange Server SDK documentation:
+# https://learn.microsoft.com/en-us/previous-versions/office/developer/exchange-server-2003/
+echo "Checking extensionAttribute schema..."
+extattr_check=$(${SAMBA_BIN}/ldbsearch -H ${SAMBA_PRIVATE}/sam.ldb "cn=ms-Exch-Extension-Attribute-1" 2>/dev/null || true)
+if ! echo "$extattr_check" | grep -q "ms-Exch-Extension-Attribute-1" 2>/dev/null; then
+    echo "Installing extensionAttribute1-15 schema..."
+
+    # Attribute definitions (1-10: rangeUpper 1024, 11-15: rangeUpper 2048)
+    # All are single-valued Unicode strings (attributeSyntax 2.5.5.12, oMSyntax 64)
+    cat > /tmp/extattr.ldif << EXTATTR_EOF
+dn: CN=ms-Exch-Extension-Attribute-1,CN=Schema,CN=Configuration,${DOMAIN_DC}
+changetype: add
+objectClass: top
+objectClass: attributeSchema
+attributeID: 1.2.840.113556.1.2.423
+cn: ms-Exch-Extension-Attribute-1
+name: ms-Exch-Extension-Attribute-1
+lDAPDisplayName: extensionAttribute1
+attributeSyntax: 2.5.5.12
+oMSyntax: 64
+isSingleValued: TRUE
+rangeLower: 1
+rangeUpper: 1024
+objectCategory: CN=Attribute-Schema,CN=Schema,CN=Configuration,${DOMAIN_DC}
+searchFlags: 16
+schemaIDGUID:: Z3mWv+YN0BGihQCqADBJ4g==
+
+dn: CN=ms-Exch-Extension-Attribute-2,CN=Schema,CN=Configuration,${DOMAIN_DC}
+changetype: add
+objectClass: top
+objectClass: attributeSchema
+attributeID: 1.2.840.113556.1.2.424
+cn: ms-Exch-Extension-Attribute-2
+name: ms-Exch-Extension-Attribute-2
+lDAPDisplayName: extensionAttribute2
+attributeSyntax: 2.5.5.12
+oMSyntax: 64
+isSingleValued: TRUE
+rangeLower: 1
+rangeUpper: 1024
+objectCategory: CN=Attribute-Schema,CN=Schema,CN=Configuration,${DOMAIN_DC}
+searchFlags: 16
+schemaIDGUID:: aXmWv+YN0BGihQCqADBJ4g==
+
+dn: CN=ms-Exch-Extension-Attribute-3,CN=Schema,CN=Configuration,${DOMAIN_DC}
+changetype: add
+objectClass: top
+objectClass: attributeSchema
+attributeID: 1.2.840.113556.1.2.425
+cn: ms-Exch-Extension-Attribute-3
+name: ms-Exch-Extension-Attribute-3
+lDAPDisplayName: extensionAttribute3
+attributeSyntax: 2.5.5.12
+oMSyntax: 64
+isSingleValued: TRUE
+rangeLower: 1
+rangeUpper: 1024
+objectCategory: CN=Attribute-Schema,CN=Schema,CN=Configuration,${DOMAIN_DC}
+searchFlags: 16
+schemaIDGUID:: anmWv+YN0BGihQCqADBJ4g==
+
+dn: CN=ms-Exch-Extension-Attribute-4,CN=Schema,CN=Configuration,${DOMAIN_DC}
+changetype: add
+objectClass: top
+objectClass: attributeSchema
+attributeID: 1.2.840.113556.1.2.426
+cn: ms-Exch-Extension-Attribute-4
+name: ms-Exch-Extension-Attribute-4
+lDAPDisplayName: extensionAttribute4
+attributeSyntax: 2.5.5.12
+oMSyntax: 64
+isSingleValued: TRUE
+rangeLower: 1
+rangeUpper: 1024
+objectCategory: CN=Attribute-Schema,CN=Schema,CN=Configuration,${DOMAIN_DC}
+searchFlags: 16
+schemaIDGUID:: a3mWv+YN0BGihQCqADBJ4g==
+
+dn: CN=ms-Exch-Extension-Attribute-5,CN=Schema,CN=Configuration,${DOMAIN_DC}
+changetype: add
+objectClass: top
+objectClass: attributeSchema
+attributeID: 1.2.840.113556.1.2.427
+cn: ms-Exch-Extension-Attribute-5
+name: ms-Exch-Extension-Attribute-5
+lDAPDisplayName: extensionAttribute5
+attributeSyntax: 2.5.5.12
+oMSyntax: 64
+isSingleValued: TRUE
+rangeLower: 1
+rangeUpper: 1024
+objectCategory: CN=Attribute-Schema,CN=Schema,CN=Configuration,${DOMAIN_DC}
+searchFlags: 16
+schemaIDGUID:: bHmWv+YN0BGihQCqADBJ4g==
+
+dn: CN=ms-Exch-Extension-Attribute-6,CN=Schema,CN=Configuration,${DOMAIN_DC}
+changetype: add
+objectClass: top
+objectClass: attributeSchema
+attributeID: 1.2.840.113556.1.2.428
+cn: ms-Exch-Extension-Attribute-6
+name: ms-Exch-Extension-Attribute-6
+lDAPDisplayName: extensionAttribute6
+attributeSyntax: 2.5.5.12
+oMSyntax: 64
+isSingleValued: TRUE
+rangeLower: 1
+rangeUpper: 1024
+objectCategory: CN=Attribute-Schema,CN=Schema,CN=Configuration,${DOMAIN_DC}
+searchFlags: 16
+schemaIDGUID:: bXmWv+YN0BGihQCqADBJ4g==
+
+dn: CN=ms-Exch-Extension-Attribute-7,CN=Schema,CN=Configuration,${DOMAIN_DC}
+changetype: add
+objectClass: top
+objectClass: attributeSchema
+attributeID: 1.2.840.113556.1.2.429
+cn: ms-Exch-Extension-Attribute-7
+name: ms-Exch-Extension-Attribute-7
+lDAPDisplayName: extensionAttribute7
+attributeSyntax: 2.5.5.12
+oMSyntax: 64
+isSingleValued: TRUE
+rangeLower: 1
+rangeUpper: 1024
+objectCategory: CN=Attribute-Schema,CN=Schema,CN=Configuration,${DOMAIN_DC}
+searchFlags: 16
+schemaIDGUID:: bnmWv+YN0BGihQCqADBJ4g==
+
+dn: CN=ms-Exch-Extension-Attribute-8,CN=Schema,CN=Configuration,${DOMAIN_DC}
+changetype: add
+objectClass: top
+objectClass: attributeSchema
+attributeID: 1.2.840.113556.1.2.430
+cn: ms-Exch-Extension-Attribute-8
+name: ms-Exch-Extension-Attribute-8
+lDAPDisplayName: extensionAttribute8
+attributeSyntax: 2.5.5.12
+oMSyntax: 64
+isSingleValued: TRUE
+rangeLower: 1
+rangeUpper: 1024
+objectCategory: CN=Attribute-Schema,CN=Schema,CN=Configuration,${DOMAIN_DC}
+searchFlags: 16
+schemaIDGUID:: b3mWv+YN0BGihQCqADBJ4g==
+
+dn: CN=ms-Exch-Extension-Attribute-9,CN=Schema,CN=Configuration,${DOMAIN_DC}
+changetype: add
+objectClass: top
+objectClass: attributeSchema
+attributeID: 1.2.840.113556.1.2.431
+cn: ms-Exch-Extension-Attribute-9
+name: ms-Exch-Extension-Attribute-9
+lDAPDisplayName: extensionAttribute9
+attributeSyntax: 2.5.5.12
+oMSyntax: 64
+isSingleValued: TRUE
+rangeLower: 1
+rangeUpper: 1024
+objectCategory: CN=Attribute-Schema,CN=Schema,CN=Configuration,${DOMAIN_DC}
+searchFlags: 16
+schemaIDGUID:: cHmWv+YN0BGihQCqADBJ4g==
+
+dn: CN=ms-Exch-Extension-Attribute-10,CN=Schema,CN=Configuration,${DOMAIN_DC}
+changetype: add
+objectClass: top
+objectClass: attributeSchema
+attributeID: 1.2.840.113556.1.2.432
+cn: ms-Exch-Extension-Attribute-10
+name: ms-Exch-Extension-Attribute-10
+lDAPDisplayName: extensionAttribute10
+attributeSyntax: 2.5.5.12
+oMSyntax: 64
+isSingleValued: TRUE
+rangeLower: 1
+rangeUpper: 1024
+objectCategory: CN=Attribute-Schema,CN=Schema,CN=Configuration,${DOMAIN_DC}
+searchFlags: 16
+schemaIDGUID:: aHmWv+YN0BGihQCqADBJ4g==
+
+dn: CN=ms-Exch-Extension-Attribute-11,CN=Schema,CN=Configuration,${DOMAIN_DC}
+changetype: add
+objectClass: top
+objectClass: attributeSchema
+attributeID: 1.2.840.113556.1.2.599
+cn: ms-Exch-Extension-Attribute-11
+name: ms-Exch-Extension-Attribute-11
+lDAPDisplayName: extensionAttribute11
+attributeSyntax: 2.5.5.12
+oMSyntax: 64
+isSingleValued: TRUE
+rangeLower: 1
+rangeUpper: 2048
+objectCategory: CN=Attribute-Schema,CN=Schema,CN=Configuration,${DOMAIN_DC}
+searchFlags: 16
+schemaIDGUID:: 9ld3FvNH0RGpwwAA+ANnwQ==
+
+dn: CN=ms-Exch-Extension-Attribute-12,CN=Schema,CN=Configuration,${DOMAIN_DC}
+changetype: add
+objectClass: top
+objectClass: attributeSchema
+attributeID: 1.2.840.113556.1.2.600
+cn: ms-Exch-Extension-Attribute-12
+name: ms-Exch-Extension-Attribute-12
+lDAPDisplayName: extensionAttribute12
+attributeSyntax: 2.5.5.12
+oMSyntax: 64
+isSingleValued: TRUE
+rangeLower: 1
+rangeUpper: 2048
+objectCategory: CN=Attribute-Schema,CN=Schema,CN=Configuration,${DOMAIN_DC}
+searchFlags: 16
+schemaIDGUID:: 91d3FvNH0RGpwwAA+ANnwQ==
+
+dn: CN=ms-Exch-Extension-Attribute-13,CN=Schema,CN=Configuration,${DOMAIN_DC}
+changetype: add
+objectClass: top
+objectClass: attributeSchema
+attributeID: 1.2.840.113556.1.2.601
+cn: ms-Exch-Extension-Attribute-13
+name: ms-Exch-Extension-Attribute-13
+lDAPDisplayName: extensionAttribute13
+attributeSyntax: 2.5.5.12
+oMSyntax: 64
+isSingleValued: TRUE
+rangeLower: 1
+rangeUpper: 2048
+objectCategory: CN=Attribute-Schema,CN=Schema,CN=Configuration,${DOMAIN_DC}
+searchFlags: 16
+schemaIDGUID:: +Fd3FvNH0RGpwwAA+ANnwQ==
+
+dn: CN=ms-Exch-Extension-Attribute-14,CN=Schema,CN=Configuration,${DOMAIN_DC}
+changetype: add
+objectClass: top
+objectClass: attributeSchema
+attributeID: 1.2.840.113556.1.2.602
+cn: ms-Exch-Extension-Attribute-14
+name: ms-Exch-Extension-Attribute-14
+lDAPDisplayName: extensionAttribute14
+attributeSyntax: 2.5.5.12
+oMSyntax: 64
+isSingleValued: TRUE
+rangeLower: 1
+rangeUpper: 2048
+objectCategory: CN=Attribute-Schema,CN=Schema,CN=Configuration,${DOMAIN_DC}
+searchFlags: 16
+schemaIDGUID:: +Vd3FvNH0RGpwwAA+ANnwQ==
+
+dn: CN=ms-Exch-Extension-Attribute-15,CN=Schema,CN=Configuration,${DOMAIN_DC}
+changetype: add
+objectClass: top
+objectClass: attributeSchema
+attributeID: 1.2.840.113556.1.2.603
+cn: ms-Exch-Extension-Attribute-15
+name: ms-Exch-Extension-Attribute-15
+lDAPDisplayName: extensionAttribute15
+attributeSyntax: 2.5.5.12
+oMSyntax: 64
+isSingleValued: TRUE
+rangeLower: 1
+rangeUpper: 2048
+objectCategory: CN=Attribute-Schema,CN=Schema,CN=Configuration,${DOMAIN_DC}
+searchFlags: 16
+schemaIDGUID:: +ld3FvNH0RGpwwAA+ANnwQ==
+EXTATTR_EOF
+
+    # Load all 15 attribute definitions into the schema
+    ${SAMBA_BIN}/ldbadd -H ${SAMBA_PRIVATE}/sam.ldb /tmp/extattr.ldif \
+        --option="dsdb:schema update allowed"=true 2>/dev/null || true
+
+    # Add extensionAttribute1-15 as mayContain on the user class
+    # This allows user objects to carry these attributes (mimics Exchange schema extension)
+    cat > /tmp/extattr-user.ldif << EXTATTR_USER_EOF
+dn: CN=User,CN=Schema,CN=Configuration,${DOMAIN_DC}
+changetype: modify
+add: mayContain
+mayContain: extensionAttribute1
+mayContain: extensionAttribute2
+mayContain: extensionAttribute3
+mayContain: extensionAttribute4
+mayContain: extensionAttribute5
+mayContain: extensionAttribute6
+mayContain: extensionAttribute7
+mayContain: extensionAttribute8
+mayContain: extensionAttribute9
+mayContain: extensionAttribute10
+mayContain: extensionAttribute11
+mayContain: extensionAttribute12
+mayContain: extensionAttribute13
+mayContain: extensionAttribute14
+mayContain: extensionAttribute15
+EXTATTR_USER_EOF
+
+    ${SAMBA_BIN}/ldbmodify -H ${SAMBA_PRIVATE}/sam.ldb /tmp/extattr-user.ldif \
+        --option="dsdb:schema update allowed"=true 2>/dev/null || true
+
+    rm -f /tmp/extattr.ldif /tmp/extattr-user.ldif
+    echo "  extensionAttribute1-15 schema installed"
+else
+    echo "  extensionAttribute schema already exists"
+fi
+
 echo "=============================================="
 echo "Post-provisioning complete!"
 echo "=============================================="

@@ -305,6 +305,7 @@ function New-TestUser {
         - Company: Subatomic for employees, one of five partner companies for contractors
         - AccountExpires: All contractors get expiry dates (1 week to 12 months)
                          ~15% of employees get expiry dates (resignations, 1 week to 3 months)
+        - Pronouns: ~25% of users have pronouns populated (he/him, she/her, they/them, etc.)
     #>
     param(
         [Parameter(Mandatory=$true)]
@@ -323,6 +324,10 @@ function New-TestUser {
     $departments = @("Marketing", "Operations", "Finance", "Sales", "Human Resources", "Procurement",
                      "Information Technology", "Research & Development", "Executive", "Legal", "Facilities", "Catering")
     $titles = @("Manager", "Director", "Analyst", "Specialist", "Coordinator", "Administrator", "Engineer", "Developer", "Consultant", "Associate")
+
+    # Pronouns: ~25% of users have pronouns populated (optional field)
+    # Distribution reflects realistic workplace adoption rates
+    $pronounOptions = @("he/him", "she/her", "they/them", "he/they", "she/they")
 
     # Companies: Subatomic is the main company (employees), partner companies for contractors
     # These are used for company-specific entitlement groups in Scenario 4
@@ -410,6 +415,14 @@ function New-TestUser {
         $accountExpires = $now.AddDays($daysToAdd)
     }
 
+    # Assign pronouns to ~25% of users (deterministic based on index)
+    # Use modulo 4 to get exactly 25% coverage
+    $pronouns = if (($Index % 4) -eq 0) {
+        $pronounOptions[$Index % $pronounOptions.Count]
+    } else {
+        $null
+    }
+
     return @{
         FirstName = $firstName
         LastName = $lastName
@@ -423,6 +436,7 @@ function New-TestUser {
         EmployeeType = $employeeType
         Company = $company
         AccountExpires = $accountExpires
+        Pronouns = $pronouns
     }
 }
 

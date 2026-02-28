@@ -172,6 +172,11 @@ for ($i = 1; $i -lt $scale.Users + 1; $i++) {
     [void]$ldifBuilder.AppendLine("department: $($user.Department)")
     [void]$ldifBuilder.AppendLine("title: $($user.Title)")
 
+    # Set pronouns in extensionAttribute1 (~25% of users)
+    if ($null -ne $user.Pronouns) {
+        [void]$ldifBuilder.AppendLine("extensionAttribute1: $($user.Pronouns)")
+    }
+
     # Set accountExpires directly in LDIF (Windows FILETIME format)
     if ($null -ne $user.AccountExpires) {
         $fileTime = ($user.AccountExpires.ToUniversalTime() - $fileTimeEpoch).Ticks

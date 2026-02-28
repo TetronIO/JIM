@@ -506,8 +506,8 @@ When choosing which deletion features to prioritise, consider:
 
 ## Related Documentation
 
-- [Import ChangeType Design](IMPORT_CHANGETYPE_DESIGN.md) - How connectors signal deletions
-- [LDAP Connector Improvements](LDAP_CONNECTOR_IMPROVEMENTS.md) - Delta import deletion detection
+- [Import ChangeType Design](../done/IMPORT_CHANGETYPE_DESIGN.md) - How connectors signal deletions
+- [LDAP Connector Improvements](../done/LDAP_CONNECTOR_IMPROVEMENTS.md) - Delta import deletion detection
 
 ## References
 

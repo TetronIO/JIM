@@ -72,6 +72,7 @@ for ($i = 1; $i -lt $scale.Users + 1; $i++) {
         department = $user.Department
         title = $user.Title
         company = $user.Company
+        pronouns = if ($null -ne $user.Pronouns) { $user.Pronouns } else { "" }
         samAccountName = $user.SamAccountName
         displayName = $user.DisplayName
         status = "Active"
@@ -185,7 +186,8 @@ $crossDomainHeaders = @(
     "email",
     "department",
     "employeeId",
-    "company"
+    "company",
+    "pronouns"
 )
 
 # Write header row only (file connector will append exports)

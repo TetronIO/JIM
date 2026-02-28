@@ -109,7 +109,7 @@ var allMatches = await Repository.Database.ConnectedSystemObjects
     .ToListAsync();
 ```
 
-> **Current implementation details**: See [CSO Lookup Cache Strategy](../CACHING_STRATEGY.md) for the full cache lifecycle, population points, and secondary external ID support.
+> **Current implementation details**: See [CSO Lookup Cache Strategy](../../CACHING_STRATEGY.md) for the full cache lifecycle, population points, and secondary external ID support.
 
 **Approach**: Service-lifetime CSO lookup index using .NET's built-in `IMemoryCache`.
 

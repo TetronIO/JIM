@@ -1324,6 +1324,24 @@ internal class SeedingServer
             });
         }
 
+        var pronounsTemplateAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Pronouns);
+        if (pronounsTemplateAttribute == null)
+        {
+            userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            {
+                MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Pronouns),
+                WeightedStringValues = new List<DataGenerationTemplateAttributeWeightedValue>
+                {
+                    new() { Value = "he/him", Weight = 0.35f },
+                    new() { Value = "she/her", Weight = 0.35f },
+                    new() { Value = "they/them", Weight = 0.20f },
+                    new() { Value = "he/they", Weight = 0.05f },
+                    new() { Value = "she/they", Weight = 0.05f }
+                },
+                PopulatedValuesPercentage = 25
+            });
+        }
+
         var statusAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Status);
         if (statusAttribute == null)
         {

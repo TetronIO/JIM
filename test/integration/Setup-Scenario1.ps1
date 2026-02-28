@@ -658,7 +658,8 @@ try {
             'distinguishedName',  # DN - required for LDAP provisioning
             'accountExpires',     # Account expiry (Large Integer/Int64) - populated from HR Employee End Date via ToFileTime
             'userAccountControl', # Account control flags (Number/Int32) - tests integer data type flow
-            'description'         # Training Status - supplementary attribute from Training source (recall testing)
+            'description',         # Training Status - supplementary attribute from Training source (recall testing)
+            'extensionAttribute1'  # Pronouns - AD has no native attribute, uses Exchange extension attribute
         )
 
         $ldapAttrUpdates = @{}
@@ -819,6 +820,7 @@ try {
             @{ CsAttr = "title";             MvAttr = "Job Title" }
             @{ CsAttr = "department";        MvAttr = "Department" }
             @{ CsAttr = "company";           MvAttr = "Company" }  # Company name - Subatomic for employees, partner companies for contractors
+            @{ CsAttr = "pronouns";          MvAttr = "Pronouns" }  # Personal pronouns - populated for ~25% of users
             @{ CsAttr = "samAccountName";    MvAttr = "Account Name" }
             @{ CsAttr = "employeeType";      MvAttr = "Employee Type" }
             @{ CsAttr = "employeeEndDate";   MvAttr = "Employee End Date" }  # DateTime - HR end date → MV, then exported to AD accountExpires via ToFileTime
@@ -836,6 +838,7 @@ try {
             @{ MvAttr = "Job Title";             LdapAttr = "title" }
             @{ MvAttr = "Department";            LdapAttr = "department" }
             @{ MvAttr = "Company";               LdapAttr = "company" }  # Company name exported to AD
+            @{ MvAttr = "Pronouns";              LdapAttr = "extensionAttribute1" }  # Pronouns - AD has no native attribute, use extensionAttribute
             @{ MvAttr = "Employee ID";           LdapAttr = "employeeID" }  # Required for LDAP matching rule
             # Training export mappings (Training Status → description, Training Course Count → info)
             # are created later in the Training configuration section, after Training MV attributes exist.
@@ -1238,6 +1241,7 @@ try {
                 @{ MvAttr = "Department";     CsAttr = "department" }
                 @{ MvAttr = "Employee ID";    CsAttr = "employeeId" }
                 @{ MvAttr = "Company";        CsAttr = "company" }
+                @{ MvAttr = "Pronouns";       CsAttr = "pronouns" }
             )
 
             $existingCrossDomainMappings = Get-JIMSyncRuleMapping -SyncRuleId $crossDomainExportRule.id

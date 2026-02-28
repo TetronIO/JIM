@@ -146,8 +146,8 @@ With cache (PK lookups at ~1ms each, or cache-hit at ~0.1ms):
 
 ## Related Documentation
 
-- [Worker Database Performance Optimisation](plans/WORKER_DATABASE_PERFORMANCE_OPTIMISATION.md) — original design and future phases (full entity cache, MVO join-attribute cache)
-- [PostgreSQL Improvements](plans/POSTGRESQL_IMPROVEMENTS.md) — database-level cache sizing (`effective_cache_size`)
+- [Worker Database Performance Optimisation](plans/done/WORKER_DATABASE_PERFORMANCE_OPTIMISATION.md) — original design and future phases (full entity cache, MVO join-attribute cache)
+- [PostgreSQL Improvements](plans/done/POSTGRESQL_IMPROVEMENTS.md) — database-level cache sizing (`effective_cache_size`)
 
 ## Key Source Files
 

@@ -449,7 +449,8 @@ Write-Host "  ✓ Set objectGUID as External ID for all object types" -Foregroun
 # Select required LDAP attributes for users
 $requiredUserAttributes = @(
     'objectGUID', 'sAMAccountName', 'givenName', 'sn', 'displayName', 'cn',
-    'mail', 'userPrincipalName', 'title', 'department', 'company', 'distinguishedName'
+    'mail', 'userPrincipalName', 'title', 'department', 'company', 'distinguishedName',
+    'extensionAttribute1'  # Pronouns - AD has no native attribute, uses Exchange extension attribute
 )
 
 # Select required LDAP attributes for groups
@@ -630,6 +631,7 @@ $userImportMappings = @(
     @{ LdapAttr = "title"; MvAttr = "Job Title" }
     @{ LdapAttr = "department"; MvAttr = "Department" }
     @{ LdapAttr = "company"; MvAttr = "Company" }
+    @{ LdapAttr = "extensionAttribute1"; MvAttr = "Pronouns" }
 )
 
 $userExportMappings = @(
@@ -643,6 +645,7 @@ $userExportMappings = @(
     @{ MvAttr = "Job Title"; LdapAttr = "title" }
     @{ MvAttr = "Department"; LdapAttr = "department" }
     @{ MvAttr = "Company"; LdapAttr = "company" }
+    @{ MvAttr = "Pronouns"; LdapAttr = "extensionAttribute1" }
 )
 
 # Create user import mappings (Source -> MV)

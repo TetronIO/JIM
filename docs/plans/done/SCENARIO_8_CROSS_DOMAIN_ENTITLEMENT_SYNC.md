@@ -750,5 +750,5 @@ Scenario 8 is fully self-contained and will:
 - [Active Directory Group Types and Scopes](https://theitbros.com/active-directory-groups/) - Comprehensive guide to AD group types
 - [Manage mail-enabled security groups in Exchange Online](https://learn.microsoft.com/en-us/exchange/recipients-in-exchange-online/manage-mail-enabled-security-groups) - Microsoft documentation
 - [msExchRecipientDisplayType and msExchRecipientTypeDetails Values](https://www.mistercloudtech.com/2016/05/18/reference-to-msexchrecipientdisplaytype-msexchrecipienttypedetails-and-msexchremoterecipienttype-values/) - Exchange attribute reference
-- [INTEGRATION_TESTING.md](../INTEGRATION_TESTING.md) - Integration testing framework documentation
-- [Scenario 2: Cross-domain Sync](../INTEGRATION_TESTING.md#scenario-2-person-entity---cross-domain-synchronisation) - User sync between domains
+- [INTEGRATION_TESTING.md](../../INTEGRATION_TESTING.md) - Integration testing framework documentation
+- [Scenario 2: Cross-domain Sync](../../INTEGRATION_TESTING.md#scenario-2-person-entity---cross-domain-synchronisation) - User sync between domains

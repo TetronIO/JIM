@@ -225,6 +225,12 @@ for ($i = 0; $i -lt $groupScale.Users; $i++) {
     [void]$ldifBuilder.AppendLine("department: $departmentDisplayName")
     [void]$ldifBuilder.AppendLine("title: $($user.Title)")
     [void]$ldifBuilder.AppendLine("company: $companyDisplayName")
+
+    # Set pronouns in extensionAttribute1 (~25% of users)
+    if ($null -ne $user.Pronouns) {
+        [void]$ldifBuilder.AppendLine("extensionAttribute1: $($user.Pronouns)")
+    }
+
     [void]$ldifBuilder.AppendLine("")
 
     # Build tracking data
