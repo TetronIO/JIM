@@ -1,9 +1,10 @@
 # LDAP Export Failure: Empty DN Component on Attribute Recall
 
-- **Status:** Open
+- **Status:** Fixed (Option B + C implemented)
 - **Severity:** High - blocks leaver (deprovisioning) scenario
 - **First observed:** Integration test Scenario 1, Test 3 (Leaver)
 - **Occurrences:** Reproduced multiple times
+- **Fixed in:** Branch `fix/ldap-export-empty-dn-on-attribute-recall`
 
 ## Symptom
 
@@ -163,6 +164,64 @@ Meanwhile, `ProcessMvoDeletionRuleAsync` runs with `WhenLastConnectorDisconnecte
 1. Run integration tests: `./test/integration/Run-IntegrationTests.ps1`
 2. Scenario 1, Test 3 (Leaver) will fail at the LDAP Export step
 3. Check worker logs: `docker compose logs jim.worker --tail=500 | grep -A5 "Empty RDN"`
+
+## Fix Attempts
+
+### Attempt 1: Option B + Option C (Successful)
+
+**Branch:** `fix/ldap-export-empty-dn-on-attribute-recall`
+
+**Approach:** Implemented Option B (skip expression re-evaluation during pure attribute recall) as the primary fix and Option C (DN validation in LDAP connector) as defence-in-depth.
+
+**Key Insight:** C# string concatenation treats `null` as empty string. So a DN expression like `"CN=" + mv["DisplayName"] + ",OU=" + mv["Department"] + ",..."` does NOT return `null` when `Department` is null — it produces `"OU="` (an invalid but non-null string). This means the existing null-check on expression results was insufficient; the expression evaluates "successfully" but produces a malformed DN.
+
+**Fix 1 — Root cause (`ExportEvaluationServer.cs`):**
+
+In `CreateAttributeValueChanges()`, added "pure recall" detection: when ALL `changedAttributes` are also in `removedAttributes`, this indicates a pure removal scenario (CSO obsoletion) rather than a mixed add+remove (normal value change). When `isPureRecall` is true, expression-based mappings are skipped entirely — only direct attribute mappings produce null-clearing changes.
+
+```csharp
+// Detect "pure recall" scenario: all changed attributes are removals with no additions.
+var isPureRecall = !isCreateOperation
+    && removedAttributes is { Count: > 0 }
+    && changedAttributes.All(ca => removedAttributes.Contains(ca));
+```
+
+Then inside the expression evaluation branch:
+```csharp
+if (isPureRecall)
+{
+    Log.Debug("CreateAttributeValueChanges: Skipping expression '{Expression}' for attribute " +
+        "{AttributeName} - pure attribute recall (all changes are removals)",
+        source.Expression, mapping.TargetConnectedSystemAttribute.Name);
+    continue;
+}
+```
+
+**Fix 2 — Defence-in-depth (`LdapConnectorUtilities.cs`, `LdapConnectorExport.cs`):**
+
+Added `HasValidRdnValues(string dn)` utility method that parses a DN and verifies no RDN component has an empty value (e.g., `OU=` or `CN=`). This is called before any ModifyDN or AddRequest in the LDAP connector.
+
+- In `ProcessUpdateAsync`: if the new DN has empty RDN values, the rename is skipped with a warning log (returns success since the real fix prevents this case).
+- In `ProcessCreateAsync`: if the DN has empty RDN values, an `InvalidOperationException` is thrown (hard failure since this should never happen for creates).
+
+**Tests:**
+
+| Test file | Tests | Description |
+|-----------|-------|-------------|
+| `LdapConnectorUtilitiesTests.cs` | 9 tests | `HasValidRdnValues`: valid DN, single component, empty OU, empty CN, empty string, null, multiple empty, escaped comma, whitespace-only |
+| `ExportEvaluationNoChangeTests.cs` | 2 tests | Expression skip on pure recall, expression evaluates on mixed changes |
+| `AttributeRecallExpressionWorkflowTests.cs` | 1 test | Full pipeline workflow: source import -> full sync -> mark obsolete -> delta sync -> verify DN mapping skipped |
+
+**Gotchas encountered:**
+- EF Core in-memory database auto-tracks navigation properties. When `CreateMvObjectTypeAsync` both adds attributes to `DbContext.MetaverseAttributes` AND manually adds them to `mvType.Attributes`, duplicates appear. Fix: query attributes from DB directly with `DbContext.MetaverseAttributes.FirstAsync()`.
+- Mock-based tests (using `MockQueryable.Moq`) cannot capture entities added via `AddRangeAsync` in batch operations. Use `WorkflowTestBase` with real in-memory database instead for pipeline tests.
+
+**Result:** All unit tests pass (1855+).
+
+**Integration test status:** Scenario 1 has a pre-existing infrastructure issue where the Joiner test (Test 1) fails before reaching the Leaver test (Test 3). The `Populate-SambaAD.ps1` script pre-creates users in AD with the same `sAMAccountNames` that the CSV Joiner test attempts to provision, resulting in "sAMAccountName already in use" errors. This is unrelated to the attribute recall fix — no DN validation or expression-skip log messages appear in the worker logs. The fix has been validated via:
+- 9 unit tests for `HasValidRdnValues` (DN validation utility)
+- 2 unit tests for expression skip logic (pure recall + mixed changes)
+- 1 full pipeline workflow test (`AttributeRecallExpressionWorkflowTests`) that exercises the exact scenario: source import -> full sync -> mark obsolete -> delta sync -> verify expression DN mapping is skipped during recall, direct mappings produce null-clearing changes, and a Disconnected RPEI is created.
 
 ## Related Documents
 
