@@ -223,21 +223,21 @@ Redesign the worker as a pipeline of discrete stages connected by `System.Thread
 ### Architecture
 
 ```
-+-------------------------------------------------------------------+
-|                      JIM.Worker (Host)                            |
-|  .NET Generic Host + OpenTelemetry + Health Checks                |
-+-------------------------------------------------------------------+
-         |
-         v
-+-------------------------------------------------------------------+
-|                   Pipeline Coordinator                            |
-|  Builds and connects pipeline stages per schedule step            |
-|  Manages cancellation, progress, error aggregation                |
-|  Exposes health/metrics endpoints                                 |
-+-------------------------------------------------------------------+
-         |
-         | Channel<ImportBatch>      Channel<SyncBatch>       Channel<ExportBatch>
-         v                           v                        v
++-----------------------------------------------------------------------+
+|                         JIM.Worker (Host)                             |
+|  .NET Generic Host + OpenTelemetry + Health Checks                    |
++---------------------------------+-------------------------------------+
+                                  |
+                                  v
++-----------------------------------------------------------------------+
+|                   Pipeline Coordinator                                |
+|  Builds and connects pipeline stages per schedule step                |
+|  Manages cancellation, progress, error aggregation                    |
+|  Exposes health/metrics endpoints                                     |
++--------+------------------------+-------------------------+-----------+
+         |                        |                         |
+         | Channel<ImportBatch>   Channel<SyncBatch>        Channel<ExportBatch>
+         v                        v                         v
 +----------------+  +-----------------------------+  +------------------+
 |  Import Stage  |  |       Sync Stage            |  |  Export Stage    |
 |  (N readers)   |  | (M parallel processors)     |  |  (P writers)     |
@@ -246,9 +246,9 @@ Redesign the worker as a pipeline of discrete stages connected by `System.Thread
 | -> Diff vs DB  |  |   Join/Project/Flow (pure)  |  | -> Confirm       |
 | -> ImportBatch |  |   Batch MVO mutations       |  | -> ExportResult  |
 |                |  |   Evaluate exports          |  |                  |
-+-------+--------+  +----------+------------------+  +--------+---------+
-        |                      |                              |
-        v                      v                              v
++-------+--------+  +------------+----------------+  +--------+---------+
+        |                        |                            |
+        v                        v                            v
 +-----------------------------------------------------------------------+
 |              Persistence Layer (batched writes)                       |
 |  ISyncRepository interface                                            |
@@ -256,9 +256,9 @@ Redesign the worker as a pipeline of discrete stages connected by `System.Thread
 |    PostgresSyncRepository (Npgsql bulk COPY + raw SQL)                |
 |    InMemorySyncRepository (for testing)                               |
 |  All writes are batch-oriented: flush per page/stage completion       |
-+-----------------------------------------------------------------------+
-         |
-         v
++--------------------------------+--------------------------------------+
+                                 |
+                                 v
 +-----------------------------------------------------------------------+
 |                         PostgreSQL                                    |
 +-----------------------------------------------------------------------+
@@ -356,30 +356,30 @@ Decompose the worker into independent, horizontally scalable processing units co
 +-------------------------------------------------------------------+
 |                    JIM.Scheduler (existing)                       |
 |  Publishes work items to message bus                              |
-+-------------------------------------------------------------------+
-         |
-         v (messages)
++--------------------------------+----------------------------------+
+                                 |
+                                 v (messages)
 +-------------------------------------------------------------------+
 |                     Message Bus                                   |
 |  Option: Redis Streams (air-gap friendly, no cloud dependency)    |
 |  Queues: import-tasks, sync-batches, export-tasks                 |
 |  Consumer groups for competing consumers                          |
-+-------------------------------------------------------------------+
-         |                    |                    |
-         v                    v                    v
-+------------------+ +------------------+ +-------------------+
-| Import Workers   | | Sync Workers     | | Export Workers    |
-| (N instances)    | | (M instances)    | | (P instances)     |
-|                  | |                  | |                   |
-| - Connect to     | | - Consume CSO    | | - Consume PE      |
-|   external sys   | |   batches        | |   batches         |
-| - Diff + stage   | | - Pure sync      | | - Connect to      |
-| - Publish CSO    | |   engine         | |   target sys      |
-|   batches        | | - Publish PEs    | | - Write + confirm |
-| - Ack message    | | - Ack message    | | - Ack message     |
-+------------------+ +------------------+ +-------------------+
-          |                    |                    |
-          v                    v                    v
++------------+-------------------+--------------------+-------------+
+             |                   |                    |
+             v                   v                    v
+   +------------------+ +------------------+ +-------------------+
+   | Import Workers   | | Sync Workers     | | Export Workers    |
+   | (N instances)    | | (M instances)    | | (P instances)     |
+   |                  | |                  | |                   |
+   | - Connect to     | | - Consume CSO    | | - Consume PE      |
+   |   external sys   | |   batches        | |   batches         |
+   | - Diff + stage   | | - Pure sync      | | - Connect to      |
+   | - Publish CSO    | |   engine         | |   target sys      |
+   |   batches        | | - Publish PEs    | | - Write + confirm |
+   | - Ack message    | | - Ack message    | | - Ack message     |
+   +---------+--------+ +--------+---------+ +--------+----------+
+             |                   |                    |
+             v                   v                    v
 +-------------------------------------------------------------------+
 |           Shared Persistence Layer                                |
 |  PostgreSQL (bulk writes via Npgsql)                              |

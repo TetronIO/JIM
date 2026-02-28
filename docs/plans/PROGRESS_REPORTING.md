@@ -1,197 +1,218 @@
-# Run Profile Progress Reporting (Post-MVP)
+# Event-Based Progress Reporting
 
 - **Status:** Planned
 > **Milestone**: Post-MVP
 > **Priority**: Medium
-> **Effort**: Large (8+ phases)
+> **Effort**: Medium (3 phases)
 
 ## Overview
 
-Implement comprehensive real-time progress reporting for all JIM run profile execution types (Import, Export, Sync) using Redis for zero database load.
+Replace polling-based progress reporting in JIM's Blazor UI with an event-driven model using PostgreSQL `LISTEN/NOTIFY` and SignalR. PowerShell and API consumers already have working progress reporting and require no changes.
 
-**Key Features**:
-- **Live Progress**: Real-time visibility into executing run profiles (currently blind until completion)
-- **MIM-Style Display**: Phase + object counts + operation breakdown (Creates/Updates/Deletes)
-- **Zero DB Load**: Redis-based tracking eliminates EF thread-safety performance issues
-- **PowerShell Integration**: Live progress in `Get-JIMActivity -Follow` and enhanced `Start-JIMRunProfile -Wait`
-- **Dual API Endpoints**: Lightweight polling endpoint + enhanced activity details
+**Key Change**: The Worker already writes live progress to the Activity table during execution. Rather than having every UI component poll the database on a timer, PostgreSQL notifies JIM.Web when progress changes, and SignalR pushes updates to connected Blazor components instantly.
 
-## Business Value
+## Current State (What's Already Working)
 
-**Current Pain Points**:
-- No visibility into long-running imports/syncs until completion
-- Users cannot monitor progress or estimate completion time
-- No way to detect issues early (e.g., high error rates during execution)
-- Database performance degradation from frequent progress updates
+The original version of this plan predates significant progress reporting work that has since been completed. The following are **already implemented**:
 
-**Solution Benefits**:
-- Real-time monitoring of run profile execution
-- Early detection of problems (error rates, performance issues)
-- Better user experience (progress bars, ETAs, phase information)
-- Improved system performance (Redis eliminates database contention)
-- Foundation for future features (WebSocket notifications, caching infrastructure)
+### Worker Progress Updates
+All processor types update `Activity.ObjectsToProcess`, `ObjectsProcessed`, and `Message` in real-time during execution via `UpdateActivityMessageAsync()` (single-row UPDATE, negligible load):
+- `SyncImportTaskProcessor` — updates throughout import phases (importing, deletions, references, saving)
+- `SyncFullSyncTaskProcessor` — sets totals at start, increments per-object and at page boundaries
+- `SyncDeltaSyncTaskProcessor` — same pattern for modified CSOs only
+- `SyncExportTaskProcessor` — uses `ExportProgressInfo` callback with phase tracking (`ExportPhase` enum)
 
-## Technical Architecture
+### API Endpoints
+- `GET /api/v1/activities/{id}` — returns `ObjectsToProcess`, `ObjectsProcessed`, `Message` during execution
+- `GET /api/v1/activities/{id}/stats` — detailed RPEI-based execution statistics
+- `GET /api/v1/schedule-executions/{id}` — step-level progress for schedule executions
 
-### Current State
+### PowerShell Progress
+- `Start-JIMRunProfile -Wait` — uses `Write-Progress` with determinate/indeterminate modes, polling every 2 seconds
+- `Start-JIMSchedule -Wait` — uses `Write-Progress` with step-level progress, polling every 5 seconds
+- Both cmdlets handle timeout, authentication refresh, and terminal status detection
 
-- `ActivityRunProfileExecutionStats`: Final summary calculated **after** completion by counting `ActivityRunProfileExecutionItems` in PostgreSQL
-- Export has basic `ExportProgressInfo` with callback-based reporting
-- Import/Sync have no structured progress tracking
+### Blazor UI Polling
+- `OperationsQueueTab` — 1-second `Task.Run` polling loop with change detection, `MudProgressLinear` bars
+- `OperationsHistoryTab` — 5-second polling with fingerprint-based change detection
+- `ExampleDataTemplateDetail` — 2-second `System.Threading.Timer` (tagged `POLLING_TO_REPLACE`)
+- `Logs` — 5-second auto-refresh timer
 
-### Proposed Solution
+## What's Outstanding
 
-**Redis-Based Progress Tracking**:
-- Worker writes progress to Redis during execution (ephemeral, 1-hour TTL)
-- API reads from Redis for real-time queries (microsecond latency)
-- Stats remain unchanged (permanent database records for historical analysis)
-- **No conflicts**: Progress is transient (Redis), Stats are permanent (PostgreSQL)
+The single remaining gap is **replacing UI polling with event-based push updates**. All data, APIs, and external consumers (PowerShell) are already working.
+
+## Technical Approach: PostgreSQL LISTEN/NOTIFY + SignalR
+
+### Why PostgreSQL LISTEN/NOTIFY (Not Redis)
+
+The original plan proposed Redis as an ephemeral progress store. After review, PostgreSQL `LISTEN/NOTIFY` is the better fit:
+
+| Aspect | PostgreSQL LISTEN/NOTIFY | Redis Pub/Sub |
+|--------|--------------------------|---------------|
+| **Infrastructure** | Already deployed | New container, new dependency |
+| **Air-gap compliance** | No change | Another image to distribute |
+| **NuGet dependency** | None (Npgsql already included) | StackExchange.Redis (new) |
+| **Latency** | Sub-millisecond on same host | Sub-millisecond on same host |
+| **Durability** | Fire-and-forget | Fire-and-forget |
+| **Operational complexity** | Zero | Memory tuning, monitoring, TTL config |
+
+**Key reasons for this decision:**
+- JIM is single-worker architecture — Redis scaling arguments don't apply
+- Progress data is already written to PostgreSQL via `UpdateActivityMessageAsync()` — we just need to notify listeners that it changed
+- The 8KB NOTIFY payload limit is irrelevant — we send only the activity ID; clients fetch fresh state
+- No new Docker container, NuGet package, or environment variables needed
+- Aligns with JIM's principle of maximising use of existing infrastructure before adding new components
+- The original concern about "database load from progress writes" was addressed by the Phase 5 worker performance work (bulk RPEI inserts, change tracker clearing); the Activity UPDATEs are single-row and negligible
+
+### Architecture
+
+```
++-------------------+     +------------------+     +------------------+
+|  JIM.Worker       |     |  PostgreSQL      |     |  JIM.Web         |
+|                   |     |                  |     |                  |
+| Processors update |---->| Activity table   |     | SignalR Hub      |
+| Activity fields   |     |   |              |     |   ^              |
+| via SaveChanges() |     |   v              |     |   |              |
+|                   |     | TRIGGER fires    |     | IHostedService   |
+|                   |     | pg_notify(       |---->| LISTEN on        |
+|                   |     |  'activity_      |     | NpgsqlConnection |
+|                   |     |   progress',     |     |   |              |
+|                   |     |   activity_id)   |     |   v              |
+|                   |     |                  |     | Blazor components|
+|                   |     |                  |     | subscribe to hub |
++-------------------+     +------------------+     +------------------+
+                                                          |
+                                                   +------v-----------+
+                                                   | PowerShell / API |
+                                                   | (keep polling -  |
+                                                   |  already works)  |
+                                                   +------------------+
+```
 
 ### Data Flow
 
 ```
-1. User executes run profile
-   └─> Activity created with Status=InProgress
+1. Worker processes objects
+   --> SaveChangesAsync() updates Activity row (ObjectsProcessed, Message, Status)
 
-2. Worker processes objects (DURING EXECUTION)
-   ├─> Updates Redis progress every N objects (fast, no DB hit)
-   │   └─> Clients poll GET /activities/{id}/progress (read from Redis)
-   └─> Writes ActivityRunProfileExecutionItem to database (detailed record)
+2. PostgreSQL AFTER UPDATE trigger on Activities table
+   --> pg_notify('activity_progress', activity_id::text)
+   --> Only fires when ObjectsProcessed, Message, or Status actually change
 
-3. Worker completes
-   ├─> Activity.Status = Complete
-   ├─> Final progress update to Redis
-   └─> Redis auto-expires progress after 1 hour (TTL)
+3. JIM.Web NotificationListenerService (IHostedService)
+   --> Dedicated NpgsqlConnection with LISTEN activity_progress
+   --> WaitAsync() loop receives notification
+   --> Pushes to ActivityProgressHub via IHubContext
 
-4. User views completed activity
-   ├─> GET /activities/{id} returns Activity + Stats (from database)
-   └─> GET /activities/{id}/progress returns 404 (Redis expired)
+4. Blazor components subscribed to hub
+   --> Receive activity ID
+   --> Fetch fresh state via existing JimApplication methods
+   --> Update UI (StateHasChanged)
+
+5. PowerShell / external API consumers
+   --> Continue polling as today (already working, idiomatic for CLI)
 ```
 
-### Stats vs Progress Comparison
+### Why PowerShell Keeps Polling
 
-| Aspect | ActivityRunProfileExecutionStats | RunProfileProgressInfo |
-|--------|----------------------------------|------------------------|
-| **Timing** | After completion | During execution |
-| **Storage** | PostgreSQL (permanent) | Redis (ephemeral, 1-hour TTL) |
-| **Detail** | Final summary counts | Live phase + incremental counts |
-| **Performance** | 5 DB COUNT queries | Single Redis GET (microseconds) |
-| **Use Case** | Historical analysis, auditing | Real-time monitoring |
-| **Phase Info** | No | Yes (Importing, Syncing, Preparing, etc.) |
+PowerShell is an external HTTP client — it cannot subscribe to SignalR or PostgreSQL notifications. The existing `Write-Progress` with 2-second polling is the idiomatic PowerShell pattern and provides a good user experience. The Worker updates the Activity at regular intervals regardless of the notification mechanism, so polling the Activity API gives accurate, timely progress.
+
+If sub-second CLI updates are ever needed, a Server-Sent Events (SSE) endpoint (`GET /api/v1/activities/{id}/progress/stream`) could be added, backed by the same SignalR infrastructure. This is low priority given the current experience is already good.
 
 ## Implementation Phases
 
-### Phase 1: Redis Infrastructure
-- Add Redis service to docker-compose.yml (redis:7-alpine)
-- Add StackExchange.Redis NuGet package to Application/Web/Worker
-- Configure Redis connection in Program.cs (both Web and Worker)
-- Environment variables: `JIM_REDIS_HOST`, `JIM_REDIS_PORT`, `JIM_REDIS_PROGRESS_TTL_SECONDS`
+### Phase 1: PostgreSQL Trigger + Notification Listener Service
 
-### Phase 2: Progress Models
-- Create `RunProfileProgressInfo` base class
-- Create `ImportProgressInfo` with `ImportPhase` enum
-- Create `SyncProgressInfo` with `SyncPhase` enum
-- Enhance existing `ExportProgressInfo` with operation counts
-- Add operation breakdown fields: CreatedCount, UpdatedCount, DeletedCount
+**PostgreSQL trigger** (EF Core migration):
+- `AFTER UPDATE` trigger on `Activities` table
+- Fires `pg_notify('activity_progress', NEW.id::text)` when `ObjectsProcessed`, `Message`, or `Status` columns change
+- Use `WHEN (OLD.* IS DISTINCT FROM NEW.*)` or column-specific checks to avoid spurious notifications
 
-### Phase 3: Progress Tracking Service
-- Create `ProgressTrackingService` in JIM.Application
-- Methods: `UpdateProgressAsync`, `GetProgressAsync<T>`, `ClearProgressAsync`
-- Redis key pattern: `progress:{activityId}`
-- JSON serialisation with polymorphic type handling
-- TTL management (auto-expire after completion)
+**NotificationListenerService** (`IHostedService` in JIM.Web):
+- Opens a dedicated `NpgsqlConnection` (not from the pool — required for LISTEN)
+- Executes `LISTEN activity_progress`
+- Loops on `WaitAsync()` with cancellation token support
+- Reconnects on connection failure with exponential backoff
+- Publishes received activity IDs to an in-process event (e.g., `IActivityProgressNotifier` interface)
 
-### Phase 4: Worker Integration
-- Update `SyncImportTaskProcessor.cs` with progress tracking
-- Update `SyncFullSyncTaskProcessor.cs` with progress tracking
-- Enhance `SyncExportTaskProcessor.cs` callback to write to Redis
-- Progress updates at: phase transitions, batch completions, final summary
+**Testing:**
+- Unit tests for reconnection logic (mocked connection)
+- Integration test: UPDATE Activity row, verify notification received
 
-### Phase 5: API Layer
-- Add `GET /api/v1/activities/{id}/progress` endpoint (lightweight polling)
-- Enhance `GET /api/v1/activities/{id}` to include progress when available
-- Create `RunProfileProgressDto` with polymorphic type support
-- Update `ActivityDetailDto` to optionally include progress
+### Phase 2: SignalR Hub + Blazor Component Migration
 
-### Phase 6: PowerShell Integration
-- Add `-Follow` parameter to `Get-JIMActivity` (continuous polling with progress display)
-- Enhance `Start-JIMRunProfile -Wait` with live progress updates
-- Reuse progress bar functions from `Test-Helpers.ps1`
-- MIM-style display: `"Importing | Processed: 457/1000 | Creates: 234, Updates: 198, Deletes: 25"`
-- Handle indeterminate progress (delta imports where total is unknown)
+**SignalR hub** (`ActivityProgressHub`):
+- `AddSignalR()` in `Program.cs`, `MapHub<ActivityProgressHub>("/hubs/activity-progress")`
+- Hub method: clients join/leave groups by activity ID or "all activities"
+- `NotificationListenerService` uses `IHubContext<ActivityProgressHub>` to push notifications
 
-### Phase 7: Testing
-- Unit tests: `ProgressTrackingServiceTests` with Testcontainers for Redis
-- Integration tests: Full run profile execution with progress verification
-- API tests: Progress endpoint + 404 handling + embedded progress
-- PowerShell tests: Polling and display logic (mocked API responses)
-- Performance tests: Memory usage + Redis latency under concurrent operations
+**Blazor component migration:**
+- Create a shared `ActivityProgressSubscription` service/component that wraps SignalR subscription
+- Migrate `OperationsQueueTab` — replace 1-second polling loop with hub subscription
+- Migrate `OperationsHistoryTab` — replace 5-second polling loop with hub subscription
+- Migrate `ExampleDataTemplateDetail` — replace timer (remove `POLLING_TO_REPLACE` tag)
+- Migrate `Logs` page — replace auto-refresh timer (if applicable)
+- Keep polling as fallback: if SignalR connection drops, revert to timer-based polling until reconnected
 
-### Phase 8: Documentation
-- Update `CLAUDE.md` with Redis architecture details
-- Update `DEVELOPER_GUIDE.md` with progress tracking patterns
-- Update `.devcontainer/README.md` with Docker stack changes
-- Document Redis configuration and troubleshooting
+**Testing:**
+- Unit tests for hub group management
+- UI smoke testing for each migrated page
+
+### Phase 3: Cleanup + Documentation
+
+- Remove polling code from migrated components (or retain as documented fallback)
+- Update `DEVELOPER_GUIDE.md` with notification architecture
+- Update `CHANGELOG.md`
+- Document the trigger in migration notes
+- Add connection string guidance for the dedicated LISTEN connection if needed
+
+## Design Considerations
+
+### Dedicated Connection for LISTEN
+Npgsql requires a non-pooled connection for `LISTEN`/`WaitAsync()`. The `NotificationListenerService` should open its own connection using the same connection string but with `Pooling=false` or a separate `NpgsqlDataSource`. This connection stays open for the lifetime of the service.
+
+### Notification Deduplication
+Multiple rapid Activity UPDATEs (e.g., during fast batch processing) may generate many notifications. The listener should debounce — collect notifications over a short window (~200ms) and push unique activity IDs to SignalR. This prevents UI thrashing during high-throughput processing.
+
+### Blazor Server Circuit
+Since JIM uses Blazor Server, the SignalR circuit for Blazor is already established. The `ActivityProgressHub` can be a separate hub on the same connection, or notifications can be pushed through the Blazor circuit using `IJSRuntime` or a scoped service. The separate hub approach is cleaner and allows non-Blazor consumers in the future.
+
+### Graceful Degradation
+If the LISTEN connection drops or the trigger is missing (e.g., database restored from backup without the trigger), the system should fall back to polling. This means the polling infrastructure should be retained but disabled by default when SignalR is connected.
 
 ## Success Criteria
 
-✅ Redis service running in Docker stack with health checks
-✅ Zero database writes for progress (all via Redis)
-✅ Phase + object-level progress for Import, Export, Sync with operation breakdown
-✅ Dual API endpoints working (enhanced /activities/{id} + dedicated /progress)
-✅ PowerShell live progress via 2s polling in both cmdlets
-✅ Indeterminate progress support for delta imports
-✅ Auto-cleanup via TTL (1-hour default)
-✅ Progress survives worker restarts
-✅ 90%+ test coverage for new components
-✅ No API or Redis bottlenecks under load
-
-## Benefits
-
-**Performance**:
-- Eliminates database load from progress updates (addresses EF thread-safety concerns)
-- Microsecond read/write times via Redis (vs milliseconds for database)
-- Auto-cleanup via TTL (no manual maintenance)
-
-**User Experience**:
-- Real-time progress visibility during execution
-- MIM-style operation breakdown (creates/updates/deletes)
-- Progress available to all users (not just initiator)
-- Early problem detection (error rates, stalls)
-
-**Architecture**:
-- Foundation for future caching (EF query cache, connector metadata)
-- Enables WebSocket pub/sub for JIM.Web real-time UI
-- Clean separation: ephemeral data in Redis, persistent data in PostgreSQL
-- Scalable pattern for future features
-
-## Dependencies
-
-- Redis 7-alpine Docker image (~10MB)
-- StackExchange.Redis NuGet package (v2.8.16+)
-- No breaking changes to existing Stats functionality
-- No database schema changes required
+- Blazor UI updates within ~500ms of Worker progress changes (vs current 1-5 second polling delay)
+- Zero polling timers in migrated Blazor components during normal operation
+- Polling fallback activates automatically on SignalR/LISTEN disconnection
+- No new infrastructure dependencies (no Redis, no new Docker containers)
+- PowerShell `Write-Progress` continues to work unchanged
+- All existing API endpoints continue to work unchanged
 
 ## Risks & Mitigations
 
-**Risk**: Redis unavailable during run profile execution
-**Mitigation**: Progress tracking is optional; execution continues, Stats still calculated from database
+**Risk**: Dedicated LISTEN connection drops silently
+**Mitigation**: `NotificationListenerService` implements health checks and automatic reconnection with exponential backoff. Falls back to polling if reconnection fails.
 
-**Risk**: Memory usage with many concurrent run profiles
-**Mitigation**: 256MB Redis maxmemory with LRU eviction policy, 1-hour TTL for auto-cleanup
+**Risk**: High-frequency notifications during large imports overwhelm SignalR
+**Mitigation**: Debounce notifications (~200ms window). Send only activity IDs, not full payloads — clients fetch state on demand.
 
-**Risk**: Polling overhead for API/PowerShell
-**Mitigation**: 2-second polling interval, lightweight Redis queries (microseconds), dedicated progress endpoint
+**Risk**: PostgreSQL connection limit pressure from dedicated LISTEN connection
+**Mitigation**: Single additional connection. JIM's single-worker architecture means at most 1 extra connection.
 
-## Related Features
+## Dependencies
 
-- **Schedules** (future): Overall progress across multiple run profile executions
-- **JIM.Web Progress UI** (future): Real-time progress bars in web interface using WebSocket pub/sub
-- **Performance Caching** (future): Use Redis for EF query caching, connector metadata caching
+- Npgsql (already included via `Npgsql.EntityFrameworkCore.PostgreSQL 9.0.4`)
+- ASP.NET Core SignalR (already included in the framework; log config already in `appsettings.json`)
+- No new NuGet packages required
+- No new Docker containers required
+- No database schema changes beyond the trigger migration
 
 ## Notes
 
 - Post-MVP feature (not required for initial release)
 - Complements existing Stats system (doesn't replace it)
 - Single worker architecture assumption (no horizontal scaling planned)
-- Air-gapped compatible (self-hosted Redis container)
+- Air-gapped compatible (no external dependencies)
+- The original Redis-based plan is superseded by this approach
