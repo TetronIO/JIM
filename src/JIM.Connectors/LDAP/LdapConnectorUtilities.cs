@@ -559,4 +559,38 @@ internal static class LdapConnectorUtilities
         }
         return -1;
     }
+
+    /// <summary>
+    /// Validates that a Distinguished Name does not contain empty RDN values.
+    /// Empty RDN values (e.g., "OU=,OU=Users,...") are invalid and will be rejected by LDAP servers.
+    /// This can occur when expression-based DN mappings evaluate against incomplete MVO state
+    /// (e.g., after attribute recall during deprovisioning).
+    /// </summary>
+    /// <param name="dn">The Distinguished Name to validate.</param>
+    /// <returns>True if the DN is valid (no empty RDN values); false otherwise.</returns>
+    internal static bool HasValidRdnValues(string dn)
+    {
+        if (string.IsNullOrEmpty(dn))
+            return false;
+
+        // Split the DN into RDN components, respecting escaped commas
+        var remaining = dn;
+        while (!string.IsNullOrEmpty(remaining))
+        {
+            var commaIndex = FindUnescapedComma(remaining);
+            var component = commaIndex >= 0 ? remaining[..commaIndex] : remaining;
+            remaining = commaIndex >= 0 ? remaining[(commaIndex + 1)..] : string.Empty;
+
+            // Each component should be in the form "TYPE=VALUE"
+            var equalsIndex = component.IndexOf('=');
+            if (equalsIndex < 0)
+                return false;
+
+            var value = component[(equalsIndex + 1)..];
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+        }
+
+        return true;
+    }
 }

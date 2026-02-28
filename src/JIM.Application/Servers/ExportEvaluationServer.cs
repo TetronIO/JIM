@@ -1298,6 +1298,17 @@ public class ExportEvaluationServer
         // For no-net-change detection, we need both the CSO and the attribute cache
         var canDetectNoNetChange = !isCreateOperation && existingCso != null && csoAttributeCache != null;
 
+        // Detect "pure recall" scenario: all changed attributes are removals with no additions.
+        // This occurs during CSO obsoletion (leaver) when contributed attributes are recalled from the MVO.
+        // In this case, expression-based mappings must NOT be re-evaluated because the MVO state is now
+        // incomplete — expressions that concatenate MVO attribute values (e.g., DN expressions like
+        // "CN=" + mv["Display Name"] + ",OU=" + mv["Department"] + ",...") will produce invalid results
+        // when the recalled attributes are missing (e.g., "OU=,OU=Users,...").
+        // Only direct attribute mappings should be processed, which correctly produce null-clearing changes.
+        var isPureRecall = !isCreateOperation
+            && removedAttributes is { Count: > 0 }
+            && changedAttributes.All(ca => removedAttributes.Contains(ca));
+
         // Build the MVO attribute dictionary once for all expression evaluations
         // This avoids repeatedly iterating through MVO attributes for each expression
         Dictionary<string, object?>? mvAttributeDictionary = null;
@@ -1316,6 +1327,17 @@ public class ExportEvaluationServer
                 // Handle expression-based mappings
                 if (!string.IsNullOrWhiteSpace(source.Expression))
                 {
+                    // Skip expression evaluation during pure attribute recall (leaver/deprovisioning).
+                    // When all changed attributes are removals, the MVO is in an incomplete state and
+                    // expression results would be invalid (e.g., DN with empty OU components).
+                    if (isPureRecall)
+                    {
+                        Log.Debug("CreateAttributeValueChanges: Skipping expression '{Expression}' for attribute " +
+                            "{AttributeName} - pure attribute recall (all changes are removals)",
+                            source.Expression, mapping.TargetConnectedSystemAttribute.Name);
+                        continue;
+                    }
+
                     // For Update operations with expressions, we need to check if any source attributes changed
                     // For simplicity, always include expression results for Create, but for Update we include them
                     // because expression results may depend on the changed attributes

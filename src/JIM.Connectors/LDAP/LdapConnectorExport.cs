@@ -564,6 +564,12 @@ internal class LdapConnectorExport
         if (string.IsNullOrEmpty(dn))
             throw new InvalidOperationException("Cannot create object: Distinguished Name (DN) could not be determined from attribute changes.");
 
+        // Defence-in-depth: validate that the DN doesn't contain empty RDN components.
+        if (!LdapConnectorUtilities.HasValidRdnValues(dn))
+            throw new InvalidOperationException(
+                $"Cannot create object: Distinguished Name '{dn}' contains empty RDN components. " +
+                "This typically indicates an expression-based DN mapping evaluated against incomplete MVO state.");
+
         _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Creating object at DN '{Dn}'", dn);
 
         var createContainersAsNeeded = GetSettingBoolValue(SettingCreateContainersAsNeeded) ?? false;
@@ -627,6 +633,17 @@ internal class LdapConnectorExport
 
         if (!string.IsNullOrEmpty(newDn) && !newDn.Equals(currentDn, StringComparison.OrdinalIgnoreCase))
         {
+            // Defence-in-depth: validate that the new DN doesn't contain empty RDN components.
+            // This can occur when expression-based DN mappings evaluate against incomplete MVO state
+            // (e.g., after attribute recall during deprovisioning produces "OU=,OU=Users,...").
+            if (!LdapConnectorUtilities.HasValidRdnValues(newDn))
+            {
+                _logger.Warning("LdapConnectorExport.ProcessUpdateAsync: New DN '{NewDn}' contains empty RDN components. " +
+                    "Skipping rename — this typically indicates attribute recall during deprovisioning produced an invalid DN.",
+                    newDn);
+                return ExportResult.Succeeded();
+            }
+
             // Sequential within this export: rename must complete before modify
             workingDn = await ProcessRenameAsync(currentDn, newDn);
             wasRenamed = true;
