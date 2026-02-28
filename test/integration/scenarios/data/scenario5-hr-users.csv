@@ -1,2 +1,2 @@
-hrId,employeeId,firstName,lastName,email,department,title,company,samAccountName,displayName,status,userPrincipalName,employeeType,employeeEndDate
-00000001-0000-0000-0000-000000000000,EMP000001,Baseline,User,baseline.user@subatomic.local,Information Technology,Engineer,Subatomic,baseline.user1,Baseline User,Active,baseline.user@subatomic.local,Employee,2099-12-31T00:00:00Z
+hrId,employeeId,firstName,lastName,email,department,title,company,pronouns,samAccountName,displayName,status,userPrincipalName,employeeType,employeeEndDate
+00000001-0000-0000-0000-000000000000,EMP000001,Baseline,User,baseline.user@subatomic.local,Information Technology,Engineer,Subatomic,,baseline.user1,Baseline User,Active,baseline.user@subatomic.local,Employee,2099-12-31T00:00:00Z

@@ -630,6 +630,7 @@ $userImportMappings = @(
     @{ LdapAttr = "title"; MvAttr = "Job Title" }
     @{ LdapAttr = "department"; MvAttr = "Department" }
     @{ LdapAttr = "company"; MvAttr = "Company" }
+    @{ LdapAttr = "extensionAttribute1"; MvAttr = "Pronouns" }
 )
 
 $userExportMappings = @(
@@ -643,6 +644,7 @@ $userExportMappings = @(
     @{ MvAttr = "Job Title"; LdapAttr = "title" }
     @{ MvAttr = "Department"; LdapAttr = "department" }
     @{ MvAttr = "Company"; LdapAttr = "company" }
+    @{ MvAttr = "Pronouns"; LdapAttr = "extensionAttribute1" }
 )
 
 # Create user import mappings (Source -> MV)
