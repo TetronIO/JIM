@@ -1,12 +1,13 @@
 # JIM.Worker Redesign - High-Level Design Options
 
-- **Status:** Planned
+- **Status:** Planned (partially progressed — see [Progress Since Original Analysis](#progress-since-original-analysis))
 - **Created**: 2026-02-23
+- **Updated**: 2026-02-28
 - **Author**: Architecture Review
 
 ## Context
 
-JIM.Worker is the synchronisation engine - the beating heart of JIM. It processes imports from connected systems, reconciles identity data in the metaverse, evaluates exports, and writes changes back to connected systems. We are currently in an optimisation/debugging loop and need to evaluate whether incremental improvements are sufficient or whether a more fundamental redesign is warranted.
+JIM.Worker is the synchronisation engine - the beating heart of JIM. It processes imports from connected systems, reconciles identity data in the metaverse, evaluates exports, and writes changes back to connected systems. This document was originally written during an optimisation/debugging loop to evaluate whether incremental improvements were sufficient or whether a more fundamental redesign was warranted. Since then, significant performance work has been completed (see [Progress Since Original Analysis](#progress-since-original-analysis)).
 
 ### Current Architecture Summary
 
@@ -14,6 +15,9 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
 +----------------------------------------------+
 |              JIM.Worker (Host)               |
 |  BackgroundService polling loop (2s)         |
+|  Service-lifetime IMemoryCache (CSO lookup)  |
+|  Startup cache warming (all CSO ext. IDs)    |
+|  Heartbeat + stale task crash recovery       |
 |  One JimDbContext per main loop              |
 |  One JimDbContext per spawned Task           |
 +----------------------------------------------+
@@ -21,20 +25,21 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
          v
 +----------------------------------------------+
 |         Task Processors (per work item)      |
-| SyncImportTaskProcessor    ~2,060 LOC        |
-| SyncTaskProcessorBase      ~1,760 LOC        |
-| SyncFullSyncTaskProcessor    ~260 LOC        |
-| SyncDeltaSyncTaskProcessor   ~210 LOC        |
-| SyncExportTaskProcessor      ~300 LOC        |
-| SyncRuleMappingProcessor     ~730 LOC        |
+| SyncImportTaskProcessor    ~2,260 LOC        |
+| SyncTaskProcessorBase      ~2,230 LOC        |
+| SyncFullSyncTaskProcessor    ~330 LOC        |
+| SyncDeltaSyncTaskProcessor   ~255 LOC        |
+| SyncExportTaskProcessor      ~320 LOC        |
+| SyncRuleMappingProcessor     ~820 LOC        |
+| Worker.cs (host)             ~925 LOC        |
 +----------------------------------------------+
          |
          v
 +----------------------------------------------+
 |       JimApplication (Business Logic)        |
-| ConnectedSystemServer    3,840 LOC           |
-| ExportEvaluationServer   1,790 LOC           |
-| ExportExecutionServer    1,500 LOC           |
+| ConnectedSystemServer    4,240 LOC           |
+| ExportEvaluationServer   1,860 LOC           |
+| ExportExecutionServer    1,590 LOC           |
 | MetaverseServer            650 LOC           |
 | + 13 other servers                           |
 +----------------------------------------------+
@@ -44,6 +49,7 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
 |       PostgresDataRepository (EF Core)       |
 |  IRepository -> 13 sub-repositories          |
 |  JimDbContext (single DbContext per scope)   |
+|  + Raw SQL bulk ops on hot paths (#338)      |
 +----------------------------------------------+
          |
          v
@@ -54,51 +60,58 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
 
 ### Identified Pain Points
 
-1. **EF Core is the bottleneck and the untestable seam**
-   - Change tracking overhead on hot paths (every `SaveChangesAsync` scans all tracked entities)
-   - Include chains generate multi-round-trip split queries for deep object graphs
-   - `AddRange`/`UpdateRange` generate N individual SQL statements, not bulk operations
-   - In-memory provider masks missing `.Include()` bugs, making unit tests unreliable
-   - Cannot fully unit test repository logic - requires integration tests with real PostgreSQL
+> **Note:** Pain points marked with **(Addressed by #338)** were partially or fully resolved by the Worker Database Performance Optimisation work. See [Progress Since Original Analysis](#progress-since-original-analysis) for details.
 
-2. **Sequential per-object processing**
+1. **EF Core is the bottleneck and the untestable seam**
+   - ~~Change tracking overhead on hot paths (every `SaveChangesAsync` scans all tracked entities)~~ **(Addressed by #338)** — `SetAutoDetectChangesEnabled(false)` during flush sequences; RPEIs detached from tracker after bulk insert
+   - ~~Include chains generate multi-round-trip split queries for deep object graphs~~ **(Addressed by #338)** — `AsSplitQuery` removed from sync page loading; replaced with two-query transaction approach
+   - ~~`AddRange`/`UpdateRange` generate N individual SQL statements, not bulk operations~~ **(Addressed by #338)** — CSO creates/updates, pending export creates/updates/deletes, and RPEI persistence all use raw SQL bulk operations
+   - In-memory provider masks missing `.Include()` bugs, making unit tests unreliable — **still a problem**
+   - Cannot fully unit test repository logic - requires integration tests with real PostgreSQL — **still a problem**
+   - **New concern (#338):** Production and test code paths now diverge via `_hasRawSqlSupport` flag and try/catch EF fallbacks — bugs can hide in raw SQL paths that unit tests don't exercise
+
+2. **Sequential per-object processing** — **unchanged**
    - `ProcessConnectedSystemObjectAsync` processes one CSO at a time in a `foreach` loop
    - Join/project/attribute-flow is inherently per-object, but many surrounding operations could be batched or parallelised
    - Import processing is serial within a page (connector I/O is paginated but processing is sequential)
    - Export parallelism exists but is limited by single-DbContext progress reporting
 
-3. **Tight coupling to JimApplication**
+3. **Tight coupling to JimApplication** — **largely unchanged**
    - `JimApplication` is a God Object facade with 16 server properties, each back-referencing the parent
    - Processors directly `new` up `JimApplication` and `PostgresDataRepository` instances
    - No dependency injection - prevents substitution for testing and makes parallelism unsafe
    - Each parallel task creates its own `JimApplication` + `JimDbContext` to avoid EF thread-safety issues
+   - **Minor improvement (#338):** A shared `IMemoryCache` is now threaded through `JimApplication` constructors for the CSO lookup cache, but this is still manual wiring rather than proper DI
 
-4. **Worker is monolithic**
+4. **Worker is monolithic** — **unchanged**
    - All work types (import, sync, export, data generation, deletion, housekeeping) in a single process
    - Cannot scale horizontally - only one worker instance supported
    - No way to prioritise work (urgent manual sync vs. scheduled background sync)
 
-5. **Testing is slow and fragile**
+5. **Testing is slow and fragile** — **unchanged (arguably slightly worse)**
    - Workflow tests use EF in-memory which auto-tracks navigation properties (masks real bugs)
    - Integration tests require full Docker stack, take minutes, and are flaky
    - No way to test sync logic without database (EF is deeply coupled throughout)
-   - `TestUtilities.cs` is 1,100 lines of setup helpers - indicating painful test setup
+   - `TestUtilities.cs` is ~1,110 lines of setup helpers - indicating painful test setup
+   - **New concern (#338):** Raw SQL bulk operations use try/catch fallback to EF in tests, meaning production hot paths are not exercised by unit tests at all
 
 ---
 
 ## Key Outcomes Required
 
-| # | Outcome | Weight | Current State |
+| # | Outcome | Weight | Current State (post-#338) |
 |---|---------|--------|---------------|
-| 1 | **Data Integrity** | Critical | Good conceptually (state-based, re-assertable), but hard to prove due to testing gaps |
-| 2 | **Provability** | Critical | Weak - EF in-memory masks bugs, integration tests are slow/flaky |
+| 1 | **Data Integrity** | Critical | Good conceptually (state-based, re-assertable), but harder to prove due to diverging prod/test code paths |
+| 2 | **Provability** | Critical | Weak - EF in-memory masks bugs; raw SQL hot paths not exercised by unit tests |
 | 3 | **Scalability** | High | Limited - sequential processing, single worker, ~500k objects target |
-| 4 | **Performance** | High | Bottlenecked by EF overhead and sequential processing; 1-2 hour target for large orgs |
+| 4 | **Performance** | High | Improved ~34% (FullSync) by #338 bulk SQL; sequential processing remains the primary bottleneck |
 | 5 | **Telemetry** | Medium | Basic Serilog + custom Diagnostics spans; no structured metrics/health |
 
 ---
 
 ## Option A: "Surgical Refactor" - Extract Pure Domain Engine + Optimised Data Access
+
+> **Status: Partially completed.** The data access half (ISyncPersistence / bulk SQL) has been largely delivered by #338. The domain engine half (ISyncEngine extraction) has **not** been started. See [Progress Since Original Analysis](#progress-since-original-analysis).
 
 ### Philosophy
 
@@ -151,23 +164,25 @@ Keep the current architecture but surgically extract the sync processing logic i
 
 ### Key Changes
 
-1. **Extract `ISyncEngine`** - Pure domain logic, no I/O dependencies
+1. **Extract `ISyncEngine`** - Pure domain logic, no I/O dependencies — **NOT STARTED**
    - Takes in-memory objects (CSO batch, sync rules, MVO candidates)
    - Returns decisions/commands (JoinDecision, ProjectDecision, FlowDecision, ExportDecision)
    - Fully unit testable with plain objects - no mocking needed
-   - The ~3,500 lines of SyncTaskProcessorBase + SyncRuleMappingProcessor become the engine
+   - The ~3,050 lines of SyncTaskProcessorBase + SyncRuleMappingProcessor become the engine
 
-2. **Extract `ISyncDataAccess`** - Explicit data boundary for sync hot paths
-   - `InMemorySyncDataAccess` for tests - purpose-built, not EF's leaky in-memory provider
-   - `PostgresSyncDataAccess` for production - uses `NpgsqlBinaryImporter` (COPY), raw SQL, no change tracking
-   - Batch-oriented API: `GetCsoBatch()`, `PersistSyncResults()`, `BulkUpsertCsos()`
+2. **Extract `ISyncDataAccess`** - Explicit data boundary for sync hot paths — **PARTIALLY DONE (#338)**
+   - `InMemorySyncDataAccess` for tests - purpose-built, not EF's leaky in-memory provider — **not done** (tests use EF fallback via try/catch)
+   - `PostgresSyncDataAccess` for production - uses raw SQL, no change tracking — **done** for CSO creates/updates, pending export CRUD, and RPEI persistence; MVO operations still use EF
+   - Batch-oriented API: `GetCsoBatch()`, `PersistSyncResults()`, `BulkUpsertCsos()` — **not formalised as an interface** (raw SQL is embedded in existing repository methods with EF fallback)
+   - CSO lookup cache via `IMemoryCache` eliminates N+1 import queries — **done**
+   - Lightweight ID-only MVO matching with `Take(2)` — **done**
 
-3. **Introduce DI throughout the worker**
+3. **Introduce DI throughout the worker** — **NOT STARTED**
    - Replace `new JimApplication(new PostgresDataRepository(new JimDbContext()))` with `IServiceScopeFactory`
    - Each task gets a DI scope with properly scoped `DbContext`
    - Enables clean testing via service substitution
 
-4. **Parallelise within sync phases**
+4. **Parallelise within sync phases** — **NOT STARTED**
    - Import: Multiple pages processed concurrently (each with own data access scope)
    - Sync: CSO batches processed in parallel (engine is stateless per-CSO, only shared state is MVO lookup)
    - Export: Already has parallelism; extend to use proper DI scopes
@@ -182,7 +197,8 @@ Keep the current architecture but surgically extract the sync processing logic i
 
 ### Estimates
 
-- **Scope**: ~6,000 lines of processor code refactored + new ISyncDataAccess implementations
+- **Completed (#338)**: Bulk SQL persistence for CSOs, pending exports, RPEIs; CSO lookup cache; lightweight MVO matching; `AsSplitQuery` elimination. Measured ~34% FullSync improvement, ~37% faster CSO processing
+- **Remaining scope**: ISyncEngine extraction (~3,050 LOC to refactor), formal ISyncDataAccess interface, InMemorySyncDataAccess for tests, DI introduction, intra-phase parallelism
 - **Risk**: Medium - mechanical refactoring with clear seams; high test coverage before/after
 - **Breaking Changes**: None externally; internal restructuring only
 
@@ -191,9 +207,9 @@ Keep the current architecture but surgically extract the sync processing logic i
 | Outcome | Rating | Notes |
 |---------|--------|-------|
 | Data Integrity | Good | Same logic, better tested. State-based re-assertion unchanged |
-| Provability | Very Good | Pure engine is 100% testable. InMemory data access purpose-built |
+| Provability | Very Good | Pure engine is 100% testable. InMemory data access purpose-built. **Currently partially undermined by prod/test code path divergence** |
 | Scalability | Moderate | Intra-process parallelism improved. Still single worker |
-| Performance | Good | Bulk SQL on hot paths. 2-5x improvement on data-intensive operations |
+| Performance | Good | Bulk SQL on hot paths delivers ~34% improvement (#338). Full 2-5x requires ISyncEngine extraction + parallelism |
 | Telemetry | Moderate | Can add OpenTelemetry to orchestrator/engine. No architectural support |
 
 ---
@@ -220,7 +236,7 @@ Redesign the worker as a pipeline of discrete stages connected by `System.Thread
 |  Exposes health/metrics endpoints                                 |
 +-------------------------------------------------------------------+
          |
-         |  Channel<ImportBatch>     Channel<SyncBatch>       Channel<ExportBatch>
+         | Channel<ImportBatch>      Channel<SyncBatch>       Channel<ExportBatch>
          v                           v                        v
 +----------------+  +-----------------------------+  +------------------+
 |  Import Stage  |  |       Sync Stage            |  |  Export Stage    |
@@ -351,17 +367,17 @@ Decompose the worker into independent, horizontally scalable processing units co
 +-------------------------------------------------------------------+
          |                    |                    |
          v                    v                    v
-+------------------+ +------------------+ +------------------+
-| Import Workers   | | Sync Workers     | | Export Workers   |
-| (N instances)    | | (M instances)    | | (P instances)    |
-|                  | |                  | |                  |
-| - Connect to     | | - Consume CSO    | | - Consume PE     |
-|   external sys   | |   batches        | |   batches        |
-| - Diff + stage   | | - Pure sync      | | - Connect to     |
-| - Publish CSO    | |   engine         | |   target sys     |
-|   batches        | | - Publish PEs    | | - Write + confirm|
-| - Ack message    | | - Ack message    | | - Ack message    |
-+------------------+ +------------------+ +------------------+
++------------------+ +------------------+ +-------------------+
+| Import Workers   | | Sync Workers     | | Export Workers    |
+| (N instances)    | | (M instances)    | | (P instances)     |
+|                  | |                  | |                   |
+| - Connect to     | | - Consume CSO    | | - Consume PE      |
+|   external sys   | |   batches        | |   batches         |
+| - Diff + stage   | | - Pure sync      | | - Connect to      |
+| - Publish CSO    | |   engine         | |   target sys      |
+|   batches        | | - Publish PEs    | | - Write + confirm |
+| - Ack message    | | - Ack message    | | - Ack message     |
++------------------+ +------------------+ +-------------------+
           |                    |                    |
           v                    v                    v
 +-------------------------------------------------------------------+
@@ -476,14 +492,15 @@ docker compose / Kubernetes:
 | **Data Integrity** | Good | Very Good | Good |
 | **Provability** | Very Good | Excellent | Very Good |
 | **Scalability** | Moderate | Very Good | Excellent |
-| **Performance** | Good (2-5x) | Very Good (3-10x) | Excellent (10x+) |
+| **Performance** | Good (~34% done, 2-5x full) | Very Good (3-10x) | Excellent (10x+) |
 | **Telemetry** | Moderate | Excellent | Excellent |
-| Development effort | Lowest | Medium | Highest |
+| Development effort | Lowest (partially done) | Medium | Highest |
 | Risk | Low-Medium | Medium-High | High |
 | Deployment change | None | None | Redis required |
 | Code disruption | ~30% of worker | ~70% of worker | ~90% of worker |
 | Air-gap compatible | Yes | Yes | Yes (Redis self-hosted) |
 | Time to initial PR | Incremental | Needs critical mass | Needs critical mass |
+| **Progress to date** | ~50% (persistence done, engine not started) | 0% | 0% |
 
 ### Recommendation Matrix by Organisation Size
 
@@ -568,23 +585,26 @@ No database. No mocking. No flaky tests. Just logic.
 
 ### D2: Persistence Must Be Batch-Oriented
 
+> **Partially implemented by #338.** The flush mechanism now bypasses EF change tracking for most hot-path writes (see status annotations below). However, the operations are embedded in existing repository methods with try/catch EF fallback for tests, rather than formalised behind a dedicated `ISyncPersistence` interface. Formalising the interface remains a prerequisite for proper InMemory test implementations and the ISyncEngine extraction.
+
 All options should use batch persistence. The current pattern of accumulating changes and flushing at page boundaries is correct. But the flush mechanism needs to bypass EF change tracking:
 
 ```csharp
 public interface ISyncPersistence
 {
     // Bulk operations - bypasses EF change tracking entirely
-    Task BulkCreateCsosAsync(IReadOnlyList<ConnectedSystemObject> csos);
-    Task BulkUpdateCsosAsync(IReadOnlyList<ConnectedSystemObject> csos);
-    Task BulkDeleteCsosAsync(IReadOnlyList<Guid> csoIds);
-    Task BulkCreateMvosAsync(IReadOnlyList<MetaverseObject> mvos);
-    Task BulkUpsertMvoAttributesAsync(IReadOnlyList<MetaverseObjectAttributeValue> values);
-    Task BulkCreatePendingExportsAsync(IReadOnlyList<PendingExport> exports);
-    Task BulkDeletePendingExportsAsync(IReadOnlyList<Guid> exportIds);
+    Task BulkCreateCsosAsync(IReadOnlyList<ConnectedSystemObject> csos);       // DONE (#338) - raw SQL
+    Task BulkUpdateCsosAsync(IReadOnlyList<ConnectedSystemObject> csos);       // DONE (#338) - raw SQL
+    Task BulkDeleteCsosAsync(IReadOnlyList<Guid> csoIds);                      // existing (ExecuteSqlRawAsync)
+    Task BulkCreateMvosAsync(IReadOnlyList<MetaverseObject> mvos);             // NOT DONE - still EF
+    Task BulkUpsertMvoAttributesAsync(IReadOnlyList<MetaverseObjectAttributeValue> values);  // NOT DONE - still EF
+    Task BulkCreatePendingExportsAsync(IReadOnlyList<PendingExport> exports);  // DONE (#338) - raw SQL
+    Task BulkDeletePendingExportsAsync(IReadOnlyList<Guid> exportIds);         // DONE (#338) - raw SQL
+    Task BulkInsertRpeisAsync(IReadOnlyList<RunProfileExecutionItem> rpeis);   // DONE (#338) - raw SQL (not in original spec)
 
     // Reads - lightweight DTOs, no EF tracking
-    Task<CsoBatch> GetCsoBatchAsync(int connectedSystemId, int page, int pageSize);
-    Task<MvoLookup> GetMvoLookupForSyncAsync(int connectedSystemId); // lightweight
+    Task<CsoBatch> GetCsoBatchAsync(int connectedSystemId, int page, int pageSize);  // PARTIALLY DONE - AsSplitQuery removed, uses two-query transaction
+    Task<MvoLookup> GetMvoLookupForSyncAsync(int connectedSystemId);                  // DONE (#338) - lightweight ID-only matching with Take(2)
 }
 ```
 
@@ -611,10 +631,46 @@ The current custom `Diagnostics` class is a good start but should be upgraded to
 5. **The pipeline model matches the domain** - import -> sync -> export is inherently a pipeline; the code should reflect that
 6. **It solves the testing problem** - the pure ISyncEngine + InMemorySyncRepository combination gives us the provability we need without EF in-memory's quirks
 
-However, **Option A is the pragmatic starting point** if the team wants to derisk incrementally. The ISyncEngine extraction (D1) and ISyncPersistence boundary (D2) from Option A are prerequisites for Option B anyway. A phased approach would be:
+However, **Option A is the pragmatic starting point** if the team wants to de-risk incrementally. The ISyncEngine extraction (D1) and ISyncPersistence boundary (D2) from Option A are prerequisites for Option B anyway. A phased approach would be:
 
-**Phase 1** (Option A): Extract ISyncEngine + ISyncPersistence. Ship and validate.
-**Phase 2** (Option B): Rewire orchestration to use Channels pipeline. Ship and validate.
-**Phase 3** (Option C, if needed): Add Redis message bus between pipeline stages for horizontal scaling.
+- **Phase 1a** (Option A - persistence): Replace EF Core on hot paths with raw SQL bulk operations. **DONE (#338)** — ~34% FullSync improvement measured.
+- **Phase 1b** (Option A - engine): Extract ISyncEngine as a pure domain service. Formalise ISyncPersistence interface. Build InMemorySyncDataAccess for tests. **NOT STARTED** — this is the remaining high-value work for provability.
+- **Phase 2** (Option B): Rewire orchestration to use Channels pipeline. Ship and validate.
+- **Phase 3** (Option C, if needed): Add Redis message bus between pipeline stages for horizontal scaling.
 
 Each phase delivers standalone value and can be assessed before committing to the next.
+
+---
+
+## Progress Since Original Analysis
+
+### Worker Database Performance Optimisation (#338) - Completed
+
+A 5-phase surgical optimisation programme was completed in February 2026, replacing EF Core hot-path operations with raw SQL and in-memory indexing. This work corresponds to the **data access half of Option A** but was implemented without formalising the `ISyncPersistence` interface — raw SQL is embedded in existing repository methods with try/catch EF fallback for unit test compatibility.
+
+**What was delivered:**
+
+| Phase | Change | Impact |
+|-------|--------|--------|
+| 1 | Service-lifetime CSO lookup cache (`IMemoryCache`) with startup warming | Eliminates N+1 import lookup queries |
+| 2 | Lightweight ID-only MVO matching with `Take(2)` (match-first, load-later) | Eliminates unnecessary full entity materialisation |
+| 3 | Raw SQL bulk insert/update for CSOs, CSO attribute values, pending exports | Bypasses EF change tracking on write hot paths |
+| 4 | Removed `AsSplitQuery` from sync page loading; two-query transaction approach | Eliminated materialisation bugs; removed ~170 lines of post-load SQL repair code |
+| 5 | Raw SQL bulk insert for RPEIs with chunked parameterised queries | RPEIs detached from EF tracker after flush; prevents duplicate inserts |
+
+**Measured results:** ~34% faster FullSync, ~37% faster CSO processing.
+
+**EF Core bugs discovered and fixed during this work:**
+1. `SaveChangesAsync` triggering `DetectChanges()` which discovered RPEIs via `Activity.RunProfileExecutionItems` and inserted them before bulk flush — fixed with `SetAutoDetectChangesEnabled(false)`
+2. `DbSet.Update()` / `Database.Update()` traversing full object graph regardless of `AutoDetectChangesEnabled` — fixed with `Entry().State = Modified` (no graph traversal)
+3. Raw SQL modifying rows still tracked in EF memory causing `DbUpdateConcurrencyException` — fixed with `ClearChangeTracker()` after MVO deletion pages
+
+**What was NOT delivered (remains for Phase 1b):**
+- ISyncEngine extraction (pure domain logic, no I/O)
+- Formal ISyncPersistence / ISyncDataAccess interface
+- InMemorySyncDataAccess for tests (currently using EF fallback)
+- DI introduction (still using manual `new` wiring)
+- Intra-phase parallelism
+- MVO create/update still uses EF (not yet converted to raw SQL)
+
+**Full details:** See `docs/plans/done/WORKER_DATABASE_PERFORMANCE_OPTIMISATION.md`
