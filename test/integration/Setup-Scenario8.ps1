@@ -449,7 +449,8 @@ Write-Host "  ✓ Set objectGUID as External ID for all object types" -Foregroun
 # Select required LDAP attributes for users
 $requiredUserAttributes = @(
     'objectGUID', 'sAMAccountName', 'givenName', 'sn', 'displayName', 'cn',
-    'mail', 'userPrincipalName', 'title', 'department', 'company', 'distinguishedName'
+    'mail', 'userPrincipalName', 'title', 'department', 'company', 'distinguishedName',
+    'extensionAttribute1'  # Pronouns - AD has no native attribute, uses Exchange extension attribute
 )
 
 # Select required LDAP attributes for groups

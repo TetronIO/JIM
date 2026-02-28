@@ -658,7 +658,8 @@ try {
             'distinguishedName',  # DN - required for LDAP provisioning
             'accountExpires',     # Account expiry (Large Integer/Int64) - populated from HR Employee End Date via ToFileTime
             'userAccountControl', # Account control flags (Number/Int32) - tests integer data type flow
-            'description'         # Training Status - supplementary attribute from Training source (recall testing)
+            'description',         # Training Status - supplementary attribute from Training source (recall testing)
+            'extensionAttribute1'  # Pronouns - AD has no native attribute, uses Exchange extension attribute
         )
 
         $ldapAttrUpdates = @{}
