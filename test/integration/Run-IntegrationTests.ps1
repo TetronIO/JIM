@@ -187,7 +187,7 @@ function Show-ScenarioMenu {
                 "*Scenario1*" { "HR to Identity Directory synchronisation" }
                 "*Scenario2*" { "Cross-domain synchronisation (APAC ↔ EMEA)" }
                 "*Scenario3*" { "Global Address List (GAL) synchronisation" }
-                "*Scenario4*" { "Deletion rules and tombstone handling" }
+                "*Scenario4*" { "Deletion rules and attribute recall" }
                 "*Scenario5*" { "Matching rules and join logic" }
                 "*Scenario6*" { "Scheduler service end-to-end testing" }
                 "*Scenario8*" { "Cross-domain entitlement synchronisation" }
