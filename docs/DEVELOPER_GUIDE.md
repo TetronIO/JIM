@@ -189,7 +189,7 @@ Rules:
 - **Never compare raw byte arrays from different sources** - parse to `Guid` first, then compare
 - **Use `Guid.ToByteArray()` only for Microsoft-format targets** (AD, SQL Server) - RFC 4122 systems need byte-swapped first 3 components
 
-For full details and connector-specific guidance, see [`docs/plans/GUID_UUID_HANDLING.md`](plans/GUID_UUID_HANDLING.md).
+For full details and connector-specific guidance, see [`docs/plans/doing/GUID_UUID_HANDLING.md`](plans/doing/GUID_UUID_HANDLING.md).
 
 ### 3. Database & Migrations
 

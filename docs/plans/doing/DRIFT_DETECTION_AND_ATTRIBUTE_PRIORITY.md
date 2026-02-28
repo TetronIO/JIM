@@ -739,5 +739,5 @@ Legend: [*] = This rule contributes to N attributes that have multiple contribut
 
 - Issue #91: MV attribute priority
 - Issue #173: Scenario 8 drift detection tests
-- [OUTBOUND_SYNC_DESIGN.md](OUTBOUND_SYNC_DESIGN.md) - Related export evaluation design
-- [SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md](SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md) - Integration test scenarios
+- [OUTBOUND_SYNC_DESIGN.md](../done/OUTBOUND_SYNC_DESIGN.md) - Related export evaluation design
+- [SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md](../done/SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md) - Integration test scenarios

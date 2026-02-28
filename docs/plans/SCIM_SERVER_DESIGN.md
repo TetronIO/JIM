@@ -3,11 +3,11 @@
 - **Status:** Planned
 > **Issue**: #124
 > **Related Issues**: #123 (Event-Based Sync), #121 (Outbound Sync)
-> **Last Updated**: 2025-12-03
+> **Last Updated**: 2026-02-28
 
 ## Overview
 
-This document describes how JIM can act as a **SCIM 2.0 Server**, enabling external identity providers (Okta, Azure AD, OneLogin, etc.) to push identity changes directly to JIM. This transforms JIM into a **SCIM Hub** - aggregating identities from multiple SCIM sources and synchronising them to target systems.
+This document describes how JIM can act as a **SCIM 2.0 Server**, enabling external identity providers to push identity changes directly to JIM. This transforms JIM into a **SCIM Hub** - aggregating identities from multiple SCIM sources and synchronising them to target systems.
 
 ### What is SCIM?
 
@@ -19,7 +19,7 @@ SCIM (System for Cross-domain Identity Management) is a standard protocol (RFC 7
 ### Why SCIM Server for JIM?
 
 1. **Event-Based Inbound** - Eliminates polling; changes pushed in real-time
-2. **Enterprise Integration** - Major IdPs (Okta, Azure AD, Ping) support SCIM provisioning
+2. **Enterprise Integration** - Major IdPs support SCIM provisioning as a standard
 3. **Standards Compliance** - Well-defined spec reduces integration effort
 4. **JIM as Hub** - Aggregate from multiple SCIM sources into unified metaverse
 
@@ -108,13 +108,13 @@ Each SCIM source is configured as a **Connected System** with a special connecto
 ### Connected System Configuration
 
 ```
-Connected System: "Okta HR"
+Connected System: "HR Source"
 ├── Connector Type: SCIM Server
 ├── Settings:
-│   ├── Authentication Type: Bearer Token
-│   ├── Token Value: [encrypted]
+│   ├── Authentication Type: Bearer Token / OAuth 2.0 / Federated Identity Credential
+│   ├── Token Value: [encrypted] (for Bearer Token)
 │   ├── Allowed IP Ranges: [optional]
-│   └── SCIM Endpoint Path: /scim/v2/okta-hr  (auto-generated from system ID)
+│   └── SCIM Endpoint Path: /scim/v2/{systemId}  (auto-generated from system ID)
 │
 ├── Schema: (Fixed SCIM 2.0 schema)
 │   ├── User
@@ -159,9 +159,15 @@ public class ScimServerConnector : IConnector, IConnectorCapabilities, IConnecto
     {
         new() { Name = "Authentication", Type = ConnectedSystemSettingType.Heading },
         new() { Name = "Auth Type", Type = ConnectedSystemSettingType.DropDown,
-                DropDownValues = new() { "Bearer Token", "OAuth 2.0" } },
+                DropDownValues = new() { "Bearer Token", "OAuth 2.0", "Federated Identity Credential" } },
         new() { Name = "Bearer Token", Type = ConnectedSystemSettingType.StringEncrypted,
-                Description = "Token that SCIM clients must provide" },
+                Description = "Token that SCIM clients must provide (Bearer Token auth)" },
+        new() { Name = "Trusted Issuer URL", Type = ConnectedSystemSettingType.String,
+                Description = "OIDC issuer URL of the client's IdP (FIC auth)" },
+        new() { Name = "Expected Subject", Type = ConnectedSystemSettingType.String,
+                Description = "Expected 'sub' claim identifying the workload (FIC auth)" },
+        new() { Name = "Expected Audience", Type = ConnectedSystemSettingType.String,
+                Description = "Expected 'aud' claim for JIM's SCIM endpoint (FIC auth)" },
         new() { Name = "Security", Type = ConnectedSystemSettingType.Heading },
         new() { Name = "Allowed IP Ranges", Type = ConnectedSystemSettingType.String,
                 Description = "Optional: Comma-separated CIDR ranges (e.g., 10.0.0.0/8)" },
@@ -262,11 +268,63 @@ Authorization: Bearer <token-configured-in-connected-system>
 Content-Type: application/scim+json
 ```
 
-### Option 2: OAuth 2.0 (Enterprise)
+- Admin generates a token and configures it on the Connected System
+- SCIM client includes the token in the `Authorization` header
+- Simple but requires manual token rotation and secure storage at both ends
+
+### Option 2: OAuth 2.0 Client Credentials (Enterprise)
 
 For IdPs that use OAuth for SCIM:
 - JIM exposes token endpoint or validates tokens from IdP
-- More complex but more secure
+- More complex but eliminates long-lived bearer tokens in API calls
+
+### Option 3: Federated Identity Credential (Recommended)
+
+Federated Identity Credentials (FIC) enable **secretless machine-to-machine authentication** using workload identity federation. Instead of shared secrets, the SCIM client authenticates by presenting a signed JWT from its own trusted identity provider, which JIM validates cryptographically.
+
+**How it works:**
+
+```
++-------------------+       +-------------------+       +-----------+
+| SCIM Client       |       | Client's IdP      |       | JIM       |
+| (e.g. HR system   | ----> | (e.g. Keycloak,   | ----> | SCIM      |
+|  on Kubernetes)   |       |  K8s OIDC issuer,  |       | Server    |
++-------------------+       |  SPIRE, etc.)     |       +-----------+
+                            +-------------------+
+
+1. Client obtains a signed JWT from its own IdP
+2. Client presents JWT to JIM: Authorization: Bearer <idp-signed-jwt>
+3. JIM validates:
+   - Signature (via JWKS from the issuer's .well-known/openid-configuration)
+   - Issuer (iss) matches the configured trusted issuer
+   - Subject (sub) matches the configured allowed identity
+   - Audience (aud) matches JIM's SCIM endpoint identifier
+   - Token is not expired (exp)
+4. JIM authorises the request against the Connected System
+```
+
+**Connected System FIC Configuration:**
+
+| Setting | Description | Example |
+|---------|-------------|---------|
+| Trusted Issuer URL | The OIDC issuer URL of the client's IdP | `https://keycloak.internal/realms/infra` |
+| Expected Subject | The `sub` claim identifying the workload | `system:serviceaccount:hr:provisioner` |
+| Expected Audience | The `aud` claim for JIM's SCIM endpoint | `https://jim.example.org/scim` |
+
+**Standards underpinning FIC:**
+- OpenID Connect Core 1.0 (discovery, JWKS, JWT claims)
+- RFC 7523 — JWT Profile for OAuth 2.0 Client Authentication
+- RFC 8693 — OAuth 2.0 Token Exchange (for optional token exchange flow)
+- SPIFFE/SPIRE — platform-neutral workload identity (fully on-premises, no cloud dependencies)
+
+**Why FIC is recommended:**
+- **No shared secrets** — trust is established via cryptographic verification of signed tokens using public keys
+- **Short-lived tokens** — JWTs typically expire in 5–10 minutes, drastically reducing blast radius if intercepted
+- **Automatic rotation** — no manual credential rotation needed; tokens are ephemeral
+- **Strong audit trail** — each JWT uniquely identifies the calling workload through its claims
+- **Aligns with JIM's OIDC investment** — JIM already uses OIDC for PE/NPE authentication; FIC uses the same standards (JWT, JWKS, OIDC discovery)
+- **Works in air-gapped environments** — requires only network access to the IdP, which is on the same internal network as JIM and the SCIM client
+- **Industry standard** — supported by major platforms (Entra ID, GCP, Kubernetes, Keycloak 26.5+, SPIFFE/SPIRE)
 
 ### Authentication Flow
 
@@ -282,21 +340,57 @@ public class ScimAuthenticator : IScimAuthenticator
             return false;
 
         var authType = system.GetSettingValue("Auth Type");
-        var expectedToken = system.GetSettingValue("Bearer Token");
 
         // Extract Authorization header
         var authHeader = request.Headers.Authorization.FirstOrDefault();
         if (string.IsNullOrEmpty(authHeader))
             return false;
 
-        if (authType == "Bearer Token")
-        {
-            return authHeader.StartsWith("Bearer ") &&
-                   authHeader.Substring(7) == expectedToken;
-        }
+        if (!authHeader.StartsWith("Bearer "))
+            return false;
 
-        // OAuth validation would go here
-        return false;
+        var token = authHeader.Substring(7);
+
+        return authType switch
+        {
+            "Bearer Token" => ValidateBearerToken(system, token),
+            "Federated Identity Credential" => await ValidateFederatedCredentialAsync(system, token),
+            // OAuth validation would go here
+            _ => false
+        };
+    }
+
+    private bool ValidateBearerToken(ConnectedSystem system, string token)
+    {
+        var expectedToken = system.GetSettingValue("Bearer Token");
+        return token == expectedToken;
+    }
+
+    private async Task<bool> ValidateFederatedCredentialAsync(
+        ConnectedSystem system, string token)
+    {
+        var issuer = system.GetSettingValue("Trusted Issuer URL");
+        var expectedSubject = system.GetSettingValue("Expected Subject");
+        var expectedAudience = system.GetSettingValue("Expected Audience");
+
+        // Fetch JWKS from issuer's .well-known/openid-configuration
+        // Validate JWT signature, issuer, subject, audience, and expiry
+        var validationParameters = new TokenValidationParameters
+        {
+            ValidIssuer = issuer,
+            ValidAudience = expectedAudience,
+            // JWKS retrieved and cached from issuer's discovery endpoint
+        };
+
+        var handler = new JsonWebTokenHandler();
+        var result = await handler.ValidateTokenAsync(token, validationParameters);
+
+        if (!result.IsValid)
+            return false;
+
+        // Verify subject claim matches configured identity
+        var subject = result.ClaimsIdentity.FindFirst("sub")?.Value;
+        return subject == expectedSubject;
     }
 }
 ```
@@ -451,7 +545,7 @@ Admin configures sync rules to map SCIM attributes to MVO:
 
 ```
 Sync Rule: "SCIM User to MV Person"
-├── Source: Connected System "Okta HR", Object Type "User"
+├── Source: Connected System "HR Source", Object Type "User"
 ├── Target: Metaverse Object Type "Person"
 ├── Direction: Import
 ├── Join Rules:
@@ -599,15 +693,19 @@ This is correct per SCIM spec - clients are expected to create dependencies firs
 
 ### Q6: Do we need SCIM Bulk operations?
 
-**Standard SCIM (most IdPs):**
-- Single-object operations (POST, PATCH, DELETE one at a time)
-- Client handles ordering
-- Optional Bulk endpoint (rarely used by clients)
+RFC 7644 Section 3.7 defines an optional `/Bulk` endpoint that allows clients to send multiple operations in a single HTTP request.
 
-**Entra ID Inbound Provisioning API:**
-- Bulk-first approach with SCIM payloads
-- Uses `bulkId` for intra-batch references
-- Server handles dependency ordering
+**Standard SCIM client behaviour (most IdPs):**
+- Single-object operations (POST, PATCH, DELETE one at a time)
+- Client handles ordering of dependent objects
+- Bulk endpoint is optional and rarely used by mainstream SCIM clients
+
+**Why Bulk could be useful:**
+- Efficiency for initial data loads (batch creation of many users)
+- Atomic handling of inter-dependent objects via `bulkId` references (e.g. creating a user and their manager in one request)
+- Full RFC 7644 conformance
+
+**Example Bulk request (RFC 7644 Section 3.7):**
 
 ```json
 {
@@ -636,8 +734,8 @@ This is correct per SCIM spec - clients are expected to create dependencies firs
 
 | Phase | Scope | Rationale |
 |-------|-------|-----------|
-| **MVP** | Single-object only | Most IdPs (Okta, OneLogin, Ping) use single-object |
-| **Post-MVP** | Add Bulk endpoint | Required for Entra ID API-driven provisioning |
+| **MVP** | Single-object only | Mainstream SCIM clients use single-object operations |
+| **Post-MVP** | Add Bulk endpoint | RFC 7644 conformance; useful for initial data loads and batch provisioning |
 
 **Bulk implementation approach (post-MVP):**
 
@@ -680,7 +778,7 @@ public async Task<IActionResult> BulkOperation(Guid systemId, ScimBulkRequest re
 ### Phase 1: Core Infrastructure
 1. Create `ScimServerConnector` class
 2. Add SCIM schema definition (User, Group)
-3. Implement basic authentication (Bearer token)
+3. Implement authentication (Bearer token + Federated Identity Credential)
 4. Create `ScimController` with discovery endpoints
 
 ### Phase 2: User Operations
@@ -700,8 +798,8 @@ public async Task<IActionResult> BulkOperation(Guid systemId, ScimBulkRequest re
 ### Phase 4: Polish
 15. Enhanced filtering support
 16. Pagination
-17. Bulk operations (optional)
-18. OAuth 2.0 authentication (optional)
+17. Bulk operations (RFC 7644 Section 3.7, optional)
+18. OAuth 2.0 client credentials authentication (optional)
 19. IP allowlist enforcement
 
 ---
@@ -755,14 +853,15 @@ PATCH operation has 5 operations, 2 fail.
 - [ ] User CRUD operations
 - [ ] Group CRUD operations
 - [ ] Bearer token authentication
+- [ ] Federated Identity Credential authentication
 - [ ] SCIM error responses (RFC 7644 Section 3.12)
 - [ ] ETag support for concurrency
 
 ### Optional (Post-MVP)
 - [ ] SCIM filtering (full grammar)
 - [ ] Pagination with cursors
-- [ ] Bulk operations
-- [ ] OAuth 2.0 authentication
+- [ ] Bulk operations (RFC 7644 Section 3.7)
+- [ ] OAuth 2.0 client credentials authentication
 - [ ] Password management
 - [ ] Schema extensions
 
@@ -782,7 +881,7 @@ PATCH operation has 5 operations, 2 fail.
 
 ### Compliance Tests
 - Use existing SCIM compliance test suites
-- Test with real IdPs (Okta, Azure AD) in sandbox
+- Test with real IdPs in sandbox environments
 
 ---
 
@@ -793,4 +892,4 @@ PATCH operation has 5 operations, 2 fail.
 - [SCIM 2.0 Tutorial](http://www.simplecloud.info/)
 - Issue #123: Event-Based Synchronisation Support
 - Issue #121: Outbound Sync
-- [OUTBOUND_SYNC_DESIGN.md](OUTBOUND_SYNC_DESIGN.md) - Event-Based Sync Roadmap
+- [OUTBOUND_SYNC_DESIGN.md](done/OUTBOUND_SYNC_DESIGN.md) - Event-Based Sync Roadmap
