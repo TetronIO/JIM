@@ -1,8 +1,8 @@
 # Outbound Sync Design Document
 
 - **Status:** Done
-> **Issue**: #121
-> **Last Updated**: 2025-12-04
+- **Issue**: #121
+- **Last Updated**: 2026-02-28
 
 ## Overview
 
@@ -35,18 +35,25 @@ Outbound sync is the process of:
 3. Creating Pending Export records describing the required changes
 4. Executing those exports via the appropriate connector
 
-### Current State
+### Implementation Status
 
-JIM already has:
-- `PendingExport` model with `ChangeType` (Add, Update, Delete)
-- `PendingExportAttributeValueChange` for attribute-level changes
+All core outbound sync functionality has been implemented:
+
+- `PendingExport` model with `ChangeType` (Create, Update, Delete)
+- `PendingExportAttributeValueChange` for attribute-level changes with per-attribute confirmation tracking
 - Export sync rule direction (`SyncRuleDirection.Export`)
-- Pending export confirmation during Full Sync (verifying exports were applied)
+- `ExportEvaluationServer` — evaluates export rules and creates Pending Exports immediately when MVO changes (Q1)
+- `ExportExecutionServer` — executes Pending Exports via connectors with batching, retry, and parallel support
+- `PendingExportReconciliationService` — confirms exports via confirming import with per-attribute granularity
+- `SyncExportTaskProcessor` — processes Export run profiles in the Worker
+- CSO origin tracking via `JoinType.Provisioned` (Q2)
+- Circular sync prevention via `ContributedBySystem` (Q3)
+- Deferred reference resolution for out-of-order object provisioning
+- Parallel batch export processing with per-system `MaxExportParallelism` setting
+- LDAP connector async pipelining with configurable "Export Concurrency"
 
-What's missing:
-- Logic to detect MVO changes and create Pending Exports
-- Logic to execute Pending Exports via connectors
-- Tracking of CSO origin (was it provisioned by JIM or pre-existing?)
+**Not yet implemented:**
+- Sync Preview Mode / What-If Analysis (Issue #288)
 
 ---
 
@@ -312,7 +319,7 @@ EF Core's `DbContext` is **not thread-safe**. Using constructs like `Task.WhenAl
 
 The original MVP decision was sequential-only operations. Post-MVP, parallelism has been implemented across multiple axes with safe defaults (all default to sequential/1):
 
-**Implemented Parallelism (see `docs/plans/EXPORT_PERFORMANCE_OPTIMISATION.md`):**
+**Implemented Parallelism (see `docs/plans/done/EXPORT_PERFORMANCE_OPTIMISATION.md`):**
 
 1. **LDAP Connector Pipelining** (Phase 2) — Multiple LDAP operations execute concurrently within a single export batch:
    - Per-connector "Export Concurrency" setting (1-16, default 1)
@@ -337,7 +344,7 @@ The original MVP decision was sequential-only operations. Post-MVP, parallelism 
 
 **✅ DECISION: Sequential operations for MVP, parallelism implemented post-MVP with safe defaults.**
 
-See `docs/plans/EXPORT_PERFORMANCE_OPTIMISATION.md` for full implementation details.
+See `docs/plans/done/EXPORT_PERFORMANCE_OPTIMISATION.md` for full implementation details.
 
 ---
 
@@ -355,31 +362,31 @@ Event-Based synchronisation enables near-real-time identity propagation, where c
 The decision to evaluate exports **immediately when MVO changes** (Q1 Option A) creates an architecture that naturally supports both sync modes:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    UNIFIED SYNC ARCHITECTURE                                │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  INBOUND TRIGGER              PROCESSING              EXPORT EXECUTION      │
-│  ───────────────              ──────────              ────────────────      │
-│                                                                             │
-│  ┌─────────────┐                                                            │
-│  │ Scheduled   │──┐                                                         │
-│  │ Full/Delta  │  │                                                         │
-│  └─────────────┘  │         ┌──────────────┐      ┌─────────────────┐       │
-│                   ├────────>│   Inbound    │─────>│ Pending Exports │       │
-│  ┌─────────────┐  │         │   Sync       │      │    Created      │       │
-│  │ Webhook/    │  │         │  (Same code) │      └────────┬────────┘       │
-│  │ Notification│──┤         └──────────────┘               │                │
-│  └─────────────┘  │                                        │                │
-│                   │                               ┌────────┴────────┐       │
-│  ┌─────────────┐  │                               │                 │       │
-│  │ SCIM Push   │──┤                               ▼                 ▼       │
-│  │             │──┘                         ┌───────────┐     ┌───────────┐ │
-│  └─────────────┘                            │ Scheduled │     │ Immediate │ │
-│                                             │   Batch   │     │ Execute   │ │
-│                                             └───────────┘     └───────────┘ │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                    UNIFIED SYNC ARCHITECTURE                                 │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  INBOUND TRIGGER              PROCESSING              EXPORT EXECUTION       │
+│  ───────────────              ──────────              ────────────────       │
+│                                                                              │
+│  ┌──────────────┐                                                            │
+│  │ Scheduled    │──┐                                                         │
+│  │ Full/Delta   │  │                                                         │
+│  └──────────────┘  │         ┌──────────────┐      ┌─────────────────┐       │
+│                    ├────────>│   Inbound    │─────>│ Pending Exports │       │
+│  ┌──────────────┐  │         │   Sync       │      │    Created      │       │
+│  │ Webhook/     │  │         │  (Same code) │      └────────┬────────┘       │
+│  │ Notification │──┤         └──────────────┘               │                │
+│  └──────────────┘  │                                        │                │
+│                    │                               ┌────────┴────────┐       │
+│  ┌──────────────┐  │                               │                 │       │
+│  │ SCIM Push    │  │                               ▼                 ▼       │
+│  │              │──┘                         ┌───────────┐     ┌───────────┐ │
+│  └──────────────┘                            │ Scheduled │     │ Immediate │ │
+│                                              │   Batch   │     │ Execute   │ │
+│                                              └───────────┘     └───────────┘ │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Sync Mode Comparison
@@ -538,7 +545,7 @@ public async Task ExecutePendingExportsAsync(ConnectedSystem targetSystem)
 
     // Pass 1: Non-reference changes (parallel)
     var pass1Tasks = pendingExports
-        .Where(e => e.ChangeType == Add || HasNonReferenceChanges(e))
+        .Where(e => e.ChangeType == Create || HasNonReferenceChanges(e))
         .Select(e => ExecuteNonReferenceChangesAsync(e));
     await Task.WhenAll(pass1Tasks);
 
@@ -738,7 +745,7 @@ Outbound sync should be triggered by:
 ### 2. New MVO Creation (Projection)
 - New MVO created from inbound CSO
 - Evaluate export rules for provisioning to other systems
-- Create `PendingExport` with `ChangeType = Add` for each target system
+- Create `PendingExport` with `ChangeType = Create` for each target system
 
 ### 3. MVO Deletion
 - MVO is being deleted (via deletion rules or manually)
@@ -774,32 +781,58 @@ Outbound sync should be triggered by:
          │  Export Run Profile executes
          ▼
   ┌──────────────┐
-  │  Executing   │  Connector.Export() called
+  │  Executing   │  Connector.ExportAsync() called
   │              │
   └──────┬───────┘
          │
-    ┌────┴────┐
-    │         │
-    ▼         ▼
-┌────────┐ ┌────────┐
-│Success │ │ Failed │
-└───┬────┘ └───┬────┘
-    │          │
-    │          │  Retry? (if ErrorCount < MaxRetries)
-    │          ├──────────────────────────┐
-    │          │                          │
-    ▼          ▼                          ▼
-┌────────┐ ┌────────────┐          ┌──────────────┐
-│Exported│ │   Error    │          │ Back to      │
-│        │ │ (Manual)   │          │ Pending      │
-└───┬────┘ └────────────┘          └──────────────┘
-    │
-    │  Full Sync confirms CSO matches
-    ▼
-┌─────────┐
-│Confirmed│ -> Deleted
-│& Deleted│
-└─────────┘
+    ┌────┴────────────────┐
+    │                     │
+    ▼                     ▼
+┌────────────┐     ┌─────────────────────┐
+│  Success   │     │  Connector Failure  │
+└────┬───────┘     └─────────┬───────────┘
+     │                       │
+     ▼                       │  ErrorCount < MaxRetries?
+┌────────────┐          ┌────┴────┐
+│  Exported  │          │         │
+│            │          ▼         ▼
+└────┬───────┘   ┌─────────────┐  ┌────────────┐
+     │           │  Export Not │  │  Failed    │
+     │           │  Confirmed  │  │ (Manual)   │
+     │           │ (retryable) │  └────────────┘
+     │           └──────┬──────┘
+     │                  │  NextRetryAt expires
+     │                  │  -> back to Executing
+     │                  │
+     │  Confirming Import runs
+     │
+     ├────────────────────────────────┐
+     │                                │
+     ▼                                ▼
+┌──────────────────┐          ┌───────────────────────┐
+│ All attributes   │          │ Some attributes not   │
+│ confirmed        │          │ confirmed             │
+│                  │          │                       │
+│ -> PE deleted    │          │ -> ExportNotConfirmed │
+└──────────────────┘          │ (retryable)           │
+                              └──────────┬────────────┘
+                                         │
+                                    ┌────┴────┐
+                                    │         │
+                                    ▼         ▼
+                              ┌──────────┐  ┌──────────┐
+                              │  Retry   │  │  Failed  │
+                              │(re-export│  │ (max     │
+                              │ on next  │  │ retries) │
+                              │ run)     │  └──────────┘
+                              └──────────┘
+
+  Notes:
+  - Per-attribute confirmation: individual attribute changes track their own
+    status (Pending -> ExportedPendingConfirmation -> confirmed or Failed)
+  - Partial confirmation: 3 of 5 attributes match -> remove 3, keep 2 for retry
+  - Create-to-Update demotion: if a Create PE is partially confirmed (object
+    created but some attributes didn't take), the PE is demoted to Update
 ```
 
 ---
@@ -808,7 +841,7 @@ Outbound sync should be triggered by:
 
 Important distinction:
 
-### Provisioning (Add)
+### Provisioning (Create)
 - Creating a **new** CSO in a target system
 - Requires: External ID generation, all required attributes
 - JoinType: `Provisioned`
@@ -928,7 +961,7 @@ Based on the design decisions above, this is the implementation plan for outboun
 **Goal**: Set up the data model foundations for outbound sync.
 
 - [x] **1.1 Add enums to `PendingExportEnums.cs`**
-  - `PendingExportStatus`: Pending, Executing, Failed, Exported
+  - `PendingExportStatus`: Pending, ExportNotConfirmed, Executing, Failed, Exported
   - `SyncRunMode`: PreviewOnly, PreviewAndSync
 
 - [x] **1.2 Enhance `PendingExport.cs`**
@@ -1071,30 +1104,30 @@ Phase 4         Phase 5                              Phase 6
 
 ## Open Questions for Discussion
 
-1. **Should pending exports require approval by default, or be auto-executed?**
-   - Auto-execute is simpler, approval is safer
+1. ~~**Should pending exports require approval by default, or be auto-executed?**~~
+   - **Resolved**: Auto-execute is the implemented approach. Pending exports are created and executed automatically via Export run profiles. Approval workflows remain a future enhancement (see [Innovation Opportunities](#innovation-opportunities)).
 
-2. **How granular should export sync rules be?**
-   - Per-attribute rules vs. all-attributes-at-once
+2. ~~**How granular should export sync rules be?**~~
+   - **Resolved**: Per-attribute granularity is implemented. Each `SyncRuleMapping` maps individual attributes, and `PendingExportAttributeValueChange` tracks per-attribute confirmation status.
 
-3. **Should we support "disable before delete" pattern in MVP?**
+3. **Should we support "disable before delete" pattern?**
    - Common AD pattern: disable account, wait 30 days, then delete
+   - Not yet implemented. `OutboundDeprovisionAction` currently supports `Disconnect` and `Delete` only.
 
 4. **How do we handle provisioning to systems that require specific ID formats?**
    - AD needs DN, SAM, UPN
-   - Other systems have their own requirements
+   - **Partially resolved**: Expression-based mappings in sync rules support DN generation (e.g., `"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,DC=domain,DC=local"`). Other ID formats handled similarly via expressions.
 
-5. **Should export sync run as part of Full Sync, or as a separate run profile?**
-   - Combined is simpler, separate gives more control
+5. ~~**Should export sync run as part of Full Sync, or as a separate run profile?**~~
+   - **Resolved**: Export is a separate run profile (`ConnectedSystemRunType.Export = 5`). Export evaluation happens during inbound sync (Q1), but export execution is a separate run profile step.
 
 ---
 
-## Next Steps
+## Remaining Work
 
-1. Review and discuss this design document
-2. Agree on answers to key design questions
-3. Create detailed implementation tasks
-4. Begin TDD implementation
+1. Sync Preview Mode / What-If Analysis (Issue #288)
+2. "Disable before delete" deprovisioning pattern
+3. Event-Based Sync (see [Event-Based Sync Roadmap](#event-based-sync-roadmap))
 
 ---
 
@@ -1104,8 +1137,9 @@ Phase 4         Phase 5                              Phase 6
 - Issue #25: Pending Exports report feature
 - Issue #91: MV attribute priority
 - Issue #288: Sync Preview Mode (What-If Analysis)
-- Existing code: `SyncFullSyncTaskProcessor`, `PendingExport` model
+- Key implementation files: `ExportEvaluationServer`, `ExportExecutionServer`, `SyncExportTaskProcessor`, `SyncTaskProcessorBase`, `PendingExport` model
 
 ### Related Design Documents
 
 - [DRIFT_DETECTION_AND_ATTRIBUTE_PRIORITY.md](../doing/DRIFT_DETECTION_AND_ATTRIBUTE_PRIORITY.md) - Extends this design with drift detection (re-evaluating exports on inbound sync) and attribute priority (determining authoritative source for multi-contributor scenarios)
+- [EXPORT_PERFORMANCE_OPTIMISATION.md](EXPORT_PERFORMANCE_OPTIMISATION.md) - Parallelism and performance optimisation for export execution (Phase 2-4 of Q8)
