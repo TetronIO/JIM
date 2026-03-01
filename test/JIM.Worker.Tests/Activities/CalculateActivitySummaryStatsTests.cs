@@ -167,10 +167,10 @@ public class CalculateActivitySummaryStatsTests
     }
 
     [Test]
-    public void CalculateActivitySummaryStats_SyncRun_AbsorbedAttributeFlows_IncludedInTotal()
+    public void CalculateActivitySummaryStats_SyncRun_AbsorbedAttributeFlows_NotDoubleCountedWithJoins()
     {
-        // Arrange - A Joined RPEI that also caused 3 attribute flows (absorbed into the join)
-        // should count as 1 Joined AND 3 AttributeFlows
+        // Arrange - Joined RPEIs with attribute flows should NOT be counted in TotalAttributeFlows
+        // because joins inherently include attribute flow and are already counted in TotalJoined
         var activity = CreateActivity();
         AddRpeisAndCalculate(activity,
             CreateRpei(ObjectChangeType.Joined, attributeFlowCount: 3),
@@ -178,8 +178,8 @@ public class CalculateActivitySummaryStatsTests
 
         // Assert
         Assert.That(activity.TotalJoined, Is.EqualTo(2));
-        // Absorbed flows: 3 + 2 = 5 (no standalone AttributeFlow RPEIs)
-        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(5));
+        // Attribute flows absorbed into joins are not double-counted
+        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(0));
     }
 
     #endregion
@@ -310,26 +310,25 @@ public class CalculateActivitySummaryStatsTests
     #region Mixed Attribute Flow Counting
 
     [Test]
-    public void CalculateActivitySummaryStats_MixedAbsorbedAndStandaloneFlows_BothCounted()
+    public void CalculateActivitySummaryStats_MixedAbsorbedAndStandaloneFlows_OnlyStandaloneCounted()
     {
-        // Arrange - Both standalone AttributeFlow RPEIs and absorbed flows
-        // (via AttributeFlowCount on Joined/Projected RPEIs) contribute to TotalAttributeFlows
+        // Arrange - Only standalone AttributeFlow RPEIs contribute to TotalAttributeFlows.
+        // Attribute flows absorbed into Joined/Projected/Disconnected RPEIs are NOT counted
+        // because those change types are already counted in their own stats.
         var activity = CreateActivity();
         AddRpeisAndCalculate(activity,
-            // 3 standalone attribute flow RPEIs
+            // 3 standalone attribute flow RPEIs (3 objects)
             CreateRpei(ObjectChangeType.AttributeFlow),
             CreateRpei(ObjectChangeType.AttributeFlow),
             CreateRpei(ObjectChangeType.AttributeFlow),
-            // A Joined RPEI that also caused 4 absorbed attribute flows
+            // Joined/Projected/Disconnected RPEIs with absorbed flows — NOT counted in TotalAttributeFlows
             CreateRpei(ObjectChangeType.Joined, attributeFlowCount: 4),
-            // A Projected RPEI that also caused 2 absorbed attribute flows
             CreateRpei(ObjectChangeType.Projected, attributeFlowCount: 2),
-            // A Disconnected RPEI that also caused 1 absorbed attribute flow (attribute removal)
             CreateRpei(ObjectChangeType.Disconnected, attributeFlowCount: 1));
 
         // Assert
-        // Standalone: 3, Absorbed: 4 + 2 + 1 = 7, Total = 10
-        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(10));
+        // Only 3 standalone AttributeFlow RPEIs counted (absorbed flows excluded)
+        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(3));
 
         // Verify the primary types are still counted correctly
         Assert.That(activity.TotalJoined, Is.EqualTo(1));
@@ -338,25 +337,24 @@ public class CalculateActivitySummaryStatsTests
     }
 
     [Test]
-    public void CalculateActivitySummaryStats_CrossPageReferenceResolution_UsesAttributeFlowCount()
+    public void CalculateActivitySummaryStats_CrossPageReferenceResolution_CountsStandaloneOnly()
     {
-        // Arrange - Cross-page reference resolution creates AttributeFlow RPEIs with
-        // AttributeFlowCount set to the actual number of reference changes resolved.
-        // These should use the count (not just count as 1 each).
+        // Arrange - Cross-page reference resolution creates standalone AttributeFlow RPEIs.
+        // These are counted. Absorbed flows on Joined RPEIs are not.
         var activity = CreateActivity();
         AddRpeisAndCalculate(activity,
-            // 2 standalone AttributeFlow RPEIs without count (within-page, each counts as 1)
+            // 2 standalone AttributeFlow RPEIs without count (within-page, 2 objects)
             CreateRpei(ObjectChangeType.AttributeFlow),
             CreateRpei(ObjectChangeType.AttributeFlow),
-            // Cross-page resolution RPEIs with actual reference change counts
+            // Cross-page resolution RPEIs — standalone AttributeFlow (2 objects)
             CreateRpei(ObjectChangeType.AttributeFlow, attributeFlowCount: 15),
             CreateRpei(ObjectChangeType.AttributeFlow, attributeFlowCount: 8),
-            // A Joined RPEI with absorbed flows
+            // A Joined RPEI with absorbed flows — NOT counted in TotalAttributeFlows
             CreateRpei(ObjectChangeType.Joined, attributeFlowCount: 3));
 
         // Assert
-        // Standalone without count: 2, Cross-page with count: 15 + 8 = 23, Absorbed: 3, Total = 28
-        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(28));
+        // 4 standalone AttributeFlow RPEIs counted (joined excluded)
+        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(4));
         Assert.That(activity.TotalJoined, Is.EqualTo(1));
     }
 
@@ -407,7 +405,7 @@ public class CalculateActivitySummaryStatsTests
         // Assert
         Assert.That(activity.TotalDisconnected, Is.EqualTo(1));
         Assert.That(activity.TotalDeleted, Is.EqualTo(1));
-        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(3), "Absorbed attribute removals should be counted");
+        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(0), "Attribute recalls on disconnection are not standalone attribute flows");
     }
 
     [Test]
@@ -429,7 +427,7 @@ public class CalculateActivitySummaryStatsTests
         // Assert
         Assert.That(activity.TotalDisconnected, Is.EqualTo(3));
         Assert.That(activity.TotalDeleted, Is.EqualTo(3));
-        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(2), "Only absorbed flows from one Disconnected RPEI");
+        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(0), "Attribute recalls on disconnection are not standalone attribute flows");
     }
 
     #endregion
