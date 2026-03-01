@@ -62,7 +62,7 @@ I've uploaded a context document with detailed architecture, concepts, and curre
 
 ## Current Status
 
-JIM's core platform is complete and in active post-MVP development. Core sync (import, sync, export), scheduling, change history, and admin UI are all functional. Recent enhancements include export performance optimisation, granular activity stats, and compliance documentation.
+JIM's core platform is complete and in active post-MVP development. Core sync (import, sync, export), scheduling, change history, dashboard, and admin UI are all functional. Recent enhancements include worker database performance optimisation (raw SQL bulk operations), export performance optimisation, granular activity stats, CSO list filtering, and compliance documentation. Currently working on RPEI Outcome Graph (#363) for structured sync outcome tracking.
 ```
 
 ---
