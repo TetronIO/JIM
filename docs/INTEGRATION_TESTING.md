@@ -1796,49 +1796,6 @@ See full plan: [`docs/plans/done/SCENARIO_8_CROSS_DOMAIN_ENTITLEMENT_SYNC.md`](p
 
 2. **MetaverseAttribute.MetaverseObjectTypes null** - When updating attribute associations, the collection wasn't loaded. Added `GetMetaverseAttributeWithObjectTypesAsync` method to include navigation property.
 
-### Quick Start for New Session
-
-```powershell
-# 1. Start the full Docker stack (JIM + external systems)
-jim-stack
-docker compose -f docker-compose.integration-tests.yml up -d
-
-# 2. Wait for systems to be ready
-pwsh test/integration/Wait-SystemsReady.ps1
-
-# 3. Set up infrastructure API key (if not already done)
-pwsh test/integration/Setup-InfrastructureApiKey.ps1
-
-# 4. Run Scenario 1 setup (creates connected systems, sync rules, mappings)
-pwsh test/integration/Setup-Scenario1.ps1 -ApiKey "jim_ak_xxx" -Template Micro
-
-# 5. Run the full test scenario
-pwsh test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1 -ApiKey "jim_ak_xxx" -Template Micro
-
-# 6. Check logs if tests fail
-docker logs jim.worker --tail 100
-docker logs jim.web --tail 100
-```
-
-### Files Modified in This Branch
-
-**New Files:**
-- `test/JIM.Web.Api.Tests/SynchronisationControllerSchemaTests.cs` - 14 tests
-- `test/JIM.Web.Api.Tests/MetaverseControllerAttributeTests.cs` - 18 tests
-- `test/JIM.Web.Api.Tests/SynchronisationControllerMappingTests.cs` - 11 tests
-
-**Bug Fixes:**
-- `src/JIM.Application/Servers/ConnectedSystemServer.cs` - Activity.ConnectedSystemId for UPDATE operations
-- `src/JIM.Web/Controllers/Api/MetaverseController.cs` - Collection initialisation, eager loading for updates
-- `src/JIM.Models/Staging/ConnectedSystemObject.cs` - DisplayNameOrId FirstOrDefault fix
-- `src/JIM.Data/Repositories/IMetaverseRepository.cs` - Added GetMetaverseAttributeWithObjectTypesAsync
-- `src/JIM.PostgresData/Repositories/MetaverseRepository.cs` - Implemented GetMetaverseAttributeWithObjectTypesAsync
-- `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` - Added .Include() for AttributeValues in CSO retrieval methods
-
-**Integration Test Improvements:**
-- `test/integration/Setup-Scenario1.ps1` - Fixed API response property names (metaverseObjectTypes)
-- `test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1` - Added CSV reset and AD cleanup for repeatable tests
-
 ### Remaining Work
 
 1. **Complete Scenario 3** - GALSYNC (AD to CSV export) — stub script exists but not implemented
@@ -1891,6 +1848,7 @@ docker logs jim.web --tail 100
 
 | Version | Date       | Changes                                         |
 |---------|------------|-------------------------------------------------|
+| 2.4     | 2026-03-01 | Document cleanup: updated status to Phase 1 Complete, fixed appendix file structure to match reality, removed stale Scenario 2 and branch-specific sections, resolved Scenario 6/7 Legacy naming collision with active Scenario 6, updated status table. |
 | 2.3     | 2026-01-10 | Fixed Issue #280: Same-batch import deduplication. When duplicate external IDs detected in same batch, BOTH objects rejected with `DuplicateObject` error. Added unit tests. Test 3 now runs in All mode. |
 | 2.2     | 2026-01-10 | Scenario 5 matching rules complete. Added hrId (GUID) as external ID, Test 5 JoinConflict verifies CouldNotJoinDueToExistingJoin error. Documented same-batch import deduplication limitation (#280). |
 | 2.1     | 2026-01-10 | Scenario 2 blocker fixed (PR #279). Export now stores external ID with correct data type. Setup-Scenario2.ps1 updated to use objectGUID as external ID instead of sAMAccountName. |
