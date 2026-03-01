@@ -181,7 +181,6 @@ public static class Helpers
             ObjectChangeType.DriftCorrection => Color.Warning,
 
             // Export
-            ObjectChangeType.Provisioned => Color.Success,
             ObjectChangeType.Exported => Color.Info,
             ObjectChangeType.Deprovisioned => Color.Error,
 
@@ -454,7 +453,7 @@ public static class Helpers
             ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation =>
                 new[] { ObjectChangeType.Projected, ObjectChangeType.Joined, ObjectChangeType.AttributeFlow, ObjectChangeType.Disconnected, ObjectChangeType.Deleted },
             ConnectedSystemRunType.Export =>
-                new[] { ObjectChangeType.Provisioned, ObjectChangeType.Exported, ObjectChangeType.Deprovisioned },
+                new[] { ObjectChangeType.Exported, ObjectChangeType.Deprovisioned },
             _ => Array.Empty<ObjectChangeType>()
         };
     }
@@ -476,7 +475,6 @@ public static class Helpers
             ObjectChangeType.AttributeFlow => stats.TotalAttributeFlows,
             ObjectChangeType.Disconnected => stats.TotalDisconnections,
             // Export
-            ObjectChangeType.Provisioned => stats.TotalProvisioned,
             ObjectChangeType.Exported => stats.TotalExported,
             ObjectChangeType.Deprovisioned => stats.TotalDeprovisioned,
             _ => 0

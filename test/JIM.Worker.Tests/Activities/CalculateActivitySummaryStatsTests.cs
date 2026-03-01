@@ -86,7 +86,6 @@ public class CalculateActivitySummaryStatsTests
         Assert.That(activity.TotalDriftCorrections, Is.EqualTo(0));
 
         // Assert - Export stats
-        Assert.That(activity.TotalProvisioned, Is.EqualTo(0));
         Assert.That(activity.TotalExported, Is.EqualTo(0));
         Assert.That(activity.TotalDeprovisioned, Is.EqualTo(0));
 
@@ -126,7 +125,6 @@ public class CalculateActivitySummaryStatsTests
         Assert.That(activity.TotalProjected, Is.EqualTo(0));
         Assert.That(activity.TotalJoined, Is.EqualTo(0));
         Assert.That(activity.TotalAttributeFlows, Is.EqualTo(0));
-        Assert.That(activity.TotalProvisioned, Is.EqualTo(0));
         Assert.That(activity.TotalErrors, Is.EqualTo(0));
     }
 
@@ -161,7 +159,6 @@ public class CalculateActivitySummaryStatsTests
         Assert.That(activity.TotalAdded, Is.EqualTo(0));
         Assert.That(activity.TotalUpdated, Is.EqualTo(0));
         Assert.That(activity.TotalDeleted, Is.EqualTo(0));
-        Assert.That(activity.TotalProvisioned, Is.EqualTo(0));
         Assert.That(activity.TotalExported, Is.EqualTo(0));
         Assert.That(activity.TotalDeprovisioned, Is.EqualTo(0));
     }
@@ -187,21 +184,20 @@ public class CalculateActivitySummaryStatsTests
     #region Export Stats
 
     [Test]
-    public void CalculateActivitySummaryStats_ExportRun_CountsProvisionedExportedDeprovisioned()
+    public void CalculateActivitySummaryStats_ExportRun_CountsExportedDeprovisioned()
     {
         // Arrange
         var activity = CreateActivity();
         AddRpeisAndCalculate(activity,
-            CreateRpei(ObjectChangeType.Provisioned),
-            CreateRpei(ObjectChangeType.Provisioned),
+            CreateRpei(ObjectChangeType.Exported),
+            CreateRpei(ObjectChangeType.Exported),
             CreateRpei(ObjectChangeType.Exported),
             CreateRpei(ObjectChangeType.Exported),
             CreateRpei(ObjectChangeType.Exported),
             CreateRpei(ObjectChangeType.Deprovisioned));
 
         // Assert
-        Assert.That(activity.TotalProvisioned, Is.EqualTo(2));
-        Assert.That(activity.TotalExported, Is.EqualTo(3));
+        Assert.That(activity.TotalExported, Is.EqualTo(5));
         Assert.That(activity.TotalDeprovisioned, Is.EqualTo(1));
 
         // Verify import and sync categories remain zero

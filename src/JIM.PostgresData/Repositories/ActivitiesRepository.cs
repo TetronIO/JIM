@@ -572,7 +572,6 @@ public class ActivityRepository : IActivityRepository
         var totalCreated = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Created).Sum(x => x.Count);
 
         // Export stats
-        var totalProvisioned = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Provisioned).Sum(x => x.Count);
         var totalExported = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Exported).Sum(x => x.Count);
         var totalDeprovisioned = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deprovisioned).Sum(x => x.Count);
 
@@ -620,7 +619,6 @@ public class ActivityRepository : IActivityRepository
             TotalCreated = totalCreated,
 
             // Export stats
-            TotalProvisioned = totalProvisioned,
             TotalExported = totalExported,
             TotalDeprovisioned = totalDeprovisioned,
 
