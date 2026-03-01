@@ -77,7 +77,9 @@ try
     // Blazor Server pre-rendering and interactive rendering can happen concurrently
     builder.Services.AddDbContextFactory<JimDbContext>(options =>
         options.UseNpgsql(connectionString)
-            .ConfigureWarnings(warnings => warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
+            .ConfigureWarnings(warnings => warnings.Ignore(
+                Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning,
+                Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.MultipleCollectionIncludeWarning)));
 
     // Register repository and application as transient to prevent DbContext concurrency issues
     // In Blazor Server, multiple async operations within a page can run concurrently

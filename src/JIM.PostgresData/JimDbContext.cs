@@ -122,7 +122,9 @@ public class JimDbContext : DbContext
         if (!optionsBuilder.IsConfigured && _connectionString != null)
         {
             optionsBuilder.UseNpgsql(_connectionString)
-                .ConfigureWarnings(warnings => warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+                .ConfigureWarnings(warnings => warnings.Ignore(
+                    Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning,
+                    Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.MultipleCollectionIncludeWarning));
         }
     }
 
