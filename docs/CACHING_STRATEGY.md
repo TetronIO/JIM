@@ -1,5 +1,11 @@
 # CSO Lookup Cache Strategy
 
+| | |
+|---|---|
+| **Created** | 2026-02-22 |
+| **Last Updated** | 2026-02-28 |
+| **Status** | Active |
+
 This document describes the Connected System Object (CSO) lookup cache used by the JIM Worker to eliminate per-object database round-trips during import processing.
 
 ## Overview
