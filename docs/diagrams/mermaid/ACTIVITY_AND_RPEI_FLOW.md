@@ -116,7 +116,7 @@ flowchart TD
     ProcessResults --> PerExport{For each<br/>export result}
 
     PerExport --> Outcome{Export<br/>outcome?}
-    Outcome -->|Create succeeded| ProvRPEI[RPEI: ObjectChangeType = Provisioned]
+    Outcome -->|Create succeeded| ProvRPEI[RPEI: ObjectChangeType = Exported]
     Outcome -->|Update succeeded| ExpRPEI[RPEI: ObjectChangeType = Exported]
     Outcome -->|Delete succeeded| DeprovRPEI[RPEI: ObjectChangeType = Deprovisioned]
     Outcome -->|Failed| FailRPEI[RPEI: ErrorType = UnhandledError<br/>Error message + retry count]

@@ -22,7 +22,7 @@ flowchart TD
     CancelMsg --> Done
 
     CheckCancel -->|No| Execute[ExportExecutionServer.ExecuteExportsAsync<br/>See Export Execution below]
-    Execute --> ProcessResult[ProcessExportResultAsync<br/>Create RPEIs for each export:<br/>- Create --> Provisioned<br/>- Update --> Exported<br/>- Delete --> Deprovisioned<br/>- Failed --> UnhandledError with retry count]
+    Execute --> ProcessResult[ProcessExportResultAsync<br/>Create RPEIs for each export:<br/>- Create --> Exported<br/>- Update --> Exported<br/>- Delete --> Deprovisioned<br/>- Failed --> UnhandledError with retry count]
 
     ProcessResult --> CheckContainers{New containers<br/>created during export?}
     CheckContainers -->|Yes| AutoSelect[Auto-select new containers<br/>Refresh and select containers<br/>by created external IDs<br/>Ensures they appear in future imports]
@@ -91,7 +91,7 @@ flowchart TD
     CallConnector --> ProcessResults[For each export + result pair]
     ProcessResults --> CheckResult{Export<br/>succeeded?}
 
-    CheckResult -->|Yes, Create| HandleCreate[Record Provisioned<br/>Capture new external ID<br/>from ExportResult<br/>Set Status = Exported]
+    CheckResult -->|Yes, Create| HandleCreate[Record Exported<br/>Capture new external ID<br/>from ExportResult<br/>Set Status = Exported]
     CheckResult -->|Yes, Update| HandleUpdate[Record Exported<br/>Set Status = Exported]
     CheckResult -->|Yes, Delete| HandleDelete[Record Deprovisioned<br/>Delete pending export<br/>Delete CSO]
     CheckResult -->|Failed| HandleFail[Increment ErrorCount<br/>Set error message<br/>Calculate NextRetryAt<br/>with exponential backoff]

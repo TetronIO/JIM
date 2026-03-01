@@ -15,7 +15,7 @@ This gives administrators immediate visibility into what happened and why, from 
 ## Business Value
 
 - **Full story per object**: Click into any RPEI and see the complete causal chain — no cross-referencing between activities
-- **At-a-glance list view**: Stat chips on each row show outcomes (Projected, Attribute Flow, Provisioned ×2) without drilling in
+- **At-a-glance list view**: Stat chips on each row show outcomes (Projected, Attribute Flow, Exported ×2) without drilling in
 - **Accurate statistics**: Aggregate counts derived from outcome types across all trees (e.g., total provisions = sum of provisioning outcomes across all RPEIs, spanning target systems)
 - **Sync Preview foundation**: The outcome graph model is the "what actually happened" counterpart to the Sync Preview "what would happen" model (#288) — same data structure, shared logic
 - **Configurable granularity**: Administrators control how much detail is stored, balancing audit depth against storage and performance
@@ -26,7 +26,7 @@ This gives administrators immediate visibility into what happened and why, from 
 
 Each `ActivityRunProfileExecutionItem` is a flat record:
 - One per CSO per activity
-- Single `ObjectChangeType` enum (Added, Joined, Projected, AttributeFlow, Provisioned, etc.)
+- Single `ObjectChangeType` enum (Added, Joined, Projected, AttributeFlow, Exported, etc.)
 - Optional `AttributeFlowCount` for absorbed flows
 - Optional navigation to `ConnectedSystemObjectChange` / `MetaverseObjectChange` for attribute-level detail
 - `ExternalIdSnapshot` for identity preservation after CSO deletion
@@ -109,10 +109,10 @@ public enum SyncOutcomeType
     MvoDeleted,
 
     // Sync outcomes — outbound (pending export creation during sync)
+    Provisioned,
     PendingExportCreated,
 
     // Export execution outcomes
-    Provisioned,
     Exported,
     Deprovisioned
 }
@@ -152,9 +152,7 @@ RPEI: CSO "EMP002" (HR System)
 ```
 RPEI: CSO "CN=jsmith,OU=Staff,DC=ad,DC=local" (Active Directory)
   |
-  +-- [Provisioned] CSO created in AD
-        |
-        +-- [Exported] 8 attributes written
+  +-- [Exported] CSO created in AD, 8 attributes written
 ```
 
 **Import: New objects from source**
@@ -206,7 +204,7 @@ Description: "Controls how much detail is recorded for sync outcome
 | Level | What's Recorded | Use Case |
 |-------|----------------|----------|
 | **None** | No outcome tree — RPEI `ObjectChangeType` only (legacy behaviour) | Maximum performance, minimal storage |
-| **Standard** | Root-level outcomes only (Projected, Joined, Provisioned, etc.) — no nested children | Stat chips on list view, basic causal visibility |
+| **Standard** | Root-level outcomes only (Projected, Joined, Exported, etc.) — no nested children | Stat chips on list view, basic causal visibility |
 | **Detailed** | Full tree with nested children (Projected → AttributeFlow → PendingExportCreated per system) | Default. Full audit trail, debugging, compliance |
 
 **Detailed** is the default — it provides the complete causal chain needed for debugging, audit, and compliance. **Standard** can be used in high-volume environments where storage is a concern, and **None** preserves legacy behaviour with zero overhead.
@@ -223,7 +221,7 @@ At **None** tracking level, the system behaves exactly as today. At **Standard**
 
 #### List View Denormalisation
 
-For the activity detail table, each RPEI row should show small stat chips for its root-level outcomes (e.g., `[Projected] [Attr Flow: 12] [Provisioned ×2]`). To avoid joining to the outcomes table on every paginated query:
+For the activity detail table, each RPEI row should show small stat chips for its root-level outcomes (e.g., `[Projected] [Attr Flow: 12] [Exported ×2]`). To avoid joining to the outcomes table on every paginated query:
 
 **Option A — Denormalised summary field**: Store a bitmask or compact representation directly on the RPEI (e.g., `OutcomeSummary` column). Maintained during sync when outcomes are built. Keeps the list query fast.
 
@@ -253,7 +251,7 @@ GROUP BY OutcomeType
 
 Or equivalently via join.
 
-**Key semantic change for provisions**: If 10 objects are each provisioned into 2 connected systems, the "Provisioned" stat shows **20** — the total number of provisioning actions across target systems. This is the meaningful number for operators ("how many CSOs were created in target systems").
+**Key semantic change for exports**: If 10 objects are each exported to 2 connected systems, the "Exported" stat shows **20** — the total number of export actions across target systems. This is the meaningful number for operators ("how many CSOs were exported to target systems").
 
 The current `TotalObjectsProcessed` / `TotalObjectChangeCount` concepts remain. Individual outcome-type totals replace the current `ObjectChangeType`-based counts.
 
@@ -268,7 +266,7 @@ The `Activity` model's denormalised stat fields (e.g., `TotalProjected`, `TotalJ
 Each RPEI row shows:
 - External ID, Display Name, Object Type (as today)
 - Primary `ObjectChangeType` (as today)
-- **New**: Outcome stat chips derived from `OutcomeSummary` — e.g., `[Projected] [Attr Flow: 12] [Provisioned ×2]`
+- **New**: Outcome stat chips derived from `OutcomeSummary` — e.g., `[Projected] [Attr Flow: 12] [Exported ×2]`
 - Error indicator (as today)
 
 #### Activity Detail Filter Controls
@@ -332,7 +330,7 @@ The richest graph. The processor already tracks decisions through `MetaverseObje
 ### Export Processor
 
 Creates outcome nodes for export execution results:
-- Root: `Provisioned` / `Exported` / `Deprovisioned`
+- Root: `Exported` / `Deprovisioned`
 - Children (Detailed only): attribute-level export detail
 
 ## Database Migration

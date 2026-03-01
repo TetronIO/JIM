@@ -75,7 +75,7 @@ flowchart LR
         GetExecutable[Get executable PEs:<br/>Status = Pending or<br/>ExportNotConfirmed<br/>NextRetryAt <= now] --> MarkExec[Mark batch:<br/>Status = Executing]
         MarkExec --> ConnExport[Connector executes<br/>export operations]
         ConnExport --> Success{Success?}
-        Success -->|Yes, Create| ProvResult[Status = Exported<br/>Capture new external ID<br/>RPEI: Provisioned]
+        Success -->|Yes, Create| ProvResult[Status = Exported<br/>Capture new external ID<br/>RPEI: Exported]
         Success -->|Yes, Update| ExpResult[Status = Exported<br/>RPEI: Exported]
         Success -->|Yes, Delete| DeprovResult[Delete PE + CSO<br/>RPEI: Deprovisioned]
         Success -->|No| FailResult[Increment ErrorCount<br/>Set NextRetryAt<br/>Status = ExportNotConfirmed]
