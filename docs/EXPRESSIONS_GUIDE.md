@@ -1,5 +1,11 @@
 # Expression Language Guide
 
+| | |
+|---|---|
+| **Created** | 2026-01-22 |
+| **Last Updated** | 2026-02-20 |
+| **Status** | Active |
+
 This guide covers JIM's expression language — a simple, readable syntax for transforming and mapping identity attributes in sync rules. No programming experience is required.
 
 ## Overview
