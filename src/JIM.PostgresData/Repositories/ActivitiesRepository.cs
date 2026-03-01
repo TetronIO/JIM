@@ -729,6 +729,11 @@ public class ActivityRepository : IActivityRepository
 
             await BulkInsertRpeisRawAsync(rpeis);
 
+            // Bulk insert sync outcomes for all RPEIs (within the same transaction)
+            var allOutcomes = rpeis.SelectMany(r => FlattenSyncOutcomes(r)).ToList();
+            if (allOutcomes.Count > 0)
+                await BulkInsertSyncOutcomesRawAsync(allOutcomes);
+
             if (transaction != null)
                 await transaction.CommitAsync();
 
@@ -763,6 +768,11 @@ public class ActivityRepository : IActivityRepository
             if (untracked.Count > 0)
                 Repository.Database.AddRange(untracked);
 
+            // Also explicitly add sync outcomes for the EF fallback path
+            var allOutcomes = rpeis.SelectMany(r => FlattenSyncOutcomes(r)).ToList();
+            if (allOutcomes.Count > 0)
+                Repository.Database.AddRange(allOutcomes);
+
             return false; // EF fallback used — RPEIs tracked by EF via AddRange
         }
         finally
@@ -795,13 +805,13 @@ public class ActivityRepository : IActivityRepository
     /// </summary>
     private async Task BulkInsertRpeisRawAsync(List<ActivityRunProfileExecutionItem> rpeis)
     {
-        const int columnsPerRow = 11;
+        const int columnsPerRow = 12;
         var chunkSize = MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in ChunkList(rpeis, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""ActivityRunProfileExecutionItems"" (""Id"", ""ActivityId"", ""ObjectChangeType"", ""NoChangeReason"", ""ConnectedSystemObjectId"", ""ExternalIdSnapshot"", ""DataSnapshot"", ""ErrorType"", ""ErrorMessage"", ""ErrorStackTrace"", ""AttributeFlowCount"") VALUES ");
+            sql.Append(@"INSERT INTO ""ActivityRunProfileExecutionItems"" (""Id"", ""ActivityId"", ""ObjectChangeType"", ""NoChangeReason"", ""ConnectedSystemObjectId"", ""ExternalIdSnapshot"", ""DataSnapshot"", ""ErrorType"", ""ErrorMessage"", ""ErrorStackTrace"", ""AttributeFlowCount"", ""OutcomeSummary"") VALUES ");
 
             // Use NpgsqlParameter objects with explicit NpgsqlDbType for nullable columns.
             // EF Core's RawSqlCommandBuilder passes DbParameter objects through directly to the
@@ -811,7 +821,7 @@ public class ActivityRepository : IActivityRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10})");
+                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10}, @p{offset + 11})");
 
                 var rpei = chunk[i];
                 parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = rpei.Id });
@@ -825,9 +835,78 @@ public class ActivityRepository : IActivityRepository
                 parameters.Add(new NpgsqlParameter($"p{offset + 8}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ErrorMessage ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 9}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ErrorStackTrace ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 10}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)rpei.AttributeFlowCount ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 11}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.OutcomeSummary ?? DBNull.Value });
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
+    }
+
+    /// <summary>
+    /// Bulk inserts ActivityRunProfileExecutionItemSyncOutcome rows using parameterised multi-row INSERT.
+    /// Chunks automatically to stay within the PostgreSQL parameter limit.
+    /// </summary>
+    private async Task BulkInsertSyncOutcomesRawAsync(List<ActivityRunProfileExecutionItemSyncOutcome> outcomes)
+    {
+        const int columnsPerRow = 9;
+        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+
+        foreach (var chunk in ChunkList(outcomes, chunkSize))
+        {
+            var sql = new System.Text.StringBuilder();
+            sql.Append(@"INSERT INTO ""ActivityRunProfileExecutionItemSyncOutcomes"" (""Id"", ""ActivityRunProfileExecutionItemId"", ""ParentSyncOutcomeId"", ""OutcomeType"", ""TargetEntityId"", ""TargetEntityDescription"", ""DetailCount"", ""DetailMessage"", ""Ordinal"") VALUES ");
+
+            var parameters = new List<NpgsqlParameter>();
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                if (i > 0) sql.Append(", ");
+                var offset = i * columnsPerRow;
+                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8})");
+
+                var outcome = chunk[i];
+                parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = outcome.Id });
+                parameters.Add(new NpgsqlParameter($"p{offset + 1}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = outcome.ActivityRunProfileExecutionItemId });
+                parameters.Add(new NpgsqlParameter($"p{offset + 2}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)outcome.ParentSyncOutcomeId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 3}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)outcome.OutcomeType });
+                parameters.Add(new NpgsqlParameter($"p{offset + 4}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)outcome.TargetEntityId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 5}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)outcome.TargetEntityDescription ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 6}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)outcome.DetailCount ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 7}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)outcome.DetailMessage ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 8}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = outcome.Ordinal });
+            }
+
+            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
+    }
+
+    /// <summary>
+    /// Flattens the sync outcome tree for an RPEI into a list, pre-generating IDs
+    /// and setting FK references for bulk insertion.
+    /// </summary>
+    private static List<ActivityRunProfileExecutionItemSyncOutcome> FlattenSyncOutcomes(ActivityRunProfileExecutionItem rpei)
+    {
+        var result = new List<ActivityRunProfileExecutionItemSyncOutcome>();
+        FlattenOutcomesRecursive(rpei.SyncOutcomes, rpei.Id, null, result);
+        return result;
+    }
+
+    private static void FlattenOutcomesRecursive(
+        List<ActivityRunProfileExecutionItemSyncOutcome> outcomes,
+        Guid rpeiId,
+        Guid? parentId,
+        List<ActivityRunProfileExecutionItemSyncOutcome> result)
+    {
+        foreach (var outcome in outcomes)
+        {
+            if (outcome.Id == Guid.Empty)
+                outcome.Id = Guid.NewGuid();
+
+            outcome.ActivityRunProfileExecutionItemId = rpeiId;
+            outcome.ParentSyncOutcomeId = parentId;
+            result.Add(outcome);
+
+            if (outcome.Children.Count > 0)
+                FlattenOutcomesRecursive(outcome.Children, rpeiId, outcome.Id, result);
         }
     }
 

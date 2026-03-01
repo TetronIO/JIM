@@ -16,6 +16,7 @@ public class JimDbContext : DbContext
 {
     public virtual DbSet<Activity> Activities { get; set; } = null!;
     public virtual DbSet<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; set; } = null!;
+    public virtual DbSet<ActivityRunProfileExecutionItemSyncOutcome> ActivityRunProfileExecutionItemSyncOutcomes { get; set; } = null!;
     public virtual DbSet<ClearConnectedSystemObjectsWorkerTask> ClearConnectedSystemObjectsTasks { get; set; } = null!;
     public virtual DbSet<ConnectedSystem> ConnectedSystems { get; set; } = null!;
     public virtual DbSet<ConnectedSystemContainer> ConnectedSystemContainers { get; set; } = null!;
@@ -145,6 +146,22 @@ public class JimDbContext : DbContext
             .HasMany(cso => cso.Changes)
             .WithOne(c => c.ConnectedSystemObject)
             .OnDelete(DeleteBehavior.SetNull); // let the db clear the fk value to the CSO.
+
+        // ActivityRunProfileExecutionItemSyncOutcome: cascade delete when parent RPEI is deleted
+        modelBuilder.Entity<ActivityRunProfileExecutionItem>()
+            .HasMany(rpei => rpei.SyncOutcomes)
+            .WithOne(o => o.ActivityRunProfileExecutionItem)
+            .HasForeignKey(o => o.ActivityRunProfileExecutionItemId)
+            .OnDelete(DeleteBehavior.Cascade)
+            .HasConstraintName("FK_SyncOutcomes_ActivityRunProfileExecutionItems");
+
+        // Self-referential tree: set parent to null when parent outcome is deleted
+        modelBuilder.Entity<ActivityRunProfileExecutionItemSyncOutcome>()
+            .HasOne(o => o.ParentSyncOutcome)
+            .WithMany(o => o.Children)
+            .HasForeignKey(o => o.ParentSyncOutcomeId)
+            .OnDelete(DeleteBehavior.SetNull)
+            .HasConstraintName("FK_SyncOutcomes_ParentSyncOutcome");
         
         modelBuilder.Entity<ConnectedSystemObjectChange>()
             .HasMany(cso => cso.AttributeChanges)
@@ -320,6 +337,15 @@ public class JimDbContext : DbContext
             .HasIndex(a => a.Created)
             .HasDatabaseName("IX_Activities_Created")
             .IsDescending(true);
+
+        // Sync outcome indexes for RPEI detail loading and aggregate stats queries
+        modelBuilder.Entity<ActivityRunProfileExecutionItemSyncOutcome>()
+            .HasIndex(o => o.ActivityRunProfileExecutionItemId)
+            .HasDatabaseName("IX_ActivityRunProfileExecutionItemSyncOutcomes_ActivityRunProfileExecutionItemId");
+
+        modelBuilder.Entity<ActivityRunProfileExecutionItemSyncOutcome>()
+            .HasIndex(o => new { o.ActivityRunProfileExecutionItemId, o.OutcomeType })
+            .HasDatabaseName("IX_ActivityRunProfileExecutionItemSyncOutcomes_RpeiId_OutcomeType");
 
         // Performance index for metaverse object deletion automation
         // Optimises GetMetaverseObjectsEligibleForDeletionAsync queries

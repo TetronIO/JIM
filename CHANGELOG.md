@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sortable columns on Attribute Flow table
 - Synchronisation Rules quick link on homepage dashboard
 - `Get-JIMMetaverseObject -All` switch to automatically paginate through all results
+- RPEI Sync Outcome Graph data model — `ActivityRunProfileExecutionItemSyncOutcome` entity with self-referential tree structure for recording causal chains per RPEI (#363)
+- Sync outcome tracking level service setting (`ChangeTracking.SyncOutcomes.Level`) with None/Standard/Detailed granularity control
+- Bulk insert support for sync outcome trees alongside RPEIs
 
 ### Changed
 - Consolidated `ObjectChangeType.Provisioned` into `ObjectChangeType.Exported` — "Provisioned" is now reserved for the sync-phase concept (adding an MVO to a CS for the first time via `SyncOutcome`), while all export-phase operations use `Exported` regardless of whether the object was newly created or updated in the target system

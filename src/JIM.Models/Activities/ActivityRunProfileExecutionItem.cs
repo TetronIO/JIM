@@ -83,6 +83,21 @@ public class ActivityRunProfileExecutionItem
     /// </summary>
     public int? AttributeFlowCount { get; set; }
 
+    /// <summary>
+    /// Denormalised summary of sync outcome types for fast list-view rendering.
+    /// Comma-separated outcome types with counts, e.g., "Projected:1,AttributeFlow:12,PendingExportCreated:2".
+    /// Populated during outcome tree construction — no separate maintenance path.
+    /// Null when no outcome tracking is configured or for legacy RPEIs.
+    /// </summary>
+    public string? OutcomeSummary { get; set; }
+
+    /// <summary>
+    /// The structured causal graph of sync outcomes for this RPEI.
+    /// Each root outcome can have nested children forming a tree that tells the complete
+    /// story of what happened when this CSO was processed.
+    /// </summary>
+    public List<ActivityRunProfileExecutionItemSyncOutcome> SyncOutcomes { get; set; } = [];
+
     public ConnectedSystemObjectAttributeValue? GetExternalIdAttributeValue()
     {
         // try and get an external id for the target object
