@@ -8,7 +8,7 @@
 
 ## Overview
 
-Restructure Run Profile Execution Items (RPEIs) so that each RPEI records a structured graph of **causal outcomes** — the full chain of consequences that resulted from processing a single Connected System Object. Today, RPEIs are flat records with a single `ObjectChangeType`. This design replaces that with a tree of `SyncOutcome` nodes that tells the complete story: "this CSO was projected, which caused attribute flow of 12 attributes, which caused provisioning into AD and LDAP."
+Restructure Run Profile Execution Items (RPEIs) so that each RPEI records a structured graph of **causal outcomes** — the full chain of consequences that resulted from processing a single Connected System Object. Today, RPEIs are flat records with a single `ObjectChangeType`. This design replaces that with a tree of `ActivityRunProfileExecutionItemSyncOutcome` nodes that tells the complete story: "this CSO was projected, which caused attribute flow of 12 attributes, which caused provisioning into AD and LDAP."
 
 This gives administrators immediate visibility into what happened and why, from a single row in the activity detail view.
 
@@ -45,12 +45,12 @@ Each activity type (import, sync, export) records its own causal graph within it
 
 This avoids cross-activity writes (which would complicate concurrency and the bulk-insert model) while still giving each activity a complete story within its operational scope.
 
-### New Entity: `SyncOutcome`
+### New Entity: `ActivityRunProfileExecutionItemSyncOutcome`
 
 New table with self-referential parent/child FK for tree structure:
 
 ```csharp
-public class SyncOutcome
+public class ActivityRunProfileExecutionItemSyncOutcome
 {
     [Key]
     public Guid Id { get; set; }
@@ -61,11 +61,11 @@ public class SyncOutcome
 
     // Self-referential tree (null = root outcome)
     public Guid? ParentSyncOutcomeId { get; set; }
-    public SyncOutcome? ParentSyncOutcome { get; set; }
-    public List<SyncOutcome> Children { get; set; } = [];
+    public ActivityRunProfileExecutionItemSyncOutcome? ParentSyncOutcome { get; set; }
+    public List<ActivityRunProfileExecutionItemSyncOutcome> Children { get; set; } = [];
 
     // What happened
-    public SyncOutcomeType OutcomeType { get; set; }
+    public ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType { get; set; }
 
     // Target entity context (MVO ID, target CSO ID, connected system ID, etc.)
     public Guid? TargetEntityId { get; set; }
@@ -84,12 +84,12 @@ public class SyncOutcome
 }
 ```
 
-### New Enum: `SyncOutcomeType`
+### New Enum: `ActivityRunProfileExecutionItemSyncOutcomeType`
 
 Covers all three run profile types:
 
 ```csharp
-public enum SyncOutcomeType
+public enum ActivityRunProfileExecutionItemSyncOutcomeType
 {
     // Import outcomes
     CsoAdded,
@@ -167,16 +167,16 @@ RPEI: CSO "EMP001" (HR System)
 
 ### Synergy with Sync Preview (#288)
 
-The `SyncOutcome` model serves both purposes:
+The `ActivityRunProfileExecutionItemSyncOutcome` model serves both purposes:
 
 - **Actual sync**: Build the outcome tree during processing, persist it against the RPEI
 - **Sync Preview**: Build the same tree speculatively (without persisting), return it for display
 
-The `SyncPreviewServer` from #288 and the sync processors share the same outcome model and tree-building logic. The difference is whether outcomes are committed to the database or returned as a preview result. This means implementing the outcome graph is a prerequisite for — and directly enables — sync preview functionality.
+The `SyncPreviewServer` from #288 and the sync processors share the same `ActivityRunProfileExecutionItemSyncOutcome` model and tree-building logic. The difference is whether outcomes are committed to the database or returned as a preview result. This means implementing the outcome graph is a prerequisite for — and directly enables — sync preview functionality.
 
 ```
 SyncPreviewResult
-  └── List<SyncOutcome>   <-- same model, built speculatively
+  └── List<ActivityRunProfileExecutionItemSyncOutcome>   <-- same model, built speculatively
         ├── Projected → MVO
         │     └── AttributeFlow → 12 attributes
         │           ├── PendingExportCreated → AD
@@ -192,7 +192,7 @@ Following the existing `ChangeTracking.CsoChanges.Enabled` / `ChangeTracking.Mvo
 Key: "ChangeTracking.SyncOutcomes.Level"
 Category: History
 ValueType: Enum
-EnumTypeName: "SyncOutcomeTrackingLevel"
+EnumTypeName: "ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel"
 DefaultValue: "Detailed"
 Description: "Controls how much detail is recorded for sync outcome
               graphs on each run profile execution item. Higher levels
@@ -221,28 +221,22 @@ At **None** tracking level, the system behaves exactly as today. At **Standard**
 
 #### List View Denormalisation
 
-For the activity detail table, each RPEI row should show small stat chips for its root-level outcomes (e.g., `[Projected] [Attr Flow: 12] [Exported ×2]`). To avoid joining to the outcomes table on every paginated query:
+For the activity detail table, each RPEI row should show small stat chips for its root-level outcomes (e.g., `[Projected] [Attr Flow: 12] [Exported ×2]`). To avoid joining to the outcomes table on every paginated query, a denormalised `OutcomeSummary` column is stored directly on the RPEI. This keeps the list query fast — no join needed. The full outcome tree is only loaded when drilling into a single RPEI's detail page.
 
-**Option A — Denormalised summary field**: Store a bitmask or compact representation directly on the RPEI (e.g., `OutcomeSummary` column). Maintained during sync when outcomes are built. Keeps the list query fast.
-
-**Option B — Eager load on query**: Join to outcomes table with a lightweight projection. Simpler to maintain but adds query cost per page.
-
-**Recommendation**: Option A. The list view is the most frequently accessed view. A compact summary field avoids the join entirely. The full outcome tree is only loaded when drilling into a single RPEI's detail page.
-
-Possible `OutcomeSummary` representation:
+`OutcomeSummary` representation:
 - Comma-separated outcome types with counts, e.g., `"Projected:1,AttributeFlow:12,PendingExportCreated:2"`
 - Parsed client-side for chip rendering
 - Populated during outcome tree construction — no separate maintenance path
 
 ### Activity Statistics Changes
 
-Statistics shift from "count of RPEIs by ObjectChangeType" to "count of outcome nodes by SyncOutcomeType across all RPEIs for this activity."
+Statistics shift from "count of RPEIs by ObjectChangeType" to "count of outcome nodes by `ActivityRunProfileExecutionItemSyncOutcomeType` across all RPEIs for this activity."
 
 The query becomes:
 
 ```sql
 SELECT OutcomeType, COUNT(*)
-FROM SyncOutcomes
+FROM ActivityRunProfileExecutionItemSyncOutcomes
 WHERE ActivityRunProfileExecutionItemId IN (
     SELECT Id FROM ActivityRunProfileExecutionItems WHERE ActivityId = @activityId
 )
@@ -275,7 +269,7 @@ Filter controls allow filtering by outcome types present in RPEIs:
 
 ```sql
 WHERE EXISTS (
-    SELECT 1 FROM SyncOutcomes
+    SELECT 1 FROM ActivityRunProfileExecutionItemSyncOutcomes
     WHERE ActivityRunProfileExecutionItemId = rpei.Id
     AND OutcomeType = @filterType
 )
@@ -306,7 +300,7 @@ At **Detailed** level, the full nested tree is displayed.
 The existing `ConnectedSystemObjectChange` and `MetaverseObjectChange` navigation properties on RPEIs serve a different purpose — they carry **attribute-level detail** (which specific attributes changed, old/new values). The outcome graph is about the **structural causal chain** (what operations occurred and what they triggered).
 
 Both coexist:
-- **SyncOutcome tree**: "What happened and what it caused" — structural story
+- **Sync outcome tree**: "What happened and what it caused" — structural story
 - **CSOChange / MVOChange**: "What the attribute values looked like before/after" — debugging detail
 
 ## Processor Changes
@@ -335,7 +329,7 @@ Creates outcome nodes for export execution results:
 
 ## Database Migration
 
-New table `SyncOutcomes` with:
+New table `ActivityRunProfileExecutionItemSyncOutcomes` with:
 - `Id` (PK)
 - `ActivityRunProfileExecutionItemId` (FK → `ActivityRunProfileExecutionItems`, CASCADE DELETE)
 - `ParentSyncOutcomeId` (FK → self, SET NULL)
@@ -350,8 +344,8 @@ New column on `ActivityRunProfileExecutionItems`:
 - `OutcomeSummary` (nullable string) — denormalised summary for list view
 
 Indexes:
-- `IX_SyncOutcomes_ActivityRunProfileExecutionItemId` — for loading outcomes by RPEI
-- `IX_SyncOutcomes_OutcomeType` — for aggregate stats queries (composite with RPEI FK)
+- `IX_ActivityRunProfileExecutionItemSyncOutcomes_ActivityRunProfileExecutionItemId` — for loading outcomes by RPEI
+- `IX_ActivityRunProfileExecutionItemSyncOutcomes_OutcomeType` — for aggregate stats queries (composite with RPEI FK)
 
 Existing RPEIs have no outcomes (empty list) — gracefully handled with no data migration.
 
@@ -397,8 +391,8 @@ new ServiceSetting
                   "nested outcomes.",
     Category = ServiceSettingCategory.History,
     ValueType = ServiceSettingValueType.Enum,
-    EnumTypeName = nameof(SyncOutcomeTrackingLevel),
-    DefaultValue = nameof(SyncOutcomeTrackingLevel.Detailed),
+    EnumTypeName = nameof(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel),
+    DefaultValue = nameof(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed),
     IsReadOnly = false
 }
 ```
@@ -407,8 +401,8 @@ new ServiceSetting
 
 ### Phase 1: Data Model & Infrastructure
 
-1. Create `SyncOutcome` entity and `SyncOutcomeType` enum
-2. Create `SyncOutcomeTrackingLevel` enum
+1. Create `ActivityRunProfileExecutionItemSyncOutcome` entity and `ActivityRunProfileExecutionItemSyncOutcomeType` enum
+2. Create `ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel` enum
 3. Add `OutcomeSummary` column to `ActivityRunProfileExecutionItem`
 4. Create EF configuration and database migration
 5. Add service setting key constant and seeding
@@ -457,16 +451,15 @@ new ServiceSetting
 
 | File | Changes |
 |------|---------|
-| `src/JIM.Models/Activities/SyncOutcome.cs` | **New** — entity model |
-| `src/JIM.Models/Enums/SyncOutcomeType.cs` | **New** — outcome type enum |
-| `src/JIM.Models/Enums/SyncOutcomeTrackingLevel.cs` | **New** — tracking level enum |
-| `src/JIM.Models/Activities/ActivityRunProfileExecutionItem.cs` | Add `OutcomeSummary` property and `SyncOutcomes` navigation |
+| `src/JIM.Models/Activities/ActivityRunProfileExecutionItemSyncOutcome.cs` | **New** — entity model |
+| `src/JIM.Models/Activities/ActivityEnums.cs` | **Add** — `ActivityRunProfileExecutionItemSyncOutcomeType` and `ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel` enums |
+| `src/JIM.Models/Activities/ActivityRunProfileExecutionItem.cs` | Add `OutcomeSummary` property and `SyncOutcomes` navigation collection |
 | `src/JIM.Models/Core/Constants.cs` | Add setting key constant |
-| `src/JIM.PostgresData/JimDbContext.cs` | Add `SyncOutcomes` DbSet and EF configuration |
-| `src/JIM.PostgresData/Migrations/...` | New migration for SyncOutcomes table and OutcomeSummary column |
+| `src/JIM.PostgresData/JimDbContext.cs` | Add `ActivityRunProfileExecutionItemSyncOutcomes` DbSet and EF configuration |
+| `src/JIM.PostgresData/Migrations/...` | New migration for `ActivityRunProfileExecutionItemSyncOutcomes` table and `OutcomeSummary` column |
 | `src/JIM.PostgresData/Repositories/ActivitiesRepository.cs` | Extend bulk insert, update stats query |
 | `src/JIM.Application/Servers/SeedingServer.cs` | Add service setting seed |
-| `src/JIM.Application/Servers/ServiceSettingsServer.cs` | Add `GetSyncOutcomeTrackingLevelAsync()` |
+| `src/JIM.Application/Servers/ServiceSettingsServer.cs` | Add `GetSyncOutcomeTrackingLevelAsync()` (returns `ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel`) |
 | `src/JIM.Application/Servers/ActivityServer.cs` | Update stats model and queries |
 | `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs` | Build outcome trees during sync |
 | `src/JIM.Worker/Processors/SyncImportTaskProcessor.cs` | Build outcome trees during import |
@@ -496,7 +489,7 @@ new ServiceSetting
 4. Activity statistics are derived from outcome types
 5. Filter controls support filtering by outcome type
 6. Service setting allows administrators to control tracking granularity
-7. Sync Preview (#288) can reuse the `SyncOutcome` model for speculative results
+7. Sync Preview (#288) can reuse the `ActivityRunProfileExecutionItemSyncOutcome` model for speculative results
 8. No performance regression at None tracking level
 9. All existing tests continue to pass
 10. New tests cover outcome tree building, persistence, stats, and tracking levels
