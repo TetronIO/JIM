@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Sortable columns on Attribute Flow table
 - Synchronisation Rules quick link on homepage dashboard
+- `Get-JIMMetaverseObject -All` switch to automatically paginate through all results
+
+### Fixed
+- `Get-JIMMetaverseObject` now correctly caps `-PageSize` at 100 to match the API maximum (previously accepted up to 1000, but the API silently capped at 100, returning incomplete results)
 
 ### Performance
 

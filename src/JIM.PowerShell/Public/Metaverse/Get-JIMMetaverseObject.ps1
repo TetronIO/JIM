@@ -8,6 +8,9 @@ function Get-JIMMetaverseObject {
         filtering, or a specific object by ID. Supports selecting which attributes
         to include in the response.
 
+        By default, returns a single page of results. Use -All to automatically
+        paginate through all results and return every matching object.
+
     .PARAMETER Id
         The unique identifier (GUID) of a specific Metaverse Object to retrieve.
 
@@ -32,11 +35,15 @@ function Get-JIMMetaverseObject {
         List of attribute names to include in the response. Use "*" for all attributes.
         DisplayName is always included by default.
 
+    .PARAMETER All
+        Automatically paginate through all results and return every matching object.
+        Cannot be used with -Page.
+
     .PARAMETER Page
-        Page number for paginated results. Defaults to 1.
+        Page number for paginated results. Defaults to 1. Cannot be used with -All.
 
     .PARAMETER PageSize
-        Number of items per page. Defaults to 100.
+        Number of items per page. Defaults to 100. Maximum is 100.
 
     .OUTPUTS
         PSCustomObject representing Metaverse Object(s).
@@ -45,6 +52,11 @@ function Get-JIMMetaverseObject {
         Get-JIMMetaverseObject
 
         Gets all Metaverse Objects (first page).
+
+    .EXAMPLE
+        Get-JIMMetaverseObject -All
+
+        Gets all Metaverse Objects, automatically paginating through all results.
 
     .EXAMPLE
         Get-JIMMetaverseObject -Id "12345678-1234-1234-1234-123456789abc"
@@ -86,6 +98,11 @@ function Get-JIMMetaverseObject {
 
         Gets all objects with all attributes included.
 
+    .EXAMPLE
+        Get-JIMMetaverseObject -ObjectTypeName "User" -Attributes "Training Status" -All
+
+        Gets all User objects with Training Status attribute, automatically paginating.
+
     .LINK
         Get-JIMMetaverseObjectType
         Get-JIMMetaverseAttribute
@@ -97,32 +114,42 @@ function Get-JIMMetaverseObject {
         [Guid]$Id,
 
         [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
         [int]$ObjectTypeId,
 
         [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
         [ValidateNotNullOrEmpty()]
         [string]$ObjectTypeName,
 
         [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
         [SupportsWildcards()]
         [string]$Search,
 
         [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
         [ValidateNotNullOrEmpty()]
         [string]$AttributeName,
 
         [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
         [string]$AttributeValue,
 
         [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
         [string[]]$Attributes,
+
+        [Parameter(Mandatory, ParameterSetName = 'ListAll')]
+        [switch]$All,
 
         [Parameter(ParameterSetName = 'List')]
         [ValidateRange(1, [int]::MaxValue)]
         [int]$Page = 1,
 
         [Parameter(ParameterSetName = 'List')]
-        [ValidateRange(1, 1000)]
+        [Parameter(ParameterSetName = 'ListAll')]
+        [ValidateRange(1, 100)]
         [int]$PageSize = 100
     )
 
@@ -146,7 +173,7 @@ function Get-JIMMetaverseObject {
                 $result
             }
 
-            'List' {
+            { $_ -in 'List', 'ListAll' } {
                 Write-Verbose "Getting Metaverse Objects"
 
                 # Validate AttributeName and AttributeValue are used together
@@ -159,40 +186,51 @@ function Get-JIMMetaverseObject {
                     return
                 }
 
-                $queryParams = @(
-                    "page=$Page",
+                # Build base query parameters (excluding page, which varies during pagination)
+                $baseQueryParams = @(
                     "pageSize=$PageSize"
                 )
 
                 if ($PSBoundParameters.ContainsKey('ObjectTypeId') -or $ObjectTypeName) {
-                    $queryParams += "objectTypeId=$ObjectTypeId"
+                    $baseQueryParams += "objectTypeId=$ObjectTypeId"
                 }
 
                 if ($Search) {
-                    $queryParams += "search=$([System.Uri]::EscapeDataString($Search))"
+                    $baseQueryParams += "search=$([System.Uri]::EscapeDataString($Search))"
                 }
 
                 if ($AttributeName) {
-                    $queryParams += "filterAttributeName=$([System.Uri]::EscapeDataString($AttributeName))"
-                    $queryParams += "filterAttributeValue=$([System.Uri]::EscapeDataString($AttributeValue))"
+                    $baseQueryParams += "filterAttributeName=$([System.Uri]::EscapeDataString($AttributeName))"
+                    $baseQueryParams += "filterAttributeValue=$([System.Uri]::EscapeDataString($AttributeValue))"
                 }
 
                 if ($Attributes) {
                     foreach ($attr in $Attributes) {
-                        $queryParams += "attributes=$([System.Uri]::EscapeDataString($attr))"
+                        $baseQueryParams += "attributes=$([System.Uri]::EscapeDataString($attr))"
                     }
                 }
 
-                $queryString = $queryParams -join '&'
-                $response = Invoke-JIMApi -Endpoint "/api/v1/metaverse/objects?$queryString"
+                $currentPage = $Page
+                do {
+                    $queryParams = @("page=$currentPage") + $baseQueryParams
+                    $queryString = $queryParams -join '&'
+                    $response = Invoke-JIMApi -Endpoint "/api/v1/metaverse/objects?$queryString"
 
-                # Handle paginated response - check property exists, not truthy (empty array is valid)
-                $objects = if ($null -ne $response.items) { $response.items } else { $response }
+                    # Handle paginated response - check property exists, not truthy (empty array is valid)
+                    $objects = if ($null -ne $response.items) { $response.items } else { $response }
 
-                # Output each object individually for pipeline support
-                foreach ($obj in $objects) {
-                    $obj
-                }
+                    # Output each object individually for pipeline support
+                    foreach ($obj in $objects) {
+                        $obj
+                    }
+
+                    # Check if we should fetch the next page
+                    $hasMore = $All -and $response.hasNextPage -eq $true
+                    if ($hasMore) {
+                        $currentPage++
+                        Write-Verbose "Fetching page $currentPage of $($response.totalPages)..."
+                    }
+                } while ($hasMore)
             }
         }
     }
