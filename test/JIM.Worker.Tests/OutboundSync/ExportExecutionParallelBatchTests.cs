@@ -131,7 +131,7 @@ public class ExportExecutionParallelBatchTests
             PendingExportsData.Add(CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}"));
         }
 
-        var mockConnector = CreateMockConnector(ExportResult.Succeeded());
+        var mockConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
 
         var options = new ExportExecutionOptions
         {
@@ -172,7 +172,7 @@ public class ExportExecutionParallelBatchTests
             PendingExportsData.Add(CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}"));
         }
 
-        var mockConnector = CreateMockConnector(ExportResult.Succeeded());
+        var mockConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
 
         var options = new ExportExecutionOptions
         {
@@ -216,14 +216,14 @@ public class ExportExecutionParallelBatchTests
             pendingExportIds.Add(pe.Id);
         }
 
-        var primaryConnector = CreateMockConnector(ExportResult.Succeeded());
+        var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
 
         // Track how many connector instances were created
         var connectorInstanceCount = 0;
         Func<IConnector> connectorFactory = () =>
         {
             Interlocked.Increment(ref connectorInstanceCount);
-            return CreateMockConnector(ExportResult.Succeeded()).Object;
+            return CreateMockConnector(ConnectedSystemExportResult.Succeeded()).Object;
         };
 
         // Track how many repository instances were created
@@ -282,7 +282,7 @@ public class ExportExecutionParallelBatchTests
         }
 
         // Primary connector succeeds (used by batch 0)
-        var primaryConnector = CreateMockConnector(ExportResult.Succeeded());
+        var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
 
         // Factory connector fails (used by batch 1)
         Func<IConnector> connectorFactory = () =>
@@ -337,9 +337,9 @@ public class ExportExecutionParallelBatchTests
             PendingExportsData.Add(CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}"));
         }
 
-        var primaryConnector = CreateMockConnector(ExportResult.Succeeded());
+        var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
 
-        Func<IConnector> connectorFactory = () => CreateMockConnector(ExportResult.Succeeded()).Object;
+        Func<IConnector> connectorFactory = () => CreateMockConnector(ConnectedSystemExportResult.Succeeded()).Object;
         Func<IRepository> repositoryFactory = () => CreateMockRepository(PendingExportsData);
 
         using var cts = new CancellationTokenSource();
@@ -384,9 +384,9 @@ public class ExportExecutionParallelBatchTests
             PendingExportsData.Add(CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}"));
         }
 
-        var primaryConnector = CreateMockConnector(ExportResult.Succeeded());
+        var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
 
-        Func<IConnector> connectorFactory = () => CreateMockConnector(ExportResult.Succeeded()).Object;
+        Func<IConnector> connectorFactory = () => CreateMockConnector(ConnectedSystemExportResult.Succeeded()).Object;
         Func<IRepository> repositoryFactory = () => CreateMockRepository(PendingExportsData);
 
         var progressReports = new List<ExportProgressInfo>();
@@ -443,13 +443,13 @@ public class ExportExecutionParallelBatchTests
             PendingExportsData.Add(CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}"));
         }
 
-        var primaryConnector = CreateMockConnector(ExportResult.Succeeded());
+        var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
 
         var connectorFactoryCalled = false;
         Func<IConnector> connectorFactory = () =>
         {
             connectorFactoryCalled = true;
-            return CreateMockConnector(ExportResult.Succeeded()).Object;
+            return CreateMockConnector(ConnectedSystemExportResult.Succeeded()).Object;
         };
 
         var repoFactoryCalled = false;
@@ -503,8 +503,8 @@ public class ExportExecutionParallelBatchTests
             expectedIds.Add(pe.Id);
         }
 
-        var primaryConnector = CreateMockConnector(ExportResult.Succeeded());
-        Func<IConnector> connectorFactory = () => CreateMockConnector(ExportResult.Succeeded()).Object;
+        var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
+        Func<IConnector> connectorFactory = () => CreateMockConnector(ConnectedSystemExportResult.Succeeded()).Object;
         Func<IRepository> repositoryFactory = () => CreateMockRepository(PendingExportsData);
 
         var options = new ExportExecutionOptions
@@ -593,7 +593,7 @@ public class ExportExecutionParallelBatchTests
         };
     }
 
-    private static Mock<IConnector> CreateMockConnector(ExportResult defaultResult)
+    private static Mock<IConnector> CreateMockConnector(ConnectedSystemExportResult defaultResult)
     {
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();

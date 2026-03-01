@@ -1,9 +1,10 @@
 # LDAP Export Failure: Empty DN Component on Attribute Recall
 
-- **Status:** Open
+- **Status:** Fixed (Option C only — defence-in-depth DN validation)
 - **Severity:** High - blocks leaver (deprovisioning) scenario
 - **First observed:** Integration test Scenario 1, Test 3 (Leaver)
 - **Occurrences:** Reproduced multiple times
+- **Fixed in:** Branch `fix/ldap-export-empty-dn-on-attribute-recall`
 
 ## Symptom
 
@@ -163,6 +164,51 @@ Meanwhile, `ProcessMvoDeletionRuleAsync` runs with `WhenLastConnectorDisconnecte
 1. Run integration tests: `./test/integration/Run-IntegrationTests.ps1`
 2. Scenario 1, Test 3 (Leaver) will fail at the LDAP Export step
 3. Check worker logs: `docker compose logs jim.worker --tail=500 | grep -A5 "Empty RDN"`
+
+## Fix Attempts
+
+### Attempt 1: Option B + Option C (Superseded)
+
+**Approach:** Implemented Option B (skip expression re-evaluation during "pure attribute recall") as the primary fix and Option C (DN validation in LDAP connector) as defence-in-depth.
+
+**Outcome:** Option B was **removed** after review — it violated separation of concerns and was based on a non-representative test scenario. See Attempt 2 for the reasoning and final fix.
+
+### Attempt 2: Option C Only — Defence-in-Depth (Final)
+
+**Branch:** `fix/ldap-export-empty-dn-on-attribute-recall`
+
+**Key Insight:** The original bug scenario (single-source CS with attribute recall enabled, whose attributes feed DN expressions) is a **misconfiguration**. In a properly configured system:
+
+- **Primary sources** (e.g., HR) contribute identity-critical attributes that feed expressions (DN, userAccountControl, etc.). Attribute recall should be **disabled** on these — their disconnection triggers deprovisioning, not recall.
+- **Supplemental sources** (e.g., Training) contribute non-critical attributes. Attribute recall is **enabled** on these — their attributes don't feed expressions, so recall produces valid null-clearing exports without breaking DN generation.
+
+**Why Option B was removed:**
+
+1. **Separation of concerns violation**: The `isPureRecall` detection in `ExportEvaluationServer` made the class aware of "recall" semantics — a worker-level concept. A removal is a removal regardless of cause; the class shouldn't detect or special-case specific upstream scenarios.
+2. **Suppressing admin intent**: Admins may intentionally write expressions that handle null values for their business logic. It's not for the system to decide that expressions shouldn't be evaluated during attribute removal.
+3. **Non-representative test scenario**: The test used a single-source topology where the primary source had attribute recall enabled — this doesn't match real-world deployment patterns.
+
+**What remains — Fix (Option C): DN validation in LDAP connector**
+
+Added `HasValidRdnValues(string dn)` utility method using the existing `DNParser` package (`CPI.DirectoryServices.DN`) to validate that no RDN component has an empty value. This is called before any ModifyDN or AddRequest in the LDAP connector.
+
+- In `ProcessUpdateAsync`: if the new DN has empty RDN values, returns `ExportResult.Failed(...)` so the error is visible to admins in the activity as a failed export object.
+- In `ProcessCreateAsync`: if the DN has empty RDN values, throws `InvalidOperationException` (hard failure since this should never happen for creates).
+
+This ensures that if an admin misconfigures attribute recall on a primary source, the resulting invalid DN is caught before reaching the LDAP server, and the failure is reported back to the worker for recording as a visible error in the activity.
+
+**Tests:**
+
+| Test file | Tests | Description |
+|-----------|-------|-------------|
+| `LdapConnectorUtilitiesTests.cs` | 9 tests | `HasValidRdnValues`: valid DN, single component, empty OU, empty CN, empty string, null, multiple empty, escaped comma, whitespace-only |
+| `AttributeRecallExpressionWorkflowTests.cs` | 1 test | Representative multi-source workflow: HR import + Training import → Full Sync → mark Training obsolete → Delta Sync → verify Training attributes cleared, DN expression evaluates correctly (HR attributes retained), no-net-change detection filters unchanged DN |
+
+**Gotchas encountered:**
+- EF Core in-memory database auto-tracks navigation properties. When `CreateMvObjectTypeAsync` both adds attributes to `DbContext.MetaverseAttributes` AND manually adds them to `mvType.Attributes`, duplicates appear. Fix: query attributes from DB directly with `DbContext.MetaverseAttributes.FirstAsync()`.
+- EF Core in-memory database does not support `EF.Functions.ILike()` (PostgreSQL-specific). Object matching rules in workflow tests must use `CaseSensitive = true` to avoid ILike.
+
+**Result:** All unit tests pass (1783).
 
 ## Related Documents
 

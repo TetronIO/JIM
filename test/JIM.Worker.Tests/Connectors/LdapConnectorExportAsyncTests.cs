@@ -330,6 +330,99 @@ public class LdapConnectorExportAsyncTests
 
     #endregion
 
+    #region Invalid DN validation tests
+
+    [Test]
+    public async Task ExecuteAsync_UpdateWithInvalidNewDn_ReturnsFailedWithInvalidGeneratedExternalIdAsync()
+    {
+        var pendingExport = CreateUpdateWithRenamePendingExport(
+            "CN=Test User,OU=Users,DC=test,DC=local",
+            "CN=,OU=,OU=Users,DC=test,DC=local");
+
+        var export = CreateExport(concurrency: 4);
+        var results = await export.ExecuteAsync(new List<PendingExport> { pendingExport }, CancellationToken.None);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].Success, Is.False);
+        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.InvalidGeneratedExternalId));
+        Assert.That(results[0].ErrorMessage, Does.Contain("empty RDN components"));
+    }
+
+    [Test]
+    public async Task ExecuteAsync_UpdateWithInvalidNewDn_SyncPath_ReturnsFailedWithInvalidGeneratedExternalIdAsync()
+    {
+        // Concurrency 1 uses the synchronous path
+        var pendingExport = CreateUpdateWithRenamePendingExport(
+            "CN=Test User,OU=Users,DC=test,DC=local",
+            "CN=,OU=,OU=Users,DC=test,DC=local");
+
+        var export = CreateExport(concurrency: 1);
+        var results = await export.ExecuteAsync(new List<PendingExport> { pendingExport }, CancellationToken.None);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].Success, Is.False);
+        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.InvalidGeneratedExternalId));
+        Assert.That(results[0].ErrorMessage, Does.Contain("empty RDN components"));
+    }
+
+    [Test]
+    public async Task ExecuteAsync_CreateWithInvalidDn_ReturnsFailedWithInvalidGeneratedExternalIdAsync()
+    {
+        var pendingExport = CreateCreatePendingExport("CN=,OU=,OU=Users,DC=test,DC=local", "user");
+
+        var export = CreateExport(concurrency: 4);
+        var results = await export.ExecuteAsync(new List<PendingExport> { pendingExport }, CancellationToken.None);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].Success, Is.False);
+        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.InvalidGeneratedExternalId));
+        Assert.That(results[0].ErrorMessage, Does.Contain("empty RDN components"));
+    }
+
+    [Test]
+    public async Task ExecuteAsync_CreateWithInvalidDn_SyncPath_ReturnsFailedWithInvalidGeneratedExternalIdAsync()
+    {
+        var pendingExport = CreateCreatePendingExport("CN=,OU=,OU=Users,DC=test,DC=local", "user");
+
+        var export = CreateExport(concurrency: 1);
+        var results = await export.ExecuteAsync(new List<PendingExport> { pendingExport }, CancellationToken.None);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].Success, Is.False);
+        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.InvalidGeneratedExternalId));
+        Assert.That(results[0].ErrorMessage, Does.Contain("empty RDN components"));
+    }
+
+    [Test]
+    public async Task ExecuteAsync_DeleteWithInvalidDn_ReturnsFailedWithInvalidGeneratedExternalIdAsync()
+    {
+        var pendingExport = CreateDeletePendingExport("CN=,OU=,OU=Users,DC=test,DC=local");
+
+        var export = CreateExport(concurrency: 4);
+        var results = await export.ExecuteAsync(new List<PendingExport> { pendingExport }, CancellationToken.None);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].Success, Is.False);
+        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.InvalidGeneratedExternalId));
+        Assert.That(results[0].ErrorMessage, Does.Contain("empty RDN components"));
+    }
+
+    [Test]
+    public async Task ExecuteAsync_DeleteWithInvalidDn_SyncPath_ReturnsFailedWithInvalidGeneratedExternalIdAsync()
+    {
+        var pendingExport = CreateDeletePendingExport("CN=,OU=,OU=Users,DC=test,DC=local");
+
+        var export = CreateExport(concurrency: 1);
+        var results = await export.ExecuteAsync(new List<PendingExport> { pendingExport }, CancellationToken.None);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].Success, Is.False);
+        Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.InvalidGeneratedExternalId));
+        Assert.That(results[0].ErrorMessage, Does.Contain("empty RDN components"));
+    }
+
+    #endregion
+
     #region Helper methods
 
     private LdapConnectorExport CreateExport(int concurrency)

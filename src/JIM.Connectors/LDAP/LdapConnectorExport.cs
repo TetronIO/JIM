@@ -104,11 +104,11 @@ internal class LdapConnectorExport
 
     #region Sequential execution (sync path)
 
-    internal List<ExportResult> Execute(IList<PendingExport> pendingExports)
+    internal List<ConnectedSystemExportResult> Execute(IList<PendingExport> pendingExports)
     {
         _logger.Debug("LdapConnectorExport.Execute: Starting export of {Count} pending exports", pendingExports.Count);
 
-        var results = new List<ExportResult>();
+        var results = new List<ConnectedSystemExportResult>();
 
         if (pendingExports.Count == 0)
         {
@@ -125,13 +125,12 @@ internal class LdapConnectorExport
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "LdapConnectorExport.Execute: Failed to process pending export {Id} ({ChangeType})",
-                    pendingExport.Id, pendingExport.ChangeType);
+                _logger.Error(ex, "LdapConnectorExport.Execute: Failed to process pending export {Id} ({ChangeType})", pendingExport.Id, pendingExport.ChangeType);
 
                 // Return failure result - ExportExecutionServer is responsible for updating
-                // ErrorCount, Status, and retry timing (Q6 decision). The connector should
-                // only report success or failure via ExportResult.
-                results.Add(ExportResult.Failed(ex.Message));
+                // ErrorCount, Status, and retry timing. The connector should
+                // only report success or failure via ConnectedSystemExportResult.
+                results.Add(ConnectedSystemExportResult.Failed(ex.Message));
             }
         }
 
@@ -139,12 +138,12 @@ internal class LdapConnectorExport
         return results;
     }
 
-    private ExportResult ProcessPendingExport(PendingExport pendingExport)
+    private ConnectedSystemExportResult ProcessPendingExport(PendingExport pendingExport)
     {
         pendingExport.Status = PendingExportStatus.Executing;
         pendingExport.LastAttemptedAt = DateTime.UtcNow;
 
-        ExportResult result;
+        ConnectedSystemExportResult result;
         switch (pendingExport.ChangeType)
         {
             case PendingExportChangeType.Create:
@@ -154,25 +153,39 @@ internal class LdapConnectorExport
                 result = ProcessUpdate(pendingExport);
                 break;
             case PendingExportChangeType.Delete:
-                ProcessDelete(pendingExport);
-                result = ExportResult.Succeeded();
+                result = ProcessDelete(pendingExport);
                 break;
             default:
                 throw new InvalidOperationException($"Unknown change type: {pendingExport.ChangeType}");
         }
 
-        pendingExport.Status = PendingExportStatus.Exported;
-        _logger.Debug("LdapConnectorExport.ProcessPendingExport: Successfully processed {ChangeType} for {Id}",
-            pendingExport.ChangeType, pendingExport.Id);
+        if (result.Success)
+        {
+            pendingExport.Status = PendingExportStatus.Exported;
+            _logger.Debug("LdapConnectorExport.ProcessPendingExport: Successfully processed {ChangeType} for {Id}",
+                pendingExport.ChangeType, pendingExport.Id);
+        }
+        else
+        {
+            _logger.Warning("LdapConnectorExport.ProcessPendingExport: Failed to process {ChangeType} for {Id}: {Error}",
+                pendingExport.ChangeType, pendingExport.Id, result.ErrorMessage);
+        }
+
         return result;
     }
 
-    private ExportResult ProcessCreate(PendingExport pendingExport)
+    private ConnectedSystemExportResult ProcessCreate(PendingExport pendingExport)
     {
         // For create, we need to build the DN and all attributes
         var dn = GetDistinguishedNameForCreate(pendingExport);
         if (string.IsNullOrEmpty(dn))
             throw new InvalidOperationException("Cannot create object: Distinguished Name (DN) could not be determined from attribute changes.");
+
+        // Validate that the DN doesn't contain empty RDN components (e.g., "OU=,OU=Users,...").
+        if (!LdapConnectorUtilities.HasValidRdnValues(dn))
+            return ConnectedSystemExportResult.Failed(
+                $"Cannot create object: Distinguished Name '{dn}' contains empty RDN components.",
+                ConnectedSystemExportErrorType.InvalidGeneratedExternalId);
 
         _logger.Debug("LdapConnectorExport.ProcessCreate: Creating object at DN '{Dn}'", dn);
 
@@ -198,11 +211,11 @@ internal class LdapConnectorExport
         if (objectGuid != null)
         {
             _logger.Debug("LdapConnectorExport.ProcessCreate: Retrieved objectGUID {ObjectGuid} for '{Dn}'", objectGuid, dn);
-            return ExportResult.Succeeded(objectGuid, dn);
+            return ConnectedSystemExportResult.Succeeded(objectGuid, dn);
         }
 
         // objectGUID not available, return success without external ID
-        return ExportResult.Succeeded(null, dn);
+        return ConnectedSystemExportResult.Succeeded(null, dn);
     }
 
     /// <summary>
@@ -228,7 +241,7 @@ internal class LdapConnectorExport
         }
     }
 
-    private ExportResult ProcessUpdate(PendingExport pendingExport)
+    private ConnectedSystemExportResult ProcessUpdate(PendingExport pendingExport)
     {
         var currentDn = GetDistinguishedNameForUpdate(pendingExport);
         if (string.IsNullOrEmpty(currentDn))
@@ -243,6 +256,14 @@ internal class LdapConnectorExport
 
         if (!string.IsNullOrEmpty(newDn) && !newDn.Equals(currentDn, StringComparison.OrdinalIgnoreCase))
         {
+            // Validate that the new DN doesn't contain empty RDN components (e.g., "OU=,OU=Users,...").
+            if (!LdapConnectorUtilities.HasValidRdnValues(newDn))
+            {
+                return ConnectedSystemExportResult.Failed(
+                    $"Cannot rename object: new Distinguished Name '{newDn}' contains empty RDN components.",
+                    ConnectedSystemExportErrorType.InvalidGeneratedExternalId);
+            }
+
             // DN has changed - perform rename first
             workingDn = ProcessRename(currentDn, newDn);
             wasRenamed = true;
@@ -253,11 +274,11 @@ internal class LdapConnectorExport
         if (modifyRequests.Count == 0)
         {
             _logger.Debug("LdapConnectorExport.ProcessUpdate: No attribute modifications to apply for '{Dn}'", workingDn);
-            return wasRenamed ? ExportResult.Succeeded(null, workingDn) : ExportResult.Succeeded();
+            return wasRenamed ? ConnectedSystemExportResult.Succeeded(null, workingDn) : ConnectedSystemExportResult.Succeeded();
         }
 
         // Execute each chunked modify request sequentially
-        ExportResult lastResult = ExportResult.Succeeded();
+        ConnectedSystemExportResult lastResult = ConnectedSystemExportResult.Succeeded();
         for (var i = 0; i < modifyRequests.Count; i++)
         {
             var request = modifyRequests[i];
@@ -296,11 +317,17 @@ internal class LdapConnectorExport
         return newDn;
     }
 
-    private void ProcessDelete(PendingExport pendingExport)
+    private ConnectedSystemExportResult ProcessDelete(PendingExport pendingExport)
     {
         var dn = GetDistinguishedNameForUpdate(pendingExport);
         if (string.IsNullOrEmpty(dn))
             throw new InvalidOperationException("Cannot delete object: Distinguished Name (DN) could not be determined.");
+
+        // Validate that the DN doesn't contain empty RDN components before attempting delete/disable.
+        if (!LdapConnectorUtilities.HasValidRdnValues(dn))
+            return ConnectedSystemExportResult.Failed(
+                $"Cannot delete object: Distinguished Name '{dn}' contains empty RDN components.",
+                ConnectedSystemExportErrorType.InvalidGeneratedExternalId);
 
         var deleteBehaviour = GetSettingValue(SettingDeleteBehaviour) ?? LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE;
 
@@ -312,6 +339,8 @@ internal class LdapConnectorExport
         {
             ProcessHardDelete(dn);
         }
+
+        return ConnectedSystemExportResult.Succeeded();
     }
 
     private void ProcessHardDelete(string dn)
@@ -482,7 +511,7 @@ internal class LdapConnectorExport
     /// When concurrency > 1, processes multiple exports concurrently using SemaphoreSlim
     /// while maintaining positional ordering of results.
     /// </summary>
-    internal async Task<List<ExportResult>> ExecuteAsync(
+    internal async Task<List<ConnectedSystemExportResult>> ExecuteAsync(
         IList<PendingExport> pendingExports,
         CancellationToken cancellationToken)
     {
@@ -492,7 +521,7 @@ internal class LdapConnectorExport
         if (pendingExports.Count == 0)
         {
             _logger.Information("LdapConnectorExport.ExecuteAsync: No pending exports to process");
-            return new List<ExportResult>();
+            return new List<ConnectedSystemExportResult>();
         }
 
         // If concurrency is 1, fall back to synchronous sequential processing
@@ -502,7 +531,7 @@ internal class LdapConnectorExport
 
         // Pre-allocate results array to maintain positional ordering.
         // Each task writes to its own unique index - no shared mutable state between tasks.
-        var results = new ExportResult[pendingExports.Count];
+        var results = new ConnectedSystemExportResult[pendingExports.Count];
         using var semaphore = new SemaphoreSlim(_exportConcurrency);
 
         var tasks = new Task[pendingExports.Count];
@@ -523,7 +552,7 @@ internal class LdapConnectorExport
                 {
                     _logger.Error(ex, "LdapConnectorExport.ExecuteAsync: Failed to process pending export {Id} ({ChangeType})",
                         pendingExport.Id, pendingExport.ChangeType);
-                    results[index] = ExportResult.Failed(ex.Message);
+                    results[index] = ConnectedSystemExportResult.Failed(ex.Message);
                 }
                 finally
                 {
@@ -539,7 +568,7 @@ internal class LdapConnectorExport
         return results.ToList();
     }
 
-    private async Task<ExportResult> ProcessPendingExportAsync(PendingExport pendingExport)
+    private async Task<ConnectedSystemExportResult> ProcessPendingExportAsync(PendingExport pendingExport)
     {
         pendingExport.Status = PendingExportStatus.Executing;
         pendingExport.LastAttemptedAt = DateTime.UtcNow;
@@ -552,17 +581,32 @@ internal class LdapConnectorExport
             _ => throw new InvalidOperationException($"Unknown change type: {pendingExport.ChangeType}")
         };
 
-        pendingExport.Status = PendingExportStatus.Exported;
-        _logger.Debug("LdapConnectorExport.ProcessPendingExportAsync: Successfully processed {ChangeType} for {Id}",
-            pendingExport.ChangeType, pendingExport.Id);
+        if (result.Success)
+        {
+            pendingExport.Status = PendingExportStatus.Exported;
+            _logger.Debug("LdapConnectorExport.ProcessPendingExportAsync: Successfully processed {ChangeType} for {Id}",
+                pendingExport.ChangeType, pendingExport.Id);
+        }
+        else
+        {
+            _logger.Warning("LdapConnectorExport.ProcessPendingExportAsync: Failed to process {ChangeType} for {Id}: {Error}",
+                pendingExport.ChangeType, pendingExport.Id, result.ErrorMessage);
+        }
+
         return result;
     }
 
-    private async Task<ExportResult> ProcessCreateAsync(PendingExport pendingExport)
+    private async Task<ConnectedSystemExportResult> ProcessCreateAsync(PendingExport pendingExport)
     {
         var dn = GetDistinguishedNameForCreate(pendingExport);
         if (string.IsNullOrEmpty(dn))
             throw new InvalidOperationException("Cannot create object: Distinguished Name (DN) could not be determined from attribute changes.");
+
+        // Validate that the DN doesn't contain empty RDN components (e.g., "OU=,OU=Users,...").
+        if (!LdapConnectorUtilities.HasValidRdnValues(dn))
+            return ConnectedSystemExportResult.Failed(
+                $"Cannot create object: Distinguished Name '{dn}' contains empty RDN components.",
+                ConnectedSystemExportErrorType.InvalidGeneratedExternalId);
 
         _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Creating object at DN '{Dn}'", dn);
 
@@ -587,10 +631,10 @@ internal class LdapConnectorExport
         if (objectGuid != null)
         {
             _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Retrieved objectGUID {ObjectGuid} for '{Dn}'", objectGuid, dn);
-            return ExportResult.Succeeded(objectGuid, dn);
+            return ConnectedSystemExportResult.Succeeded(objectGuid, dn);
         }
 
-        return ExportResult.Succeeded(null, dn);
+        return ConnectedSystemExportResult.Succeeded(null, dn);
     }
 
     private async Task<string?> FetchObjectGuidAsync(string dn)
@@ -613,7 +657,7 @@ internal class LdapConnectorExport
         }
     }
 
-    private async Task<ExportResult> ProcessUpdateAsync(PendingExport pendingExport)
+    private async Task<ConnectedSystemExportResult> ProcessUpdateAsync(PendingExport pendingExport)
     {
         var currentDn = GetDistinguishedNameForUpdate(pendingExport);
         if (string.IsNullOrEmpty(currentDn))
@@ -627,6 +671,14 @@ internal class LdapConnectorExport
 
         if (!string.IsNullOrEmpty(newDn) && !newDn.Equals(currentDn, StringComparison.OrdinalIgnoreCase))
         {
+            // Validate that the new DN doesn't contain empty RDN components (e.g., "OU=,OU=Users,...").
+            if (!LdapConnectorUtilities.HasValidRdnValues(newDn))
+            {
+                return ConnectedSystemExportResult.Failed(
+                    $"Cannot rename object: new Distinguished Name '{newDn}' contains empty RDN components.",
+                    ConnectedSystemExportErrorType.InvalidGeneratedExternalId);
+            }
+
             // Sequential within this export: rename must complete before modify
             workingDn = await ProcessRenameAsync(currentDn, newDn);
             wasRenamed = true;
@@ -637,11 +689,11 @@ internal class LdapConnectorExport
         if (modifyRequests.Count == 0)
         {
             _logger.Debug("LdapConnectorExport.ProcessUpdateAsync: No attribute modifications to apply for '{Dn}'", workingDn);
-            return wasRenamed ? ExportResult.Succeeded(null, workingDn) : ExportResult.Succeeded();
+            return wasRenamed ? ConnectedSystemExportResult.Succeeded(null, workingDn) : ConnectedSystemExportResult.Succeeded();
         }
 
         // Execute each chunked modify request sequentially
-        ExportResult lastResult = ExportResult.Succeeded();
+        ConnectedSystemExportResult lastResult = ConnectedSystemExportResult.Succeeded();
         for (var i = 0; i < modifyRequests.Count; i++)
         {
             var request = modifyRequests[i];
@@ -676,11 +728,17 @@ internal class LdapConnectorExport
         return newDn;
     }
 
-    private async Task<ExportResult> ProcessDeleteAsync(PendingExport pendingExport)
+    private async Task<ConnectedSystemExportResult> ProcessDeleteAsync(PendingExport pendingExport)
     {
         var dn = GetDistinguishedNameForUpdate(pendingExport);
         if (string.IsNullOrEmpty(dn))
             throw new InvalidOperationException("Cannot delete object: Distinguished Name (DN) could not be determined.");
+
+        // Validate that the DN doesn't contain empty RDN components before attempting delete/disable.
+        if (!LdapConnectorUtilities.HasValidRdnValues(dn))
+            return ConnectedSystemExportResult.Failed(
+                $"Cannot delete object: Distinguished Name '{dn}' contains empty RDN components.",
+                ConnectedSystemExportErrorType.InvalidGeneratedExternalId);
 
         var deleteBehaviour = GetSettingValue(SettingDeleteBehaviour) ?? LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE;
 
@@ -693,7 +751,7 @@ internal class LdapConnectorExport
             await ProcessHardDeleteAsync(dn);
         }
 
-        return ExportResult.Succeeded();
+        return ConnectedSystemExportResult.Succeeded();
     }
 
     private async Task ProcessHardDeleteAsync(string dn)
@@ -1188,7 +1246,7 @@ internal class LdapConnectorExport
     /// <summary>
     /// Handles the response from a ModifyRequest, including the special case for AttributeOrValueExists.
     /// </summary>
-    private ExportResult HandleModifyResponse(ModifyResponse response, ModifyRequest modifyRequest, string workingDn, bool wasRenamed)
+    private ConnectedSystemExportResult HandleModifyResponse(ModifyResponse response, ModifyRequest modifyRequest, string workingDn, bool wasRenamed)
     {
         if (response.ResultCode != ResultCode.Success)
         {
@@ -1201,7 +1259,7 @@ internal class LdapConnectorExport
                 _logger.Warning("LdapConnectorExport.HandleModifyResponse: Some attribute values already exist at '{Dn}'. " +
                     "This typically means a group member was already present. Treating as success. Error: {Error}",
                     workingDn, response.ErrorMessage);
-                return wasRenamed ? ExportResult.Succeeded(null, workingDn) : ExportResult.Succeeded();
+                return wasRenamed ? ConnectedSystemExportResult.Succeeded(null, workingDn) : ConnectedSystemExportResult.Succeeded();
             }
 
             // Build a more descriptive error message that includes the attributes being modified
@@ -1218,7 +1276,7 @@ internal class LdapConnectorExport
         _logger.Information("LdapConnectorExport.HandleModifyResponse: Successfully updated object at '{Dn}' with {Count} modifications",
             workingDn, modifyRequest.Modifications.Count);
 
-        return wasRenamed ? ExportResult.Succeeded(null, workingDn) : ExportResult.Succeeded();
+        return wasRenamed ? ConnectedSystemExportResult.Succeeded(null, workingDn) : ConnectedSystemExportResult.Succeeded();
     }
 
     /// <summary>

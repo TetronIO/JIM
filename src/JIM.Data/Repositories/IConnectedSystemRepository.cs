@@ -559,6 +559,13 @@ public interface IConnectedSystemRepository
     public Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
 
     /// <summary>
+    /// Batch updates only the join-related columns (JoinType, DateJoined, MetaverseObjectId) on
+    /// Connected System Objects. Used during sync page flush where AutoDetectChangesEnabled is
+    /// disabled and EF cannot detect CSO scalar property changes automatically.
+    /// </summary>
+    public Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects);
+
+    /// <summary>
     /// Updates a Connected System Object and explicitly adds new attribute values to the DbContext.
     /// This is needed when adding attribute values to a CSO that was loaded without any (e.g., PendingProvisioning).
     /// </summary>

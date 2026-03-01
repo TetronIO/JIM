@@ -6,11 +6,12 @@
 
 **YOU MUST BUILD AND TEST BEFORE EVERY COMMIT AND PR (for .NET code):**
 
-1. **ALWAYS** run `dotnet build JIM.sln` - Build must succeed with zero errors
-2. **ALWAYS** run `dotnet test JIM.sln` - All tests must pass
-3. **NEVER** commit code that hasn't been built and tested locally
-4. **NEVER** create a PR without verifying build and tests pass
-5. **NEVER** assume tests will pass without running them
+1. **ALWAYS** build and test before committing - zero errors required
+2. **Prefer targeted builds**: Build only affected projects and their dependents, not the full solution. For example, if you changed `JIM.Connectors` and `JIM.Worker.Tests`, run `dotnet build test/JIM.Worker.Tests/` (which transitively builds its dependencies). Only use `dotnet build JIM.sln` for the **final pre-PR check** or when changes span many projects.
+3. **Prefer targeted tests**: Run only the test projects that cover your changes. For example, `dotnet test test/JIM.Worker.Tests/` instead of `dotnet test JIM.sln`. Only run `dotnet test JIM.sln` for the **final pre-PR check**.
+4. **NEVER** commit code that hasn't been built and tested locally
+5. **NEVER** create a PR without verifying **full solution** build and tests pass
+6. **NEVER** assume tests will pass without running them
 
 **EXCEPTIONS - changes that do NOT require dotnet build/test:**
 - **Scripts** (.ps1, .sh, etc.) - do not affect compiled code
@@ -91,8 +92,10 @@ Sync operations are the core of JIM. Customers depend on JIM to synchronise thei
 ## Commands
 
 **Build & Test:**
-- `dotnet build JIM.sln` - Build entire solution
-- `dotnet test JIM.sln` - Run all tests
+- `dotnet build JIM.sln` - Build entire solution (use for final pre-PR check)
+- `dotnet build test/JIM.Worker.Tests/` - Build a specific project and its dependencies (preferred during development)
+- `dotnet test JIM.sln` - Run all tests (use for final pre-PR check)
+- `dotnet test test/JIM.Worker.Tests/` - Run a specific test project (preferred during development)
 - `dotnet test --filter "FullyQualifiedName~TestName"` - Run specific test
 - `dotnet clean && dotnet build` - Clean build
 
@@ -241,8 +244,9 @@ When creating ASCII diagrams in documentation or code comments, use only reliabl
 ## Testing
 
 **Before Committing .NET Code (MANDATORY):**
-- Run `dotnet build JIM.sln` - Must complete with zero errors
-- Run `dotnet test JIM.sln` - All tests must pass
+- Build and test affected projects - must complete with zero errors
+- During development, prefer targeted builds: `dotnet build test/JIM.Worker.Tests/` (builds dependencies transitively)
+- For final pre-PR check: `dotnet build JIM.sln` and `dotnet test JIM.sln` (full solution)
 - **DO NOT proceed to commit if any tests fail or build has errors**
 - See **Exceptions** under Critical Requirements for changes that do not require build/test
 
@@ -487,7 +491,7 @@ Use `./test/integration/Run-IntegrationTests.ps1` (PowerShell) - never invoke sc
 **Development Cycle (FOLLOW THIS EXACTLY):**
 1. Create/checkout feature branch (NEVER work on `main`)
 2. Make changes
-3. **For .NET code changes**: Build (`dotnet build JIM.sln`) and Test (`dotnet test JIM.sln`) - must succeed
+3. **For .NET code changes**: Build and test affected projects during development; run full solution build/test (`dotnet build JIM.sln` and `dotnet test JIM.sln`) as a final pre-PR check
 4. For non-.NET changes (scripts, docs, config, CI/CD, diagrams): skip build/test (see Exceptions above)
 5. If build or tests fail, fix errors and repeat step 3
 6. **ONLY AFTER** build and tests pass (or are not required): Commit with clear message

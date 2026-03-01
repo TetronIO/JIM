@@ -14,7 +14,7 @@ namespace JIM.Worker.Tests.OutboundSync;
 
 /// <summary>
 /// Integration tests for the provisioning flow - verifying the complete HR -> MV -> LDAP flow
-/// including CSO creation with PendingProvisioning status and ExportResult handling.
+/// including CSO creation with PendingProvisioning status and ConnectedSystemExportResult handling.
 /// </summary>
 [TestFixture]
 public class ProvisioningFlowTests
@@ -187,7 +187,7 @@ public class ProvisioningFlowTests
         };
 
         // Act - Simulate what ExportExecutionServer does after successful export
-        var exportResult = ExportResult.Succeeded(
+        var exportResult = ConnectedSystemExportResult.Succeeded(
             Guid.NewGuid().ToString(),  // objectGUID returned by LDAP
             "CN=Test User,OU=Users,DC=example,DC=com"  // DN returned by LDAP
         );
@@ -204,10 +204,10 @@ public class ProvisioningFlowTests
     }
 
     /// <summary>
-    /// Verifies that ExportResult with objectGUID can be used to populate CSO external ID.
+    /// Verifies that ConnectedSystemExportResult with objectGUID can be used to populate CSO external ID.
     /// </summary>
     [Test]
-    public void ExportResult_WithObjectGuid_PopulatesCsoExternalId()
+    public void ConnectedSystemExportResult_WithObjectGuid_PopulatesCsoExternalId()
     {
         // Arrange
         var targetObjectType = new ConnectedSystemObjectType
@@ -233,11 +233,11 @@ public class ProvisioningFlowTests
             AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
         };
 
-        // Act - Simulate receiving ExportResult from LDAP connector
+        // Act - Simulate receiving ConnectedSystemExportResult from LDAP connector
         var returnedObjectGuid = Guid.NewGuid();
         var returnedDn = "CN=John Smith,OU=Users,DC=example,DC=com";
 
-        var exportResult = ExportResult.Succeeded(returnedObjectGuid.ToString(), returnedDn);
+        var exportResult = ConnectedSystemExportResult.Succeeded(returnedObjectGuid.ToString(), returnedDn);
 
         // Simulate how ExportExecutionServer would handle this result
         if (exportResult.Success)
@@ -323,10 +323,10 @@ public class ProvisioningFlowTests
     }
 
     /// <summary>
-    /// Verifies that ExportResult failure keeps CSO in PendingProvisioning status.
+    /// Verifies that ConnectedSystemExportResult failure keeps CSO in PendingProvisioning status.
     /// </summary>
     [Test]
-    public void ExportResult_OnFailure_KeepsCsoPendingProvisioning()
+    public void ConnectedSystemExportResult_OnFailure_KeepsCsoPendingProvisioning()
     {
         // Arrange
         var cso = new ConnectedSystemObject
@@ -338,7 +338,7 @@ public class ProvisioningFlowTests
         };
 
         // Act - Simulate failed export
-        var exportResult = ExportResult.Failed("LDAP error: Entry already exists");
+        var exportResult = ConnectedSystemExportResult.Failed("LDAP error: Entry already exists");
 
         // Simulate how ExportExecutionServer would handle a failure
         if (!exportResult.Success)

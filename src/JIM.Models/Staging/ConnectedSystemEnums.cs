@@ -1,8 +1,17 @@
 ﻿namespace JIM.Models.Staging;
 
+/// <summary>
+/// Indicates the current lifecycle status of a Connected System Object.
+/// </summary>
 public enum ConnectedSystemObjectStatus
 {
+    /// <summary>
+    /// The object is active and participating in synchronisation normally.
+    /// </summary>
     Normal = 0,
+    /// <summary>
+    /// The object was not returned during a full import, indicating it no longer exists in the Connected System.
+    /// </summary>
     Obsolete = 1,
     /// <summary>
     /// The CSO was created as part of provisioning evaluation but the export has not yet been confirmed.
@@ -94,12 +103,52 @@ public enum ConnectedSystemImportObjectError
     AttributeValueError
 }
 
+/// <summary>
+/// Defines the type of run profile operation to execute against a Connected System.
+/// </summary>
 public enum ConnectedSystemRunType
 {
+    /// <summary>
+    /// Default value indicating no run type has been assigned.
+    /// </summary>
     NotSet = 0,
+    /// <summary>
+    /// Imports all objects from the Connected System, replacing the existing connector space staging data.
+    /// </summary>
     FullImport = 1,
+    /// <summary>
+    /// Imports only objects that have changed in the Connected System since the last import.
+    /// </summary>
     DeltaImport = 2,
+    /// <summary>
+    /// Synchronises all Connected System Objects with the Metaverse, evaluating join/projection rules,
+    /// attribute flow, and provisioning for every object in the connector space.
+    /// </summary>
     FullSynchronisation = 3,
+    /// <summary>
+    /// Synchronises only Connected System Objects that have pending changes since the last synchronisation,
+    /// evaluating join/projection rules, attribute flow, and provisioning for those objects only.
+    /// </summary>
     DeltaSynchronisation = 4,
+    /// <summary>
+    /// Exports pending changes from the Metaverse to the Connected System, applying attribute updates,
+    /// object creation, and object deletion as determined by prior synchronisation.
+    /// </summary>
     Export = 5
+}
+
+/// <summary>
+/// Classifies the type of export error for structured error reporting.
+/// </summary>
+public enum ConnectedSystemExportErrorType
+{
+    /// <summary>General or unclassified export error.</summary>
+    General,
+
+    /// <summary>
+    /// The generated external identifier (e.g., LDAP Distinguished Name) is structurally invalid.
+    /// This typically occurs when expression-based ID attributes evaluate with null or empty
+    /// input values, producing malformed identifiers.
+    /// </summary>
+    InvalidGeneratedExternalId
 }

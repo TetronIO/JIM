@@ -101,4 +101,10 @@ public class ProcessedExportItem
     /// Number of retry attempts if the export failed.
     /// </summary>
     public int ErrorCount { get; set; }
+
+    /// <summary>
+    /// Classifies the type of error when the export failed.
+    /// Null when the export succeeded.
+    /// </summary>
+    public ConnectedSystemExportErrorType? ErrorType { get; set; }
 }

@@ -30,6 +30,10 @@ Describe 'Get-JIMMetaverseObject' {
         It 'Should have a ById parameter set' {
             $command.ParameterSets.Name | Should -Contain 'ById'
         }
+
+        It 'Should have a ListAll parameter set' {
+            $command.ParameterSets.Name | Should -Contain 'ListAll'
+        }
     }
 
     Context 'Parameter Validation' {
@@ -79,6 +83,31 @@ Describe 'Get-JIMMetaverseObject' {
         It 'Should have PageSize parameter with validation' {
             $param = $command.Parameters['PageSize']
             $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateRangeAttribute] } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have PageSize max of 100' {
+            $param = $command.Parameters['PageSize']
+            $rangeAttr = $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateRangeAttribute] }
+            $rangeAttr.MaxRange | Should -Be 100
+        }
+
+        It 'Should have All switch parameter' {
+            $param = $command.Parameters['All']
+            $param | Should -Not -BeNullOrEmpty
+            $param.SwitchParameter | Should -BeTrue
+        }
+
+        It 'Should have All parameter in ListAll parameter set' {
+            $param = $command.Parameters['All']
+            $paramAttr = $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ParameterSetName -eq 'ListAll' }
+            $paramAttr | Should -Not -BeNullOrEmpty
+            $paramAttr.Mandatory | Should -BeTrue
+        }
+
+        It 'Should not allow Page and All together' {
+            $pageParam = $command.Parameters['Page']
+            $pageParamSets = $pageParam.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] } | ForEach-Object { $_.ParameterSetName }
+            $pageParamSets | Should -Not -Contain 'ListAll'
         }
     }
 

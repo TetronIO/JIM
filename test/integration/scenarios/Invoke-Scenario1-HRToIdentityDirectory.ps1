@@ -427,7 +427,7 @@ try {
             $expectedWithTraining = [int]($expectedUsers * $expectedTrainingCoverage)
 
             # Query all User MVOs with Training Status attribute
-            $allMVOs = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Attributes "Training Status" -PageSize 1000)
+            $allMVOs = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Attributes "Training Status" -All)
             $totalMVOs = $allMVOs.Count
 
             # Count MVOs that have Training Status attribute with a value

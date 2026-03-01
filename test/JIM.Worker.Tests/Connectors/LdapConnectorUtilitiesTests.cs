@@ -545,4 +545,64 @@ public class LdapConnectorUtilitiesTests
     }
 
     #endregion
+
+    #region HasValidRdnValues tests
+
+    [Test]
+    public void HasValidRdnValues_ValidDn_ReturnsTrue()
+    {
+        Assert.That(LdapConnectorUtilities.HasValidRdnValues("CN=John Smith,OU=Users,OU=Corp,DC=example,DC=local"), Is.True);
+    }
+
+    [Test]
+    public void HasValidRdnValues_SingleComponent_ReturnsTrue()
+    {
+        Assert.That(LdapConnectorUtilities.HasValidRdnValues("DC=local"), Is.True);
+    }
+
+    [Test]
+    public void HasValidRdnValues_EmptyOuComponent_ReturnsFalse()
+    {
+        // This is the key scenario: an empty RDN component like "OU=,OU=Users,..."
+        Assert.That(LdapConnectorUtilities.HasValidRdnValues("CN=John Smith,OU=,OU=Users,OU=Corp,DC=example,DC=local"), Is.False);
+    }
+
+    [Test]
+    public void HasValidRdnValues_EmptyCnComponent_ReturnsFalse()
+    {
+        Assert.That(LdapConnectorUtilities.HasValidRdnValues("CN=,OU=Users,DC=example,DC=local"), Is.False);
+    }
+
+    [Test]
+    public void HasValidRdnValues_EmptyString_ReturnsFalse()
+    {
+        Assert.That(LdapConnectorUtilities.HasValidRdnValues(""), Is.False);
+    }
+
+    [Test]
+    public void HasValidRdnValues_NullString_ReturnsFalse()
+    {
+        Assert.That(LdapConnectorUtilities.HasValidRdnValues(null!), Is.False);
+    }
+
+    [Test]
+    public void HasValidRdnValues_MultipleEmptyComponents_ReturnsFalse()
+    {
+        Assert.That(LdapConnectorUtilities.HasValidRdnValues("CN=,OU=,DC=example,DC=local"), Is.False);
+    }
+
+    [Test]
+    public void HasValidRdnValues_EscapedCommaInValue_ReturnsTrue()
+    {
+        // Escaped comma in value should be valid: "CN=Smith\, John"
+        Assert.That(LdapConnectorUtilities.HasValidRdnValues(@"CN=Smith\, John,OU=Users,DC=example,DC=local"), Is.True);
+    }
+
+    [Test]
+    public void HasValidRdnValues_WhitespaceOnlyValue_ReturnsFalse()
+    {
+        Assert.That(LdapConnectorUtilities.HasValidRdnValues("CN= ,OU=Users,DC=example,DC=local"), Is.False);
+    }
+
+    #endregion
 }

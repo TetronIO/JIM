@@ -57,6 +57,12 @@ public abstract class SyncTaskProcessorBase
     protected readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToDelete = [];
     protected readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToUpdate = [];
 
+    // Batch collection for deferred CSO join/projection updates (JoinType, DateJoined, MetaverseObjectId).
+    // CSO scalar property changes are NOT detected by EF during sync because AutoDetectChangesEnabled is
+    // disabled at page boundaries for performance. Without explicit persistence, JoinType stays as NotJoined
+    // and DateJoined stays null in the database after projection or join.
+    protected readonly List<ConnectedSystemObject> _pendingCsoJoinUpdates = [];
+
     // Batch collection for deferred provisioning CSO creation (avoid per-CSO database calls)
     protected readonly List<ConnectedSystemObject> _provisioningCsosToCreate = [];
 
@@ -560,8 +566,14 @@ public abstract class SyncTaskProcessorBase
         var totalCsoCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
         var remainingCsoCount = Math.Max(0, totalCsoCount - 1);
 
-        // Check if we should remove contributed attributes based on the object type setting
-        if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion)
+        // Check if we should remove contributed attributes based on the object type setting.
+        // When a grace period is configured, skip attribute recall to preserve identity-critical
+        // attribute values (e.g., display name, department) that feed expression-based exports
+        // (e.g., LDAP Distinguished Name). Recalling these attributes during the grace period
+        // would produce invalid export values. The attributes will be cleaned up when the MVO
+        // is deleted after the grace period expires, or preserved if the object reappears.
+        var hasGracePeriod = mvo.Type?.DeletionGracePeriod is { } gp && gp > TimeSpan.Zero;
+        if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !hasGracePeriod)
         {
             // Find all MVO attribute values contributed by this connected system and mark them for removal
             var contributedAttributes = mvo.AttributeValues
@@ -598,6 +610,12 @@ public abstract class SyncTaskProcessorBase
                 // for the recalled attribute values
                 _pendingExportEvaluations.Add((mvo, changedAttributes, removedAttributes));
             }
+        }
+        else if (hasGracePeriod)
+        {
+            Log.Debug("ProcessObsoleteConnectedSystemObjectAsync: Skipping attribute recall for CSO {CsoId} " +
+                "because MVO {MvoId} has a grace period of {GracePeriod}. Attributes will be preserved until " +
+                "grace period expires.", connectedSystemObject.Id, mvo.Id, mvo.Type!.DeletionGracePeriod);
         }
 
         // Break the CSO-MVO join
@@ -832,6 +850,8 @@ public abstract class SyncTaskProcessorBase
                 using (Diagnostics.Sync.StartSpan("AttemptProjection"))
                 {
                     wasProjected = AttemptProjection(scopedSyncRules, connectedSystemObject);
+                    if (wasProjected)
+                        _pendingCsoJoinUpdates.Add(connectedSystemObject);
                 }
             }
         }
@@ -1013,18 +1033,21 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Batch persists all pending MVO creates and updates collected during the current page.
-    /// This reduces database round trips from n writes to 2 writes (one for creates, one for updates).
-    /// After creates are persisted, CSO foreign keys are updated with the newly assigned MVO IDs.
+    /// Batch persists all pending MVO creates and updates collected during the current page,
+    /// then persists CSO join/projection updates (JoinType, DateJoined, MetaverseObjectId).
+    /// CSO updates are flushed AFTER MVO creates so that projected CSOs can pick up the
+    /// newly assigned MVO IDs. This is necessary because AutoDetectChangesEnabled is disabled
+    /// during page flush, so EF does not detect CSO scalar property changes automatically.
     /// </summary>
     protected async Task PersistPendingMetaverseObjectsAsync()
     {
-        if (_pendingMvoCreates.Count == 0 && _pendingMvoUpdates.Count == 0)
+        if (_pendingMvoCreates.Count == 0 && _pendingMvoUpdates.Count == 0 && _pendingCsoJoinUpdates.Count == 0)
             return;
 
         using var span = Diagnostics.Sync.StartSpan("PersistPendingMetaverseObjects");
         span.SetTag("createCount", _pendingMvoCreates.Count);
         span.SetTag("updateCount", _pendingMvoUpdates.Count);
+        span.SetTag("csoJoinUpdateCount", _pendingCsoJoinUpdates.Count);
 
         // Batch create new MVOs
         if (_pendingMvoCreates.Count > 0)
@@ -1040,6 +1063,26 @@ public abstract class SyncTaskProcessorBase
             await _jim.Metaverse.UpdateMetaverseObjectsAsync(_pendingMvoUpdates);
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} MVOs in batch", _pendingMvoUpdates.Count);
             _pendingMvoUpdates.Clear();
+        }
+
+        // Batch update CSOs that had JoinType/DateJoined/MetaverseObjectId changed during
+        // projection or join. This must run AFTER MVO creates so that projected CSOs can
+        // pick up the newly assigned MVO IDs (set via EF relationship fixup during AddRange).
+        if (_pendingCsoJoinUpdates.Count > 0)
+        {
+            // For projected CSOs, MetaverseObjectId was not set at projection time (MVO had
+            // no ID yet). Now that CreateMetaverseObjectsAsync has persisted the MVOs, EF has
+            // assigned IDs and relationship fixup has set MetaverseObjectId on the CSOs.
+            // Ensure the FK is populated for any CSO where it's still null.
+            foreach (var cso in _pendingCsoJoinUpdates)
+            {
+                if (cso.MetaverseObjectId == null && cso.MetaverseObject != null)
+                    cso.MetaverseObjectId = cso.MetaverseObject.Id;
+            }
+
+            await _jim.ConnectedSystems.UpdateConnectedSystemObjectJoinStatesAsync(_pendingCsoJoinUpdates);
+            Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} CSO join states in batch", _pendingCsoJoinUpdates.Count);
+            _pendingCsoJoinUpdates.Clear();
         }
 
         span.SetSuccess();
@@ -1469,6 +1512,10 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Batch evaluates export rules for all MVOs that changed during the current page.
     /// Must be called after PersistPendingMetaverseObjectsAsync so MVOs have valid IDs for pending export FKs.
+    /// Skips MVOs that are queued for immediate deletion (0-grace-period) because
+    /// FlushPendingMvoDeletionsAsync will create the correct Delete exports via EvaluateMvoDeletionAsync.
+    /// Creating Update exports for recalled attributes on a doomed MVO is spurious and can produce
+    /// invalid attribute values (e.g., empty DN from expression evaluation against recalled attributes).
     /// </summary>
     protected async Task EvaluatePendingExportsAsync()
     {
@@ -1478,8 +1525,26 @@ public abstract class SyncTaskProcessorBase
         using var span = Diagnostics.Sync.StartSpan("EvaluatePendingExports");
         span.SetTag("count", _pendingExportEvaluations.Count);
 
+        // Build a set of MVO IDs pending immediate deletion.
+        // These MVOs will get Delete exports in FlushPendingMvoDeletionsAsync,
+        // so creating Update exports here would be spurious.
+        var pendingDeletionMvoIds = _pendingMvoDeletions.Count > 0
+            ? _pendingMvoDeletions.Select(m => m.Id).ToHashSet()
+            : null;
+
+        var skippedCount = 0;
+
         foreach (var (mvo, changedAttributes, removedAttributes) in _pendingExportEvaluations)
         {
+            if (pendingDeletionMvoIds != null && pendingDeletionMvoIds.Contains(mvo.Id))
+            {
+                Log.Debug("EvaluatePendingExportsAsync: Skipping export evaluation for MVO {MvoId} — " +
+                    "queued for immediate deletion, Delete exports will be created by FlushPendingMvoDeletionsAsync",
+                    mvo.Id);
+                skippedCount++;
+                continue;
+            }
+
             using (Diagnostics.Sync.StartSpan("EvaluateSingleMvoExports")
                 .SetTag("mvoId", mvo.Id)
                 .SetTag("changedAttributeCount", changedAttributes.Count))
@@ -1488,7 +1553,13 @@ public abstract class SyncTaskProcessorBase
             }
         }
 
-        Log.Verbose("EvaluatePendingExportsAsync: Evaluated exports for {Count} MVOs", _pendingExportEvaluations.Count);
+        if (skippedCount > 0)
+        {
+            Log.Information("EvaluatePendingExportsAsync: Skipped {SkippedCount} MVO(s) pending immediate deletion", skippedCount);
+        }
+
+        Log.Verbose("EvaluatePendingExportsAsync: Evaluated exports for {Count} MVOs ({SkippedCount} skipped due to pending deletion)",
+            _pendingExportEvaluations.Count, skippedCount);
         _pendingExportEvaluations.Clear();
 
         span.SetSuccess();
@@ -1860,6 +1931,7 @@ public abstract class SyncTaskProcessorBase
             connectedSystemObject.MetaverseObjectId = mvo.Id;
             connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Joined;
             connectedSystemObject.DateJoined = DateTime.UtcNow;
+            _pendingCsoJoinUpdates.Add(connectedSystemObject);
             mvo.ConnectedSystemObjects.Add(connectedSystemObject);
 
             // If the MVO was marked for deletion (reconnection scenario), clear the disconnection date
@@ -2098,9 +2170,11 @@ public abstract class SyncTaskProcessorBase
                 var totalCsoCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
                 var remainingCsoCount = Math.Max(0, totalCsoCount - 1);
 
-                // Check if we should remove contributed attributes based on the object type setting
+                // Check if we should remove contributed attributes based on the object type setting.
+                // Skip recall when a grace period is configured (see ProcessObsoleteConnectedSystemObjectAsync).
                 int attributeRemovalCount = 0;
-                if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion)
+                var hasGracePeriod = mvo.Type?.DeletionGracePeriod is { } gracePeriod && gracePeriod > TimeSpan.Zero;
+                if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !hasGracePeriod)
                 {
                     var contributedAttributes = mvo.AttributeValues
                         .Where(av => av.ContributedBySystemId == _connectedSystem.Id)

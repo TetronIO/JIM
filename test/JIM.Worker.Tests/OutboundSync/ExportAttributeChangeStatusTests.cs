@@ -356,7 +356,7 @@ public class ExportAttributeChangeStatusTests
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
         mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<ExportResult> { ExportResult.Succeeded() });
+            .ReturnsAsync(new List<ConnectedSystemExportResult> { ConnectedSystemExportResult.Succeeded() });
 
         // Mock update
         MockDbSetPendingExports.Setup(set => set.Update(It.IsAny<PendingExport>()));
@@ -403,7 +403,7 @@ public class ExportAttributeChangeStatusTests
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
         mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<ExportResult> { ExportResult.Succeeded() });
+            .ReturnsAsync(new List<ConnectedSystemExportResult> { ConnectedSystemExportResult.Succeeded() });
 
         MockDbSetPendingExports.Setup(set => set.Update(It.IsAny<PendingExport>()));
 
@@ -467,7 +467,7 @@ public class ExportAttributeChangeStatusTests
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
         mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<ExportResult> { ExportResult.Succeeded() });
+            .ReturnsAsync(new List<ConnectedSystemExportResult> { ConnectedSystemExportResult.Succeeded() });
 
         MockDbSetPendingExports.Setup(set => set.Update(It.IsAny<PendingExport>()));
 

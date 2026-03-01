@@ -1502,6 +1502,24 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }
     }
 
+    /// <inheritdoc />
+    public async Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects)
+    {
+        if (connectedSystemObjects.Count == 0)
+            return;
+
+        try
+        {
+            await BulkUpdateConnectedSystemObjectJoinStatesRawAsync(connectedSystemObjects);
+        }
+        catch
+        {
+            // Fallback for unit tests with mocked DbContext where raw SQL is not available.
+            Repository.Database.ConnectedSystemObjects.UpdateRange(connectedSystemObjects);
+            await Repository.Database.SaveChangesAsync();
+        }
+    }
+
     /// <summary>
     /// Updates a Connected System Object and explicitly adds new attribute values to the DbContext.
     /// This is needed when adding attribute values to a CSO that was loaded without any (e.g., PendingProvisioning).
@@ -3538,6 +3556,41 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             }
 
             sql.Append(@") AS v(""Id"", ""LastUpdated"", ""Status"", ""MetaverseObjectId"", ""JoinType"", ""DateJoined"", ""ExternalIdAttributeId"", ""SecondaryExternalIdAttributeId"") WHERE t.""Id"" = v.""Id""");
+
+            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
+    }
+
+    /// <summary>
+    /// Batch updates only the join-related columns (JoinType, DateJoined, MetaverseObjectId) on
+    /// ConnectedSystemObject rows using UPDATE ... FROM (VALUES ...) pattern.
+    /// Used during sync page flush where only join state has changed and a full column update is unnecessary.
+    /// </summary>
+    private async Task BulkUpdateConnectedSystemObjectJoinStatesRawAsync(List<ConnectedSystemObject> objects)
+    {
+        const int columnsPerRow = 4; // Id + 3 mutable columns
+        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+
+        foreach (var chunk in ChunkList(objects, chunkSize))
+        {
+            var sql = new System.Text.StringBuilder();
+            sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ""MetaverseObjectId"" = v.""MetaverseObjectId"", ""JoinType"" = v.""JoinType"", ""DateJoined"" = v.""DateJoined"" FROM (VALUES ");
+
+            var parameters = new List<object>();
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                if (i > 0) sql.Append(", ");
+                var offset = i * columnsPerRow;
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::uuid, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone)");
+
+                var cso = chunk[i];
+                parameters.Add(cso.Id);
+                parameters.Add((object?)cso.MetaverseObjectId ?? DBNull.Value);
+                parameters.Add((int)cso.JoinType);
+                parameters.Add((object?)cso.DateJoined ?? DBNull.Value);
+            }
+
+            sql.Append(@") AS v(""Id"", ""MetaverseObjectId"", ""JoinType"", ""DateJoined"") WHERE t.""Id"" = v.""Id""");
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }

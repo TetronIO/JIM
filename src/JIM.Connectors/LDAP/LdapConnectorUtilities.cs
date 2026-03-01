@@ -1,4 +1,5 @@
-﻿using JIM.Models.Core;
+﻿using CPI.DirectoryServices;
+using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
@@ -558,5 +559,37 @@ internal static class LdapConnectorUtilities
             }
         }
         return -1;
+    }
+
+    /// <summary>
+    /// Validates that a Distinguished Name does not contain empty RDN values.
+    /// Empty RDN values (e.g., "OU=,OU=Users,...") are invalid and will be rejected by LDAP servers.
+    /// </summary>
+    /// <param name="dn">The Distinguished Name to validate.</param>
+    /// <returns>True if the DN is valid (no empty RDN values); false otherwise.</returns>
+    internal static bool HasValidRdnValues(string dn)
+    {
+        if (string.IsNullOrEmpty(dn))
+            return false;
+
+        try
+        {
+            var parsedDn = new DN(dn);
+            foreach (var rdn in parsedDn.RDNs)
+            {
+                foreach (var component in rdn.Components)
+                {
+                    if (string.IsNullOrWhiteSpace(component.ComponentValue))
+                        return false;
+                }
+            }
+
+            return true;
+        }
+        catch
+        {
+            // If DNParser cannot parse the DN, it's malformed
+            return false;
+        }
     }
 }

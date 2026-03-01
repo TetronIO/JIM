@@ -93,6 +93,11 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
     font-size: 1rem;
 }
 
+/* Allow mud-text-secondary to override the default table cell text colour */
+.mud-table-root .mud-table-body .mud-table-cell.mud-text-secondary {
+    color: var(--mud-palette-text-secondary);
+}
+
 .mud-table-root .mud-table-pagination-toolbar {
     font-size: 1rem;
 }
@@ -1023,6 +1028,7 @@ html[lang] .mud-dialog .mud-paper-outlined {
     min-width: auto !important;
     font-size: 0.75rem;
     text-transform: none !important;
+    align-self: flex-start;
 }
 
 .jim-attr-expanded {

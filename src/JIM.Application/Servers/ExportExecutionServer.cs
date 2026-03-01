@@ -526,14 +526,14 @@ public class ExportExecutionServer
                 await MarkBatchAsExecutingAsync(batch, Application.Repository.ConnectedSystems);
             }
 
-            // Execute batch via connector - now returns ExportResult list
-            List<ExportResult> exportResults;
+            // Execute batch via connector - now returns ConnectedSystemExportResult list
+            List<ConnectedSystemExportResult> exportResults;
             using (Diagnostics.Diagnostics.Connector.StartSpan("ExportBatch").SetTag("batchSize", batch.Count))
             {
                 exportResults = await connector.ExportAsync(batch, cancellationToken);
             }
 
-            // Process results with ExportResult data
+            // Process results with ConnectedSystemExportResult data
             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessBatchSuccess")
                 .SetTag("batchSize", batch.Count))
             {
@@ -575,7 +575,7 @@ public class ExportExecutionServer
                 await MarkBatchAsExecutingAsync(batch, Application.Repository.ConnectedSystems);
             }
 
-            List<ExportResult> exportResults;
+            List<ConnectedSystemExportResult> exportResults;
             using (Diagnostics.Diagnostics.Connector.StartSpan("ExportDeferredBatch")
                 .SetTag("batchSize", batch.Count))
             {
@@ -766,24 +766,24 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Processes a batch of exports with their corresponding ExportResult data.
+    /// Processes a batch of exports with their corresponding ConnectedSystemExportResult data.
     /// Uses batch updates for efficiency - pre-fetches attribute definitions and performs
     /// a single SaveChanges for all CSO updates.
     /// Accepts an explicit repository parameter to support both sequential (shared) and parallel (per-batch) paths.
     /// </summary>
     private async Task ProcessBatchSuccessAsync(
         List<PendingExport> batch,
-        List<ExportResult> exportResults,
+        List<ConnectedSystemExportResult> exportResults,
         ExportExecutionResult result,
         IConnectedSystemRepository repository)
     {
         var exportsToUpdate = new List<PendingExport>();
-        var csosToUpdate = new List<(ConnectedSystemObject cso, ExportResult exportResult)>();
+        var csosToUpdate = new List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)>();
 
         for (var i = 0; i < batch.Count; i++)
         {
             var export = batch[i];
-            var exportResult = i < exportResults.Count ? exportResults[i] : ExportResult.Succeeded();
+            var exportResult = i < exportResults.Count ? exportResults[i] : ConnectedSystemExportResult.Succeeded();
 
             if (!exportResult.Success)
             {
@@ -800,7 +800,8 @@ public class ExportExecutionServer
                     AttributeChangeCount = export.AttributeValueChanges.Count,
                     Succeeded = false,
                     ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
-                    ErrorCount = export.ErrorCount
+                    ErrorCount = export.ErrorCount,
+                    ErrorType = exportResult.ErrorType
                 });
                 continue;
             }
@@ -857,7 +858,7 @@ public class ExportExecutionServer
     /// Accepts an explicit repository parameter to support both sequential (shared) and parallel (per-batch) paths.
     /// </summary>
     private async Task BatchUpdateCsosAfterSuccessfulExportAsync(
-        List<(ConnectedSystemObject cso, ExportResult exportResult)> csosToUpdate,
+        List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)> csosToUpdate,
         IConnectedSystemRepository repository)
     {
         // Collect all unique attribute IDs we need to look up (external ID + secondary external ID attributes)
@@ -1022,7 +1023,7 @@ public class ExportExecutionServer
     /// For Create exports, transitions the CSO from PendingProvisioning to Normal status
     /// and populates the external ID attribute with the system-assigned value.
     /// </summary>
-    private async Task UpdateCsoAfterSuccessfulExportAsync(ConnectedSystemObject cso, ExportResult? exportResult = null)
+    private async Task UpdateCsoAfterSuccessfulExportAsync(ConnectedSystemObject cso, ConnectedSystemExportResult? exportResult = null)
     {
         var needsUpdate = false;
         var newAttributeValues = new List<ConnectedSystemObjectAttributeValue>();
@@ -1171,12 +1172,12 @@ public class ExportExecutionServer
             // Process exports and collect for batch operations
             var exportsToUpdate = new List<PendingExport>();
             var exportsToDelete = new List<PendingExport>();
-            var csosToUpdate = new List<(ConnectedSystemObject cso, ExportResult exportResult)>();
+            var csosToUpdate = new List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)>();
 
             for (var i = 0; i < pendingExports.Count; i++)
             {
                 var export = pendingExports[i];
-                var exportResult = i < exportResults.Count ? exportResults[i] : ExportResult.Succeeded();
+                var exportResult = i < exportResults.Count ? exportResults[i] : ConnectedSystemExportResult.Succeeded();
 
                 if (!exportResult.Success)
                 {
@@ -1192,7 +1193,8 @@ public class ExportExecutionServer
                         AttributeChangeCount = export.AttributeValueChanges.Count,
                         Succeeded = false,
                         ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
-                        ErrorCount = export.ErrorCount
+                        ErrorCount = export.ErrorCount,
+                        ErrorType = exportResult.ErrorType
                     });
                     continue;
                 }
@@ -1448,9 +1450,9 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Processes a successful export execution with ExportResult data.
+    /// Processes a successful export execution with ConnectedSystemExportResult data.
     /// </summary>
-    private async Task ProcessExportSuccessAsync(PendingExport export, ExportResult exportResult, ExportExecutionResult result)
+    private async Task ProcessExportSuccessAsync(PendingExport export, ConnectedSystemExportResult exportResult, ExportExecutionResult result)
     {
         if (!exportResult.Success)
         {
@@ -1465,7 +1467,8 @@ public class ExportExecutionServer
                 AttributeChangeCount = export.AttributeValueChanges.Count,
                 Succeeded = false,
                 ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
-                ErrorCount = export.ErrorCount
+                ErrorCount = export.ErrorCount,
+                ErrorType = exportResult.ErrorType
             });
             return;
         }

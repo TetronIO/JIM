@@ -466,7 +466,7 @@
                 </MudTh>
                 <MudTh>
                     <MudTableSortLabel SortLabel="displayname" T="ActivityRunProfileExecutionItemHeader">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Name</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Display Name</MudText>
                     </MudTableSortLabel>
                 </MudTh>
                 <MudTh>
@@ -492,7 +492,7 @@
                                Color="Color.Primary"
                                Href="@($"/activity/item/{context.Id}")">View</MudButton>
                 </MudTd>
-                <MudTd DataLabel="External Id" Class="jim-text-code">@(!string.IsNullOrEmpty(context.ExternalIdValue) ? context.ExternalIdValue : "-")</MudTd>
+                <MudTd DataLabel="External Id" Class="jim-text-code mud-text-secondary">@(!string.IsNullOrEmpty(context.ExternalIdValue) ? context.ExternalIdValue : "-")</MudTd>
                 <MudTd DataLabel="Display Name">@(!string.IsNullOrEmpty(context.DisplayName) ? context.DisplayName : "-")</MudTd>
                 <MudTd DataLabel="External Object Type">@(context.ConnectedSystemObjectType != null ? context.ConnectedSystemObjectType.ToString().SplitOnCapitalLetters() : "-")</MudTd>
                 <MudTd DataLabel="Change Type">
