@@ -30,14 +30,14 @@ internal class FileConnectorExport
         _logger = logger;
     }
 
-    internal List<ExportResult> Execute()
+    internal List<ConnectedSystemExportResult> Execute()
     {
         _logger.Debug("FileConnectorExport.Execute: Starting export of {Count} pending exports", _pendingExports.Count);
 
         if (_pendingExports.Count == 0)
         {
             _logger.Information("FileConnectorExport.Execute: No pending exports to process");
-            return new List<ExportResult>();
+            return new List<ConnectedSystemExportResult>();
         }
 
         var exportFilePath = GetSettingValue("File Path");
@@ -57,7 +57,7 @@ internal class FileConnectorExport
         if (string.IsNullOrEmpty(externalIdAttributeName))
         {
             _logger.Error("FileConnectorExport.Execute: Could not determine External ID attribute from pending exports. Cannot proceed with full-state export.");
-            return _pendingExports.Select(_ => ExportResult.Failed("No External ID attribute configured for this Connected System.")).ToList();
+            return _pendingExports.Select(_ => ConnectedSystemExportResult.Failed("No External ID attribute configured for this Connected System.")).ToList();
         }
 
         _logger.Debug("FileConnectorExport.Execute: Using External ID attribute '{ExternalIdAttribute}'", externalIdAttributeName);
@@ -71,11 +71,11 @@ internal class FileConnectorExport
         if (attributeColumns.Count == 0)
         {
             _logger.Warning("FileConnectorExport.Execute: No attribute columns found in pending exports or existing file");
-            return _pendingExports.Select(_ => ExportResult.Failed("No attributes found in pending exports.")).ToList();
+            return _pendingExports.Select(_ => ConnectedSystemExportResult.Failed("No attributes found in pending exports.")).ToList();
         }
 
         // Process each pending export and build results
-        var results = new List<ExportResult>();
+        var results = new List<ConnectedSystemExportResult>();
         var createdCount = 0;
         var updatedCount = 0;
         var deletedCount = 0;
@@ -106,7 +106,7 @@ internal class FileConnectorExport
             catch (Exception ex)
             {
                 _logger.Error(ex, "FileConnectorExport.Execute: Error processing pending export {PendingExportId}", pendingExport.Id);
-                results.Add(ExportResult.Failed($"Error processing export: {ex.Message}"));
+                results.Add(ConnectedSystemExportResult.Failed($"Error processing export: {ex.Message}"));
             }
         }
 
@@ -258,9 +258,9 @@ internal class FileConnectorExport
 
     /// <summary>
     /// Processes a single pending export, applying changes to the existing rows dictionary.
-    /// Returns an ExportResult with the External ID for Create operations.
+    /// Returns an ConnectedSystemExportResult with the External ID for Create operations.
     /// </summary>
-    private ExportResult ProcessPendingExport(
+    private ConnectedSystemExportResult ProcessPendingExport(
         PendingExport pendingExport,
         Dictionary<string, Dictionary<string, string>> existingRows,
         string externalIdAttributeName,
@@ -277,7 +277,7 @@ internal class FileConnectorExport
                 {
                     _logger.Warning("FileConnectorExport.ProcessPendingExport: Create export has no External ID value for attribute '{ExternalIdAttribute}'",
                         externalIdAttributeName);
-                    return ExportResult.Failed($"Create export has no value for External ID attribute '{externalIdAttributeName}'.");
+                    return ConnectedSystemExportResult.Failed($"Create export has no value for External ID attribute '{externalIdAttributeName}'.");
                 }
 
                 if (existingRows.ContainsKey(externalId))
@@ -295,7 +295,7 @@ internal class FileConnectorExport
 
                 existingRows[externalId] = row;
 
-                return ExportResult.Succeeded(externalId);
+                return ConnectedSystemExportResult.Succeeded(externalId);
             }
 
             case PendingExportChangeType.Update:
@@ -303,7 +303,7 @@ internal class FileConnectorExport
                 if (string.IsNullOrEmpty(externalId))
                 {
                     _logger.Warning("FileConnectorExport.ProcessPendingExport: Update export has no External ID value");
-                    return ExportResult.Failed("Update export has no External ID value.");
+                    return ConnectedSystemExportResult.Failed("Update export has no External ID value.");
                 }
 
                 if (!existingRows.TryGetValue(externalId, out var existingRow))
@@ -319,7 +319,7 @@ internal class FileConnectorExport
                 // Include full state from CSO if available (for attributes not in changes)
                 ApplyCsoFullState(existingRow, pendingExport, multiValueDelimiter);
 
-                return ExportResult.Succeeded(externalId);
+                return ConnectedSystemExportResult.Succeeded(externalId);
             }
 
             case PendingExportChangeType.Delete:
@@ -327,7 +327,7 @@ internal class FileConnectorExport
                 if (string.IsNullOrEmpty(externalId))
                 {
                     _logger.Warning("FileConnectorExport.ProcessPendingExport: Delete export has no External ID value");
-                    return ExportResult.Failed("Delete export has no External ID value.");
+                    return ConnectedSystemExportResult.Failed("Delete export has no External ID value.");
                 }
 
                 if (existingRows.Remove(externalId))
@@ -340,11 +340,11 @@ internal class FileConnectorExport
                         externalId);
                 }
 
-                return ExportResult.Succeeded(externalId);
+                return ConnectedSystemExportResult.Succeeded(externalId);
             }
 
             default:
-                return ExportResult.Failed($"Unsupported change type: {pendingExport.ChangeType}");
+                return ConnectedSystemExportResult.Failed($"Unsupported change type: {pendingExport.ChangeType}");
         }
     }
 

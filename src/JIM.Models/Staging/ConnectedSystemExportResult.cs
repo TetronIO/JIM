@@ -5,7 +5,7 @@ namespace JIM.Models.Staging;
 /// Connectors return this to provide feedback about the export, including
 /// any system-generated identifiers.
 /// </summary>
-public class ExportResult
+public class ConnectedSystemExportResult
 {
     /// <summary>
     /// Whether the export operation succeeded.
@@ -16,6 +16,12 @@ public class ExportResult
     /// Error message if the export failed. Should be human-readable.
     /// </summary>
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// Classifies the type of error when the export failed.
+    /// Null when the export succeeded.
+    /// </summary>
+    public ConnectedSystemExportErrorType? ErrorType { get; set; }
 
     /// <summary>
     /// The primary external ID assigned by the target system.
@@ -34,12 +40,12 @@ public class ExportResult
     /// <summary>
     /// Creates a successful result with no external ID feedback.
     /// </summary>
-    public static ExportResult Succeeded() => new() { Success = true };
+    public static ConnectedSystemExportResult Succeeded() => new() { Success = true };
 
     /// <summary>
     /// Creates a successful result with external ID feedback.
     /// </summary>
-    public static ExportResult Succeeded(string? externalId, string? secondaryExternalId = null) =>
+    public static ConnectedSystemExportResult Succeeded(string? externalId, string? secondaryExternalId = null) =>
         new()
         {
             Success = true,
@@ -50,10 +56,22 @@ public class ExportResult
     /// <summary>
     /// Creates a failed result with an error message.
     /// </summary>
-    public static ExportResult Failed(string errorMessage) =>
+    public static ConnectedSystemExportResult Failed(string errorMessage) =>
         new()
         {
             Success = false,
-            ErrorMessage = errorMessage
+            ErrorMessage = errorMessage,
+            ErrorType = ConnectedSystemExportErrorType.General
+        };
+
+    /// <summary>
+    /// Creates a failed result with an error message and a specific error classification.
+    /// </summary>
+    public static ConnectedSystemExportResult Failed(string errorMessage, ConnectedSystemExportErrorType errorType) =>
+        new()
+        {
+            Success = false,
+            ErrorMessage = errorMessage,
+            ErrorType = errorType
         };
 }

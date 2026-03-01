@@ -484,7 +484,7 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #endregion
 
     #region IConnectorExportUsingFiles members
-    public Task<List<ExportResult>> ExportAsync(IList<ConnectedSystemSettingValue> settings, IList<PendingExport> pendingExports, CancellationToken cancellationToken)
+    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<ConnectedSystemSettingValue> settings, IList<PendingExport> pendingExports, CancellationToken cancellationToken)
     {
         var logger = Log.ForContext<FileConnector>();
         logger.Verbose("ExportAsync() called with {Count} pending exports", pendingExports.Count);

@@ -560,8 +560,14 @@ public abstract class SyncTaskProcessorBase
         var totalCsoCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
         var remainingCsoCount = Math.Max(0, totalCsoCount - 1);
 
-        // Check if we should remove contributed attributes based on the object type setting
-        if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion)
+        // Check if we should remove contributed attributes based on the object type setting.
+        // When a grace period is configured, skip attribute recall to preserve identity-critical
+        // attribute values (e.g., display name, department) that feed expression-based exports
+        // (e.g., LDAP Distinguished Name). Recalling these attributes during the grace period
+        // would produce invalid export values. The attributes will be cleaned up when the MVO
+        // is deleted after the grace period expires, or preserved if the object reappears.
+        var hasGracePeriod = mvo.Type?.DeletionGracePeriod is { } gp && gp > TimeSpan.Zero;
+        if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !hasGracePeriod)
         {
             // Find all MVO attribute values contributed by this connected system and mark them for removal
             var contributedAttributes = mvo.AttributeValues
@@ -598,6 +604,12 @@ public abstract class SyncTaskProcessorBase
                 // for the recalled attribute values
                 _pendingExportEvaluations.Add((mvo, changedAttributes, removedAttributes));
             }
+        }
+        else if (hasGracePeriod)
+        {
+            Log.Debug("ProcessObsoleteConnectedSystemObjectAsync: Skipping attribute recall for CSO {CsoId} " +
+                "because MVO {MvoId} has a grace period of {GracePeriod}. Attributes will be preserved until " +
+                "grace period expires.", connectedSystemObject.Id, mvo.Id, mvo.Type!.DeletionGracePeriod);
         }
 
         // Break the CSO-MVO join
@@ -2098,9 +2110,11 @@ public abstract class SyncTaskProcessorBase
                 var totalCsoCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
                 var remainingCsoCount = Math.Max(0, totalCsoCount - 1);
 
-                // Check if we should remove contributed attributes based on the object type setting
+                // Check if we should remove contributed attributes based on the object type setting.
+                // Skip recall when a grace period is configured (see ProcessObsoleteConnectedSystemObjectAsync).
                 int attributeRemovalCount = 0;
-                if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion)
+                var hasGracePeriod = mvo.Type?.DeletionGracePeriod is { } gracePeriod && gracePeriod > TimeSpan.Zero;
+                if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !hasGracePeriod)
                 {
                     var contributedAttributes = mvo.AttributeValues
                         .Where(av => av.ContributedBySystemId == _connectedSystem.Id)

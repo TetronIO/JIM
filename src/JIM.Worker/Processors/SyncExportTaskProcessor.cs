@@ -225,7 +225,11 @@ public class SyncExportTaskProcessor
             // Set error information if the export failed
             if (!exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))
             {
-                executionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
+                executionItem.ErrorType = exportItem.ErrorType switch
+                {
+                    ConnectedSystemExportErrorType.InvalidGeneratedExternalId => ActivityRunProfileExecutionItemErrorType.InvalidGeneratedExternalId,
+                    _ => ActivityRunProfileExecutionItemErrorType.UnhandledError,
+                };
                 if (exportItem.ErrorCount > 1)
                 {
                     // Export has been retried - show the retry count

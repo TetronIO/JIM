@@ -32,8 +32,8 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     private bool _supportsSecondaryExternalId = true;
     private readonly Queue<ConnectedSystemImportResult> _importResultQueue = new();
     private readonly List<PendingExport> _exportedItems = new();
-    private readonly Dictionary<Guid, ExportResult> _exportResultOverrides = new();
-    private Func<PendingExport, ExportResult>? _exportResultFactory;
+    private readonly Dictionary<Guid, ConnectedSystemExportResult> _exportResultOverrides = new();
+    private Func<PendingExport, ConnectedSystemExportResult>? _exportResultFactory;
     private Func<PendingExport, ConnectedSystemImportObject>? _confirmingImportFactory;
 
     #region Configuration Methods
@@ -88,7 +88,7 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     /// Sets a factory function to generate export results for each pending export.
     /// If not set, all exports succeed by default.
     /// </summary>
-    public MockCallConnector WithExportResultFactory(Func<PendingExport, ExportResult> factory)
+    public MockCallConnector WithConnectedSystemExportResultFactory(Func<PendingExport, ConnectedSystemExportResult> factory)
     {
         _exportResultFactory = factory;
         return this;
@@ -98,7 +98,7 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     /// Sets a specific export result for a pending export ID.
     /// Takes precedence over the export result factory.
     /// </summary>
-    public MockCallConnector WithExportResult(Guid pendingExportId, ExportResult result)
+    public MockCallConnector WithConnectedSystemExportResult(Guid pendingExportId, ConnectedSystemExportResult result)
     {
         _exportResultOverrides[pendingExportId] = result;
         return this;
@@ -244,12 +244,12 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
         // No-op for mock
     }
 
-    public Task<List<ExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken)
+    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken)
     {
         if (ExportExceptionToThrow != null)
             throw ExportExceptionToThrow;
 
-        var results = new List<ExportResult>();
+        var results = new List<ConnectedSystemExportResult>();
 
         foreach (var pendingExport in pendingExports)
         {
@@ -257,7 +257,7 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
 
             _exportedItems.Add(pendingExport);
 
-            ExportResult result;
+            ConnectedSystemExportResult result;
 
             // Check for specific override first
             if (_exportResultOverrides.TryGetValue(pendingExport.Id, out var overrideResult))
@@ -273,8 +273,8 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
             else
             {
                 result = pendingExport.ChangeType == PendingExportChangeType.Create
-                    ? ExportResult.Succeeded(Guid.NewGuid().ToString()) // Generate a new external ID for creates
-                    : ExportResult.Succeeded();
+                    ? ConnectedSystemExportResult.Succeeded(Guid.NewGuid().ToString()) // Generate a new external ID for creates
+                    : ConnectedSystemExportResult.Succeeded();
             }
 
             results.Add(result);

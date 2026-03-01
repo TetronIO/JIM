@@ -348,7 +348,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         OpenImportConnection(settings.ToList(), Log.Logger);
     }
 
-    public Task<List<ExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken)
+    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken)
     {
         if (_connection == null)
             throw new InvalidOperationException("Must call OpenExportConnection() before ExportAsync()!");

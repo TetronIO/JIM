@@ -103,3 +103,19 @@ public enum ConnectedSystemRunType
     DeltaSynchronisation = 4,
     Export = 5
 }
+
+/// <summary>
+/// Classifies the type of export error for structured error reporting.
+/// </summary>
+public enum ConnectedSystemExportErrorType
+{
+    /// <summary>General or unclassified export error.</summary>
+    General,
+
+    /// <summary>
+    /// The generated external identifier (e.g., LDAP Distinguished Name) is structurally invalid.
+    /// This typically occurs when expression-based ID attributes evaluate with null or empty
+    /// input values, producing malformed identifiers.
+    /// </summary>
+    InvalidGeneratedExternalId,
+}

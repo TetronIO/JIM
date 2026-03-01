@@ -429,6 +429,487 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
     }
 
     /// <summary>
+    /// When a grace period is configured on the MVO type and a source CSO goes obsolete,
+    /// attribute recall should be SKIPPED even though RemoveContributedAttributesOnObsoletion is true.
+    /// This prevents identity-critical attributes (which feed expression-based exports like DN)
+    /// from being cleared during the grace period.
+    ///
+    /// Topology: HR Source (recall enabled) + AD Target (expression-based DN).
+    /// Grace period: 7 days on MVO type.
+    /// Action: HR CSO goes obsolete → Delta Sync.
+    /// Expected: MVO attributes preserved, no Update export generated.
+    /// </summary>
+    [Test]
+    public async Task AttributeRecall_WithGracePeriod_SkipsRecallAndPreservesAttributesAsync()
+    {
+        // Arrange: Create HR source system with recall ENABLED
+        var hrSystem = await CreateConnectedSystemAsync("HR Source");
+        var hrType = await CreateCsoTypeAsync(hrSystem.Id, "HrUser");
+        hrType.RemoveContributedAttributesOnObsoletion = true;
+        await DbContext.SaveChangesAsync();
+
+        // Create target AD system
+        var targetSystem = await CreateConnectedSystemAsync("AD Target");
+        var targetDnAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "distinguishedName",
+            Type = AttributeDataType.Text,
+            IsSecondaryExternalId = true,
+            Selected = true
+        };
+        var targetDisplayNameAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "DisplayName",
+            Type = AttributeDataType.Text,
+            Selected = true
+        };
+        var targetExternalIdAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "ExternalId",
+            Type = AttributeDataType.Guid,
+            IsExternalId = true,
+            Selected = true
+        };
+        var targetType = await CreateCsoTypeAsync(targetSystem.Id, "TargetUser",
+            new List<ConnectedSystemObjectTypeAttribute>
+            {
+                targetExternalIdAttr,
+                targetDnAttr,
+                targetDisplayNameAttr
+            });
+
+        // Create MVO type WITH grace period
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        mvType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
+        mvType.DeletionGracePeriod = TimeSpan.FromDays(7);
+        mvType.DeletionTriggerConnectedSystemIds = new List<int>();
+        await DbContext.SaveChangesAsync();
+
+        var mvDisplayNameAttr = await DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "DisplayName");
+        var mvEmployeeIdAttr = await DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "EmployeeId");
+
+        // Create HR import sync rule (HR Source → MV: DisplayName, EmployeeId)
+        var hrImportRule = await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
+        var hrDisplayNameAttr = hrType.Attributes.Single(a => a.Name == "DisplayName");
+        var hrEmployeeIdAttr = hrType.Attributes.Single(a => a.Name == "EmployeeId");
+        hrImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = hrImportRule,
+            TargetMetaverseAttribute = mvDisplayNameAttr,
+            TargetMetaverseAttributeId = mvDisplayNameAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Order = 0,
+                ConnectedSystemAttribute = hrDisplayNameAttr,
+                ConnectedSystemAttributeId = hrDisplayNameAttr.Id
+            }}
+        });
+        hrImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = hrImportRule,
+            TargetMetaverseAttribute = mvEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Order = 0,
+                ConnectedSystemAttribute = hrEmployeeIdAttr,
+                ConnectedSystemAttributeId = hrEmployeeIdAttr.Id
+            }}
+        });
+        await DbContext.SaveChangesAsync();
+
+        // Create export sync rule (MV → AD Target) with expression-based DN
+        var exportRule = new SyncRule
+        {
+            ConnectedSystemId = targetSystem.Id,
+            Name = "AD Export",
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            ConnectedSystemObjectTypeId = targetType.Id,
+            ConnectedSystemObjectType = targetType,
+            MetaverseObjectTypeId = mvType.Id,
+            MetaverseObjectType = mvType,
+            ProvisionToConnectedSystem = true
+        };
+        exportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = targetDisplayNameAttr,
+            TargetConnectedSystemAttributeId = targetDisplayNameAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Order = 0,
+                MetaverseAttribute = mvDisplayNameAttr,
+                MetaverseAttributeId = mvDisplayNameAttr.Id
+            }}
+        });
+        var dnMapping = new SyncRuleMapping
+        {
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = targetDnAttr,
+            TargetConnectedSystemAttributeId = targetDnAttr.Id
+        };
+        dnMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Order = 0,
+            Expression = "\"CN=\" + mv[\"DisplayName\"] + \",OU=Users,DC=testdomain,DC=local\""
+        });
+        exportRule.AttributeFlowRules.Add(dnMapping);
+        DbContext.SyncRules.Add(exportRule);
+        await DbContext.SaveChangesAsync();
+
+        // --- Step 1: Import HR source CSO ---
+        var hrCso = await CreateCsoAsync(hrSystem.Id, hrType, "John Smith", "EMP001");
+
+        // --- Step 2: Full Sync on HR source — projects MVO, evaluates export ---
+        var hrFullSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "HR Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var hrFullSyncActivity = await CreateActivityAsync(hrSystem.Id, hrFullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(Jim, hrSystem, hrFullSyncProfile, hrFullSyncActivity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        // Verify MVO was created with HR attributes
+        hrCso = await DbContext.ConnectedSystemObjects
+            .Include(c => c.MetaverseObject)
+            .ThenInclude(m => m!.AttributeValues)
+            .FirstAsync(c => c.Id == hrCso.Id);
+        Assert.That(hrCso.MetaverseObjectId, Is.Not.Null, "HR CSO should be joined to MVO after Full Sync");
+        var mvoId = hrCso.MetaverseObjectId!.Value;
+
+        // Simulate that the provisioning export was executed
+        var targetCso = await DbContext.ConnectedSystemObjects
+            .Include(c => c.AttributeValues)
+            .FirstAsync(c => c.ConnectedSystemId == targetSystem.Id);
+        targetCso.Status = ConnectedSystemObjectStatus.Normal;
+        targetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            AttributeId = targetDisplayNameAttr.Id,
+            StringValue = "John Smith",
+            ConnectedSystemObject = targetCso
+        });
+        targetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            AttributeId = targetDnAttr.Id,
+            StringValue = "CN=John Smith,OU=Users,DC=testdomain,DC=local",
+            ConnectedSystemObject = targetCso
+        });
+        var provisioningExports = await DbContext.PendingExports
+            .Where(pe => pe.ConnectedSystemObject!.ConnectedSystemId == targetSystem.Id)
+            .ToListAsync();
+        DbContext.PendingExports.RemoveRange(provisioningExports);
+        await DbContext.SaveChangesAsync();
+
+        // --- Step 3: Mark HR CSO as Obsolete (user removed from HR system) ---
+        await MarkCsoAsObsoleteAsync(hrCso);
+
+        // --- Step 4: Delta Sync on HR source — processes obsolete CSO ---
+        var hrDeltaSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "HR Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        hrSystem = await ReloadEntityAsync(hrSystem);
+        var hrDeltaSyncActivity = await CreateActivityAsync(hrSystem.Id, hrDeltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
+        await new SyncDeltaSyncTaskProcessor(Jim, hrSystem, hrDeltaSyncProfile, hrDeltaSyncActivity, new CancellationTokenSource())
+            .PerformDeltaSyncAsync();
+
+        // --- Assert: MVO attributes should be PRESERVED (not recalled) ---
+        var mvo = await DbContext.MetaverseObjects
+            .Include(m => m.AttributeValues)
+            .FirstAsync(m => m.Id == mvoId);
+
+        var mvDisplayName = mvo.AttributeValues.FirstOrDefault(av => av.AttributeId == mvDisplayNameAttr.Id);
+        Assert.That(mvDisplayName, Is.Not.Null,
+            "DisplayName should be preserved on MVO — grace period prevents attribute recall");
+        Assert.That(mvDisplayName!.StringValue, Is.EqualTo("John Smith"));
+
+        var mvEmployeeId = mvo.AttributeValues.FirstOrDefault(av => av.AttributeId == mvEmployeeIdAttr.Id);
+        Assert.That(mvEmployeeId, Is.Not.Null,
+            "EmployeeId should be preserved on MVO — grace period prevents attribute recall");
+
+        // --- Assert: No Update export should be generated (attributes unchanged) ---
+        var recallExports = await DbContext.PendingExports
+            .Include(pe => pe.AttributeValueChanges)
+            .Where(pe => pe.ConnectedSystemObject!.ConnectedSystemId == targetSystem.Id)
+            .ToListAsync();
+        Assert.That(recallExports, Has.Count.EqualTo(0),
+            "No pending exports should be created — attributes were not recalled, so no changes to export");
+
+        // Note: LastConnectorDisconnectedDate is NOT set here because the target CSO is still
+        // joined to the MVO. The deletion rule WhenLastConnectorDisconnected only fires when
+        // ALL connectors are disconnected. The key assertion is that attributes were preserved.
+    }
+
+    /// <summary>
+    /// When a grace period is active and the source object reappears in a subsequent import,
+    /// the deletion markers should be cleared and MVO attributes should remain intact throughout
+    /// the cycle. This is the primary use case for grace periods: handle temporary disappearances
+    /// without data loss.
+    ///
+    /// Topology: HR Source (recall enabled) + AD Target (expression-based DN).
+    /// Grace period: 7 days on MVO type.
+    /// Cycle: HR CSO disappears → Delta Sync (grace period starts) → HR CSO reappears → Full Sync.
+    /// Expected: Deletion cancelled, attributes intact, no invalid exports at any point.
+    /// </summary>
+    [Test]
+    public async Task AttributeRecall_WithGracePeriod_ReappearingObject_PreservesAttributesAndClearsDeletionAsync()
+    {
+        // Arrange: Create HR source system with recall ENABLED
+        var hrSystem = await CreateConnectedSystemAsync("HR Source");
+        var hrType = await CreateCsoTypeAsync(hrSystem.Id, "HrUser");
+        hrType.RemoveContributedAttributesOnObsoletion = true;
+        await DbContext.SaveChangesAsync();
+
+        // Create target AD system
+        var targetSystem = await CreateConnectedSystemAsync("AD Target");
+        var targetDnAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "distinguishedName",
+            Type = AttributeDataType.Text,
+            IsSecondaryExternalId = true,
+            Selected = true
+        };
+        var targetDisplayNameAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "DisplayName",
+            Type = AttributeDataType.Text,
+            Selected = true
+        };
+        var targetExternalIdAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "ExternalId",
+            Type = AttributeDataType.Guid,
+            IsExternalId = true,
+            Selected = true
+        };
+        var targetType = await CreateCsoTypeAsync(targetSystem.Id, "TargetUser",
+            new List<ConnectedSystemObjectTypeAttribute>
+            {
+                targetExternalIdAttr,
+                targetDnAttr,
+                targetDisplayNameAttr
+            });
+
+        // Create MVO type WITH grace period
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        mvType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
+        mvType.DeletionGracePeriod = TimeSpan.FromDays(7);
+        mvType.DeletionTriggerConnectedSystemIds = new List<int>();
+        await DbContext.SaveChangesAsync();
+
+        var mvDisplayNameAttr = await DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "DisplayName");
+        var mvEmployeeIdAttr = await DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "EmployeeId");
+
+        // Create HR import sync rule with projection and join
+        var hrImportRule = await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
+        var hrDisplayNameAttr = hrType.Attributes.Single(a => a.Name == "DisplayName");
+        var hrEmployeeIdAttr = hrType.Attributes.Single(a => a.Name == "EmployeeId");
+        hrImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = hrImportRule,
+            TargetMetaverseAttribute = mvDisplayNameAttr,
+            TargetMetaverseAttributeId = mvDisplayNameAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Order = 0,
+                ConnectedSystemAttribute = hrDisplayNameAttr,
+                ConnectedSystemAttributeId = hrDisplayNameAttr.Id
+            }}
+        });
+        hrImportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = hrImportRule,
+            TargetMetaverseAttribute = mvEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Order = 0,
+                ConnectedSystemAttribute = hrEmployeeIdAttr,
+                ConnectedSystemAttributeId = hrEmployeeIdAttr.Id
+            }}
+        });
+        // Add join rule for reconnection (match on EmployeeId)
+        hrImportRule.ObjectMatchingRules.Add(new ObjectMatchingRule
+        {
+            SyncRule = hrImportRule,
+            SyncRuleId = hrImportRule.Id,
+            Order = 0,
+            CaseSensitive = true,
+            TargetMetaverseAttribute = mvEmployeeIdAttr,
+            TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new()
+                {
+                    Order = 0,
+                    ConnectedSystemAttribute = hrEmployeeIdAttr,
+                    ConnectedSystemAttributeId = hrEmployeeIdAttr.Id
+                }
+            }
+        });
+        await DbContext.SaveChangesAsync();
+
+        // Create export sync rule with expression-based DN
+        var exportRule = new SyncRule
+        {
+            ConnectedSystemId = targetSystem.Id,
+            Name = "AD Export",
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            ConnectedSystemObjectTypeId = targetType.Id,
+            ConnectedSystemObjectType = targetType,
+            MetaverseObjectTypeId = mvType.Id,
+            MetaverseObjectType = mvType,
+            ProvisionToConnectedSystem = true
+        };
+        exportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = targetDisplayNameAttr,
+            TargetConnectedSystemAttributeId = targetDisplayNameAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Order = 0,
+                MetaverseAttribute = mvDisplayNameAttr,
+                MetaverseAttributeId = mvDisplayNameAttr.Id
+            }}
+        });
+        var dnMapping = new SyncRuleMapping
+        {
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = targetDnAttr,
+            TargetConnectedSystemAttributeId = targetDnAttr.Id
+        };
+        dnMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Order = 0,
+            Expression = "\"CN=\" + mv[\"DisplayName\"] + \",OU=Users,DC=testdomain,DC=local\""
+        });
+        exportRule.AttributeFlowRules.Add(dnMapping);
+        DbContext.SyncRules.Add(exportRule);
+        await DbContext.SaveChangesAsync();
+
+        // --- Step 1: Import HR source CSO ---
+        var hrCso = await CreateCsoAsync(hrSystem.Id, hrType, "John Smith", "EMP001");
+
+        // --- Step 2: Full Sync on HR source — projects MVO ---
+        var hrFullSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "HR Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var hrFullSyncActivity = await CreateActivityAsync(hrSystem.Id, hrFullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(Jim, hrSystem, hrFullSyncProfile, hrFullSyncActivity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        // Verify MVO was created
+        hrCso = await DbContext.ConnectedSystemObjects
+            .Include(c => c.MetaverseObject)
+            .ThenInclude(m => m!.AttributeValues)
+            .FirstAsync(c => c.Id == hrCso.Id);
+        Assert.That(hrCso.MetaverseObjectId, Is.Not.Null, "HR CSO should be joined to MVO");
+        var mvoId = hrCso.MetaverseObjectId!.Value;
+
+        // Simulate provisioning export was executed
+        var targetCso = await DbContext.ConnectedSystemObjects
+            .Include(c => c.AttributeValues)
+            .FirstAsync(c => c.ConnectedSystemId == targetSystem.Id);
+        targetCso.Status = ConnectedSystemObjectStatus.Normal;
+        targetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            AttributeId = targetDisplayNameAttr.Id,
+            StringValue = "John Smith",
+            ConnectedSystemObject = targetCso
+        });
+        targetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            AttributeId = targetDnAttr.Id,
+            StringValue = "CN=John Smith,OU=Users,DC=testdomain,DC=local",
+            ConnectedSystemObject = targetCso
+        });
+        var provisioningExports = await DbContext.PendingExports
+            .Where(pe => pe.ConnectedSystemObject!.ConnectedSystemId == targetSystem.Id)
+            .ToListAsync();
+        DbContext.PendingExports.RemoveRange(provisioningExports);
+        await DbContext.SaveChangesAsync();
+
+        // --- Step 3: Mark HR CSO as Obsolete (user temporarily removed from HR) ---
+        await MarkCsoAsObsoleteAsync(hrCso);
+
+        // --- Step 4: Delta Sync — processes obsolete CSO, grace period starts ---
+        var hrDeltaSyncProfile = await CreateRunProfileAsync(hrSystem.Id, "HR Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        hrSystem = await ReloadEntityAsync(hrSystem);
+        var hrDeltaSyncActivity = await CreateActivityAsync(hrSystem.Id, hrDeltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
+        await new SyncDeltaSyncTaskProcessor(Jim, hrSystem, hrDeltaSyncProfile, hrDeltaSyncActivity, new CancellationTokenSource())
+            .PerformDeltaSyncAsync();
+
+        // Verify: Attributes PRESERVED (grace period prevents recall)
+        var mvo = await DbContext.MetaverseObjects
+            .Include(m => m.AttributeValues)
+            .FirstAsync(m => m.Id == mvoId);
+
+        // Note: LastConnectorDisconnectedDate is NOT set here because the target CSO is still
+        // joined to the MVO. The WhenLastConnectorDisconnected rule only fires when ALL connectors
+        // disconnect. The key verification is that attributes were preserved.
+
+        var mvDisplayNameBeforeReappearance = mvo.AttributeValues.FirstOrDefault(av => av.AttributeId == mvDisplayNameAttr.Id);
+        Assert.That(mvDisplayNameBeforeReappearance, Is.Not.Null,
+            "DisplayName should be preserved during grace period");
+        Assert.That(mvDisplayNameBeforeReappearance!.StringValue, Is.EqualTo("John Smith"));
+
+        // Verify: No invalid exports were generated during the grace period
+        var gracePeriodExports = await DbContext.PendingExports
+            .Where(pe => pe.ConnectedSystemObject!.ConnectedSystemId == targetSystem.Id)
+            .ToListAsync();
+        Assert.That(gracePeriodExports, Has.Count.EqualTo(0),
+            "No exports should be created during grace period — attributes not recalled");
+
+        // --- Step 5: HR CSO reappears (user added back to HR system) ---
+        // Create a new CSO with the same EmployeeId (simulating re-import)
+        var hrCsoReappeared = await CreateCsoAsync(hrSystem.Id, hrType, "John Smith", "EMP001");
+
+        // --- Step 6: Full Sync on HR source — new CSO joins to existing MVO ---
+        hrSystem = await ReloadEntityAsync(hrSystem);
+        var hrFullSync2Profile = await CreateRunProfileAsync(hrSystem.Id, "HR Full Sync 2", ConnectedSystemRunType.FullSynchronisation);
+        var hrFullSync2Activity = await CreateActivityAsync(hrSystem.Id, hrFullSync2Profile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(Jim, hrSystem, hrFullSync2Profile, hrFullSync2Activity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        // --- Assert: New CSO joined to existing MVO ---
+        hrCsoReappeared = await DbContext.ConnectedSystemObjects
+            .Include(c => c.MetaverseObject)
+            .FirstAsync(c => c.Id == hrCsoReappeared.Id);
+        Assert.That(hrCsoReappeared.MetaverseObjectId, Is.EqualTo(mvoId),
+            "Reappeared CSO should join to the SAME MVO (not create a new one)");
+
+        // --- Assert: MVO state is healthy after reconnection ---
+        mvo = await DbContext.MetaverseObjects
+            .Include(m => m.AttributeValues)
+            .FirstAsync(m => m.Id == mvoId);
+        Assert.That(mvo.LastConnectorDisconnectedDate, Is.Null,
+            "LastConnectorDisconnectedDate should be null — MVO was never marked for deletion " +
+            "(target CSO kept it alive) and reconnection further ensures clean state");
+
+        // --- Assert: MVO attributes intact throughout the cycle ---
+        var mvDisplayNameAfterReappearance = mvo.AttributeValues.FirstOrDefault(av => av.AttributeId == mvDisplayNameAttr.Id);
+        Assert.That(mvDisplayNameAfterReappearance, Is.Not.Null,
+            "DisplayName should still be present on MVO after reappearance");
+        Assert.That(mvDisplayNameAfterReappearance!.StringValue, Is.EqualTo("John Smith"));
+
+        var mvEmployeeIdAfterReappearance = mvo.AttributeValues.FirstOrDefault(av => av.AttributeId == mvEmployeeIdAttr.Id);
+        Assert.That(mvEmployeeIdAfterReappearance, Is.Not.Null,
+            "EmployeeId should still be present on MVO after reappearance");
+
+        // --- Assert: No invalid exports generated at any point in the cycle ---
+        var postReappearanceExports = await DbContext.PendingExports
+            .Include(pe => pe.AttributeValueChanges)
+            .ThenInclude(avc => avc.Attribute)
+            .Where(pe => pe.ConnectedSystemObject!.ConnectedSystemId == targetSystem.Id)
+            .ToListAsync();
+        // Either no exports (no-net-change: same attributes, same values) or valid updates only
+        foreach (var export in postReappearanceExports)
+        {
+            var dnChange = export.AttributeValueChanges.FirstOrDefault(c => c.AttributeId == targetDnAttr.Id);
+            if (dnChange != null)
+            {
+                Assert.That(dnChange.StringValue, Does.Not.Contain("CN=,"),
+                    "DN should never have empty RDN components — attributes were preserved");
+            }
+        }
+    }
+
+    /// <summary>
     /// Marks a CSO as Obsolete (simulating a Delete from delta import).
     /// </summary>
     private async Task MarkCsoAsObsoleteAsync(ConnectedSystemObject cso)

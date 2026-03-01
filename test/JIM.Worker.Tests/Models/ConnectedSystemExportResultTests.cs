@@ -4,10 +4,10 @@ using NUnit.Framework;
 namespace JIM.Worker.Tests.Models;
 
 /// <summary>
-/// Tests for the ExportResult model used to capture connector export results.
+/// Tests for the ConnectedSystemExportResult model used to capture connector export results.
 /// </summary>
 [TestFixture]
-public class ExportResultTests
+public class ConnectedSystemExportResultTests
 {
     #region Factory Method Tests
 
@@ -15,7 +15,7 @@ public class ExportResultTests
     public void Succeeded_WithNoParameters_ReturnsSuccessResultWithNullIds()
     {
         // Act
-        var result = ExportResult.Succeeded();
+        var result = ConnectedSystemExportResult.Succeeded();
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -31,7 +31,7 @@ public class ExportResultTests
         var externalId = "12345678-1234-1234-1234-123456789012";
 
         // Act
-        var result = ExportResult.Succeeded(externalId);
+        var result = ConnectedSystemExportResult.Succeeded(externalId);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -48,7 +48,7 @@ public class ExportResultTests
         var secondaryId = "CN=John Smith,OU=Users,DC=example,DC=com";
 
         // Act
-        var result = ExportResult.Succeeded(externalId, secondaryId);
+        var result = ConnectedSystemExportResult.Succeeded(externalId, secondaryId);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -61,7 +61,7 @@ public class ExportResultTests
     public void Succeeded_WithNullExternalId_ReturnsSuccessResultWithNullExternalId()
     {
         // Act
-        var result = ExportResult.Succeeded(null);
+        var result = ConnectedSystemExportResult.Succeeded(null);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -75,7 +75,7 @@ public class ExportResultTests
         var errorMessage = "Connection refused by target server";
 
         // Act
-        var result = ExportResult.Failed(errorMessage);
+        var result = ConnectedSystemExportResult.Failed(errorMessage);
 
         // Assert
         Assert.That(result.Success, Is.False);
@@ -88,7 +88,7 @@ public class ExportResultTests
     public void Failed_WithEmptyErrorMessage_ReturnsFailedResultWithEmptyMessage()
     {
         // Act
-        var result = ExportResult.Failed(string.Empty);
+        var result = ConnectedSystemExportResult.Failed(string.Empty);
 
         // Assert
         Assert.That(result.Success, Is.False);
@@ -100,10 +100,10 @@ public class ExportResultTests
     #region Property Tests
 
     [Test]
-    public void ExportResult_CanSetAllPropertiesDirectly()
+    public void ConnectedSystemExportResult_CanSetAllPropertiesDirectly()
     {
         // Arrange
-        var result = new ExportResult
+        var result = new ConnectedSystemExportResult
         {
             Success = true,
             ErrorMessage = "Some message",
@@ -119,10 +119,10 @@ public class ExportResultTests
     }
 
     [Test]
-    public void ExportResult_DefaultValuesAreCorrect()
+    public void ConnectedSystemExportResult_DefaultValuesAreCorrect()
     {
         // Act
-        var result = new ExportResult();
+        var result = new ConnectedSystemExportResult();
 
         // Assert
         Assert.That(result.Success, Is.False); // bool default is false
@@ -143,7 +143,7 @@ public class ExportResultTests
         var distinguishedName = "CN=Test User,OU=Users,DC=contoso,DC=com";
 
         // Act
-        var result = ExportResult.Succeeded(objectGuid, distinguishedName);
+        var result = ConnectedSystemExportResult.Succeeded(objectGuid, distinguishedName);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -161,7 +161,7 @@ public class ExportResultTests
         var ldapError = "LDAP error code 68: Entry already exists";
 
         // Act
-        var result = ExportResult.Failed(ldapError);
+        var result = ConnectedSystemExportResult.Failed(ldapError);
 
         // Assert
         Assert.That(result.Success, Is.False);

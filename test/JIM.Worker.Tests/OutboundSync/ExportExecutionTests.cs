@@ -737,7 +737,7 @@ public class ExportExecutionTests
 
         mockConnector.Setup(c => c.Name).Returns("Test Container Creation Connector");
         mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<ExportResult> { ExportResult.Succeeded() });
+            .ReturnsAsync(new List<ConnectedSystemExportResult> { ConnectedSystemExportResult.Succeeded() });
 
         // Simulate that the connector created two OUs during export
         var createdContainers = new List<string>
@@ -811,7 +811,7 @@ public class ExportExecutionTests
 
         mockConnector.Setup(c => c.Name).Returns("Test Regular Connector");
         mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<ExportResult> { ExportResult.Succeeded() });
+            .ReturnsAsync(new List<ConnectedSystemExportResult> { ConnectedSystemExportResult.Succeeded() });
 
         // Act
         var result = await Jim.ExportExecution.ExecuteExportsAsync(
@@ -889,9 +889,9 @@ public class ExportExecutionTests
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Failing Connector");
         mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<ExportResult>
+            .ReturnsAsync(new List<ConnectedSystemExportResult>
             {
-                ExportResult.Failed("Connection to target system failed")
+                ConnectedSystemExportResult.Failed("Connection to target system failed")
             });
 
         // Mock update methods
@@ -1005,9 +1005,9 @@ public class ExportExecutionTests
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Successful Connector");
         mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<ExportResult>
+            .ReturnsAsync(new List<ConnectedSystemExportResult>
             {
-                ExportResult.Succeeded(generatedObjectGuid.ToString())
+                ConnectedSystemExportResult.Succeeded(generatedObjectGuid.ToString())
             });
 
         // Track CSO updates
@@ -1069,7 +1069,7 @@ public class ExportExecutionTests
     /// Tests that ErrorCount is incremented exactly once when an export fails.
     /// This verifies the fix for a bug where ErrorCount was being incremented twice:
     /// once in the connector's catch block and once in ExportExecutionServer.MarkExportFailed.
-    /// The connector should only return ExportResult.Failed() without modifying ErrorCount.
+    /// The connector should only return ConnectedSystemExportResult.Failed() without modifying ErrorCount.
     /// </summary>
     [Test]
     public async Task ExecuteExportsAsync_WhenExportFails_ErrorCountIsIncrementedExactlyOnceAsync()
@@ -1129,9 +1129,9 @@ public class ExportExecutionTests
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Failing Connector");
         mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<ExportResult>
+            .ReturnsAsync(new List<ConnectedSystemExportResult>
             {
-                ExportResult.Failed("LDAP error: The object exists. Attribute member already exists")
+                ConnectedSystemExportResult.Failed("LDAP error: The object exists. Attribute member already exists")
             });
 
         // Track pending export updates
@@ -1164,7 +1164,7 @@ public class ExportExecutionTests
 
         // Assert - Error message should be captured
         Assert.That(pendingExport.LastErrorMessage, Is.Not.Null.And.Contains("LDAP error"),
-            "Error message should be captured from ExportResult");
+            "Error message should be captured from ConnectedSystemExportResult");
 
         // Assert - ProcessedExportItems should report ErrorCount = 1
         Assert.That(result.ProcessedExportItems.Count, Is.EqualTo(1), "Should have one processed export item");
@@ -1235,9 +1235,9 @@ public class ExportExecutionTests
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Failing Connector");
         mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<ExportResult>
+            .ReturnsAsync(new List<ConnectedSystemExportResult>
             {
-                ExportResult.Failed("Connection timeout")
+                ConnectedSystemExportResult.Failed("Connection timeout")
             });
 
         // Track pending export updates
