@@ -1,8 +1,17 @@
 ﻿namespace JIM.Models.Staging;
 
+/// <summary>
+/// Indicates the current lifecycle status of a Connected System Object.
+/// </summary>
 public enum ConnectedSystemObjectStatus
 {
+    /// <summary>
+    /// The object is active and participating in synchronisation normally.
+    /// </summary>
     Normal = 0,
+    /// <summary>
+    /// The object was not returned during a full import, indicating it no longer exists in the Connected System.
+    /// </summary>
     Obsolete = 1,
     /// <summary>
     /// The CSO was created as part of provisioning evaluation but the export has not yet been confirmed.
