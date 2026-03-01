@@ -433,7 +433,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null)
+        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
+        IEnumerable<int>? objectTypeFilter = null,
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -455,6 +457,26 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             if (statuses.Count > 0)
             {
                 query = query.Where(cso => statuses.Contains(cso.Status));
+            }
+        }
+
+        // Apply object type filter if specified
+        if (objectTypeFilter != null)
+        {
+            var typeIds = objectTypeFilter.ToList();
+            if (typeIds.Count > 0)
+            {
+                query = query.Where(cso => typeIds.Contains(cso.Type.Id));
+            }
+        }
+
+        // Apply join type filter if specified
+        if (joinTypeFilter != null)
+        {
+            var joinTypes = joinTypeFilter.ToList();
+            if (joinTypes.Count > 0)
+            {
+                query = query.Where(cso => joinTypes.Contains(cso.JoinType));
             }
         }
 

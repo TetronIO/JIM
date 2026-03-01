@@ -2521,10 +2521,13 @@ public class ConnectedSystemServer
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null)
+        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
+        IEnumerable<int>? objectTypeFilter = null,
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
-            connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending, statusFilter);
+            connectedSystemId, page, pageSize, searchQuery, sortBy, sortDescending, statusFilter,
+            objectTypeFilter, joinTypeFilter);
     }
     
     /// <summary>

@@ -25,27 +25,76 @@
 
 @if (_connectedSystemHeader != null && _preferencesLoaded)
 {
-    @* Status Filter Chips with Options Menu *@
-    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-4 mb-2">Filter by status:</MudText>
-    <div class="d-flex justify-space-between align-center mb-3">
-        <MudChipSet T="ConnectedSystemObjectStatus"
-                    SelectionMode="SelectionMode.MultiSelection"
-                    SelectedValues="_selectedStatuses"
-                    SelectedValuesChanged="OnStatusFilterChanged">
-            @foreach (var status in GetAvailableStatuses())
-            {
-                <MudChip Value="@status"
-                         Color="@GetStatusColor(status)"
-                         Variant="@GetStatusVariant(status)"
-                         SelectedColor="@GetStatusColor(status)">
-                    @status.ToString().SplitOnCapitalLetters()
-                </MudChip>
-            }
-        </MudChipSet>
-        <MudMenu Label="Options" Variant="Variant.Filled" EndIcon="@Icons.Material.Filled.KeyboardArrowDown" IconColor="Color.Default" DropShadow="false" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
-            <MudMenuItem IconColor="Color.Primary" Icon="@Icons.Material.Filled.Delete" OnClick="HandleDeleteAllObjectsClickAsync">Delete all objects</MudMenuItem>
-        </MudMenu>
-    </div>
+    @* Filter Chips *@
+    <MudStack Row="true" Spacing="6" Class="mt-4 mb-3 flex-wrap" AlignItems="AlignItems.Start">
+        <div>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Status:</MudText>
+            <MudChipSet T="ConnectedSystemObjectStatus"
+                        SelectionMode="SelectionMode.MultiSelection"
+                        SelectedValues="_selectedStatuses"
+                        SelectedValuesChanged="OnStatusFilterChanged">
+                @foreach (var status in GetAvailableStatuses())
+                {
+                    <MudChip Value="@status"
+                             Color="@(_selectedStatuses.Contains(status) ? Color.Default : GetStatusColor(status))"
+                             Variant="@(_selectedStatuses.Contains(status) ? Variant.Outlined : Variant.Text)"
+                             SelectedColor="@GetStatusColor(status)">
+                        @status.ToString().SplitOnCapitalLetters()
+                    </MudChip>
+                }
+            </MudChipSet>
+        </div>
+
+        @if (_objectTypes.Count > 1)
+        {
+            <div>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Object Type:</MudText>
+                <MudChipSet T="int"
+                            SelectionMode="SelectionMode.MultiSelection"
+                            SelectedValues="_selectedObjectTypeIds"
+                            SelectedValuesChanged="OnObjectTypeFilterChanged">
+                    @foreach (var type in _objectTypes)
+                    {
+                        <MudChip Value="@type.Id"
+                                 Color="Color.Default"
+                                 Variant="@(_selectedObjectTypeIds.Contains(type.Id) ? Variant.Outlined : Variant.Text)"
+                                 SelectedColor="Color.Default">
+                            @type.Name
+                        </MudChip>
+                    }
+                </MudChipSet>
+            </div>
+        }
+
+        <div>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Join Type:</MudText>
+            <MudChipSet T="ConnectedSystemObjectJoinType"
+                        SelectionMode="SelectionMode.MultiSelection"
+                        SelectedValues="_selectedJoinTypes"
+                        SelectedValuesChanged="OnJoinTypeFilterChanged">
+                @foreach (var joinType in GetAvailableJoinTypes())
+                {
+                    <MudChip Value="@joinType"
+                             Color="Color.Default"
+                             Variant="@(_selectedJoinTypes.Contains(joinType) ? Variant.Outlined : Variant.Text)"
+                             SelectedColor="Color.Default">
+                        @joinType.ToString().SplitOnCapitalLetters()
+                    </MudChip>
+                }
+            </MudChipSet>
+        </div>
+
+        <MudSpacer />
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Error"
+                   StartIcon="@Icons.Material.Filled.Delete"
+                   DropShadow="false"
+                   OnClick="HandleDeleteAllObjectsClickAsync"
+                   Style="align-self: end;">
+            Delete All Objects
+        </MudButton>
+    </MudStack>
 
     <MudTable @ref="_table"
               T="ConnectedSystemObjectHeader"
@@ -272,13 +321,11 @@ else
     private int _rowsPerPage = 10;
     private bool _preferencesLoaded;
 
-    // Status filter - by default, hide Obsolete CSOs to reduce noise
-    // Users can click the Obsolete chip to see deleted objects
-    private IReadOnlyCollection<ConnectedSystemObjectStatus> _selectedStatuses = new List<ConnectedSystemObjectStatus>
-    {
-        ConnectedSystemObjectStatus.Normal,
-        ConnectedSystemObjectStatus.PendingProvisioning
-    };
+    // Filter state
+    private IReadOnlyCollection<ConnectedSystemObjectStatus> _selectedStatuses = new List<ConnectedSystemObjectStatus>();
+    private IReadOnlyCollection<int> _selectedObjectTypeIds = new List<int>();
+    private IReadOnlyCollection<ConnectedSystemObjectJoinType> _selectedJoinTypes = new List<ConnectedSystemObjectJoinType>();
+    private List<ConnectedSystemObjectType> _objectTypes = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -298,6 +345,10 @@ else
             new(_connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(_connectedSystemHeader)),
             new("Objects", href: null, disabled: true)
         };
+
+        _objectTypes = (await Jim.ConnectedSystems.GetObjectTypesAsync(Id))
+            .Where(t => t.Selected)
+            .ToList();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -335,8 +386,10 @@ else
             var page = state.Page + 1;
             var sortDescending = state.SortDirection == SortDirection.Descending;
 
-            // Get selected statuses for filtering (null means show all)
+            // Build filters - null means show all
             IEnumerable<ConnectedSystemObjectStatus>? statusFilter = _selectedStatuses.Count > 0 ? _selectedStatuses : null;
+            IEnumerable<int>? objectTypeFilter = _selectedObjectTypeIds.Count > 0 ? _selectedObjectTypeIds : null;
+            IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = _selectedJoinTypes.Count > 0 ? _selectedJoinTypes : null;
 
             var result = await Jim.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
                 Id,
@@ -345,7 +398,9 @@ else
                 string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
                 state.SortLabel,
                 sortDescending,
-                statusFilter);
+                statusFilter,
+                objectTypeFilter,
+                joinTypeFilter);
 
             // Update column headers based on first result
             UpdateColumnHeaders(result.Results);
@@ -428,62 +483,51 @@ else
         Snackbar.Add("Connected system objects queued for deletion.", Severity.Info);
     }
 
-    /// <summary>
-    /// Returns all available CSO statuses for filtering.
-    /// </summary>
     private static IEnumerable<ConnectedSystemObjectStatus> GetAvailableStatuses()
     {
         return new[]
         {
             ConnectedSystemObjectStatus.Normal,
-            ConnectedSystemObjectStatus.PendingProvisioning,
-            ConnectedSystemObjectStatus.Obsolete
+            ConnectedSystemObjectStatus.PendingProvisioning
         };
     }
 
-    /// <summary>
-    /// Gets the colour for a CSO status chip.
-    /// </summary>
+    private static IEnumerable<ConnectedSystemObjectJoinType> GetAvailableJoinTypes()
+    {
+        return new[]
+        {
+            ConnectedSystemObjectJoinType.NotJoined,
+            ConnectedSystemObjectJoinType.Projected,
+            ConnectedSystemObjectJoinType.Provisioned,
+            ConnectedSystemObjectJoinType.Joined
+        };
+    }
+
     private static Color GetStatusColor(ConnectedSystemObjectStatus status)
     {
         return status switch
         {
             ConnectedSystemObjectStatus.Normal => Color.Success,
             ConnectedSystemObjectStatus.PendingProvisioning => Color.Info,
-            ConnectedSystemObjectStatus.Obsolete => Color.Default,
             _ => Color.Default
         };
     }
 
-    /// <summary>
-    /// Gets the variant for a CSO status chip based on selection state.
-    /// Obsolete uses Text variant (no outline) when not selected to de-emphasise it.
-    /// </summary>
-    private Variant GetStatusVariant(ConnectedSystemObjectStatus status)
+    private void OnStatusFilterChanged(IReadOnlyCollection<ConnectedSystemObjectStatus> selected)
     {
-        // When selected, all chips use Outlined variant (shows the outline)
-        if (IsStatusSelected(status))
-            return Variant.Outlined;
-
-        // When not selected, Obsolete uses Text (no outline) to de-emphasise it
-        // Other statuses also use Text variant when not selected
-        return Variant.Text;
+        _selectedStatuses = selected;
+        _table?.ReloadServerData();
     }
 
-    /// <summary>
-    /// Checks if a status is currently selected in the filter.
-    /// </summary>
-    private bool IsStatusSelected(ConnectedSystemObjectStatus status)
+    private void OnObjectTypeFilterChanged(IReadOnlyCollection<int> selected)
     {
-        return _selectedStatuses.Contains(status);
+        _selectedObjectTypeIds = selected;
+        _table?.ReloadServerData();
     }
 
-    /// <summary>
-    /// Called when status filter chips are selected/deselected.
-    /// </summary>
-    private void OnStatusFilterChanged(IReadOnlyCollection<ConnectedSystemObjectStatus> selectedStatuses)
+    private void OnJoinTypeFilterChanged(IReadOnlyCollection<ConnectedSystemObjectJoinType> selected)
     {
-        _selectedStatuses = selectedStatuses;
+        _selectedJoinTypes = selected;
         _table?.ReloadServerData();
     }
 

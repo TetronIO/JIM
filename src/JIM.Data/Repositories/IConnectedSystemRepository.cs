@@ -444,7 +444,9 @@ public interface IConnectedSystemRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null);
+        IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
+        IEnumerable<int>? objectTypeFilter = null,
+        IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null);
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize);
 
     /// <summary>
