@@ -648,7 +648,7 @@ else if (_syncRule != null)
                             OnClick="@(() => HandleEditAttributeFlowRule(context))" />
                         <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error"
                             Size="Size.Small" aria-label="delete"
-                            OnClick="@(() => HandleAttributeFlowRuleDeleteClick(context))" />
+                            OnClick="@(() => HandleAttributeFlowRuleDeleteClickAsync(context))" />
                     </div>
                 </MudTd>
             </RowTemplate>
@@ -785,7 +785,7 @@ else if (_syncRule != null)
                             OnClick="@(() => HandleEditAttributeFlowRule(attributeFlowRule))" />
                         <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error"
                             Size="Size.Small" aria-label="delete"
-                            OnClick="@(() => HandleAttributeFlowRuleDeleteClick(attributeFlowRule))" />
+                            OnClick="@(() => HandleAttributeFlowRuleDeleteClickAsync(attributeFlowRule))" />
                     </div>
                 </MudStack>
 
@@ -1393,9 +1393,16 @@ new BreadcrumbItem("Synchronisation Rules", href: "/admin/sync-rules/")
         _isEditingAttributeFlow = false;
     }
 
-    private void HandleAttributeFlowRuleDeleteClick(SyncRuleMapping attributeFlowRule)
+    private async Task HandleAttributeFlowRuleDeleteClickAsync(SyncRuleMapping attributeFlowRule)
     {
-        _syncRule?.AttributeFlowRules.Remove(attributeFlowRule);
+        if (_syncRule == null)
+            return;
+
+        var confirmationResult = await DialogService.ShowMessageBox("Warning", "Are you sure you want to remove this Attribute Mapping?", yesText: "Remove!", cancelText: "Cancel");
+        if (confirmationResult.HasValue && confirmationResult.Value)
+        {
+            _syncRule.AttributeFlowRules.Remove(attributeFlowRule);
+        }
     }
 
     private bool FilterAttributeFlowRules(SyncRuleMapping mapping)
