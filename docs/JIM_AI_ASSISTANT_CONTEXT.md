@@ -4,7 +4,7 @@
 >
 > **Repository**: https://github.com/TetronIO/JIM
 >
-> **Last Updated**: 2026-02-20
+> **Last Updated**: 2026-03-01
 >
 > **Note**: This is a snapshot. For current implementation details, check the repository or ask the user to provide updated code/docs.
 
@@ -271,7 +271,7 @@ FormatDateTime(hireDate, "yyyy-MM-dd")
 
 ### Key Endpoints (v1)
 
-14 API controllers with 80+ endpoints. Key examples:
+14 API controllers with 112 endpoints. Key examples:
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -285,6 +285,7 @@ FormatDateTime(hireDate, "yyyy-MM-dd")
 | `GET /api/v1/health` | Health/readiness/liveness probes |
 | `GET /api/v1/certificates` | Manage trusted certificates |
 | `GET /api/v1/history/deleted-objects/mvo` | View deleted objects |
+| `GET /api/v1/logs` | Unified log viewer (app + PostgreSQL) |
 
 Full Swagger documentation available at `/api/swagger`.
 
@@ -301,6 +302,7 @@ Connect-JIM -Url "http://localhost:5200" -ApiKey "jim_xxx"
 
 # Query
 Get-JIMMetaverseObject -ObjectType Person
+Get-JIMMetaverseObject -ObjectType Person -All  # Auto-paginate all results
 Get-JIMConnectedSystem -Name "HR System"
 
 # Execute
@@ -348,30 +350,36 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ Background processing (Worker service)
 - ✅ Scheduler service with cron/interval triggers and multi-step execution
 - ✅ Admin UI (operations, config, monitoring)
-- ✅ API with JWT and API key auth (14 controllers, 80+ endpoints)
+- ✅ Dashboard home page with system overview
+- ✅ API with JWT and API key auth (14 controllers, 112 endpoints)
 - ✅ PowerShell module (75 cmdlets)
 - ✅ Docker deployment with air-gapped bundles
-- ✅ Integration testing framework (6 scenarios)
+- ✅ Integration testing framework (7 scenarios)
 - ✅ Credential encryption
 - ✅ Change history/audit with timeline UI and deleted objects view
 - ✅ Real-time progress indication on Operations page
+- ✅ Unified log viewer (application + PostgreSQL logs)
 
 ### Recent Enhancements
 
-- ✅ **Export Performance Optimisation** - Batch DB operations, LDAP async pipelining (Export Concurrency 1-16), parallel batch export (MaxExportParallelism), parallel schedule step execution, integration test timing validation
+- ✅ **Worker Database Performance Optimisation** (#338) - Raw SQL bulk INSERT for RPEIs, service-lifetime CSO lookup index, lightweight ID-only MVO join lookups, skip CSO lookups on empty systems, raw SQL for import/export bulk writes (~34% faster FullSync, ~37% faster ProcessConnectedSystemObjects)
+- ✅ **Export Performance Optimisation** - Batch DB operations, LDAP async pipelining (Export Concurrency 1-16), parallel batch export (MaxExportParallelism), parallel schedule step execution
 - ✅ **Granular Activity Stats** (#332) - 16 per-change-type stat fields, run-type-aware display, scheduler step failure detection, OperationalException hierarchy
+- ✅ **CSO List Filtering** - Filter controls on Connected System Objects list page
+- ✅ **ObjectChangeType Consolidation** - `Provisioned` merged into `Exported` for cleaner export-phase semantics
 - ✅ **Attribute Type Compatibility Validation** (#308) - Application-layer validation for sync rule attribute flow mappings
-- ✅ **GUID/UUID Centralised Handling** (#300) - IdentifierParser utility for consistent GUID/UUID parsing
 - ✅ **Interactive PowerShell Auth** (#296) - Browser-based SSO authentication for PowerShell module
 - ✅ **Security Compliance Documentation** - NCSC, CISA, OWASP ASVS compliance mapping
 
+### In Progress
+
+- 🔧 **RPEI Outcome Graph** (#363) - Structured sync outcome tracking on ActivityRunProfileExecutionItem entities
+
 ### Roadmap
 
-- Dashboard home page (#169)
 - Unique value generation (#242)
 - Full RBAC (#21)
 - Sync preview / what-if analysis (#288)
-- Worker database performance optimisation (#338)
 - SCIM server connector
 
 ---
