@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **In Progress** |
+| **Status** | **Phase 1 Complete** |
 | **Phase 1 Target** | MVP Validation |
 | **Phase 2 Target** | Post-MVP (after Database Connector #170) |
 | **Related Issue** | [#173](https://github.com/TetronIO/JIM/issues/173) |
@@ -728,9 +728,9 @@ Step 8 [SEQUENTIAL]:  Delta Sync AD
 
 These scenarios test group management capabilities - a core ILM function where the system manages group memberships based on identity attributes.
 
-#### Scenario 6 (Legacy): Entitlement Management - JIM to AD ⏸️ DEFERRED
+#### Deferred: Entitlement Management - JIM to AD ⏸️
 
-> **Status**: ⏸️ **DEFERRED** - This scenario requires proper design and implementation of Internally-managed MVOs (Metaverse Objects created within JIM rather than imported from a Connected System). Deferred until Internal MVO support is designed and implemented.
+> **Status**: ⏸️ **DEFERRED** - This scenario requires proper design and implementation of Internally-managed MVOs (Metaverse Objects created within JIM rather than imported from a Connected System). Deferred until Internal MVO support is designed and implemented. No scenario number assigned — will be allocated when work begins.
 
 **Purpose**: Validate JIM as the authoritative source for entitlement groups, provisioning them to AD with membership derived from person attributes.
 
@@ -756,28 +756,11 @@ These scenarios test group management capabilities - a core ILM function where t
 | 5 | **DeleteGroup** | Group deleted from JIM MV -> group deleted from AD |
 | 6 | **DeleteMember** | User deleted from JIM MV -> user removed from all group memberships in AD |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario6-EntitlementJIMToAD.ps1`
-
-**Execution Model**:
-
-```powershell
-# Individual steps
-./Invoke-Scenario6-EntitlementJIMToAD.ps1 -Step CreateGroups -Template Small
-./Invoke-Scenario6-EntitlementJIMToAD.ps1 -Step UpdateMembership -Template Small
-./Invoke-Scenario6-EntitlementJIMToAD.ps1 -Step DetectDrift -Template Small
-./Invoke-Scenario6-EntitlementJIMToAD.ps1 -Step ReassertState -Template Small
-./Invoke-Scenario6-EntitlementJIMToAD.ps1 -Step DeleteGroup -Template Small
-./Invoke-Scenario6-EntitlementJIMToAD.ps1 -Step DeleteMember -Template Small
-
-# Run all steps sequentially
-./Invoke-Scenario6-EntitlementJIMToAD.ps1 -Step All -Template Small
-```
-
 ---
 
-#### Scenario 7: Entitlement Management - Convert AD Group Authority to JIM ⏸️ DEFERRED
+#### Deferred: Entitlement Management - Convert AD Group Authority to JIM ⏸️
 
-> **Status**: ⏸️ **DEFERRED** - This scenario requires proper design and implementation of Internally-managed MVOs. After import, groups would need to be marked as JIM-authoritative (Internal origin), which requires the same Internal MVO support as Scenario 6. Deferred until Internal MVO support is designed and implemented.
+> **Status**: ⏸️ **DEFERRED** - This scenario requires proper design and implementation of Internally-managed MVOs. After import, groups would need to be marked as JIM-authoritative (Internal origin), which requires the same Internal MVO support as the scenario above. Deferred until Internal MVO support is designed and implemented. No scenario number assigned — will be allocated when work begins.
 
 **Purpose**: Validate importing existing AD groups into JIM and converting authority so JIM becomes the authoritative source. After conversion, any changes made directly in AD are overwritten by JIM.
 
@@ -797,22 +780,6 @@ These scenarios test group management capabilities - a core ILM function where t
 | 3 | **UpdateViaJIM** | Membership changed via JIM API -> changes exported to AD |
 | 4 | **DetectDrift** | Admin manually modifies group in AD -> JIM detects drift |
 | 5 | **ReassertState** | JIM overwrites AD changes, reasserting JIM-managed membership |
-
-**Script**: `test/integration/scenarios/Invoke-Scenario7-ConvertADGroupAuthority.ps1`
-
-**Execution Model**:
-
-```powershell
-# Individual steps
-./Invoke-Scenario7-ConvertADGroupAuthority.ps1 -Step ImportGroups -Template Small
-./Invoke-Scenario7-ConvertADGroupAuthority.ps1 -Step ConvertAuthority -Template Small
-./Invoke-Scenario7-ConvertADGroupAuthority.ps1 -Step UpdateViaJIM -Template Small
-./Invoke-Scenario7-ConvertADGroupAuthority.ps1 -Step DetectDrift -Template Small
-./Invoke-Scenario7-ConvertADGroupAuthority.ps1 -Step ReassertState -Template Small
-
-# Run all steps sequentially
-./Invoke-Scenario7-ConvertADGroupAuthority.ps1 -Step All -Template Small
-```
 
 ---
 
@@ -1278,7 +1245,7 @@ See `.github/workflows/integration-tests.yml` for complete workflow definition.
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Micro", "Small", "Medium", "Large", "XLarge", "XXLarge")]
+    [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "XLarge", "XXLarge")]
     [string]$Template = "Small"
 )
 
@@ -1654,29 +1621,47 @@ Get-ChildItem /connector-files/test-data/
 
 ```
 JIM/
-├── docker-compose.integration-tests.yml                    # Container definitions
+├── docker-compose.integration-tests.yml                    # External system containers
 ├── test/
 │   ├── JIM.Web.Api.Tests/                                  # API unit tests
 │   ├── JIM.Models.Tests/                                   # Model unit tests
+│   ├── JIM.Worker.Tests/                                   # Worker/business logic tests
 │   └── integration/
-│       ├── Invoke-IntegrationTests.ps1                     # Master test runner
-│       ├── Populate-SambaAD.ps1                            # AD population
+│       ├── Run-IntegrationTests.ps1                        # Single-command test runner (recommended)
+│       ├── Invoke-IntegrationTests.ps1                     # Alternative invoker script
+│       ├── Start-IntegrationTestEnvironment.ps1            # Starts JIM + Samba AD
+│       ├── Setup-InfrastructureApiKey.ps1                  # Creates API key for testing
+│       ├── Setup-Scenario1.ps1                             # Configures JIM for Scenario 1
+│       ├── Setup-Scenario2.ps1                             # Configures JIM for Scenario 2
+│       ├── Setup-Scenario8.ps1                             # Configures JIM for Scenario 8
+│       ├── Populate-SambaAD.ps1                            # AD population (Scenarios 1, 4, 5)
+│       ├── Populate-SambaAD-Scenario8.ps1                  # AD population (Scenario 8)
 │       ├── Generate-TestCSV.ps1                            # CSV generation
-│       ├── Populate-SqlServer.ps1                          # SQL Server population (Phase 2)
-│       ├── Populate-Oracle.ps1                             # Oracle population (Phase 2)
-│       ├── Populate-PostgreSQL.ps1                         # PostgreSQL setup (Phase 2)
-│       ├── Wait-SystemsReady.ps1                           # Health check script
+│       ├── Wait-SambaReady.ps1                             # Samba AD readiness check
+│       ├── Wait-SystemsReady.ps1                           # General health check script
+│       ├── Show-PerformanceTree.ps1                        # Performance reporting
+│       ├── Test-ParallelOptimization.ps1                   # Parallelisation testing
 │       ├── scenarios/
-│       │   ├── Invoke-Scenario1-HRToIdentityDirectory.ps1
-│       │   ├── Invoke-Scenario2-CrossDomainSync.ps1
-│       │   ├── Invoke-Scenario3-GALSYNC.ps1
-│       │   ├── Invoke-Scenario4-MultiSourceAggregation.ps1  # Phase 2
-│       │   ├── Invoke-Scenario5-DatabaseSourceTarget.ps1    # Phase 2
-│       │   └── Invoke-Scenario6-Performance.ps1             # Phase 2
+│       │   ├── Invoke-Scenario1-HRToIdentityDirectory.ps1  # HR CSV -> AD provisioning
+│       │   ├── Invoke-Scenario2-CrossDomainSync.ps1        # APAC -> EMEA directory sync
+│       │   ├── Invoke-Scenario3-GALSYNC.ps1                # AD -> CSV export (stub)
+│       │   ├── Invoke-Scenario4-DeletionRules.ps1          # Deletion rules testing
+│       │   ├── Invoke-Scenario5-MatchingRules.ps1          # Matching rules testing
+│       │   ├── Invoke-Scenario6-SchedulerService.ps1       # Scheduler service testing
+│       │   └── Invoke-Scenario8-CrossDomainEntitlementSync.ps1  # Group sync
+│       ├── docker/
+│       │   └── samba-ad-prebuilt/                           # Custom Samba AD Docker image
+│       │       ├── Dockerfile
+│       │       ├── Build-SambaImages.ps1                    # Image build script
+│       │       ├── provision.sh                             # Domain provisioning
+│       │       ├── post-provision.sh                        # Post-provisioning setup
+│       │       ├── start-samba.sh                           # Container startup
+│       │       └── README.md
 │       ├── utils/
 │       │   ├── Test-Helpers.ps1                             # Common test utilities
 │       │   ├── LDAP-Helpers.ps1                             # LDAP query functions
-│       │   └── Database-Helpers.ps1                         # Database query functions
+│       │   └── Test-GroupHelpers.ps1                        # Group management helpers
+│       ├── test-data/                                       # Generated CSV test data
 │       └── results/                                         # Test results output
 └── docs/
     └── INTEGRATION_TESTING.md                               # This document
@@ -1714,23 +1699,23 @@ JIM/
 
 ## Current Progress & Known Issues
 
-### Phase 1 Status (as of 2026-01-20) - ✅ COMPLETE
+### Phase 1 Status (as of 2026-03-01) - ✅ COMPLETE
 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Infrastructure | ✅ Complete | Samba AD, CSV file mounting, volume orchestration |
 | API Endpoints | ✅ Complete | Schema management, sync rules, mappings, run profiles |
-| PowerShell Module | ✅ Complete | All cmdlets for Scenario 1 |
-| Setup-Scenario1.ps1 | ✅ Complete | Automated JIM configuration with deletion rules |
-| Invoke-Scenario1 | ✅ Complete | All 6 tests passing (Joiner, Mover, Mover-Rename, Mover-Move, Leaver, Reconnection) |
-| Scenario 2 | ✅ Complete | All 4 tests passing (Provision, ForwardSync, TargetImport, Conflict). Test 3 fixed to validate unidirectional sync. |
-| Scenario 3 | ⏳ Pending | Placeholder script exists |
-| Scenario 4 | ✅ Complete | Deletion rules - comprehensive coverage (SyncDelete, AsyncDelete, ManualRule, InternalProtection). WhenAuthoritativeSourceDisconnected deferred pending attribute precedence. |
-| Scenario 5 | ✅ Complete | Matching rules - 4/5 tests passing, 1 run separately (MultipleRules requires specific setup) |
-| Scenario 6 | ✅ Complete | Scheduler service end-to-end testing (Create, ManualTrigger, AutoTrigger, Overlap, MultiStep, Parallel) |
-| Scenarios 6-7 (Legacy) | ⏸️ Deferred | Entitlement management - Requires Internal MVO design (JIM-authoritative objects) |
-| Scenario 8 | ✅ Complete | All 6 tests implemented (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup) |
-| Scenarios 9-11 | ⏳ Post-MVP | Database scenarios |
+| PowerShell Module | ✅ Complete | All cmdlets for scenarios 1, 2, and 8 |
+| Scenario 1 | ✅ Complete | All 6 tests passing (Joiner, Mover, Mover-Rename, Mover-Move, Leaver, Reconnection) |
+| Scenario 2 | ✅ Complete | All 4 tests passing (Provision, ForwardSync, TargetImport, Conflict) |
+| Scenario 3 | ⏳ Pending | Stub script exists — not yet implemented |
+| Scenario 4 | ✅ Complete | Deletion rules (SyncDelete, AsyncDelete, ManualRule, InternalProtection). AuthoritativeSourceDisconnected deferred pending attribute precedence. |
+| Scenario 5 | ✅ Complete | Matching rules — 4/5 tests passing, MultipleRules run separately |
+| Scenario 6 | ✅ Complete | Scheduler service (Create, ManualTrigger, AutoTrigger, Overlap, MultiStep, Parallel) |
+| Scenario 8 | ✅ Complete | All 6 tests (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup) |
+| Entitlement (JIM-to-AD) | ⏸️ Deferred | Requires Internal MVO design |
+| Entitlement (Convert Authority) | ⏸️ Deferred | Requires Internal MVO design |
+| Scenarios 9-11 | ⏳ Post-MVP | Database scenarios — requires Database Connector (#170) |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 
 ### Scenario 8 Complete (2026-01-20)
@@ -1854,38 +1839,12 @@ docker logs jim.web --tail 100
 - `test/integration/Setup-Scenario1.ps1` - Fixed API response property names (metaverseObjectTypes)
 - `test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1` - Added CSV reset and AD cleanup for repeatable tests
 
-### Next Steps
+### Remaining Work
 
-1. ~~**Debug sync engine export**~~ - ✅ Fixed! Users now provisioned to AD successfully
-2. ~~**Fix file connector change detection**~~ - ✅ Fixed! All Scenario 1 tests now passing
-3. ~~**Fix Scenario 2 duplicate attribute bug**~~ - ✅ Fixed! PR #279 - uses objectGUID as external ID
-4. ~~**Test and validate Scenario 2**~~ - ✅ Complete! All 4 tests passing
-5. ~~**Complete Scenario 8**~~ - ✅ Complete! All 6 tests passing (cross-domain entitlement sync)
-6. **Complete Scenario 3** - GALSYNC (AD to CSV export)
-7. **Create GitHub Actions workflow** - Automate integration tests in CI/CD
-8. **Post-MVP: Scenarios 6-7 (Legacy)** - Internal MVO design required for entitlement management
-9. **Post-MVP: Scenarios 9-11** - Database connector testing (SQL Server, PostgreSQL, Oracle, MySQL)
-
-### Scenario 2 Status: Ready for Testing
-
-**Status**: 🔧 Ready for Testing
-
-**Previous Issue**: Scenario 2 (Directory-to-Directory) was failing with error: `Sequence contains more than one matching element`
-
-**Root Cause & Fix (PR #279)**: The error was caused by duplicate CSO attribute values being created:
-
-1. **Export storing value with wrong type**: `ExportExecutionServer.UpdateCsoAfterSuccessfulExportAsync` was blindly trying to parse external ID as GUID and storing in `GuidValue`, regardless of the attribute's actual data type. Fixed by looking up the attribute type before storing.
-
-2. **Incorrect external ID configuration**: Setup-Scenario2.ps1 was using `sAMAccountName` (Text type) as the external ID. This is incorrect because `sAMAccountName` can change (user renames). Fixed by changing to `objectGUID` which is immutable and the correct AD anchor.
-
-**Files Available**:
-- `test/integration/Setup-Scenario2.ps1` - JIM configuration for directory sync
-- `test/integration/scenarios/Invoke-Scenario2-CrossDomainSync.ps1` - Test execution script
-
-**To Run Scenario 2**:
-```powershell
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Template Nano
-```
+1. **Complete Scenario 3** - GALSYNC (AD to CSV export) — stub script exists but not implemented
+2. **Create GitHub Actions workflow** - `.github/workflows/integration-tests.yml` for CI/CD automation
+3. **Post-MVP: Entitlement Management** - Internal MVO design required (deferred scenarios above)
+4. **Post-MVP: Scenarios 9-11** - Database connector testing (SQL Server, PostgreSQL, Oracle, MySQL)
 
 ### Resolved Issue: LDAP Partition Management API Missing
 
@@ -2095,7 +2054,7 @@ See [Developer Guide - Workflow Tests](DEVELOPER_GUIDE.md#workflow-tests) for de
 
 ## Related Documentation
 
-- [MVP Definition](MVP_DEFINITION.md) - Overall project status
+- [MVP Definition](plans/done/MVP_DEFINITION.md) - Overall project status
 - [Developer Guide](DEVELOPER_GUIDE.md) - Development setup and architecture
 - [GitHub Issue #173](https://github.com/TetronIO/JIM/issues/173) - Integration Testing Framework tracking issue
 - [GitHub Issue #170](https://github.com/TetronIO/JIM/issues/170) - SQL Database Connector (Phase 2 dependency)

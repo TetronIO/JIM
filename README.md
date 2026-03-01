@@ -122,7 +122,7 @@ JIM has reached MVP completion (100%). The core identity lifecycle is fully func
 - **Export** changes to target systems with pending export management
 - **Schedule** automated synchronisation using cron or interval-based triggers
 
-For detailed feature checklists and post-MVP roadmap, see the [MVP Definition](docs/MVP_DEFINITION.md).
+For detailed feature checklists and post-MVP roadmap, see the [MVP Definition](docs/plans/done/MVP_DEFINITION.md).
 
 ## Licensing
 JIM uses a Source-Available model where it is free to use in non-production scenarios, but requires a commercial license for use in production scenarios. [﻿Full details can be found here](https://tetron.io/jim/#licensing).

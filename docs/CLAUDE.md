@@ -98,7 +98,7 @@ This makes it easy to see at a glance what has been done within a partially-impl
   - `DATABASE_GUIDE.md` - PostgreSQL configuration, connection pooling, and backup/restore
   - `DEVELOPER_GUIDE.md` - Comprehensive development guide
   - `INTEGRATION_TESTING.md` - Integration testing guide
-  - `MVP_DEFINITION.md` - MVP completion record and future roadmap
+  - `plans/done/MVP_DEFINITION.md` - MVP completion record and future roadmap
   - `RELEASE_PROCESS.md` - Release and deployment procedures
   - `SSO_SETUP_GUIDE.md` - SSO configuration instructions
 
