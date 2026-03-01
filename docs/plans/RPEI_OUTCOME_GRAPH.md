@@ -96,6 +96,10 @@ public enum SyncOutcomeType
     CsoUpdated,
     CsoDeleted,
 
+    // Import outcomes — confirming import (export confirmation)
+    ExportConfirmed,
+    ExportFailed,
+
     // Sync outcomes — inbound
     Projected,
     Joined,
@@ -110,9 +114,7 @@ public enum SyncOutcomeType
     // Export execution outcomes
     Provisioned,
     Exported,
-    Deprovisioned,
-    ExportConfirmed,
-    ExportFailed
+    Deprovisioned
 }
 ```
 
