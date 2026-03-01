@@ -3203,5 +3203,202 @@ public class FullSyncTests
             "Expected deletion markers to be cleared after reconnection.");
     }
 
+    /// <summary>
+    /// Tests that when a source CSO is obsoleted with attribute recall AND the MVO is queued for
+    /// immediate deletion (0-grace-period via WhenAuthoritativeSourceDisconnected), no spurious
+    /// Update exports are created for the recalled attributes. Only Delete exports should be
+    /// created (by FlushPendingMvoDeletionsAsync via EvaluateMvoDeletionAsync).
+    ///
+    /// This prevents the bug where attribute recall removes values feeding expression-based
+    /// exports (e.g., DN), causing the expression to evaluate to an invalid value (e.g., empty RDN),
+    /// producing a failing Update export alongside the correct Delete export.
+    /// </summary>
+    [Test]
+    public async Task CsoObsoleteWithRecallAndZeroGracePeriodDeletion_NoSpuriousUpdateExports_Async()
+    {
+        // Arrange: source CSO on system 1, target CSO on system 2
+        var sourceSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Source System");
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var mvUserType = MetaverseObjectTypesData.Single(q => q.Name == "User");
+        var displayNameMvAttr = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.DisplayName);
+        var employeeIdMvAttr = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
+
+        var targetDisplayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        var targetEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.EmployeeId.ToString());
+
+        // Configure MVO type for immediate deletion when authoritative source disconnects
+        mvUserType.DeletionRule = MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected;
+        mvUserType.DeletionGracePeriod = null; // null = immediate deletion
+        mvUserType.DeletionTriggerConnectedSystemIds = new List<int> { sourceSystem.Id };
+
+        // Set up export sync rule on the TARGET system with attribute flow mappings
+        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Sync Rule 1");
+        exportSyncRule.ConnectedSystemId = targetSystem.Id;
+        exportSyncRule.ConnectedSystem = targetSystem;
+        exportSyncRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 100,
+            SyncRule = exportSyncRule,
+            TargetConnectedSystemAttribute = targetDisplayNameAttr,
+            TargetConnectedSystemAttributeId = targetDisplayNameAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Id = 200,
+                Order = 0,
+                MetaverseAttribute = displayNameMvAttr,
+                MetaverseAttributeId = displayNameMvAttr.Id
+            }}
+        });
+        exportSyncRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 101,
+            SyncRule = exportSyncRule,
+            TargetConnectedSystemAttribute = targetEmployeeIdAttr,
+            TargetConnectedSystemAttributeId = targetEmployeeIdAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Id = 201,
+                Order = 0,
+                MetaverseAttribute = employeeIdMvAttr,
+                MetaverseAttributeId = employeeIdMvAttr.Id
+            }}
+        });
+
+        // Set up source CSO joined to MVO with attribute recall enabled
+        var sourceCso = ConnectedSystemObjectsData[0];
+        sourceCso.Type.RemoveContributedAttributesOnObsoletion = true;
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        sourceCso.MetaverseObject = mvo;
+        sourceCso.MetaverseObjectId = mvo.Id;
+        sourceCso.JoinType = ConnectedSystemObjectJoinType.Joined;
+        sourceCso.DateJoined = DateTime.UtcNow;
+        mvo.ConnectedSystemObjects.Add(sourceCso);
+
+        // Set up MVO attribute values contributed by the source system
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = displayNameMvAttr,
+            AttributeId = displayNameMvAttr.Id,
+            StringValue = "Joe Bloggs",
+            ContributedBySystemId = sourceSystem.Id
+        });
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = employeeIdMvAttr,
+            AttributeId = employeeIdMvAttr.Id,
+            StringValue = "EMP001",
+            ContributedBySystemId = sourceSystem.Id
+        });
+
+        // Set up target CSO (Provisioned) joined to the same MVO
+        var targetCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            Status = ConnectedSystemObjectStatus.Normal,
+            DateJoined = DateTime.UtcNow,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        targetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = targetDisplayNameAttr.Id,
+            StringValue = "Joe Bloggs",
+            ConnectedSystemObject = targetCso
+        });
+        targetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = targetEmployeeIdAttr.Id,
+            StringValue = "EMP001",
+            ConnectedSystemObject = targetCso
+        });
+        ConnectedSystemObjectsData.Add(targetCso);
+        mvo.ConnectedSystemObjects.Add(targetCso);
+
+        // Rebuild the mock DbSets so the new CSO and updated sync rules are visible to queries
+        MockDbSetConnectedSystemObjects = ConnectedSystemObjectsData.BuildMockDbSet();
+        MockDbSetSyncRules = SyncRulesData.BuildMockDbSet();
+        ConnectedSystemObjectAttributeValuesData.AddRange(targetCso.AttributeValues);
+        MockDbSetConnectedSystemObjectAttributeValues = ConnectedSystemObjectAttributeValuesData.BuildMockDbSet();
+
+        // Rebuild JimDbContext with updated mocks
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(MockDbSetConnectedSystemObjects.Object);
+        MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjectAttributeValues).Returns(MockDbSetConnectedSystemObjectAttributeValues.Object);
+
+        // Capture all pending exports created during sync
+        var createdPendingExports = new List<PendingExport>();
+        MockDbSetPendingExports.Setup(m => m.AddAsync(It.IsAny<PendingExport>(), It.IsAny<CancellationToken>()))
+            .Callback<PendingExport, CancellationToken>((pe, _) =>
+            {
+                PendingExportsData.Add(pe);
+                createdPendingExports.Add(pe);
+            })
+            .ReturnsAsync((PendingExport pe, CancellationToken _) => null!);
+        MockDbSetPendingExports.Setup(m => m.AddRangeAsync(It.IsAny<IEnumerable<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<PendingExport>, CancellationToken>((exports, _) =>
+            {
+                var list = exports.ToList();
+                PendingExportsData.AddRange(list);
+                createdPendingExports.AddRange(list);
+            })
+            .Returns(Task.CompletedTask);
+
+        // Setup mock to handle CSO deletion
+        MockDbSetConnectedSystemObjects.Setup(set => set.Remove(It.IsAny<ConnectedSystemObject>())).Callback(
+            (ConnectedSystemObject entity) => ConnectedSystemObjectsData.Remove(entity));
+
+        // Setup mock for MVO deletion
+        MockDbSetMetaverseObjects.Setup(set => set.Remove(It.IsAny<MetaverseObject>())).Callback(
+            (MetaverseObject entity) => MetaverseObjectsData.Remove(entity));
+
+        // Mark source CSO as obsolete
+        sourceCso.Status = ConnectedSystemObjectStatus.Obsolete;
+
+        var initialMvoCount = MetaverseObjectsData.Count;
+        var mvoId = mvo.Id;
+
+        // Act: run full sync on the SOURCE system
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q =>
+            q.ConnectedSystemId == sourceSystem.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncProcessor = new SyncFullSyncTaskProcessor(Jim, sourceSystem, runProfile, activity, new CancellationTokenSource());
+        await syncProcessor.PerformFullSyncAsync();
+
+        // Assert: MVO should have been deleted (0-grace-period, authoritative source disconnected)
+        Assert.That(MetaverseObjectsData.Any(m => m.Id == mvoId), Is.False,
+            "Expected MVO to be deleted synchronously (0-grace-period, WhenAuthoritativeSourceDisconnected).");
+
+        // Assert: No Update pending exports should have been created.
+        // Only Delete exports (from EvaluateMvoDeletionAsync) are expected.
+        var updateExports = createdPendingExports.Where(pe => pe.ChangeType == PendingExportChangeType.Update).ToList();
+        Assert.That(updateExports, Is.Empty,
+            "Expected no Update pending exports — MVO was queued for immediate deletion, " +
+            "so attribute recall should not generate spurious Update exports.");
+
+        // Assert: Delete export should have been created for the Provisioned target CSO
+        var deleteExports = createdPendingExports.Where(pe => pe.ChangeType == PendingExportChangeType.Delete).ToList();
+        Assert.That(deleteExports, Has.Count.EqualTo(1),
+            "Expected exactly one Delete pending export for the Provisioned target CSO.");
+        Assert.That(deleteExports[0].ConnectedSystemObjectId, Is.EqualTo(targetCso.Id),
+            "Expected the Delete export to target the Provisioned CSO.");
+    }
+
     #endregion
 }

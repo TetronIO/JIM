@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - `Get-JIMMetaverseObject` now correctly caps `-PageSize` at 100 to match the API maximum (previously accepted up to 1000, but the API silently capped at 100, returning incomplete results)
+- Skip export evaluation for metaverse objects queued for immediate deletion (0-grace-period), preventing spurious Update exports with invalid attribute values (e.g., empty DN from recalled attributes) alongside the correct Delete export
 
 ### Performance
 

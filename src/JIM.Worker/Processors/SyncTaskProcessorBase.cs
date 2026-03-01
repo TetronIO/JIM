@@ -1481,6 +1481,10 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Batch evaluates export rules for all MVOs that changed during the current page.
     /// Must be called after PersistPendingMetaverseObjectsAsync so MVOs have valid IDs for pending export FKs.
+    /// Skips MVOs that are queued for immediate deletion (0-grace-period) because
+    /// FlushPendingMvoDeletionsAsync will create the correct Delete exports via EvaluateMvoDeletionAsync.
+    /// Creating Update exports for recalled attributes on a doomed MVO is spurious and can produce
+    /// invalid attribute values (e.g., empty DN from expression evaluation against recalled attributes).
     /// </summary>
     protected async Task EvaluatePendingExportsAsync()
     {
@@ -1490,8 +1494,26 @@ public abstract class SyncTaskProcessorBase
         using var span = Diagnostics.Sync.StartSpan("EvaluatePendingExports");
         span.SetTag("count", _pendingExportEvaluations.Count);
 
+        // Build a set of MVO IDs pending immediate deletion.
+        // These MVOs will get Delete exports in FlushPendingMvoDeletionsAsync,
+        // so creating Update exports here would be spurious.
+        var pendingDeletionMvoIds = _pendingMvoDeletions.Count > 0
+            ? _pendingMvoDeletions.Select(m => m.Id).ToHashSet()
+            : null;
+
+        var skippedCount = 0;
+
         foreach (var (mvo, changedAttributes, removedAttributes) in _pendingExportEvaluations)
         {
+            if (pendingDeletionMvoIds != null && pendingDeletionMvoIds.Contains(mvo.Id))
+            {
+                Log.Debug("EvaluatePendingExportsAsync: Skipping export evaluation for MVO {MvoId} — " +
+                    "queued for immediate deletion, Delete exports will be created by FlushPendingMvoDeletionsAsync",
+                    mvo.Id);
+                skippedCount++;
+                continue;
+            }
+
             using (Diagnostics.Sync.StartSpan("EvaluateSingleMvoExports")
                 .SetTag("mvoId", mvo.Id)
                 .SetTag("changedAttributeCount", changedAttributes.Count))
@@ -1500,7 +1522,13 @@ public abstract class SyncTaskProcessorBase
             }
         }
 
-        Log.Verbose("EvaluatePendingExportsAsync: Evaluated exports for {Count} MVOs", _pendingExportEvaluations.Count);
+        if (skippedCount > 0)
+        {
+            Log.Information("EvaluatePendingExportsAsync: Skipped {SkippedCount} MVO(s) pending immediate deletion", skippedCount);
+        }
+
+        Log.Verbose("EvaluatePendingExportsAsync: Evaluated exports for {Count} MVOs ({SkippedCount} skipped due to pending deletion)",
+            _pendingExportEvaluations.Count, skippedCount);
         _pendingExportEvaluations.Clear();
 
         span.SetSuccess();
