@@ -305,10 +305,6 @@
                 @* Export-specific cards *@
                 @if (IsExportRun())
                 {
-                    <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Green.Default}; min-width: 120px;")">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Provisioned</MudText>
-                        <MudText Typo="Typo.h4" Color="Color.Success">@_activityRunProfileExecutionStats.TotalProvisioned.ToString("N0")</MudText>
-                    </MudPaper>
                     <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Teal.Default}; min-width: 120px;")">
                         <MudText Typo="Typo.button" Class="mud-text-secondary">Exported</MudText>
                         <MudText Typo="Typo.h4" Color="Color.Info">@_activityRunProfileExecutionStats.TotalExported.ToString("N0")</MudText>
@@ -745,8 +741,6 @@
             availableTypes.Add(ObjectChangeType.DriftCorrection);
 
         // Export operations
-        if (_activityRunProfileExecutionStats.TotalProvisioned > 0)
-            availableTypes.Add(ObjectChangeType.Provisioned);
         if (_activityRunProfileExecutionStats.TotalExported > 0)
             availableTypes.Add(ObjectChangeType.Exported);
         if (_activityRunProfileExecutionStats.TotalDeprovisioned > 0)
@@ -780,7 +774,6 @@
             ObjectChangeType.AttributeFlow => _activityRunProfileExecutionStats.TotalAttributeFlows,
             ObjectChangeType.Disconnected => _activityRunProfileExecutionStats.TotalDisconnections,
             ObjectChangeType.DriftCorrection => _activityRunProfileExecutionStats.TotalDriftCorrections,
-            ObjectChangeType.Provisioned => _activityRunProfileExecutionStats.TotalProvisioned,
             ObjectChangeType.Exported => _activityRunProfileExecutionStats.TotalExported,
             ObjectChangeType.Deprovisioned => _activityRunProfileExecutionStats.TotalDeprovisioned,
             ObjectChangeType.PendingExport => _activityRunProfileExecutionStats.TotalPendingExports,
@@ -827,8 +820,7 @@
                 (_activityRunProfileExecutionStats.TotalCsoAdds > 0 ||
                  _activityRunProfileExecutionStats.TotalCsoUpdates > 0 ||
                  _activityRunProfileExecutionStats.TotalCsoDeletes > 0) &&
-                _activityRunProfileExecutionStats.TotalProjections == 0 &&
-                _activityRunProfileExecutionStats.TotalProvisioned == 0)
+                _activityRunProfileExecutionStats.TotalProjections == 0)
                 return true;
         }
 
@@ -875,8 +867,7 @@
             if (_activity?.TargetName?.Contains("Export", StringComparison.OrdinalIgnoreCase) == true)
                 return true;
             if (_activityRunProfileExecutionStats != null &&
-                (_activityRunProfileExecutionStats.TotalProvisioned > 0 ||
-                 _activityRunProfileExecutionStats.TotalExported > 0 ||
+                (_activityRunProfileExecutionStats.TotalExported > 0 ||
                  _activityRunProfileExecutionStats.TotalDeprovisioned > 0))
                 return true;
         }

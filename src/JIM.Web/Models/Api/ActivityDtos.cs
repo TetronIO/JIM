@@ -150,12 +150,7 @@ public class ActivityHeader
 
     #region Export Stats
     /// <summary>
-    /// Count of new objects provisioned to target systems.
-    /// </summary>
-    public int TotalProvisioned { get; set; }
-
-    /// <summary>
-    /// Count of existing objects exported with updated attributes.
+    /// Count of objects exported to target systems (includes both initial creation and subsequent updates).
     /// </summary>
     public int TotalExported { get; set; }
 
@@ -226,7 +221,6 @@ public class ActivityHeader
             TotalDriftCorrections = activity.TotalDriftCorrections,
 
             // Export
-            TotalProvisioned = activity.TotalProvisioned,
             TotalExported = activity.TotalExported,
             TotalDeprovisioned = activity.TotalDeprovisioned,
 
@@ -504,12 +498,7 @@ public class ActivityRunProfileExecutionStatsDto
 
     #region Export Stats
     /// <summary>
-    /// Number of new objects provisioned to target systems.
-    /// </summary>
-    public int TotalProvisioned { get; set; }
-
-    /// <summary>
-    /// Number of existing objects exported with updated attributes.
+    /// Number of objects exported to target systems (includes both initial creation and subsequent updates).
     /// </summary>
     public int TotalExported { get; set; }
 
@@ -584,7 +573,6 @@ public class ActivityRunProfileExecutionStatsDto
             TotalDriftCorrections = stats.TotalDriftCorrections,
 
             // Export
-            TotalProvisioned = stats.TotalProvisioned,
             TotalExported = stats.TotalExported,
             TotalDeprovisioned = stats.TotalDeprovisioned,
 

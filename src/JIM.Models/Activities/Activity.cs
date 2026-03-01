@@ -165,10 +165,7 @@ public class Activity
     #endregion
 
     #region Export Stats
-    /// <summary>Count of new objects provisioned to target systems.</summary>
-    public int TotalProvisioned { get; set; }
-
-    /// <summary>Count of existing objects exported with updated attributes.</summary>
+    /// <summary>Count of objects exported to target systems (includes both initial creation and subsequent updates).</summary>
     public int TotalExported { get; set; }
 
     /// <summary>Count of objects deprovisioned from target systems.</summary>

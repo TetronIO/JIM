@@ -761,7 +761,6 @@ public class Worker : BackgroundService
         activity.TotalDriftCorrections = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.DriftCorrection);
 
         // Export stats
-        activity.TotalProvisioned = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Provisioned);
         activity.TotalExported = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Exported);
         activity.TotalDeprovisioned = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Deprovisioned);
 
@@ -780,14 +779,14 @@ public class Worker : BackgroundService
             "Projected={Projected}, Joined={Joined}, AttributeFlows={AttributeFlows}, " +
             "Disconnected={Disconnected}, DisconnectedOutOfScope={DisconnectedOutOfScope}, " +
             "OutOfScopeRetainJoin={OutOfScopeRetainJoin}, DriftCorrections={DriftCorrections}, " +
-            "Provisioned={Provisioned}, Exported={Exported}, Deprovisioned={Deprovisioned}, " +
+            "Exported={Exported}, Deprovisioned={Deprovisioned}, " +
             "Created={Created}, PendingExports={PendingExports}, Errors={Errors}",
             activity.Id,
             activity.TotalAdded, activity.TotalUpdated, activity.TotalDeleted,
             activity.TotalProjected, activity.TotalJoined, activity.TotalAttributeFlows,
             activity.TotalDisconnected, activity.TotalDisconnectedOutOfScope,
             activity.TotalOutOfScopeRetainJoin, activity.TotalDriftCorrections,
-            activity.TotalProvisioned, activity.TotalExported, activity.TotalDeprovisioned,
+            activity.TotalExported, activity.TotalDeprovisioned,
             activity.TotalCreated, activity.TotalPendingExports, activity.TotalErrors);
     }
 

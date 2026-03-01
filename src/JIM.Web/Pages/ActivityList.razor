@@ -201,15 +201,6 @@
                         }
                         else if (effectiveRunType == "Export")
                         {
-                            @if (context.TotalProvisioned > 0)
-                            {
-                                <MudTooltip Text="Provisioned" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Success" Variant="Variant.Text"
-                                             Icon="@Icons.Material.Filled.Add" Class="px-2">
-                                        @context.TotalProvisioned.ToString("N0")
-                                    </MudChip>
-                                </MudTooltip>
-                            }
                             @if (context.TotalExported > 0)
                             {
                                 <MudTooltip Text="Exported" Arrow="true" Placement="Placement.Top">
@@ -559,7 +550,6 @@
             || activity.TotalDisconnectedOutOfScope > 0
             || activity.TotalOutOfScopeRetainJoin > 0
             || activity.TotalDriftCorrections > 0
-            || activity.TotalProvisioned > 0
             || activity.TotalExported > 0
             || activity.TotalDeprovisioned > 0
             || activity.TotalCreated > 0

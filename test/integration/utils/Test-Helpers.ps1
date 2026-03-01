@@ -810,7 +810,6 @@ function Assert-ActivitySuccess {
             if ($stats.totalOutOfScopeRetainJoin -gt 0) { $errorDetails += "  - Out of Scope (Retain Join): $($stats.totalOutOfScopeRetainJoin)" }
             if ($stats.totalDriftCorrections -gt 0) { $errorDetails += "  - Drift Corrections: $($stats.totalDriftCorrections)" }
             # Export stats
-            if ($stats.totalProvisioned -gt 0) { $errorDetails += "  - Provisioned: $($stats.totalProvisioned)" }
             if ($stats.totalExported -gt 0) { $errorDetails += "  - Exported: $($stats.totalExported)" }
             if ($stats.totalDeprovisioned -gt 0) { $errorDetails += "  - Deprovisioned: $($stats.totalDeprovisioned)" }
             # Direct creation stats
@@ -865,7 +864,7 @@ function Assert-ActivityHasChanges {
         A friendly name for the operation (used in messages)
 
     .PARAMETER ExpectedChangeType
-        The ObjectChangeType to look for (e.g., 'Added', 'Deleted', 'Updated', 'Projected', 'Provisioned', 'Deprovisioned')
+        The ObjectChangeType to look for (e.g., 'Added', 'Deleted', 'Updated', 'Projected', 'Exported', 'Deprovisioned')
 
     .PARAMETER MinCount
         Minimum number of changes expected (default: 1)
@@ -895,7 +894,7 @@ function Assert-ActivityHasChanges {
 
         [Parameter(Mandatory=$true)]
         [ValidateSet('Added', 'Updated', 'Deleted', 'Projected', 'Joined', 'AttributeFlow', 'Disconnected',
-                     'DisconnectedOutOfScope', 'OutOfScopeRetainJoin', 'DriftCorrection', 'Provisioned',
+                     'DisconnectedOutOfScope', 'OutOfScopeRetainJoin', 'DriftCorrection',
                      'Exported', 'Deprovisioned', 'NoChange', 'PendingExport', 'PendingExportConfirmed')]
         [string]$ExpectedChangeType,
 
@@ -928,7 +927,6 @@ function Assert-ActivityHasChanges {
         'DisconnectedOutOfScope' { $stats.totalDisconnectedOutOfScope }
         'OutOfScopeRetainJoin' { $stats.totalOutOfScopeRetainJoin }
         'DriftCorrection' { $stats.totalDriftCorrections }
-        'Provisioned' { $stats.totalProvisioned }
         'Exported' { $stats.totalExported }
         'Deprovisioned' { $stats.totalDeprovisioned }
         'NoChange' { $stats.totalUnchanged }
@@ -997,7 +995,7 @@ function Get-ActivityChangeCount {
 
         [Parameter(Mandatory=$true)]
         [ValidateSet('Added', 'Updated', 'Deleted', 'Projected', 'Joined', 'AttributeFlow', 'Disconnected',
-                     'DisconnectedOutOfScope', 'OutOfScopeRetainJoin', 'DriftCorrection', 'Provisioned',
+                     'DisconnectedOutOfScope', 'OutOfScopeRetainJoin', 'DriftCorrection',
                      'Exported', 'Deprovisioned', 'NoChange', 'PendingExport', 'PendingExportConfirmed')]
         [string]$ChangeType
     )
@@ -1019,7 +1017,6 @@ function Get-ActivityChangeCount {
         'DisconnectedOutOfScope' { return $stats.totalDisconnectedOutOfScope }
         'OutOfScopeRetainJoin' { return $stats.totalOutOfScopeRetainJoin }
         'DriftCorrection' { return $stats.totalDriftCorrections }
-        'Provisioned' { return $stats.totalProvisioned }
         'Exported' { return $stats.totalExported }
         'Deprovisioned' { return $stats.totalDeprovisioned }
         'NoChange' { return $stats.totalUnchanged }

@@ -233,15 +233,6 @@
                             }
                             else if (runType == "Export")
                             {
-                                @if (context.TotalProvisioned > 0)
-                                {
-                                    <MudTooltip Text="Provisioned" Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Color="Color.Success" Variant="Variant.Text"
-                                                 Icon="@Icons.Material.Filled.Add" Class="px-2">
-                                            @context.TotalProvisioned.ToString("N0")
-                                        </MudChip>
-                                    </MudTooltip>
-                                }
                                 @if (context.TotalExported > 0)
                                 {
                                     <MudTooltip Text="Exported" Arrow="true" Placement="Placement.Top">
@@ -435,10 +426,6 @@
                             }
                             else if (sidebarRunType == "Export")
                             {
-                                <tr>
-                                    <td><MudText Typo="Typo.body2">Provisions</MudText></td>
-                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Success">@_selectedActivity.TotalProvisioned.ToString("N0")</MudText></td>
-                                </tr>
                                 <tr>
                                     <td><MudText Typo="Typo.body2">Exports</MudText></td>
                                     <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Info">@_selectedActivity.TotalExported.ToString("N0")</MudText></td>
@@ -669,7 +656,7 @@
     private static string BuildFingerprint(IEnumerable<Activity> activities)
     {
         return string.Join("|", activities.Select(a =>
-            $"{a.Id}:{a.Status}:{a.TotalAdded},{a.TotalUpdated},{a.TotalDeleted},{a.TotalProjected},{a.TotalJoined},{a.TotalAttributeFlows},{a.TotalDisconnected},{a.TotalDriftCorrections},{a.TotalProvisioned},{a.TotalExported},{a.TotalDeprovisioned},{a.TotalErrors}"));
+            $"{a.Id}:{a.Status}:{a.TotalAdded},{a.TotalUpdated},{a.TotalDeleted},{a.TotalProjected},{a.TotalJoined},{a.TotalAttributeFlows},{a.TotalDisconnected},{a.TotalDriftCorrections},{a.TotalExported},{a.TotalDeprovisioned},{a.TotalErrors}"));
     }
 
     private void OnConnectedSystemFilterChanged(IEnumerable<string> values)
@@ -730,7 +717,6 @@
             || activity.TotalDisconnectedOutOfScope > 0
             || activity.TotalOutOfScopeRetainJoin > 0
             || activity.TotalDriftCorrections > 0
-            || activity.TotalProvisioned > 0
             || activity.TotalExported > 0
             || activity.TotalDeprovisioned > 0
             || activity.TotalCreated > 0

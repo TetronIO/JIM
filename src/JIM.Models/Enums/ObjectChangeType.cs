@@ -69,12 +69,10 @@ public enum ObjectChangeType
 
     // Export operations
     /// <summary>
-    /// New CSO created in target system (provisioning).
-    /// </summary>
-    Provisioned,
-
-    /// <summary>
-    /// CSO attributes exported to target system.
+    /// CSO attributes exported to target system (includes both initial creation and subsequent updates).
+    /// The distinction between provisioning (first export) and updating (subsequent exports) is captured
+    /// in the SyncOutcome graph on the RPEI, not in the ObjectChangeType — "Provisioned" is a sync-phase
+    /// concept (adding an MVO to a CS for the first time), not an export-phase concept.
     /// </summary>
     Exported,
 

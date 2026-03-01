@@ -1077,7 +1077,6 @@ new("Item Details", href: null, disabled: true)
             ObjectChangeType.AttributeFlow => Icons.Material.Filled.SwapHoriz,
             ObjectChangeType.Disconnected => Icons.Material.Filled.LinkOff,
             // Export operations
-            ObjectChangeType.Provisioned => Icons.Material.Filled.Add,
             ObjectChangeType.Exported => Icons.Material.Filled.Publish,
             ObjectChangeType.Deprovisioned => Icons.Material.Filled.Delete,
             // Other
@@ -1103,7 +1102,6 @@ new("Item Details", href: null, disabled: true)
             ObjectChangeType.AttributeFlow => "Attributes Flowed",
             ObjectChangeType.Disconnected => "Disconnected from Metaverse",
             // Export operations
-            ObjectChangeType.Provisioned => "Object Provisioned",
             ObjectChangeType.Exported => "Object Exported",
             ObjectChangeType.Deprovisioned => "Object Deprovisioned",
             // Other
@@ -1209,12 +1207,9 @@ new("Item Details", href: null, disabled: true)
             ? $"The connected system object ({externalId}) was disconnected from the metaverse. Join and metaverse deletion rules were evaluated."
             : "The connected system object was disconnected from the metaverse. Join and metaverse deletion rules were evaluated.",
             // Export operations
-            ObjectChangeType.Provisioned => hasExternalId
-            ? $"A new connected system object ({externalId}) was provisioned in the target system."
-            : "A new connected system object was provisioned in the target system.",
             ObjectChangeType.Exported => hasExternalId
-            ? $"The connected system object ({externalId}) was exported with updated attributes."
-            : "The connected system object was exported with updated attributes.",
+            ? $"The connected system object ({externalId}) was exported to the target system."
+            : "The connected system object was exported to the target system.",
             ObjectChangeType.Deprovisioned => hasExternalId
             ? $"The connected system object ({externalId}) was deprovisioned from the target system."
             : "The connected system object was deprovisioned from the target system.",
@@ -1245,7 +1240,6 @@ new("Item Details", href: null, disabled: true)
             ObjectChangeType.AttributeFlow => "Attribute Flow",
             ObjectChangeType.Disconnected => "Disconnected",
             // Export operations
-            ObjectChangeType.Provisioned => "Provisioned",
             ObjectChangeType.Exported => "Exported",
             ObjectChangeType.Deprovisioned => "Deprovisioned",
             // Other
