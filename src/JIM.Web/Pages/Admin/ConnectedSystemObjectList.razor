@@ -1,5 +1,7 @@
 @page "/admin/connected-systems/{Id:int}/objects"
 @attribute [Authorize(Roles = "Administrator")]
+@implements IFullWidthPage
+@implements IDisposable
 @using JIM.Application
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
@@ -7,6 +9,7 @@
 @using JIM.Models.Utility
 @using JIM.Utilities
 @using JIM.Web.Services
+@using JIM.Web.Shared
 @inject JimApplication Jim
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
@@ -252,6 +255,9 @@ else
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
+    [CascadingParameter]
+    private MainLayout? Layout { get; set; }
+
     private MudTable<ConnectedSystemObjectHeader>? _table;
     private ConnectedSystemHeader? _connectedSystemHeader;
     private string _searchString = "";
@@ -276,6 +282,8 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        Layout?.SetFullWidth();
+
         _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(Id);
         if (_connectedSystemHeader == null)
         {
@@ -477,5 +485,10 @@ else
     {
         _selectedStatuses = selectedStatuses;
         _table?.ReloadServerData();
+    }
+
+    public void Dispose()
+    {
+        Layout?.ResetWidth();
     }
 }

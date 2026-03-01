@@ -47,16 +47,18 @@
         </MudDrawer>
 
         <MudMainContent>
-            <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-5 pb-5">
-                @Body
+            <CascadingValue Value="this" IsFixed="true">
+                <MudContainer MaxWidth="@_contentMaxWidth" Class="pt-5 pb-5">
+                    @Body
 
-                <div class="jim-page-footer">
-                    <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5 mud-text-secondary">
-                        &copy; Tetron Ltd | All rights reserved | v@(AppVersion)
-                    </MudText>
-                </div>
+                    <div class="jim-page-footer">
+                        <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5 mud-text-secondary">
+                            &copy; Tetron Ltd | All rights reserved | v@(AppVersion)
+                        </MudText>
+                    </div>
 
-            </MudContainer>
+                </MudContainer>
+            </CascadingValue>
         </MudMainContent>
 
     </MudDrawerContainer>
@@ -111,6 +113,33 @@
     // Minimum viewport width (in pixels) to have drawer open by default
     // 1400px is a common breakpoint for "large" screens
     private const int LargeScreenBreakpoint = 1400;
+    // Content container width - pages can request full width via SetFullWidth()
+    private MaxWidth _contentMaxWidth = MaxWidth.ExtraLarge;
+
+    /// <summary>
+    /// Called by pages that implement IFullWidthPage to remove the max-width constraint.
+    /// </summary>
+    public void SetFullWidth()
+    {
+        if (_contentMaxWidth != MaxWidth.False)
+        {
+            _contentMaxWidth = MaxWidth.False;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Resets the content area to the default max-width.
+    /// </summary>
+    public void ResetWidth()
+    {
+        if (_contentMaxWidth != MaxWidth.ExtraLarge)
+        {
+            _contentMaxWidth = MaxWidth.ExtraLarge;
+            StateHasChanged();
+        }
+    }
+
     // Default to closed/unpinned - will be set based on screen size or saved preference in OnAfterRenderAsync
     private bool IsDrawerOpen { get; set; }
     private bool IsDrawerPinned { get; set; }
