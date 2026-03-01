@@ -1028,6 +1028,7 @@ html[lang] .mud-dialog .mud-paper-outlined {
     min-width: auto !important;
     font-size: 0.75rem;
     text-transform: none !important;
+    align-self: flex-start;
 }
 
 .jim-attr-expanded {
