@@ -103,10 +103,8 @@ public enum SyncOutcomeType
     Disconnected,
     DisconnectedOutOfScope,
     MvoDeleted,
-    MvoUpdated,
 
-    // Sync outcomes — outbound (export evaluation during sync)
-    ExportEvaluated,
+    // Sync outcomes — outbound (pending export creation during sync)
     PendingExportCreated,
 
     // Export execution outcomes
@@ -195,7 +193,7 @@ Key: "ChangeTracking.SyncOutcomes.Level"
 Category: History
 ValueType: Enum
 EnumTypeName: "SyncOutcomeTrackingLevel"
-DefaultValue: "Standard"
+DefaultValue: "Detailed"
 Description: "Controls how much detail is recorded for sync outcome
               graphs on each run profile execution item. Higher levels
               provide richer audit trails but increase storage usage."
@@ -206,10 +204,10 @@ Description: "Controls how much detail is recorded for sync outcome
 | Level | What's Recorded | Use Case |
 |-------|----------------|----------|
 | **None** | No outcome tree — RPEI `ObjectChangeType` only (legacy behaviour) | Maximum performance, minimal storage |
-| **Standard** | Root-level outcomes only (Projected, Joined, Provisioned, etc.) — no nested children | Default. Stat chips on list view, basic causal visibility |
-| **Detailed** | Full tree with nested children (Projected → AttributeFlow → PendingExportCreated per system) | Full audit trail, debugging, compliance |
+| **Standard** | Root-level outcomes only (Projected, Joined, Provisioned, etc.) — no nested children | Stat chips on list view, basic causal visibility |
+| **Detailed** | Full tree with nested children (Projected → AttributeFlow → PendingExportCreated per system) | Default. Full audit trail, debugging, compliance |
 
-**Standard** is the recommended default — it provides the stat chips and aggregate statistics without the storage cost of full nesting. **Detailed** gives the complete causal chain for environments that need full audit depth.
+**Detailed** is the default — it provides the complete causal chain needed for debugging, audit, and compliance. **Standard** can be used in high-volume environments where storage is a concern, and **None** preserves legacy behaviour with zero overhead.
 
 This setting complements the existing CSO/MVO change tracking settings. An administrator might enable Detailed outcome tracking but disable CSO change tracking if they care about "what happened" but not "what the attributes looked like before/after."
 
@@ -375,8 +373,8 @@ Outcomes reference pre-generated RPEI IDs, so both inserts can be in the same fl
 
 | Concern | Assessment |
 |---------|-----------|
-| **Write volume** | Standard: ~3-5 outcome rows per RPEI. 100k objects → ~300-500k outcome rows. Detailed: ~5-10 per RPEI. Manageable with existing chunked bulk insert |
-| **Storage** | Each outcome row is small (~100-200 bytes: GUIDs, enum, int, short string). Standard level for 100k objects ≈ 30-50 MB per sync run |
+| **Write volume** | Detailed (default): ~5-10 outcome rows per RPEI. 100k objects → ~500k-1M outcome rows. Standard: ~3-5 per RPEI. Manageable with existing chunked bulk insert |
+| **Storage** | Each outcome row is small (~100-200 bytes: GUIDs, enum, int, short string). Detailed level for 100k objects ≈ 50-100 MB per sync run |
 | **List query** | No join needed — `OutcomeSummary` denormalised field. Same performance as today |
 | **Detail query** | Single RPEI + its outcomes via indexed FK. Small result set, fast |
 | **Stats query** | `GROUP BY OutcomeType` on outcomes table with FK filter. Single indexed query |
@@ -400,7 +398,7 @@ new ServiceSetting
     Category = ServiceSettingCategory.History,
     ValueType = ServiceSettingValueType.Enum,
     EnumTypeName = nameof(SyncOutcomeTrackingLevel),
-    DefaultValue = nameof(SyncOutcomeTrackingLevel.Standard),
+    DefaultValue = nameof(SyncOutcomeTrackingLevel.Detailed),
     IsReadOnly = false
 }
 ```
