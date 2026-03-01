@@ -57,6 +57,12 @@ public abstract class SyncTaskProcessorBase
     protected readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToDelete = [];
     protected readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToUpdate = [];
 
+    // Batch collection for deferred CSO join/projection updates (JoinType, DateJoined, MetaverseObjectId).
+    // CSO scalar property changes are NOT detected by EF during sync because AutoDetectChangesEnabled is
+    // disabled at page boundaries for performance. Without explicit persistence, JoinType stays as NotJoined
+    // and DateJoined stays null in the database after projection or join.
+    protected readonly List<ConnectedSystemObject> _pendingCsoJoinUpdates = [];
+
     // Batch collection for deferred provisioning CSO creation (avoid per-CSO database calls)
     protected readonly List<ConnectedSystemObject> _provisioningCsosToCreate = [];
 
@@ -844,6 +850,8 @@ public abstract class SyncTaskProcessorBase
                 using (Diagnostics.Sync.StartSpan("AttemptProjection"))
                 {
                     wasProjected = AttemptProjection(scopedSyncRules, connectedSystemObject);
+                    if (wasProjected)
+                        _pendingCsoJoinUpdates.Add(connectedSystemObject);
                 }
             }
         }
@@ -1025,18 +1033,21 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Batch persists all pending MVO creates and updates collected during the current page.
-    /// This reduces database round trips from n writes to 2 writes (one for creates, one for updates).
-    /// After creates are persisted, CSO foreign keys are updated with the newly assigned MVO IDs.
+    /// Batch persists all pending MVO creates and updates collected during the current page,
+    /// then persists CSO join/projection updates (JoinType, DateJoined, MetaverseObjectId).
+    /// CSO updates are flushed AFTER MVO creates so that projected CSOs can pick up the
+    /// newly assigned MVO IDs. This is necessary because AutoDetectChangesEnabled is disabled
+    /// during page flush, so EF does not detect CSO scalar property changes automatically.
     /// </summary>
     protected async Task PersistPendingMetaverseObjectsAsync()
     {
-        if (_pendingMvoCreates.Count == 0 && _pendingMvoUpdates.Count == 0)
+        if (_pendingMvoCreates.Count == 0 && _pendingMvoUpdates.Count == 0 && _pendingCsoJoinUpdates.Count == 0)
             return;
 
         using var span = Diagnostics.Sync.StartSpan("PersistPendingMetaverseObjects");
         span.SetTag("createCount", _pendingMvoCreates.Count);
         span.SetTag("updateCount", _pendingMvoUpdates.Count);
+        span.SetTag("csoJoinUpdateCount", _pendingCsoJoinUpdates.Count);
 
         // Batch create new MVOs
         if (_pendingMvoCreates.Count > 0)
@@ -1052,6 +1063,26 @@ public abstract class SyncTaskProcessorBase
             await _jim.Metaverse.UpdateMetaverseObjectsAsync(_pendingMvoUpdates);
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} MVOs in batch", _pendingMvoUpdates.Count);
             _pendingMvoUpdates.Clear();
+        }
+
+        // Batch update CSOs that had JoinType/DateJoined/MetaverseObjectId changed during
+        // projection or join. This must run AFTER MVO creates so that projected CSOs can
+        // pick up the newly assigned MVO IDs (set via EF relationship fixup during AddRange).
+        if (_pendingCsoJoinUpdates.Count > 0)
+        {
+            // For projected CSOs, MetaverseObjectId was not set at projection time (MVO had
+            // no ID yet). Now that CreateMetaverseObjectsAsync has persisted the MVOs, EF has
+            // assigned IDs and relationship fixup has set MetaverseObjectId on the CSOs.
+            // Ensure the FK is populated for any CSO where it's still null.
+            foreach (var cso in _pendingCsoJoinUpdates)
+            {
+                if (cso.MetaverseObjectId == null && cso.MetaverseObject != null)
+                    cso.MetaverseObjectId = cso.MetaverseObject.Id;
+            }
+
+            await _jim.ConnectedSystems.UpdateConnectedSystemObjectJoinStatesAsync(_pendingCsoJoinUpdates);
+            Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} CSO join states in batch", _pendingCsoJoinUpdates.Count);
+            _pendingCsoJoinUpdates.Clear();
         }
 
         span.SetSuccess();
@@ -1900,6 +1931,7 @@ public abstract class SyncTaskProcessorBase
             connectedSystemObject.MetaverseObjectId = mvo.Id;
             connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Joined;
             connectedSystemObject.DateJoined = DateTime.UtcNow;
+            _pendingCsoJoinUpdates.Add(connectedSystemObject);
             mvo.ConnectedSystemObjects.Add(connectedSystemObject);
 
             // If the MVO was marked for deletion (reconnection scenario), clear the disconnection date

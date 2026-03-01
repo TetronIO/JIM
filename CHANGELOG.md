@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Get-JIMMetaverseObject` now correctly caps `-PageSize` at 100 to match the API maximum (previously accepted up to 1000, but the API silently capped at 100, returning incomplete results)
 - Skip export evaluation for metaverse objects queued for immediate deletion (0-grace-period), preventing spurious Update exports with invalid attribute values (e.g., empty DN from recalled attributes) alongside the correct Delete export
 - Sync activity attribute flow statistic now counts only standalone attribute flow objects, excluding flows already counted under projections, joins, or disconnections — previously summed individual attribute changes across all change types, inflating the count (e.g., 320k instead of the expected object count)
+- CSO join state (JoinType, DateJoined, MetaverseObjectId) now explicitly persisted during sync — previously these properties were set in memory but not saved to the database because EF change detection is disabled during page flush for performance
 
 ### Performance
 

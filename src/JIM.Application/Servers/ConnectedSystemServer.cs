@@ -2956,6 +2956,16 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Batch updates only the join-related columns (JoinType, DateJoined, MetaverseObjectId) on
+    /// Connected System Objects. Used during sync page flush where AutoDetectChangesEnabled is
+    /// disabled and EF cannot detect CSO scalar property changes automatically.
+    /// </summary>
+    public async Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects)
+    {
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectJoinStatesAsync(connectedSystemObjects);
+    }
+
+    /// <summary>
     /// Adds a Change Object to a Run Profile Execution Item for a CSO that's being created.
     /// </summary>
     private static void AddConnectedSystemObjectChange(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem, bool changeTrackingEnabled)

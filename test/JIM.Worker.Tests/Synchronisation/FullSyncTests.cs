@@ -649,6 +649,83 @@ public class FullSyncTests
     }
 
     /// <summary>
+    /// Tests that CSO join state (JoinType, DateJoined, MetaverseObjectId) is explicitly persisted
+    /// via UpdateRange during sync. This is necessary because AutoDetectChangesEnabled is disabled
+    /// during page flush, so EF cannot detect CSO scalar property changes automatically.
+    /// Without explicit persistence, JoinType stays NotJoined and DateJoined stays null in the database.
+    /// </summary>
+    [Test]
+    public async Task CsoProjection_JoinStateExplicitlyPersistedAsync()
+    {
+        // Arrange - capture CSOs passed to UpdateRange on the ConnectedSystemObjects DbSet
+        var updatedCsos = new List<ConnectedSystemObject>();
+        MockDbSetConnectedSystemObjects.Setup(m => m.UpdateRange(It.IsAny<IEnumerable<ConnectedSystemObject>>()))
+            .Callback<IEnumerable<ConnectedSystemObject>>(csos => updatedCsos.AddRange(csos));
+
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+        importSyncRule.ProjectToMetaverse = true;
+
+        // Act
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        await syncProcessor.PerformFullSyncAsync();
+
+        // Assert - UpdateRange should have been called with the projected CSOs
+        Assert.That(updatedCsos, Is.Not.Empty, "Expected UpdateRange to be called with projected CSOs for join state persistence.");
+        Assert.That(updatedCsos.All(c => c.JoinType == ConnectedSystemObjectJoinType.Projected),
+            "All projected CSOs should have JoinType=Projected when persisted.");
+        Assert.That(updatedCsos.All(c => c.DateJoined != null),
+            "All projected CSOs should have DateJoined set when persisted.");
+    }
+
+    /// <summary>
+    /// Tests that CSO join state is explicitly persisted when CSOs are joined (not projected) to existing MVOs.
+    /// </summary>
+    [Test]
+    public async Task CsoJoin_JoinStateExplicitlyPersistedAsync()
+    {
+        // Arrange - capture CSOs passed to UpdateRange on the ConnectedSystemObjects DbSet
+        var updatedCsos = new List<ConnectedSystemObject>();
+        MockDbSetConnectedSystemObjects.Setup(m => m.UpdateRange(It.IsAny<IEnumerable<ConnectedSystemObject>>()))
+            .Callback<IEnumerable<ConnectedSystemObject>>(csos => updatedCsos.AddRange(csos));
+
+        // Set up a join rule (same pattern as CsoJoinToMvoViaTextAttributeTestAsync)
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+        var objectMatchingRule = new ObjectMatchingRule
+        {
+            Id = 1,
+            SyncRule = importSyncRule,
+            CaseSensitive = true,
+            TargetMetaverseAttribute = MetaverseObjectTypesData.Single(q => q.Name == "User")
+                .Attributes.Single(q => q.Id == (int)MockMetaverseAttributeName.EmployeeId)
+        };
+        objectMatchingRule.TargetMetaverseAttributeId = objectMatchingRule.TargetMetaverseAttribute.Id;
+        objectMatchingRule.Sources.Add(new ObjectMatchingRuleSource
+        {
+            Id = 1,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.EMPLOYEE_ID,
+            ConnectedSystemAttribute = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER")
+                .Attributes.Single(q => q.Id == (int)MockSourceSystemAttributeNames.EMPLOYEE_ID)
+        });
+        importSyncRule.ObjectMatchingRules.Add(objectMatchingRule);
+
+        // Act
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        await syncProcessor.PerformFullSyncAsync();
+
+        // Assert - UpdateRange should have been called with the joined CSOs
+        var joinedCsos = updatedCsos.Where(c => c.JoinType == ConnectedSystemObjectJoinType.Joined).ToList();
+        Assert.That(joinedCsos, Is.Not.Empty, "Expected UpdateRange to be called with joined CSOs for join state persistence.");
+        Assert.That(joinedCsos.All(c => c.DateJoined != null), "All joined CSOs should have DateJoined set when persisted.");
+        Assert.That(joinedCsos.All(c => c.MetaverseObjectId != null), "All joined CSOs should have MetaverseObjectId set when persisted.");
+    }
+
+    /// <summary>
     /// Tests that pending attribute value adds are created for all data types when a CSO joins/projects to an MVO.
     /// </summary>
     [Test]
