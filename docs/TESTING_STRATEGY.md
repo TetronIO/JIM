@@ -14,7 +14,7 @@ Integration Tests (Full System)
 
 ## 1. Unit Tests
 
-**Location**: `test/JIM.Worker.Tests/`, `test/JIM.Models.Tests/`, `test/JIM.Web.Api.Tests/`
+**Location**: `test/JIM.Worker.Tests/`, `test/JIM.Models.Tests/`, `test/JIM.Web.Api.Tests/`, `test/JIM.Utilities.Tests/`
 
 **Purpose**: Test individual methods and classes in isolation using mocks
 
@@ -54,9 +54,11 @@ public async Task GetConnectedSystemObjectsModifiedSinceAsync_WithModifiedCsos_R
 - ❌ Multi-step workflows
 - ❌ End-to-end business processes
 
-## 2. Workflow Tests (RECOMMENDED - NEW CATEGORY)
+## 2. Workflow Tests
 
-**Location**: `test/JIM.Worker.Tests/Workflows/` (to be implemented)
+**Location**: Two complementary test suites:
+- `test/JIM.Worker.Tests/Workflows/` — Lower-level workflow tests using `WorkflowTestBase` (26 tests)
+- `test/JIM.Workflow.Tests/Scenarios/` — Higher-level scenario tests using `WorkflowTestHarness` (36 tests)
 
 **Purpose**: Test multi-step business processes using real implementations with in-memory database
 
@@ -66,38 +68,21 @@ public async Task GetConnectedSystemObjectsModifiedSinceAsync_WithModifiedCsos_R
 - Test multiple components working together
 - Focus on workflow correctness and component integration
 
-**Example**: Testing Full Sync -> Delta Sync watermark workflow
+**Current Coverage**:
 
-```csharp
-[Test]
-public async Task FullSyncThenDeltaSync_WithOneModifiedCso_ProcessesOnlyModifiedCso()
-{
-    // Arrange: Create system with 100 CSOs using real database
-    var connectedSystem = await CreateConnectedSystemWithSyncRulesAsync("TestSystem");
-    for (int i = 0; i < 100; i++)
-    {
-        await CreateCsoAsync(connectedSystem.Id, csvCsoType.Id, $"user{i}");
-    }
-
-    // Act 1: Run Full Sync (real processor, not mocked)
-    var fullSyncProcessor = new SyncFullSyncTaskProcessor(...);
-    await fullSyncProcessor.PerformFullSyncAsync();
-
-    // Assert: Watermark was set
-    await ReloadEntityAsync(connectedSystem);
-    Assert.That(connectedSystem.LastDeltaSyncCompletedAt, Is.Not.Null);
-
-    // Act 2: Modify 1 CSO and run Delta Sync
-    csos[50].LastUpdated = DateTime.UtcNow;
-    await repository.UpdateConnectedSystemObjectAsync(csos[50]);
-
-    var deltaSyncProcessor = new SyncDeltaSyncTaskProcessor(...);
-    await deltaSyncProcessor.PerformDeltaSyncAsync();
-
-    // Assert: ONLY 1 CSO processed, not all 100!
-    Assert.That(deltaSyncActivity.ObjectsProcessed, Is.EqualTo(1));
-}
-```
+| Test File | Tests | Area |
+|-----------|------:|------|
+| `SyncWorkflowTests.cs` | 6 | Full Sync / Delta Sync watermark |
+| `DeletionRuleWorkflowTests.cs` | 10 | MVO deletion lifecycle |
+| `ExportConfirmationWorkflowTests.cs` | 7 | Export confirmation cycle |
+| `AttributeRecallExpressionWorkflowTests.cs` | 3 | Multi-source attribute recall |
+| `FullSyncAfterImportWorkflowTests.cs` | 2 | Import → Full Sync |
+| `DeltaSyncAfterImportWorkflowTests.cs` | 2 | Import → Delta Sync |
+| `DriftDetectionWorkflowTests.cs` | 12 | Export drift detection |
+| `NoNetChangeWorkflowTests.cs` | 12 | No-change optimisation |
+| `ProvisioningWorkflowTests.cs` | 4 | Joiner provisioning |
+| `GroupMembershipSyncTests.cs` | 2 | Entitlement management |
+| `NonStringDataTypeExportTests.cs` | 4 | Non-string data type exports |
 
 **What Workflow Tests Are Good At**:
 - ✅ Testing multi-step workflows (Import -> Sync -> Export)
@@ -111,12 +96,17 @@ public async Task FullSyncThenDeltaSync_WithOneModifiedCso_ProcessesOnlyModified
 - When refactoring workflows to ensure behaviour preserved
 - For critical business processes (provisioning, deletion, sync)
 
-**Implementation Guidelines**:
-1. Create `test/JIM.Worker.Tests/Workflows/` directory
-2. Create `WorkflowTestBase` with helper methods for test data setup
-3. Use in-memory EF Core database: `UseInMemoryDatabase(Guid.NewGuid().ToString())`
-4. Test name format: `<Scenario>_<Action>_<ExpectedOutcome>`
-5. Keep workflows focused (test one business process per test)
+**Two Patterns**:
+
+1. **`WorkflowTestBase`** (`test/JIM.Worker.Tests/Workflows/`) — Abstract base class with in-memory database and helper methods for creating test data (connected systems, CSOs, sync rules, run profiles). Best for focused tests on specific processor logic.
+
+2. **`WorkflowTestHarness`** (`test/JIM.Workflow.Tests/Harness/`) — Higher-level harness that orchestrates complete sync cycles (import → sync → export → confirming import) with state snapshots between steps. Uses `MockCallConnector` to simulate external systems. Best for end-to-end scenario tests.
+
+**Guidelines**:
+- Use in-memory EF Core database: `UseInMemoryDatabase(Guid.NewGuid().ToString())`
+- Test name format: `<Scenario>_<Action>_<ExpectedOutcome>`
+- Keep workflows focused (test one business process per test)
+- Choose `WorkflowTestBase` for processor-level tests, `WorkflowTestHarness` for full-cycle scenarios
 
 ## 3. Integration Tests
 
@@ -163,11 +153,12 @@ public async Task FullSyncThenDeltaSync_WithOneModifiedCso_ProcessesOnlyModified
 - ✅ Integration test measured actual performance (took forever)
 - ❌ But integration tests are slow and expensive to run
 
-**How Workflow Tests Would Have Caught It**:
-- ✅ Workflow test would run Full Sync -> Delta Sync
-- ✅ Workflow test would assert `ObjectsProcessed == 1`, not `100`
-- ✅ Workflow test runs in seconds, not minutes
-- ✅ Workflow test provides clear failure message
+**How Workflow Tests Caught It**:
+- ✅ `SyncWorkflowTests` runs Full Sync -> Delta Sync
+- ✅ Asserts `ObjectsProcessed == 1`, not `100`
+- ✅ Runs in seconds, not minutes
+- ✅ Provides clear failure message
+- ✅ Now prevents regression on every commit
 
 ## Test Coverage Goals
 
@@ -203,65 +194,24 @@ public async Task FullSyncThenDeltaSync_WithOneModifiedCso_ProcessesOnlyModified
 
 ## Writing Workflow Tests
 
-> **Implementation**: Workflow tests are now implemented in [`test/JIM.Worker.Tests/Workflows/`](../test/JIM.Worker.Tests/Workflows/):
-> - [`WorkflowTestBase.cs`](../test/JIM.Worker.Tests/Workflows/WorkflowTestBase.cs) - Base class with in-memory database setup and helper methods
-> - [`SyncWorkflowTests.cs`](../test/JIM.Worker.Tests/Workflows/SyncWorkflowTests.cs) - Tests for Full Sync -> Delta Sync workflows
->
-> These tests caught the watermark bug and now ensure it doesn't regress.
+### Pattern 1: WorkflowTestBase (Processor-Level Tests)
 
-### 1. Create Base Class
-
-```csharp
-public abstract class WorkflowTestBase
-{
-    protected JimDbContext DbContext;
-    protected JimApplication Jim;
-
-    [SetUp]
-    public void BaseSetUp()
-    {
-        // In-memory database for fast, isolated tests
-        var options = new DbContextOptionsBuilder<JimDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
-
-        DbContext = new JimDbContext(options);
-        Repository = new PostgresRepository(DbContext);
-        Jim = new JimApplication(Repository);
-    }
-
-    // Helper methods for creating test data
-    protected async Task<ConnectedSystem> CreateConnectedSystemAsync(...)
-    protected async Task<ConnectedSystemObject> CreateCsoAsync(...)
-    protected async Task ReloadEntityAsync<T>(T entity) {...}
-}
-```
-
-### 2. Write Workflow Test
+Extend `WorkflowTestBase` in `test/JIM.Worker.Tests/Workflows/` for tests that exercise individual processors with real database state.
 
 ```csharp
 [TestFixture]
 public class SyncWorkflowTests : WorkflowTestBase
 {
     [Test]
-    public async Task FullSyncThenDeltaSync_WithNoModifications_DeltaSyncProcessesZeroCsos()
+    public async Task DeltaSync_WithNoModifications_ProcessesZeroCsosAsync()
     {
-        // Arrange: Create test data
+        // Arrange: Create test data using base class helpers
         var system = await CreateConnectedSystemAsync();
-        for (int i = 0; i < 100; i++)
-            await CreateCsoAsync(system.Id, $"user{i}");
+        var csoType = await CreateCsoTypeAsync(system.Id);
+        await CreateCsosAsync(system.Id, csoType.Id, count: 100);
 
-        // Act: Run Full Sync
-        var fullSync = new SyncFullSyncTaskProcessor(...);
-        await fullSync.PerformFullSyncAsync();
-
-        // Assert: Watermark set
-        await ReloadEntityAsync(system);
-        Assert.That(system.LastDeltaSyncCompletedAt, Is.Not.Null);
-
-        // Act: Run Delta Sync (no changes)
-        var deltaSync = new SyncDeltaSyncTaskProcessor(...);
-        await deltaSync.PerformDeltaSyncAsync();
+        // Act: Run Full Sync then Delta Sync
+        // ... processor setup and execution ...
 
         // Assert: Processed 0 CSOs (not 100!)
         Assert.That(activity.ObjectsProcessed, Is.EqualTo(0));
@@ -269,15 +219,50 @@ public class SyncWorkflowTests : WorkflowTestBase
 }
 ```
 
-## Migration Path
+### Pattern 2: WorkflowTestHarness (Scenario Tests)
 
-1. ✅ Keep existing unit tests (they test individual components well)
-2. ⚠️ Add workflow tests for critical business processes:
-   - Delta Sync (Full -> Delta -> verify only modified CSOs processed)
-   - Projection (CSO -> MVO -> verify join established)
-   - Export Evaluation (MVO change -> PendingExport created)
-   - Deletion Rules (Last connector disconnects -> MVO scheduled for deletion)
-3. ✅ Keep integration tests for system-level scenarios
+Use `WorkflowTestHarness` in `test/JIM.Workflow.Tests/Scenarios/` for end-to-end scenario tests that orchestrate full sync cycles with mock connectors.
+
+```csharp
+[TestFixture]
+public class FullSyncAfterImportWorkflowTests
+{
+    [Test]
+    public async Task FullImportThenSync_WithNewObjects_ProjectsToMetaverseAsync()
+    {
+        using var harness = new WorkflowTestHarness();
+
+        // Setup: Create connected system with mock connector
+        await harness.CreateConnectedSystemAsync("HR", ...);
+
+        // Execute: Import -> Sync cycle
+        await harness.ExecuteFullImportAsync("HR");
+        await harness.ExecuteFullSyncAsync("HR");
+
+        // Assert: Objects projected to metaverse
+        var snapshot = harness.LatestSnapshot;
+        Assert.That(snapshot.MetaverseObjects, Has.Count.GreaterThan(0));
+    }
+}
+```
+
+## Workflow Coverage Status
+
+| Business Process | Status | Test Location |
+|-----------------|--------|---------------|
+| Delta Sync (watermark) | ✅ Done | `JIM.Worker.Tests/Workflows/SyncWorkflowTests.cs` |
+| Deletion Rules | ✅ Done | `JIM.Worker.Tests/Workflows/DeletionRuleWorkflowTests.cs` |
+| Export Confirmation | ✅ Done | `JIM.Worker.Tests/Workflows/ExportConfirmationWorkflowTests.cs` |
+| Attribute Recall / Expressions | ✅ Done | `JIM.Worker.Tests/Workflows/AttributeRecallExpressionWorkflowTests.cs` |
+| Provisioning (Joiners) | ✅ Done | `JIM.Workflow.Tests/Scenarios/Joiners/ProvisioningWorkflowTests.cs` |
+| Drift Detection | ✅ Done | `JIM.Workflow.Tests/Scenarios/Sync/DriftDetectionWorkflowTests.cs` |
+| No Net Change Optimisation | ✅ Done | `JIM.Workflow.Tests/Scenarios/Sync/NoNetChangeWorkflowTests.cs` |
+| Full Import → Sync | ✅ Done | `JIM.Workflow.Tests/Scenarios/Sync/FullSyncAfterImportWorkflowTests.cs` |
+| Delta Import → Sync | ✅ Done | `JIM.Workflow.Tests/Scenarios/Sync/DeltaSyncAfterImportWorkflowTests.cs` |
+| Group Membership Sync | ✅ Done | `JIM.Workflow.Tests/Scenarios/Entitlement Management/GroupMembershipSyncTests.cs` |
+| Non-String Data Types | ✅ Done | `JIM.Workflow.Tests/Scenarios/Sync/NonStringDataTypeExportTests.cs` |
+| Projection (CSO -> MVO join) | ⚠️ Partial | Covered implicitly by sync tests; no dedicated test |
+| Export Evaluation (PendingExport) | ⚠️ Partial | Covered implicitly by drift detection; no dedicated test |
 
 ## ⚠️ CRITICAL: EF Core In-Memory Database Limitations ⚠️
 
@@ -375,5 +360,3 @@ Because we cannot rely on unit/workflow tests to catch these bugs, we employ:
 The three tiers complement each other. The watermark bug demonstrates why we need all three levels - unit tests verify components work individually, workflow tests verify they work together, and integration tests verify the complete system works at scale.
 
 **⚠️ Critical Caveat**: Due to EF Core in-memory database limitations (see above), integration tests are the ONLY reliable way to verify navigation property loading. Unit and workflow tests will PASS even when `.Include()` statements are missing.
-
-**Action Item**: Implement workflow test infrastructure and add tests for critical sync workflows to prevent future orchestration bugs.
