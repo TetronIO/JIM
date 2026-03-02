@@ -621,6 +621,9 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 **Reset**:
 - `jim-reset` - Reset JIM (delete database and logs volumes)
 
+**Planning**:
+- `jim-prd` - Create a new PRD from template (prompts for feature name)
+
 **Development Workflows**:
 1. **Local Debugging** (Recommended): Use `jim-db` to start database, then F5 to debug services locally
 2. **Full Stack**: Use `jim-stack` to run all services in containers
