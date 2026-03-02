@@ -718,9 +718,9 @@ public class Worker : BackgroundService
 
     /// <summary>
     /// Calculates granular summary stats from Run Profile Execution Items for activity list display.
-    /// Each ObjectChangeType maps directly to a corresponding Activity counter field.
-    /// TotalAttributeFlows includes both standalone AttributeFlow RPEIs and absorbed flows
-    /// (tracked via RPEI.AttributeFlowCount) that occurred alongside other operations.
+    /// When RPEIs have sync outcome data, stats are derived from outcome nodes for richer counting
+    /// (e.g., multi-system exports count each target system separately). For legacy RPEIs without
+    /// outcomes, falls back to counting by ObjectChangeType.
     /// </summary>
     /// <summary>
     /// Overload that accepts an explicit list of RPEIs, avoiding the need to load them
@@ -739,55 +739,96 @@ public class Worker : BackgroundService
 
     private static void CalculateActivitySummaryStatsInternal(Activity activity, IReadOnlyList<ActivityRunProfileExecutionItem> rpeis)
     {
+        // Check if any RPEIs have sync outcomes — if so, derive stats from outcome nodes
+        var hasOutcomes = rpeis.Any(r => r.SyncOutcomes.Count > 0);
 
-        // Import stats
-        activity.TotalAdded = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Added);
-        activity.TotalUpdated = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Updated);
-        activity.TotalDeleted = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Deleted);
+        if (hasOutcomes)
+        {
+            // Collect all outcome nodes across all RPEIs (flattened tree) for counting
+            var allOutcomes = rpeis.SelectMany(r => FlattenOutcomes(r.SyncOutcomes)).ToList();
 
-        // Sync stats
-        activity.TotalProjected = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Projected);
-        activity.TotalJoined = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Joined);
+            // Import stats from outcomes
+            activity.TotalAdded = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded);
+            activity.TotalUpdated = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated);
+            activity.TotalDeleted = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
 
-        // Attribute flows: count objects whose primary change was AttributeFlow only.
-        // Joins, projections, and disconnections inherently include attribute flow but are
-        // already counted in their own stats — counting them again here would be redundant
-        // and inflate the number beyond the projection/join count.
-        activity.TotalAttributeFlows = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.AttributeFlow);
+            // Sync stats from outcomes
+            activity.TotalProjected = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
+            activity.TotalJoined = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined);
+            activity.TotalAttributeFlows = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
+            activity.TotalDisconnected = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected);
+            activity.TotalDisconnectedOutOfScope = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope);
 
-        activity.TotalDisconnected = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Disconnected);
-        activity.TotalDisconnectedOutOfScope = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.DisconnectedOutOfScope);
+            // Export stats from outcomes
+            activity.TotalExported = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
+            activity.TotalDeprovisioned = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned);
+
+            // Pending export stats from outcomes
+            activity.TotalPendingExports = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        }
+        else
+        {
+            // Legacy fallback: derive stats from RPEI ObjectChangeType
+            activity.TotalAdded = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Added);
+            activity.TotalUpdated = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Updated);
+            activity.TotalDeleted = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Deleted);
+
+            activity.TotalProjected = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Projected);
+            activity.TotalJoined = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Joined);
+
+            // Attribute flows: count objects whose primary change was AttributeFlow only.
+            // Joins, projections, and disconnections inherently include attribute flow but are
+            // already counted in their own stats — counting them again here would be redundant.
+            activity.TotalAttributeFlows = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.AttributeFlow);
+
+            activity.TotalDisconnected = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Disconnected);
+            activity.TotalDisconnectedOutOfScope = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.DisconnectedOutOfScope);
+
+            activity.TotalExported = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Exported);
+            activity.TotalDeprovisioned = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Deprovisioned);
+
+            activity.TotalPendingExports = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.PendingExport);
+        }
+
+        // Stats that always come from RPEIs (no outcome type equivalent)
         activity.TotalOutOfScopeRetainJoin = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.OutOfScopeRetainJoin);
         activity.TotalDriftCorrections = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.DriftCorrection);
-
-        // Export stats
-        activity.TotalExported = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Exported);
-        activity.TotalDeprovisioned = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Deprovisioned);
-
-        // Direct creation stats
         activity.TotalCreated = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Created);
 
-        // Pending export stats
-        activity.TotalPendingExports = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.PendingExport);
-
-        // Errors: any RPEI with an error type set
+        // Errors: any RPEI with an error type set (always per-RPEI, not per-outcome)
         activity.TotalErrors = rpeis.Count(r =>
             r.ErrorType.HasValue && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
 
-        Log.Verbose("CalculateActivitySummaryStats: Activity {ActivityId} - " +
+        Log.Verbose("CalculateActivitySummaryStats: Activity {ActivityId} (outcomes={HasOutcomes}) - " +
             "Added={Added}, Updated={Updated}, Deleted={Deleted}, " +
             "Projected={Projected}, Joined={Joined}, AttributeFlows={AttributeFlows}, " +
             "Disconnected={Disconnected}, DisconnectedOutOfScope={DisconnectedOutOfScope}, " +
             "OutOfScopeRetainJoin={OutOfScopeRetainJoin}, DriftCorrections={DriftCorrections}, " +
             "Exported={Exported}, Deprovisioned={Deprovisioned}, " +
             "Created={Created}, PendingExports={PendingExports}, Errors={Errors}",
-            activity.Id,
+            activity.Id, hasOutcomes,
             activity.TotalAdded, activity.TotalUpdated, activity.TotalDeleted,
             activity.TotalProjected, activity.TotalJoined, activity.TotalAttributeFlows,
             activity.TotalDisconnected, activity.TotalDisconnectedOutOfScope,
             activity.TotalOutOfScopeRetainJoin, activity.TotalDriftCorrections,
             activity.TotalExported, activity.TotalDeprovisioned,
             activity.TotalCreated, activity.TotalPendingExports, activity.TotalErrors);
+    }
+
+    /// <summary>
+    /// Recursively flattens a tree of sync outcomes into a flat sequence for counting.
+    /// </summary>
+    private static IEnumerable<ActivityRunProfileExecutionItemSyncOutcome> FlattenOutcomes(
+        IEnumerable<ActivityRunProfileExecutionItemSyncOutcome> outcomes)
+    {
+        foreach (var outcome in outcomes)
+        {
+            yield return outcome;
+            foreach (var child in FlattenOutcomes(outcome.Children))
+            {
+                yield return child;
+            }
+        }
     }
 
     /// <summary>

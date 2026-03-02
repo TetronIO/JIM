@@ -426,13 +426,13 @@ new ServiceSetting
 3. ~~Respect tracking level setting~~
 4. ~~Write unit tests~~
 
-### Phase 4: Statistics & API
+### Phase 4: Statistics & API ✅
 
-1. Update `ActivityRunProfileExecutionStats` to derive from outcome types
-2. Update `GetActivityRunProfileExecutionStatsAsync` query
-3. Update `Worker.CalculateActivitySummaryStats` for denormalised activity fields
-4. Update API DTOs and endpoints to include outcome summary
-5. Write unit tests for stats calculation
+1. ~~Update `ActivityRunProfileExecutionStats` to derive from outcome types~~
+2. ~~Update `GetActivityRunProfileExecutionStatsAsync` query~~
+3. ~~Update `Worker.CalculateActivitySummaryStats` for denormalised activity fields~~
+4. ~~Update API DTOs and endpoints to include outcome summary~~
+5. ~~Write unit tests for stats calculation~~
 
 ### Phase 5: UI — List View & Filters
 
@@ -440,6 +440,23 @@ new ServiceSetting
 2. Update filter controls to support outcome type filtering
 3. Update Activity Detail stats display
 4. Update Operations History view
+
+### Phase 5b: API Integration Tests
+
+End-to-end tests covering outcome recording and presentation through the API layer. Deferred until after UI phases are complete and the solution has stabilised.
+
+1. Test outcome-based stats derivation via `GET /api/v1/activities/{id}/stats` for activities with outcomes
+2. Test legacy fallback stats via `GET /api/v1/activities/{id}/stats` for activities without outcomes (tracking level = None)
+3. Test `OutcomeSummary` appears in `GET /api/v1/activities/{id}/items` response for RPEIs with outcomes
+4. Test `OutcomeSummary` is null for legacy RPEIs and RPEIs with tracking level = None
+5. Test outcome trees at each tracking level (None / Standard / Detailed) produce correct stats
+6. Test import outcome recording: CsoAdded, CsoUpdated, CsoDeleted, ExportConfirmed, ExportFailed
+7. Test sync outcome recording: Projected → AttributeFlow → PendingExportCreated (nested tree)
+8. Test sync outcome recording: Joined, Disconnected, DisconnectedOutOfScope, MvoDeleted chains
+9. Test export outcome recording: Exported, Deprovisioned
+10. Test multi-system export stats: one object exported to N systems = N Exported outcome nodes
+11. Test RPEI-only stats (OutOfScopeRetainJoin, DriftCorrection, Created, NoChange) remain correct alongside outcome-based stats
+12. Test error counting remains per-RPEI regardless of outcomes
 
 ### Phase 6: UI — RPEI Detail Page
 

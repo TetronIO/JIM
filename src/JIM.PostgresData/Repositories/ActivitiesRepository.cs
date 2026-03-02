@@ -476,7 +476,8 @@ public class ActivityRepository : IActivityRepository
             DisplayName = i.ConnectedSystemObject?.AttributeValues.FirstOrDefault(av => av.Attribute.Name.Equals("displayname", StringComparison.OrdinalIgnoreCase))?.StringValue,
             ConnectedSystemObjectType = i.ConnectedSystemObject?.Type?.Name,
             ErrorType = i.ErrorType,
-            ObjectChangeType = i.ObjectChangeType
+            ObjectChangeType = i.ObjectChangeType,
+            OutcomeSummary = i.OutcomeSummary
         }).ToList();
 
         // Build paged result set
@@ -506,11 +507,17 @@ public class ActivityRepository : IActivityRepository
         var activity = await Repository.Database.Activities.FirstOrDefaultAsync(a => a.Id == activityId);
         var totalObjectsProcessed = activity?.ObjectsProcessed ?? 0;
 
-        // Single query to get all counts grouped by change type, error status, and no-change reason
-        // This replaces 15+ individual COUNT queries with one efficient GROUP BY query
         var rpeiQuery = Repository.Database.ActivityRunProfileExecutionItems
             .Where(q => q.Activity.Id == activityId);
 
+        // Check if this activity has sync outcome data (phases 1-3 of outcome graph).
+        // If outcomes exist, derive stats from outcome nodes for richer counting
+        // (e.g., multi-system exports count each target system separately).
+        // If no outcomes exist (legacy data or tracking level = None), fall back to RPEI ObjectChangeType counting.
+        var hasOutcomes = await Repository.Database.ActivityRunProfileExecutionItemSyncOutcomes
+            .AnyAsync(o => o.ActivityRunProfileExecutionItem.Activity.Id == activityId);
+
+        // --- RPEI-based aggregate data (always needed for shared stats, NoChange, errors, and RPEI-only types) ---
         var aggregateData = await rpeiQuery
             .GroupBy(q => new
             {
@@ -543,40 +550,74 @@ public class ActivityRepository : IActivityRepository
             .Select(g => new { ErrorType = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.ErrorType, x => x.Count);
 
-        // Calculate totals from grouped data
+        // Shared stats always come from RPEIs
         var totalObjectChangeCount = aggregateData.Sum(x => x.Count);
         var totalObjectErrors = aggregateData.Where(x => x.HasError).Sum(x => x.Count);
 
-        // Import stats
-        var totalCsoAdds = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Added).Sum(x => x.Count);
-        var totalCsoUpdates = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Updated).Sum(x => x.Count);
-        var totalCsoDeletes = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deleted).Sum(x => x.Count);
+        // --- Outcome-based or RPEI-based stats depending on whether outcomes exist ---
+        int totalCsoAdds, totalCsoUpdates, totalCsoDeletes;
+        int totalProjections, totalJoins, totalAttributeFlows;
+        int totalDisconnections, totalDisconnectedOutOfScope;
+        int totalExported, totalDeprovisioned;
+        int totalPendingExportsFromOutcomes;
 
-        // Sync stats
-        var totalProjections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Projected).Sum(x => x.Count);
-        var totalJoins = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Joined).Sum(x => x.Count);
-        // Attribute flows: count the number of OBJECTS that had standalone attribute flow
-        // (i.e., RPEIs whose primary change type is AttributeFlow). Attribute flows absorbed
-        // into Joined/Projected/Disconnected RPEIs are NOT counted here — those objects are
-        // already counted in their respective stats. This matches Worker.CalculateActivitySummaryStats.
-        var totalAttributeFlows = aggregateData
-            .Where(x => x.ObjectChangeType == ObjectChangeType.AttributeFlow)
-            .Sum(x => x.Count);
+        if (hasOutcomes)
+        {
+            // Derive stats from outcome nodes — counts outcome actions across all RPEIs.
+            // This gives richer semantics: e.g., one object exported to 2 systems = 2 Exported outcomes.
+            var outcomeCounts = await Repository.Database.ActivityRunProfileExecutionItemSyncOutcomes
+                .Where(o => o.ActivityRunProfileExecutionItem.Activity.Id == activityId)
+                .GroupBy(o => o.OutcomeType)
+                .Select(g => new { OutcomeType = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.OutcomeType, x => x.Count);
 
-        var totalDisconnections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Disconnected).Sum(x => x.Count);
-        var totalDisconnectedOutOfScope = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.DisconnectedOutOfScope).Sum(x => x.Count);
+            // Import stats from outcomes
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded, out totalCsoAdds);
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated, out totalCsoUpdates);
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted, out totalCsoDeletes);
+
+            // Sync stats from outcomes
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Projected, out totalProjections);
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Joined, out totalJoins);
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow, out totalAttributeFlows);
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected, out totalDisconnections);
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope, out totalDisconnectedOutOfScope);
+
+            // Export stats from outcomes
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Exported, out totalExported);
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned, out totalDeprovisioned);
+
+            // Pending export stats from outcomes
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, out totalPendingExportsFromOutcomes);
+        }
+        else
+        {
+            // Legacy fallback: derive stats from RPEI ObjectChangeType (pre-outcome graph behaviour)
+            totalCsoAdds = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Added).Sum(x => x.Count);
+            totalCsoUpdates = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Updated).Sum(x => x.Count);
+            totalCsoDeletes = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deleted).Sum(x => x.Count);
+
+            totalProjections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Projected).Sum(x => x.Count);
+            totalJoins = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Joined).Sum(x => x.Count);
+            totalAttributeFlows = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.AttributeFlow).Sum(x => x.Count);
+
+            totalDisconnections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Disconnected).Sum(x => x.Count);
+            totalDisconnectedOutOfScope = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.DisconnectedOutOfScope).Sum(x => x.Count);
+
+            totalExported = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Exported).Sum(x => x.Count);
+            totalDeprovisioned = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deprovisioned).Sum(x => x.Count);
+
+            totalPendingExportsFromOutcomes = 0;
+        }
+
+        // --- Stats that always come from RPEIs (no outcome type equivalent) ---
         var totalOutOfScopeRetainJoin = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.OutOfScopeRetainJoin).Sum(x => x.Count);
         var totalDriftCorrections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.DriftCorrection).Sum(x => x.Count);
-
-        // Direct creation stats
         var totalCreated = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Created).Sum(x => x.Count);
 
-        // Export stats
-        var totalExported = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Exported).Sum(x => x.Count);
-        var totalDeprovisioned = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deprovisioned).Sum(x => x.Count);
-
-        // Pending export stats (surfaced during sync for operator visibility)
-        var totalPendingExports = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.PendingExport).Sum(x => x.Count);
+        // Pending export stats: use outcome-based count when available, otherwise fall back to RPEI count
+        var totalPendingExportsFromRpeis = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.PendingExport).Sum(x => x.Count);
+        var totalPendingExports = hasOutcomes ? totalPendingExportsFromOutcomes : totalPendingExportsFromRpeis;
 
         // Pending export reconciliation stats (populated during confirming import)
         // TotalPendingExportsConfirmed is stored directly on the Activity (not derived from RPEIs)
@@ -585,7 +626,7 @@ public class ActivityRepository : IActivityRepository
         errorTypeCounts.TryGetValue(ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed, out var totalPendingExportsRetrying);
         errorTypeCounts.TryGetValue(ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed, out var totalPendingExportsFailed);
 
-        // NoChange stats
+        // NoChange stats (always from RPEIs — no outcome equivalent)
         var noChangeItems = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.NoChange).ToList();
         var totalNoChanges = noChangeItems.Sum(x => x.Count);
         var totalMvoNoAttributeChanges = noChangeItems.Where(x => x.NoChangeReason == NoChangeReason.MvoNoAttributeChanges).Sum(x => x.Count);
