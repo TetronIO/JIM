@@ -744,8 +744,10 @@ public class Worker : BackgroundService
 
         if (hasOutcomes)
         {
-            // Collect all outcome nodes across all RPEIs (flattened tree) for counting
-            var allOutcomes = rpeis.SelectMany(r => FlattenOutcomes(r.SyncOutcomes)).ToList();
+            // Collect all outcome nodes across all RPEIs for counting.
+            // SyncOutcomes is already a flat list of all outcomes (root + children) — both
+            // AddRootOutcome and AddChildOutcome add to rpei.SyncOutcomes directly.
+            var allOutcomes = rpeis.SelectMany(r => r.SyncOutcomes).ToList();
 
             // Import stats from outcomes
             activity.TotalAdded = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded);
@@ -816,22 +818,6 @@ public class Worker : BackgroundService
             activity.TotalOutOfScopeRetainJoin, activity.TotalDriftCorrections,
             activity.TotalExported, activity.TotalDeprovisioned,
             activity.TotalCreated, activity.TotalPendingExports, activity.TotalErrors);
-    }
-
-    /// <summary>
-    /// Recursively flattens a tree of sync outcomes into a flat sequence for counting.
-    /// </summary>
-    private static IEnumerable<ActivityRunProfileExecutionItemSyncOutcome> FlattenOutcomes(
-        IEnumerable<ActivityRunProfileExecutionItemSyncOutcome> outcomes)
-    {
-        foreach (var outcome in outcomes)
-        {
-            yield return outcome;
-            foreach (var child in FlattenOutcomes(outcome.Children))
-            {
-                yield return child;
-            }
-        }
     }
 
     /// <summary>

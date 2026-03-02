@@ -68,7 +68,7 @@ internal static class SyncOutcomeBuilder
     /// Builds the denormalised OutcomeSummary string from the RPEI's SyncOutcomes collection.
     /// Format: "Projected:1,AttributeFlow:12,PendingExportCreated:2" — counts per outcome type.
     /// Counts all outcome nodes (root + children) so the summary reflects the full causal chain,
-    /// matching how Activity-level stats are derived via FlattenOutcomes in Worker.cs.
+    /// matching how Activity-level stats are derived from rpei.SyncOutcomes in Worker.cs.
     /// </summary>
     internal static void BuildOutcomeSummary(ActivityRunProfileExecutionItem rpei)
     {

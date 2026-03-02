@@ -62,6 +62,8 @@ public class CalculateActivitySummaryStatsTests
 
     /// <summary>
     /// Creates an RPEI with the specified change type and sync outcomes attached.
+    /// Mirrors production behaviour where SyncOutcomeBuilder.AddRootOutcome and AddChildOutcome
+    /// add ALL outcomes (root + children) to rpei.SyncOutcomes as a flat list.
     /// </summary>
     private static ActivityRunProfileExecutionItem CreateRpeiWithOutcomes(
         ObjectChangeType changeType,
@@ -75,8 +77,22 @@ public class CalculateActivitySummaryStatsTests
             ErrorType = errorType
         };
         rootOutcome.ActivityRunProfileExecutionItemId = rpei.Id;
-        rpei.SyncOutcomes.Add(rootOutcome);
+        // Add root and all descendants to SyncOutcomes (flat list), matching SyncOutcomeBuilder behaviour
+        AddOutcomeAndDescendants(rpei, rootOutcome);
         return rpei;
+    }
+
+    /// <summary>
+    /// Recursively adds an outcome and all its children to rpei.SyncOutcomes.
+    /// This mirrors SyncOutcomeBuilder.AddChildOutcome which adds to both parent.Children AND rpei.SyncOutcomes.
+    /// </summary>
+    private static void AddOutcomeAndDescendants(
+        ActivityRunProfileExecutionItem rpei,
+        ActivityRunProfileExecutionItemSyncOutcome outcome)
+    {
+        rpei.SyncOutcomes.Add(outcome);
+        foreach (var child in outcome.Children)
+            AddOutcomeAndDescendants(rpei, child);
     }
 
     /// <summary>
