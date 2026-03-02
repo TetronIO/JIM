@@ -1389,9 +1389,10 @@ public class FullSyncTests
         // export evaluation didn't silently skip by checking the RPEI export evaluation counts.
         // The key verification: recall must NOT produce 0 changes that get silently skipped.
         var rpeis = activity.RunProfileExecutionItems;
+        // After the flush, ConnectedSystemObject is nulled (CSO deleted), so match by ObjectChangeType only.
+        // ConnectedSystemObjectId is also nulled by DeleteConnectedSystemObjectsAsync.
         var disconnectedRpei = rpeis.FirstOrDefault(r =>
-            r.ObjectChangeType == ObjectChangeType.Disconnected &&
-            r.ConnectedSystemObject?.Id == sourceCso.Id);
+            r.ObjectChangeType == ObjectChangeType.Disconnected);
 
         Assert.That(disconnectedRpei, Is.Not.Null,
             "Expected a Disconnected RPEI for the obsoleted source CSO.");

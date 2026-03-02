@@ -75,12 +75,25 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
             "MVO with DeletionRule=Manual should NOT have LastConnectorDisconnectedDate set, " +
             "even when all CSOs are disconnected");
 
-        // Assert: Delta Sync should produce both a Disconnected RPEI (join broken) and a Deleted RPEI (CSO removed)
+        // Assert: Delta Sync should produce a single Disconnected RPEI with both Disconnected and CsoDeleted outcomes
         var rpeis = deltaSyncActivity.RunProfileExecutionItems;
         Assert.That(rpeis.Count(r => r.ObjectChangeType == ObjectChangeType.Disconnected), Is.EqualTo(1),
-            "Delta Sync should produce a Disconnected RPEI when a joined CSO is obsoleted");
-        Assert.That(rpeis.Count(r => r.ObjectChangeType == ObjectChangeType.Deleted), Is.EqualTo(1),
-            "Delta Sync should produce a Deleted RPEI when an obsolete CSO is removed");
+            "Delta Sync should produce a single Disconnected RPEI when a joined CSO is obsoleted");
+        Assert.That(rpeis.Count(r => r.ObjectChangeType == ObjectChangeType.Deleted), Is.EqualTo(0),
+            "Delta Sync should NOT produce a separate Deleted RPEI — CsoDeleted is an outcome on the Disconnected RPEI");
+
+        // Assert: The single RPEI should have both Disconnected and CsoDeleted as root outcomes
+        var disconnectedRpei = rpeis.Single(r => r.ObjectChangeType == ObjectChangeType.Disconnected);
+        var rootOutcomes = disconnectedRpei.SyncOutcomes
+            .Where(o => o.ParentSyncOutcomeId == null)
+            .Select(o => o.OutcomeType)
+            .ToList();
+        Assert.That(rootOutcomes, Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected),
+            "RPEI should have a Disconnected root outcome");
+        Assert.That(rootOutcomes, Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted),
+            "RPEI should have a CsoDeleted root outcome (CSO deletion is a consequence of the disconnection)");
+        Assert.That(rootOutcomes, Has.Count.EqualTo(2),
+            "RPEI should have exactly two root outcomes: Disconnected and CsoDeleted");
     }
 
     #endregion
@@ -186,12 +199,12 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         Assert.That(mvo, Is.Null,
             "MVO with grace period = 0 should be deleted immediately during sync, not deferred to housekeeping");
 
-        // Assert: Delta Sync should produce both a Disconnected RPEI and a Deleted RPEI
+        // Assert: Delta Sync should produce a single Disconnected RPEI with both Disconnected and CsoDeleted outcomes
         var rpeis = deltaSyncActivity.RunProfileExecutionItems;
         Assert.That(rpeis.Count(r => r.ObjectChangeType == ObjectChangeType.Disconnected), Is.EqualTo(1),
-            "Delta Sync should produce a Disconnected RPEI when a joined CSO is obsoleted");
-        Assert.That(rpeis.Count(r => r.ObjectChangeType == ObjectChangeType.Deleted), Is.EqualTo(1),
-            "Delta Sync should produce a Deleted RPEI when an obsolete CSO is removed");
+            "Delta Sync should produce a single Disconnected RPEI when a joined CSO is obsoleted");
+        Assert.That(rpeis.Count(r => r.ObjectChangeType == ObjectChangeType.Deleted), Is.EqualTo(0),
+            "Delta Sync should NOT produce a separate Deleted RPEI — CsoDeleted is an outcome on the Disconnected RPEI");
     }
 
     /// <summary>

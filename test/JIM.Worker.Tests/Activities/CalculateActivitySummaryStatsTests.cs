@@ -508,6 +508,31 @@ public class CalculateActivitySummaryStatsTests
         Assert.That(activity.TotalDisconnected, Is.EqualTo(0));
     }
 
+    [Test]
+    public void CalculateActivitySummaryStats_WithOutcomes_SourceDeletion_SingleRpeiWithBothOutcomes()
+    {
+        // Arrange - Source deletion produces a single Disconnected RPEI with both
+        // Disconnected and CsoDeleted as sibling root outcomes (one-RPEI-per-CSO rule)
+        var activity = CreateActivity();
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.Disconnected
+        };
+        var disconnectedOutcome = CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected);
+        disconnectedOutcome.ActivityRunProfileExecutionItemId = rpei.Id;
+        rpei.SyncOutcomes.Add(disconnectedOutcome);
+        var csoDeletedOutcome = CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+        csoDeletedOutcome.ActivityRunProfileExecutionItemId = rpei.Id;
+        rpei.SyncOutcomes.Add(csoDeletedOutcome);
+
+        AddRpeisAndCalculate(activity, rpei);
+
+        // Assert - Disconnected counted from outcome, CsoDeleted counted from outcome
+        Assert.That(activity.TotalDisconnected, Is.EqualTo(1));
+        Assert.That(activity.TotalDeleted, Is.EqualTo(1), "CsoDeleted outcome should count towards TotalDeleted");
+    }
+
     #endregion
 
     #region Outcome-Based Stats — Export
@@ -582,19 +607,17 @@ public class CalculateActivitySummaryStatsTests
     #region Source Deletion Scenarios
 
     [Test]
-    public void CalculateActivitySummaryStats_SourceDeletion_CountsBothDisconnectedAndDeleted()
+    public void CalculateActivitySummaryStats_SourceDeletion_CountsDisconnectedOnly()
     {
-        // Arrange - When a joined CSO is obsoleted during sync, two RPEIs are produced:
-        // 1. Disconnected (CSO-MVO join broken)
-        // 2. Deleted (CSO removed from staging)
+        // Arrange - When a joined CSO is obsoleted during sync, a single Disconnected RPEI is produced
+        // with both Disconnected and CsoDeleted outcomes (one-RPEI-per-CSO rule)
         var activity = CreateActivity();
         AddRpeisAndCalculate(activity,
-            CreateRpei(ObjectChangeType.Disconnected),
-            CreateRpei(ObjectChangeType.Deleted));
+            CreateRpei(ObjectChangeType.Disconnected));
 
-        // Assert - Both stats should be counted
+        // Assert - Only Disconnected stat is counted (CsoDeleted is an outcome, not a separate RPEI)
         Assert.That(activity.TotalDisconnected, Is.EqualTo(1));
-        Assert.That(activity.TotalDeleted, Is.EqualTo(1));
+        Assert.That(activity.TotalDeleted, Is.EqualTo(0));
     }
 
     [Test]
@@ -603,34 +626,27 @@ public class CalculateActivitySummaryStatsTests
         // Arrange - Disconnected RPEI with attribute removals (contributed attributes recalled)
         var activity = CreateActivity();
         AddRpeisAndCalculate(activity,
-            CreateRpei(ObjectChangeType.Disconnected, attributeFlowCount: 3),
-            CreateRpei(ObjectChangeType.Deleted));
+            CreateRpei(ObjectChangeType.Disconnected, attributeFlowCount: 3));
 
         // Assert
         Assert.That(activity.TotalDisconnected, Is.EqualTo(1));
-        Assert.That(activity.TotalDeleted, Is.EqualTo(1));
+        Assert.That(activity.TotalDeleted, Is.EqualTo(0));
         Assert.That(activity.TotalAttributeFlows, Is.EqualTo(0), "Attribute recalls on disconnection are not standalone attribute flows");
     }
 
     [Test]
-    public void CalculateActivitySummaryStats_MultipleSourceDeletions_CountsAllPairs()
+    public void CalculateActivitySummaryStats_MultipleSourceDeletions_CountsAll()
     {
-        // Arrange - Multiple objects deleted from source, each producing Disconnected + Deleted
+        // Arrange - Multiple objects deleted from source, each producing a single Disconnected RPEI
         var activity = CreateActivity();
         AddRpeisAndCalculate(activity,
-            // Object 1 deletion
             CreateRpei(ObjectChangeType.Disconnected),
-            CreateRpei(ObjectChangeType.Deleted),
-            // Object 2 deletion
             CreateRpei(ObjectChangeType.Disconnected, attributeFlowCount: 2),
-            CreateRpei(ObjectChangeType.Deleted),
-            // Object 3 deletion
-            CreateRpei(ObjectChangeType.Disconnected),
-            CreateRpei(ObjectChangeType.Deleted));
+            CreateRpei(ObjectChangeType.Disconnected));
 
         // Assert
         Assert.That(activity.TotalDisconnected, Is.EqualTo(3));
-        Assert.That(activity.TotalDeleted, Is.EqualTo(3));
+        Assert.That(activity.TotalDeleted, Is.EqualTo(0));
         Assert.That(activity.TotalAttributeFlows, Is.EqualTo(0), "Attribute recalls on disconnection are not standalone attribute flows");
     }
 

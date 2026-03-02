@@ -252,7 +252,7 @@ public abstract class SyncTaskProcessorBase
             }
 
             // Add execution items for obsolete CSO (created by ProcessObsoleteConnectedSystemObjectAsync)
-            // May include both a Disconnected RPEI and a Deleted RPEI when a joined CSO is obsoleted
+            // Returns a single RPEI per CSO with Disconnected + CsoDeleted outcomes when a joined CSO is obsoleted
             if (obsoleteExecutionItems.Count > 0)
             {
                 foreach (var item in obsoleteExecutionItems)
@@ -612,11 +612,11 @@ public abstract class SyncTaskProcessorBase
         var connectedSystemId = connectedSystemObject.ConnectedSystemId;
         var mvoId = mvo.Id;
 
-        // Create a separate Disconnected RPEI to record the CSO-MVO join being broken.
-        // This provides granular audit trail: Disconnected = join broken, Deleted = CSO removed.
-        var disconnectedExecutionItem = _activity.PrepareRunProfileExecutionItem();
-        disconnectedExecutionItem.ConnectedSystemObject = connectedSystemObject;
-        disconnectedExecutionItem.ObjectChangeType = ObjectChangeType.Disconnected;
+        // Single RPEI for both disconnection and deletion (one-RPEI-per-CSO rule).
+        // The ObjectChangeType is Disconnected (the meaningful event); CsoDeleted is recorded
+        // as an outcome on the same RPEI since the deletion is a consequence of the disconnection.
+        // Reuse deletionExecutionItem (already created above) and change its type to Disconnected.
+        deletionExecutionItem.ObjectChangeType = ObjectChangeType.Disconnected;
 
         // Query remaining CSO count BEFORE breaking the join so the count includes all current connectors.
         // Then subtract 1 to exclude this CSO which is about to be disconnected.
@@ -652,8 +652,8 @@ public abstract class SyncTaskProcessorBase
                 var changedAttributes = mvo.PendingAttributeValueRemovals.ToList();
                 var removedAttributes = mvo.PendingAttributeValueRemovals.ToHashSet();
 
-                // Track attribute removals on the Disconnected RPEI (these are part of the disconnection, not the deletion)
-                disconnectedExecutionItem.AttributeFlowCount = mvo.PendingAttributeValueRemovals.Count;
+                // Track attribute removals on the RPEI (these are part of the disconnection)
+                deletionExecutionItem.AttributeFlowCount = mvo.PendingAttributeValueRemovals.Count;
 
                 Log.Information("ProcessObsoleteConnectedSystemObjectAsync: Applying {Count} attribute removals to MVO {MvoId} and queueing for export evaluation",
                     changedAttributes.Count, mvo.Id);
@@ -687,33 +687,36 @@ public abstract class SyncTaskProcessorBase
         // The database still shows this CSO as joined until FlushObsoleteCsoOperationsAsync() runs.
         _pendingDisconnectedMvoIds.Add(mvoId);
 
-        // Queue the CSO for batch deletion (deletion will happen at end of page processing)
+        // Queue the CSO for batch deletion (deletion will happen at end of page processing).
+        // The same RPEI is used for both the disconnection record and the deletion tracking.
         _obsoleteCsosToDelete.Add((connectedSystemObject, deletionExecutionItem));
 
         // Evaluate MVO deletion rule based on type configuration
         await ProcessMvoDeletionRuleAsync(mvo, connectedSystemId, remainingCsoCount);
 
-        // Build sync outcomes for the Disconnected and Deleted RPEIs
+        // Build sync outcomes: Disconnected and CsoDeleted as sibling root outcomes on the single RPEI.
+        // This follows the one-RPEI-per-CSO rule from the outcome graph design — the disconnection
+        // is the primary event, and CSO deletion is a consequential outcome on the same RPEI.
         if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
         {
-            var disconnectedRoot = SyncOutcomeBuilder.AddRootOutcome(disconnectedExecutionItem,
+            var disconnectedRoot = SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem,
                 ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected,
-                detailCount: disconnectedExecutionItem.AttributeFlowCount);
+                detailCount: deletionExecutionItem.AttributeFlowCount);
 
             // In Detailed mode, add AttributeFlow child under Disconnected when attributes were recalled
             if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
-                && disconnectedExecutionItem.AttributeFlowCount is > 0)
+                && deletionExecutionItem.AttributeFlowCount is > 0)
             {
-                SyncOutcomeBuilder.AddChildOutcome(disconnectedExecutionItem, disconnectedRoot,
+                SyncOutcomeBuilder.AddChildOutcome(deletionExecutionItem, disconnectedRoot,
                     ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
-                    detailCount: disconnectedExecutionItem.AttributeFlowCount);
+                    detailCount: deletionExecutionItem.AttributeFlowCount);
             }
 
             SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
         }
 
-        // Return both RPEIs: Disconnected first (the join was broken), then Deleted (CSO removed)
-        return [disconnectedExecutionItem, deletionExecutionItem];
+        // Return single RPEI with both Disconnected and CsoDeleted outcomes
+        return [deletionExecutionItem];
     }
 
     /// <summary>
