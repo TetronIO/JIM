@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sync outcome tracking level service setting (`ChangeTracking.SyncOutcomes.Level`) with None/Standard/Detailed granularity control
 - Bulk insert support for sync outcome trees alongside RPEIs
 - Sync processor outcome tree building — `SyncOutcomeBuilder` wires causal outcome nodes at all sync integration points (projection, join, attribute flow, disconnection, deletion, export evaluation, cross-page reference resolution) with None/Standard/Detailed tracking level enforcement (#363)
+- Import processor outcome tree building — CsoAdded, CsoUpdated, CsoDeleted, and ExportFailed outcomes on import RPEIs (#363)
+- Export processor outcome tree building — Exported and Deprovisioned outcomes on export RPEIs (#363)
 
 ### Changed
 - Consolidated `ObjectChangeType.Provisioned` into `ObjectChangeType.Exported` — "Provisioned" is now reserved for the sync-phase concept (adding an MVO to a CS for the first time via `SyncOutcome`), while all export-phase operations use `Exported` regardless of whether the object was newly created or updated in the target system

@@ -32,6 +32,13 @@ public class SyncExportTaskProcessor
     private readonly Guid? _initiatedById;
     private readonly string? _initiatedByName;
 
+    /// <summary>
+    /// Controls how much detail is recorded for sync outcome graphs on each RPEI.
+    /// Loaded once at export start from service settings.
+    /// </summary>
+    private ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel _syncOutcomeTrackingLevel =
+        ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None;
+
     public SyncExportTaskProcessor(
         JimApplication jimApplication,
         IConnector connector,
@@ -67,6 +74,9 @@ public class SyncExportTaskProcessor
             _connectedSystem.Name, _runMode);
 
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Preparing export");
+
+        // Load sync outcome tracking level once at start of export
+        _syncOutcomeTrackingLevel = await _jim.ServiceSettings.GetSyncOutcomeTrackingLevelAsync();
 
         // Get count of pending exports for progress tracking
         int pendingExportCount;
@@ -244,6 +254,18 @@ public class SyncExportTaskProcessor
                 }
             }
 
+            // Build sync outcome for export result
+            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            {
+                var outcomeType = exportItem.ChangeType switch
+                {
+                    PendingExportChangeType.Delete => ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned,
+                    _ => ActivityRunProfileExecutionItemSyncOutcomeType.Exported
+                };
+                SyncOutcomeBuilder.AddRootOutcome(executionItem, outcomeType,
+                    detailCount: exportItem.AttributeChangeCount > 0 ? exportItem.AttributeChangeCount : null);
+            }
+
             _activity.RunProfileExecutionItems.Add(executionItem);
         }
 
@@ -271,6 +293,14 @@ public class SyncExportTaskProcessor
                 if (rpei.Id == Guid.Empty)
                     rpei.Id = Guid.NewGuid();
             }
+
+            // Build outcome summaries before persisting
+            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            {
+                foreach (var rpei in exportRpeis)
+                    SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
+            }
+
             await _jim.Activities.BulkInsertRpeisAsync(exportRpeis);
         }
 

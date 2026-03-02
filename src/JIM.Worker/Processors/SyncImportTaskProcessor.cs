@@ -34,6 +34,13 @@ public class SyncImportTaskProcessor
     /// </summary>
     private bool _csIsEmpty;
 
+    /// <summary>
+    /// Controls how much detail is recorded for sync outcome graphs on each RPEI.
+    /// Loaded once at import start from service settings.
+    /// </summary>
+    private ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel _syncOutcomeTrackingLevel =
+        ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None;
+
     public SyncImportTaskProcessor(
         JimApplication jimApplication,
         IConnector connector,
@@ -79,6 +86,9 @@ public class SyncImportTaskProcessor
         _csIsEmpty = csoCountAtStart == 0;
         if (_csIsEmpty)
             Log.Information("PerformFullImportAsync: Connected system {ConnectedSystemId} has no existing CSOs. Skipping CSO lookups for this import.", _connectedSystem.Id);
+
+        // Load sync outcome tracking level once at start of import
+        _syncOutcomeTrackingLevel = await _jim.ServiceSettings.GetSyncOutcomeTrackingLevelAsync();
 
         // we keep track of all processed CSOs here, so we can bulk-persist later, when all waves of CSO changes are prepared
         var connectedSystemObjectsToBeCreated = new List<ConnectedSystemObject>();
@@ -542,6 +552,13 @@ public class SyncImportTaskProcessor
                 rpei.Id = Guid.NewGuid();
         }
 
+        // Build outcome summaries before persisting
+        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+        {
+            foreach (var rpei in _activityRunProfileExecutionItems)
+                SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
+        }
+
         await _jim.Activities.BulkInsertRpeisAsync(_activityRunProfileExecutionItems);
         _allPersistedImportRpeis.AddRange(_activityRunProfileExecutionItems);
         _activityRunProfileExecutionItems.Clear();
@@ -590,6 +607,13 @@ public class SyncImportTaskProcessor
         activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
         // Snapshot the external ID so it's preserved even after CSO is deleted
         activityRunProfileExecutionItem.ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue;
+
+        // Build sync outcome for CSO deletion
+        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+        {
+            SyncOutcomeBuilder.AddRootOutcome(activityRunProfileExecutionItem,
+                ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+        }
 
         // mark it obsolete internally, so that it's deleted when a synchronisation run profile is performed.
         // Note: The RPEI uses Delete (user-facing), but the CSO status uses Obsolete (internal state)
@@ -827,6 +851,14 @@ public class SyncImportTaskProcessor
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Obsolete;
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
                         connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
+
+                        // Build sync outcome for delta import deletion
+                        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                        {
+                            SyncOutcomeBuilder.AddRootOutcome(activityRunProfileExecutionItem,
+                                ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+                        }
+
                         Log.Information("ProcessImportObjectsAsync: Connector requested delete for object with external ID in type '{ObjectType}'. Marking CSO {CsoId} for deletion.",
                             importObject.ObjectType, connectedSystemObject.Id);
                     }
@@ -867,6 +899,14 @@ public class SyncImportTaskProcessor
                     {
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
+
+                        // Build sync outcome for new CSO
+                        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                        {
+                            SyncOutcomeBuilder.AddRootOutcome(activityRunProfileExecutionItem,
+                                ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded,
+                                detailCount: importObject.Attributes.Count);
+                        }
 
                         // Update the seenExternalIds entry with the CSO reference so we can remove it if a duplicate is found later
                         var extIdAttr = csObjectType.Attributes.First(a => a.IsExternalId);
@@ -963,6 +1003,16 @@ public class SyncImportTaskProcessor
                         // Snapshot the external ID so it's preserved even if CSO is later deleted
                         activityRunProfileExecutionItem.ExternalIdSnapshot = connectedSystemObject.ExternalIdAttributeValue?.StringValue;
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
+
+                        // Build sync outcome for CSO update
+                        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                        {
+                            var attrChangeCount = connectedSystemObject.PendingAttributeValueAdditions.Count
+                                + connectedSystemObject.PendingAttributeValueRemovals.Count;
+                            SyncOutcomeBuilder.AddRootOutcome(activityRunProfileExecutionItem,
+                                ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated,
+                                detailCount: attrChangeCount > 0 ? attrChangeCount : null);
+                        }
                     }
                     else
                     {
@@ -2163,6 +2213,14 @@ public class SyncImportTaskProcessor
                                     ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.",
                                     DataSnapshot = $"Failed attributes: {failedAttrNames}"
                                 };
+
+                                if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                                {
+                                    SyncOutcomeBuilder.AddRootOutcome(executionItem,
+                                        ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed,
+                                        detailCount: result.FailedChanges.Count);
+                                }
+
                                 pageExecutionItems.Add(executionItem);
                             }
 
@@ -2181,6 +2239,14 @@ public class SyncImportTaskProcessor
                                     ErrorMessage = $"We exported a change, but did not get confirmation of it when a confirming import was performed. Details: {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will attempt to reassert the change on the next export run.",
                                     DataSnapshot = $"Unconfirmed attributes: {retryAttrNames}"
                                 };
+
+                                if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                                {
+                                    SyncOutcomeBuilder.AddRootOutcome(executionItem,
+                                        ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed,
+                                        detailCount: result.RetryChanges.Count);
+                                }
+
                                 pageExecutionItems.Add(executionItem);
                             }
                         }
