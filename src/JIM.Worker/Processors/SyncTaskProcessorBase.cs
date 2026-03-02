@@ -161,12 +161,17 @@ public abstract class SyncTaskProcessorBase
         if (pageRpeis.Count == 0)
             return;
 
-        // Ensure all RPEIs have ActivityId set and IDs pre-generated
+        // Ensure all RPEIs have ActivityId set, IDs pre-generated, and CSO display snapshots populated
         foreach (var rpei in pageRpeis)
         {
             rpei.ActivityId = _activity.Id;
             if (rpei.Id == Guid.Empty)
                 rpei.Id = Guid.NewGuid();
+
+            // Snapshot CSO display fields (ExternalId, DisplayName, ObjectType) for historical preservation.
+            // This centralised call ensures every sync RPEI gets snapshots regardless of creation path.
+            if (rpei.ConnectedSystemObject != null)
+                rpei.SnapshotCsoDisplayFields(rpei.ConnectedSystemObject);
         }
 
         // Build OutcomeSummary strings from outcome trees before bulk insert.

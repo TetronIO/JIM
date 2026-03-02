@@ -46,6 +46,18 @@ public class ActivityRunProfileExecutionItem
     public string? ExternalIdSnapshot { get; set; }
 
     /// <summary>
+    /// Snapshot of the CSO display name at the time the RPEI was created.
+    /// Provides a fallback for display purposes when the CSO has been deleted.
+    /// </summary>
+    public string? DisplayNameSnapshot { get; set; }
+
+    /// <summary>
+    /// Snapshot of the CSO object type name at the time the RPEI was created.
+    /// Provides a fallback for display purposes when the CSO has been deleted.
+    /// </summary>
+    public string? ObjectTypeSnapshot { get; set; }
+
+    /// <summary>
     /// If this is for an import operation, what changes, if any were made to the Connected System Object in question?
     /// This needs populating for update and delete scenarios.
     /// </summary>
@@ -126,5 +138,19 @@ public class ActivityRunProfileExecutionItem
     public int? GetConnectedSystemId()
     {
         return ConnectedSystemObject?.ConnectedSystemId ?? ConnectedSystemObjectChange?.ConnectedSystemId;
+    }
+
+    /// <summary>
+    /// Populates the ExternalIdSnapshot, DisplayNameSnapshot, and ObjectTypeSnapshot fields
+    /// from the given CSO. Call this when creating or linking an RPEI to a CSO so the display
+    /// data is preserved even if the CSO is later deleted.
+    /// </summary>
+    public void SnapshotCsoDisplayFields(ConnectedSystemObject cso)
+    {
+        ExternalIdSnapshot ??= cso.ExternalIdAttributeValue?.ToStringNoName();
+        DisplayNameSnapshot ??= cso.AttributeValues
+            .FirstOrDefault(av => av.Attribute?.Name?.Equals("displayname", StringComparison.OrdinalIgnoreCase) == true)
+            ?.StringValue;
+        ObjectTypeSnapshot ??= cso.Type?.Name;
     }
 }

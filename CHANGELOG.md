@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sync processor outcome tree building — `SyncOutcomeBuilder` wires causal outcome nodes at all sync integration points (projection, join, attribute flow, disconnection, deletion, export evaluation, cross-page reference resolution) with None/Standard/Detailed tracking level enforcement (#363)
 - Import processor outcome tree building — CsoAdded, CsoUpdated, CsoDeleted, and ExportFailed outcomes on import RPEIs (#363)
 - Export processor outcome tree building — Exported and Deprovisioned outcomes on export RPEIs (#363)
+- Outcome stat chips on Activity Detail RPEI rows — parsed from `OutcomeSummary` with colour-coded chips per outcome type (#363)
+- Outcome type filter on Activity Detail page — filter RPEIs by outcome type (Projected, Joined, AttributeFlow, etc.) (#363)
+- `DisplayNameSnapshot` and `ObjectTypeSnapshot` fields on RPEI — preserves CSO display data for historical RPEIs after CSO deletion (#363)
+- `SnapshotCsoDisplayFields()` helper on RPEI model — centralised snapshot population for ExternalId, DisplayName, and ObjectType
 
 ### Changed
 - Consolidated `ObjectChangeType.Provisioned` into `ObjectChangeType.Exported` — "Provisioned" is now reserved for the sync-phase concept (adding an MVO to a CS for the first time via `SyncOutcome`), while all export-phase operations use `Exported` regardless of whether the object was newly created or updated in the target system
@@ -26,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Skip export evaluation for metaverse objects queued for immediate deletion (0-grace-period), preventing spurious Update exports with invalid attribute values (e.g., empty DN from recalled attributes) alongside the correct Delete export
 - Sync activity attribute flow statistic now counts only standalone attribute flow objects, excluding flows already counted under projections, joins, or disconnections — previously summed individual attribute changes across all change types, inflating the count (e.g., 320k instead of the expected object count)
 - CSO join state (JoinType, DateJoined, MetaverseObjectId) now explicitly persisted during sync — previously these properties were set in memory but not saved to the database because EF change detection is disabled during page flush for performance
+- Activity Detail RPEI rows now show Display Name and Object Type even after CSO deletion — previously these fields showed as dashes when the CSO FK was null due to `DeleteBehaviour.SetNull` cascade (#363)
 
 ### Performance
 

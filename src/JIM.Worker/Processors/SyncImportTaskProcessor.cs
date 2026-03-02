@@ -550,6 +550,11 @@ public class SyncImportTaskProcessor
             rpei.ActivityId = _activity.Id;
             if (rpei.Id == Guid.Empty)
                 rpei.Id = Guid.NewGuid();
+
+            // Snapshot CSO display fields (ExternalId, DisplayName, ObjectType) for historical preservation.
+            // Defence-in-depth: ensures snapshots are populated even if individual code paths missed them.
+            if (rpei.ConnectedSystemObject != null)
+                rpei.SnapshotCsoDisplayFields(rpei.ConnectedSystemObject);
         }
 
         // Build outcome summaries before persisting
@@ -605,8 +610,8 @@ public class SyncImportTaskProcessor
         activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Deleted;
         activityRunProfileExecutionItem.ConnectedSystemObject = cso;
         activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
-        // Snapshot the external ID so it's preserved even after CSO is deleted
-        activityRunProfileExecutionItem.ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue;
+        // Snapshot CSO display fields so they're preserved even after CSO is deleted
+        activityRunProfileExecutionItem.SnapshotCsoDisplayFields(cso);
 
         // Build sync outcome for CSO deletion
         if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
@@ -846,8 +851,8 @@ public class SyncImportTaskProcessor
                         activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Deleted;
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
-                        // Snapshot the external ID so it's preserved even after CSO is deleted
-                        activityRunProfileExecutionItem.ExternalIdSnapshot = connectedSystemObject.ExternalIdAttributeValue?.StringValue;
+                        // Snapshot CSO display fields so they're preserved even after CSO is deleted
+                        activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Obsolete;
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
                         connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
@@ -898,6 +903,7 @@ public class SyncImportTaskProcessor
                     if (connectedSystemObject != null)
                     {
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+                        activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
                         connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
 
                         // Build sync outcome for new CSO
@@ -1000,8 +1006,8 @@ public class SyncImportTaskProcessor
                         activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Updated;
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
-                        // Snapshot the external ID so it's preserved even if CSO is later deleted
-                        activityRunProfileExecutionItem.ExternalIdSnapshot = connectedSystemObject.ExternalIdAttributeValue?.StringValue;
+                        // Snapshot CSO display fields so they're preserved even if CSO is later deleted
+                        activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
 
                         // Build sync outcome for CSO update
@@ -2207,12 +2213,12 @@ public class SyncImportTaskProcessor
                                     Activity = _activity,
                                     ConnectedSystemObject = cso,
                                     ConnectedSystemObjectId = cso.Id,
-                                    ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue,
                                     ObjectChangeType = ObjectChangeType.Updated,
                                     ErrorType = ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed,
                                     ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.",
                                     DataSnapshot = $"Failed attributes: {failedAttrNames}"
                                 };
+                                executionItem.SnapshotCsoDisplayFields(cso);
 
                                 if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                                 {
@@ -2233,12 +2239,12 @@ public class SyncImportTaskProcessor
                                     Activity = _activity,
                                     ConnectedSystemObject = cso,
                                     ConnectedSystemObjectId = cso.Id,
-                                    ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue,
                                     ObjectChangeType = ObjectChangeType.Updated,
                                     ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
                                     ErrorMessage = $"We exported a change, but did not get confirmation of it when a confirming import was performed. Details: {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will attempt to reassert the change on the next export run.",
                                     DataSnapshot = $"Unconfirmed attributes: {retryAttrNames}"
                                 };
+                                executionItem.SnapshotCsoDisplayFields(cso);
 
                                 if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                                 {

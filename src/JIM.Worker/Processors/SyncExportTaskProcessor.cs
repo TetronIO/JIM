@@ -224,10 +224,9 @@ public class SyncExportTaskProcessor
             {
                 executionItem.ConnectedSystemObject = exportItem.ConnectedSystemObject;
 
-                // Snapshot the external ID for durability - ensures the RPEI retains the
-                // external ID even if the CSO is later deleted via FK cascade
-                executionItem.ExternalIdSnapshot = exportItem.ConnectedSystemObject
-                    .ExternalIdAttributeValue?.ToStringNoName();
+                // Snapshot CSO display fields for durability - ensures the RPEI retains
+                // display data even if the CSO is later deleted via FK cascade
+                executionItem.SnapshotCsoDisplayFields(exportItem.ConnectedSystemObject);
             }
 
             // Set error information if the export failed
@@ -292,6 +291,10 @@ public class SyncExportTaskProcessor
                 rpei.ActivityId = _activity.Id;
                 if (rpei.Id == Guid.Empty)
                     rpei.Id = Guid.NewGuid();
+
+                // Snapshot CSO display fields for historical preservation (defence-in-depth)
+                if (rpei.ConnectedSystemObject != null)
+                    rpei.SnapshotCsoDisplayFields(rpei.ConnectedSystemObject);
             }
 
             // Build outcome summaries before persisting

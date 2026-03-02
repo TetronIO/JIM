@@ -458,6 +458,21 @@ End-to-end tests covering outcome recording and presentation through the API lay
 3. ~~Update Activity Detail stats display~~ (already working via Phase 4 stats derivation)
 4. ~~Update Operations History view~~ (already working via Phase 4 denormalised Activity fields)
 
+### Phase 5b: RPEI Display Name & Object Type Snapshot Fix ✅
+
+Bug fix discovered during Phase 5 integration testing: RPEI header projection relied on live CSO
+navigation properties for Display Name and Object Type. When a CSO is deleted (FK set to NULL via
+`DeleteBehaviour.SetNull`), these fields showed as empty dashes in the Activity Detail view.
+
+1. ~~Add `DisplayNameSnapshot` and `ObjectTypeSnapshot` fields to `ActivityRunProfileExecutionItem`~~
+2. ~~Create migration for new columns~~
+3. ~~Update bulk insert SQL to include new columns~~
+4. ~~Add `SnapshotCsoDisplayFields()` helper method on RPEI model~~
+5. ~~Populate snapshots at all CSO→RPEI linking sites (import, sync, export processors)~~
+6. ~~Add centralised snapshot population in flush methods (defence-in-depth)~~
+7. ~~Update RPEI header projection to use snapshot fallbacks~~
+8. ~~Write unit tests for snapshot logic~~
+
 ### Phase 6: UI — RPEI Detail Page
 
 1. Create outcome tree view component for RPEI detail page

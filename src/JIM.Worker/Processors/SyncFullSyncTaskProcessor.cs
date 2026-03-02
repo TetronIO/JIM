@@ -319,10 +319,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             executionItem.ConnectedSystemObject = pendingExport.ConnectedSystemObject;
             executionItem.ConnectedSystemObjectId = pendingExport.ConnectedSystemObjectId;
 
-            // Capture the external ID snapshot for historical reference
+            // Snapshot CSO display fields for historical reference
             if (pendingExport.ConnectedSystemObject != null)
             {
-                executionItem.ExternalIdSnapshot = pendingExport.ConnectedSystemObject.ExternalIdAttributeValue?.StringValue;
+                executionItem.SnapshotCsoDisplayFields(pendingExport.ConnectedSystemObject);
             }
 
             _activity.RunProfileExecutionItems.Add(executionItem);
