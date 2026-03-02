@@ -111,6 +111,17 @@ public abstract class SyncTaskProcessorBase
     // production where raw SQL operations create stale change tracker entries.
     protected bool _hasRawSqlSupport;
 
+    // Controls how much detail is recorded for sync outcome graphs on each RPEI.
+    // Loaded once at sync start by each processor subclass. Default: None (no overhead).
+    protected ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel _syncOutcomeTrackingLevel =
+        ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None;
+
+    // MVO ID → RPEI lookup for linking export evaluation results back to the originating RPEI.
+    // Populated when RPEIs are created in ProcessMetaverseObjectChangesAsync.
+    // Looked up in EvaluateOutboundExportsAsync to attach export outcomes as children.
+    // Cleared per page alongside other batch collections.
+    protected readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _mvoIdToRpei = [];
+
     // Expression evaluator for expression-based sync rule mappings
     protected readonly IExpressionEvaluator _expressionEvaluator = new DynamicExpressoEvaluator();
 
@@ -158,6 +169,14 @@ public abstract class SyncTaskProcessorBase
                 rpei.Id = Guid.NewGuid();
         }
 
+        // Build OutcomeSummary strings from outcome trees before bulk insert.
+        // This runs after all outcome nodes have been attached (including export evaluation).
+        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+        {
+            foreach (var rpei in pageRpeis)
+                SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
+        }
+
         // Bulk insert this page's RPEIs via raw SQL (or EF fallback for tests).
         // Returns true if raw SQL was used, false if EF fallback was used.
         var usedRawSql = await _jim.Activities.BulkInsertRpeisAsync(pageRpeis);
@@ -176,6 +195,9 @@ public abstract class SyncTaskProcessorBase
 
         // Move to accumulated list for summary stats at activity completion
         _allPersistedRpeis.AddRange(pageRpeis);
+
+        // Clear per-page MVO→RPEI lookup (only used within a single page's processing)
+        _mvoIdToRpei.Clear();
     }
 
     /// <summary>
@@ -300,6 +322,30 @@ public abstract class SyncTaskProcessorBase
                     if (changeResult.AttributeFlowCount.HasValue)
                     {
                         runProfileExecutionItem.AttributeFlowCount = changeResult.AttributeFlowCount;
+                    }
+
+                    // Build sync outcome for RPEIs not already covered by ProcessMetaverseObjectChangesAsync
+                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                    {
+                        var outcomeType = changeResult.ChangeType switch
+                        {
+                            ObjectChangeType.Projected => ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
+                            ObjectChangeType.Joined => ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+                            ObjectChangeType.DisconnectedOutOfScope => ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope,
+                            _ => ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
+                        };
+                        var rootOutcome = SyncOutcomeBuilder.AddRootOutcome(runProfileExecutionItem, outcomeType,
+                            detailCount: changeResult.AttributeFlowCount);
+
+                        // In Detailed mode, add AttributeFlow child under DisconnectedOutOfScope when attributes were recalled
+                        if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
+                            && changeResult.ChangeType == ObjectChangeType.DisconnectedOutOfScope
+                            && changeResult.AttributeFlowCount is > 0)
+                        {
+                            SyncOutcomeBuilder.AddChildOutcome(runProfileExecutionItem, rootOutcome,
+                                ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+                                detailCount: changeResult.AttributeFlowCount);
+                        }
                     }
 
                     _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
@@ -530,6 +576,9 @@ public abstract class SyncTaskProcessorBase
             }
 
             // Not joined but has a different JoinType (e.g., Explicit) - this is a regular orphan deletion
+            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+
             _obsoleteCsosToDelete.Add((connectedSystemObject, deletionExecutionItem));
             return [deletionExecutionItem];
         }
@@ -546,6 +595,9 @@ public abstract class SyncTaskProcessorBase
 
             // Note: We still delete the CSO as it's obsolete in the source system,
             // but we don't disconnect from MVO or trigger deletion rules
+            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+
             _obsoleteCsosToDelete.Add((connectedSystemObject, deletionExecutionItem));
             return [deletionExecutionItem];
         }
@@ -635,6 +687,25 @@ public abstract class SyncTaskProcessorBase
 
         // Evaluate MVO deletion rule based on type configuration
         await ProcessMvoDeletionRuleAsync(mvo, connectedSystemId, remainingCsoCount);
+
+        // Build sync outcomes for the Disconnected and Deleted RPEIs
+        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+        {
+            var disconnectedRoot = SyncOutcomeBuilder.AddRootOutcome(disconnectedExecutionItem,
+                ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected,
+                detailCount: disconnectedExecutionItem.AttributeFlowCount);
+
+            // In Detailed mode, add AttributeFlow child under Disconnected when attributes were recalled
+            if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
+                && disconnectedExecutionItem.AttributeFlowCount is > 0)
+            {
+                SyncOutcomeBuilder.AddChildOutcome(disconnectedExecutionItem, disconnectedRoot,
+                    ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+                    detailCount: disconnectedExecutionItem.AttributeFlowCount);
+            }
+
+            SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+        }
 
         // Return both RPEIs: Disconnected first (the join was broken), then Deleted (CSO removed)
         return [disconnectedExecutionItem, deletionExecutionItem];
@@ -918,6 +989,32 @@ public abstract class SyncTaskProcessorBase
                 }
 
                 _pendingMvoChanges.Add((connectedSystemObject.MetaverseObject, additions, removals, changeType, rpei));
+
+                // Build sync outcome tree on the RPEI
+                if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                {
+                    var outcomeType = changeType switch
+                    {
+                        ObjectChangeType.Projected => ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
+                        ObjectChangeType.Joined => ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+                        _ => ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
+                    };
+                    var rootOutcome = SyncOutcomeBuilder.AddRootOutcome(rpei, outcomeType,
+                        detailCount: attributesAdded + attributesRemoved);
+
+                    // In Detailed mode, add a separate AttributeFlow child under Projected/Joined
+                    if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
+                        && changeType is ObjectChangeType.Projected or ObjectChangeType.Joined
+                        && (attributesAdded + attributesRemoved) > 0)
+                    {
+                        SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
+                            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+                            detailCount: attributesAdded + attributesRemoved);
+                    }
+
+                    // Register MVO→RPEI mapping for export evaluation outcome linking
+                    _mvoIdToRpei[connectedSystemObject.MetaverseObject.Id] = rpei;
+                }
             }
 
             // Apply pending attribute value changes to the MVO
@@ -1019,6 +1116,63 @@ public abstract class SyncTaskProcessorBase
             if (result.PendingExports.Count > 0)
             {
                 _pendingExportsToCreate.AddRange(result.PendingExports);
+            }
+
+            // Attach export evaluation outcomes to the originating RPEI (Detailed mode only)
+            if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
+                && _mvoIdToRpei.TryGetValue(mvo.Id, out var originatingRpei))
+            {
+                // Find a suitable parent outcome (first root outcome on the RPEI)
+                var parentOutcome = originatingRpei.SyncOutcomes.FirstOrDefault(o =>
+                    o.ParentSyncOutcome == null && o.ParentSyncOutcomeId == null);
+
+                foreach (var provisioningCso in result.ProvisioningCsosToCreate)
+                {
+                    if (parentOutcome != null)
+                    {
+                        SyncOutcomeBuilder.AddChildOutcome(originatingRpei, parentOutcome,
+                            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
+                            targetEntityDescription: provisioningCso.ConnectedSystem?.Name);
+                    }
+                    else
+                    {
+                        SyncOutcomeBuilder.AddRootOutcome(originatingRpei,
+                            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
+                            targetEntityDescription: provisioningCso.ConnectedSystem?.Name);
+                    }
+                }
+
+                foreach (var pendingExport in result.PendingExports)
+                {
+                    if (parentOutcome != null)
+                    {
+                        SyncOutcomeBuilder.AddChildOutcome(originatingRpei, parentOutcome,
+                            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            targetEntityDescription: pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name);
+                    }
+                    else
+                    {
+                        SyncOutcomeBuilder.AddRootOutcome(originatingRpei,
+                            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            targetEntityDescription: pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name);
+                    }
+                }
+            }
+            else if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Standard
+                && _mvoIdToRpei.TryGetValue(mvo.Id, out var standardRpei))
+            {
+                // Standard mode: add root-level outcomes only (no children)
+                foreach (var _ in result.ProvisioningCsosToCreate)
+                {
+                    SyncOutcomeBuilder.AddRootOutcome(standardRpei,
+                        ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
+                }
+
+                foreach (var _ in result.PendingExports)
+                {
+                    SyncOutcomeBuilder.AddRootOutcome(standardRpei,
+                        ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+                }
             }
         }
 
@@ -1190,6 +1344,17 @@ public abstract class SyncTaskProcessorBase
                     _activity.RunProfileExecutionItems.Add(rpei);
                     Log.Debug("ProcessDeferredReferenceAttributes: Created RPEI for CSO {CsoId} with reference-only changes",
                         cso.Id);
+
+                    // Build outcome for the new reference-only RPEI
+                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                    {
+                        SyncOutcomeBuilder.AddRootOutcome(rpei,
+                            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+                            detailCount: additionsFromReferences + removalsFromReferences);
+
+                        // Register in MVO→RPEI lookup for export evaluation
+                        _mvoIdToRpei[mvo.Id] = rpei;
+                    }
                 }
 
                 // Capture MVO changes for change tracking (reference attributes processed separately from scalar attributes)
@@ -1212,6 +1377,26 @@ public abstract class SyncTaskProcessorBase
                             existingChangeEntry.Rpei.AttributeFlowCount =
                                 (existingChangeEntry.Rpei.AttributeFlowCount ?? 0)
                                 + refAddedAttributes.Count + refRemovedAttributesList.Count;
+
+                            // Update the existing outcome tree to reflect merged reference attribute changes
+                            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                            {
+                                // Update root outcome's DetailCount to match updated AttributeFlowCount
+                                var rootOutcome = existingChangeEntry.Rpei.SyncOutcomes.FirstOrDefault(o =>
+                                    o.ParentSyncOutcome == null && o.ParentSyncOutcomeId == null);
+                                if (rootOutcome != null)
+                                    rootOutcome.DetailCount = existingChangeEntry.Rpei.AttributeFlowCount;
+
+                                // In Detailed mode, also update the AttributeFlow child node
+                                if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed)
+                                {
+                                    var attrFlowChild = existingChangeEntry.Rpei.SyncOutcomes.FirstOrDefault(o =>
+                                        o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
+                                        && o.ParentSyncOutcome != null);
+                                    if (attrFlowChild != null)
+                                        attrFlowChild.DetailCount = existingChangeEntry.Rpei.AttributeFlowCount;
+                                }
+                            }
                         }
                     }
                     else
@@ -1389,6 +1574,16 @@ public abstract class SyncTaskProcessorBase
                     rpei.ObjectChangeType = ObjectChangeType.AttributeFlow;
                     rpei.AttributeFlowCount = additionsCount + removalsCount;
                     _activity.RunProfileExecutionItems.Add(rpei);
+
+                    // Build outcome for cross-page reference resolution RPEI
+                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                    {
+                        SyncOutcomeBuilder.AddRootOutcome(rpei,
+                            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+                            detailCount: additionsCount + removalsCount);
+
+                        _mvoIdToRpei[mvo.Id] = rpei;
+                    }
 
                     // Track MVO changes for change tracking
                     _pendingMvoChanges.Add((mvo, refAddedAttributes, refRemovedAttributesList,

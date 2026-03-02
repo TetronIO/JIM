@@ -765,13 +765,16 @@ public class ActivityRepository : IActivityRepository
                 }
             }
 
+            // Pre-generate IDs and set FK references on sync outcomes before EF tracking.
+            // FlattenSyncOutcomes assigns IDs and links ParentSyncOutcomeId/ActivityRunProfileExecutionItemId.
+            // The outcomes themselves are NOT explicitly added via AddRange — EF's AddRange
+            // traverses RPEI → SyncOutcomes navigation and discovers them automatically.
+            // Explicitly adding them would cause duplicate key errors.
+            foreach (var rpei in rpeis)
+                FlattenSyncOutcomes(rpei);
+
             if (untracked.Count > 0)
                 Repository.Database.AddRange(untracked);
-
-            // Also explicitly add sync outcomes for the EF fallback path
-            var allOutcomes = rpeis.SelectMany(r => FlattenSyncOutcomes(r)).ToList();
-            if (allOutcomes.Count > 0)
-                Repository.Database.AddRange(allOutcomes);
 
             return false; // EF fallback used — RPEIs tracked by EF via AddRange
         }
