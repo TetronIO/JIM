@@ -459,6 +459,16 @@ $requiredGroupAttributes = @(
     'groupType', 'member', 'managedBy', 'mail', 'company', 'distinguishedName'
 )
 
+# Validate all required user attributes exist in the LDAP schema
+$sourceSchemaAttrNames = @($sourceUserType.attributes | ForEach-Object { $_.name })
+$missingUserAttrs = @($requiredUserAttributes | Where-Object { $_ -notin $sourceSchemaAttrNames })
+if ($missingUserAttrs.Count -gt 0) {
+    Write-Host "  ✗ Required LDAP user attributes not found in schema: $($missingUserAttrs -join ', ')" -ForegroundColor Red
+    Write-Host "    This usually means the Samba AD image is outdated and needs rebuilding." -ForegroundColor Yellow
+    Write-Host "    Run: docker rmi samba-ad-prebuilt:latest && jim-build" -ForegroundColor Yellow
+    throw "Missing required LDAP attributes in schema: $($missingUserAttrs -join ', '). Rebuild the Samba AD image."
+}
+
 # Select attributes for Source user
 $sourceUserAttrUpdates = @{}
 foreach ($attr in $sourceUserType.attributes) {
