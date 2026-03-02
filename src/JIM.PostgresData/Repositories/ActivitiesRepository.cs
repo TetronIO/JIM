@@ -591,7 +591,13 @@ public class ActivityRepository : IActivityRepository
             // Import stats from outcomes
             outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded, out totalCsoAdds);
             outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated, out totalCsoUpdates);
+            // CsoDeleted: combine outcome-based count (sync-phase actual deletions) with RPEI-based count
+            // for ObjectChangeType.Deleted (import-phase deletion detections that have no CsoDeleted outcome).
+            // These never overlap within a single activity since import and sync are separate run profile types.
             outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted, out totalCsoDeletes);
+            totalCsoDeletes += aggregateData
+                .Where(x => x.ObjectChangeType == ObjectChangeType.Deleted)
+                .Sum(x => x.Count);
 
             // Sync stats from outcomes
             outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Projected, out totalProjections);

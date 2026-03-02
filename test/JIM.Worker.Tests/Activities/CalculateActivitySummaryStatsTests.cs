@@ -412,7 +412,9 @@ public class CalculateActivitySummaryStatsTests
     [Test]
     public void CalculateActivitySummaryStats_WithOutcomes_ImportRun_DerivedFromOutcomes()
     {
-        // Arrange - When RPEIs have sync outcomes, stats are derived from outcome nodes
+        // Arrange - When RPEIs have sync outcomes, stats are derived from outcome nodes.
+        // Import deletion RPEIs have ObjectChangeType.Deleted but no CsoDeleted outcome
+        // (CsoDeleted is only recorded during the sync phase when the CSO is actually deleted).
         var activity = CreateActivity();
         AddRpeisAndCalculate(activity,
             CreateRpeiWithOutcomes(ObjectChangeType.Added,
@@ -421,10 +423,9 @@ public class CalculateActivitySummaryStatsTests
                 CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded)),
             CreateRpeiWithOutcomes(ObjectChangeType.Updated,
                 CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated)),
-            CreateRpeiWithOutcomes(ObjectChangeType.Deleted,
-                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted)));
+            CreateRpei(ObjectChangeType.Deleted));  // Import deletion: no outcome, counted from RPEI
 
-        // Assert - Stats derived from outcome nodes
+        // Assert - Stats derived from outcome nodes + RPEI-based count for import deletions
         Assert.That(activity.TotalAdded, Is.EqualTo(2));
         Assert.That(activity.TotalUpdated, Is.EqualTo(1));
         Assert.That(activity.TotalDeleted, Is.EqualTo(1));

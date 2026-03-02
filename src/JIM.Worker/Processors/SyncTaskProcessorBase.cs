@@ -565,6 +565,9 @@ public abstract class SyncTaskProcessorBase
         var deletionExecutionItem = _activity.PrepareRunProfileExecutionItem();
         deletionExecutionItem.ConnectedSystemObject = connectedSystemObject;
         deletionExecutionItem.ObjectChangeType = ObjectChangeType.Deleted;
+        // Snapshot CSO display fields eagerly — FlushObsoleteCsoOperationsAsync() will null the CSO
+        // reference before FlushRpeisAsync() runs, so the centralised snapshot would find nothing.
+        deletionExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
 
         if (connectedSystemObject.MetaverseObject == null)
         {

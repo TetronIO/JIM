@@ -750,7 +750,10 @@ public class Worker : BackgroundService
             // Import stats from outcomes
             activity.TotalAdded = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded);
             activity.TotalUpdated = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated);
-            activity.TotalDeleted = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+            // CsoDeleted: combine outcome-based count (sync-phase actual deletions) with RPEI-based count
+            // for ObjectChangeType.Deleted (import-phase deletion detections that have no CsoDeleted outcome).
+            activity.TotalDeleted = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted)
+                + rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Deleted);
 
             // Sync stats from outcomes
             activity.TotalProjected = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected);

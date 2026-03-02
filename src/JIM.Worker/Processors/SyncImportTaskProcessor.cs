@@ -620,15 +620,12 @@ public class SyncImportTaskProcessor
         // Snapshot CSO display fields so they're preserved even after CSO is deleted
         activityRunProfileExecutionItem.SnapshotCsoDisplayFields(cso);
 
-        // Build sync outcome for CSO deletion
-        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-        {
-            SyncOutcomeBuilder.AddRootOutcome(activityRunProfileExecutionItem,
-                ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
-        }
+        // No sync outcome recorded here — during import, the CSO is only marked as Obsolete (not actually
+        // deleted). The actual deletion and CsoDeleted outcome happen during the subsequent sync run.
+        // The ObjectChangeType.DeletionDetected on this RPEI communicates the detection to the admin.
 
         // mark it obsolete internally, so that it's deleted when a synchronisation run profile is performed.
-        // Note: The RPEI uses Delete (user-facing), but the CSO status uses Obsolete (internal state)
+        // Note: The RPEI uses DeletionDetected (user-facing), but the CSO status uses Obsolete (internal state)
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
         cso.LastUpdated = DateTime.UtcNow;
 
@@ -854,7 +851,7 @@ public class SyncImportTaskProcessor
                 {
                     if (connectedSystemObject != null)
                     {
-                        // RPEI uses Delete (user-facing), CSO status uses Obsolete (internal state)
+                        // RPEI uses DeletionDetected (user-facing), CSO status uses Obsolete (internal state)
                         activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Deleted;
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
@@ -864,12 +861,8 @@ public class SyncImportTaskProcessor
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
                         connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
 
-                        // Build sync outcome for delta import deletion
-                        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-                        {
-                            SyncOutcomeBuilder.AddRootOutcome(activityRunProfileExecutionItem,
-                                ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
-                        }
+                        // No sync outcome recorded here — during import, the CSO is only marked as Obsolete
+                        // (not actually deleted). The CsoDeleted outcome is recorded during the subsequent sync run.
 
                         Log.Information("ProcessImportObjectsAsync: Connector requested delete for object with external ID in type '{ObjectType}'. Marking CSO {CsoId} for deletion.",
                             importObject.ObjectType, connectedSystemObject.Id);

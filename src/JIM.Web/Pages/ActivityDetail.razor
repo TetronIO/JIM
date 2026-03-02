@@ -512,7 +512,7 @@
                 <MudTd DataLabel="Display Name">@(!string.IsNullOrEmpty(context.DisplayName) ? context.DisplayName : "-")</MudTd>
                 <MudTd DataLabel="External Object Type">@(context.ConnectedSystemObjectType != null ? context.ConnectedSystemObjectType.ToString().SplitOnCapitalLetters() : "-")</MudTd>
                 <MudTd DataLabel="Change Type">
-                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetRunItemMudBlazorColorForType(context.ObjectChangeType)">@context.ObjectChangeType.ToString().SplitOnCapitalLetters()</MudChip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetRunItemMudBlazorColorForType(context.ObjectChangeType)">@GetContextAwareRowChangeTypeName(context.ObjectChangeType)</MudChip>
                 </MudTd>
                 <MudTd DataLabel="Outcomes">
                     @{
@@ -779,7 +779,9 @@
         // Import outcomes
         if (s.TotalCsoAdds > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded, s.TotalCsoAdds);
         if (s.TotalCsoUpdates > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated, s.TotalCsoUpdates);
-        if (s.TotalCsoDeletes > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted, s.TotalCsoDeletes);
+        // CsoDeleted outcome only exists on sync-phase RPEIs. For import activities, deletions are
+        // communicated via the ObjectChangeType.Deleted change type filter ("Deletions Detected") only.
+        if (s.TotalCsoDeletes > 0 && IsSyncRun()) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted, s.TotalCsoDeletes);
 
         // Sync outcomes
         if (s.TotalProjections > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Projected, s.TotalProjections);
@@ -997,13 +999,25 @@
     }
 
     /// <summary>
-    /// Returns a context-aware display name for a change type.
+    /// Returns a context-aware display name for a change type (plural form, used for filter chips).
     /// For ObjectChangeType.Deleted, differentiates between import (detection) and sync (processing).
     /// </summary>
     private string GetContextAwareChangeTypeName(ObjectChangeType changeType)
     {
         if (changeType == ObjectChangeType.Deleted)
             return IsSyncRun() ? "Deletions Processed" : "Deletions Detected";
+
+        return Helpers.GetChangeTypeDisplayName(changeType);
+    }
+
+    /// <summary>
+    /// Returns a context-aware display name for a change type (singular form, used for row chips).
+    /// For ObjectChangeType.Deleted, differentiates between import (detection) and sync (processing).
+    /// </summary>
+    private string GetContextAwareRowChangeTypeName(ObjectChangeType changeType)
+    {
+        if (changeType == ObjectChangeType.Deleted)
+            return IsSyncRun() ? "Deletion Processed" : "Deletion Detected";
 
         return Helpers.GetChangeTypeDisplayName(changeType);
     }
