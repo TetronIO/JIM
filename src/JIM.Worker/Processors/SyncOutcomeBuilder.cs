@@ -67,22 +67,22 @@ internal static class SyncOutcomeBuilder
     /// <summary>
     /// Builds the denormalised OutcomeSummary string from the RPEI's SyncOutcomes collection.
     /// Format: "Projected:1,AttributeFlow:12,PendingExportCreated:2" — counts per outcome type.
-    /// Only counts root-level outcomes (no children) to keep the summary concise.
+    /// Counts all outcome nodes (root + children) so the summary reflects the full causal chain,
+    /// matching how Activity-level stats are derived via FlattenOutcomes in Worker.cs.
     /// </summary>
     internal static void BuildOutcomeSummary(ActivityRunProfileExecutionItem rpei)
     {
         if (rpei.SyncOutcomes.Count == 0)
             return;
 
-        // Count root-level outcomes (those without a parent) by type
-        var rootOutcomeCounts = rpei.SyncOutcomes
-            .Where(o => o.ParentSyncOutcome == null && o.ParentSyncOutcomeId == null)
+        // Count all outcome nodes (root + children) by type
+        var outcomeCounts = rpei.SyncOutcomes
             .GroupBy(o => o.OutcomeType)
             .OrderBy(g => g.Key)
             .Select(g => $"{g.Key}:{g.Count()}")
             .ToList();
 
-        if (rootOutcomeCounts.Count > 0)
-            rpei.OutcomeSummary = string.Join(",", rootOutcomeCounts);
+        if (outcomeCounts.Count > 0)
+            rpei.OutcomeSummary = string.Join(",", outcomeCounts);
     }
 }

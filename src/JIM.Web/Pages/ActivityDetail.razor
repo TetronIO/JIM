@@ -208,12 +208,6 @@
             @* Summary Section *@
             <MudText Typo="Typo.h5" Class="mt-5">Stats</MudText>
             <MudStack Row="true" Class="mt-4 mb-5 flex-wrap" Spacing="3">
-                @* Total card *@
-                <MudPaper Class="pa-4" Outlined="true" Style="min-width: 120px;">
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">Total</MudText>
-                    <MudText Typo="Typo.h4">@_activityRunProfileExecutionStats.TotalObjectChangeCount.ToString("N0")</MudText>
-                </MudPaper>
-
                 @* Import-specific cards *@
                 @if (IsImportRun())
                 {

@@ -186,7 +186,7 @@ public class SyncOutcomeBuilderTests
     }
 
     [Test]
-    public void BuildOutcomeSummary_ExcludesChildOutcomes()
+    public void BuildOutcomeSummary_IncludesChildOutcomes()
     {
         var rpei = CreateRpei();
         var root = SyncOutcomeBuilder.AddRootOutcome(rpei,
@@ -198,12 +198,12 @@ public class SyncOutcomeBuilderTests
 
         SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
 
-        // Only the root outcome should appear in the summary
-        Assert.That(rpei.OutcomeSummary, Is.EqualTo("Projected:1"));
+        // All outcomes (root + children) should appear in the summary
+        Assert.That(rpei.OutcomeSummary, Is.EqualTo("Projected:1,AttributeFlow:1,PendingExportCreated:1"));
     }
 
     [Test]
-    public void BuildOutcomeSummary_ComplexTree_OnlyCountsRoots()
+    public void BuildOutcomeSummary_ComplexTree_CountsAllNodes()
     {
         var rpei = CreateRpei();
         // Root 1: Projected with children
@@ -219,7 +219,9 @@ public class SyncOutcomeBuilderTests
 
         SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
 
-        Assert.That(rpei.OutcomeSummary, Is.EqualTo("Projected:1,Disconnected:1"));
+        // All nodes counted: Projected:1, Disconnected:1, and 2 AttributeFlow children merged
+        // Ordered by enum value: Projected, AttributeFlow, Disconnected
+        Assert.That(rpei.OutcomeSummary, Is.EqualTo("Projected:1,AttributeFlow:2,Disconnected:1"));
     }
 
     #endregion
