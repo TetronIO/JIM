@@ -397,6 +397,62 @@ new ServiceSetting
 }
 ```
 
+## Mapping Reference: Change Types, Outcomes, Stats & UI Labels
+
+This section documents the relationship between `ObjectChangeType` (per-RPEI), `SyncOutcomeType` (per-outcome node), stat box labels, and filter chip labels. These vary by run profile type.
+
+### Import (Full Import / Delta Import)
+
+| What Happened | ObjectChangeType | SyncOutcome(s) | Stat Box Label | Change Type Filter Chip | Outcome Filter Chip | Row Change Chip |
+|---------------|-----------------|----------------|---------------|------------------------|--------------------|--------------------|
+| New CSO staged | `Added` | `CsoAdded` | "Added" | "Added" | "CSO Added" | "Added" |
+| CSO attributes updated | `Updated` | `CsoUpdated` | "Updated" | "Updated" | "CSO Updated" | "Updated" |
+| CSO deletion detected (marked Obsolete) | `Deleted` | *(none)* | "Deletions Detected" | "Deletions Detected" | *(not shown)* | "Deletion Detected" |
+| Pending export confirmed | `PendingExportConfirmed` | `ExportConfirmed` | "Exports Confirmed" | *(N/A)* | "Export Confirmed" | "Pending Export Confirmed" |
+| Pending export retrying | *(error on RPEI)* | *(none)* | "Exports Retrying" | *(N/A)* | *(N/A)* | *(N/A)* |
+| Pending export failed | *(error on RPEI)* | `ExportFailed` | "Exports Failed" | *(N/A)* | "Export Failed" | *(N/A)* |
+
+**Key point — import deletions**: During import, the CSO is only marked `Obsolete` (not actually deleted). No `CsoDeleted` outcome is recorded. The `ObjectChangeType.Deleted` communicates the detection to the admin via change type filter/chip. The actual deletion and `CsoDeleted` outcome occur during the subsequent sync run.
+
+### Synchronisation (Full Sync / Delta Sync)
+
+| What Happened | ObjectChangeType | SyncOutcome(s) | Stat Box Label | Change Type Filter Chip | Outcome Filter Chip | Row Change Chip |
+|---------------|-----------------|----------------|---------------|------------------------|--------------------|--------------------|
+| MVO projected | `Projected` | `Projected` (+ children) | "Projected" | "Projected" | "Projected" | "Projected" |
+| CSO joined to MVO | `Joined` | `Joined` (+ children) | "Joined" | "Joined" | "Joined" | "Joined" |
+| Attributes flowed (no join/project) | `AttributeFlow` | `AttributeFlow` | "Attribute Flow" | "Attribute Flow" | "Attr Flow" | "Attribute Flow" |
+| CSO disconnected (obsoleted) | `Disconnected` | `Disconnected` + `CsoDeleted` | "Disconnected" / "Deletions Processed" | "Disconnected" / "Deletions Processed" | "Disconnected" / "CSO Deleted" | "Disconnected" |
+| CSO disconnected (out of scope) | `DisconnectedOutOfScope` | `DisconnectedOutOfScope` | *(via Disconnected)* | "Disconnected Out Of Scope" | "Out of Scope" | "Disconnected Out Of Scope" |
+| Drift detected | `DriftCorrection` | *(none)* | "Drift Correction" | "Drift Correction" | *(N/A)* | "Drift Correction" |
+| Pending export created | `PendingExport` | `PendingExportCreated` | "Pending Exports" | "Pending Export" | "Pending Export" | "Pending Export" |
+| No attribute changes | `NoChange` | *(none)* | *(via Unchanged)* | *(filtered separately)* | *(N/A)* | "No Change" |
+
+**Key point — obsoleted CSOs**: When a joined CSO is marked Obsolete and processed during sync, a single RPEI is created with `ObjectChangeType.Disconnected`. The outcome graph contains sibling root nodes: `Disconnected` (for the join break) and `CsoDeleted` (for the actual CSO deletion). If an MVO deletion rule fires, there may also be `MvoDeleted` and `PendingExportCreated` child outcomes.
+
+### Export
+
+| What Happened | ObjectChangeType | SyncOutcome(s) | Stat Box Label | Change Type Filter Chip | Outcome Filter Chip | Row Change Chip |
+|---------------|-----------------|----------------|---------------|------------------------|--------------------|--------------------|
+| CSO exported | `Exported` | `Exported` | "Exported" | "Exported" | "Exported" | "Exported" |
+| CSO deprovisioned | `Deprovisioned` | `Deprovisioned` | "Deprovisioned" | "Deprovisioned" | "Deprovisioned" | "Deprovisioned" |
+
+### Stats Derivation Logic
+
+Statistics can be derived from two sources, with outcomes taking priority:
+
+1. **Outcome-based** (preferred): When RPEIs have sync outcomes, stats are counted from outcome nodes. This is the primary path for activities created with outcome tracking enabled.
+2. **RPEI-based** (legacy fallback): When no outcomes exist (tracking level = None, or legacy activities), stats are derived from `ObjectChangeType` counts on RPEIs.
+
+**Special case — import deletions**: Since import-phase deletion RPEIs have `ObjectChangeType.Deleted` but no `CsoDeleted` outcome, the `TotalCsoDeletes` stat supplements outcome-based counts with RPEI-based `ObjectChangeType.Deleted` counts. These never overlap within a single activity (import and sync are separate run profile types).
+
+### One-RPEI-per-CSO Rule
+
+Each CSO should produce at most one RPEI per activity. Multiple outcomes are recorded as sibling root nodes in the outcome graph on that single RPEI, rather than creating separate RPEIs. Examples:
+
+- **Import with confirmed export**: One RPEI with `CsoUpdated` + `ExportConfirmed` outcomes
+- **Sync obsoleted CSO**: One RPEI with `Disconnected` + `CsoDeleted` outcomes (+ children for MVO deletion, pending exports)
+- **Import deletion detection**: One RPEI with `ObjectChangeType.Deleted`, no outcomes (detection only)
+
 ## Implementation Phases
 
 ### Phase 1: Data Model & Infrastructure ✅
