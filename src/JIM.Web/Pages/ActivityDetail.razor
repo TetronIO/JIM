@@ -289,9 +289,9 @@
                     @* Pending Exports - surfaced during sync to show what's awaiting confirmation *@
                     @if (_activityRunProfileExecutionStats.TotalPendingExports > 0)
                     {
-                        <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Orange.Default}; min-width: 120px;")">
+                        <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Teal.Default}; min-width: 120px;")">
                             <MudText Typo="Typo.button" Class="mud-text-secondary">Pending Exports</MudText>
-                            <MudText Typo="Typo.h4" Color="Color.Warning">@_activityRunProfileExecutionStats.TotalPendingExports.ToString("N0")</MudText>
+                            <MudText Typo="Typo.h4" Color="Color.Info">@_activityRunProfileExecutionStats.TotalPendingExports.ToString("N0")</MudText>
                         </MudPaper>
                     }
                 }
@@ -790,6 +790,9 @@
         if (s.TotalDisconnections > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected, s.TotalDisconnections);
         if (s.TotalDisconnectedOutOfScope > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope, s.TotalDisconnectedOutOfScope);
 
+        // Outbound sync outcomes
+        if (s.TotalPendingExports > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, s.TotalPendingExports);
+
         // Export outcomes
         if (s.TotalExported > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Exported, s.TotalExported);
         if (s.TotalDeprovisioned > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned, s.TotalDeprovisioned);
@@ -841,9 +844,9 @@
         if (_activityRunProfileExecutionStats.TotalDeprovisioned > 0)
             availableTypes.Add(ObjectChangeType.Deprovisioned);
 
-        // Pending export visibility (surfaced during sync)
-        if (_activityRunProfileExecutionStats.TotalPendingExports > 0)
-            availableTypes.Add(ObjectChangeType.PendingExport);
+        // Note: PendingExport is filtered via the Outcome Type filter (PendingExportCreated),
+        // not here, because pending exports are outcomes on RPEIs with other change types
+        // (e.g., Joined + PendingExportCreated), not standalone RPEIs with ObjectChangeType.PendingExport.
 
         // Note: NoChange RPEIs are filtered out from GetAvailableChangeTypes
         // as unchanged objects are shown separately via TotalUnchanged
