@@ -2,6 +2,7 @@ using JIM.Models.Activities;
 using JIM.Models.Enums;
 using JIM.PostgresData;
 using JIM.PostgresData.Repositories;
+using JIM.Worker.Processors;
 using Microsoft.EntityFrameworkCore;
 using MockQueryable.Moq;
 using Moq;
@@ -256,5 +257,46 @@ public class BulkInsertSyncOutcomesTests
 
         // Assert - pre-set ID should be preserved
         Assert.That(rpei.SyncOutcomes[0].Id, Is.EqualTo(existingId));
+    }
+
+    [Test]
+    public async Task BulkInsertRpeisAsync_OutcomesBuiltViaSyncOutcomeBuilder_NoDuplicatesAsync()
+    {
+        // Arrange - use SyncOutcomeBuilder which adds to BOTH parent.Children AND rpei.SyncOutcomes
+        // This is the production pattern; FlattenSyncOutcomes must not double-visit children.
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            ActivityId = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.Projected,
+        };
+
+        var root = SyncOutcomeBuilder.AddRootOutcome(rpei,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
+            detailCount: 5);
+        var attrFlow = SyncOutcomeBuilder.AddChildOutcome(rpei, root,
+            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+            detailCount: 5);
+        SyncOutcomeBuilder.AddChildOutcome(rpei, attrFlow,
+            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+            targetEntityDescription: "AD");
+        SyncOutcomeBuilder.AddChildOutcome(rpei, attrFlow,
+            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+            targetEntityDescription: "LDAP");
+        SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
+
+        var rpeis = new List<ActivityRunProfileExecutionItem> { rpei };
+
+        // Act - should not throw due to duplicate outcome IDs
+        await _repository.Activity.BulkInsertRpeisAsync(rpeis);
+
+        // Assert - all 4 outcomes should have unique IDs and correct FKs
+        var allOutcomes = rpei.SyncOutcomes;
+        Assert.That(allOutcomes, Has.Count.EqualTo(4));
+        Assert.That(allOutcomes.Select(o => o.Id).Distinct().Count(), Is.EqualTo(4),
+            "All outcome IDs must be unique");
+        Assert.That(allOutcomes.All(o => o.Id != Guid.Empty), Is.True,
+            "All outcome IDs must be pre-generated");
+        Assert.That(allOutcomes.All(o => o.ActivityRunProfileExecutionItemId == rpei.Id), Is.True,
+            "All outcomes must reference their RPEI");
     }
 }

@@ -889,7 +889,14 @@ public class ActivityRepository : IActivityRepository
     private static List<ActivityRunProfileExecutionItemSyncOutcome> FlattenSyncOutcomes(ActivityRunProfileExecutionItem rpei)
     {
         var result = new List<ActivityRunProfileExecutionItemSyncOutcome>();
-        FlattenOutcomesRecursive(rpei.SyncOutcomes, rpei.Id, null, result);
+
+        // SyncOutcomeBuilder adds all nodes (root + children) to rpei.SyncOutcomes as a flat list,
+        // AND also builds a parent→Children tree. If we pass the full flat list to
+        // FlattenOutcomesRecursive, children get visited twice (once from the flat list, once from
+        // parent.Children recursion), causing duplicate inserts.
+        // Start from root outcomes only and let recursion reach children via parent.Children.
+        var roots = rpei.SyncOutcomes.Where(o => o.ParentSyncOutcome == null && o.ParentSyncOutcomeId == null).ToList();
+        FlattenOutcomesRecursive(roots, rpei.Id, null, result);
         return result;
     }
 
