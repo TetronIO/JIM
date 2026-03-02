@@ -1017,8 +1017,12 @@ public class SyncImportTaskProcessor
                         activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
 
-                        // Build sync outcome for CSO update
-                        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                        // Build sync outcome — only record CsoUpdated when attributes actually changed,
+                        // NOT for status-only transitions (e.g. PendingProvisioning → Normal).
+                        // Status transitions still create the RPEI as a slot for reconciliation
+                        // to merge ExportConfirmed outcomes onto.
+                        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None
+                            && hasAttributeChanges)
                         {
                             var attrChangeCount = connectedSystemObject.PendingAttributeValueAdditions.Count
                                 + connectedSystemObject.PendingAttributeValueRemovals.Count;
