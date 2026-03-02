@@ -542,7 +542,7 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => "CSO Deleted",
             ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => "Export Confirmed",
             ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => "Export Failed",
-            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => "Attr Flow",
+            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => "Attribute Flow",
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => "Out of Scope",
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => "MVO Deleted",
             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => "Pending Export",

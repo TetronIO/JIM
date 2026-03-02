@@ -420,7 +420,7 @@ This section documents the relationship between `ObjectChangeType` (per-RPEI), `
 |---------------|-----------------|----------------|---------------|------------------------|--------------------|--------------------|
 | MVO projected | `Projected` | `Projected` (+ children) | "Projected" | "Projected" | "Projected" | "Projected" |
 | CSO joined to MVO | `Joined` | `Joined` (+ children) | "Joined" | "Joined" | "Joined" | "Joined" |
-| Attributes flowed (no join/project) | `AttributeFlow` | `AttributeFlow` | "Attribute Flow" | "Attribute Flow" | "Attr Flow" | "Attribute Flow" |
+| Attributes flowed (no join/project) | `AttributeFlow` | `AttributeFlow` | "Attribute Flow" | "Attribute Flow" | "Attribute Flow" | "Attribute Flow" |
 | CSO disconnected (obsoleted) | `Disconnected` | `Disconnected` + `CsoDeleted` | "Disconnected" / "Deletions Processed" | "Disconnected" / "Deletions Processed" | "Disconnected" / "CSO Deleted" | "Disconnected" |
 | CSO disconnected (out of scope) | `DisconnectedOutOfScope` | `DisconnectedOutOfScope` | *(via Disconnected)* | "Disconnected Out Of Scope" | "Out of Scope" | "Disconnected Out Of Scope" |
 | Drift detected | `DriftCorrection` | *(none)* | "Drift Correction" | "Drift Correction" | *(N/A)* | "Drift Correction" |
