@@ -99,10 +99,10 @@ public class HelpersOutcomeSummaryTests
     #region GetOutcomeTypeDisplayName
 
     [Test]
-    public void GetOutcomeTypeDisplayName_AttributeFlow_ReturnsAttrFlow()
+    public void GetOutcomeTypeDisplayName_AttributeFlow_ReturnsAttributeFlow()
     {
         var result = Helpers.GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
-        Assert.That(result, Is.EqualTo("Attr Flow"));
+        Assert.That(result, Is.EqualTo("Attribute Flow"));
     }
 
     [Test]

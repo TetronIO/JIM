@@ -193,13 +193,17 @@ public abstract class SyncTaskProcessorBase
             _activity.RunProfileExecutionItems.Clear();
             _jim.Activities.DetachRpeisFromChangeTracker(pageRpeis);
             _hasRawSqlSupport = true;
+
+            // Move to accumulated list for summary stats at activity completion.
+            // Only needed when raw SQL is used — RPEIs were cleared from Activity.RunProfileExecutionItems
+            // so _allPersistedRpeis is the only place they're tracked for stats.
+            // In the EF fallback (tests), RPEIs stay in Activity.RunProfileExecutionItems
+            // and _allPersistedRpeis is not used, avoiding double-counting in the concat at completion.
+            _allPersistedRpeis.AddRange(pageRpeis);
         }
         // Tests (EF fallback): RPEIs stay in Activity.RunProfileExecutionItems for test
         // assertions. They're tracked by EF (via AddRange in fallback) and will be persisted
         // by the next SaveChangesAsync (typically UpdateActivityAsync).
-
-        // Move to accumulated list for summary stats at activity completion
-        _allPersistedRpeis.AddRange(pageRpeis);
 
         // Clear per-page MVO→RPEI lookup (only used within a single page's processing)
         _mvoIdToRpei.Clear();

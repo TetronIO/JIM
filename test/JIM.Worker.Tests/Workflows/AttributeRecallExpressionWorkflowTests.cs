@@ -288,6 +288,13 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         Assert.That(provisioningDnChange, Is.Not.Null, "Provisioning export should include DN");
         Assert.That(provisioningDnChange!.StringValue, Is.EqualTo("CN=John Smith,OU=Users,DC=testdomain,DC=local"));
 
+        // Verify aggregate stats for HR Full Sync (guards against double-counting bugs).
+        // In Detailed mode, attribute flows under a Projected root are a single child outcome node
+        // with detailCount=N, so TotalAttributeFlows counts outcome nodes, not individual attributes.
+        Assert.That(hrFullSyncActivity.TotalProjected, Is.EqualTo(1), "HR Full Sync: expected 1 projection.");
+        Assert.That(hrFullSyncActivity.TotalJoined, Is.EqualTo(0), "HR Full Sync: expected 0 joins.");
+        Assert.That(hrFullSyncActivity.TotalAttributeFlows, Is.EqualTo(1), "HR Full Sync: expected 1 attribute flow outcome (absorbed under projection).");
+
         // Simulate that the provisioning export was executed
         var targetCso = await DbContext.ConnectedSystemObjects
             .Include(c => c.AttributeValues)
@@ -345,6 +352,11 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         var descriptionValue = mvo.AttributeValues.FirstOrDefault(av => av.AttributeId == mvDescriptionAttr.Id);
         Assert.That(descriptionValue, Is.Not.Null, "MVO should have Description attribute from Training");
         Assert.That(descriptionValue!.StringValue, Is.EqualTo("Completed Advanced Training"));
+
+        // Verify aggregate stats for Training Full Sync (guards against double-counting bugs)
+        Assert.That(trainingFullSyncActivity.TotalJoined, Is.EqualTo(1), "Training Full Sync: expected 1 join.");
+        Assert.That(trainingFullSyncActivity.TotalProjected, Is.EqualTo(0), "Training Full Sync: expected 0 projections.");
+        Assert.That(trainingFullSyncActivity.TotalAttributeFlows, Is.EqualTo(1), "Training Full Sync: expected 1 attribute flow (Description).");
 
         // Simulate that Description export was executed
         targetCso = await DbContext.ConnectedSystemObjects
@@ -426,6 +438,10 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
             .FirstOrDefault(r => r.ObjectChangeType == ObjectChangeType.Disconnected);
         Assert.That(disconnectedRpei, Is.Not.Null,
             "Delta Sync should produce a Disconnected RPEI when a joined CSO is obsoleted");
+
+        // Verify aggregate stats for Training Delta Sync (guards against double-counting bugs)
+        Assert.That(trainingDeltaSyncActivity.TotalDisconnected, Is.EqualTo(1), "Training Delta Sync: expected 1 disconnection.");
+        Assert.That(trainingDeltaSyncActivity.TotalAttributeFlows, Is.EqualTo(1), "Training Delta Sync: expected 1 attribute flow (recalled Description).");
     }
 
     /// <summary>
