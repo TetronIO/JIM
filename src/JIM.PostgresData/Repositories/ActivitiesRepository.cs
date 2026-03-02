@@ -861,6 +861,111 @@ public class ActivityRepository : IActivityRepository
     }
 
     /// <summary>
+    /// Bulk updates OutcomeSummary and error fields on already-persisted RPEIs,
+    /// and inserts any new SyncOutcomes that were added after initial persistence.
+    /// Used by confirming imports to merge reconciliation outcomes onto existing import RPEIs.
+    /// </summary>
+    public async Task BulkUpdateRpeiOutcomesAsync(
+        List<ActivityRunProfileExecutionItem> rpeis,
+        List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes)
+    {
+        if (rpeis.Count == 0)
+            return;
+
+        IDbContextTransaction? transaction = null;
+        try
+        {
+            var existingTransaction = Repository.Database.Database.CurrentTransaction;
+            if (existingTransaction == null)
+                transaction = await Repository.Database.Database.BeginTransactionAsync();
+
+            // Bulk UPDATE OutcomeSummary and error fields on existing RPEIs
+            await BulkUpdateRpeiFieldsRawAsync(rpeis);
+
+            // Bulk INSERT new sync outcomes
+            if (newOutcomes.Count > 0)
+                await BulkInsertSyncOutcomesRawAsync(newOutcomes);
+
+            if (transaction != null)
+                await transaction.CommitAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        {
+            // Test environment detection — same pattern as BulkInsertRpeisAsync
+            if (transaction != null)
+                throw;
+
+            // EF fallback: mark modified fields as changed
+            foreach (var rpei in rpeis)
+            {
+                try
+                {
+                    var entry = Repository.Database.Entry(rpei);
+                    if (entry.State == EntityState.Detached)
+                        Repository.Database.Attach(rpei);
+                    entry.Property(r => r.OutcomeSummary).IsModified = true;
+                    entry.Property(r => r.ErrorType).IsModified = true;
+                    entry.Property(r => r.ErrorMessage).IsModified = true;
+                    entry.Property(r => r.DataSnapshot).IsModified = true;
+                }
+                catch (NullReferenceException)
+                {
+                    // Mocked DbContext — property marking not available
+                }
+            }
+
+            // EF will discover new outcomes via navigation property traversal
+            // when the RPEI is already tracked — no explicit AddRange needed.
+        }
+        finally
+        {
+            if (transaction != null)
+                await transaction.DisposeAsync();
+        }
+    }
+
+    /// <summary>
+    /// Bulk updates OutcomeSummary and error fields on already-persisted RPEIs using parameterised UPDATE statements.
+    /// </summary>
+    private async Task BulkUpdateRpeiFieldsRawAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    {
+        const int columnsPerRow = 5; // Id (WHERE) + OutcomeSummary, ErrorType, ErrorMessage, DataSnapshot
+        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+
+        foreach (var chunk in ChunkList(rpeis, chunkSize))
+        {
+            // Use individual UPDATE statements per RPEI within a single round-trip
+            var sql = new System.Text.StringBuilder();
+            var parameters = new List<NpgsqlParameter>();
+
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                var offset = i * columnsPerRow;
+                sql.Append(@"UPDATE ""ActivityRunProfileExecutionItems"" SET ""OutcomeSummary"" = @p");
+                sql.Append(offset);
+                sql.Append(@", ""ErrorType"" = @p");
+                sql.Append(offset + 1);
+                sql.Append(@", ""ErrorMessage"" = @p");
+                sql.Append(offset + 2);
+                sql.Append(@", ""DataSnapshot"" = @p");
+                sql.Append(offset + 3);
+                sql.Append(@" WHERE ""Id"" = @p");
+                sql.Append(offset + 4);
+                sql.Append("; ");
+
+                var rpei = chunk[i];
+                parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.OutcomeSummary ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 1}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = rpei.ErrorType.HasValue ? (object)(int)rpei.ErrorType.Value : DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 2}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ErrorMessage ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 3}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.DataSnapshot ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 4}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = rpei.Id });
+            }
+
+            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
+    }
+
+    /// <summary>
     /// Bulk inserts ActivityRunProfileExecutionItem rows using parameterised multi-row INSERT.
     /// Chunks automatically to stay within the PostgreSQL parameter limit.
     /// </summary>

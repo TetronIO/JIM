@@ -218,6 +218,13 @@ public class ActivityServer
         return await Application.Repository.Activity.BulkInsertRpeisAsync(rpeis);
     }
 
+    public async Task BulkUpdateRpeiOutcomesAsync(
+        List<ActivityRunProfileExecutionItem> rpeis,
+        List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes)
+    {
+        await Application.Repository.Activity.BulkUpdateRpeiOutcomesAsync(rpeis, newOutcomes);
+    }
+
     public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis)
     {
         Application.Repository.Activity.DetachRpeisFromChangeTracker(rpeis);

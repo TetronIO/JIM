@@ -81,6 +81,15 @@ public interface IActivityRepository
     public Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis);
 
     /// <summary>
+    /// Bulk updates OutcomeSummary and error fields on already-persisted RPEIs,
+    /// and inserts any new SyncOutcomes that were added after initial persistence.
+    /// Used by confirming imports to merge reconciliation outcomes onto existing import RPEIs.
+    /// </summary>
+    public Task BulkUpdateRpeiOutcomesAsync(
+        List<ActivityRunProfileExecutionItem> rpeis,
+        List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes);
+
+    /// <summary>
     /// Detaches RPEIs from the EF change tracker so they are not persisted by subsequent
     /// SaveChangesAsync calls. Call this after raw SQL bulk insert has persisted them.
     /// </summary>
