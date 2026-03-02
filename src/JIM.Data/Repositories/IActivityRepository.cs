@@ -45,7 +45,8 @@ public interface IActivityRepository
         bool sortDescending = false,
         IEnumerable<ObjectChangeType>? changeTypeFilter = null,
         IEnumerable<string>? objectTypeFilter = null,
-        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null);
+        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null,
+        IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = null);
 
     public Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId);
 

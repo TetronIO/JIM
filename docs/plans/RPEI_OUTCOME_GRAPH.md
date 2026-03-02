@@ -434,14 +434,7 @@ new ServiceSetting
 4. ~~Update API DTOs and endpoints to include outcome summary~~
 5. ~~Write unit tests for stats calculation~~
 
-### Phase 5: UI — List View & Filters
-
-1. Add outcome stat chips to Activity Detail table rows (from `OutcomeSummary`)
-2. Update filter controls to support outcome type filtering
-3. Update Activity Detail stats display
-4. Update Operations History view
-
-### Phase 5b: API Integration Tests
+### Phase 4b: API Integration Tests
 
 End-to-end tests covering outcome recording and presentation through the API layer. Deferred until after UI phases are complete and the solution has stabilised.
 
@@ -457,6 +450,13 @@ End-to-end tests covering outcome recording and presentation through the API lay
 10. Test multi-system export stats: one object exported to N systems = N Exported outcome nodes
 11. Test RPEI-only stats (OutOfScopeRetainJoin, DriftCorrection, Created, NoChange) remain correct alongside outcome-based stats
 12. Test error counting remains per-RPEI regardless of outcomes
+
+### Phase 5: UI — List View & Filters ✅
+
+1. ~~Add outcome stat chips to Activity Detail table rows (from `OutcomeSummary`)~~
+2. ~~Update filter controls to support outcome type filtering~~
+3. ~~Update Activity Detail stats display~~ (already working via Phase 4 stats derivation)
+4. ~~Update Operations History view~~ (already working via Phase 4 denormalised Activity fields)
 
 ### Phase 6: UI — RPEI Detail Page
 

@@ -333,7 +333,8 @@ public class ActivityRepository : IActivityRepository
         bool sortDescending = false,
         IEnumerable<ObjectChangeType>? changeTypeFilter = null,
         IEnumerable<string>? objectTypeFilter = null,
-        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null)
+        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null,
+        IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -386,6 +387,20 @@ public class ActivityRepository : IActivityRepository
                 query = query.Where(a =>
                     a.ErrorType != null &&
                     errorTypes.Contains(a.ErrorType.Value));
+            }
+        }
+
+        // Apply outcome type filter if specified — matches against the denormalised OutcomeSummary string
+        if (outcomeTypeFilter != null)
+        {
+            var outcomeTypes = outcomeTypeFilter.ToList();
+            if (outcomeTypes.Count > 0)
+            {
+                // Build a predicate that requires at least one of the selected outcome types
+                // to appear in the OutcomeSummary string (e.g., "Projected:" prefix match)
+                query = query.Where(a =>
+                    a.OutcomeSummary != null &&
+                    outcomeTypes.Any(ot => a.OutcomeSummary.Contains(ot.ToString() + ":")));
             }
         }
 

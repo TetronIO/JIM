@@ -495,5 +495,90 @@ public static class Helpers
             _ => changeType.ToString()
         };
     }
+
+    /// <summary>
+    /// Gets a MudBlazor colour for the sync outcome type chip.
+    /// </summary>
+    public static Color GetOutcomeTypeMudBlazorColor(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
+    {
+        return outcomeType switch
+        {
+            // Import outcomes
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded => Color.Success,
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated => Color.Info,
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => Color.Error,
+            ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => Color.Success,
+            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => Color.Error,
+
+            // Sync outcomes — inbound
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected => Color.Primary,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => Color.Secondary,
+            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => Color.Tertiary,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => Color.Warning,
+            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => Color.Warning,
+            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => Color.Error,
+
+            // Sync outcomes — outbound
+            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => Color.Primary,
+            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => Color.Info,
+
+            // Export outcomes
+            ActivityRunProfileExecutionItemSyncOutcomeType.Exported => Color.Info,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => Color.Error,
+
+            _ => Color.Default,
+        };
+    }
+
+    /// <summary>
+    /// Gets a human-readable display name for a sync outcome type.
+    /// </summary>
+    public static string GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
+    {
+        return outcomeType switch
+        {
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded => "CSO Added",
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated => "CSO Updated",
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => "CSO Deleted",
+            ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => "Export Confirmed",
+            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => "Export Failed",
+            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => "Attr Flow",
+            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => "Out of Scope",
+            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => "MVO Deleted",
+            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => "Pending Export",
+            _ => outcomeType.ToString()
+        };
+    }
+
+    /// <summary>
+    /// Parses the denormalised OutcomeSummary string into outcome type/count pairs.
+    /// Format: "Projected:1,AttributeFlow:12,PendingExportCreated:2"
+    /// Returns empty list if null, empty, or unparseable.
+    /// </summary>
+    public static List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, int Count)> ParseOutcomeSummary(string? outcomeSummary)
+    {
+        var results = new List<(ActivityRunProfileExecutionItemSyncOutcomeType, int)>();
+        if (string.IsNullOrWhiteSpace(outcomeSummary))
+            return results;
+
+        foreach (var part in outcomeSummary.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var colonIndex = part.LastIndexOf(':');
+            if (colonIndex <= 0 || colonIndex >= part.Length - 1)
+                continue;
+
+            var typeName = part[..colonIndex];
+            var countStr = part[(colonIndex + 1)..];
+
+            if (Enum.TryParse<ActivityRunProfileExecutionItemSyncOutcomeType>(typeName, out var outcomeType)
+                && int.TryParse(countStr, out var count)
+                && count > 0)
+            {
+                results.Add((outcomeType, count));
+            }
+        }
+
+        return results;
+    }
     #endregion
 }
