@@ -2204,6 +2204,28 @@ public class SyncImportTaskProcessor
                                     confirmedAttrChangesToDelete.Add(confirmedChange);
                             }
 
+                            // Create execution items for confirmed exports (successful confirmations)
+                            if (result.ConfirmedChanges.Count > 0)
+                            {
+                                var executionItem = new ActivityRunProfileExecutionItem
+                                {
+                                    Activity = _activity,
+                                    ConnectedSystemObject = cso,
+                                    ConnectedSystemObjectId = cso.Id,
+                                    ObjectChangeType = ObjectChangeType.Updated
+                                };
+                                executionItem.SnapshotCsoDisplayFields(cso);
+
+                                if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                                {
+                                    SyncOutcomeBuilder.AddRootOutcome(executionItem,
+                                        ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed,
+                                        detailCount: result.ConfirmedChanges.Count);
+                                }
+
+                                pageExecutionItems.Add(executionItem);
+                            }
+
                             // Create execution items for failed exports (permanent failures)
                             if (result.FailedChanges.Count > 0)
                             {
