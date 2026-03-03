@@ -1329,6 +1329,14 @@ html[lang] .mud-dialog .mud-paper-outlined {
     background: var(--mud-palette-surface);
 }
 
+/* Continue the branch line alongside the expanded attribute table
+   when the node has children below it. Aligns with .outcome-children border. */
+.outcome-table-continuation {
+    margin-left: 20px;
+    padding-left: 20px;
+    border-left: 2px solid var(--mud-palette-lines-default);
+}
+
 /* Collapse cumulative bottom padding from deeply nested last children
    so the tree's bottom spacing matches the top. */
 .outcome-tree > .outcome-node:last-child,

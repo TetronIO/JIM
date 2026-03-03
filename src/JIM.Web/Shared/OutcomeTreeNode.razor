@@ -79,7 +79,7 @@
     @* Expandable attribute change detail for CsoAdded, CsoUpdated, and AttributeFlow nodes *@
     @if (_expanded && IsAttributeFlowWithChanges)
     {
-        <div class="mt-2">
+        <div class="@($"mt-2{(Outcome.Children.Count > 0 ? " outcome-table-continuation" : "")}")">
             <AttributeChangeTable AttributeChanges="AttributeChanges"
                                    MvoAttributeChanges="MvoAttributeChanges" />
         </div>
