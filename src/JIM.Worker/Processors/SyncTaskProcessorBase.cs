@@ -307,6 +307,7 @@ public abstract class SyncTaskProcessorBase
             // Create execution item for unhandled error tracking
             var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
             runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+            runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
             runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
             runProfileExecutionItem.ErrorMessage = e.Message;
             runProfileExecutionItem.ErrorStackTrace = e.StackTrace;
@@ -364,6 +365,7 @@ public abstract class SyncTaskProcessorBase
                     // Create a new RPEI (for cases like join/project without attribute changes)
                     var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
                     runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+                    runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
                     runProfileExecutionItem.ObjectChangeType = changeResult.ChangeType;
 
                     // Propagate attribute flow count from change result (e.g., DisconnectedOutOfScope with attribute removals)
@@ -417,6 +419,7 @@ public abstract class SyncTaskProcessorBase
             // Create execution item for join-specific errors with proper error type
             var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
             runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+            runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
             runProfileExecutionItem.ErrorType = joinEx.ErrorType;
             runProfileExecutionItem.ErrorMessage = joinEx.Message;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
@@ -429,6 +432,7 @@ public abstract class SyncTaskProcessorBase
             // Create execution item for unhandled error tracking
             var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
             runProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+            runProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
             runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
             runProfileExecutionItem.ErrorMessage = e.Message;
             runProfileExecutionItem.ErrorStackTrace = e.StackTrace;
@@ -619,6 +623,7 @@ public abstract class SyncTaskProcessorBase
         // Note: RPEI uses Delete (user-facing), CSO status uses Obsolete (internal state)
         var deletionExecutionItem = _activity.PrepareRunProfileExecutionItem();
         deletionExecutionItem.ConnectedSystemObject = connectedSystemObject;
+        deletionExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
         deletionExecutionItem.ObjectChangeType = ObjectChangeType.Deleted;
         // Snapshot CSO display fields eagerly — FlushObsoleteCsoOperationsAsync() will null the CSO
         // reference before FlushRpeisAsync() runs, so the centralised snapshot would find nothing.
@@ -1045,6 +1050,7 @@ public abstract class SyncTaskProcessorBase
                 // Create RPEI for this CSO change - will be used to link MVO change to Activity for initiator context
                 var rpei = _activity.PrepareRunProfileExecutionItem();
                 rpei.ConnectedSystemObject = connectedSystemObject;
+                rpei.ConnectedSystemObjectId = connectedSystemObject.Id;
                 _activity.RunProfileExecutionItems.Add(rpei);
 
                 // Track attribute flow count when the primary change type is Join or Projection
@@ -1473,6 +1479,7 @@ public abstract class SyncTaskProcessorBase
                     // No RPEI exists for this CSO - create one for the reference attribute flow
                     rpei = _activity.PrepareRunProfileExecutionItem();
                     rpei.ConnectedSystemObject = cso;
+                    rpei.ConnectedSystemObjectId = cso.Id;
                     rpei.ObjectChangeType = ObjectChangeType.AttributeFlow;
                     _activity.RunProfileExecutionItems.Add(rpei);
                     Log.Debug("ProcessDeferredReferenceAttributes: Created RPEI for CSO {CsoId} with reference-only changes",
@@ -1704,6 +1711,7 @@ public abstract class SyncTaskProcessorBase
                     // Create RPEI for cross-page reference resolution
                     var rpei = _activity.PrepareRunProfileExecutionItem();
                     rpei.ConnectedSystemObject = cso;
+                    rpei.ConnectedSystemObjectId = cso.Id;
                     rpei.ObjectChangeType = ObjectChangeType.AttributeFlow;
                     rpei.AttributeFlowCount = additionsCount + removalsCount;
                     _activity.RunProfileExecutionItems.Add(rpei);
@@ -2623,6 +2631,7 @@ public abstract class SyncTaskProcessorBase
             // This shows that the delta sync detected unauthorised changes and staged corrective exports
             var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
             runProfileExecutionItem.ConnectedSystemObject = cso;
+            runProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
             runProfileExecutionItem.ObjectChangeType = ObjectChangeType.DriftCorrection;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
         }
