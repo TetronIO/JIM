@@ -49,32 +49,11 @@
                 </MudText>
             }
 
-            @* Expandable attribute change detail for AttributeFlow nodes *@
+            @* Expandable attribute change detail for CsoAdded, CsoUpdated, and AttributeFlow nodes *@
             @if (_expanded && IsAttributeFlowWithChanges)
             {
                 <div class="mt-2">
-                    <MudSimpleTable Dense="true" Hover="true" Elevation="0" Style="background: transparent;">
-                        <tbody>
-                            @foreach (var change in AttributeChanges!.OrderBy(c => c.Attribute.Name))
-                            {
-                                @foreach (var vc in change.ValueChanges)
-                                {
-                                    <tr>
-                                        <td style="padding: 4px 12px 4px 0; border: none; vertical-align: top; white-space: nowrap;">
-                                            <MudText Class="mud-text-secondary">@change.Attribute.Name</MudText>
-                                        </td>
-                                        <td style="padding: 4px 8px 4px 0; border: none; vertical-align: top; white-space: nowrap;">
-                                            <MudChip T="string" Variant="Variant.Text"
-                                                     Color="@Helpers.GetMudBlazorColorForValueChangeType(vc.ValueChangeType)"
-                                                     Size="Size.Small" Class="ml-0">
-                                                @vc.ValueChangeType
-                                            </MudChip>
-                                        </td>
-                                    </tr>
-                                }
-                            }
-                        </tbody>
-                    </MudSimpleTable>
+                    <AttributeChangeTable AttributeChanges="AttributeChanges!" />
                 </div>
             }
 
