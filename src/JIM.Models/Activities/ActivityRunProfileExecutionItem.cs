@@ -72,7 +72,7 @@ public class ActivityRunProfileExecutionItem
     // errors:
     // two-tiers of error logging, depending on system settings:
     // - individual error items with detailed error info
-    // - individual error items with detailed error info and json snapshot of exported/imported object
+    // - individual error items with detailed error info and json snapshot of exported/imported object (not yet implemented, but planned for future)
 
     /// <summary>
     /// If settings allow during run profile execution, a JSON representation of the data imported, or exported can be
