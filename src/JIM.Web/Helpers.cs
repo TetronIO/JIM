@@ -544,8 +544,11 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => "Export Failed",
             ActivityRunProfileExecutionItemSyncOutcomeType.Projected => "MVO Projected",
             ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => "MVO Attribute Flow",
+            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => "Joined",
+            ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => "CSO Disconnected",
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => "Out of Scope",
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => "MVO Deleted",
+            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => "Provisioned",
             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => "Pending Export",
             _ => outcomeType.ToString()
         };
