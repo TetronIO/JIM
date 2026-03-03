@@ -122,6 +122,10 @@ public abstract class SyncTaskProcessorBase
     // Cleared per page alongside other batch collections.
     protected readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _mvoIdToRpei = [];
 
+    // Deferred MVO→RPEI mappings for newly projected MVOs whose ID is Guid.Empty at registration time.
+    // After PersistPendingMetaverseObjectsAsync assigns real IDs, these are re-keyed into _mvoIdToRpei.
+    private readonly List<(MetaverseObject Mvo, ActivityRunProfileExecutionItem Rpei)> _deferredMvoRpeiMappings = [];
+
     // Expression evaluator for expression-based sync rule mappings
     protected readonly IExpressionEvaluator _expressionEvaluator = new DynamicExpressoEvaluator();
 
@@ -174,6 +178,40 @@ public abstract class SyncTaskProcessorBase
                 rpei.SnapshotCsoDisplayFields(rpei.ConnectedSystemObject);
         }
 
+        // Retroactively update outcome descriptions and target entity IDs.
+        // Sync outcome nodes are created before ApplyPendingMetaverseObjectAttributeChanges (which
+        // sets DisplayName) and before PersistPendingMetaverseObjectsAsync (which assigns real IDs).
+        // By this point both have run, so we can fill in any blanks.
+        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+        {
+            foreach (var rpei in pageRpeis)
+            {
+                var mvo = rpei.ConnectedSystemObject?.MetaverseObject;
+                if (mvo == null) continue;
+
+                foreach (var outcome in rpei.SyncOutcomes)
+                {
+                    if (outcome.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
+                            or ActivityRunProfileExecutionItemSyncOutcomeType.Joined
+                            or ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow)
+                    {
+                        // Fill in MVO display name if it was null at creation time
+                        if (string.IsNullOrEmpty(outcome.TargetEntityDescription)
+                            && !string.IsNullOrEmpty(mvo.DisplayName))
+                        {
+                            outcome.TargetEntityDescription = mvo.DisplayName;
+                        }
+
+                        // Fill in MVO ID if it was null at creation time (newly projected MVOs)
+                        if (!outcome.TargetEntityId.HasValue && mvo.Id != Guid.Empty)
+                        {
+                            outcome.TargetEntityId = mvo.Id;
+                        }
+                    }
+                }
+            }
+        }
+
         // Build OutcomeSummary strings from outcome trees before bulk insert.
         // This runs after all outcome nodes have been attached (including export evaluation).
         if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
@@ -207,6 +245,7 @@ public abstract class SyncTaskProcessorBase
 
         // Clear per-page MVO→RPEI lookup (only used within a single page's processing)
         _mvoIdToRpei.Clear();
+        _deferredMvoRpeiMappings.Clear();
     }
 
     /// <summary>
@@ -1047,8 +1086,13 @@ public abstract class SyncTaskProcessorBase
                             detailCount: attributesAdded + attributesRemoved);
                     }
 
-                    // Register MVO→RPEI mapping for export evaluation outcome linking
-                    _mvoIdToRpei[connectedSystemObject.MetaverseObject.Id] = rpei;
+                    // Register MVO→RPEI mapping for export evaluation outcome linking.
+                    // Newly projected MVOs have Guid.Empty as their ID until PersistPendingMetaverseObjectsAsync
+                    // assigns real IDs. Defer these mappings and re-key after persistence.
+                    if (connectedSystemObject.MetaverseObject.Id != Guid.Empty)
+                        _mvoIdToRpei[connectedSystemObject.MetaverseObject.Id] = rpei;
+                    else
+                        _deferredMvoRpeiMappings.Add((connectedSystemObject.MetaverseObject, rpei));
                 }
             }
 
@@ -1276,6 +1320,18 @@ public abstract class SyncTaskProcessorBase
             await _jim.ConnectedSystems.UpdateConnectedSystemObjectJoinStatesAsync(_pendingCsoJoinUpdates);
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} CSO join states in batch", _pendingCsoJoinUpdates.Count);
             _pendingCsoJoinUpdates.Clear();
+        }
+
+        // Re-key deferred MVO→RPEI mappings now that newly projected MVOs have real IDs.
+        // This enables EvaluateOutboundExportsAsync to find the originating RPEI for outcome linking.
+        if (_deferredMvoRpeiMappings.Count > 0)
+        {
+            foreach (var (mvo, rpei) in _deferredMvoRpeiMappings)
+            {
+                if (mvo.Id != Guid.Empty)
+                    _mvoIdToRpei[mvo.Id] = rpei;
+            }
+            _deferredMvoRpeiMappings.Clear();
         }
 
         span.SetSuccess();

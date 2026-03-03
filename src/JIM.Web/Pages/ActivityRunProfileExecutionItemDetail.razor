@@ -217,6 +217,7 @@
             <MudPaper Class="pa-5 mb-5" Outlined="true">
                 <OutcomeTree Outcomes="_activityRunProfileExecutionItem.SyncOutcomes.ToList()"
                              AttributeChanges="_activityRunProfileExecutionItem.ConnectedSystemObjectChange?.AttributeChanges?.ToList()"
+                             MvoAttributeChanges="_activityRunProfileExecutionItem.MetaverseObjectChange?.AttributeChanges?.ToList()"
                              OnLoadPendingExport="LoadPendingExportAsync"
                              ConnectedSystemName="@_connectedSystemHeader?.Name"
                              ConnectedSystemId="@_connectedSystemHeader?.Id"

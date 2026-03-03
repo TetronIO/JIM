@@ -1,4 +1,5 @@
 @using JIM.Models.Activities
+@using JIM.Models.Core
 @using JIM.Models.Staging
 @using JIM.Models.Transactional
 @using JIM.Utilities
@@ -56,7 +57,8 @@
     @if (_expanded && IsAttributeFlowWithChanges)
     {
         <div class="mt-2">
-            <AttributeChangeTable AttributeChanges="AttributeChanges!" />
+            <AttributeChangeTable AttributeChanges="AttributeChanges"
+                                   MvoAttributeChanges="MvoAttributeChanges" />
         </div>
     }
 
@@ -108,6 +110,7 @@
             {
                 <OutcomeTreeNode Outcome="child"
                                  AttributeChanges="AttributeChanges"
+                                 MvoAttributeChanges="MvoAttributeChanges"
                                  OnLoadPendingExport="OnLoadPendingExport" />
             }
         </div>
@@ -126,6 +129,13 @@
     public List<ConnectedSystemObjectChangeAttribute>? AttributeChanges { get; set; }
 
     /// <summary>
+    /// Optional MVO attribute changes from the RPEI's MetaverseObjectChange,
+    /// passed down from the OutcomeTree container.
+    /// </summary>
+    [Parameter]
+    public List<MetaverseObjectChangeAttribute>? MvoAttributeChanges { get; set; }
+
+    /// <summary>
     /// Callback for loading pending export data on demand when a PendingExportCreated node is expanded.
     /// </summary>
     [Parameter]
@@ -139,8 +149,8 @@
         (Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
          || Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded
          || Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated)
-        && AttributeChanges != null
-        && AttributeChanges.Count > 0;
+        && ((AttributeChanges != null && AttributeChanges.Count > 0)
+            || (MvoAttributeChanges != null && MvoAttributeChanges.Count > 0));
 
     private bool IsPendingExportExpandable =>
         Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
