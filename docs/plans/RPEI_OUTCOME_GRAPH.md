@@ -139,13 +139,12 @@ HR CSV Source - Full Synchronisation:
 |
 +-- CSO EMP001 - John Smith
     |
-    +-- [Projected] MVO John Smith created
+    +-- [Projected] MVO John Smith
           |
-          +-- [Attribute Flow] 12 attributes
-                | Show changes >
+          +-- [Attribute Flow] 12 attributes [show >]
                 |
-                +-- [Pending Export Created] AD — new CSO to provision [show >]
-                +-- [Pending Export Created] LDAP — new CSO to provision [show >]
+                +-- [Pending Export Created] AD — provision [show >]
+                +-- [Pending Export Created] LDAP — provision [show >]
 ```
 
 **Sync: Employee deleted from source**
@@ -157,12 +156,11 @@ HR CSV Source - Delta Synchronisation:
     |
     +-- [Disconnected] from MVO: Jane Doe
           |
-          +-- [Attribute Flow] 8 attributes recalled
-                | Show changes >
+          +-- [Attribute Flow] 8 attributes recalled [show >]
           +-- [MVO Deleted] MVO deleted: Jane Doe
                 |
-                +-- [Pending Export Created] AD — CSO to deprovision [show >]
-                +-- [Pending Export Created] LDAP — CSO to deprovision [show >]
+                +-- [Pending Export Created] AD — deprovision [show >]
+                +-- [Pending Export Created] LDAP — deprovision [show >]
 ```
 
 **Export: Pending exports executed**
