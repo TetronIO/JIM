@@ -1329,10 +1329,16 @@ html[lang] .mud-dialog .mud-paper-outlined {
     background: var(--mud-palette-surface);
 }
 
-/* Attribute change table — transparent background so it inherits from its container */
+/* Attribute change table — transparent background so it inherits from its container.
+   The theme (navy-o5-dark) sets background-color on pagination/footer/empty-row with
+   html[lang] .mud-paper .mud-table specificity, so we must match it. */
 .attribute-change-table,
-.attribute-change-table .mud-table-container,
-.attribute-change-table .mud-table-pagination,
-.attribute-change-table .mud-table-pagination .mud-table-pagination-toolbar {
+.attribute-change-table .mud-table-container {
+    background-color: transparent !important;
+}
+
+html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-pagination-toolbar,
+html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-foot .mud-table-cell,
+html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     background-color: transparent !important;
 }
