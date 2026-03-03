@@ -343,7 +343,14 @@ public abstract class SyncTaskProcessorBase
                             ObjectChangeType.DisconnectedOutOfScope => ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope,
                             _ => ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
                         };
+                        // Include MVO info for Joined/Projected/AttributeFlow outcomes
+                        Guid? mvoId = connectedSystemObject.MetaverseObject?.Id;
+                        string? mvoDescription = connectedSystemObject.MetaverseObject?.DisplayName
+                            ?? mvoId?.ToString();
+
                         var rootOutcome = SyncOutcomeBuilder.AddRootOutcome(runProfileExecutionItem, outcomeType,
+                            targetEntityId: mvoId,
+                            targetEntityDescription: mvoDescription,
                             detailCount: changeResult.AttributeFlowCount);
 
                         // In Detailed mode, add AttributeFlow child under DisconnectedOutOfScope when attributes were recalled
@@ -1014,7 +1021,12 @@ public abstract class SyncTaskProcessorBase
                         ObjectChangeType.Joined => ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
                         _ => ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
                     };
+                    var mvo = connectedSystemObject.MetaverseObject;
+                    var mvoDescription = mvo.DisplayName ?? mvo.Id.ToString();
+
                     var rootOutcome = SyncOutcomeBuilder.AddRootOutcome(rpei, outcomeType,
+                        targetEntityId: mvo.Id,
+                        targetEntityDescription: mvoDescription,
                         detailCount: attributesAdded + attributesRemoved);
 
                     // In Detailed mode, add a separate AttributeFlow child under Projected/Joined
@@ -1024,6 +1036,7 @@ public abstract class SyncTaskProcessorBase
                     {
                         SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
                             ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+                            targetEntityDescription: mvoDescription,
                             detailCount: attributesAdded + attributesRemoved);
                     }
 

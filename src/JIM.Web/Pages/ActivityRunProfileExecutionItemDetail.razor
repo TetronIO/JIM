@@ -215,7 +215,8 @@
                 What happened during processing and the downstream consequences.
             </MudText>
             <MudPaper Class="pa-5 mb-5" Outlined="true">
-                <OutcomeTree Outcomes="_activityRunProfileExecutionItem.SyncOutcomes.ToList()" />
+                <OutcomeTree Outcomes="_activityRunProfileExecutionItem.SyncOutcomes.ToList()"
+                             AttributeChanges="_activityRunProfileExecutionItem.ConnectedSystemObjectChange?.AttributeChanges?.ToList()" />
             </MudPaper>
         }
 

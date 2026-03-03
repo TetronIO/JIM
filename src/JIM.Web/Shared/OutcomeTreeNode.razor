@@ -1,4 +1,5 @@
 @using JIM.Models.Activities
+@using JIM.Models.Staging
 @using JIM.Utilities
 
 <div class="outcome-node">
@@ -6,8 +7,8 @@
         <MudIcon Icon="@Helpers.GetOutcomeTypeIcon(Outcome.OutcomeType)"
                  Color="@Helpers.GetOutcomeTypeMudBlazorColor(Outcome.OutcomeType)"
                  Size="Size.Medium" />
-        <div>
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+        <div style="flex: 1; min-width: 0;">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
                 <MudText Typo="Typo.body1" Class="jim-text-emphasis">
                     @Helpers.GetOutcomeTypeDisplayName(Outcome.OutcomeType)
                 </MudText>
@@ -15,14 +16,21 @@
                 {
                     <MudChip T="string" Color="@Helpers.GetOutcomeTypeMudBlazorColor(Outcome.OutcomeType)"
                              Variant="Variant.Text" Size="Size.Medium">
-                        @("\u00D7")@Outcome.DetailCount.Value
+                        @Outcome.DetailCount.Value @(Outcome.DetailCount.Value == 1 ? "attribute" : "attributes")
                     </MudChip>
                 }
+                @if (IsAttributeFlowWithChanges)
+                {
+                    <MudTooltip Text="@(_expanded ? "Hide attribute changes" : "Show attribute changes")">
+                        <MudIconButton Icon="@(_expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                       Size="Size.Small" OnClick="ToggleExpand" />
+                    </MudTooltip>
+                }
             </MudStack>
-            @if (!string.IsNullOrEmpty(Outcome.TargetEntityDescription))
+            @if (!string.IsNullOrEmpty(GetDescription()))
             {
                 <MudText Typo="Typo.body1" Class="mud-text-secondary">
-                    @Outcome.TargetEntityDescription
+                    @GetDescription()
                 </MudText>
             }
             @if (!string.IsNullOrEmpty(Outcome.DetailMessage))
@@ -30,6 +38,35 @@
                 <MudText Typo="Typo.body1" Class="mud-text-secondary">
                     @Outcome.DetailMessage
                 </MudText>
+            }
+
+            @* Expandable attribute change detail for AttributeFlow nodes *@
+            @if (_expanded && IsAttributeFlowWithChanges)
+            {
+                <div class="mt-2">
+                    <MudSimpleTable Dense="true" Hover="true" Elevation="0" Style="background: transparent;">
+                        <tbody>
+                            @foreach (var change in AttributeChanges!.OrderBy(c => c.Attribute.Name))
+                            {
+                                @foreach (var vc in change.ValueChanges)
+                                {
+                                    <tr>
+                                        <td style="padding: 4px 12px 4px 0; border: none; vertical-align: top; white-space: nowrap;">
+                                            <MudText Class="mud-text-secondary">@change.Attribute.Name</MudText>
+                                        </td>
+                                        <td style="padding: 4px 8px 4px 0; border: none; vertical-align: top; white-space: nowrap;">
+                                            <MudChip T="string" Variant="Variant.Text"
+                                                     Color="@Helpers.GetMudBlazorColorForValueChangeType(vc.ValueChangeType)"
+                                                     Size="Size.Small" Class="ml-0">
+                                                @vc.ValueChangeType
+                                            </MudChip>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </div>
             }
         </div>
     </MudStack>
@@ -39,7 +76,7 @@
         <div class="outcome-children">
             @foreach (var child in Outcome.Children.OrderBy(c => c.Ordinal))
             {
-                <OutcomeTreeNode Outcome="child" />
+                <OutcomeTreeNode Outcome="child" AttributeChanges="AttributeChanges" />
             }
         </div>
     }
@@ -48,4 +85,53 @@
 @code {
     [Parameter, EditorRequired]
     public ActivityRunProfileExecutionItemSyncOutcome Outcome { get; set; } = null!;
+
+    /// <summary>
+    /// Optional attribute changes from the RPEI's ConnectedSystemObjectChange,
+    /// passed down from the OutcomeTree container.
+    /// </summary>
+    [Parameter]
+    public List<ConnectedSystemObjectChangeAttribute>? AttributeChanges { get; set; }
+
+    private bool _expanded;
+
+    private bool IsAttributeFlowWithChanges =>
+        Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
+        && AttributeChanges != null
+        && AttributeChanges.Count > 0;
+
+    private void ToggleExpand()
+    {
+        _expanded = !_expanded;
+    }
+
+    /// <summary>
+    /// Builds a contextual description based on outcome type and available data.
+    /// </summary>
+    private string? GetDescription()
+    {
+        if (string.IsNullOrEmpty(Outcome.TargetEntityDescription))
+            return null;
+
+        return Outcome.OutcomeType switch
+        {
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected
+                => $"MVO \"{Outcome.TargetEntityDescription}\" created",
+            ActivityRunProfileExecutionItemSyncOutcomeType.Joined
+                => $"to MVO \"{Outcome.TargetEntityDescription}\"",
+            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
+                => $"to MVO \"{Outcome.TargetEntityDescription}\"",
+            ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected
+                => $"from MVO \"{Outcome.TargetEntityDescription}\"",
+            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
+                => $"MVO \"{Outcome.TargetEntityDescription}\" deleted",
+            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
+                => Outcome.TargetEntityDescription,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Exported
+                => Outcome.TargetEntityDescription,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned
+                => Outcome.TargetEntityDescription,
+            _ => Outcome.TargetEntityDescription
+        };
+    }
 }
