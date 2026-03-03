@@ -495,7 +495,8 @@
                             DisplayName = vc.ReferenceValue.DisplayNameOrId ?? vc.ReferenceValue.Id.ToString(),
                             Href = JIM.Utilities.Utilities.GetConnectedSystemObjectHref(vc.ReferenceValue)
                         } : null,
-                        IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued
+                        IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued,
+                        AttributeType = ac.Attribute.Type
                     }))
                     .ToList()
             })
@@ -536,7 +537,8 @@
                             DisplayName = vc.ReferenceValue.DisplayName ?? vc.ReferenceValue.Id.ToString(),
                             Href = $"/users/{vc.ReferenceValue.Id}"
                         } : null,
-                        IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued
+                        IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued,
+                        AttributeType = ac.Attribute.Type
                     }))
                     .ToList()
             })

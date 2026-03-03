@@ -279,23 +279,35 @@ else
                 Elevation="0" RowsPerPage="10" T="AttributeChangeDisplay">
                 <HeaderContent>
                     <MudTh>
+                        <MudText Typo="Typo.button">Change</MudText>
+                    </MudTh>
+                    <MudTh>
                         <MudText Typo="Typo.button">Attribute</MudText>
                     </MudTh>
                     <MudTh>
-                        <MudText Typo="Typo.button">Change</MudText>
+                        <MudText Typo="Typo.button">Type</MudText>
+                    </MudTh>
+                    <MudTh>
+                        <MudText Typo="Typo.button">Plurality</MudText>
                     </MudTh>
                     <MudTh>
                         <MudText Typo="Typo.button">Value</MudText>
                     </MudTh>
                 </HeaderContent>
                 <RowTemplate>
-                    <MudTd DataLabel="Attribute">
-                        <MudText Class="mud-text-secondary">@context.AttributeName</MudText>
-                    </MudTd>
                     <MudTd DataLabel="Change">
                         <MudChip T="string" Variant="Variant.Text" Color="@GetDisplayChangeTypeColor(context)">
                             @context.DisplayChangeType
                         </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Attribute">
+                        <MudText Class="mud-text-secondary">@context.AttributeName</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Type">
+                        <MudText Class="mud-text-secondary">@context.AttributeType</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Plurality">
+                        <MudText Class="mud-text-secondary">@(context.IsMultiValued ? "Multi-Valued" : "Single-Valued")</MudText>
                     </MudTd>
                     <MudTd DataLabel="Value">
                         @if (context.IsUpdate)
@@ -494,6 +506,10 @@ else
         /// - MVA (multi-valued): Show individual Add/Remove operations
         /// </summary>
         public bool IsMultiValued { get; set; }
+        /// <summary>
+        /// The data type of the attribute (Text, Number, Reference, etc.).
+        /// </summary>
+        public AttributeDataType AttributeType { get; set; }
     }
 
     /// <summary>
@@ -514,6 +530,14 @@ else
     public class AttributeChangeDisplay
     {
         public string AttributeName { get; set; } = string.Empty;
+        /// <summary>
+        /// The data type of the attribute (Text, Number, Reference, etc.).
+        /// </summary>
+        public AttributeDataType AttributeType { get; set; }
+        /// <summary>
+        /// Whether this attribute is multi-valued (MVA) or single-valued (SVA).
+        /// </summary>
+        public bool IsMultiValued { get; set; }
         /// <summary>
         /// Display change type: Add, Remove, or Update (for SVA with both).
         /// </summary>
@@ -568,6 +592,7 @@ else
         {
             var changes = group.ToList();
             var isMultiValued = changes.FirstOrDefault()?.IsMultiValued ?? false;
+            var attributeType = changes.FirstOrDefault()?.AttributeType ?? AttributeDataType.NotSet;
 
             if (!isMultiValued)
             {
@@ -581,6 +606,8 @@ else
                     result.Add(new AttributeChangeDisplay
                     {
                         AttributeName = group.Key,
+                        AttributeType = attributeType,
+                        IsMultiValued = isMultiValued,
                         DisplayChangeType = "Updated",
                         IsUpdate = true,
                         UnderlyingChangeType = ValueChangeType.Add, // For filtering, treat as Add
@@ -604,6 +631,8 @@ else
                         result.Add(new AttributeChangeDisplay
                         {
                             AttributeName = change.AttributeName,
+                            AttributeType = attributeType,
+                            IsMultiValued = isMultiValued,
                             DisplayChangeType = displayType,
                             IsUpdate = false,
                             UnderlyingChangeType = change.ChangeType,
@@ -621,6 +650,8 @@ else
                     result.Add(new AttributeChangeDisplay
                     {
                         AttributeName = change.AttributeName,
+                        AttributeType = attributeType,
+                        IsMultiValued = isMultiValued,
                         DisplayChangeType = change.ChangeType.ToString(),
                         IsUpdate = false,
                         UnderlyingChangeType = change.ChangeType,
