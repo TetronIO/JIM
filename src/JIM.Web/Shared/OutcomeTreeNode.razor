@@ -5,10 +5,10 @@
 @using JIM.Utilities
 
 <div class="outcome-node">
-    <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
         <MudIcon Icon="@Helpers.GetOutcomeTypeIcon(Outcome.OutcomeType)"
                  Color="@Helpers.GetOutcomeTypeMudBlazorColor(Outcome.OutcomeType)"
-                 Size="Size.Medium" Class="mt-1" />
+                 Size="Size.Medium" />
         <div style="flex: 1; min-width: 0;">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
                 <MudText Typo="Typo.body1" Class="jim-text-emphasis">

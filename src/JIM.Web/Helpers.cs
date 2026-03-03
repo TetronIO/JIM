@@ -564,7 +564,7 @@ public static class Helpers
             // Import outcomes
             ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded => Icons.Material.Filled.AddCircle,
             ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated => Icons.Material.Filled.Edit,
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => Icons.Material.Filled.RemoveCircle,
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => Icons.Material.Filled.Delete,
             ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => Icons.Material.Filled.CheckCircle,
             ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => Icons.Material.Filled.Cancel,
 
