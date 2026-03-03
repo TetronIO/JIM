@@ -1332,6 +1332,7 @@ html[lang] .mud-dialog .mud-paper-outlined {
 /* Attribute change table — transparent background so it inherits from its container */
 .attribute-change-table,
 .attribute-change-table .mud-table-container,
-.attribute-change-table .mud-table-pagination {
-    background: transparent !important;
+.attribute-change-table .mud-table-pagination,
+.attribute-change-table .mud-table-pagination .mud-table-pagination-toolbar {
+    background-color: transparent !important;
 }
