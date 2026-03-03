@@ -3,10 +3,10 @@
 @using JIM.Utilities
 
 <div class="outcome-node">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+    <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2">
         <MudIcon Icon="@Helpers.GetOutcomeTypeIcon(Outcome.OutcomeType)"
                  Color="@Helpers.GetOutcomeTypeMudBlazorColor(Outcome.OutcomeType)"
-                 Size="Size.Medium" />
+                 Size="Size.Medium" Class="mt-1" />
         <div style="flex: 1; min-width: 0;">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
                 <MudText Typo="Typo.body1" Class="jim-text-emphasis">
@@ -27,11 +27,12 @@
                     </MudTooltip>
                 }
             </MudStack>
-            @if (!string.IsNullOrEmpty(GetDescription()))
+            @{
+                var description = GetDescription();
+            }
+            @if (description != null)
             {
-                <MudText Typo="Typo.body1" Class="mud-text-secondary">
-                    @GetDescription()
-                </MudText>
+                @description
             }
             @if (!string.IsNullOrEmpty(Outcome.DetailMessage))
             {
@@ -106,9 +107,10 @@
     }
 
     /// <summary>
-    /// Builds a contextual description based on outcome type and available data.
+    /// Builds a contextual description as a RenderFragment, using MudLink when a target entity link is available.
+    /// Returns null when there's nothing to display.
     /// </summary>
-    private string? GetDescription()
+    private RenderFragment? GetDescription()
     {
         if (string.IsNullOrEmpty(Outcome.TargetEntityDescription))
             return null;
@@ -116,22 +118,45 @@
         return Outcome.OutcomeType switch
         {
             ActivityRunProfileExecutionItemSyncOutcomeType.Projected
-                => $"MVO \"{Outcome.TargetEntityDescription}\" created",
+                => RenderMvoDescription("MVO created: "),
             ActivityRunProfileExecutionItemSyncOutcomeType.Joined
-                => $"to MVO \"{Outcome.TargetEntityDescription}\"",
+                => RenderMvoDescription("to MVO: "),
             ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
-                => $"to MVO \"{Outcome.TargetEntityDescription}\"",
+                => RenderMvoDescription("to MVO: "),
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected
-                => $"from MVO \"{Outcome.TargetEntityDescription}\"",
+                => RenderMvoDescription("from MVO: "),
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
-                => $"MVO \"{Outcome.TargetEntityDescription}\" deleted",
-            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
-                => Outcome.TargetEntityDescription,
-            ActivityRunProfileExecutionItemSyncOutcomeType.Exported
-                => Outcome.TargetEntityDescription,
-            ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned
-                => Outcome.TargetEntityDescription,
-            _ => Outcome.TargetEntityDescription
+                => RenderMvoDescription("MVO deleted: "),
+            // For connected system targets (pending exports, exports), just show the name
+            _ => RenderPlainDescription()
         };
     }
+
+    private RenderFragment RenderMvoDescription(string prefix) => __builder =>
+    {
+        <MudText Typo="Typo.body1" Class="mud-text-secondary">
+            @prefix
+            @if (Outcome.TargetEntityId.HasValue && Outcome.TargetEntityId.Value != Guid.Empty)
+            {
+                <MudLink Href="@GetMvoHref(Outcome.TargetEntityId.Value)">@Outcome.TargetEntityDescription</MudLink>
+            }
+            else
+            {
+                @Outcome.TargetEntityDescription
+            }
+        </MudText>
+    };
+
+    private RenderFragment RenderPlainDescription() => __builder =>
+    {
+        <MudText Typo="Typo.body1" Class="mud-text-secondary">
+            @Outcome.TargetEntityDescription
+        </MudText>
+    };
+
+    /// <summary>
+    /// Builds the MVO href. Since we don't have the type plural name on the outcome,
+    /// we use a search-based redirect path.
+    /// </summary>
+    private static string GetMvoHref(Guid mvoId) => $"/identity/search/{mvoId}";
 }

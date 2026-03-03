@@ -343,15 +343,20 @@ public abstract class SyncTaskProcessorBase
                             ObjectChangeType.DisconnectedOutOfScope => ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope,
                             _ => ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
                         };
-                        // Include MVO info for Joined/Projected/AttributeFlow outcomes
-                        Guid? mvoId = connectedSystemObject.MetaverseObject?.Id;
-                        string? mvoDescription = connectedSystemObject.MetaverseObject?.DisplayName
-                            ?? mvoId?.ToString();
+                        // Include MVO info for outcomes (only store ID if already persisted)
+                        var mvoRef = connectedSystemObject.MetaverseObject;
+                        Guid? mvoId = mvoRef != null && mvoRef.Id != Guid.Empty ? mvoRef.Id : null;
+                        string? mvoDescription = mvoRef?.DisplayName;
+
+                        // Only put detailCount on AttributeFlow/DisconnectedOutOfScope root outcomes, not on Joined/Projected
+                        int? rootDetailCount = outcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
+                            or ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope
+                            ? changeResult.AttributeFlowCount : null;
 
                         var rootOutcome = SyncOutcomeBuilder.AddRootOutcome(runProfileExecutionItem, outcomeType,
                             targetEntityId: mvoId,
                             targetEntityDescription: mvoDescription,
-                            detailCount: changeResult.AttributeFlowCount);
+                            detailCount: rootDetailCount);
 
                         // In Detailed mode, add AttributeFlow child under DisconnectedOutOfScope when attributes were recalled
                         if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
@@ -1022,12 +1027,14 @@ public abstract class SyncTaskProcessorBase
                         _ => ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
                     };
                     var mvo = connectedSystemObject.MetaverseObject;
-                    var mvoDescription = mvo.DisplayName ?? mvo.Id.ToString();
+                    // Only store the MVO ID if it's already persisted (non-empty).
+                    // For newly projected MVOs, the ID is Guid.Empty until batch persistence.
+                    var mvoId = mvo.Id != Guid.Empty ? mvo.Id : (Guid?)null;
+                    var mvoDescription = mvo.DisplayName;
 
                     var rootOutcome = SyncOutcomeBuilder.AddRootOutcome(rpei, outcomeType,
-                        targetEntityId: mvo.Id,
-                        targetEntityDescription: mvoDescription,
-                        detailCount: attributesAdded + attributesRemoved);
+                        targetEntityId: mvoId,
+                        targetEntityDescription: mvoDescription);
 
                     // In Detailed mode, add a separate AttributeFlow child under Projected/Joined
                     if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
