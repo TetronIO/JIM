@@ -757,9 +757,8 @@ public abstract class SyncTaskProcessorBase
         // Evaluate MVO deletion rule based on type configuration
         await ProcessMvoDeletionRuleAsync(mvo, connectedSystemId, remainingCsoCount);
 
-        // Build sync outcomes: Disconnected and CsoDeleted as sibling root outcomes on the single RPEI.
-        // This follows the one-RPEI-per-CSO rule from the outcome graph design — the disconnection
-        // is the primary event, and CSO deletion is a consequential outcome on the same RPEI.
+        // Build sync outcomes: Disconnected as root, CsoDeleted as child (causal chain).
+        // The disconnection is the primary event; CSO deletion is a consequential outcome.
         if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
         {
             var disconnectedRoot = SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem,
@@ -775,7 +774,8 @@ public abstract class SyncTaskProcessorBase
                     detailCount: deletionExecutionItem.AttributeFlowCount);
             }
 
-            SyncOutcomeBuilder.AddRootOutcome(deletionExecutionItem, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+            SyncOutcomeBuilder.AddChildOutcome(deletionExecutionItem, disconnectedRoot,
+                ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
         }
 
         // Return single RPEI with both Disconnected and CsoDeleted outcomes

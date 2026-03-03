@@ -528,8 +528,8 @@ public class CalculateActivitySummaryStatsTests
     [Test]
     public void CalculateActivitySummaryStats_WithOutcomes_SourceDeletion_SingleRpeiWithBothOutcomes()
     {
-        // Arrange - Source deletion produces a single Disconnected RPEI with both
-        // Disconnected and CsoDeleted as sibling root outcomes (one-RPEI-per-CSO rule)
+        // Arrange - Source deletion produces a single Disconnected RPEI with
+        // Disconnected as root and CsoDeleted as child (causal chain)
         var activity = CreateActivity();
         var rpei = new ActivityRunProfileExecutionItem
         {
@@ -541,6 +541,8 @@ public class CalculateActivitySummaryStatsTests
         rpei.SyncOutcomes.Add(disconnectedOutcome);
         var csoDeletedOutcome = CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
         csoDeletedOutcome.ActivityRunProfileExecutionItemId = rpei.Id;
+        csoDeletedOutcome.ParentSyncOutcome = disconnectedOutcome;
+        disconnectedOutcome.Children.Add(csoDeletedOutcome);
         rpei.SyncOutcomes.Add(csoDeletedOutcome);
 
         AddRpeisAndCalculate(activity, rpei);
