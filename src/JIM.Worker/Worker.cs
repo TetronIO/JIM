@@ -752,10 +752,10 @@ public class Worker : BackgroundService
             // Import stats from outcomes
             activity.TotalAdded = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded);
             activity.TotalUpdated = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated);
-            // CsoDeleted: combine outcome-based count (sync-phase actual deletions) with RPEI-based count
-            // for ObjectChangeType.Deleted (import-phase deletion detections that have no CsoDeleted outcome).
-            activity.TotalDeleted = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted)
-                + rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Deleted);
+            // Deletions: CsoDeleted (sync-phase actual deletions) + DeletionDetected (import-phase detection)
+            activity.TotalDeleted = allOutcomes.Count(o => o.OutcomeType is
+                ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted
+                or ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected);
 
             // Sync stats from outcomes
             activity.TotalProjected = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
@@ -770,6 +770,9 @@ public class Worker : BackgroundService
 
             // Pending export stats from outcomes
             activity.TotalPendingExports = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+
+            // Drift correction from outcomes
+            activity.TotalDriftCorrections = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection);
         }
         else
         {
@@ -793,11 +796,12 @@ public class Worker : BackgroundService
             activity.TotalDeprovisioned = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Deprovisioned);
 
             activity.TotalPendingExports = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.PendingExport);
+
+            activity.TotalDriftCorrections = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.DriftCorrection);
         }
 
         // Stats that always come from RPEIs (no outcome type equivalent)
         activity.TotalOutOfScopeRetainJoin = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.OutOfScopeRetainJoin);
-        activity.TotalDriftCorrections = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.DriftCorrection);
         activity.TotalCreated = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Created);
 
         // Errors: any RPEI with an error type set (always per-RPEI, not per-outcome)

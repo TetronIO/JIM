@@ -507,6 +507,7 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded => Color.Success,
             ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated => Color.Info,
             ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => Color.Error,
+            ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected => Color.Warning,
             ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => Color.Success,
             ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => Color.Error,
 
@@ -517,6 +518,7 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => Color.Warning,
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => Color.Warning,
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => Color.Error,
+            ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection => Color.Warning,
 
             // Sync outcomes — outbound
             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => Color.Primary,
@@ -540,6 +542,7 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded => "CSO Added",
             ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated => "CSO Updated",
             ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => "CSO Deleted",
+            ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected => "Deletion Detected",
             ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => "Export Confirmed",
             ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => "Export Failed",
             ActivityRunProfileExecutionItemSyncOutcomeType.Projected => "Projected",
@@ -548,6 +551,7 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => "CSO Disconnected",
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => "Out of Scope",
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => "MVO Deleted",
+            ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection => "Drift Correction",
             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => "Provisioned",
             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => "Pending Export",
             _ => outcomeType.ToString()
@@ -565,6 +569,7 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded => Icons.Material.Filled.AddCircle,
             ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated => Icons.Material.Filled.Edit,
             ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => Icons.Material.Filled.Delete,
+            ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected => Icons.Material.Filled.RemoveCircle,
             ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => Icons.Material.Filled.CheckCircle,
             ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => Icons.Material.Filled.Cancel,
 
@@ -575,6 +580,7 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => Icons.Material.Filled.LinkOff,
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => Icons.Material.Filled.FilterAltOff,
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => Icons.Material.Filled.PersonRemove,
+            ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection => Icons.Material.Filled.CompareArrows,
 
             // Sync outcomes — outbound
             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => Icons.Material.Filled.CloudUpload,

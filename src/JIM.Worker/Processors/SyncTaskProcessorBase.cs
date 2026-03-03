@@ -2645,6 +2645,11 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
             runProfileExecutionItem.ObjectChangeType = ObjectChangeType.DriftCorrection;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                SyncOutcomeBuilder.AddRootOutcome(runProfileExecutionItem,
+                    ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection,
+                    detailCount: result.DriftedAttributes.Count);
         }
 
         span.SetSuccess();

@@ -429,8 +429,7 @@ public class CalculateActivitySummaryStatsTests
     public void CalculateActivitySummaryStats_WithOutcomes_ImportRun_DerivedFromOutcomes()
     {
         // Arrange - When RPEIs have sync outcomes, stats are derived from outcome nodes.
-        // Import deletion RPEIs have ObjectChangeType.Deleted but no CsoDeleted outcome
-        // (CsoDeleted is only recorded during the sync phase when the CSO is actually deleted).
+        // Import deletion RPEIs record a DeletionDetected outcome.
         var activity = CreateActivity();
         AddRpeisAndCalculate(activity,
             CreateRpeiWithOutcomes(ObjectChangeType.Added,
@@ -439,9 +438,10 @@ public class CalculateActivitySummaryStatsTests
                 CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded)),
             CreateRpeiWithOutcomes(ObjectChangeType.Updated,
                 CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated)),
-            CreateRpei(ObjectChangeType.Deleted));  // Import deletion: no outcome, counted from RPEI
+            CreateRpeiWithOutcomes(ObjectChangeType.Deleted,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected)));
 
-        // Assert - Stats derived from outcome nodes + RPEI-based count for import deletions
+        // Assert - Stats derived from outcome nodes
         Assert.That(activity.TotalAdded, Is.EqualTo(2));
         Assert.That(activity.TotalUpdated, Is.EqualTo(1));
         Assert.That(activity.TotalDeleted, Is.EqualTo(1));
@@ -581,7 +581,7 @@ public class CalculateActivitySummaryStatsTests
     [Test]
     public void CalculateActivitySummaryStats_WithOutcomes_RpeiOnlyTypes_StillCountedFromRpeis()
     {
-        // Arrange - OutOfScopeRetainJoin, DriftCorrection, Created have no outcome equivalents
+        // Arrange - OutOfScopeRetainJoin and Created have no outcome equivalents
         // and must always be counted from RPEIs, even when other RPEIs have outcomes
         var activity = CreateActivity();
         AddRpeisAndCalculate(activity,
@@ -590,13 +590,10 @@ public class CalculateActivitySummaryStatsTests
                 CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.Projected)),
             // RPEIs without outcome equivalents
             CreateRpei(ObjectChangeType.OutOfScopeRetainJoin),
-            CreateRpei(ObjectChangeType.DriftCorrection),
-            CreateRpei(ObjectChangeType.DriftCorrection),
             CreateRpei(ObjectChangeType.Created));
 
         // Assert - RPEI-only types always counted from RPEIs
         Assert.That(activity.TotalOutOfScopeRetainJoin, Is.EqualTo(1));
-        Assert.That(activity.TotalDriftCorrections, Is.EqualTo(2));
         Assert.That(activity.TotalCreated, Is.EqualTo(1));
 
         // Assert - Outcome-based type derived from outcomes
@@ -667,6 +664,76 @@ public class CalculateActivitySummaryStatsTests
         Assert.That(activity.TotalDisconnected, Is.EqualTo(3));
         Assert.That(activity.TotalDeleted, Is.EqualTo(0));
         Assert.That(activity.TotalAttributeFlows, Is.EqualTo(0), "Attribute recalls on disconnection are not standalone attribute flows");
+    }
+
+    #endregion
+
+    #region DeletionDetected Outcome
+
+    [Test]
+    public void CalculateActivitySummaryStats_WithOutcomes_DeletionDetected_CountedInTotalDeleted()
+    {
+        // Arrange - Import-phase deletion RPEIs now record a DeletionDetected outcome
+        var activity = CreateActivity();
+        AddRpeisAndCalculate(activity,
+            CreateRpeiWithOutcomes(ObjectChangeType.Deleted,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected)),
+            CreateRpeiWithOutcomes(ObjectChangeType.Deleted,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected)),
+            CreateRpeiWithOutcomes(ObjectChangeType.Deleted,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected)));
+
+        // Assert - DeletionDetected outcomes contribute to TotalDeleted
+        Assert.That(activity.TotalDeleted, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void CalculateActivitySummaryStats_WithOutcomes_CsoDeletedAndDeletionDetected_BothContributeToTotalDeleted()
+    {
+        // Arrange - Sync-phase CsoDeleted and import-phase DeletionDetected both contribute
+        // to TotalDeleted. These never overlap within a single activity (different run profile types)
+        // but test the combined counting logic.
+        var activity = CreateActivity();
+        AddRpeisAndCalculate(activity,
+            CreateRpeiWithOutcomes(ObjectChangeType.Disconnected,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted)),
+            CreateRpeiWithOutcomes(ObjectChangeType.Deleted,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected)));
+
+        // Assert
+        Assert.That(activity.TotalDeleted, Is.EqualTo(2));
+    }
+
+    #endregion
+
+    #region DriftCorrection Outcome
+
+    [Test]
+    public void CalculateActivitySummaryStats_WithOutcomes_DriftCorrection_CountedFromOutcomes()
+    {
+        // Arrange - DriftCorrection RPEIs now record a DriftCorrection outcome
+        var activity = CreateActivity();
+        AddRpeisAndCalculate(activity,
+            CreateRpeiWithOutcomes(ObjectChangeType.DriftCorrection,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection, detailCount: 3)),
+            CreateRpeiWithOutcomes(ObjectChangeType.DriftCorrection,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection, detailCount: 1)));
+
+        // Assert - DriftCorrection outcomes counted
+        Assert.That(activity.TotalDriftCorrections, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void CalculateActivitySummaryStats_LegacyDriftCorrection_CountedFromRpeis()
+    {
+        // Arrange - Legacy DriftCorrection RPEIs without outcomes still counted from RPEIs
+        var activity = CreateActivity();
+        AddRpeisAndCalculate(activity,
+            CreateRpei(ObjectChangeType.DriftCorrection),
+            CreateRpei(ObjectChangeType.DriftCorrection));
+
+        // Assert
+        Assert.That(activity.TotalDriftCorrections, Is.EqualTo(2));
     }
 
     #endregion

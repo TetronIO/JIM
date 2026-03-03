@@ -947,8 +947,7 @@ new("Item Details", href: null, disabled: true)
             _activityRunProfileExecutionItem.ConnectedSystemObjectId.Value);
         }
 
-        // For deletion/disconnection items, load the object type to show concrete deletion rule information
-        if (_activityRunProfileExecutionItem.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected)
+        // Resolve the MVO type for headings and deletion rule display
         {
             // Try to get the MVO type from the CSO's linked MetaverseObject, or from sync rules
             int? mvoTypeId = null;
@@ -986,9 +985,10 @@ new("Item Details", href: null, disabled: true)
             {
                 _metaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeAsync(mvoTypeId.Value, false);
 
-                // If the deletion rule uses authoritative sources, load their names
-                if (_metaverseObjectType?.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
-                && _metaverseObjectType.DeletionTriggerConnectedSystemIds.Count > 0)
+                // For deletion/disconnection items, load authoritative source names for deletion rule display
+                if (_activityRunProfileExecutionItem.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected
+                    && _metaverseObjectType?.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
+                    && _metaverseObjectType.DeletionTriggerConnectedSystemIds.Count > 0)
                 {
                     _deletionTriggerSystems = new List<ConnectedSystemHeader>();
                     foreach (var csId in _metaverseObjectType.DeletionTriggerConnectedSystemIds)
@@ -1166,17 +1166,18 @@ new("Item Details", href: null, disabled: true)
             return GetErrorPhaseTitle();
 
         var typeName = GetObjectTypeName();
+        var mvoTypeName = GetMetaverseObjectTypeName();
 
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations
             ObjectChangeType.Added => $"{typeName} Added to Staging",
             ObjectChangeType.Updated => $"{typeName} Updated",
-            ObjectChangeType.Deleted => IsSyncContext() ? "Source Deletion Processed" : $"Source {typeName} Deletion Detected",
+            ObjectChangeType.Deleted => IsSyncContext() ? "Source Deletion Processed" : $"{typeName} Deletion Detected",
             // Sync operations
             ObjectChangeType.Projected => $"Projected {typeName} to the Metaverse",
-            ObjectChangeType.Joined => "Joined to Metaverse Object",
-            ObjectChangeType.AttributeFlow => "Attributes Flowed",
+            ObjectChangeType.Joined => $"Joined {typeName} to Metaverse {mvoTypeName}",
+            ObjectChangeType.AttributeFlow => $"{typeName} Attributes Flowed to Metaverse {mvoTypeName}",
             ObjectChangeType.Disconnected => $"Disconnected {typeName} from Metaverse",
             // Export operations
             ObjectChangeType.Exported => $"{typeName} Exported",
@@ -1199,6 +1200,14 @@ new("Item Details", href: null, disabled: true)
             return "Object";
 
         return char.ToUpperInvariant(name[0]) + name[1..];
+    }
+
+    /// <summary>
+    /// Returns the Metaverse Object type name (e.g., "User", "Group"), or "Object" as a fallback.
+    /// </summary>
+    private string GetMetaverseObjectTypeName()
+    {
+        return _metaverseObjectType?.Name ?? "Object";
     }
 
     /// <summary>

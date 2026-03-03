@@ -779,8 +779,8 @@
         // Import outcomes
         if (s.TotalCsoAdds > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded, s.TotalCsoAdds);
         if (s.TotalCsoUpdates > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated, s.TotalCsoUpdates);
-        // CsoDeleted outcome only exists on sync-phase RPEIs. For import activities, deletions are
-        // communicated via the ObjectChangeType.Deleted change type filter ("Deletions Detected") only.
+        // Import-phase: DeletionDetected. Sync-phase: CsoDeleted. Show the appropriate type per run type.
+        if (s.TotalCsoDeletes > 0 && IsImportRun()) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected, s.TotalCsoDeletes);
         if (s.TotalCsoDeletes > 0 && IsSyncRun()) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted, s.TotalCsoDeletes);
 
         // Sync outcomes
@@ -789,6 +789,7 @@
         if (s.TotalAttributeFlows > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow, s.TotalAttributeFlows);
         if (s.TotalDisconnections > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected, s.TotalDisconnections);
         if (s.TotalDisconnectedOutOfScope > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope, s.TotalDisconnectedOutOfScope);
+        if (s.TotalDriftCorrections > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection, s.TotalDriftCorrections);
 
         // Outbound sync outcomes
         if (s.TotalPendingExports > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, s.TotalPendingExports);

@@ -577,6 +577,7 @@ public class ActivityRepository : IActivityRepository
         int totalDisconnections, totalDisconnectedOutOfScope;
         int totalExported, totalDeprovisioned;
         int totalPendingExportsFromOutcomes;
+        int totalDriftCorrections;
 
         if (hasOutcomes)
         {
@@ -591,13 +592,10 @@ public class ActivityRepository : IActivityRepository
             // Import stats from outcomes
             outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded, out totalCsoAdds);
             outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated, out totalCsoUpdates);
-            // CsoDeleted: combine outcome-based count (sync-phase actual deletions) with RPEI-based count
-            // for ObjectChangeType.Deleted (import-phase deletion detections that have no CsoDeleted outcome).
-            // These never overlap within a single activity since import and sync are separate run profile types.
+            // Deletions: CsoDeleted (sync-phase actual deletions) + DeletionDetected (import-phase detection)
             outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted, out totalCsoDeletes);
-            totalCsoDeletes += aggregateData
-                .Where(x => x.ObjectChangeType == ObjectChangeType.Deleted)
-                .Sum(x => x.Count);
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected, out var totalDeletionDetected);
+            totalCsoDeletes += totalDeletionDetected;
 
             // Sync stats from outcomes
             outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Projected, out totalProjections);
@@ -612,6 +610,9 @@ public class ActivityRepository : IActivityRepository
 
             // Pending export stats from outcomes
             outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, out totalPendingExportsFromOutcomes);
+
+            // Drift correction from outcomes
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection, out totalDriftCorrections);
         }
         else
         {
@@ -631,11 +632,12 @@ public class ActivityRepository : IActivityRepository
             totalDeprovisioned = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deprovisioned).Sum(x => x.Count);
 
             totalPendingExportsFromOutcomes = 0;
+
+            totalDriftCorrections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.DriftCorrection).Sum(x => x.Count);
         }
 
         // --- Stats that always come from RPEIs (no outcome type equivalent) ---
         var totalOutOfScopeRetainJoin = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.OutOfScopeRetainJoin).Sum(x => x.Count);
-        var totalDriftCorrections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.DriftCorrection).Sum(x => x.Count);
         var totalCreated = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Created).Sum(x => x.Count);
 
         // Pending export stats: use outcome-based count when available, otherwise fall back to RPEI count

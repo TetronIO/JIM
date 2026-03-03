@@ -10,6 +10,7 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     CsoAdded,
     CsoUpdated,
     CsoDeleted,
+    DeletionDetected,
 
     // Import outcomes — confirming import (export confirmation)
     ExportConfirmed,
@@ -22,6 +23,7 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     Disconnected,
     DisconnectedOutOfScope,
     MvoDeleted,
+    DriftCorrection,
 
     // Sync outcomes — outbound (pending export creation during sync)
     Provisioned,

@@ -95,6 +95,7 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     CsoAdded,
     CsoUpdated,
     CsoDeleted,
+    DeletionDetected,
 
     // Import outcomes — confirming import (export confirmation)
     ExportConfirmed,
@@ -107,6 +108,7 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     Disconnected,
     DisconnectedOutOfScope,
     MvoDeleted,
+    DriftCorrection,
 
     // Sync outcomes — outbound (pending export creation during sync)
     Provisioned,
@@ -128,7 +130,8 @@ followed by the outcome nodes as children.
 
 - `{Connected System Name} - {Run Profile Name}:` — connected system and run profile context header (CS name hyperlinks to CS detail page)
 - `CSO {ExternalID} - {DisplayName}` — CSO identity (hyperlink to CSO detail page)
-- `[Outcome]` — outcome type rendered as a coloured MudChip
+- `[Outcome]` — outcome type rendered as a coloured icon + display name
+- `--` — em dash separator between outcome type and inline target description (Projected, Joined, Provisioned show target inline; Joined uses "— to")
 - `Show changes >` / `[show >]` — expand/collapse button with rotating chevron icon
 - MVO names and CS names are hyperlinks to their respective detail pages
 
@@ -139,12 +142,24 @@ HR CSV Source - Full Synchronisation:
 |
 +-- CSO EMP001 - John Smith
     |
-    +-- [Projected] MVO John Smith
+    +-- [Projected] -- John Smith
           |
           +-- [Attribute Flow] 12 attributes [show >]
                 |
-                +-- [Provisioned] AD [show >]
-                +-- [Provisioned] LDAP [show >]
+                +-- [Provisioned] -- AD [show >]
+                +-- [Provisioned] -- LDAP [show >]
+```
+
+**Sync: Employee joined to existing MVO**
+
+```
+HR CSV Source - Delta Synchronisation:
+|
++-- CSO EMP003 - Amelia Sullivan
+    |
+    +-- [Joined] -- to Amelia Sullivan
+          |
+          +-- [Attribute Flow] 8 attributes [show >]
 ```
 
 **Sync: Employee deleted from source**
@@ -154,13 +169,13 @@ HR CSV Source - Delta Synchronisation:
 |
 +-- CSO EMP002 - Jane Doe
     |
-    +-- [Disconnected] from MVO: Jane Doe
+    +-- [CSO Disconnected] from MVO: Jane Doe
           |
           +-- [Attribute Flow] 8 attributes recalled [show >]
           +-- [MVO Deleted] MVO deleted: Jane Doe
                 |
-                +-- [Deprovisioned] AD  [show >]
-                +-- [Deprovisioned] LDAP [show >]
+                +-- [Deprovisioned] AD
+                +-- [Deprovisioned] LDAP
 ```
 
 **Export: Pending exports executed**
@@ -181,6 +196,16 @@ HR CSV Source - Full Import:
 +-- User EMP001 - Joe Bloggs
     |
     +-- [CSO Added] 15 attributes [show >]
+```
+
+**Import: Deletion detected (full import, CSO missing from source)**
+
+```
+HR CSV Source - Full Import:
+|
++-- User EMP002 - Jane Doe
+    |
+    +-- [Deletion Detected]
 ```
 
 ### Synergy with Sync Preview (#288)
@@ -301,10 +326,10 @@ Clicking into an RPEI shows the outcome tree rendered as an indented list or tre
 
 ```
 CSO: EMP001 (HR System)
-  +-- Projected to MVO "John Smith"
-  |     +-- Attribute Flow: 12 attributes to MVO
-  |           +-- Pending Export: AD — new CSO to provision
-  |           +-- Pending Export: LDAP — new CSO to provision
+  +-- [Projected] -- John Smith
+  |     +-- [Attribute Flow] 12 attributes [show >]
+  |           +-- [Provisioned] -- AD
+  |           +-- [Provisioned] -- LDAP
 ```
 
 At **None** tracking level, this page shows only the RPEI's `ObjectChangeType` and existing `ConnectedSystemObjectChange` / `MetaverseObjectChange` detail (current behaviour).
@@ -425,12 +450,12 @@ This section documents the relationship between `ObjectChangeType` (per-RPEI), `
 |---------------|-----------------|----------------|---------------|------------------------|--------------------|--------------------|
 | New CSO staged | `Added` | `CsoAdded` | "Added" | "Added" | "CSO Added" | "Added" |
 | CSO attributes updated | `Updated` | `CsoUpdated` | "Updated" | "Updated" | "CSO Updated" | "Updated" |
-| CSO deletion detected (marked Obsolete) | `Deleted` | *(none)* | "Deletions Detected" | "Deletions Detected" | *(not shown)* | "Deletion Detected" |
+| CSO deletion detected (marked Obsolete) | `Deleted` | `DeletionDetected` | "Deletions Detected" | "Deletions Detected" | "Deletion Detected" | "Deletion Detected" |
 | Pending export confirmed | `PendingExportConfirmed` | `ExportConfirmed` | "Exports Confirmed" | *(N/A)* | "Export Confirmed" | "Pending Export Confirmed" |
 | Pending export retrying | *(error on RPEI)* | *(none)* | "Exports Retrying" | *(N/A)* | *(N/A)* | *(N/A)* |
 | Pending export failed | *(error on RPEI)* | `ExportFailed` | "Exports Failed" | *(N/A)* | "Export Failed" | *(N/A)* |
 
-**Key point — import deletions**: During import, the CSO is only marked `Obsolete` (not actually deleted). No `CsoDeleted` outcome is recorded. The `ObjectChangeType.Deleted` communicates the detection to the admin via change type filter/chip. The actual deletion and `CsoDeleted` outcome occur during the subsequent sync run.
+**Key point — import deletions**: During import, the CSO is only marked `Obsolete` (not actually deleted). A `DeletionDetected` outcome is recorded to show the detection in the outcome tree. The actual deletion and `CsoDeleted` outcome occur during the subsequent sync run.
 
 ### Synchronisation (Full Sync / Delta Sync)
 
@@ -439,9 +464,9 @@ This section documents the relationship between `ObjectChangeType` (per-RPEI), `
 | MVO projected | `Projected` | `Projected` (+ children) | "Projected" | "Projected" | "Projected" | "Projected" |
 | CSO joined to MVO | `Joined` | `Joined` (+ children) | "Joined" | "Joined" | "Joined" | "Joined" |
 | Attributes flowed (no join/project) | `AttributeFlow` | `AttributeFlow` | "Attribute Flow" | "Attribute Flow" | "Attribute Flow" | "Attribute Flow" |
-| CSO disconnected (obsoleted) | `Disconnected` | `Disconnected` + `CsoDeleted` | "Disconnected" / "Deletions Processed" | "Disconnected" / "Deletions Processed" | "Disconnected" / "CSO Deleted" | "Disconnected" |
+| CSO disconnected (obsoleted) | `Disconnected` | `Disconnected` + `CsoDeleted` | "Disconnected" / "Deletions Processed" | "Disconnected" / "Deletions Processed" | "CSO Disconnected" / "CSO Deleted" | "Disconnected" |
 | CSO disconnected (out of scope) | `DisconnectedOutOfScope` | `DisconnectedOutOfScope` | *(via Disconnected)* | "Disconnected Out Of Scope" | "Out of Scope" | "Disconnected Out Of Scope" |
-| Drift detected | `DriftCorrection` | *(none)* | "Drift Correction" | "Drift Correction" | *(N/A)* | "Drift Correction" |
+| Drift detected | `DriftCorrection` | `DriftCorrection` | "Drift Correction" | "Drift Correction" | "Drift Correction" | "Drift Correction" |
 | Pending export created | `PendingExport` | `PendingExportCreated` | "Pending Exports" | "Pending Export" | "Pending Export" | "Pending Export" |
 | No attribute changes | `NoChange` | *(none)* | *(via Unchanged)* | *(filtered separately)* | *(N/A)* | "No Change" |
 
@@ -461,7 +486,9 @@ Statistics can be derived from two sources, with outcomes taking priority:
 1. **Outcome-based** (preferred): When RPEIs have sync outcomes, stats are counted from outcome nodes. This is the primary path for activities created with outcome tracking enabled.
 2. **RPEI-based** (legacy fallback): When no outcomes exist (tracking level = None, or legacy activities), stats are derived from `ObjectChangeType` counts on RPEIs.
 
-**Special case — import deletions**: Since import-phase deletion RPEIs have `ObjectChangeType.Deleted` but no `CsoDeleted` outcome, the `TotalCsoDeletes` stat supplements outcome-based counts with RPEI-based `ObjectChangeType.Deleted` counts. These never overlap within a single activity (import and sync are separate run profile types).
+**Import deletions**: Import-phase deletion RPEIs record a `DeletionDetected` outcome. Sync-phase deletion RPEIs record a `CsoDeleted` outcome. The `TotalDeleted` stat combines both outcome types. These never overlap within a single activity since import and sync are separate run profile types.
+
+**Drift corrections**: When outcomes are available, `TotalDriftCorrections` is derived from `DriftCorrection` outcome nodes. Legacy fallback uses RPEI `ObjectChangeType.DriftCorrection` counts.
 
 ### One-RPEI-per-CSO Rule
 
