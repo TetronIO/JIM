@@ -50,33 +50,34 @@ else
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             <MudIcon Icon="@Icons.Material.Filled.Description"
                                      Color="Color.Default" Size="Size.Medium" />
-                            <div>
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
-                                    @if (!string.IsNullOrEmpty(CsoObjectTypeName))
+                            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
+                                @if (!string.IsNullOrEmpty(CsoObjectTypeName))
+                                {
+                                    <MudChip T="string" Color="Color.Default" Size="Size.Medium"
+                                             Style="margin: 0;">
+                                        @CsoObjectTypeName
+                                    </MudChip>
+                                }
+                                @if (!string.IsNullOrEmpty(CsoExternalId))
+                                {
+                                    @if (CsoId.HasValue && CsoConnectedSystemId.HasValue)
                                     {
-                                        <MudChip T="string" Color="Color.Default" Size="Size.Medium">
-                                            @CsoObjectTypeName
-                                        </MudChip>
+                                        <MudLink Href="@Utilities.GetConnectedSystemObjectHref(CsoConnectedSystemId.Value, CsoId.Value)"
+                                                 Typo="Typo.body1" Class="jim-text-code">
+                                            @CsoExternalId
+                                        </MudLink>
                                     }
-                                    @if (!string.IsNullOrEmpty(CsoExternalId))
+                                    else
                                     {
-                                        @if (CsoId.HasValue && CsoConnectedSystemId.HasValue)
-                                        {
-                                            <MudLink Href="@Utilities.GetConnectedSystemObjectHref(CsoConnectedSystemId.Value, CsoId.Value)"
-                                                     Typo="Typo.body1" Class="jim-text-code">
-                                                @CsoExternalId
-                                            </MudLink>
-                                        }
-                                        else
-                                        {
-                                            <MudText Typo="Typo.body1" Class="jim-text-code">@CsoExternalId</MudText>
-                                        }
+                                        <MudText Typo="Typo.body1" Class="jim-text-code"
+                                                 Style="margin: 0;">@CsoExternalId</MudText>
                                     }
-                                    @if (!string.IsNullOrEmpty(CsoDisplayName) && CsoDisplayName != CsoExternalId)
-                                    {
-                                        <MudText Class="mud-text-secondary">— @CsoDisplayName</MudText>
-                                    }
-                                </MudStack>
+                                }
+                                @if (!string.IsNullOrEmpty(CsoDisplayName) && CsoDisplayName != CsoExternalId)
+                                {
+                                    <MudText Typo="Typo.body1" Class="mud-text-secondary"
+                                             Style="margin: 0;">— @CsoDisplayName</MudText>
+                                }
                             </div>
                         </MudStack>
 
