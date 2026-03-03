@@ -1299,8 +1299,8 @@ html[lang] .mud-dialog .mud-paper-outlined {
 }
 
 .outcome-children {
-    margin-left: 20px;
-    padding-left: 20px;
+    margin-left: 11px;
+    padding-left: 24px;
     border-left: 2px solid var(--mud-palette-lines-default);
 }
 
@@ -1312,9 +1312,9 @@ html[lang] .mud-dialog .mud-paper-outlined {
 .outcome-children > .outcome-node::before {
     content: '';
     position: absolute;
-    left: -20px;
+    left: -24px;
     top: 20px;
-    width: 16px;
+    width: 20px;
     border-top: 2px solid var(--mud-palette-lines-default);
 }
 
@@ -1322,7 +1322,7 @@ html[lang] .mud-dialog .mud-paper-outlined {
 .outcome-children > .outcome-node:last-child::after {
     content: '';
     position: absolute;
-    left: -22px;
+    left: -26px;
     top: 20px;
     bottom: 0;
     width: 4px;
@@ -1332,8 +1332,8 @@ html[lang] .mud-dialog .mud-paper-outlined {
 /* Continue the branch line alongside the expanded attribute table
    when the node has children below it. Aligns with .outcome-children border. */
 .outcome-table-continuation {
-    margin-left: 20px;
-    padding-left: 20px;
+    margin-left: 11px;
+    padding-left: 24px;
     border-left: 2px solid var(--mud-palette-lines-default);
 }
 
