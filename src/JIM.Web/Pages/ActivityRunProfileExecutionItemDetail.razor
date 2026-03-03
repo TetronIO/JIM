@@ -484,6 +484,19 @@
         @if (_activityRunProfileExecutionItem.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected)
         {
             <MudText Typo="Typo.h6" Class="mb-3">Metaverse Impact</MudText>
+
+            @if (!IsSyncContext() && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
+            {
+                @* Import context: deletion detected but not yet processed by sync *@
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-3">
+                    <MudText Typo="Typo.body1">
+                        The connected system object has been detected as deleted from the source system and marked for removal.
+                        When a Full Synchronisation or Delta Synchronisation run profile is executed, JIM will disconnect
+                        this object from the metaverse and evaluate the deletion rule for its object type.
+                    </MudText>
+                </MudAlert>
+            }
+
             @if (_metaverseObjectType != null)
             {
                 @* Show concrete deletion rule based on object type configuration *@
@@ -582,12 +595,26 @@
 else
                         {
                             @* Fallback generic message when object type info not available *@
-                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
-                                <MudText Typo="Typo.body1">
-                                    When a connected system object is deleted from the source system, JIM disconnects it from
-                                    the metaverse. The metaverse object deletion rule for this object type determines what happens next.
-                                </MudText>
-                            </MudAlert>
+                            @if (!IsSyncContext() && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
+                            {
+                                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+                                    <MudText Typo="Typo.body1">
+                                        The connected system object has been detected as deleted from the source system and marked for removal.
+                                        When a Full Synchronisation or Delta Synchronisation run profile is executed, JIM will disconnect
+                                        this object from the metaverse. The metaverse object deletion rule for this object type determines
+                                        what happens next.
+                                    </MudText>
+                                </MudAlert>
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+                                    <MudText Typo="Typo.body1">
+                                        When a connected system object is deleted from the source system, JIM disconnects it from
+                                        the metaverse. The metaverse object deletion rule for this object type determines what happens next.
+                                    </MudText>
+                                </MudAlert>
+                            }
                         }
                     }
 
@@ -1127,7 +1154,7 @@ new("Item Details", href: null, disabled: true)
             // Import operations
             ObjectChangeType.Added => "Object Added to Staging",
             ObjectChangeType.Updated => "Object Updated",
-            ObjectChangeType.Deleted => IsSyncContext() ? "Source Deletion Processed" : "Source Deletion Detected",
+            ObjectChangeType.Deleted => IsSyncContext() ? "Source Deletion Processed" : "Source Object Deletion Detected",
             // Sync operations
             ObjectChangeType.Projected => "Projected New Metaverse Object",
             ObjectChangeType.Joined => "Joined to Metaverse Object",

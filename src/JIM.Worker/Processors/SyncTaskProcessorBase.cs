@@ -1197,13 +1197,29 @@ public abstract class SyncTaskProcessorBase
                 _pendingExportsToCreate.AddRange(result.PendingExports);
             }
 
-            // Attach export evaluation outcomes to the originating RPEI (Detailed mode only)
+            // Attach export evaluation outcomes to the originating RPEI (Detailed mode only).
+            // Causal tree structure:
+            //   Root (Projected/Joined/AttributeFlow)
+            //     └── AttributeFlow (if present — MVO fully formed)
+            //           ├── Provisioned → CS A (new CSO created)
+            //           │     └── Pending Export → CS A
+            //           ├── Provisioned → CS B (new CSO created)
+            //           │     └── Pending Export → CS B
+            //           └── Pending Export → CS C (update to existing CSO, no Provisioned parent)
             if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
                 && _mvoIdToRpei.TryGetValue(mvo.Id, out var originatingRpei))
             {
-                // Find a suitable parent outcome (first root outcome on the RPEI)
-                var parentOutcome = originatingRpei.SyncOutcomes.FirstOrDefault(o =>
+                // Prefer the AttributeFlow child as parent (MVO is fully formed after attribute flow),
+                // fall back to root outcome, fall back to creating outcomes at root level.
+                var rootOutcome = originatingRpei.SyncOutcomes.FirstOrDefault(o =>
                     o.ParentSyncOutcome == null && o.ParentSyncOutcomeId == null);
+                var attributeFlowChild = originatingRpei.SyncOutcomes.FirstOrDefault(o =>
+                    o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
+                    && o.ParentSyncOutcome != null);
+                var exportParent = attributeFlowChild ?? rootOutcome;
+
+                // Track Provisioned outcomes by CS ID so we can nest Pending Exports under them
+                var provisionedByCs = new Dictionary<int, ActivityRunProfileExecutionItemSyncOutcome>();
 
                 foreach (var provisioningCso in result.ProvisioningCsosToCreate)
                 {
@@ -1212,27 +1228,41 @@ public abstract class SyncTaskProcessorBase
                         ? provisioningCso.ConnectedSystemId.ToString()
                         : null;
 
-                    if (parentOutcome != null)
+                    ActivityRunProfileExecutionItemSyncOutcome provisionedOutcome;
+                    if (exportParent != null)
                     {
-                        SyncOutcomeBuilder.AddChildOutcome(originatingRpei, parentOutcome,
+                        provisionedOutcome = SyncOutcomeBuilder.AddChildOutcome(originatingRpei, exportParent,
                             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
                             targetEntityDescription: provisioningCso.ConnectedSystem?.Name,
                             detailMessage: csIdString);
                     }
                     else
                     {
-                        SyncOutcomeBuilder.AddRootOutcome(originatingRpei,
+                        provisionedOutcome = SyncOutcomeBuilder.AddRootOutcome(originatingRpei,
                             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
                             targetEntityDescription: provisioningCso.ConnectedSystem?.Name,
                             detailMessage: csIdString);
                     }
+
+                    provisionedByCs[provisioningCso.ConnectedSystemId] = provisionedOutcome;
                 }
 
                 foreach (var pendingExport in result.PendingExports)
                 {
-                    if (parentOutcome != null)
+                    var peCsId = pendingExport.ConnectedSystemObject?.ConnectedSystemId ?? 0;
+
+                    // If this PE matches a Provisioned CSO, nest it under the Provisioned node
+                    if (peCsId > 0 && provisionedByCs.TryGetValue(peCsId, out var provisionedParent))
                     {
-                        SyncOutcomeBuilder.AddChildOutcome(originatingRpei, parentOutcome,
+                        SyncOutcomeBuilder.AddChildOutcome(originatingRpei, provisionedParent,
+                            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            targetEntityId: pendingExport.Id,
+                            targetEntityDescription: pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name);
+                    }
+                    else if (exportParent != null)
+                    {
+                        // Update to existing CSO — attach under AttributeFlow or root
+                        SyncOutcomeBuilder.AddChildOutcome(originatingRpei, exportParent,
                             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
                             targetEntityId: pendingExport.Id,
                             targetEntityDescription: pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name);
