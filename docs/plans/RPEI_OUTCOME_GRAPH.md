@@ -120,49 +120,71 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
 
 ### Example Outcome Trees
 
+These diagrams represent the visual structure of the Causality Tree as rendered on the
+RPEI detail page. Each tree starts with the connected system context and CSO identity,
+followed by the outcome nodes as children.
+
+**Visual conventions:**
+
+- `{Connected System Name}:` — connected system context header (hyperlink to CS detail page)
+- `CSO {ExternalID} - {DisplayName}` — CSO identity (hyperlink to CSO detail page)
+- `[Outcome]` — outcome type rendered as a coloured MudChip
+- `Show changes >` / `[show >]` — expand/collapse button with rotating chevron icon
+- MVO names and CS names are hyperlinks to their respective detail pages
+
 **Sync: New employee imported and provisioned**
 
 ```
-RPEI: CSO "EMP001" (HR System)
-  |
-  +-- [Projected] MVO "John Smith" created
-        |
-        +-- [AttributeFlow] 12 attributes flowed to MVO
-              |
-              +-- [PendingExportCreated] AD — new CSO to provision
-              +-- [PendingExportCreated] LDAP — new CSO to provision
+HR CSV Source:
+|
++-- CSO EMP001 - John Smith
+    |
+    +-- [Projected] MVO John Smith created
+          |
+          +-- [Attribute Flow] 12 attributes
+                | Show changes >
+                |
+                +-- [Pending Export Created] AD — new CSO to provision [show >]
+                +-- [Pending Export Created] LDAP — new CSO to provision [show >]
 ```
 
 **Sync: Employee deleted from source**
 
 ```
-RPEI: CSO "EMP002" (HR System)
-  |
-  +-- [Disconnected] CSO disconnected from MVO "Jane Doe"
-        |
-        +-- [AttributeFlow] 8 attributes recalled from MVO
-        +-- [MvoDeleted] MVO deleted (last connector rule)
-              |
-              +-- [PendingExportCreated] AD — CSO to deprovision
-              +-- [PendingExportCreated] LDAP — CSO to deprovision
+HR CSV Source:
+|
++-- CSO EMP002 - Jane Doe
+    |
+    +-- [Disconnected] from MVO: Jane Doe
+          |
+          +-- [Attribute Flow] 8 attributes recalled
+                | Show changes >
+          +-- [MVO Deleted] MVO deleted: Jane Doe
+                |
+                +-- [Pending Export Created] AD — CSO to deprovision [show >]
+                +-- [Pending Export Created] LDAP — CSO to deprovision [show >]
 ```
 
 **Export: Pending exports executed**
 
 ```
-RPEI: CSO "CN=jsmith,OU=Staff,DC=ad,DC=local" (Active Directory)
-  |
-  +-- [Exported] CSO created in AD, 8 attributes written
+Active Directory:
+|
++-- CSO CN=jsmith,OU=Staff,DC=ad,DC=local
+    |
+    +-- [Exported] CSO created, 8 attributes written
 ```
 
 **Import: New objects from source**
 
 ```
-RPEI: CSO "EMP001" (HR System)
-  |
-  +-- [CsoAdded] CSO created in staging
-        |
-        +-- [CsoUpdated] 15 attributes set
+HR CSV Source:
+|
++-- CSO EMP001
+    |
+    +-- [CSO Added] CSO created in staging
+          |
+          +-- [CSO Updated] 15 attributes set
 ```
 
 ### Synergy with Sync Preview (#288)

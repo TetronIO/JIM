@@ -1183,12 +1183,14 @@ public abstract class SyncTaskProcessorBase
                     {
                         SyncOutcomeBuilder.AddChildOutcome(originatingRpei, parentOutcome,
                             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            targetEntityId: pendingExport.Id,
                             targetEntityDescription: pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name);
                     }
                     else
                     {
                         SyncOutcomeBuilder.AddRootOutcome(originatingRpei,
                             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            targetEntityId: pendingExport.Id,
                             targetEntityDescription: pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name);
                     }
                 }
@@ -1203,10 +1205,12 @@ public abstract class SyncTaskProcessorBase
                         ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
                 }
 
-                foreach (var _ in result.PendingExports)
+                foreach (var pe in result.PendingExports)
                 {
                     SyncOutcomeBuilder.AddRootOutcome(standardRpei,
-                        ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+                        ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                        targetEntityId: pe.Id,
+                        targetEntityDescription: pe.ConnectedSystemObject?.ConnectedSystem?.Name);
                 }
             }
         }
