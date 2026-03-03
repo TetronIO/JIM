@@ -49,56 +49,57 @@
                 </MudText>
             }
 
-            @* Expandable attribute change detail for CsoAdded, CsoUpdated, and AttributeFlow nodes *@
-            @if (_expanded && IsAttributeFlowWithChanges)
-            {
-                <div class="mt-2">
-                    <AttributeChangeTable AttributeChanges="AttributeChanges!" />
-                </div>
-            }
-
-            @* Expandable attribute detail for PendingExportCreated nodes *@
-            @if (_expanded && IsPendingExportExpandable)
-            {
-                <div class="mt-2">
-                    @if (_pendingExportLoading)
-                    {
-                        <MudProgressLinear Indeterminate="true" />
-                    }
-                    else if (_pendingExport != null && _pendingExport.AttributeValueChanges.Count > 0)
-                    {
-                        <MudSimpleTable Dense="true" Hover="true" Elevation="0" Style="background: transparent;">
-                            <tbody>
-                                @foreach (var change in _pendingExport.AttributeValueChanges.OrderBy(c => c.Attribute.Name))
-                                {
-                                    <tr>
-                                        <td style="padding: 4px 12px 4px 0; border: none; vertical-align: top; white-space: nowrap;">
-                                            <MudText Class="mud-text-secondary">@change.Attribute.Name</MudText>
-                                        </td>
-                                        <td style="padding: 4px 8px 4px 0; border: none; vertical-align: top; white-space: nowrap;">
-                                            <MudChip T="string" Variant="Variant.Text"
-                                                     Color="@GetPendingExportChangeColor(change.ChangeType)"
-                                                     Size="Size.Small" Class="ml-0">
-                                                @change.ChangeType
-                                            </MudChip>
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </MudSimpleTable>
-                    }
-                    else if (_pendingExport != null)
-                    {
-                        <MudText Class="mud-text-secondary">No attribute changes.</MudText>
-                    }
-                    else
-                    {
-                        <MudText Class="mud-text-secondary">Pending export detail not available.</MudText>
-                    }
-                </div>
-            }
         </div>
     </MudStack>
+
+    @* Expandable attribute change detail for CsoAdded, CsoUpdated, and AttributeFlow nodes *@
+    @if (_expanded && IsAttributeFlowWithChanges)
+    {
+        <div class="mt-2">
+            <AttributeChangeTable AttributeChanges="AttributeChanges!" />
+        </div>
+    }
+
+    @* Expandable attribute detail for PendingExportCreated nodes *@
+    @if (_expanded && IsPendingExportExpandable)
+    {
+        <div class="mt-2">
+            @if (_pendingExportLoading)
+            {
+                <MudProgressLinear Indeterminate="true" />
+            }
+            else if (_pendingExport != null && _pendingExport.AttributeValueChanges.Count > 0)
+            {
+                <MudSimpleTable Dense="true" Hover="true" Elevation="0" Style="background: transparent;">
+                    <tbody>
+                        @foreach (var change in _pendingExport.AttributeValueChanges.OrderBy(c => c.Attribute.Name))
+                        {
+                            <tr>
+                                <td style="padding: 4px 12px 4px 0; border: none; vertical-align: top; white-space: nowrap;">
+                                    <MudText Class="mud-text-secondary">@change.Attribute.Name</MudText>
+                                </td>
+                                <td style="padding: 4px 8px 4px 0; border: none; vertical-align: top; white-space: nowrap;">
+                                    <MudChip T="string" Variant="Variant.Text"
+                                             Color="@GetPendingExportChangeColor(change.ChangeType)"
+                                             Size="Size.Small" Class="ml-0">
+                                        @change.ChangeType
+                                    </MudChip>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+            else if (_pendingExport != null)
+            {
+                <MudText Class="mud-text-secondary">No attribute changes.</MudText>
+            }
+            else
+            {
+                <MudText Class="mud-text-secondary">Pending export detail not available.</MudText>
+            }
+        </div>
+    }
 
     @if (Outcome.Children.Count > 0)
     {
