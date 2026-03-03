@@ -17,9 +17,9 @@
                 @if (HasInlineTargetDescription)
                 {
                     @* Inline target entity shown on the same row as the outcome type (e.g., Projected → MVO name, Provisioned → CS name) *@
+                    <MudText Typo="Typo.body1" Class="mud-text-secondary">@GetInlineSeparator()</MudText>
                     @if (IsProvisionedWithCsLink)
                     {
-                        <MudText Typo="Typo.body1" Class="mud-text-secondary">&mdash;</MudText>
                         <MudLink Href="@GetProvisionedCsHref()" Typo="Typo.body1" Class="mud-text-secondary">
                             @Outcome.TargetEntityDescription
                         </MudLink>
@@ -188,6 +188,7 @@
     private bool HasInlineTargetDescription =>
         !string.IsNullOrEmpty(Outcome.TargetEntityDescription)
         && Outcome.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
+            or ActivityRunProfileExecutionItemSyncOutcomeType.Joined
             or ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned;
 
     /// <summary>
@@ -204,6 +205,11 @@
     /// </summary>
     private bool HasMvoLink =>
         Outcome.TargetEntityId.HasValue && Outcome.TargetEntityId.Value != Guid.Empty;
+
+    private string GetInlineSeparator() =>
+        Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined
+            ? "\u2014 to"
+            : "\u2014";
 
     private void ToggleExpand()
     {
@@ -224,7 +230,7 @@
     /// <summary>
     /// Builds a contextual description as a RenderFragment, using MudLink when a target entity link is available.
     /// Returns null when there's nothing to display.
-    /// Outcome types rendered inline on the title row (Projected, Provisioned) are excluded here.
+    /// Outcome types rendered inline on the title row (Projected, Joined, Provisioned) are excluded here.
     /// </summary>
     private RenderFragment? GetDescription()
     {
@@ -233,13 +239,12 @@
 
         return Outcome.OutcomeType switch
         {
-            // Projected and Provisioned show their target inline on the title row
+            // Projected, Joined, and Provisioned show their target inline on the title row
             ActivityRunProfileExecutionItemSyncOutcomeType.Projected => null,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => null,
             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => null,
             // AttributeFlow child nodes don't need a separate MVO description line
             ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => null,
-            ActivityRunProfileExecutionItemSyncOutcomeType.Joined
-                => RenderMvoDescription("to MVO: "),
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected
                 => RenderMvoDescription("from MVO: "),
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
