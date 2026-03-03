@@ -1318,8 +1318,9 @@ html[lang] .mud-dialog .mud-paper-outlined {
     border-top: 2px solid var(--mud-palette-lines-default);
 }
 
-/* Hide the vertical line below the last child's connector stub */
-.outcome-children > .outcome-node:last-child::after {
+/* Hide the vertical line below the last child's connector stub,
+   but only when the node has no nested children (which need the line to continue). */
+.outcome-children > .outcome-node:last-child:not(:has(> .outcome-children))::after {
     content: '';
     position: absolute;
     left: -22px;
