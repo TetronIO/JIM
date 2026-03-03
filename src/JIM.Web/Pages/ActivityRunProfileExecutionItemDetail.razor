@@ -1164,24 +1164,40 @@ new("Item Details", href: null, disabled: true)
         if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
             return GetErrorPhaseTitle();
 
+        var typeName = GetObjectTypeName();
+
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations
-            ObjectChangeType.Added => "Object Added to Staging",
-            ObjectChangeType.Updated => "Object Updated",
-            ObjectChangeType.Deleted => IsSyncContext() ? "Source Deletion Processed" : "Source Object Deletion Detected",
+            ObjectChangeType.Added => $"{typeName} Added to Staging",
+            ObjectChangeType.Updated => $"{typeName} Updated",
+            ObjectChangeType.Deleted => IsSyncContext() ? "Source Deletion Processed" : $"Source {typeName} Deletion Detected",
             // Sync operations
-            ObjectChangeType.Projected => "Projected New Metaverse Object",
+            ObjectChangeType.Projected => $"Projected {typeName} to the Metaverse",
             ObjectChangeType.Joined => "Joined to Metaverse Object",
             ObjectChangeType.AttributeFlow => "Attributes Flowed",
             ObjectChangeType.Disconnected => "Disconnected from Metaverse",
             // Export operations
-            ObjectChangeType.Exported => "Object Exported",
-            ObjectChangeType.Deprovisioned => "Object Deprovisioned",
+            ObjectChangeType.Exported => $"{typeName} Exported",
+            ObjectChangeType.Deprovisioned => $"{typeName} Deprovisioned",
             // Other
             ObjectChangeType.NoChange => "No Changes",
             _ => "Synchronisation Complete"
         };
+    }
+
+    /// <summary>
+    /// Returns the CSO object type name with the first letter capitalised, or "Object" as a fallback.
+    /// </summary>
+    private string GetObjectTypeName()
+    {
+        var name = _activityRunProfileExecutionItem?.ConnectedSystemObject?.Type?.Name
+                   ?? _activityRunProfileExecutionItem?.ObjectTypeSnapshot;
+
+        if (string.IsNullOrEmpty(name))
+            return "Object";
+
+        return char.ToUpperInvariant(name[0]) + name[1..];
     }
 
     /// <summary>

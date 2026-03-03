@@ -1329,6 +1329,18 @@ html[lang] .mud-dialog .mud-paper-outlined {
     background: var(--mud-palette-surface);
 }
 
+/* Collapse cumulative bottom padding from deeply nested last children
+   so the tree's bottom spacing matches the top. */
+.outcome-tree > .outcome-node:last-child,
+.outcome-children > .outcome-node:last-child {
+    padding-bottom: 0;
+}
+
+.outcome-children:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
 /* Attribute change table — transparent background so it inherits from its container.
    The theme (navy-o5-dark) sets background-color on pagination/footer/empty-row with
    html[lang] .mud-paper .mud-table specificity, so we must match it. */
