@@ -182,8 +182,23 @@
                                 <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
                             </MudStack>
                         }
+                        else if (!IsSyncContext() && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
+                        {
+                            @* Import context: CSO detected as deleted but not yet removed *@
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudTooltip
+                                    Text="This object has been detected as deleted from the source system and is pending removal during the next synchronisation."
+                                    Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Color="Color.Warning" Icon="@Icons.Material.Filled.Schedule">
+                                        Pending Removal
+                                    </MudChip>
+                                </MudTooltip>
+                                <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
+                            </MudStack>
+                        }
                         else
                         {
+                            @* Sync context or disconnected: CSO has been deleted *@
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                 <MudTooltip
                                     Text="This object has been deleted. The external ID shown is preserved from when this operation was recorded."
@@ -1216,7 +1231,10 @@ new("Item Details", href: null, disabled: true)
             if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
                 return "External ID (from source data)";
 
-            // If no error but no CSO, it was deleted
+            // If no error but no CSO — differentiate import (pending removal) vs sync (deleted)
+            if (!IsSyncContext() && _activityRunProfileExecutionItem?.ObjectChangeType == ObjectChangeType.Deleted)
+                return "External ID (Pending Removal)";
+
             return "External ID (Deleted)";
         }
 
