@@ -241,7 +241,7 @@
                              CsoDisplayName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.DisplayNameOrId ?? _activityRunProfileExecutionItem.DisplayNameSnapshot)"
                              CsoObjectTypeName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.Type?.Name ?? _activityRunProfileExecutionItem.ObjectTypeSnapshot)"
                              CsoId="@_activityRunProfileExecutionItem.ConnectedSystemObjectId"
-                             CsoConnectedSystemId="@_activityRunProfileExecutionItem.ConnectedSystemObject?.ConnectedSystemId" />
+                             CsoConnectedSystemId="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.ConnectedSystemId ?? _connectedSystemHeader?.Id)" />
             </MudPaper>
         }
 
@@ -926,7 +926,8 @@ new("Item Details", href: null, disabled: true)
 };
         _externalIdAttributeValue = _activityRunProfileExecutionItem.GetExternalIdAttributeValue();
 
-        var connectedSystemId = _activityRunProfileExecutionItem.GetConnectedSystemId();
+        var connectedSystemId = _activityRunProfileExecutionItem.GetConnectedSystemId()
+                                ?? _activity?.ConnectedSystemId;
         if (connectedSystemId != null)
             _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(connectedSystemId.Value);
 
