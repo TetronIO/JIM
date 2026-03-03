@@ -19,6 +19,7 @@
                     @* Inline target entity shown on the same row as the outcome type (e.g., Projected → MVO name, Provisioned → CS name) *@
                     @if (IsProvisionedWithCsLink)
                     {
+                        <MudText Typo="Typo.body1" Class="mud-text-secondary">&mdash;</MudText>
                         <MudLink Href="@GetProvisionedCsHref()" Typo="Typo.body1" Class="mud-text-secondary">
                             @Outcome.TargetEntityDescription
                         </MudLink>

@@ -1227,6 +1227,15 @@ public abstract class SyncTaskProcessorBase
                 // Track Provisioned outcomes by CS ID so we can nest Pending Exports under them
                 var provisionedByCs = new Dictionary<int, ActivityRunProfileExecutionItemSyncOutcome>();
 
+                // Build CS ID → name lookup from the export evaluation cache (the provisioning CSO
+                // intentionally does not have the ConnectedSystem nav property loaded).
+                var csNameLookup = _exportEvaluationCache?.ExportRulesByMvoTypeId.Values
+                    .SelectMany(rules => rules)
+                    .Where(sr => sr.ConnectedSystem != null)
+                    .GroupBy(sr => sr.ConnectedSystemId)
+                    .ToDictionary(g => g.Key, g => g.First().ConnectedSystem.Name)
+                    ?? new Dictionary<int, string>();
+
                 foreach (var provisioningCso in result.ProvisioningCsosToCreate)
                 {
                     // Store CS integer ID in DetailMessage for hyperlinking in the UI
@@ -1234,19 +1243,21 @@ public abstract class SyncTaskProcessorBase
                         ? provisioningCso.ConnectedSystemId.ToString()
                         : null;
 
+                    csNameLookup.TryGetValue(provisioningCso.ConnectedSystemId, out var csName);
+
                     ActivityRunProfileExecutionItemSyncOutcome provisionedOutcome;
                     if (exportParent != null)
                     {
                         provisionedOutcome = SyncOutcomeBuilder.AddChildOutcome(originatingRpei, exportParent,
                             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
-                            targetEntityDescription: provisioningCso.ConnectedSystem?.Name,
+                            targetEntityDescription: csName,
                             detailMessage: csIdString);
                     }
                     else
                     {
                         provisionedOutcome = SyncOutcomeBuilder.AddRootOutcome(originatingRpei,
                             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
-                            targetEntityDescription: provisioningCso.ConnectedSystem?.Name,
+                            targetEntityDescription: csName,
                             detailMessage: csIdString);
                     }
 
