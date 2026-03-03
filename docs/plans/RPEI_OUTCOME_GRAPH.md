@@ -126,7 +126,7 @@ followed by the outcome nodes as children.
 
 **Visual conventions:**
 
-- `{Connected System Name}:` — connected system context header (hyperlink to CS detail page)
+- `{Connected System Name} - {Run Profile Name}:` — connected system and run profile context header (CS name hyperlinks to CS detail page)
 - `CSO {ExternalID} - {DisplayName}` — CSO identity (hyperlink to CSO detail page)
 - `[Outcome]` — outcome type rendered as a coloured MudChip
 - `Show changes >` / `[show >]` — expand/collapse button with rotating chevron icon
@@ -135,7 +135,7 @@ followed by the outcome nodes as children.
 **Sync: New employee imported and provisioned**
 
 ```
-HR CSV Source:
+HR CSV Source - Full Synchronisation:
 |
 +-- CSO EMP001 - John Smith
     |
@@ -151,7 +151,7 @@ HR CSV Source:
 **Sync: Employee deleted from source**
 
 ```
-HR CSV Source:
+HR CSV Source - Delta Synchronisation:
 |
 +-- CSO EMP002 - Jane Doe
     |
@@ -168,7 +168,7 @@ HR CSV Source:
 **Export: Pending exports executed**
 
 ```
-Active Directory:
+Active Directory - Export:
 |
 +-- CSO CN=jsmith,OU=Staff,DC=ad,DC=local
     |
@@ -178,7 +178,7 @@ Active Directory:
 **Import: New objects from source**
 
 ```
-HR CSV Source:
+HR CSV Source - Full Import:
 |
 +-- CSO EMP001
     |

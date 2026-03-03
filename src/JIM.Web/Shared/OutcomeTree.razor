@@ -21,19 +21,27 @@ else
                     <MudIcon Icon="@Icons.Material.Filled.Storage"
                              Color="Color.Default" Size="Size.Medium" />
                     <div>
-                        @if (ConnectedSystemId.HasValue)
-                        {
-                            <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId.Value}")"
-                                     Typo="Typo.body1" Class="jim-text-emphasis">
-                                @ConnectedSystemName
-                            </MudLink>
-                        }
-                        else
-                        {
-                            <MudText Typo="Typo.body1" Class="jim-text-emphasis">
-                                @ConnectedSystemName
-                            </MudText>
-                        }
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            @if (ConnectedSystemId.HasValue)
+                            {
+                                <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId.Value}")"
+                                         Typo="Typo.body1" Class="jim-text-emphasis">
+                                    @ConnectedSystemName
+                                </MudLink>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body1" Class="jim-text-emphasis">
+                                    @ConnectedSystemName
+                                </MudText>
+                            }
+                            @if (!string.IsNullOrEmpty(RunProfileName))
+                            {
+                                <MudText Typo="Typo.body1" Class="mud-text-secondary">
+                                    — @RunProfileName
+                                </MudText>
+                            }
+                        </MudStack>
                     </div>
                 </MudStack>
 
@@ -120,6 +128,13 @@ else
     /// </summary>
     [Parameter]
     public string? ConnectedSystemName { get; set; }
+
+    /// <summary>
+    /// Name of the run profile that was executed (e.g., "Full Import", "Full Synchronisation").
+    /// Displayed alongside the connected system name.
+    /// </summary>
+    [Parameter]
+    public string? RunProfileName { get; set; }
 
     /// <summary>
     /// ID of the connected system, for generating the link.

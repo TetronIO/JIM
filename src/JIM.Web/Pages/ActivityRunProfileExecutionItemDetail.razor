@@ -220,6 +220,7 @@
                              OnLoadPendingExport="LoadPendingExportAsync"
                              ConnectedSystemName="@_connectedSystemHeader?.Name"
                              ConnectedSystemId="@_connectedSystemHeader?.Id"
+                             RunProfileName="@_activity?.TargetName"
                              CsoExternalId="@(_externalIdAttributeValue?.ToStringNoName() ?? _activityRunProfileExecutionItem.ExternalIdSnapshot)"
                              CsoDisplayName="@_activityRunProfileExecutionItem.DisplayNameSnapshot"
                              CsoObjectTypeName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.Type?.Name ?? _activityRunProfileExecutionItem.ObjectTypeSnapshot)"
