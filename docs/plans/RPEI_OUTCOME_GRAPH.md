@@ -180,11 +180,11 @@ Active Directory - Export:
 ```
 HR CSV Source - Full Import:
 |
-+-- CSO EMP001
++-- User EMP001 - Joe Bloggs
     |
     +-- [CSO Added] CSO created in staging
           |
-          +-- [CSO Updated] 15 attributes set
+          +-- [CSO Updated] 15 attributes [show >]
 ```
 
 ### Synergy with Sync Preview (#288)

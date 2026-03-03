@@ -156,7 +156,8 @@
     private bool _pendingExportLoading;
 
     private bool IsAttributeFlowWithChanges =>
-        Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
+        (Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
+         || Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated)
         && AttributeChanges != null
         && AttributeChanges.Count > 0;
 
