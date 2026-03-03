@@ -1,0 +1,51 @@
+@using JIM.Models.Activities
+@using JIM.Utilities
+
+<div class="outcome-node">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+        <MudIcon Icon="@Helpers.GetOutcomeTypeIcon(Outcome.OutcomeType)"
+                 Color="@Helpers.GetOutcomeTypeMudBlazorColor(Outcome.OutcomeType)"
+                 Size="Size.Medium" />
+        <div>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudText Typo="Typo.body1" Class="jim-text-emphasis">
+                    @Helpers.GetOutcomeTypeDisplayName(Outcome.OutcomeType)
+                </MudText>
+                @if (Outcome.DetailCount.HasValue)
+                {
+                    <MudChip T="string" Color="@Helpers.GetOutcomeTypeMudBlazorColor(Outcome.OutcomeType)"
+                             Variant="Variant.Text" Size="Size.Medium">
+                        @("\u00D7")@Outcome.DetailCount.Value
+                    </MudChip>
+                }
+            </MudStack>
+            @if (!string.IsNullOrEmpty(Outcome.TargetEntityDescription))
+            {
+                <MudText Typo="Typo.body1" Class="mud-text-secondary">
+                    @Outcome.TargetEntityDescription
+                </MudText>
+            }
+            @if (!string.IsNullOrEmpty(Outcome.DetailMessage))
+            {
+                <MudText Typo="Typo.body1" Class="mud-text-secondary">
+                    @Outcome.DetailMessage
+                </MudText>
+            }
+        </div>
+    </MudStack>
+
+    @if (Outcome.Children.Count > 0)
+    {
+        <div class="outcome-children">
+            @foreach (var child in Outcome.Children.OrderBy(c => c.Ordinal))
+            {
+                <OutcomeTreeNode Outcome="child" />
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public ActivityRunProfileExecutionItemSyncOutcome Outcome { get; set; } = null!;
+}

@@ -1,0 +1,29 @@
+@using JIM.Models.Activities
+
+@if (Outcomes == null || Outcomes.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+        Outcome tracking was not enabled when this activity was recorded.
+        Only the operation type is available.
+    </MudAlert>
+}
+else
+{
+    <div class="outcome-tree">
+        @foreach (var rootOutcome in RootOutcomes)
+        {
+            <OutcomeTreeNode Outcome="rootOutcome" />
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public List<ActivityRunProfileExecutionItemSyncOutcome> Outcomes { get; set; } = [];
+
+    private List<ActivityRunProfileExecutionItemSyncOutcome> RootOutcomes =>
+        Outcomes
+            .Where(o => o.ParentSyncOutcomeId == null)
+            .OrderBy(o => o.Ordinal)
+            .ToList();
+}

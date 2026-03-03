@@ -205,6 +205,20 @@
             </MudGrid>
         </MudPaper>
 
+        @* Causality Tree - shows the outcome graph when outcomes are recorded *@
+        @if (_activityRunProfileExecutionItem.SyncOutcomes.Count > 0)
+        {
+            <MudText Typo="Typo.h6" Class="mb-2">
+                Causality Tree
+            </MudText>
+            <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
+                What happened during processing and the downstream consequences.
+            </MudText>
+            <MudPaper Class="pa-5 mb-5" Outlined="true">
+                <OutcomeTree Outcomes="_activityRunProfileExecutionItem.SyncOutcomes.ToList()" />
+            </MudPaper>
+        }
+
         @* Projection Flow Visualisation - shown for Projected items *@
         @if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Projected)
         {

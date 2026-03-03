@@ -529,11 +529,11 @@ navigation properties for Display Name and Object Type. When a CSO is deleted (F
 7. ~~Update RPEI header projection to use snapshot fallbacks~~
 8. ~~Write unit tests for snapshot logic~~
 
-### Phase 6: UI — RPEI Detail Page
+### Phase 6: UI — RPEI Detail Page ✅
 
-1. Create outcome tree view component for RPEI detail page
-2. Render tree at appropriate depth based on tracking level
-3. Handle graceful display when no outcomes exist (None level / legacy RPEIs)
+1. ~~Create outcome tree view component for RPEI detail page~~
+2. ~~Render tree at appropriate depth based on tracking level~~
+3. ~~Handle graceful display when no outcomes exist (None level / legacy RPEIs)~~
 
 ### Phase 7: UI Simplification — Remove Change Type from Web UI
 

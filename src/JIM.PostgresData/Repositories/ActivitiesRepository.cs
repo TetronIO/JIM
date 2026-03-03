@@ -747,6 +747,8 @@ public class ActivityRepository : IActivityRepository
             .Include(q => q.MetaverseObjectChange)
             .ThenInclude(c => c!.MetaverseObject)
             .ThenInclude(mvo => mvo!.Type)
+            // Sync outcome tree (causality chain)
+            .Include(q => q.SyncOutcomes)
             .SingleOrDefaultAsync(q => q.Id == id);
     }
     #endregion

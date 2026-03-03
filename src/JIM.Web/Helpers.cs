@@ -551,6 +551,40 @@ public static class Helpers
     }
 
     /// <summary>
+    /// Gets a Material icon string for a sync outcome type.
+    /// </summary>
+    public static string GetOutcomeTypeIcon(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
+    {
+        return outcomeType switch
+        {
+            // Import outcomes
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded => Icons.Material.Filled.AddCircle,
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated => Icons.Material.Filled.Edit,
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => Icons.Material.Filled.RemoveCircle,
+            ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => Icons.Material.Filled.CheckCircle,
+            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => Icons.Material.Filled.Cancel,
+
+            // Sync outcomes — inbound
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected => Icons.Material.Filled.PersonAdd,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => Icons.Material.Filled.Link,
+            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => Icons.Material.Filled.SyncAlt,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => Icons.Material.Filled.LinkOff,
+            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => Icons.Material.Filled.FilterAltOff,
+            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => Icons.Material.Filled.PersonRemove,
+
+            // Sync outcomes — outbound
+            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => Icons.Material.Filled.CloudUpload,
+            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => Icons.Material.Filled.Schedule,
+
+            // Export outcomes
+            ActivityRunProfileExecutionItemSyncOutcomeType.Exported => Icons.Material.Filled.CloudDone,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => Icons.Material.Filled.CloudOff,
+
+            _ => Icons.Material.Filled.Circle,
+        };
+    }
+
+    /// <summary>
     /// Parses the denormalised OutcomeSummary string into outcome type/count pairs.
     /// Format: "Projected:1,AttributeFlow:12,PendingExportCreated:2"
     /// Returns empty list if null, empty, or unparseable.
