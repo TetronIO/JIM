@@ -14,6 +14,29 @@
                 <MudText Typo="Typo.body1" Class="jim-text-emphasis">
                     @Helpers.GetOutcomeTypeDisplayName(Outcome.OutcomeType)
                 </MudText>
+                @if (HasInlineTargetDescription)
+                {
+                    @* Inline target entity shown on the same row as the outcome type (e.g., Projected → MVO name, Provisioned → CS name) *@
+                    @if (IsProvisionedWithCsLink)
+                    {
+                        <MudLink Href="@GetProvisionedCsHref()" Typo="Typo.body1" Class="mud-text-secondary">
+                            @Outcome.TargetEntityDescription
+                        </MudLink>
+                    }
+                    else if (HasMvoLink)
+                    {
+                        <MudLink Href="@GetMvoHref(Outcome.TargetEntityId!.Value)"
+                                 Typo="Typo.body1" Class="mud-text-secondary">
+                            @Outcome.TargetEntityDescription
+                        </MudLink>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body1" Class="mud-text-secondary">
+                            @Outcome.TargetEntityDescription
+                        </MudText>
+                    }
+                }
                 @if (Outcome.DetailCount.HasValue)
                 {
                     <MudChip T="string" Color="@Helpers.GetOutcomeTypeMudBlazorColor(Outcome.OutcomeType)"
@@ -43,7 +66,7 @@
             {
                 @description
             }
-            @if (!string.IsNullOrEmpty(Outcome.DetailMessage))
+            @if (!string.IsNullOrEmpty(Outcome.DetailMessage) && !IsProvisionedWithCsLink)
             {
                 <MudText Typo="Typo.body1" Class="mud-text-secondary">
                     @Outcome.DetailMessage
@@ -157,6 +180,30 @@
         && Outcome.TargetEntityId.HasValue
         && OnLoadPendingExport != null;
 
+    /// <summary>
+    /// Outcome types that show their target entity inline on the title row
+    /// rather than as a separate description line below.
+    /// </summary>
+    private bool HasInlineTargetDescription =>
+        !string.IsNullOrEmpty(Outcome.TargetEntityDescription)
+        && Outcome.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
+            or ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned;
+
+    /// <summary>
+    /// Whether this Provisioned node has a connected system link available.
+    /// The CS integer ID is stored in DetailMessage as a convention for Provisioned outcomes.
+    /// </summary>
+    private bool IsProvisionedWithCsLink =>
+        Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
+        && !string.IsNullOrEmpty(Outcome.DetailMessage)
+        && int.TryParse(Outcome.DetailMessage, out _);
+
+    /// <summary>
+    /// Whether this outcome has an MVO link (Guid target entity ID that isn't empty).
+    /// </summary>
+    private bool HasMvoLink =>
+        Outcome.TargetEntityId.HasValue && Outcome.TargetEntityId.Value != Guid.Empty;
+
     private void ToggleExpand()
     {
         _expanded = !_expanded;
@@ -176,6 +223,7 @@
     /// <summary>
     /// Builds a contextual description as a RenderFragment, using MudLink when a target entity link is available.
     /// Returns null when there's nothing to display.
+    /// Outcome types rendered inline on the title row (Projected, Provisioned) are excluded here.
     /// </summary>
     private RenderFragment? GetDescription()
     {
@@ -184,11 +232,12 @@
 
         return Outcome.OutcomeType switch
         {
-            ActivityRunProfileExecutionItemSyncOutcomeType.Projected
-                => RenderMvoDescription("MVO created: "),
+            // Projected and Provisioned show their target inline on the title row
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected => null,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => null,
+            // AttributeFlow child nodes don't need a separate MVO description line
+            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => null,
             ActivityRunProfileExecutionItemSyncOutcomeType.Joined
-                => RenderMvoDescription("to MVO: "),
-            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
                 => RenderMvoDescription("to MVO: "),
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected
                 => RenderMvoDescription("from MVO: "),
@@ -226,6 +275,12 @@
     /// we use a search-based redirect path.
     /// </summary>
     private static string GetMvoHref(Guid mvoId) => $"/identity/search/{mvoId}";
+
+    /// <summary>
+    /// Builds the connected system href for Provisioned outcomes.
+    /// The CS integer ID is stored in DetailMessage by convention.
+    /// </summary>
+    private string GetProvisionedCsHref() => $"/admin/connected-systems/{Outcome.DetailMessage}";
 
     private static Color GetPendingExportChangeColor(PendingExportAttributeChangeType changeType) =>
         changeType switch

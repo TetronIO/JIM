@@ -889,7 +889,6 @@ new("Item Details", href: null, disabled: true)
             _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(connectedSystemId.Value);
 
         // For projected items, get the MVO from the MetaverseObjectChange or fall back to CSO.MetaverseObject
-        // Note: MetaverseObjectChange is not currently populated during sync, so we primarily use CSO.MetaverseObject
         if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Projected)
         {
             _metaverseObject = _activityRunProfileExecutionItem.MetaverseObjectChange?.MetaverseObject

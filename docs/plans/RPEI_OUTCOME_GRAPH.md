@@ -143,8 +143,8 @@ HR CSV Source - Full Synchronisation:
           |
           +-- [Attribute Flow] 12 attributes [show >]
                 |
-                +-- [Pending Export Created] AD — provision [show >]
-                +-- [Pending Export Created] LDAP — provision [show >]
+                +-- [Provisioned] AD [show >]
+                +-- [Provisioned] LDAP [show >]
 ```
 
 **Sync: Employee deleted from source**
@@ -159,8 +159,8 @@ HR CSV Source - Delta Synchronisation:
           +-- [Attribute Flow] 8 attributes recalled [show >]
           +-- [MVO Deleted] MVO deleted: Jane Doe
                 |
-                +-- [Pending Export Created] AD — deprovision [show >]
-                +-- [Pending Export Created] LDAP — deprovision [show >]
+                +-- [Deprovisioned] AD  [show >]
+                +-- [Deprovisioned] LDAP [show >]
 ```
 
 **Export: Pending exports executed**

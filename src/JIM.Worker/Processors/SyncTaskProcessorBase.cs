@@ -1207,17 +1207,24 @@ public abstract class SyncTaskProcessorBase
 
                 foreach (var provisioningCso in result.ProvisioningCsosToCreate)
                 {
+                    // Store CS integer ID in DetailMessage for hyperlinking in the UI
+                    var csIdString = provisioningCso.ConnectedSystemId > 0
+                        ? provisioningCso.ConnectedSystemId.ToString()
+                        : null;
+
                     if (parentOutcome != null)
                     {
                         SyncOutcomeBuilder.AddChildOutcome(originatingRpei, parentOutcome,
                             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
-                            targetEntityDescription: provisioningCso.ConnectedSystem?.Name);
+                            targetEntityDescription: provisioningCso.ConnectedSystem?.Name,
+                            detailMessage: csIdString);
                     }
                     else
                     {
                         SyncOutcomeBuilder.AddRootOutcome(originatingRpei,
                             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
-                            targetEntityDescription: provisioningCso.ConnectedSystem?.Name);
+                            targetEntityDescription: provisioningCso.ConnectedSystem?.Name,
+                            detailMessage: csIdString);
                     }
                 }
 
