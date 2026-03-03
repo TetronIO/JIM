@@ -2,6 +2,10 @@
 
 > Identity Management System - .NET 9.0, EF Core, PostgreSQL, Blazor
 
+## Context7 MCP
+
+Always use Context7 MCP when you need library/API documentation, code generation, setup or configuration steps without the user having to explicitly ask. The MudBlazor library ID is `/mudblazor/mudblazor`.
+
 ## CRITICAL REQUIREMENTS
 
 **YOU MUST BUILD AND TEST BEFORE EVERY COMMIT AND PR (for .NET code):**
