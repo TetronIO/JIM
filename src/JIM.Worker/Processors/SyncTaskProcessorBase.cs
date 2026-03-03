@@ -1249,7 +1249,8 @@ public abstract class SyncTaskProcessorBase
 
                 foreach (var pendingExport in result.PendingExports)
                 {
-                    var peCsId = pendingExport.ConnectedSystemObject?.ConnectedSystemId ?? 0;
+                    // Use ConnectedSystemId directly (nav property may not be set for deferred provisioning CSOs)
+                    var peCsId = pendingExport.ConnectedSystemId;
 
                     // If this PE matches a Provisioned CSO, nest it under the Provisioned node
                     if (peCsId > 0 && provisionedByCs.TryGetValue(peCsId, out var provisionedParent))
@@ -1257,7 +1258,7 @@ public abstract class SyncTaskProcessorBase
                         SyncOutcomeBuilder.AddChildOutcome(originatingRpei, provisionedParent,
                             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
                             targetEntityId: pendingExport.Id,
-                            targetEntityDescription: pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name);
+                            targetEntityDescription: provisionedParent.TargetEntityDescription);
                     }
                     else if (exportParent != null)
                     {
