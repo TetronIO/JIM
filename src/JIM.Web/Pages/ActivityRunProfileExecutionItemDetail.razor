@@ -238,7 +238,7 @@
                              ConnectedSystemId="@_connectedSystemHeader?.Id"
                              RunProfileName="@_activity?.TargetName"
                              CsoExternalId="@(_externalIdAttributeValue?.ToStringNoName() ?? _activityRunProfileExecutionItem.ExternalIdSnapshot)"
-                             CsoDisplayName="@_activityRunProfileExecutionItem.DisplayNameSnapshot"
+                             CsoDisplayName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.DisplayNameOrId ?? _activityRunProfileExecutionItem.DisplayNameSnapshot)"
                              CsoObjectTypeName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.Type?.Name ?? _activityRunProfileExecutionItem.ObjectTypeSnapshot)"
                              CsoId="@_activityRunProfileExecutionItem.ConnectedSystemObjectId"
                              CsoConnectedSystemId="@_activityRunProfileExecutionItem.ConnectedSystemObject?.ConnectedSystemId" />
