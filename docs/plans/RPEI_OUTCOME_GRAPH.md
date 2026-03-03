@@ -182,9 +182,7 @@ HR CSV Source - Full Import:
 |
 +-- User EMP001 - Joe Bloggs
     |
-    +-- [CSO Added] CSO created in staging
-          |
-          +-- [CSO Updated] 15 attributes [show >]
+    +-- [CSO Added] 15 attributes [show >]
 ```
 
 ### Synergy with Sync Preview (#288)
