@@ -1328,3 +1328,10 @@ html[lang] .mud-dialog .mud-paper-outlined {
     width: 4px;
     background: var(--mud-palette-surface);
 }
+
+/* Attribute change table — transparent background so it inherits from its container */
+.attribute-change-table,
+.attribute-change-table .mud-table-container,
+.attribute-change-table .mud-table-pagination {
+    background: transparent !important;
+}
