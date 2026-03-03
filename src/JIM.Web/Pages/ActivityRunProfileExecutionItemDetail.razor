@@ -1231,11 +1231,7 @@ new("Item Details", href: null, disabled: true)
             if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
                 return "External ID (from source data)";
 
-            // If no error but no CSO — differentiate import (pending removal) vs sync (deleted)
-            if (!IsSyncContext() && _activityRunProfileExecutionItem?.ObjectChangeType == ObjectChangeType.Deleted)
-                return "External ID (Pending Removal)";
-
-            return "External ID (Deleted)";
+            return "External ID";
         }
 
         // Fallback
