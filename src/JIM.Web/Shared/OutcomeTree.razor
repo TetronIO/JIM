@@ -63,13 +63,13 @@ else
                                         @if (CsoId.HasValue && CsoConnectedSystemId.HasValue)
                                         {
                                             <MudLink Href="@Utilities.GetConnectedSystemObjectHref(CsoConnectedSystemId.Value, CsoId.Value)"
-                                                     Class="jim-text-code">
+                                                     Typo="Typo.body1" Class="jim-text-code">
                                                 @CsoExternalId
                                             </MudLink>
                                         }
                                         else
                                         {
-                                            <MudText Class="jim-text-code">@CsoExternalId</MudText>
+                                            <MudText Typo="Typo.body1" Class="jim-text-code">@CsoExternalId</MudText>
                                         }
                                     }
                                     @if (!string.IsNullOrEmpty(CsoDisplayName) && CsoDisplayName != CsoExternalId)
