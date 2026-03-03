@@ -448,12 +448,12 @@ This section documents the relationship between `ObjectChangeType` (per-RPEI), `
 
 | What Happened | ObjectChangeType | SyncOutcome(s) | Stat Box Label | Change Type Filter Chip | Outcome Filter Chip | Row Change Chip |
 |---------------|-----------------|----------------|---------------|------------------------|--------------------|--------------------|
-| New CSO staged | `Added` | `CsoAdded` | "Added" | "Added" | "CSO Added" | "Added" |
-| CSO attributes updated | `Updated` | `CsoUpdated` | "Updated" | "Updated" | "CSO Updated" | "Updated" |
-| CSO deletion detected (marked Obsolete) | `Deleted` | `DeletionDetected` | "Deletions Detected" | "Deletions Detected" | "Deletion Detected" | "Deletion Detected" |
-| Pending export confirmed | `PendingExportConfirmed` | `ExportConfirmed` | "Exports Confirmed" | *(N/A)* | "Export Confirmed" | "Pending Export Confirmed" |
+| New CSO staged | `Added` | `CsoAdded` | "CSOs Added" | "Added" | "CSO Added" | "Added" |
+| CSO attributes updated | `Updated` | `CsoUpdated` | "CSOs Updated" | "Updated" | "CSO Updated" | "Updated" |
+| CSO deletion detected (marked Obsolete) | `Deleted` | `DeletionDetected` | "CSO Deletions Detected" | "Deletions Detected" | "CSO Deletion Detected" | "Deletion Detected" |
+| Pending export confirmed | `PendingExportConfirmed` | `ExportConfirmed` | "CSO Exports Confirmed" | *(N/A)* | "CSO Export Confirmed" | "Pending Export Confirmed" |
 | Pending export retrying | *(error on RPEI)* | *(none)* | "Exports Retrying" | *(N/A)* | *(N/A)* | *(N/A)* |
-| Pending export failed | *(error on RPEI)* | `ExportFailed` | "Exports Failed" | *(N/A)* | "Export Failed" | *(N/A)* |
+| Pending export failed | *(error on RPEI)* | `ExportFailed` | "CSO Exports Failed" | *(N/A)* | "CSO Export Failed" | *(N/A)* |
 
 **Key point — import deletions**: During import, the CSO is only marked `Obsolete` (not actually deleted). A `DeletionDetected` outcome is recorded to show the detection in the outcome tree. The actual deletion and `CsoDeleted` outcome occur during the subsequent sync run.
 
@@ -461,13 +461,13 @@ This section documents the relationship between `ObjectChangeType` (per-RPEI), `
 
 | What Happened | ObjectChangeType | SyncOutcome(s) | Stat Box Label | Change Type Filter Chip | Outcome Filter Chip | Row Change Chip |
 |---------------|-----------------|----------------|---------------|------------------------|--------------------|--------------------|
-| MVO projected | `Projected` | `Projected` (+ children) | "Projected" | "Projected" | "Projected" | "Projected" |
-| CSO joined to MVO | `Joined` | `Joined` (+ children) | "Joined" | "Joined" | "Joined" | "Joined" |
-| Attributes flowed (no join/project) | `AttributeFlow` | `AttributeFlow` | "Attribute Flow" | "Attribute Flow" | "Attribute Flow" | "Attribute Flow" |
-| CSO disconnected (obsoleted) | `Disconnected` | `Disconnected` + `CsoDeleted` | "Disconnected" / "Deletions Processed" | "Disconnected" / "Deletions Processed" | "CSO Disconnected" / "CSO Deleted" | "Disconnected" |
-| CSO disconnected (out of scope) | `DisconnectedOutOfScope` | `DisconnectedOutOfScope` | *(via Disconnected)* | "Disconnected Out Of Scope" | "Out of Scope" | "Disconnected Out Of Scope" |
-| Drift detected | `DriftCorrection` | `DriftCorrection` | "Drift Correction" | "Drift Correction" | "Drift Correction" | "Drift Correction" |
-| Pending export created | `PendingExport` | `PendingExportCreated` | "Pending Exports" | "Pending Export" | "Pending Export" | "Pending Export" |
+| MVO projected | `Projected` | `Projected` (+ children) | "CSOs Projected" | "Projected" | "CSO Projected" | "Projected" |
+| CSO joined to MVO | `Joined` | `Joined` (+ children) | "CSOs Joined" | "Joined" | "CSO Joined" | "Joined" |
+| Attributes flowed (no join/project) | `AttributeFlow` | `AttributeFlow` | "MVOs with Attribute Flow" | "Attribute Flow" | "MVO Attribute Flow" | "Attribute Flow" |
+| CSO disconnected (obsoleted) | `Disconnected` | `Disconnected` + `CsoDeleted` | "CSOs Disconnected" / "CSOs Deleted" | "Disconnected" / "Deletions Processed" | "CSO Disconnected" / "CSO Deleted" | "Disconnected" |
+| CSO disconnected (out of scope) | `DisconnectedOutOfScope` | `DisconnectedOutOfScope` | *(via CSOs Disconnected)* | "Disconnected Out Of Scope" | *(via CSO Disconnected)* | "Disconnected Out Of Scope" |
+| Drift detected | `DriftCorrection` | `DriftCorrection` | "CSOs Drift Corrected" | "Drift Correction" | "CSO Drift Corrected" | "Drift Correction" |
+| Pending export created | `PendingExport` | `PendingExportCreated` | "CSO Pending Exports" | "Pending Export" | "CSO Pending Export" | "Pending Export" |
 | No attribute changes | `NoChange` | *(none)* | *(via Unchanged)* | *(filtered separately)* | *(N/A)* | "No Change" |
 
 **Key point — obsoleted CSOs**: When a joined CSO is marked Obsolete and processed during sync, a single RPEI is created with `ObjectChangeType.Disconnected`. The outcome graph contains sibling root nodes: `Disconnected` (for the join break) and `CsoDeleted` (for the actual CSO deletion). If an MVO deletion rule fires, there may also be `MvoDeleted` and `PendingExportCreated` child outcomes.
@@ -476,8 +476,8 @@ This section documents the relationship between `ObjectChangeType` (per-RPEI), `
 
 | What Happened | ObjectChangeType | SyncOutcome(s) | Stat Box Label | Change Type Filter Chip | Outcome Filter Chip | Row Change Chip |
 |---------------|-----------------|----------------|---------------|------------------------|--------------------|--------------------|
-| CSO exported | `Exported` | `Exported` | "Exported" | "Exported" | "Exported" | "Exported" |
-| CSO deprovisioned | `Deprovisioned` | `Deprovisioned` | "Deprovisioned" | "Deprovisioned" | "Deprovisioned" | "Deprovisioned" |
+| CSO exported | `Exported` | `Exported` | "CSO Exports" | "Exported" | "CSO Exported" | "Exported" |
+| CSO deprovisioned | `Deprovisioned` | `Deprovisioned` | "CSOs Deprovisioned" | "Deprovisioned" | "CSO Deprovisioned" | "Deprovisioned" |
 
 ### Stats Derivation Logic
 
