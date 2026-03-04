@@ -15,6 +15,8 @@
 [![License](https://img.shields.io/badge/License-Source_Available-orange)](https://tetron.io/jim/#licensing)
 &nbsp;
 [![Documentation](https://img.shields.io/badge/Docs-docs%2F-green)](https://github.com/TetronIO/JIM/tree/main/docs)
+&nbsp;
+[![Open in GitHub Codespaces](https://img.shields.io/badge/Open_in-Codespaces-black?logo=github)](https://codespaces.new/TetronIO/JIM?devcontainer_path=.devcontainer/devcontainer.json)
 
 JIM is a modern Identity Management system designed for organisations with complex identity synchronisation requirements. It is self-hosted, container-deployable, and works in both connected and air-gapped networks. Features include:
 
@@ -26,6 +28,20 @@ JIM is a modern Identity Management system designed for organisations with compl
 - Single Sign-On (SSO) using OpenID Connect
 
 ![A screenshot of JIM running](https://tetron.io/images/jim/jim-8.png "JIM Screenshot")
+
+## What Makes JIM Different
+
+Enterprise identity synchronisation typically requires cloud connectivity, complex infrastructure, or expensive licensing. JIM takes a different approach — it deploys as a single Docker stack, runs entirely on-premises, and works in air-gapped networks with no external dependencies. Source-available code means you can inspect, audit, and verify everything JIM does with your identity data.
+
+| Capability | JIM |
+|---|---|
+| Air-gapped deployment | ✅ |
+| Cloud dependencies | None |
+| Container-native | ✅ |
+| Source available | ✅ |
+| SSO with any OIDC provider | ✅ |
+| Full REST API | ✅ |
+| PowerShell automation | ✅ |
 
 ## Scenarios
 JIM supports common Identity Governance & Administration (IGA) scenarios:
@@ -107,12 +123,45 @@ JIM uses OpenID Connect (OIDC) for Single Sign-On authentication. It is IdP-agno
 
 For API access, JIM supports both JWT Bearer tokens and API keys for automation and CI/CD scenarios.
 
-## Getting Started
-For development setup using GitHub Codespaces or local installation, see the [Developer Guide](docs/DEVELOPER_GUIDE.md).
+## Quick Start
 
-For SSO configuration with your Identity Provider, see the [SSO Setup Guide](docs/SSO_SETUP_GUIDE.md).
+### For Admins (Deploy)
 
-If you don't have any connected systems available, you can use the Example Data feature to populate JIM with sample users and groups for testing.
+**Prerequisites:** Docker and an OpenID Connect identity provider (e.g., Entra ID, Keycloak)
+
+1. **Configure SSO** — Follow the [SSO Setup Guide](docs/SSO_SETUP_GUIDE.md) for your identity provider. JIM requires authentication for all access.
+
+2. **Deploy JIM:**
+   ```bash
+   git clone https://github.com/TetronIO/JIM.git && cd JIM
+   cp .env.example .env
+   # Edit .env with your SSO settings (see SSO Setup Guide)
+   docker compose --profile with-db up -d
+   ```
+
+3. **Access JIM** at [http://localhost:5200](http://localhost:5200) — log in with your identity provider, then use the Example Data feature to populate JIM with sample users and groups for testing.
+
+> **Air-gapped deployments:** Each release includes a downloadable bundle with pre-built Docker images. See [Release Process](docs/RELEASE_PROCESS.md).
+
+### For Developers (Contribute)
+
+**Prerequisites:** Configure SSO using the [SSO Setup Guide](docs/SSO_SETUP_GUIDE.md) — JIM requires authentication even during development.
+
+**Option 1 — GitHub Codespaces (one click):**
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/TetronIO/JIM?devcontainer_path=.devcontainer/devcontainer.json)
+
+Everything is pre-configured — .NET 9.0, PostgreSQL, shell aliases, and VS Code extensions. Once the codespace is ready, open a terminal and run:
+```bash
+jim-db    # Start PostgreSQL
+jim-web   # Start JIM (or press F5 to debug)
+```
+
+**Option 2 — Local devcontainer:**
+
+Clone the repository and open it in VS Code with the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension. The devcontainer will set up the full development environment automatically.
+
+For the full development guide, see the [Developer Guide](docs/DEVELOPER_GUIDE.md).
 
 ## State of Development
 JIM has reached MVP completion (100%). The core identity lifecycle is fully functional:
