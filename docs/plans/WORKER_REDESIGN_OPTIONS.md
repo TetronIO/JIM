@@ -699,4 +699,4 @@ Significant changes to how sync outcomes are recorded and reported on RPEIs. Thi
 - `ObjectChangeType.Provisioned` no longer exists (consolidated into `Exported`)
 - The `SyncOutcomeBuilder` pattern demonstrates a small step toward extracting reusable sync logic into dedicated classes, though it is a utility, not the pure domain engine envisioned by ISyncEngine
 
-**Full details:** See `docs/plans/RPEI_OUTCOME_GRAPH.md`
+**Full details:** See `docs/plans/done/RPEI_OUTCOME_GRAPH.md`
