@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Interactive setup script (`setup.sh`) for one-command deployment — auto-detects latest release, downloads compose files, walks through SSO and database configuration, and starts JIM
+- Production Docker Compose override (`docker-compose.production.yml`) — removes build contexts and uses pre-built GHCR images for admin deployments without requiring source code
+- Standalone deployment files (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example`) attached as individual GitHub release assets for easy download
 - Sortable columns on Attribute Flow table
 - Synchronisation Rules quick link on homepage dashboard
 - `Get-JIMMetaverseObject -All` switch to automatically paginate through all results
@@ -33,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DataSnapshot` property from `ActivityRunProfileExecutionItem` — superseded by structured `ConnectedSystemObjectChange` records for export and pending export attribute history
 
 ### Fixed
+- Stale environment variable names in air-gapped deployment documentation (`SSO_AUTHORITY` → `JIM_SSO_AUTHORITY`, `DB_HOSTNAME` → `JIM_DB_HOSTNAME`, etc.)
 - `Get-JIMMetaverseObject` now correctly caps `-PageSize` at 100 to match the API maximum (previously accepted up to 1000, but the API silently capped at 100, returning incomplete results)
 - Skip export evaluation for metaverse objects queued for immediate deletion (0-grace-period), preventing spurious Update exports with invalid attribute values (e.g., empty DN from recalled attributes) alongside the correct Delete export
 - Sync activity attribute flow statistic now counts only standalone attribute flow objects, excluding flows already counted under projections, joins, or disconnections — previously summed individual attribute changes across all change types, inflating the count (e.g., 320k instead of the expected object count)

@@ -305,4 +305,7 @@ jobs:
             --title "JIM v${VERSION}" \
             --notes-file ./release-notes.md \
             ./artifacts/jim-release-${VERSION}.tar.gz \
-            ./artifacts/checksums.sha256
+            ./artifacts/checksums.sha256 \
+            ./docker-compose.yml \
+            ./docker-compose.production.yml \
+            ./.env.example

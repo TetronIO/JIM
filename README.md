@@ -127,21 +127,49 @@ For API access, JIM supports both JWT Bearer tokens and API keys for automation 
 
 ### For Admins (Deploy)
 
-**Prerequisites:** Docker and an OpenID Connect identity provider (e.g., Entra ID, Keycloak)
+**Prerequisites:** Docker, Docker Compose v2, and an OpenID Connect identity provider (e.g., Entra ID, Keycloak, AD FS). See the [SSO Setup Guide](docs/SSO_SETUP_GUIDE.md) to configure your identity provider before deploying.
 
-1. **Configure SSO** — Follow the [SSO Setup Guide](docs/SSO_SETUP_GUIDE.md) for your identity provider. JIM requires authentication for all access.
+**Option 1 — Automated setup (recommended):**
 
-2. **Deploy JIM:**
-   ```bash
-   git clone https://github.com/TetronIO/JIM.git && cd JIM
-   cp .env.example .env
-   # Edit .env with your SSO settings (see SSO Setup Guide)
-   docker compose --profile with-db up -d
-   ```
+The setup script downloads everything you need, walks you through configuration, and starts JIM:
 
-3. **Access JIM** at [http://localhost:5200](http://localhost:5200) — log in with your identity provider, then use the Example Data feature to populate JIM with sample users and groups for testing.
+```bash
+curl -fsSL https://raw.githubusercontent.com/TetronIO/JIM/main/setup.sh | bash
+```
 
-> **Air-gapped deployments:** Each release includes a downloadable bundle with pre-built Docker images. See [Release Process](docs/RELEASE_PROCESS.md).
+Or download and inspect first:
+
+```bash
+curl -fsSL -o setup.sh https://raw.githubusercontent.com/TetronIO/JIM/main/setup.sh
+less setup.sh    # review the script
+bash setup.sh
+```
+
+**Option 2 — Manual setup:**
+
+```bash
+mkdir jim && cd jim
+
+# Download compose files and environment template
+curl -fsSL -o docker-compose.yml https://github.com/TetronIO/JIM/releases/latest/download/docker-compose.yml
+curl -fsSL -o docker-compose.production.yml https://github.com/TetronIO/JIM/releases/latest/download/docker-compose.production.yml
+curl -fsSL -o .env https://github.com/TetronIO/JIM/releases/latest/download/.env.example
+
+# Configure - edit .env with your SSO settings (see SSO Setup Guide)
+# Set DOCKER_REGISTRY=ghcr.io/tetronio/ and JIM_VERSION to the latest release version
+
+# Start JIM with bundled PostgreSQL
+docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db up -d
+
+# Or without bundled PostgreSQL (set JIM_DB_HOSTNAME in .env to your external DB)
+docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
+```
+
+**Option 3 — Air-gapped deployment:**
+
+Each [release](https://github.com/TetronIO/JIM/releases) includes a downloadable bundle (`jim-release-X.Y.Z.tar.gz`) with pre-built Docker images, compose files, and installation instructions. See [Release Process](docs/RELEASE_PROCESS.md).
+
+Once running, **access JIM** at [http://localhost:5200](http://localhost:5200) — log in with your identity provider, then use the Example Data feature to populate JIM with sample users and groups for testing.
 
 ### For Developers (Contribute)
 

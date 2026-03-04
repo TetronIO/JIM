@@ -95,7 +95,7 @@ git push origin main --tags
 6. **Monitor the workflow**: The release workflow will run automatically. Check the Actions tab for progress.
 
 7. **Verify the release**: Once complete, verify:
-   - GitHub Release page has the bundle and checksums
+   - GitHub Release page has the bundle, checksums, and standalone deployment files (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example`)
    - Docker images are available at `ghcr.io/tetronio/jim-web:0.3.0` (etc.)
    - PowerShell module is available on PSGallery
 
@@ -190,10 +190,10 @@ If you have an existing PostgreSQL server:
 
 2. Update `.env` with your database connection:
    ```
-   DB_HOSTNAME=your-postgres-server.local
-   DB_NAME=jim
-   DB_USERNAME=jim
-   DB_PASSWORD=your_secure_password
+   JIM_DB_HOSTNAME=your-postgres-server.local
+   JIM_DB_NAME=jim
+   JIM_DB_USERNAME=jim
+   JIM_DB_PASSWORD=your_secure_password
    ```
 
 3. Start JIM without the database profile:
@@ -202,7 +202,7 @@ If you have an existing PostgreSQL server:
    docker compose up -d
    ```
 
-The JIM services will connect to your external PostgreSQL server using the `DB_HOSTNAME` from `.env`.
+The JIM services will connect to your external PostgreSQL server using the `JIM_DB_HOSTNAME` from `.env`.
 
 #### Step 4: Configure Environment
 
@@ -215,25 +215,24 @@ Edit `.env` with your settings:
 
 ```bash
 # Database (if using external PostgreSQL)
-DB_HOSTNAME=your-postgres-server.local
-DB_NAME=jim
-DB_USERNAME=jim
-DB_PASSWORD=your_secure_password
+JIM_DB_HOSTNAME=your-postgres-server.local
+JIM_DB_NAME=jim
+JIM_DB_USERNAME=jim
+JIM_DB_PASSWORD=your_secure_password
 
 # SSO/OIDC - Configure for your air-gapped identity provider
-SSO_AUTHORITY=https://adfs.your-domain.local/adfs
-SSO_CLIENT_ID=your-client-id
-SSO_SECRET=your-client-secret
-SSO_API_SCOPE=api://your-client-id/access_as_user
+JIM_SSO_AUTHORITY=https://adfs.your-domain.local/adfs
+JIM_SSO_CLIENT_ID=your-client-id
+JIM_SSO_SECRET=your-client-secret
+JIM_SSO_API_SCOPE=api://your-client-id/access_as_user
 
 # User identity mapping
-SSO_UNIQUE_IDENTIFIER_CLAIM_TYPE=sub
-SSO_UNIQUE_IDENTIFIER_METAVERSE_ATTRIBUTE_NAME=Subject Identifier
-SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE=your-admin-identifier
+JIM_SSO_CLAIM_TYPE=sub
+JIM_SSO_MV_ATTRIBUTE=Subject Identifier
+JIM_SSO_INITIAL_ADMIN=your-admin-identifier
 
 # Logging
-LOGGING_LEVEL=Information
-LOGGING_PATH=/var/log/jim
+JIM_LOG_LEVEL=Information
 ```
 
 #### Step 5: Configure TLS (Recommended for Production)
@@ -397,22 +396,18 @@ Each release creates the following tags:
 
 ### Using Published Images
 
-To use published images instead of building locally:
+To use published images instead of building locally, use the production compose override which removes `build:` stanzas and sets production restart policy:
 
 ```bash
-# Set environment variables
-export DOCKER_REGISTRY=ghcr.io/tetronio/
-export JIM_VERSION=0.2.0
-
-# Start services
-docker compose up -d
-```
-
-Or add to your `.env` file:
-```
+# Set environment variables in .env
 DOCKER_REGISTRY=ghcr.io/tetronio/
-JIM_VERSION=0.2.0
+JIM_VERSION=0.3.0
+
+# Start services with production override
+docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db up -d
 ```
+
+The `docker-compose.production.yml` file is included in the repository root and attached to each GitHub release. It nullifies the `build:` contexts so Docker Compose pulls pre-built images from GHCR instead of attempting to build from source.
 
 ### Image Signing
 
