@@ -314,7 +314,7 @@ public class ActivitiesControllerTests
         _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemHeadersAsync(
                 It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(),
                 It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<IEnumerable<ObjectChangeType>?>(), It.IsAny<IEnumerable<string>?>(),
+                It.IsAny<IEnumerable<string>?>(),
                 It.IsAny<IEnumerable<ActivityRunProfileExecutionItemErrorType>?>(),
                 It.IsAny<IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>?>()))
             .ReturnsAsync(pagedResult);
@@ -386,7 +386,7 @@ public class ActivitiesControllerTests
         _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemHeadersAsync(
                 It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>(),
                 It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<IEnumerable<ObjectChangeType>?>(), It.IsAny<IEnumerable<string>?>(),
+                It.IsAny<IEnumerable<string>?>(),
                 It.IsAny<IEnumerable<ActivityRunProfileExecutionItemErrorType>?>(),
                 It.IsAny<IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>?>()))
             .ReturnsAsync(pagedResult);

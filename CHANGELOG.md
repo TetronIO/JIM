@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SnapshotCsoDisplayFields()` helper on RPEI model — centralised snapshot population for ExternalId, DisplayName, and ObjectType
 
 ### Changed
+- Removed "Change Type" filter and column from Activity Detail page — outcome type filter and per-row outcome chips provide a strict superset of this information (#363)
 - Consolidated `ObjectChangeType.Provisioned` into `ObjectChangeType.Exported` — "Provisioned" is now reserved for the sync-phase concept (adding an MVO to a CS for the first time via `SyncOutcome`), while all export-phase operations use `Exported` regardless of whether the object was newly created or updated in the target system
 
 ### Fixed

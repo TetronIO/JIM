@@ -1,6 +1,6 @@
 # RPEI Outcome Graph: Causal Chain Tracking Per Object
 
-- **Status:** Planned
+- **Status:** In Progress
 - **Milestone:** Post-MVP
 - **Created:** 2026-03-01
 - **Issue:** #363
@@ -580,48 +580,25 @@ navigation properties for Display Name and Object Type. When a CSO is deleted (F
 2. ~~Render tree at appropriate depth based on tracking level~~
 3. ~~Handle graceful display when no outcomes exist (None level / legacy RPEIs)~~
 
-### Phase 7: UI Simplification — Remove Change Type from Web UI
+### Phase 7: UI Simplification — Remove Change Type from Web UI ✅
 
 The outcome graph makes `ObjectChangeType` redundant in the UI. Outcomes provide a strict
 superset of the information Change Type offered — every Change Type has an equivalent Outcome
 Type, but outcomes also capture downstream consequences (e.g., pending exports, provisioning)
 that Change Type never could.
 
-**Rationale:**
-- The "Filter by Change Type" and "Filter by Outcome Type" sections overlap conceptually
-  (both have Joined, Attribute Flow, etc.), confusing users about which filter to use
-- Change Type filters by `ObjectChangeType` on the RPEI row, but outcomes like
-  `PendingExportCreated` are children of other change types — so filtering by
-  `ObjectChangeType.PendingExport` finds nothing (the fix in Phase 5 moved Pending Export
-  to the outcome filter as a workaround, but the underlying redundancy remains)
-- Row outcome chips already tell the complete story — the single Change Type chip is noise
-
-**Phased approach:**
-1. Remove "Filter by Change Type" section from Activity Detail page — the outcome filter
-   covers all the same scenarios
-2. Remove the "Change Type" column from the Activity Detail RPEI table — outcome chips
-   on each row replace it
-3. Audit the Operations History page and any other pages that display Change Type
-
-**Prerequisites:**
-- All activity-generating code paths must produce outcomes (Phases 1-3 complete)
-- Legacy/pre-outcome activities: need a fallback strategy for activities created before
-  outcome tracking was enabled, or when tracking level is set to `None`. Options:
-  - Show a simplified view with just the Change Type column for legacy activities
-  - Backfill outcomes for existing activities (migration script)
-  - Accept that historical activities have less detail (simplest)
-
-**Performance consideration:**
-- Change Type is a single indexed column; outcome filtering uses `Contains()` on a
-  denormalised string. For very large activities, outcome filtering may be slower.
-  If this becomes an issue, consider adding a GIN index on `OutcomeSummary` or
-  materialising outcome types into a separate indexed column.
+1. ~~Remove "Filter by Change Type" section from Activity Detail page — the outcome filter covers all the same scenarios~~
+2. ~~Remove the "Change Type" column from the Activity Detail RPEI table — outcome chips on each row replace it~~
+3. ~~Remove `changeTypeFilter` parameter from repository/application stack~~
+4. ~~Remove unused helper methods from `Helpers.cs` (`GetChangeTypesForRunType`, `GetStatCountForChangeType`, `GetChangeTypeDisplayName`)~~
+5. ~~Relocate "Unchanged" informational chip to the outcome filter section~~
 
 **Does NOT affect:**
 - The data model — `ObjectChangeType` remains on `ActivityRunProfileExecutionItem` for
   internal processing logic and legacy compatibility
 - Worker code — processors still set `ObjectChangeType` for their own orchestration
 - API contracts — existing API fields remain for backwards compatibility
+- RPEI detail page — "Operation" chip and conditional sections remain (useful context on detail view)
 
 ## Files to Modify
 

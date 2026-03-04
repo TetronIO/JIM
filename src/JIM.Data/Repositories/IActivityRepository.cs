@@ -43,7 +43,6 @@ public interface IActivityRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = false,
-        IEnumerable<ObjectChangeType>? changeTypeFilter = null,
         IEnumerable<string>? objectTypeFilter = null,
         IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null,
         IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = null);

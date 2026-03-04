@@ -99,24 +99,24 @@ public class HelpersOutcomeSummaryTests
     #region GetOutcomeTypeDisplayName
 
     [Test]
-    public void GetOutcomeTypeDisplayName_AttributeFlow_ReturnsAttributeFlow()
+    public void GetOutcomeTypeDisplayName_AttributeFlow_ReturnsMvoAttributeFlow()
     {
         var result = Helpers.GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
-        Assert.That(result, Is.EqualTo("Attribute Flow"));
+        Assert.That(result, Is.EqualTo("MVO Attribute Flow"));
     }
 
     [Test]
-    public void GetOutcomeTypeDisplayName_PendingExportCreated_ReturnsPendingExport()
+    public void GetOutcomeTypeDisplayName_PendingExportCreated_ReturnsCsoPendingExport()
     {
         var result = Helpers.GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
-        Assert.That(result, Is.EqualTo("Pending Export"));
+        Assert.That(result, Is.EqualTo("CSO Pending Export"));
     }
 
     [Test]
-    public void GetOutcomeTypeDisplayName_SimpleType_ReturnsToString()
+    public void GetOutcomeTypeDisplayName_Projected_ReturnsCsoProjected()
     {
         var result = Helpers.GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
-        Assert.That(result, Is.EqualTo("Projected"));
+        Assert.That(result, Is.EqualTo("CSO Projected"));
     }
 
     #endregion

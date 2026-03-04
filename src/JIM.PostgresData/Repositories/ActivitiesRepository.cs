@@ -331,7 +331,6 @@ public class ActivityRepository : IActivityRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = false,
-        IEnumerable<ObjectChangeType>? changeTypeFilter = null,
         IEnumerable<string>? objectTypeFilter = null,
         IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null,
         IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = null)
@@ -354,16 +353,6 @@ public class ActivityRepository : IActivityRepository
                 .ThenInclude(cso => cso!.AttributeValues)
                     .ThenInclude(av => av.Attribute)
             .Where(a => a.Activity.Id == activityId);
-
-        // Apply change type filter if specified
-        if (changeTypeFilter != null)
-        {
-            var changeTypes = changeTypeFilter.ToList();
-            if (changeTypes.Count > 0)
-            {
-                query = query.Where(a => changeTypes.Contains(a.ObjectChangeType));
-            }
-        }
 
         // Apply object type filter if specified
         if (objectTypeFilter != null)
@@ -464,9 +453,6 @@ public class ActivityRepository : IActivityRepository
                 : query.OrderBy(item => item.ConnectedSystemObject != null && item.ConnectedSystemObject.Type != null
                     ? item.ConnectedSystemObject.Type.Name
                     : null),
-            "changetype" => sortDescending
-                ? query.OrderByDescending(item => item.ObjectChangeType)
-                : query.OrderBy(item => item.ObjectChangeType),
             "errortype" => sortDescending
                 ? query.OrderByDescending(item => item.ErrorType)
                 : query.OrderBy(item => item.ErrorType),

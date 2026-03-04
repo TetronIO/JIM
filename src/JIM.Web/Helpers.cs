@@ -442,61 +442,6 @@ public static class Helpers
     }
 
     /// <summary>
-    /// Gets the relevant ObjectChangeTypes for a given run type.
-    /// </summary>
-    public static IEnumerable<ObjectChangeType> GetChangeTypesForRunType(ConnectedSystemRunType? runType)
-    {
-        return runType switch
-        {
-            ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport =>
-                new[] { ObjectChangeType.Added, ObjectChangeType.Updated, ObjectChangeType.Deleted },
-            ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation =>
-                new[] { ObjectChangeType.Projected, ObjectChangeType.Joined, ObjectChangeType.AttributeFlow, ObjectChangeType.Disconnected, ObjectChangeType.Deleted },
-            ConnectedSystemRunType.Export =>
-                new[] { ObjectChangeType.Exported, ObjectChangeType.Deprovisioned },
-            _ => Array.Empty<ObjectChangeType>()
-        };
-    }
-
-    /// <summary>
-    /// Gets the stat count for a specific change type from the stats model.
-    /// </summary>
-    public static int GetStatCountForChangeType(ActivityRunProfileExecutionStats stats, ObjectChangeType changeType)
-    {
-        return changeType switch
-        {
-            // Import
-            ObjectChangeType.Added => stats.TotalCsoAdds,
-            ObjectChangeType.Updated => stats.TotalCsoUpdates,
-            ObjectChangeType.Deleted => stats.TotalCsoDeletes,
-            // Sync
-            ObjectChangeType.Projected => stats.TotalProjections,
-            ObjectChangeType.Joined => stats.TotalJoins,
-            ObjectChangeType.AttributeFlow => stats.TotalAttributeFlows,
-            ObjectChangeType.Disconnected => stats.TotalDisconnections,
-            // Export
-            ObjectChangeType.Exported => stats.TotalExported,
-            ObjectChangeType.Deprovisioned => stats.TotalDeprovisioned,
-            _ => 0
-        };
-    }
-
-    /// <summary>
-    /// Gets a human-readable display name for a change type with proper spacing.
-    /// </summary>
-    public static string GetChangeTypeDisplayName(ObjectChangeType changeType)
-    {
-        return changeType switch
-        {
-            ObjectChangeType.AttributeFlow => "Attribute Flow",
-            ObjectChangeType.DriftCorrection => "Drift Correction",
-            ObjectChangeType.PendingExport => "Pending Export",
-            ObjectChangeType.PendingExportConfirmed => "Pending Export Confirmed",
-            _ => changeType.ToString()
-        };
-    }
-
-    /// <summary>
     /// Gets a MudBlazor colour for the sync outcome type chip.
     /// </summary>
     public static Color GetOutcomeTypeMudBlazorColor(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)

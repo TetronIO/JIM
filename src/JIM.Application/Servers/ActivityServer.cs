@@ -306,7 +306,7 @@ public class ActivityServer
     #region synchronisation related
     /// <summary>
     /// Retrieves a page's worth of sync execution item headers for a specific activity.
-    /// Supports server-side search, sorting, and filtering by change type, object type, error type, and outcome type.
+    /// Supports server-side search, sorting, and filtering by object type, error type, and outcome type.
     /// </summary>
     public async Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(
         Guid activityId,
@@ -315,13 +315,12 @@ public class ActivityServer
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = false,
-        IEnumerable<ObjectChangeType>? changeTypeFilter = null,
         IEnumerable<string>? objectTypeFilter = null,
         IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null,
         IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = null)
     {
         return await Application.Repository.Activity.GetActivityRunProfileExecutionItemHeadersAsync(
-            activityId, page, pageSize, searchQuery, sortBy, sortDescending, changeTypeFilter, objectTypeFilter, errorTypeFilter, outcomeTypeFilter);
+            activityId, page, pageSize, searchQuery, sortBy, sortDescending, objectTypeFilter, errorTypeFilter, outcomeTypeFilter);
     }
 
     public async Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId)

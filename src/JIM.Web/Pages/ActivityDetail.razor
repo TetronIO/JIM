@@ -336,43 +336,9 @@
         <MudText Typo="Typo.h5">@Helpers.GetRunTypeResultsTitle(_activity.ConnectedSystemRunType)</MudText>
 
         @* Filter Chips Section *@
-        @if (GetAvailableChangeTypes().Any() || GetAvailableOutcomeTypes().Any() || GetAvailableObjectTypes().Any() || GetAvailableErrorTypes().Any())
+        @if (GetAvailableOutcomeTypes().Any() || GetAvailableObjectTypes().Any() || GetAvailableErrorTypes().Any())
         {
             <MudStack Row="true" Spacing="6" Class="mt-3 mb-3 flex-wrap" AlignItems="AlignItems.Start">
-                @* Change Type Filter *@
-                @if (GetAvailableChangeTypes().Any())
-                {
-                    <div>
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Change Type:</MudText>
-                        <MudChipSet T="ObjectChangeType"
-                                    SelectionMode="SelectionMode.MultiSelection"
-                                    SelectedValues="_selectedChangeTypes"
-                                    SelectedValuesChanged="OnChangeTypeFilterChanged">
-                            @foreach (var changeType in GetAvailableChangeTypes())
-                            {
-                                <MudChip Value="@changeType"
-                                         Color="@(IsChangeTypeSelected(changeType) ? Color.Default : Helpers.GetRunItemMudBlazorColorForType(changeType))"
-                                         Variant="@(IsChangeTypeSelected(changeType) ? Variant.Outlined : Variant.Text)"
-                                         SelectedColor="@Helpers.GetRunItemMudBlazorColorForType(changeType)">
-                                    @GetContextAwareChangeTypeName(changeType)
-                                    @if (GetChangeTypeCount(changeType) is var count && count > 0)
-                                    {
-                                        <MudText Typo="Typo.caption" Class="ml-1">(@count.ToString("N0"))</MudText>
-                                    }
-                                </MudChip>
-                            }
-                            @* Disabled Unchanged chip *@
-                            <MudChip T="ObjectChangeType"
-                                     Variant="Variant.Text"
-                                     Color="Color.Default"
-                                     Disabled="true">
-                                Unchanged
-                                <MudText Typo="Typo.caption" Class="ml-1">(@GetUnchangedCount().ToString("N0"))</MudText>
-                            </MudChip>
-                        </MudChipSet>
-                    </div>
-                }
-
                 @* Outcome Type Filter *@
                 @if (GetAvailableOutcomeTypes().Any())
                 {
@@ -393,6 +359,14 @@
                                 </MudChip>
                             }
                         </MudChipSet>
+                        @* Unchanged chip — informational, not a filter *@
+                        @if (GetUnchangedCount() > 0)
+                        {
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Disabled="true" Class="mt-1">
+                                Unchanged
+                                <MudText Typo="Typo.caption" Class="ml-1">(@GetUnchangedCount().ToString("N0"))</MudText>
+                            </MudChip>
+                        }
                     </div>
                 }
 
@@ -488,11 +462,6 @@
                     </MudTableSortLabel>
                 </MudTh>
                 <MudTh>
-                    <MudTableSortLabel SortLabel="changetype" T="ActivityRunProfileExecutionItemHeader">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Change Type</MudText>
-                    </MudTableSortLabel>
-                </MudTh>
-                <MudTh>
                     <MudText Typo="Typo.button" Class="mud-text-secondary">Outcomes</MudText>
                 </MudTh>
                 <MudTh>
@@ -511,9 +480,6 @@
                 <MudTd DataLabel="External Id" Class="jim-text-code mud-text-secondary">@(!string.IsNullOrEmpty(context.ExternalIdValue) ? context.ExternalIdValue : "-")</MudTd>
                 <MudTd DataLabel="Display Name">@(!string.IsNullOrEmpty(context.DisplayName) ? context.DisplayName : "-")</MudTd>
                 <MudTd DataLabel="External Object Type">@(context.ConnectedSystemObjectType != null ? context.ConnectedSystemObjectType.ToString().SplitOnCapitalLetters() : "-")</MudTd>
-                <MudTd DataLabel="Change Type">
-                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetRunItemMudBlazorColorForType(context.ObjectChangeType)">@GetContextAwareRowChangeTypeName(context.ObjectChangeType)</MudChip>
-                </MudTd>
                 <MudTd DataLabel="Outcomes">
                     @{
                         var outcomes = Helpers.ParseOutcomeSummary(context.OutcomeSummary);
@@ -580,9 +546,6 @@
     private int _rowsPerPage = 10;
     private bool _preferencesLoaded;
     private bool _initialisationComplete;
-
-    // Change type filter - when chips are selected, the table reloads with the filter applied
-    private IReadOnlyCollection<ObjectChangeType> _selectedChangeTypes = new List<ObjectChangeType>();
 
     // Object type filter - when chips are selected, the table reloads with the filter applied
     private IReadOnlyCollection<string> _selectedObjectTypes = new List<string>();
@@ -658,9 +621,6 @@
             var page = state.Page + 1;
             var sortDescending = state.SortDirection == SortDirection.Descending;
 
-            // Get selected change types for filtering (null means show all)
-            IEnumerable<ObjectChangeType>? changeTypeFilter = _selectedChangeTypes.Count > 0 ? _selectedChangeTypes : null;
-
             // Get selected object types for filtering (null means show all)
             IEnumerable<string>? objectTypeFilter = _selectedObjectTypes.Count > 0 ? _selectedObjectTypes : null;
 
@@ -677,7 +637,6 @@
                 string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
                 state.SortLabel,
                 sortDescending,
-                changeTypeFilter,
                 objectTypeFilter,
                 errorTypeFilter,
                 outcomeTypeFilter);
@@ -698,12 +657,6 @@
     private void OnSearch(string text)
     {
         _searchString = text;
-        _table?.ReloadServerData();
-    }
-
-    private void OnChangeTypeFilterChanged(IReadOnlyCollection<ObjectChangeType> selectedTypes)
-    {
-        _selectedChangeTypes = selectedTypes;
         _table?.ReloadServerData();
     }
 
@@ -804,97 +757,6 @@
     private bool IsOutcomeTypeSelected(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
         return _selectedOutcomeTypes.Contains(outcomeType);
-    }
-
-    /// <summary>
-    /// Returns the change types that have at least one RPEI in this activity.
-    /// Shows all possible change types with non-zero counts first, ordered logically.
-    /// </summary>
-    private IEnumerable<ObjectChangeType> GetAvailableChangeTypes()
-    {
-        if (_activityRunProfileExecutionStats == null)
-            return Enumerable.Empty<ObjectChangeType>();
-
-        // Return change types in logical order: Import → Sync → Export → Other
-        var availableTypes = new List<ObjectChangeType>();
-
-        // Import operations
-        if (_activityRunProfileExecutionStats.TotalCsoAdds > 0)
-            availableTypes.Add(ObjectChangeType.Added);
-        if (_activityRunProfileExecutionStats.TotalCsoUpdates > 0)
-            availableTypes.Add(ObjectChangeType.Updated);
-        if (_activityRunProfileExecutionStats.TotalCsoDeletes > 0)
-            availableTypes.Add(ObjectChangeType.Deleted);
-
-        // Sync operations
-        if (_activityRunProfileExecutionStats.TotalProjections > 0)
-            availableTypes.Add(ObjectChangeType.Projected);
-        if (_activityRunProfileExecutionStats.TotalJoins > 0)
-            availableTypes.Add(ObjectChangeType.Joined);
-        if (_activityRunProfileExecutionStats.TotalAttributeFlows > 0)
-            availableTypes.Add(ObjectChangeType.AttributeFlow);
-        if (_activityRunProfileExecutionStats.TotalDisconnections > 0)
-            availableTypes.Add(ObjectChangeType.Disconnected);
-        if (_activityRunProfileExecutionStats.TotalDriftCorrections > 0)
-            availableTypes.Add(ObjectChangeType.DriftCorrection);
-
-        // Export operations
-        if (_activityRunProfileExecutionStats.TotalExported > 0)
-            availableTypes.Add(ObjectChangeType.Exported);
-        if (_activityRunProfileExecutionStats.TotalDeprovisioned > 0)
-            availableTypes.Add(ObjectChangeType.Deprovisioned);
-
-        // Note: PendingExport is filtered via the Outcome Type filter (PendingExportCreated),
-        // not here, because pending exports are outcomes on RPEIs with other change types
-        // (e.g., Joined + PendingExportCreated), not standalone RPEIs with ObjectChangeType.PendingExport.
-
-        // Note: NoChange RPEIs are filtered out from GetAvailableChangeTypes
-        // as unchanged objects are shown separately via TotalUnchanged
-
-        return availableTypes;
-    }
-
-    /// <summary>
-    /// Gets the count of RPEIs for a specific change type from the stats.
-    /// </summary>
-    private int GetChangeTypeCount(ObjectChangeType changeType)
-    {
-        if (_activityRunProfileExecutionStats == null)
-            return 0;
-
-        return changeType switch
-        {
-            ObjectChangeType.Added => _activityRunProfileExecutionStats.TotalCsoAdds,
-            ObjectChangeType.Updated => _activityRunProfileExecutionStats.TotalCsoUpdates,
-            ObjectChangeType.Deleted => _activityRunProfileExecutionStats.TotalCsoDeletes,
-            ObjectChangeType.Projected => _activityRunProfileExecutionStats.TotalProjections,
-            ObjectChangeType.Joined => _activityRunProfileExecutionStats.TotalJoins,
-            ObjectChangeType.AttributeFlow => _activityRunProfileExecutionStats.TotalAttributeFlows,
-            ObjectChangeType.Disconnected => _activityRunProfileExecutionStats.TotalDisconnections,
-            ObjectChangeType.DriftCorrection => _activityRunProfileExecutionStats.TotalDriftCorrections,
-            ObjectChangeType.Exported => _activityRunProfileExecutionStats.TotalExported,
-            ObjectChangeType.Deprovisioned => _activityRunProfileExecutionStats.TotalDeprovisioned,
-            ObjectChangeType.PendingExport => _activityRunProfileExecutionStats.TotalPendingExports,
-            ObjectChangeType.NoChange => 0, // NoChange items shown via TotalUnchanged
-            _ => 0
-        };
-    }
-
-    /// <summary>
-    /// Checks if a change type is currently selected in the filter.
-    /// </summary>
-    private bool IsChangeTypeSelected(ObjectChangeType changeType)
-    {
-        return _selectedChangeTypes.Contains(changeType);
-    }
-
-    /// <summary>
-    /// Gets the relevant change types for the current run type.
-    /// Returns all possible change types for the run type, not just those with counts > 0.
-    /// </summary>
-    private IEnumerable<ObjectChangeType> GetRelevantChangeTypes()
-    {
-        return Helpers.GetChangeTypesForRunType(_activity?.ConnectedSystemRunType);
     }
 
     /// <summary>
@@ -999,30 +861,6 @@
             Color.Surface => "surface",
             _ => "default"
         };
-    }
-
-    /// <summary>
-    /// Returns a context-aware display name for a change type (plural form, used for filter chips).
-    /// For ObjectChangeType.Deleted, differentiates between import (detection) and sync (processing).
-    /// </summary>
-    private string GetContextAwareChangeTypeName(ObjectChangeType changeType)
-    {
-        if (changeType == ObjectChangeType.Deleted)
-            return IsSyncRun() ? "Deletions Processed" : "Deletions Detected";
-
-        return Helpers.GetChangeTypeDisplayName(changeType);
-    }
-
-    /// <summary>
-    /// Returns a context-aware display name for a change type (singular form, used for row chips).
-    /// For ObjectChangeType.Deleted, differentiates between import (detection) and sync (processing).
-    /// </summary>
-    private string GetContextAwareRowChangeTypeName(ObjectChangeType changeType)
-    {
-        if (changeType == ObjectChangeType.Deleted)
-            return IsSyncRun() ? "Deletion Processed" : "Deletion Detected";
-
-        return Helpers.GetChangeTypeDisplayName(changeType);
     }
 
     /// <summary>
