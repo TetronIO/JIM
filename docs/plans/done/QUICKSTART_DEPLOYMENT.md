@@ -1,5 +1,7 @@
 # Plan: Slick Quick Start for Admin Deployment
 
+**Status:** Done — implemented in `537d29ac`
+
 ## Context
 
 The README currently tells admins to `git clone` the repo to deploy JIM. This is suboptimal:
@@ -141,24 +143,25 @@ Add entry under `## [Unreleased]` / **Added**.
 
 ## Files to Create/Modify
 
-| File | Action |
-|------|--------|
-| `docker-compose.production.yml` | **Create** — Pre-authored production override |
-| `setup.sh` | **Create** — Interactive installer (~300 lines) |
-| `.github/workflows/release.yml` | **Edit** — Attach standalone assets to release |
-| `README.md` | **Edit** — Replace admin Quick Start section |
-| `CHANGELOG.md` | **Edit** — Add Unreleased entry |
-| `docs/RELEASE_PROCESS.md` | **Edit** — Update "Verify the release" step to mention standalone compose/env assets; update "Using Published Images" section to reference `docker-compose.production.yml`; fix stale env var names in air-gapped section (`SSO_AUTHORITY` → `JIM_SSO_AUTHORITY`, `DB_HOSTNAME` → `JIM_DB_HOSTNAME`, etc.) |
+| File | Action | Status |
+|------|--------|--------|
+| `docker-compose.production.yml` | **Create** — Pre-authored production override | Done |
+| `setup.sh` | **Create** — Interactive installer (~426 lines) | Done |
+| `.github/workflows/release.yml` | **Edit** — Attach standalone assets to release | Done |
+| `README.md` | **Edit** — Replace admin Quick Start section | Done |
+| `CHANGELOG.md` | **Edit** — Add Unreleased entry | Done |
+| `docs/RELEASE_PROCESS.md` | **Edit** — Update verify step, fix stale env var names | Done |
 
 ## Follow-up Items
 
-- **PowerShell module banner:** Show the JIM ASCII art banner in the PowerShell module after successful authentication (e.g., after `Connect-JIM`). Gives a consistent branded feel across the setup script and PS module.
-- **Deployment guide:** Create a comprehensive deployment guide (`docs/DEPLOYMENT_GUIDE.md`) covering both online (connected) and offline (air-gapped) scenarios. Should include prerequisites, network requirements, topology options (bundled vs external DB), TLS/reverse proxy configuration, upgrades, and backup/restore. The README Quick Start gives the 5-minute path; the deployment guide gives the full production-ready walkthrough.
+- [ ] **PowerShell module banner:** Show the JIM ASCII art banner in the PowerShell module after successful authentication (e.g., after `Connect-JIM`). Gives a consistent branded feel across the setup script and PS module.
+- [ ] **Deployment guide:** Create a comprehensive deployment guide (`docs/DEPLOYMENT_GUIDE.md`) covering both online (connected) and offline (air-gapped) scenarios. Should include prerequisites, network requirements, topology options (bundled vs external DB), TLS/reverse proxy configuration, upgrades, and backup/restore. The README Quick Start gives the 5-minute path; the deployment guide gives the full production-ready walkthrough.
 
 ## Verification
 
-- `bash -n setup.sh` — syntax check
-- `shellcheck setup.sh` — lint (if available)
-- Review `docker-compose.production.yml` with `docker compose -f docker-compose.yml -f docker-compose.production.yml config` to verify merge
-- Verify README markdown renders correctly
-- No .NET code changes → no build/test required
+- [x] `bash -n setup.sh` — syntax check
+- [x] `shellcheck setup.sh` — lint (if available)
+- [x] Review `docker-compose.production.yml` with `docker compose config` to verify merge
+- [x] Verify README markdown renders correctly
+- [x] No .NET code changes → no build/test required
+- [x] Interactive testing — both bundled and external DB paths, special characters in passwords
