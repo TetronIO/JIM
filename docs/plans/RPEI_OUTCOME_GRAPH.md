@@ -545,13 +545,16 @@ End-to-end tests covering outcome recording and presentation through the API lay
 3. Test `OutcomeSummary` appears in `GET /api/v1/activities/{id}/items` response for RPEIs with outcomes
 4. Test `OutcomeSummary` is null for legacy RPEIs and RPEIs with tracking level = None
 5. Test outcome trees at each tracking level (None / Standard / Detailed) produce correct stats
-6. Test import outcome recording: CsoAdded, CsoUpdated, CsoDeleted, ExportConfirmed, ExportFailed
-7. Test sync outcome recording: Projected → AttributeFlow → PendingExportCreated (nested tree)
-8. Test sync outcome recording: Joined, Disconnected, DisconnectedOutOfScope, MvoDeleted chains
-9. Test export outcome recording: Exported, Deprovisioned
-10. Test multi-system export stats: one object exported to N systems = N Exported outcome nodes
-11. Test RPEI-only stats (OutOfScopeRetainJoin, DriftCorrection, Created, NoChange) remain correct alongside outcome-based stats
-12. Test error counting remains per-RPEI regardless of outcomes
+6. Test import outcome recording: CsoAdded, CsoUpdated, DeletionDetected, ExportConfirmed, ExportFailed
+7. Test sync outcome recording: Projected → AttributeFlow → Provisioned → PendingExportCreated (nested tree)
+8. Test sync outcome recording: Joined → AttributeFlow → PendingExportCreated (alternative root)
+9. Test sync outcome recording: Disconnected + CsoDeleted sibling roots, DisconnectedOutOfScope, MvoDeleted → Deprovisioned chains
+10. Test sync outcome recording: DriftCorrection → PendingExportCreated (corrective export chain)
+11. Test export outcome recording: Exported, Deprovisioned
+12. Test multi-system provisioning stats: one object provisioned to N systems = N Provisioned outcome nodes
+13. Test multi-system export stats: one object exported to N systems = N Exported outcome nodes
+14. Test RPEI-only stats (OutOfScopeRetainJoin, Created, NoChange) remain correct alongside outcome-based stats
+15. Test error counting remains per-RPEI regardless of outcomes
 
 ### Phase 5: UI — List View & Filters ✅
 
