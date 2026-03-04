@@ -48,7 +48,6 @@ JIM supports common Identity Governance & Administration (IGA) scenarios:
 
 - **Joiner/Mover/Leaver (JML) Automation** - Synchronise users from HR systems to directories, applications, and downstream systems
 - **Attribute Writeback** - Keep HR systems current by writing IT-managed attributes back (e.g., email addresses, phone numbers)
-- **Entitlement Management** - Centrally manage group memberships across directories, applications, and systems
 - **Domain Consolidation** - Prepare for cloud migration, simplification, or organisational mergers
 - **Domain Migration** - Support divestitures and system decommissioning
 - **Identity Correlation** - Bring together user and entitlement data from disparate business applications
@@ -114,7 +113,8 @@ Each release includes a downloadable bundle containing pre-built Docker images, 
 - Oracle Database
 - PowerShell (Core)
 - SCIM 2.0
-- Web Services (REST APIs with OAuth2/API key authentication)
+- Entra ID / Microsoft Graph API
+- Web Services (REST APIs)
 
 Custom connectors can be developed for bespoke scenarios.
 
