@@ -88,6 +88,12 @@ public static class ExportChangeHistoryBuilder
     {
         foreach (var peChange in attributeValueChanges)
         {
+            // Skip entries where the Attribute navigation property isn't loaded —
+            // this can happen in workflow tests or if the PE was created without
+            // eagerly loading the attribute definition.
+            if (peChange.Attribute == null)
+                continue;
+
             // Group by attribute — multiple value changes for the same attribute
             // (e.g., multi-valued add/remove) share one ConnectedSystemObjectChangeAttribute
             var attributeChange = change.AttributeChanges

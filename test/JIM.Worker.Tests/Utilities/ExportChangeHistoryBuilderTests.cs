@@ -404,6 +404,23 @@ public class ExportChangeHistoryBuilderTests
     }
 
     [Test]
+    public void MapAttributeValueChanges_NullAttribute_SkipsEntry()
+    {
+        // Arrange — PE attribute value change with null Attribute (navigation not loaded)
+        var change = new ConnectedSystemObjectChange();
+        var peChanges = new List<PendingExportAttributeValueChange>
+        {
+            new() { Attribute = null!, ChangeType = PendingExportAttributeChangeType.Add, StringValue = "test" }
+        };
+
+        // Act
+        ExportChangeHistoryBuilder.MapAttributeValueChanges(change, peChanges);
+
+        // Assert — entry skipped, no attribute changes created
+        Assert.That(change.AttributeChanges, Has.Count.EqualTo(0));
+    }
+
+    [Test]
     public void MapAttributeValueChanges_EmptyList_CreatesNoAttributeChanges()
     {
         // Arrange
