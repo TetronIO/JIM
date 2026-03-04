@@ -119,7 +119,7 @@ Each release includes a downloadable bundle containing pre-built Docker images, 
 Custom connectors can be developed for bespoke scenarios.
 
 ## Authentication
-JIM uses OpenID Connect (OIDC) for Single Sign-On authentication. It is IdP-agnostic and works with any OIDC-compliant Identity Provider, including Microsoft Entra ID, Okta, Auth0, Keycloak, and AD FS. PKCE is used for enhanced security.
+JIM uses OpenID Connect (OIDC) for Single Sign-On authentication. It is IdP-agnostic and works with any OIDC-compliant Identity Provider, including Entra ID, Google Cloud Identity, AWS Identity Center/Cognito, Okta, Auth0, Keycloak, AD FS, etc. PKCE is used for enhanced security.
 
 For API access, JIM supports both JWT Bearer tokens and API keys for automation and CI/CD scenarios.
 
