@@ -112,8 +112,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             _exportEvaluationCache = await _jim.ExportEvaluation.BuildExportEvaluationCacheAsync(_connectedSystem.Id);
         }
 
-        // Load sync outcome tracking level (None/Standard/Detailed) for building outcome trees on RPEIs
+        // Load settings once at start of sync
         _syncOutcomeTrackingLevel = await _jim.ServiceSettings.GetSyncOutcomeTrackingLevelAsync();
+        _csoChangeTrackingEnabled = await _jim.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
 
         // Process CSOs in batches. This enables us to respond to cancellation requests in a reasonable timeframe.
         // Page size is configurable via service settings for performance tuning.

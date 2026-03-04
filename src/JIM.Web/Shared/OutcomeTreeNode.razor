@@ -1,7 +1,6 @@
 @using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Staging
-@using JIM.Models.Transactional
 @using JIM.Utilities
 
 <div class="outcome-node">
@@ -52,11 +51,11 @@
                                        Size="Size.Small" OnClick="ToggleExpand" />
                     </MudTooltip>
                 }
-                @if (IsPendingExportExpandable)
+                @if (IsPendingExportWithChanges)
                 {
                     <MudTooltip Text="@(_expanded ? "Hide pending export detail" : "Show pending export detail")">
                         <MudIconButton Icon="@(_expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
-                                       Size="Size.Small" OnClick="TogglePendingExportExpandAsync" />
+                                       Size="Size.Small" OnClick="ToggleExpand" />
                     </MudTooltip>
                 }
             </MudStack>
@@ -86,44 +85,11 @@
         </div>
     }
 
-    @* Expandable attribute detail for PendingExportCreated nodes *@
-    @if (_expanded && IsPendingExportExpandable)
+    @* Expandable attribute detail for PendingExportCreated nodes (from persisted CSO change snapshot) *@
+    @if (_expanded && IsPendingExportWithChanges)
     {
-        <div class="mt-2">
-            @if (_pendingExportLoading)
-            {
-                <MudProgressLinear Indeterminate="true" />
-            }
-            else if (_pendingExport != null && _pendingExport.AttributeValueChanges.Count > 0)
-            {
-                <MudSimpleTable Dense="true" Hover="true" Elevation="0" Style="background: transparent;">
-                    <tbody>
-                        @foreach (var change in _pendingExport.AttributeValueChanges.OrderBy(c => c.Attribute.Name))
-                        {
-                            <tr>
-                                <td style="padding: 4px 12px 4px 0; border: none; vertical-align: top; white-space: nowrap;">
-                                    <MudText Class="mud-text-secondary">@change.Attribute.Name</MudText>
-                                </td>
-                                <td style="padding: 4px 8px 4px 0; border: none; vertical-align: top; white-space: nowrap;">
-                                    <MudChip T="string" Variant="Variant.Text"
-                                             Color="@GetPendingExportChangeColor(change.ChangeType)"
-                                             Size="Size.Small" Class="ml-0">
-                                        @change.ChangeType
-                                    </MudChip>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </MudSimpleTable>
-            }
-            else if (_pendingExport != null)
-            {
-                <MudText Class="mud-text-secondary">No attribute changes.</MudText>
-            }
-            else
-            {
-                <MudText Class="mud-text-secondary">Pending export detail not available.</MudText>
-            }
+        <div class="@($"mt-2{(Outcome.Children.Count > 0 ? " outcome-table-continuation" : "")}")">
+            <AttributeChangeTable AttributeChanges="Outcome.ConnectedSystemObjectChange!.AttributeChanges.ToList()" />
         </div>
     }
 
@@ -134,8 +100,7 @@
             {
                 <OutcomeTreeNode Outcome="child"
                                  AttributeChanges="AttributeChanges"
-                                 MvoAttributeChanges="MvoAttributeChanges"
-                                 OnLoadPendingExport="OnLoadPendingExport" />
+                                 MvoAttributeChanges="MvoAttributeChanges" />
             }
         </div>
     }
@@ -159,27 +124,23 @@
     [Parameter]
     public List<MetaverseObjectChangeAttribute>? MvoAttributeChanges { get; set; }
 
-    /// <summary>
-    /// Callback for loading pending export data on demand when a PendingExportCreated node is expanded.
-    /// </summary>
-    [Parameter]
-    public Func<Guid, Task<PendingExport?>>? OnLoadPendingExport { get; set; }
-
     private bool _expanded;
-    private PendingExport? _pendingExport;
-    private bool _pendingExportLoading;
 
     private bool IsAttributeFlowWithChanges =>
         (Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
          || Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded
-         || Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated)
+         || Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated
+         || Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported
+         || Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned)
         && ((AttributeChanges != null && AttributeChanges.Count > 0)
             || (MvoAttributeChanges != null && MvoAttributeChanges.Count > 0));
 
-    private bool IsPendingExportExpandable =>
+    /// <summary>
+    /// Whether this PendingExportCreated node has a persisted CSO change snapshot with attribute detail.
+    /// </summary>
+    private bool IsPendingExportWithChanges =>
         Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
-        && Outcome.TargetEntityId.HasValue
-        && OnLoadPendingExport != null;
+        && Outcome.ConnectedSystemObjectChange?.AttributeChanges.Count > 0;
 
     /// <summary>
     /// Outcome types that show their target entity inline on the title row
@@ -214,17 +175,6 @@
     private void ToggleExpand()
     {
         _expanded = !_expanded;
-    }
-
-    private async Task TogglePendingExportExpandAsync()
-    {
-        _expanded = !_expanded;
-        if (_expanded && _pendingExport == null && !_pendingExportLoading)
-        {
-            _pendingExportLoading = true;
-            _pendingExport = await OnLoadPendingExport!(Outcome.TargetEntityId!.Value);
-            _pendingExportLoading = false;
-        }
     }
 
     /// <summary>
@@ -288,13 +238,4 @@
     /// </summary>
     private string GetProvisionedCsHref() => $"/admin/connected-systems/{Outcome.DetailMessage}";
 
-    private static Color GetPendingExportChangeColor(PendingExportAttributeChangeType changeType) =>
-        changeType switch
-        {
-            PendingExportAttributeChangeType.Add => Color.Success,
-            PendingExportAttributeChangeType.Update => Color.Info,
-            PendingExportAttributeChangeType.Remove => Color.Warning,
-            PendingExportAttributeChangeType.RemoveAll => Color.Error,
-            _ => Color.Default
-        };
 }

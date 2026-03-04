@@ -231,6 +231,16 @@ public class ActivityServer
     }
 
     /// <summary>
+    /// Persists ConnectedSystemObjectChange records attached to RPEIs.
+    /// Call after BulkInsertRpeisAsync when RPEIs have CSO change records that need
+    /// to be persisted separately (raw SQL bulk insert only covers RPEI scalar columns).
+    /// </summary>
+    public async Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    {
+        await Application.Repository.Activity.PersistRpeiCsoChangesAsync(rpeis);
+    }
+
+    /// <summary>
     /// Updates the message on an Activity.
     /// </summary>
     public async Task UpdateActivityMessageAsync(Activity activity, string message)

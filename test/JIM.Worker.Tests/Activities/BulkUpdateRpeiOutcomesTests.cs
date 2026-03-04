@@ -93,8 +93,7 @@ public class BulkUpdateRpeiOutcomesTests
             ActivityId = Guid.NewGuid(),
             ObjectChangeType = ObjectChangeType.Updated,
             ErrorType = ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed,
-            ErrorMessage = "Export confirmation failed for 2 attribute(s)",
-            DataSnapshot = "Failed attributes: displayName, mail"
+            ErrorMessage = "Export confirmation failed for 2 attribute(s)"
         };
 
         // Act
@@ -105,7 +104,6 @@ public class BulkUpdateRpeiOutcomesTests
         // Assert - error fields should be preserved on the RPEI object
         Assert.That(rpei.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed));
         Assert.That(rpei.ErrorMessage, Is.EqualTo("Export confirmation failed for 2 attribute(s)"));
-        Assert.That(rpei.DataSnapshot, Is.EqualTo("Failed attributes: displayName, mail"));
     }
 
     [Test]
@@ -155,8 +153,7 @@ public class BulkUpdateRpeiOutcomesTests
             ObjectChangeType = ObjectChangeType.Updated,
             OutcomeSummary = "CsoUpdated:1,ExportConfirmed:1",
             ErrorType = null,
-            ErrorMessage = null,
-            DataSnapshot = null
+            ErrorMessage = null
         };
 
         // Act & Assert

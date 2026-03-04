@@ -93,4 +93,13 @@ public interface IActivityRepository
     /// SaveChangesAsync calls. Call this after raw SQL bulk insert has persisted them.
     /// </summary>
     public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis);
+
+    /// <summary>
+    /// Persists ConnectedSystemObjectChange records that are attached to RPEIs.
+    /// Used by the export processor to persist export change history records after
+    /// RPEIs have been bulk-inserted via raw SQL (which only inserts RPEI scalar columns).
+    /// The change records and their attribute/value children are added to the DbContext
+    /// and saved in a single operation.
+    /// </summary>
+    public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis);
 }

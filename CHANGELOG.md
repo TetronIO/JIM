@@ -21,10 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Outcome type filter on Activity Detail page — filter RPEIs by outcome type (Projected, Joined, AttributeFlow, etc.) (#363)
 - `DisplayNameSnapshot` and `ObjectTypeSnapshot` fields on RPEI — preserves CSO display data for historical RPEIs after CSO deletion (#363)
 - `SnapshotCsoDisplayFields()` helper on RPEI model — centralised snapshot population for ExternalId, DisplayName, and ObjectType
+- Export change history — `ConnectedSystemObjectChange` records created during export to persist attribute-level detail on export RPEIs, enabling the Causality Tree to show expandable attribute changes for Exported and Deprovisioned outcomes
+- Pending export snapshot on sync outcomes — `PendingExportCreated` outcome nodes now persist a `ConnectedSystemObjectChange` snapshot at sync time, so attribute detail remains available after the pending export is deleted during export confirmation
+- `ExportChangeHistoryBuilder` utility — maps `PendingExportAttributeValueChange` data into normalised `ConnectedSystemObjectChange` records for both export RPEIs and sync outcome snapshots
 
 ### Changed
 - Removed "Change Type" filter and column from Activity Detail page — outcome type filter and per-row outcome chips provide a strict superset of this information (#363)
 - Consolidated `ObjectChangeType.Provisioned` into `ObjectChangeType.Exported` — "Provisioned" is now reserved for the sync-phase concept (adding an MVO to a CS for the first time via `SyncOutcome`), while all export-phase operations use `Exported` regardless of whether the object was newly created or updated in the target system
+
+### Removed
+- `DataSnapshot` property from `ActivityRunProfileExecutionItem` — superseded by structured `ConnectedSystemObjectChange` records for export and pending export attribute history
 
 ### Fixed
 - `Get-JIMMetaverseObject` now correctly caps `-PageSize` at 100 to match the API maximum (previously accepted up to 1000, but the API silently capped at 100, returning incomplete results)

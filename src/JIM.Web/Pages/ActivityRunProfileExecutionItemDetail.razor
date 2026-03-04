@@ -233,7 +233,6 @@
                 <OutcomeTree Outcomes="_activityRunProfileExecutionItem.SyncOutcomes.ToList()"
                              AttributeChanges="_activityRunProfileExecutionItem.ConnectedSystemObjectChange?.AttributeChanges?.ToList()"
                              MvoAttributeChanges="_activityRunProfileExecutionItem.MetaverseObjectChange?.AttributeChanges?.ToList()"
-                             OnLoadPendingExport="LoadPendingExportAsync"
                              ConnectedSystemName="@_connectedSystemHeader?.Name"
                              ConnectedSystemId="@_connectedSystemHeader?.Id"
                              RunProfileName="@_activity?.TargetName"
@@ -865,13 +864,6 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private MetaverseObjectType? _metaverseObjectType;
     private List<ConnectedSystemHeader>? _deletionTriggerSystems;
 
-    /// <summary>
-    /// Lazy-loads a pending export by ID for the outcome tree's expandable PE detail.
-    /// </summary>
-    private async Task<PendingExport?> LoadPendingExportAsync(Guid pendingExportId)
-    {
-        return await Jim.ConnectedSystems.GetPendingExportAsync(pendingExportId);
-    }
 
     private static string FormatGracePeriod(TimeSpan period)
     {
