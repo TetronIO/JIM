@@ -44,6 +44,58 @@ public class CalculateActivitySummaryStatsTests
     }
 
     /// <summary>
+    /// Creates a sync outcome node with the specified type and optional detail count.
+    /// </summary>
+    private static ActivityRunProfileExecutionItemSyncOutcome CreateOutcome(
+        ActivityRunProfileExecutionItemSyncOutcomeType outcomeType,
+        int? detailCount = null,
+        string? targetEntityDescription = null)
+    {
+        return new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            Id = Guid.NewGuid(),
+            OutcomeType = outcomeType,
+            DetailCount = detailCount,
+            TargetEntityDescription = targetEntityDescription
+        };
+    }
+
+    /// <summary>
+    /// Creates an RPEI with the specified change type and sync outcomes attached.
+    /// Mirrors production behaviour where SyncOutcomeBuilder.AddRootOutcome and AddChildOutcome
+    /// add ALL outcomes (root + children) to rpei.SyncOutcomes as a flat list.
+    /// </summary>
+    private static ActivityRunProfileExecutionItem CreateRpeiWithOutcomes(
+        ObjectChangeType changeType,
+        ActivityRunProfileExecutionItemSyncOutcome rootOutcome,
+        ActivityRunProfileExecutionItemErrorType? errorType = null)
+    {
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ObjectChangeType = changeType,
+            ErrorType = errorType
+        };
+        rootOutcome.ActivityRunProfileExecutionItemId = rpei.Id;
+        // Add root and all descendants to SyncOutcomes (flat list), matching SyncOutcomeBuilder behaviour
+        AddOutcomeAndDescendants(rpei, rootOutcome);
+        return rpei;
+    }
+
+    /// <summary>
+    /// Recursively adds an outcome and all its children to rpei.SyncOutcomes.
+    /// This mirrors SyncOutcomeBuilder.AddChildOutcome which adds to both parent.Children AND rpei.SyncOutcomes.
+    /// </summary>
+    private static void AddOutcomeAndDescendants(
+        ActivityRunProfileExecutionItem rpei,
+        ActivityRunProfileExecutionItemSyncOutcome outcome)
+    {
+        rpei.SyncOutcomes.Add(outcome);
+        foreach (var child in outcome.Children)
+            AddOutcomeAndDescendants(rpei, child);
+    }
+
+    /// <summary>
     /// Adds RPEIs to an activity and then invokes CalculateActivitySummaryStats.
     /// </summary>
     private static void AddRpeisAndCalculate(Activity activity, params ActivityRunProfileExecutionItem[] rpeis)
@@ -371,22 +423,217 @@ public class CalculateActivitySummaryStatsTests
 
     #endregion
 
+    #region Outcome-Based Stats — Import
+
+    [Test]
+    public void CalculateActivitySummaryStats_WithOutcomes_ImportRun_DerivedFromOutcomes()
+    {
+        // Arrange - When RPEIs have sync outcomes, stats are derived from outcome nodes.
+        // Import deletion RPEIs record a DeletionDetected outcome.
+        var activity = CreateActivity();
+        AddRpeisAndCalculate(activity,
+            CreateRpeiWithOutcomes(ObjectChangeType.Added,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded)),
+            CreateRpeiWithOutcomes(ObjectChangeType.Added,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded)),
+            CreateRpeiWithOutcomes(ObjectChangeType.Updated,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated)),
+            CreateRpeiWithOutcomes(ObjectChangeType.Deleted,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected)));
+
+        // Assert - Stats derived from outcome nodes
+        Assert.That(activity.TotalAdded, Is.EqualTo(2));
+        Assert.That(activity.TotalUpdated, Is.EqualTo(1));
+        Assert.That(activity.TotalDeleted, Is.EqualTo(1));
+    }
+
+    #endregion
+
+    #region Outcome-Based Stats — Sync
+
+    [Test]
+    public void CalculateActivitySummaryStats_WithOutcomes_SyncRun_CountsFromOutcomeTree()
+    {
+        // Arrange - Sync RPEI with a full outcome tree:
+        // Projected -> AttributeFlow -> PendingExportCreated (AD) + PendingExportCreated (LDAP)
+        var activity = CreateActivity();
+        var attrFlowOutcome = CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow, detailCount: 12);
+        attrFlowOutcome.Children.Add(CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated));
+        attrFlowOutcome.Children.Add(CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated));
+
+        var projectedOutcome = CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
+        projectedOutcome.Children.Add(attrFlowOutcome);
+
+        AddRpeisAndCalculate(activity,
+            CreateRpeiWithOutcomes(ObjectChangeType.Projected, projectedOutcome));
+
+        // Assert - All outcome types counted including nested children
+        Assert.That(activity.TotalProjected, Is.EqualTo(1));
+        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(1));
+        Assert.That(activity.TotalPendingExports, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void CalculateActivitySummaryStats_WithOutcomes_MultipleRpeis_AggregatesAcrossAll()
+    {
+        // Arrange - Multiple RPEIs with outcomes, stats aggregate across all
+        var activity = CreateActivity();
+
+        // RPEI 1: Projected -> AttributeFlow -> PendingExportCreated x2
+        var attrFlow1 = CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
+        attrFlow1.Children.Add(CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated));
+        attrFlow1.Children.Add(CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated));
+        var projected = CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
+        projected.Children.Add(attrFlow1);
+
+        // RPEI 2: Joined -> AttributeFlow
+        var attrFlow2 = CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
+        var joined = CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.Joined);
+        joined.Children.Add(attrFlow2);
+
+        // RPEI 3: Disconnected -> AttributeFlow
+        var attrFlow3 = CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
+        var disconnected = CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected);
+        disconnected.Children.Add(attrFlow3);
+
+        AddRpeisAndCalculate(activity,
+            CreateRpeiWithOutcomes(ObjectChangeType.Projected, projected),
+            CreateRpeiWithOutcomes(ObjectChangeType.Joined, joined),
+            CreateRpeiWithOutcomes(ObjectChangeType.Disconnected, disconnected));
+
+        // Assert
+        Assert.That(activity.TotalProjected, Is.EqualTo(1));
+        Assert.That(activity.TotalJoined, Is.EqualTo(1));
+        Assert.That(activity.TotalDisconnected, Is.EqualTo(1));
+        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(3), "Each RPEI has one AttributeFlow outcome");
+        Assert.That(activity.TotalPendingExports, Is.EqualTo(2), "Only the projected RPEI has pending exports");
+    }
+
+    [Test]
+    public void CalculateActivitySummaryStats_WithOutcomes_DisconnectedOutOfScope_CountedFromOutcomes()
+    {
+        // Arrange
+        var activity = CreateActivity();
+        AddRpeisAndCalculate(activity,
+            CreateRpeiWithOutcomes(ObjectChangeType.DisconnectedOutOfScope,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope)),
+            CreateRpeiWithOutcomes(ObjectChangeType.DisconnectedOutOfScope,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope)));
+
+        // Assert
+        Assert.That(activity.TotalDisconnectedOutOfScope, Is.EqualTo(2));
+        Assert.That(activity.TotalDisconnected, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void CalculateActivitySummaryStats_WithOutcomes_SourceDeletion_SingleRpeiWithBothOutcomes()
+    {
+        // Arrange - Source deletion produces a single Disconnected RPEI with
+        // Disconnected as root and CsoDeleted as child (causal chain)
+        var activity = CreateActivity();
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.Disconnected
+        };
+        var disconnectedOutcome = CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected);
+        disconnectedOutcome.ActivityRunProfileExecutionItemId = rpei.Id;
+        rpei.SyncOutcomes.Add(disconnectedOutcome);
+        var csoDeletedOutcome = CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+        csoDeletedOutcome.ActivityRunProfileExecutionItemId = rpei.Id;
+        csoDeletedOutcome.ParentSyncOutcome = disconnectedOutcome;
+        disconnectedOutcome.Children.Add(csoDeletedOutcome);
+        rpei.SyncOutcomes.Add(csoDeletedOutcome);
+
+        AddRpeisAndCalculate(activity, rpei);
+
+        // Assert - Disconnected counted from outcome, CsoDeleted counted from outcome
+        Assert.That(activity.TotalDisconnected, Is.EqualTo(1));
+        Assert.That(activity.TotalDeleted, Is.EqualTo(1), "CsoDeleted outcome should count towards TotalDeleted");
+    }
+
+    #endregion
+
+    #region Outcome-Based Stats — Export
+
+    [Test]
+    public void CalculateActivitySummaryStats_WithOutcomes_ExportRun_CountsFromOutcomes()
+    {
+        // Arrange
+        var activity = CreateActivity();
+        AddRpeisAndCalculate(activity,
+            CreateRpeiWithOutcomes(ObjectChangeType.Exported,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.Exported)),
+            CreateRpeiWithOutcomes(ObjectChangeType.Exported,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.Exported)),
+            CreateRpeiWithOutcomes(ObjectChangeType.Deprovisioned,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned)));
+
+        // Assert
+        Assert.That(activity.TotalExported, Is.EqualTo(2));
+        Assert.That(activity.TotalDeprovisioned, Is.EqualTo(1));
+    }
+
+    #endregion
+
+    #region Outcome-Based Stats — RPEI-Only Types
+
+    [Test]
+    public void CalculateActivitySummaryStats_WithOutcomes_RpeiOnlyTypes_StillCountedFromRpeis()
+    {
+        // Arrange - OutOfScopeRetainJoin and Created have no outcome equivalents
+        // and must always be counted from RPEIs, even when other RPEIs have outcomes
+        var activity = CreateActivity();
+        AddRpeisAndCalculate(activity,
+            // RPEI with outcomes (triggers outcome-based path)
+            CreateRpeiWithOutcomes(ObjectChangeType.Projected,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.Projected)),
+            // RPEIs without outcome equivalents
+            CreateRpei(ObjectChangeType.OutOfScopeRetainJoin),
+            CreateRpei(ObjectChangeType.Created));
+
+        // Assert - RPEI-only types always counted from RPEIs
+        Assert.That(activity.TotalOutOfScopeRetainJoin, Is.EqualTo(1));
+        Assert.That(activity.TotalCreated, Is.EqualTo(1));
+
+        // Assert - Outcome-based type derived from outcomes
+        Assert.That(activity.TotalProjected, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void CalculateActivitySummaryStats_WithOutcomes_Errors_StillCountedFromRpeis()
+    {
+        // Arrange - Errors are always per-RPEI, not per-outcome
+        var activity = CreateActivity();
+        AddRpeisAndCalculate(activity,
+            CreateRpeiWithOutcomes(ObjectChangeType.Projected,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.Projected),
+                errorType: ActivityRunProfileExecutionItemErrorType.UnhandledError),
+            CreateRpeiWithOutcomes(ObjectChangeType.Joined,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.Joined)));
+
+        // Assert
+        Assert.That(activity.TotalErrors, Is.EqualTo(1));
+        Assert.That(activity.TotalProjected, Is.EqualTo(1));
+        Assert.That(activity.TotalJoined, Is.EqualTo(1));
+    }
+
+    #endregion
+
     #region Source Deletion Scenarios
 
     [Test]
-    public void CalculateActivitySummaryStats_SourceDeletion_CountsBothDisconnectedAndDeleted()
+    public void CalculateActivitySummaryStats_SourceDeletion_CountsDisconnectedOnly()
     {
-        // Arrange - When a joined CSO is obsoleted during sync, two RPEIs are produced:
-        // 1. Disconnected (CSO-MVO join broken)
-        // 2. Deleted (CSO removed from staging)
+        // Arrange - When a joined CSO is obsoleted during sync, a single Disconnected RPEI is produced
+        // with both Disconnected and CsoDeleted outcomes (one-RPEI-per-CSO rule)
         var activity = CreateActivity();
         AddRpeisAndCalculate(activity,
-            CreateRpei(ObjectChangeType.Disconnected),
-            CreateRpei(ObjectChangeType.Deleted));
+            CreateRpei(ObjectChangeType.Disconnected));
 
-        // Assert - Both stats should be counted
+        // Assert - Only Disconnected stat is counted (CsoDeleted is an outcome, not a separate RPEI)
         Assert.That(activity.TotalDisconnected, Is.EqualTo(1));
-        Assert.That(activity.TotalDeleted, Is.EqualTo(1));
+        Assert.That(activity.TotalDeleted, Is.EqualTo(0));
     }
 
     [Test]
@@ -395,35 +642,98 @@ public class CalculateActivitySummaryStatsTests
         // Arrange - Disconnected RPEI with attribute removals (contributed attributes recalled)
         var activity = CreateActivity();
         AddRpeisAndCalculate(activity,
-            CreateRpei(ObjectChangeType.Disconnected, attributeFlowCount: 3),
-            CreateRpei(ObjectChangeType.Deleted));
+            CreateRpei(ObjectChangeType.Disconnected, attributeFlowCount: 3));
 
         // Assert
         Assert.That(activity.TotalDisconnected, Is.EqualTo(1));
-        Assert.That(activity.TotalDeleted, Is.EqualTo(1));
+        Assert.That(activity.TotalDeleted, Is.EqualTo(0));
         Assert.That(activity.TotalAttributeFlows, Is.EqualTo(0), "Attribute recalls on disconnection are not standalone attribute flows");
     }
 
     [Test]
-    public void CalculateActivitySummaryStats_MultipleSourceDeletions_CountsAllPairs()
+    public void CalculateActivitySummaryStats_MultipleSourceDeletions_CountsAll()
     {
-        // Arrange - Multiple objects deleted from source, each producing Disconnected + Deleted
+        // Arrange - Multiple objects deleted from source, each producing a single Disconnected RPEI
         var activity = CreateActivity();
         AddRpeisAndCalculate(activity,
-            // Object 1 deletion
             CreateRpei(ObjectChangeType.Disconnected),
-            CreateRpei(ObjectChangeType.Deleted),
-            // Object 2 deletion
             CreateRpei(ObjectChangeType.Disconnected, attributeFlowCount: 2),
-            CreateRpei(ObjectChangeType.Deleted),
-            // Object 3 deletion
-            CreateRpei(ObjectChangeType.Disconnected),
-            CreateRpei(ObjectChangeType.Deleted));
+            CreateRpei(ObjectChangeType.Disconnected));
 
         // Assert
         Assert.That(activity.TotalDisconnected, Is.EqualTo(3));
-        Assert.That(activity.TotalDeleted, Is.EqualTo(3));
+        Assert.That(activity.TotalDeleted, Is.EqualTo(0));
         Assert.That(activity.TotalAttributeFlows, Is.EqualTo(0), "Attribute recalls on disconnection are not standalone attribute flows");
+    }
+
+    #endregion
+
+    #region DeletionDetected Outcome
+
+    [Test]
+    public void CalculateActivitySummaryStats_WithOutcomes_DeletionDetected_CountedInTotalDeleted()
+    {
+        // Arrange - Import-phase deletion RPEIs now record a DeletionDetected outcome
+        var activity = CreateActivity();
+        AddRpeisAndCalculate(activity,
+            CreateRpeiWithOutcomes(ObjectChangeType.Deleted,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected)),
+            CreateRpeiWithOutcomes(ObjectChangeType.Deleted,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected)),
+            CreateRpeiWithOutcomes(ObjectChangeType.Deleted,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected)));
+
+        // Assert - DeletionDetected outcomes contribute to TotalDeleted
+        Assert.That(activity.TotalDeleted, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void CalculateActivitySummaryStats_WithOutcomes_CsoDeletedAndDeletionDetected_BothContributeToTotalDeleted()
+    {
+        // Arrange - Sync-phase CsoDeleted and import-phase DeletionDetected both contribute
+        // to TotalDeleted. These never overlap within a single activity (different run profile types)
+        // but test the combined counting logic.
+        var activity = CreateActivity();
+        AddRpeisAndCalculate(activity,
+            CreateRpeiWithOutcomes(ObjectChangeType.Disconnected,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted)),
+            CreateRpeiWithOutcomes(ObjectChangeType.Deleted,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected)));
+
+        // Assert
+        Assert.That(activity.TotalDeleted, Is.EqualTo(2));
+    }
+
+    #endregion
+
+    #region DriftCorrection Outcome
+
+    [Test]
+    public void CalculateActivitySummaryStats_WithOutcomes_DriftCorrection_CountedFromOutcomes()
+    {
+        // Arrange - DriftCorrection RPEIs now record a DriftCorrection outcome
+        var activity = CreateActivity();
+        AddRpeisAndCalculate(activity,
+            CreateRpeiWithOutcomes(ObjectChangeType.DriftCorrection,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection, detailCount: 3)),
+            CreateRpeiWithOutcomes(ObjectChangeType.DriftCorrection,
+                CreateOutcome(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection, detailCount: 1)));
+
+        // Assert - DriftCorrection outcomes counted
+        Assert.That(activity.TotalDriftCorrections, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void CalculateActivitySummaryStats_LegacyDriftCorrection_CountedFromRpeis()
+    {
+        // Arrange - Legacy DriftCorrection RPEIs without outcomes still counted from RPEIs
+        var activity = CreateActivity();
+        AddRpeisAndCalculate(activity,
+            CreateRpei(ObjectChangeType.DriftCorrection),
+            CreateRpei(ObjectChangeType.DriftCorrection));
+
+        // Assert
+        Assert.That(activity.TotalDriftCorrections, Is.EqualTo(2));
     }
 
     #endregion

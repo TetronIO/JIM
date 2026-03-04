@@ -208,25 +208,19 @@
             @* Summary Section *@
             <MudText Typo="Typo.h5" Class="mt-5">Stats</MudText>
             <MudStack Row="true" Class="mt-4 mb-5 flex-wrap" Spacing="3">
-                @* Total card *@
-                <MudPaper Class="pa-4" Outlined="true" Style="min-width: 120px;">
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">Total</MudText>
-                    <MudText Typo="Typo.h4">@_activityRunProfileExecutionStats.TotalObjectChangeCount.ToString("N0")</MudText>
-                </MudPaper>
-
                 @* Import-specific cards *@
                 @if (IsImportRun())
                 {
                     <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Green.Default}; min-width: 120px;")">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Added</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">CSOs Added</MudText>
                         <MudText Typo="Typo.h4" Color="Color.Success">@_activityRunProfileExecutionStats.TotalCsoAdds.ToString("N0")</MudText>
                     </MudPaper>
                     <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Teal.Default}; min-width: 120px;")">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Updated</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">CSOs Updated</MudText>
                         <MudText Typo="Typo.h4" Color="Color.Info">@_activityRunProfileExecutionStats.TotalCsoUpdates.ToString("N0")</MudText>
                     </MudPaper>
                     <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Red.Default}; min-width: 120px;")">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Deletions Detected</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">CSO Deletions Detected</MudText>
                         <MudText Typo="Typo.h4" Color="Color.Error">@_activityRunProfileExecutionStats.TotalCsoDeletes.ToString("N0")</MudText>
                     </MudPaper>
 
@@ -234,7 +228,7 @@
                     @if (_activityRunProfileExecutionStats.TotalPendingExportsConfirmed > 0)
                     {
                         <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Green.Default}; min-width: 120px;")">
-                            <MudText Typo="Typo.button" Class="mud-text-secondary">Exports Confirmed</MudText>
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">CSO Exports Confirmed</MudText>
                             <MudText Typo="Typo.h4" Color="Color.Success">@_activityRunProfileExecutionStats.TotalPendingExportsConfirmed.ToString("N0")</MudText>
                         </MudPaper>
                     }
@@ -248,7 +242,7 @@
                     @if (_activityRunProfileExecutionStats.TotalPendingExportsFailed > 0)
                     {
                         <MudPaper Class="pa-4" Outlined="true" Style="@($"background-color: {Colors.Red.Default}; color: {Colors.Shades.White}; border-left: 4px solid {Colors.Red.Darken3}; min-width: 120px;")">
-                            <MudText Typo="Typo.button" Style="@($"color: {Colors.Shades.White};")">Exports Failed</MudText>
+                            <MudText Typo="Typo.button" Style="@($"color: {Colors.Shades.White};")">CSO Exports Failed</MudText>
                             <MudText Typo="Typo.h4" Style="@($"color: {Colors.Shades.White};")">@_activityRunProfileExecutionStats.TotalPendingExportsFailed.ToString("N0")</MudText>
                         </MudPaper>
                     }
@@ -257,28 +251,47 @@
                 @* Sync-specific cards *@
                 @if (IsSyncRun())
                 {
-                    <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid var(--mud-palette-primary); min-width: 120px;")">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Projected</MudText>
-                        <MudText Typo="Typo.h4" Color="Color.Primary">@_activityRunProfileExecutionStats.TotalProjections.ToString("N0")</MudText>
-                    </MudPaper>
                     <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid var(--mud-palette-secondary); min-width: 120px;")">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Joined</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">CSOs Joined</MudText>
                         <MudText Typo="Typo.h4" Color="Color.Secondary">@_activityRunProfileExecutionStats.TotalJoins.ToString("N0")</MudText>
                     </MudPaper>
+                    <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid var(--mud-palette-primary); min-width: 120px;")">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">MVOs Projected</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Primary">@_activityRunProfileExecutionStats.TotalProjections.ToString("N0")</MudText>
+                    </MudPaper>
                     <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid var(--mud-palette-tertiary); min-width: 120px;")">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Attribute Flow</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">MVOs with Attribute Flow</MudText>
                         <MudText Typo="Typo.h4" Color="Color.Tertiary">@_activityRunProfileExecutionStats.TotalAttributeFlows.ToString("N0")</MudText>
                     </MudPaper>
+
+                    @* CSOs Provisioned - new CSOs created in target systems via export evaluation *@
+                    @if (_activityRunProfileExecutionStats.TotalProvisioned > 0)
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid var(--mud-palette-primary); min-width: 120px;")">
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">CSOs Provisioned</MudText>
+                            <MudText Typo="Typo.h4" Color="Color.Primary">@_activityRunProfileExecutionStats.TotalProvisioned.ToString("N0")</MudText>
+                        </MudPaper>
+                    }
+
+                    @* Pending Exports - surfaced during sync to show what's awaiting confirmation *@
+                    @if (_activityRunProfileExecutionStats.TotalPendingExports > 0)
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Teal.Default}; min-width: 120px;")">
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">CSO Pending Exports</MudText>
+                            <MudText Typo="Typo.h4" Color="Color.Info">@_activityRunProfileExecutionStats.TotalPendingExports.ToString("N0")</MudText>
+                        </MudPaper>
+                    }
+
                     <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid var(--mud-palette-warning); min-width: 120px;")">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Disconnected</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">CSOs Disconnected</MudText>
                         <MudText Typo="Typo.h4" Color="Color.Warning">@_activityRunProfileExecutionStats.TotalDisconnections.ToString("N0")</MudText>
                     </MudPaper>
 
-                    @* Deletions Processed - CSOs finalised as deleted during sync *@
+                    @* CSOs Deleted - CSOs finalised as deleted during sync *@
                     @if (_activityRunProfileExecutionStats.TotalCsoDeletes > 0)
                     {
                         <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Red.Default}; min-width: 120px;")">
-                            <MudText Typo="Typo.button" Class="mud-text-secondary">Deletions Processed</MudText>
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">CSOs Deleted</MudText>
                             <MudText Typo="Typo.h4" Color="Color.Error">@_activityRunProfileExecutionStats.TotalCsoDeletes.ToString("N0")</MudText>
                         </MudPaper>
                     }
@@ -287,17 +300,8 @@
                     @if (_activityRunProfileExecutionStats.TotalDriftCorrections > 0)
                     {
                         <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Orange.Default}; min-width: 120px;")">
-                            <MudText Typo="Typo.button" Class="mud-text-secondary">Drift Correction</MudText>
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">CSOs Drift Corrected</MudText>
                             <MudText Typo="Typo.h4" Color="Color.Warning">@_activityRunProfileExecutionStats.TotalDriftCorrections.ToString("N0")</MudText>
-                        </MudPaper>
-                    }
-
-                    @* Pending Exports - surfaced during sync to show what's awaiting confirmation *@
-                    @if (_activityRunProfileExecutionStats.TotalPendingExports > 0)
-                    {
-                        <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Orange.Default}; min-width: 120px;")">
-                            <MudText Typo="Typo.button" Class="mud-text-secondary">Pending Exports</MudText>
-                            <MudText Typo="Typo.h4" Color="Color.Warning">@_activityRunProfileExecutionStats.TotalPendingExports.ToString("N0")</MudText>
                         </MudPaper>
                     }
                 }
@@ -306,11 +310,11 @@
                 @if (IsExportRun())
                 {
                     <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Teal.Default}; min-width: 120px;")">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Exported</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">CSOs Exported</MudText>
                         <MudText Typo="Typo.h4" Color="Color.Info">@_activityRunProfileExecutionStats.TotalExported.ToString("N0")</MudText>
                     </MudPaper>
                     <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Red.Default}; min-width: 120px;")">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Deprovisioned</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">CSOs Deprovisioned</MudText>
                         <MudText Typo="Typo.h4" Color="Color.Error">@_activityRunProfileExecutionStats.TotalDeprovisioned.ToString("N0")</MudText>
                     </MudPaper>
                 }
@@ -342,40 +346,37 @@
         <MudText Typo="Typo.h5">@Helpers.GetRunTypeResultsTitle(_activity.ConnectedSystemRunType)</MudText>
 
         @* Filter Chips Section *@
-        @if (GetAvailableChangeTypes().Any() || GetAvailableObjectTypes().Any() || GetAvailableErrorTypes().Any())
+        @if (GetAvailableOutcomeTypes().Any() || GetAvailableObjectTypes().Any() || GetAvailableErrorTypes().Any())
         {
             <MudStack Row="true" Spacing="6" Class="mt-3 mb-3 flex-wrap" AlignItems="AlignItems.Start">
-                @* Change Type Filter *@
-                @if (GetAvailableChangeTypes().Any())
+                @* Outcome Type Filter *@
+                @if (GetAvailableOutcomeTypes().Any())
                 {
                     <div>
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Change Type:</MudText>
-                        <MudChipSet T="ObjectChangeType"
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Outcome Type:</MudText>
+                        <MudChipSet T="ActivityRunProfileExecutionItemSyncOutcomeType"
                                     SelectionMode="SelectionMode.MultiSelection"
-                                    SelectedValues="_selectedChangeTypes"
-                                    SelectedValuesChanged="OnChangeTypeFilterChanged">
-                            @foreach (var changeType in GetAvailableChangeTypes())
+                                    SelectedValues="_selectedOutcomeTypes"
+                                    SelectedValuesChanged="OnOutcomeTypeFilterChanged">
+                            @foreach (var (outcomeType, count) in GetAvailableOutcomeTypes())
                             {
-                                <MudChip Value="@changeType"
-                                         Color="@(IsChangeTypeSelected(changeType) ? Color.Default : Helpers.GetRunItemMudBlazorColorForType(changeType))"
-                                         Variant="@(IsChangeTypeSelected(changeType) ? Variant.Outlined : Variant.Text)"
-                                         SelectedColor="@Helpers.GetRunItemMudBlazorColorForType(changeType)">
-                                    @GetContextAwareChangeTypeName(changeType)
-                                    @if (GetChangeTypeCount(changeType) is var count && count > 0)
-                                    {
-                                        <MudText Typo="Typo.caption" Class="ml-1">(@count.ToString("N0"))</MudText>
-                                    }
+                                <MudChip Value="@outcomeType"
+                                         Color="@(IsOutcomeTypeSelected(outcomeType) ? Color.Default : Helpers.GetOutcomeTypeMudBlazorColor(outcomeType))"
+                                         Variant="@(IsOutcomeTypeSelected(outcomeType) ? Variant.Outlined : Variant.Text)"
+                                         SelectedColor="@Helpers.GetOutcomeTypeMudBlazorColor(outcomeType)">
+                                    @Helpers.GetOutcomeTypeDisplayName(outcomeType)
+                                    <MudText Typo="Typo.caption" Class="ml-1">(@count.ToString("N0"))</MudText>
                                 </MudChip>
                             }
-                            @* Disabled Unchanged chip *@
-                            <MudChip T="ObjectChangeType"
-                                     Variant="Variant.Text"
-                                     Color="Color.Default"
-                                     Disabled="true">
+                        </MudChipSet>
+                        @* Unchanged chip — informational, not a filter *@
+                        @if (GetUnchangedCount() > 0)
+                        {
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Disabled="true" Class="mt-1">
                                 Unchanged
                                 <MudText Typo="Typo.caption" Class="ml-1">(@GetUnchangedCount().ToString("N0"))</MudText>
                             </MudChip>
-                        </MudChipSet>
+                        }
                     </div>
                 }
 
@@ -471,9 +472,7 @@
                     </MudTableSortLabel>
                 </MudTh>
                 <MudTh>
-                    <MudTableSortLabel SortLabel="changetype" T="ActivityRunProfileExecutionItemHeader">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Change Type</MudText>
-                    </MudTableSortLabel>
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Outcomes</MudText>
                 </MudTh>
                 <MudTh>
                     <MudTableSortLabel SortLabel="errortype" T="ActivityRunProfileExecutionItemHeader">
@@ -491,8 +490,29 @@
                 <MudTd DataLabel="External Id" Class="jim-text-code mud-text-secondary">@(!string.IsNullOrEmpty(context.ExternalIdValue) ? context.ExternalIdValue : "-")</MudTd>
                 <MudTd DataLabel="Display Name">@(!string.IsNullOrEmpty(context.DisplayName) ? context.DisplayName : "-")</MudTd>
                 <MudTd DataLabel="External Object Type">@(context.ConnectedSystemObjectType != null ? context.ConnectedSystemObjectType.ToString().SplitOnCapitalLetters() : "-")</MudTd>
-                <MudTd DataLabel="Change Type">
-                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetRunItemMudBlazorColorForType(context.ObjectChangeType)">@context.ObjectChangeType.ToString().SplitOnCapitalLetters()</MudChip>
+                <MudTd DataLabel="Outcomes">
+                    @{
+                        var outcomes = Helpers.ParseOutcomeSummary(context.OutcomeSummary);
+                    }
+                    @if (outcomes.Count > 0)
+                    {
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            @foreach (var (outcomeType, count) in outcomes)
+                            {
+                                <MudTooltip Text="@Helpers.GetOutcomeTypeDisplayName(outcomeType)" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Variant="Variant.Text"
+                                             Color="Helpers.GetOutcomeTypeMudBlazorColor(outcomeType)"
+                                             Class="px-2">
+                                        @Helpers.GetOutcomeTypeDisplayName(outcomeType)@(count > 1 ? $" ×{count}" : "")
+                                    </MudChip>
+                                </MudTooltip>
+                            }
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <span class="mud-text-disabled">-</span>
+                    }
                 </MudTd>
                 <MudTd DataLabel="Error Type">
                     @if (context.ErrorType != null && context.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
@@ -537,14 +557,14 @@
     private bool _preferencesLoaded;
     private bool _initialisationComplete;
 
-    // Change type filter - when chips are selected, the table reloads with the filter applied
-    private IReadOnlyCollection<ObjectChangeType> _selectedChangeTypes = new List<ObjectChangeType>();
-
     // Object type filter - when chips are selected, the table reloads with the filter applied
     private IReadOnlyCollection<string> _selectedObjectTypes = new List<string>();
 
     // Error type filter - when chips are selected, the table reloads with the filter applied
     private IReadOnlyCollection<ActivityRunProfileExecutionItemErrorType> _selectedErrorTypes = new List<ActivityRunProfileExecutionItemErrorType>();
+
+    // Outcome type filter - filters RPEIs by outcome types present in their OutcomeSummary
+    private IReadOnlyCollection<ActivityRunProfileExecutionItemSyncOutcomeType> _selectedOutcomeTypes = new List<ActivityRunProfileExecutionItemSyncOutcomeType>();
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
     {
@@ -611,14 +631,14 @@
             var page = state.Page + 1;
             var sortDescending = state.SortDirection == SortDirection.Descending;
 
-            // Get selected change types for filtering (null means show all)
-            IEnumerable<ObjectChangeType>? changeTypeFilter = _selectedChangeTypes.Count > 0 ? _selectedChangeTypes : null;
-
             // Get selected object types for filtering (null means show all)
             IEnumerable<string>? objectTypeFilter = _selectedObjectTypes.Count > 0 ? _selectedObjectTypes : null;
 
             // Get selected error types for filtering (null means show all)
             IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = _selectedErrorTypes.Count > 0 ? _selectedErrorTypes : null;
+
+            // Get selected outcome types for filtering (null means show all)
+            IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = _selectedOutcomeTypes.Count > 0 ? _selectedOutcomeTypes : null;
 
             var result = await Jim.Activities.GetActivityRunProfileExecutionItemHeadersAsync(
                 Id,
@@ -627,9 +647,9 @@
                 string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
                 state.SortLabel,
                 sortDescending,
-                changeTypeFilter,
                 objectTypeFilter,
-                errorTypeFilter);
+                errorTypeFilter,
+                outcomeTypeFilter);
 
             return new TableData<ActivityRunProfileExecutionItemHeader>
             {
@@ -650,12 +670,6 @@
         _table?.ReloadServerData();
     }
 
-    private void OnChangeTypeFilterChanged(IReadOnlyCollection<ObjectChangeType> selectedTypes)
-    {
-        _selectedChangeTypes = selectedTypes;
-        _table?.ReloadServerData();
-    }
-
     private void OnObjectTypeFilterChanged(IReadOnlyCollection<string> selectedTypes)
     {
         _selectedObjectTypes = selectedTypes;
@@ -665,6 +679,12 @@
     private void OnErrorTypeFilterChanged(IReadOnlyCollection<ActivityRunProfileExecutionItemErrorType> selectedTypes)
     {
         _selectedErrorTypes = selectedTypes;
+        _table?.ReloadServerData();
+    }
+
+    private void OnOutcomeTypeFilterChanged(IReadOnlyCollection<ActivityRunProfileExecutionItemSyncOutcomeType> selectedTypes)
+    {
+        _selectedOutcomeTypes = selectedTypes;
         _table?.ReloadServerData();
     }
 
@@ -709,94 +729,45 @@
     }
 
     /// <summary>
-    /// Returns the change types that have at least one RPEI in this activity.
-    /// Shows all possible change types with non-zero counts first, ordered logically.
+    /// Returns the outcome types that have at least one occurrence in this activity, with their counts.
+    /// Derived from the stats model. Ordered logically: Import → Sync → Export.
     /// </summary>
-    private IEnumerable<ObjectChangeType> GetAvailableChangeTypes()
+    private IEnumerable<(ActivityRunProfileExecutionItemSyncOutcomeType Type, int Count)> GetAvailableOutcomeTypes()
     {
         if (_activityRunProfileExecutionStats == null)
-            return Enumerable.Empty<ObjectChangeType>();
+            yield break;
 
-        // Return change types in logical order: Import → Sync → Export → Other
-        var availableTypes = new List<ObjectChangeType>();
+        var s = _activityRunProfileExecutionStats;
 
-        // Import operations
-        if (_activityRunProfileExecutionStats.TotalCsoAdds > 0)
-            availableTypes.Add(ObjectChangeType.Added);
-        if (_activityRunProfileExecutionStats.TotalCsoUpdates > 0)
-            availableTypes.Add(ObjectChangeType.Updated);
-        if (_activityRunProfileExecutionStats.TotalCsoDeletes > 0)
-            availableTypes.Add(ObjectChangeType.Deleted);
+        // Import outcomes
+        if (s.TotalCsoAdds > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded, s.TotalCsoAdds);
+        if (s.TotalCsoUpdates > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated, s.TotalCsoUpdates);
+        // Import-phase: DeletionDetected. Sync-phase: CsoDeleted. Show the appropriate type per run type.
+        if (s.TotalCsoDeletes > 0 && IsImportRun()) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected, s.TotalCsoDeletes);
+        if (s.TotalCsoDeletes > 0 && IsSyncRun()) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted, s.TotalCsoDeletes);
 
-        // Sync operations
-        if (_activityRunProfileExecutionStats.TotalProjections > 0)
-            availableTypes.Add(ObjectChangeType.Projected);
-        if (_activityRunProfileExecutionStats.TotalJoins > 0)
-            availableTypes.Add(ObjectChangeType.Joined);
-        if (_activityRunProfileExecutionStats.TotalAttributeFlows > 0)
-            availableTypes.Add(ObjectChangeType.AttributeFlow);
-        if (_activityRunProfileExecutionStats.TotalDisconnections > 0)
-            availableTypes.Add(ObjectChangeType.Disconnected);
-        if (_activityRunProfileExecutionStats.TotalDriftCorrections > 0)
-            availableTypes.Add(ObjectChangeType.DriftCorrection);
+        // Sync outcomes
+        if (s.TotalProjections > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Projected, s.TotalProjections);
+        if (s.TotalJoins > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Joined, s.TotalJoins);
+        if (s.TotalAttributeFlows > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow, s.TotalAttributeFlows);
+        if (s.TotalDisconnections > 0 || s.TotalDisconnectedOutOfScope > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected, s.TotalDisconnections + s.TotalDisconnectedOutOfScope);
+        if (s.TotalDriftCorrections > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection, s.TotalDriftCorrections);
 
-        // Export operations
-        if (_activityRunProfileExecutionStats.TotalExported > 0)
-            availableTypes.Add(ObjectChangeType.Exported);
-        if (_activityRunProfileExecutionStats.TotalDeprovisioned > 0)
-            availableTypes.Add(ObjectChangeType.Deprovisioned);
+        // Outbound sync outcomes
+        if (s.TotalProvisioned > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned, s.TotalProvisioned);
+        if (s.TotalPendingExports > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, s.TotalPendingExports);
 
-        // Pending export visibility (surfaced during sync)
-        if (_activityRunProfileExecutionStats.TotalPendingExports > 0)
-            availableTypes.Add(ObjectChangeType.PendingExport);
-
-        // Note: NoChange RPEIs are filtered out from GetAvailableChangeTypes
-        // as unchanged objects are shown separately via TotalUnchanged
-
-        return availableTypes;
+        // Export outcomes
+        if (s.TotalExported > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Exported, s.TotalExported);
+        if (s.TotalDeprovisioned > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned, s.TotalDeprovisioned);
     }
 
     /// <summary>
-    /// Gets the count of RPEIs for a specific change type from the stats.
+    /// Checks if an outcome type is currently selected in the filter.
     /// </summary>
-    private int GetChangeTypeCount(ObjectChangeType changeType)
+    private bool IsOutcomeTypeSelected(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
-        if (_activityRunProfileExecutionStats == null)
-            return 0;
-
-        return changeType switch
-        {
-            ObjectChangeType.Added => _activityRunProfileExecutionStats.TotalCsoAdds,
-            ObjectChangeType.Updated => _activityRunProfileExecutionStats.TotalCsoUpdates,
-            ObjectChangeType.Deleted => _activityRunProfileExecutionStats.TotalCsoDeletes,
-            ObjectChangeType.Projected => _activityRunProfileExecutionStats.TotalProjections,
-            ObjectChangeType.Joined => _activityRunProfileExecutionStats.TotalJoins,
-            ObjectChangeType.AttributeFlow => _activityRunProfileExecutionStats.TotalAttributeFlows,
-            ObjectChangeType.Disconnected => _activityRunProfileExecutionStats.TotalDisconnections,
-            ObjectChangeType.DriftCorrection => _activityRunProfileExecutionStats.TotalDriftCorrections,
-            ObjectChangeType.Exported => _activityRunProfileExecutionStats.TotalExported,
-            ObjectChangeType.Deprovisioned => _activityRunProfileExecutionStats.TotalDeprovisioned,
-            ObjectChangeType.PendingExport => _activityRunProfileExecutionStats.TotalPendingExports,
-            ObjectChangeType.NoChange => 0, // NoChange items shown via TotalUnchanged
-            _ => 0
-        };
-    }
-
-    /// <summary>
-    /// Checks if a change type is currently selected in the filter.
-    /// </summary>
-    private bool IsChangeTypeSelected(ObjectChangeType changeType)
-    {
-        return _selectedChangeTypes.Contains(changeType);
-    }
-
-    /// <summary>
-    /// Gets the relevant change types for the current run type.
-    /// Returns all possible change types for the run type, not just those with counts > 0.
-    /// </summary>
-    private IEnumerable<ObjectChangeType> GetRelevantChangeTypes()
-    {
-        return Helpers.GetChangeTypesForRunType(_activity?.ConnectedSystemRunType);
+        return _selectedOutcomeTypes.Contains(outcomeType);
     }
 
     /// <summary>
@@ -901,18 +872,6 @@
             Color.Surface => "surface",
             _ => "default"
         };
-    }
-
-    /// <summary>
-    /// Returns a context-aware display name for a change type.
-    /// For ObjectChangeType.Deleted, differentiates between import (detection) and sync (processing).
-    /// </summary>
-    private string GetContextAwareChangeTypeName(ObjectChangeType changeType)
-    {
-        if (changeType == ObjectChangeType.Deleted)
-            return IsSyncRun() ? "Deletions Processed" : "Deletions Detected";
-
-        return Helpers.GetChangeTypeDisplayName(changeType);
     }
 
     /// <summary>

@@ -112,6 +112,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             _exportEvaluationCache = await _jim.ExportEvaluation.BuildExportEvaluationCacheAsync(_connectedSystem.Id);
         }
 
+        // Load sync outcome tracking level (None/Standard/Detailed) for building outcome trees on RPEIs
+        _syncOutcomeTrackingLevel = await _jim.ServiceSettings.GetSyncOutcomeTrackingLevelAsync();
+
         // Process CSOs in batches. This enables us to respond to cancellation requests in a reasonable timeframe.
         // Page size is configurable via service settings for performance tuning.
         var pageSize = await _jim.ServiceSettings.GetSyncPageSizeAsync();
@@ -316,10 +319,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             executionItem.ConnectedSystemObject = pendingExport.ConnectedSystemObject;
             executionItem.ConnectedSystemObjectId = pendingExport.ConnectedSystemObjectId;
 
-            // Capture the external ID snapshot for historical reference
+            // Snapshot CSO display fields for historical reference
             if (pendingExport.ConnectedSystemObject != null)
             {
-                executionItem.ExternalIdSnapshot = pendingExport.ConnectedSystemObject.ExternalIdAttributeValue?.StringValue;
+                executionItem.SnapshotCsoDisplayFields(pendingExport.ConnectedSystemObject);
             }
 
             _activity.RunProfileExecutionItems.Add(executionItem);

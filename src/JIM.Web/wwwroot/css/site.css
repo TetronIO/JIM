@@ -1284,3 +1284,81 @@ html[lang] .mud-dialog .mud-paper-outlined {
 .jim-quick-link:hover {
     background-color: var(--jim-inner-surface, var(--mud-palette-action-default-hover));
 }
+
+/* Outcome tree — causality chain display on RPEI detail page */
+.outcome-tree {
+    padding: 4px 0;
+}
+
+.outcome-tree > .outcome-node {
+    padding: 8px 0;
+}
+
+.outcome-tree > .outcome-node + .outcome-node {
+    border-top: 1px solid var(--jim-inner-border-color, var(--mud-palette-lines-default));
+}
+
+.outcome-children {
+    margin-left: 11px;
+    padding-left: 24px;
+    border-left: 2px solid var(--mud-palette-lines-default);
+}
+
+.outcome-children > .outcome-node {
+    position: relative;
+    padding: 8px 0;
+}
+
+.outcome-children > .outcome-node::before {
+    content: '';
+    position: absolute;
+    left: -24px;
+    top: 20px;
+    width: 20px;
+    border-top: 2px solid var(--mud-palette-lines-default);
+}
+
+/* Hide the vertical line below the last child's connector stub */
+.outcome-children > .outcome-node:last-child::after {
+    content: '';
+    position: absolute;
+    left: -26px;
+    top: 20px;
+    bottom: 0;
+    width: 4px;
+    background: var(--mud-palette-surface);
+}
+
+/* Continue the branch line alongside the expanded attribute table
+   when the node has children below it. Aligns with .outcome-children border. */
+.outcome-table-continuation {
+    margin-left: 11px;
+    padding-left: 24px;
+    border-left: 2px solid var(--mud-palette-lines-default);
+}
+
+/* Collapse cumulative bottom padding from deeply nested last children
+   so the tree's bottom spacing matches the top. */
+.outcome-tree > .outcome-node:last-child,
+.outcome-children > .outcome-node:last-child {
+    padding-bottom: 0;
+}
+
+.outcome-children:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+/* Attribute change table — transparent background so it inherits from its container.
+   The theme (navy-o5-dark) sets background-color on pagination/footer/empty-row with
+   html[lang] .mud-paper .mud-table specificity, so we must match it. */
+.attribute-change-table,
+.attribute-change-table .mud-table-container {
+    background-color: transparent !important;
+}
+
+html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-pagination-toolbar,
+html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-foot .mud-table-cell,
+html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
+    background-color: transparent !important;
+}

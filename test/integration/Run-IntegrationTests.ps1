@@ -546,17 +546,52 @@ Write-Section "Step 0: Checking Samba AD Images"
 
 $buildScript = Join-Path $scriptRoot "docker" "samba-ad-prebuilt" "Build-SambaImages.ps1"
 
-# Check if the pre-built Samba AD primary image exists locally
-$sambaImageTag = "ghcr.io/tetronio/jim-samba-ad:primary"
-$imageExists = docker images -q $sambaImageTag 2>$null
+# Compute current build content hash from source scripts
+$sambaScriptDir = Join-Path $scriptRoot "docker" "samba-ad-prebuilt"
+$postProvisionContent = Get-Content -Path (Join-Path $sambaScriptDir "post-provision.sh") -Raw
+$startSambaContent = Get-Content -Path (Join-Path $sambaScriptDir "start-samba.sh") -Raw
+$combinedContent = $postProvisionContent + $startSambaContent
+$currentBuildHash = [System.BitConverter]::ToString(
+    [System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($combinedContent))
+).Replace("-", "").Substring(0, 16).ToLower()
 
-if (-not $imageExists) {
-    Write-Warning "Pre-built Samba AD image not found locally: $sambaImageTag"
-    Write-Step "Building Samba AD Primary image (this takes ~2-3 minutes, but only needs to be done once)..."
+# Function to check if a Samba image needs rebuilding (missing or stale)
+function Test-SambaImageNeedsRebuild {
+    param([string]$ImageTag)
+
+    $imageExists = docker images -q $ImageTag 2>$null
+    if (-not $imageExists) {
+        return @{ NeedsRebuild = $true; Reason = "not found" }
+    }
+
+    # Check the build hash label to detect stale images
+    $imageHash = docker inspect --format '{{ index .Config.Labels "jim.samba.build-hash" }}' $ImageTag 2>$null
+    if ($imageHash -ne $currentBuildHash) {
+        $detail = if ($imageHash) { "hash $imageHash != $currentBuildHash" } else { "no build hash label (pre-hash image)" }
+        return @{ NeedsRebuild = $true; Reason = "stale ($detail)" }
+    }
+
+    return @{ NeedsRebuild = $false; Reason = $null }
+}
+
+# Check if the pre-built Samba AD primary image exists and is up to date
+$sambaImageTag = "ghcr.io/tetronio/jim-samba-ad:primary"
+$primaryCheck = Test-SambaImageNeedsRebuild -ImageTag $sambaImageTag
+
+if ($primaryCheck.NeedsRebuild) {
+    Write-Warning "Samba AD Primary image needs rebuilding: $($primaryCheck.Reason)"
+    Write-Step "Building Samba AD Primary image (this takes ~2-3 minutes)..."
 
     if (-not (Test-Path $buildScript)) {
         Write-Failure "Build script not found: $buildScript"
         exit 1
+    }
+
+    # Remove stale image if it exists
+    $existingImage = docker images -q $sambaImageTag 2>$null
+    if ($existingImage) {
+        Write-Step "Removing stale image..."
+        docker rmi $sambaImageTag 2>$null | Out-Null
     }
 
     & $buildScript -Images Primary
@@ -568,22 +603,29 @@ if (-not $imageExists) {
     Write-Success "Samba AD Primary image built successfully"
 }
 else {
-    Write-Success "Samba AD Primary image found: $sambaImageTag"
+    Write-Success "Samba AD Primary image found and up to date: $sambaImageTag"
 }
 
 # For Scenario 2 and Scenario 8, also check for Source and Target images
 if ($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") {
     # Check Source image
     $sourceImageTag = "ghcr.io/tetronio/jim-samba-ad:source"
-    $sourceExists = docker images -q $sourceImageTag 2>$null
+    $sourceCheck = Test-SambaImageNeedsRebuild -ImageTag $sourceImageTag
 
-    if (-not $sourceExists) {
-        Write-Warning "Pre-built Samba AD Source image not found locally: $sourceImageTag"
-        Write-Step "Building Samba AD Source image (this takes ~2-3 minutes, but only needs to be done once)..."
+    if ($sourceCheck.NeedsRebuild) {
+        Write-Warning "Samba AD Source image needs rebuilding: $($sourceCheck.Reason)"
+        Write-Step "Building Samba AD Source image (this takes ~2-3 minutes)..."
 
         if (-not (Test-Path $buildScript)) {
             Write-Failure "Build script not found: $buildScript"
             exit 1
+        }
+
+        # Remove stale image if it exists
+        $existingImage = docker images -q $sourceImageTag 2>$null
+        if ($existingImage) {
+            Write-Step "Removing stale image..."
+            docker rmi $sourceImageTag 2>$null | Out-Null
         }
 
         & $buildScript -Images Source
@@ -595,20 +637,27 @@ if ($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") {
         Write-Success "Samba AD Source image built successfully"
     }
     else {
-        Write-Success "Samba AD Source image found: $sourceImageTag"
+        Write-Success "Samba AD Source image found and up to date: $sourceImageTag"
     }
 
     # Check Target image
     $targetImageTag = "ghcr.io/tetronio/jim-samba-ad:target"
-    $targetExists = docker images -q $targetImageTag 2>$null
+    $targetCheck = Test-SambaImageNeedsRebuild -ImageTag $targetImageTag
 
-    if (-not $targetExists) {
-        Write-Warning "Pre-built Samba AD Target image not found locally: $targetImageTag"
-        Write-Step "Building Samba AD Target image (this takes ~2-3 minutes, but only needs to be done once)..."
+    if ($targetCheck.NeedsRebuild) {
+        Write-Warning "Samba AD Target image needs rebuilding: $($targetCheck.Reason)"
+        Write-Step "Building Samba AD Target image (this takes ~2-3 minutes)..."
 
         if (-not (Test-Path $buildScript)) {
             Write-Failure "Build script not found: $buildScript"
             exit 1
+        }
+
+        # Remove stale image if it exists
+        $existingImage = docker images -q $targetImageTag 2>$null
+        if ($existingImage) {
+            Write-Step "Removing stale image..."
+            docker rmi $targetImageTag 2>$null | Out-Null
         }
 
         & $buildScript -Images Target
@@ -620,7 +669,7 @@ if ($Scenario -like "*Scenario2*" -or $Scenario -like "*Scenario8*") {
         Write-Success "Samba AD Target image built successfully"
     }
     else {
-        Write-Success "Samba AD Target image found: $targetImageTag"
+        Write-Success "Samba AD Target image found and up to date: $targetImageTag"
     }
 }
 

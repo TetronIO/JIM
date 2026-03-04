@@ -646,6 +646,10 @@ public class FullSyncTests
         // verify that a second CSO also projects to create its own MVO (each CSO should create its own MVO when projection is enabled)
         Assert.That(ConnectedSystemObjectsData[1].MetaverseObject, Is.Not.Null, "Expected second CSO to have projected to create an MVO.");
         Assert.That(ConnectedSystemObjectsData[1].MetaverseObject.Id, Is.Not.EqualTo(projectedMvo.Id), "Expected second CSO to create a different MVO than the first CSO.");
+
+        // verify aggregate stats on the activity (guards against double-counting bugs like FlattenOutcomes)
+        Assert.That(activity.TotalProjected, Is.EqualTo(2), "Expected 2 projections in activity stats.");
+        Assert.That(activity.TotalJoined, Is.EqualTo(0), "Expected 0 joins in activity stats.");
     }
 
     /// <summary>
@@ -1389,9 +1393,10 @@ public class FullSyncTests
         // export evaluation didn't silently skip by checking the RPEI export evaluation counts.
         // The key verification: recall must NOT produce 0 changes that get silently skipped.
         var rpeis = activity.RunProfileExecutionItems;
+        // After the flush, ConnectedSystemObject is nulled (CSO deleted), so match by ObjectChangeType only.
+        // ConnectedSystemObjectId is also nulled by DeleteConnectedSystemObjectsAsync.
         var disconnectedRpei = rpeis.FirstOrDefault(r =>
-            r.ObjectChangeType == ObjectChangeType.Disconnected &&
-            r.ConnectedSystemObject?.Id == sourceCso.Id);
+            r.ObjectChangeType == ObjectChangeType.Disconnected);
 
         Assert.That(disconnectedRpei, Is.Not.Null,
             "Expected a Disconnected RPEI for the obsoleted source CSO.");
@@ -1824,6 +1829,11 @@ public class FullSyncTests
         // verify pending lists are cleared after sync
         Assert.That(existingMvo.PendingAttributeValueAdditions, Is.Empty, "Expected pending additions to be cleared after sync.");
         Assert.That(existingMvo.PendingAttributeValueRemovals, Is.Empty, "Expected pending removals to be cleared after sync.");
+
+        // verify aggregate stats on the activity (guards against double-counting bugs like FlattenOutcomes)
+        Assert.That(activity.TotalJoined, Is.EqualTo(1), "Expected 1 join in activity stats.");
+        Assert.That(activity.TotalAttributeFlows, Is.EqualTo(1), "Expected 1 attribute flow in activity stats.");
+        Assert.That(activity.TotalProjected, Is.EqualTo(0), "Expected 0 projections in activity stats.");
     }
 
     /// <summary>

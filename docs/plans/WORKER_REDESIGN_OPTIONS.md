@@ -2,7 +2,7 @@
 
 - **Status:** Planned (partially progressed — see [Progress Since Original Analysis](#progress-since-original-analysis))
 - **Created**: 2026-02-23
-- **Updated**: 2026-02-28
+- **Updated**: 2026-03-02
 - **Author**: Architecture Review
 
 ## Context
@@ -25,29 +25,30 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
                       v
 +----------------------------------------------+
 |         Task Processors (per work item)      |
-| SyncImportTaskProcessor    ~2,260 LOC        |
-| SyncTaskProcessorBase      ~2,230 LOC        |
-| SyncFullSyncTaskProcessor    ~330 LOC        |
-| SyncDeltaSyncTaskProcessor   ~255 LOC        |
-| SyncExportTaskProcessor      ~320 LOC        |
+| SyncImportTaskProcessor    ~2,460 LOC        |
+| SyncTaskProcessorBase      ~2,510 LOC        |
+| SyncFullSyncTaskProcessor    ~335 LOC        |
+| SyncDeltaSyncTaskProcessor   ~260 LOC        |
+| SyncExportTaskProcessor      ~355 LOC        |
 | SyncRuleMappingProcessor     ~820 LOC        |
-| Worker.cs (host)             ~925 LOC        |
+| SyncOutcomeBuilder            ~90 LOC        |
+| Worker.cs (host)             ~950 LOC        |
 +---------------------+------------------------+
                       |
                       v
 +----------------------------------------------+
-|       JimApplication (Business Logic)        |
-| ConnectedSystemServer    4,240 LOC           |
-| ExportEvaluationServer   1,860 LOC           |
-| ExportExecutionServer    1,590 LOC           |
-| MetaverseServer            650 LOC           |
-| + 13 other servers                           |
+|  JimApplication (~185 LOC facade, 17 servers)|
+| ConnectedSystemServer    4,255 LOC           |
+| ExportEvaluationServer   1,863 LOC           |
+| ExportExecutionServer    1,597 LOC           |
+| MetaverseServer            651 LOC           |
+| + 13 other servers + DriftDetectionService   |
 +---------------------+------------------------+
                       |
                       v
 +----------------------------------------------+
 |       PostgresDataRepository (EF Core)       |
-|  IRepository -> 13 sub-repositories          |
+|  ~180 LOC facade + 13 sub-repositories       |
 |  JimDbContext (single DbContext per scope)   |
 |  + Raw SQL bulk ops on hot paths (#338)      |
 +----------------------------------------------+
@@ -77,7 +78,7 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
    - Export parallelism exists but is limited by single-DbContext progress reporting
 
 3. **Tight coupling to JimApplication** — **largely unchanged**
-   - `JimApplication` is a God Object facade with 16 server properties, each back-referencing the parent
+   - `JimApplication` is a God Object facade with 17 server properties, each back-referencing the parent
    - Processors directly `new` up `JimApplication` and `PostgresDataRepository` instances
    - No dependency injection - prevents substitution for testing and makes parallelism unsafe
    - Each parallel task creates its own `JimApplication` + `JimDbContext` to avoid EF thread-safety issues
@@ -111,7 +112,7 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
 
 ## Option A: "Surgical Refactor" - Extract Pure Domain Engine + Optimised Data Access
 
-> **Status: Partially completed.** The data access half (ISyncPersistence / bulk SQL) has been largely delivered by #338. The domain engine half (ISyncEngine extraction) has **not** been started. See [Progress Since Original Analysis](#progress-since-original-analysis).
+> **Status: Partially completed.** The bulk SQL operations described by the proposed `ISyncPersistence` interface have been largely delivered by #338, but the interface itself has **not** been formalised — raw SQL is embedded in existing repository methods with try/catch EF fallback. The domain engine half (ISyncEngine extraction) has **not** been started. See [Progress Since Original Analysis](#progress-since-original-analysis).
 
 ### Philosophy
 
@@ -168,7 +169,7 @@ Keep the current architecture but surgically extract the sync processing logic i
    - Takes in-memory objects (CSO batch, sync rules, MVO candidates)
    - Returns decisions/commands (JoinDecision, ProjectDecision, FlowDecision, ExportDecision)
    - Fully unit testable with plain objects - no mocking needed
-   - The ~3,050 lines of SyncTaskProcessorBase + SyncRuleMappingProcessor become the engine
+   - The ~3,330 lines of SyncTaskProcessorBase + SyncRuleMappingProcessor become the engine
 
 2. **Extract `ISyncDataAccess`** - Explicit data boundary for sync hot paths — **PARTIALLY DONE (#338)**
    - `InMemorySyncDataAccess` for tests - purpose-built, not EF's leaky in-memory provider — **not done** (tests use EF fallback via try/catch)
@@ -198,7 +199,7 @@ Keep the current architecture but surgically extract the sync processing logic i
 ### Estimates
 
 - **Completed (#338)**: Bulk SQL persistence for CSOs, pending exports, RPEIs; CSO lookup cache; lightweight MVO matching; `AsSplitQuery` elimination. Measured ~34% FullSync improvement, ~37% faster CSO processing
-- **Remaining scope**: ISyncEngine extraction (~3,050 LOC to refactor), formal ISyncDataAccess interface, InMemorySyncDataAccess for tests, DI introduction, intra-phase parallelism
+- **Remaining scope**: ISyncEngine extraction (~3,330 LOC to refactor), formal ISyncDataAccess interface, InMemorySyncDataAccess for tests, DI introduction, intra-phase parallelism
 - **Risk**: Medium - mechanical refactoring with clear seams; high test coverage before/after
 - **Breaking Changes**: None externally; internal restructuring only
 
@@ -674,3 +675,28 @@ A 5-phase surgical optimisation programme was completed in February 2026, replac
 - MVO create/update still uses EF (not yet converted to raw SQL)
 
 **Full details:** See `docs/plans/done/WORKER_DATABASE_PERFORMANCE_OPTIMISATION.md`
+
+### RPEI Outcome Graph (#363) - In Progress
+
+Significant changes to how sync outcomes are recorded and reported on RPEIs. This work adds hierarchical outcome trees to RPEIs (replacing flat outcome types) and wires outcome building into all three processor phases. While this doesn't change the fundamental worker architecture, it increases processor LOC and introduces a new utility class.
+
+**What was delivered:**
+
+| Change | Impact |
+|--------|--------|
+| New `SyncOutcomeBuilder` utility class (~90 LOC) | Centralises RPEI outcome node creation and summary generation |
+| Hierarchical outcome trees wired into import, sync, and export processors | RPEIs now carry structured parent-child outcome graphs |
+| Activity stats derived from sync outcome graph (with RPEI fallback) | More accurate activity-level statistics |
+| CSO display fields snapshotted on RPEIs | Historical preservation of CSO identity at time of processing |
+| `ExportResult` renamed to `ConnectedSystemExportResult` | Clearer naming, avoids ambiguity with export outcome types |
+| `ObjectChangeType.Provisioned` consolidated into `Exported` | Simplified outcome taxonomy |
+| Merged Disconnected and CsoDeleted into single RPEI for obsoleted CSOs | Reduced RPEI volume for common obsolescence scenarios |
+| Export confirmation outcomes (`ExportConfirmed`) | RPEIs now track successful export confirmations |
+
+**Effect on this document:**
+- Processor LOC figures have increased (SyncImportTaskProcessor +200, SyncTaskProcessorBase +280, SyncExportTaskProcessor +33)
+- The existing `ExportResult` type (referenced in the Option B Export Stage diagram) was renamed to `ConnectedSystemExportResult`
+- `ObjectChangeType.Provisioned` no longer exists (consolidated into `Exported`)
+- The `SyncOutcomeBuilder` pattern demonstrates a small step toward extracting reusable sync logic into dedicated classes, though it is a utility, not the pure domain engine envisioned by ISyncEngine
+
+**Full details:** See `docs/plans/RPEI_OUTCOME_GRAPH.md`

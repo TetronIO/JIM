@@ -62,6 +62,16 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = $PSScriptRoot
 
+# Compute a content hash of the build scripts that affect the image contents.
+# This hash is stored as a Docker image label so the test runner can detect stale images.
+$postProvisionContent = Get-Content -Path (Join-Path $scriptDir "post-provision.sh") -Raw
+$startSambaContent = Get-Content -Path (Join-Path $scriptDir "start-samba.sh") -Raw
+$combinedContent = $postProvisionContent + $startSambaContent
+$buildContentHash = [System.BitConverter]::ToString(
+    [System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($combinedContent))
+).Replace("-", "").Substring(0, 16).ToLower()
+Write-Host "Build content hash: $buildContentHash" -ForegroundColor DarkGray
+
 # Image definitions
 $imageDefinitions = @{
     Primary = @{
@@ -252,6 +262,7 @@ foreach ($imageName in $imagesToBuild) {
         --change "ENV DNS_FORWARDER=8.8.8.8" `
         --change "ENV DOMAINPASS=$($config.Password)" `
         --change "ENV NOCOMPLEXITY=true" `
+        --change "LABEL jim.samba.build-hash=$buildContentHash" `
         --change 'HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 CMD /usr/local/samba/bin/smbclient -L localhost -U% -N || exit 1' `
         --change 'CMD ["/start-samba.sh"]' `
         $containerName `

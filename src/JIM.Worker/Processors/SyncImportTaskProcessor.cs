@@ -34,6 +34,13 @@ public class SyncImportTaskProcessor
     /// </summary>
     private bool _csIsEmpty;
 
+    /// <summary>
+    /// Controls how much detail is recorded for sync outcome graphs on each RPEI.
+    /// Loaded once at import start from service settings.
+    /// </summary>
+    private ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel _syncOutcomeTrackingLevel =
+        ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None;
+
     public SyncImportTaskProcessor(
         JimApplication jimApplication,
         IConnector connector,
@@ -79,6 +86,9 @@ public class SyncImportTaskProcessor
         _csIsEmpty = csoCountAtStart == 0;
         if (_csIsEmpty)
             Log.Information("PerformFullImportAsync: Connected system {ConnectedSystemId} has no existing CSOs. Skipping CSO lookups for this import.", _connectedSystem.Id);
+
+        // Load sync outcome tracking level once at start of import
+        _syncOutcomeTrackingLevel = await _jim.ServiceSettings.GetSyncOutcomeTrackingLevelAsync();
 
         // we keep track of all processed CSOs here, so we can bulk-persist later, when all waves of CSO changes are prepared
         var connectedSystemObjectsToBeCreated = new List<ConnectedSystemObject>();
@@ -379,6 +389,13 @@ public class SyncImportTaskProcessor
             await _jim.Activities.UpdateActivityAsync(_activity);
         }
 
+        // Build CSO → RPEI lookup so reconciliation can merge outcomes onto existing import RPEIs
+        // rather than creating duplicate RPEIs (one-RPEI-per-CSO rule)
+        var importRpeisByCsoId = _allPersistedImportRpeis
+            .Where(r => r.ConnectedSystemObjectId.HasValue)
+            .GroupBy(r => r.ConnectedSystemObjectId!.Value)
+            .ToDictionary(g => g.Key, g => g.First());
+
         // Reconcile pending exports against imported values (confirming import)
         // This confirms exported attribute changes or marks them for retry
         _activity.ObjectsToProcess = connectedSystemObjectsToBeUpdated.Count;
@@ -386,7 +403,7 @@ public class SyncImportTaskProcessor
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Reconciling pending exports");
         using (Diagnostics.Sync.StartSpan("ReconcilePendingExports"))
         {
-            await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated);
+            await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated, importRpeisByCsoId);
         }
 
         // Validate all RPEIs before persisting - catch any that have no CSO and no error (indicates a bug)
@@ -540,6 +557,18 @@ public class SyncImportTaskProcessor
             rpei.ActivityId = _activity.Id;
             if (rpei.Id == Guid.Empty)
                 rpei.Id = Guid.NewGuid();
+
+            // Snapshot CSO display fields (ExternalId, DisplayName, ObjectType) for historical preservation.
+            // Defence-in-depth: ensures snapshots are populated even if individual code paths missed them.
+            if (rpei.ConnectedSystemObject != null)
+                rpei.SnapshotCsoDisplayFields(rpei.ConnectedSystemObject);
+        }
+
+        // Build outcome summaries before persisting
+        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+        {
+            foreach (var rpei in _activityRunProfileExecutionItems)
+                SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
         }
 
         await _jim.Activities.BulkInsertRpeisAsync(_activityRunProfileExecutionItems);
@@ -588,11 +617,17 @@ public class SyncImportTaskProcessor
         activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Deleted;
         activityRunProfileExecutionItem.ConnectedSystemObject = cso;
         activityRunProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
-        // Snapshot the external ID so it's preserved even after CSO is deleted
-        activityRunProfileExecutionItem.ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue;
+        // Snapshot CSO display fields so they're preserved even after CSO is deleted
+        activityRunProfileExecutionItem.SnapshotCsoDisplayFields(cso);
+
+        // Record a DeletionDetected outcome so the outcome tree shows what happened during import.
+        // The actual deletion and CsoDeleted outcome happen during the subsequent sync run.
+        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            SyncOutcomeBuilder.AddRootOutcome(activityRunProfileExecutionItem,
+                ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected);
 
         // mark it obsolete internally, so that it's deleted when a synchronisation run profile is performed.
-        // Note: The RPEI uses Delete (user-facing), but the CSO status uses Obsolete (internal state)
+        // Note: The RPEI uses DeletionDetected (user-facing), but the CSO status uses Obsolete (internal state)
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
         cso.LastUpdated = DateTime.UtcNow;
 
@@ -818,15 +853,22 @@ public class SyncImportTaskProcessor
                 {
                     if (connectedSystemObject != null)
                     {
-                        // RPEI uses Delete (user-facing), CSO status uses Obsolete (internal state)
+                        // RPEI uses DeletionDetected (user-facing), CSO status uses Obsolete (internal state)
                         activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Deleted;
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
-                        // Snapshot the external ID so it's preserved even after CSO is deleted
-                        activityRunProfileExecutionItem.ExternalIdSnapshot = connectedSystemObject.ExternalIdAttributeValue?.StringValue;
+                        // Snapshot CSO display fields so they're preserved even after CSO is deleted
+                        activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Obsolete;
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
                         connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
+
+                        // Record a DeletionDetected outcome so the outcome tree shows what happened during import.
+                        // The actual deletion and CsoDeleted outcome happen during the subsequent sync run.
+                        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                            SyncOutcomeBuilder.AddRootOutcome(activityRunProfileExecutionItem,
+                                ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected);
+
                         Log.Information("ProcessImportObjectsAsync: Connector requested delete for object with external ID in type '{ObjectType}'. Marking CSO {CsoId} for deletion.",
                             importObject.ObjectType, connectedSystemObject.Id);
                     }
@@ -866,7 +908,16 @@ public class SyncImportTaskProcessor
                     if (connectedSystemObject != null)
                     {
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+                        activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
                         connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
+
+                        // Build sync outcome for new CSO
+                        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                        {
+                            SyncOutcomeBuilder.AddRootOutcome(activityRunProfileExecutionItem,
+                                ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded,
+                                detailCount: importObject.Attributes.Count);
+                        }
 
                         // Update the seenExternalIds entry with the CSO reference so we can remove it if a duplicate is found later
                         var extIdAttr = csObjectType.Attributes.First(a => a.IsExternalId);
@@ -960,9 +1011,23 @@ public class SyncImportTaskProcessor
                         activityRunProfileExecutionItem.ObjectChangeType = ObjectChangeType.Updated;
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
-                        // Snapshot the external ID so it's preserved even if CSO is later deleted
-                        activityRunProfileExecutionItem.ExternalIdSnapshot = connectedSystemObject.ExternalIdAttributeValue?.StringValue;
+                        // Snapshot CSO display fields so they're preserved even if CSO is later deleted
+                        activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
+
+                        // Build sync outcome — only record CsoUpdated when attributes actually changed,
+                        // NOT for status-only transitions (e.g. PendingProvisioning → Normal).
+                        // Status transitions still create the RPEI as a slot for reconciliation
+                        // to merge ExportConfirmed outcomes onto.
+                        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None
+                            && hasAttributeChanges)
+                        {
+                            var attrChangeCount = connectedSystemObject.PendingAttributeValueAdditions.Count
+                                + connectedSystemObject.PendingAttributeValueRemovals.Count;
+                            SyncOutcomeBuilder.AddRootOutcome(activityRunProfileExecutionItem,
+                                ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated,
+                                detailCount: attrChangeCount > 0 ? attrChangeCount : null);
+                        }
                     }
                     else
                     {
@@ -2033,11 +2098,15 @@ public class SyncImportTaskProcessor
     /// <summary>
     /// Reconciles Pending Exports against imported CSO values.
     /// This is the "confirming import" step that validates exported attribute changes were persisted in the connected system.
-    /// Creates ActivityRunProfileExecutionItems with warnings for unconfirmed or failed exports.
+    /// Merges reconciliation outcomes (ExportConfirmed, ExportFailed) onto existing import RPEIs when available,
+    /// or creates new RPEIs for CSOs that had no import RPEI (pure confirming import with no attribute changes).
     /// Uses batched database operations for better performance, processing CSOs in pages using the sync page size setting.
     /// </summary>
     /// <param name="updatedCsos">The CSOs that were updated during this import run.</param>
-    private async Task ReconcilePendingExportsAsync(IReadOnlyCollection<ConnectedSystemObject> updatedCsos)
+    /// <param name="importRpeisByCsoId">Lookup of already-persisted import RPEIs keyed by ConnectedSystemObjectId.</param>
+    private async Task ReconcilePendingExportsAsync(
+        IReadOnlyCollection<ConnectedSystemObject> updatedCsos,
+        Dictionary<Guid, ActivityRunProfileExecutionItem> importRpeisByCsoId)
     {
         if (updatedCsos.Count == 0)
             return;
@@ -2082,6 +2151,10 @@ public class SyncImportTaskProcessor
             csoList.Count, totalPages, pageSize);
 
         var processedCount = 0;
+
+        // Track existing import RPEIs that had reconciliation outcomes merged onto them.
+        // Keyed by RPEI Id to deduplicate when a CSO has both confirmed + failed changes.
+        var modifiedExistingRpeis = new System.Collections.Concurrent.ConcurrentDictionary<Guid, ActivityRunProfileExecutionItem>();
 
         for (var page = 0; page < totalPages; page++)
         {
@@ -2148,40 +2221,138 @@ public class SyncImportTaskProcessor
                                     confirmedAttrChangesToDelete.Add(confirmedChange);
                             }
 
-                            // Create execution items for failed exports (permanent failures)
+                            // Try to find an existing import RPEI for this CSO to merge outcomes onto.
+                            // If found, we add reconciliation outcomes to the existing RPEI (one-RPEI-per-CSO rule).
+                            // If not found (pure confirming import with no attribute changes), create a new RPEI.
+                            importRpeisByCsoId.TryGetValue(cso.Id, out var existingRpei);
+
+                            // Add ExportConfirmed outcome for successfully confirmed changes
+                            if (result.ConfirmedChanges.Count > 0)
+                            {
+                                if (existingRpei != null)
+                                {
+                                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                                    {
+                                        SyncOutcomeBuilder.AddRootOutcome(existingRpei,
+                                            ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed,
+                                            detailCount: result.ConfirmedChanges.Count);
+                                    }
+                                    modifiedExistingRpeis.TryAdd(existingRpei.Id, existingRpei);
+                                }
+                                else
+                                {
+                                    var executionItem = new ActivityRunProfileExecutionItem
+                                    {
+                                        Activity = _activity,
+                                        ConnectedSystemObject = cso,
+                                        ConnectedSystemObjectId = cso.Id,
+                                        ObjectChangeType = ObjectChangeType.Updated
+                                    };
+                                    executionItem.SnapshotCsoDisplayFields(cso);
+
+                                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                                    {
+                                        SyncOutcomeBuilder.AddRootOutcome(executionItem,
+                                            ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed,
+                                            detailCount: result.ConfirmedChanges.Count);
+                                    }
+
+                                    pageExecutionItems.Add(executionItem);
+                                }
+                            }
+
+                            // Add ExportFailed outcome for permanently failed exports
                             if (result.FailedChanges.Count > 0)
                             {
                                 var failedAttrNames = string.Join(", ", result.FailedChanges.Select(c => c.Attribute?.Name ?? "unknown"));
-                                var executionItem = new ActivityRunProfileExecutionItem
+
+                                if (existingRpei != null)
                                 {
-                                    Activity = _activity,
-                                    ConnectedSystemObject = cso,
-                                    ConnectedSystemObjectId = cso.Id,
-                                    ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue,
-                                    ObjectChangeType = ObjectChangeType.Updated,
-                                    ErrorType = ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed,
-                                    ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.",
-                                    DataSnapshot = $"Failed attributes: {failedAttrNames}"
-                                };
-                                pageExecutionItems.Add(executionItem);
+                                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                                    {
+                                        SyncOutcomeBuilder.AddRootOutcome(existingRpei,
+                                            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed,
+                                            detailCount: result.FailedChanges.Count);
+                                    }
+                                    // Set error fields only if the existing RPEI doesn't already have an error
+                                    if (existingRpei.ErrorType is null or ActivityRunProfileExecutionItemErrorType.NotSet)
+                                    {
+                                        existingRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed;
+                                        existingRpei.ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.";
+                                        existingRpei.DataSnapshot = $"Failed attributes: {failedAttrNames}";
+                                    }
+                                    modifiedExistingRpeis.TryAdd(existingRpei.Id, existingRpei);
+                                }
+                                else
+                                {
+                                    var executionItem = new ActivityRunProfileExecutionItem
+                                    {
+                                        Activity = _activity,
+                                        ConnectedSystemObject = cso,
+                                        ConnectedSystemObjectId = cso.Id,
+                                        ObjectChangeType = ObjectChangeType.Updated,
+                                        ErrorType = ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed,
+                                        ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.",
+                                        DataSnapshot = $"Failed attributes: {failedAttrNames}"
+                                    };
+                                    executionItem.SnapshotCsoDisplayFields(cso);
+
+                                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                                    {
+                                        SyncOutcomeBuilder.AddRootOutcome(executionItem,
+                                            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed,
+                                            detailCount: result.FailedChanges.Count);
+                                    }
+
+                                    pageExecutionItems.Add(executionItem);
+                                }
                             }
 
-                            // Create execution items for retry exports (temporary failures that will be retried)
+                            // Add ExportFailed outcome for retry exports (temporary failures)
                             if (result.RetryChanges.Count > 0)
                             {
                                 var retryAttrNames = string.Join(", ", result.RetryChanges.Select(c => c.Attribute?.Name ?? "unknown"));
-                                var executionItem = new ActivityRunProfileExecutionItem
+
+                                if (existingRpei != null)
                                 {
-                                    Activity = _activity,
-                                    ConnectedSystemObject = cso,
-                                    ConnectedSystemObjectId = cso.Id,
-                                    ExternalIdSnapshot = cso.ExternalIdAttributeValue?.StringValue,
-                                    ObjectChangeType = ObjectChangeType.Updated,
-                                    ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
-                                    ErrorMessage = $"We exported a change, but did not get confirmation of it when a confirming import was performed. Details: {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will attempt to reassert the change on the next export run.",
-                                    DataSnapshot = $"Unconfirmed attributes: {retryAttrNames}"
-                                };
-                                pageExecutionItems.Add(executionItem);
+                                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                                    {
+                                        SyncOutcomeBuilder.AddRootOutcome(existingRpei,
+                                            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed,
+                                            detailCount: result.RetryChanges.Count);
+                                    }
+                                    // Set error fields only if the existing RPEI doesn't already have an error
+                                    if (existingRpei.ErrorType is null or ActivityRunProfileExecutionItemErrorType.NotSet)
+                                    {
+                                        existingRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed;
+                                        existingRpei.ErrorMessage = $"We exported a change, but did not get confirmation of it when a confirming import was performed. Details: {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will attempt to reassert the change on the next export run.";
+                                        existingRpei.DataSnapshot = $"Unconfirmed attributes: {retryAttrNames}";
+                                    }
+                                    modifiedExistingRpeis.TryAdd(existingRpei.Id, existingRpei);
+                                }
+                                else
+                                {
+                                    var executionItem = new ActivityRunProfileExecutionItem
+                                    {
+                                        Activity = _activity,
+                                        ConnectedSystemObject = cso,
+                                        ConnectedSystemObjectId = cso.Id,
+                                        ObjectChangeType = ObjectChangeType.Updated,
+                                        ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
+                                        ErrorMessage = $"We exported a change, but did not get confirmation of it when a confirming import was performed. Details: {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will attempt to reassert the change on the next export run.",
+                                        DataSnapshot = $"Unconfirmed attributes: {retryAttrNames}"
+                                    };
+                                    executionItem.SnapshotCsoDisplayFields(cso);
+
+                                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                                    {
+                                        SyncOutcomeBuilder.AddRootOutcome(executionItem,
+                                            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed,
+                                            detailCount: result.RetryChanges.Count);
+                                    }
+
+                                    pageExecutionItems.Add(executionItem);
+                                }
                             }
                         }
 
@@ -2232,6 +2403,44 @@ public class SyncImportTaskProcessor
 
             // Update activity progress after each page
             await _jim.Activities.UpdateActivityAsync(_activity);
+        }
+
+        // Persist reconciliation outcomes merged onto existing import RPEIs.
+        // These RPEIs were already bulk-inserted during the import phase; we now update their
+        // OutcomeSummary and error fields, and insert the new sync outcome nodes.
+        if (modifiedExistingRpeis.Count > 0)
+        {
+            var modifiedRpeiList = modifiedExistingRpeis.Values.ToList();
+
+            // Rebuild OutcomeSummary to include the newly added reconciliation outcomes
+            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            {
+                foreach (var rpei in modifiedRpeiList)
+                    SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
+            }
+
+            // Collect only the NEW outcomes (those not yet persisted).
+            // Already-persisted outcomes have non-empty IDs assigned by FlattenSyncOutcomes during the first flush.
+            // New outcomes added during reconciliation have Id == Guid.Empty.
+            var newOutcomes = new List<ActivityRunProfileExecutionItemSyncOutcome>();
+            foreach (var rpei in modifiedRpeiList)
+            {
+                var rpeiNewOutcomes = rpei.SyncOutcomes
+                    .Where(o => o.ParentSyncOutcome == null && o.ParentSyncOutcomeId == null && o.Id == Guid.Empty)
+                    .ToList();
+                foreach (var outcome in rpeiNewOutcomes)
+                {
+                    if (outcome.Id == Guid.Empty)
+                        outcome.Id = Guid.NewGuid();
+                    outcome.ActivityRunProfileExecutionItemId = rpei.Id;
+                    newOutcomes.Add(outcome);
+                }
+            }
+
+            await _jim.Activities.BulkUpdateRpeiOutcomesAsync(modifiedRpeiList, newOutcomes);
+
+            Log.Debug("ReconcilePendingExportsAsync: Updated {RpeiCount} existing RPEIs with {OutcomeCount} new reconciliation outcomes",
+                modifiedRpeiList.Count, newOutcomes.Count);
         }
 
         // Store the confirmed count on the activity for stats reporting

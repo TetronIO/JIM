@@ -2,6 +2,10 @@
 
 > Identity Management System - .NET 9.0, EF Core, PostgreSQL, Blazor
 
+## Context7 MCP
+
+Always use Context7 MCP when you need library/API documentation, code generation, setup or configuration steps without the user having to explicitly ask. The MudBlazor library ID is `/mudblazor/mudblazor`.
+
 ## CRITICAL REQUIREMENTS
 
 **YOU MUST BUILD AND TEST BEFORE EVERY COMMIT AND PR (for .NET code):**
@@ -132,6 +136,9 @@ Sync operations are the core of JIM. Customers depend on JIM to synchronise thei
 
 **Diagrams:**
 - `jim-diagrams` - Export Structurizr C4 diagrams as SVG (requires Docker)
+
+**Planning:**
+- `jim-prd` - Create a new PRD from template (prompts for feature name)
 
 **Docker (Manual Commands):**
 - `docker compose -f db.yml up -d` - Start database (same as jim-db)
@@ -312,11 +319,13 @@ Prefer: Microsoft-maintained packages > established corporate-backed packages > 
 
 ## Feature Planning
 
-**When creating plans for new features or significant changes:**
-1. Create a plan document in `docs/plans/` (uppercase filename with underscores)
-2. Create a GitHub issue linking to the plan document
+**When planning new features or significant changes:**
+1. Run `jim-prd` to create a new PRD from the template (or copy `docs/prd/PRD_TEMPLATE.md` manually)
+2. Fill in the required sections (Problem Statement, Goals, Non-Goals, User Stories, Requirements, Examples, Acceptance Criteria)
+3. Create a GitHub issue linking to the PRD
+4. Ask Claude to generate the implementation plan from the PRD
 
-> **Full plan structure guidelines and documentation organisation:** See `docs/CLAUDE.md`
+> **Full PRD template, plan structure guidelines, and documentation organisation:** See `docs/CLAUDE.md`
 
 ## Architecture Quick Reference
 

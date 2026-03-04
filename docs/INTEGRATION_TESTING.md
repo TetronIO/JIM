@@ -487,6 +487,23 @@ Each test step is triggered via a `-Step` parameter. This allows JIM to complete
 
 The `-Step All` option includes built-in waits and JIM Run Profile triggers between steps to automate the full test cycle.
 
+##### Outcome Graph Assertions (#363 Phase 4b)
+
+Each step validates that the RPEI Outcome Graph records the correct causal chain. These assertions use `Assert-ActivityOutcomeStats` and `Assert-ActivityItemsHaveOutcomeSummary` from `test/integration/utils/Test-Helpers.ps1`.
+
+| Step | Activity | Validated Outcome | What's Checked |
+|------|----------|-------------------|----------------|
+| Joiner | CSV Import | `CsoAdded` | Items have `outcomeSummary` containing `CsoAdded` |
+| Joiner | Full Sync | `Projected` | Items have `outcomeSummary` containing `Projected`; stats show `totalProvisioned` matching user count |
+| Joiner | LDAP Export | `Exported` | Items have `outcomeSummary` containing `Exported` |
+| Mover | CSV Delta Sync | `AttributeFlow` | Items have `outcomeSummary` containing `AttributeFlow` |
+| Leaver | CSV Full Import | `DeletionDetected` | Items have `outcomeSummary` containing `DeletionDetected` |
+| Leaver | CSV Delta Sync | `Disconnected` | Items have `outcomeSummary` containing `Disconnected` |
+
+These assertions piggyback on Scenario 1's existing lifecycle rather than creating a separate scenario, since outcome tracking is a cross-cutting concern exercised by every sync operation.
+
+Repository-level tests for the dual-path stats derivation logic (outcome-based vs legacy fallback) are in `test/JIM.Web.Api.Tests/ActivityOutcomeStatsIntegrationTests.cs`.
+
 ---
 
 #### Scenario 2: Person Entity - Cross-domain Synchronisation

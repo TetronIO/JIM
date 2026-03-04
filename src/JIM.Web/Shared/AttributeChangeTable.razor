@@ -1,0 +1,374 @@
+@using JIM.Models.Core
+@using JIM.Models.Enums
+@using JIM.Models.Staging
+@using JIM.Utilities
+
+<div style="display: flex; flex-direction: row; gap: 12px; margin-bottom: 12px;">
+    <div style="width: 250px;">
+        <MudTextField @bind-Value="_searchText" Label="Search" Variant="Variant.Outlined"
+            Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true"
+            DebounceInterval="300" Margin="Margin.Dense" />
+    </div>
+    <div style="width: 180px;">
+        <MudSelect T="string" @bind-Value="_filterAttribute" Label="Attribute" Variant="Variant.Outlined"
+            Dense="true" Margin="Margin.Dense">
+            <MudSelectItem T="string" Value="@((string)null!)">All Attributes</MudSelectItem>
+            @foreach (var attr in _displayItems.Select(d => d.AttributeName).Distinct().OrderBy(n => n))
+            {
+                <MudSelectItem T="string" Value="@attr">@attr</MudSelectItem>
+            }
+        </MudSelect>
+    </div>
+    <div style="width: 150px;">
+        <MudSelect T="string" @bind-Value="_filterChangeType" Label="Change type"
+            Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense">
+            <MudSelectItem T="string" Value="@((string)null!)">All</MudSelectItem>
+            <MudSelectItem T="string" Value="@("Set")">Set</MudSelectItem>
+            <MudSelectItem T="string" Value="@("Updated")">Updated</MudSelectItem>
+            <MudSelectItem T="string" Value="@("Removed")">Removed</MudSelectItem>
+            <MudSelectItem T="string" Value="@("Add")">Add</MudSelectItem>
+            <MudSelectItem T="string" Value="@("Remove")">Remove</MudSelectItem>
+        </MudSelect>
+    </div>
+</div>
+
+<MudTable Items="@GetFilteredDisplayItems()" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm"
+          Elevation="0" RowsPerPage="10" T="AttributeChangeDisplay"
+          Class="attribute-change-table">
+    <HeaderContent>
+        <MudTh>
+            <MudText Typo="Typo.button">Change</MudText>
+        </MudTh>
+        <MudTh>
+            <MudText Typo="Typo.button">Attribute</MudText>
+        </MudTh>
+        <MudTh>
+            <MudText Typo="Typo.button">Type</MudText>
+        </MudTh>
+        <MudTh>
+            <MudText Typo="Typo.button">Plurality</MudText>
+        </MudTh>
+        <MudTh>
+            <MudText Typo="Typo.button">Value</MudText>
+        </MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Change">
+            <MudChip T="string" Variant="Variant.Text" Color="@GetDisplayChangeTypeColor(context)">
+                @context.DisplayChangeType
+            </MudChip>
+        </MudTd>
+        <MudTd DataLabel="Attribute">
+            <MudText Class="mud-text-secondary">@context.AttributeName</MudText>
+        </MudTd>
+        <MudTd DataLabel="Type">
+            <MudText Class="mud-text-secondary">@context.AttributeType</MudText>
+        </MudTd>
+        <MudTd DataLabel="Plurality">
+            <MudText Class="mud-text-secondary">@(context.IsMultiValued ? "Multi-Valued" : "Single-Valued")</MudText>
+        </MudTd>
+        <MudTd DataLabel="Value">
+            @if (context.IsUpdate)
+            {
+                @* SVA Update - show old → new with old value de-emphasised *@
+                @if (context.OldReferenceValue != null || context.NewReferenceValue != null)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        @if (context.OldReferenceValue != null)
+                        {
+                            <MudLink Href="@context.OldReferenceValue.Href" Class="mud-text-secondary">
+                                @context.OldReferenceValue.DisplayName</MudLink>
+                        }
+                        else
+                        {
+                            <MudText Class="mud-text-secondary">(none)</MudText>
+                        }
+                        <MudText Class="mud-text-secondary">→</MudText>
+                        @if (context.NewReferenceValue != null)
+                        {
+                            <MudLink Href="@context.NewReferenceValue.Href">
+                                @context.NewReferenceValue.DisplayName</MudLink>
+                        }
+                        else
+                        {
+                            <MudText Class="mud-text-secondary">(none)</MudText>
+                        }
+                    </MudStack>
+                }
+                else
+                {
+                    @* Scalar update - render old value de-emphasised, new value bold *@
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudText Class="mud-text-secondary">@context.OldValue</MudText>
+                        <MudText Class="mud-text-secondary">→</MudText>
+                        <MudText>@context.NewValue</MudText>
+                    </MudStack>
+                }
+            }
+            else if (context.ReferenceValue != null)
+            {
+                @* MVA reference Add/Remove *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudChip T="string" Color="Color.Default">@context.ReferenceValue.TypeName</MudChip>
+                    <MudLink Href="@context.ReferenceValue.Href">
+                        @context.ReferenceValue.DisplayName
+                    </MudLink>
+                    @if (!string.IsNullOrEmpty(context.ReferenceValue.SecondaryId))
+                    {
+                        <MudText Class="mud-text-secondary">(@context.ReferenceValue.SecondaryId)</MudText>
+                    }
+                </MudStack>
+            }
+            else
+            {
+                @* Simple scalar Add/Remove - bold for Set/Add, de-emphasised for Removed/Remove *@
+                @if (context.DisplayChangeType == "Removed" || context.DisplayChangeType == "Remove")
+                {
+                    <MudText Class="mud-text-secondary">@context.DisplayValue</MudText>
+                }
+                else
+                {
+                    <MudText>@context.DisplayValue</MudText>
+                }
+            }
+        </MudTd>
+    </RowTemplate>
+    <PagerContent>
+        <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
+    </PagerContent>
+</MudTable>
+
+@code {
+    [Parameter]
+    public List<ConnectedSystemObjectChangeAttribute>? AttributeChanges { get; set; }
+
+    /// <summary>
+    /// Optional MVO attribute changes (from sync operations that produce metaverse object changes).
+    /// Merged with CSO attribute changes into a single display table.
+    /// </summary>
+    [Parameter]
+    public List<MetaverseObjectChangeAttribute>? MvoAttributeChanges { get; set; }
+
+    private List<AttributeChangeDisplay> _displayItems = [];
+    private string? _searchText;
+    private string? _filterAttribute;
+    private string? _filterChangeType;
+
+    protected override void OnParametersSet()
+    {
+        _displayItems = BuildDisplayItems();
+    }
+
+    private IEnumerable<AttributeChangeDisplay> GetFilteredDisplayItems()
+    {
+        var items = _displayItems.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(_searchText))
+        {
+            items = items.Where(c =>
+                c.AttributeName.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
+                (c.DisplayValue?.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (c.ReferenceValue?.DisplayName.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (c.OldReferenceValue?.DisplayName.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (c.NewReferenceValue?.DisplayName.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        if (!string.IsNullOrEmpty(_filterAttribute))
+        {
+            items = items.Where(c => c.AttributeName == _filterAttribute);
+        }
+
+        if (!string.IsNullOrEmpty(_filterChangeType))
+        {
+            items = items.Where(c => c.DisplayChangeType == _filterChangeType);
+        }
+
+        return items.OrderBy(c => c.AttributeName).ThenBy(c => c.DisplayChangeType);
+    }
+
+    /// <summary>
+    /// Maps raw EF attribute change data into display items with SVA/MVA-aware terminology.
+    /// Merges both CSO and MVO attribute changes into a single flat list.
+    /// </summary>
+    private List<AttributeChangeDisplay> BuildDisplayItems()
+    {
+        var flatChanges = new List<AttributeChange>();
+
+        // CSO attribute changes (import updates, CSO-level changes)
+        if (AttributeChanges is { Count: > 0 })
+        {
+            flatChanges.AddRange(AttributeChanges
+                .OrderBy(ac => ac.Attribute.Name)
+                .SelectMany(ac => ac.ValueChanges.Select(vc => new AttributeChange
+                {
+                    AttributeName = ac.Attribute.Name,
+                    ChangeType = vc.ValueChangeType,
+                    Value = vc.ReferenceValue == null ? vc.ToString() : null,
+                    ReferenceValue = vc.ReferenceValue != null ? new ReferenceValueInfo
+                    {
+                        TypeName = vc.ReferenceValue.Type?.Name ?? "Unknown",
+                        DisplayName = vc.ReferenceValue.DisplayNameOrId ?? vc.ReferenceValue.Id.ToString(),
+                        Href = Utilities.GetConnectedSystemObjectHref(vc.ReferenceValue)
+                    } : null,
+                    IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued,
+                    AttributeType = ac.Attribute.Type
+                })));
+        }
+
+        // MVO attribute changes (sync operations — attribute flow to metaverse)
+        if (MvoAttributeChanges is { Count: > 0 })
+        {
+            flatChanges.AddRange(MvoAttributeChanges
+                .OrderBy(ac => ac.Attribute.Name)
+                .SelectMany(ac => ac.ValueChanges.Select(vc => new AttributeChange
+                {
+                    AttributeName = ac.Attribute.Name,
+                    ChangeType = vc.ValueChangeType,
+                    Value = vc.ReferenceValue == null ? vc.ToString() : null,
+                    ReferenceValue = vc.ReferenceValue != null ? new ReferenceValueInfo
+                    {
+                        TypeName = vc.ReferenceValue.Type?.Name ?? "Unknown",
+                        DisplayName = vc.ReferenceValue.DisplayName ?? vc.ReferenceValue.Id.ToString(),
+                        Href = $"/identity/search/{vc.ReferenceValue.Id}"
+                    } : null,
+                    IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued,
+                    AttributeType = ac.Attribute.Type
+                })));
+        }
+
+        if (flatChanges.Count == 0) return [];
+
+        return GetDisplayChanges(flatChanges);
+    }
+
+    /// <summary>
+    /// Converts flat attribute changes into display items, collapsing SVA Add+Remove pairs into Updates.
+    /// SVA terms: Set (first-time assignment), Updated (value change), Removed (value cleared).
+    /// MVA terms: Add (value added), Remove (value removed).
+    /// </summary>
+    private static List<AttributeChangeDisplay> GetDisplayChanges(List<AttributeChange> flatChanges)
+    {
+        var result = new List<AttributeChangeDisplay>();
+
+        var groupedByAttribute = flatChanges
+            .GroupBy(c => c.AttributeName)
+            .OrderBy(g => g.Key);
+
+        foreach (var group in groupedByAttribute)
+        {
+            var changes = group.ToList();
+            var isMultiValued = changes.FirstOrDefault()?.IsMultiValued ?? false;
+            var attributeType = changes.FirstOrDefault()?.AttributeType ?? AttributeDataType.NotSet;
+
+            if (!isMultiValued)
+            {
+                // SVA: Check if we have both Add and Remove (i.e., an update)
+                var addChange = changes.FirstOrDefault(c => c.ChangeType == ValueChangeType.Add);
+                var removeChange = changes.FirstOrDefault(c => c.ChangeType == ValueChangeType.Remove);
+
+                if (addChange != null && removeChange != null)
+                {
+                    result.Add(new AttributeChangeDisplay
+                    {
+                        AttributeName = group.Key,
+                        AttributeType = attributeType,
+                        IsMultiValued = isMultiValued,
+                        DisplayChangeType = "Updated",
+                        IsUpdate = true,
+                        OldValue = removeChange.ReferenceValue == null ? removeChange.Value : null,
+                        NewValue = addChange.ReferenceValue == null ? addChange.Value : null,
+                        OldReferenceValue = removeChange.ReferenceValue,
+                        NewReferenceValue = addChange.ReferenceValue
+                    });
+                }
+                else
+                {
+                    foreach (var change in changes)
+                    {
+                        var displayType = change.ChangeType == ValueChangeType.Add ? "Set" : "Removed";
+
+                        result.Add(new AttributeChangeDisplay
+                        {
+                            AttributeName = change.AttributeName,
+                            AttributeType = attributeType,
+                            IsMultiValued = isMultiValued,
+                            DisplayChangeType = displayType,
+                            IsUpdate = false,
+                            DisplayValue = change.Value,
+                            ReferenceValue = change.ReferenceValue
+                        });
+                    }
+                }
+            }
+            else
+            {
+                // MVA: Show all individual Add/Remove operations
+                foreach (var change in changes)
+                {
+                    result.Add(new AttributeChangeDisplay
+                    {
+                        AttributeName = change.AttributeName,
+                        AttributeType = attributeType,
+                        IsMultiValued = isMultiValued,
+                        DisplayChangeType = change.ChangeType.ToString(),
+                        IsUpdate = false,
+                        DisplayValue = change.Value,
+                        ReferenceValue = change.ReferenceValue
+                    });
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static Color GetDisplayChangeTypeColor(AttributeChangeDisplay change)
+    {
+        return change.DisplayChangeType switch
+        {
+            "Set" => Color.Success,
+            "Updated" => Color.Info,
+            "Removed" => Color.Error,
+            "Add" => Color.Success,
+            "Remove" => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    #region Display Types
+
+    private class AttributeChange
+    {
+        public string AttributeName { get; set; } = string.Empty;
+        public ValueChangeType ChangeType { get; set; }
+        public string? Value { get; set; }
+        public ReferenceValueInfo? ReferenceValue { get; set; }
+        public bool IsMultiValued { get; set; }
+        public AttributeDataType AttributeType { get; set; }
+    }
+
+    private class AttributeChangeDisplay
+    {
+        public string AttributeName { get; set; } = string.Empty;
+        public AttributeDataType AttributeType { get; set; }
+        public bool IsMultiValued { get; set; }
+        public string DisplayChangeType { get; set; } = string.Empty;
+        public string? DisplayValue { get; set; }
+        public ReferenceValueInfo? ReferenceValue { get; set; }
+        public ReferenceValueInfo? OldReferenceValue { get; set; }
+        public ReferenceValueInfo? NewReferenceValue { get; set; }
+        public bool IsUpdate { get; set; }
+        public string? OldValue { get; set; }
+        public string? NewValue { get; set; }
+    }
+
+    private class ReferenceValueInfo
+    {
+        public string TypeName { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string? SecondaryId { get; set; }
+        public string Href { get; set; } = string.Empty;
+    }
+
+    #endregion
+}

@@ -1,0 +1,191 @@
+@using JIM.Models.Activities
+@using JIM.Models.Core
+@using JIM.Models.Staging
+@using JIM.Models.Transactional
+@using JIM.Utilities
+
+@if (Outcomes == null || Outcomes.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+        Outcome tracking was not enabled when this activity was recorded.
+        Only the operation type is available.
+    </MudAlert>
+}
+else
+{
+    <div class="outcome-tree">
+        @* Connected System + CSO root node when context is available *@
+        @if (!string.IsNullOrEmpty(ConnectedSystemName))
+        {
+            <div class="outcome-node">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Storage"
+                             Color="Color.Default" Size="Size.Medium" />
+                    <div>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            @if (ConnectedSystemId.HasValue)
+                            {
+                                <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId.Value}")"
+                                         Typo="Typo.body1" Class="jim-text-emphasis">
+                                    @ConnectedSystemName
+                                </MudLink>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body1" Class="jim-text-emphasis">
+                                    @ConnectedSystemName
+                                </MudText>
+                            }
+                            @if (!string.IsNullOrEmpty(RunProfileName))
+                            {
+                                <MudText Typo="Typo.body1" Class="mud-text-secondary">
+                                    — @RunProfileName
+                                </MudText>
+                            }
+                        </MudStack>
+                    </div>
+                </MudStack>
+
+                <div class="outcome-children">
+                    <div class="outcome-node">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Description"
+                                     Color="Color.Default" Size="Size.Medium" />
+                            <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px;">
+                                @if (!string.IsNullOrEmpty(CsoObjectTypeName))
+                                {
+                                    <MudChip T="string" Color="Color.Default" Size="Size.Medium"
+                                             Style="margin: 0;">
+                                        @CsoObjectTypeName
+                                    </MudChip>
+                                }
+                                @if (!string.IsNullOrEmpty(CsoExternalId))
+                                {
+                                    @if (CsoId.HasValue && CsoConnectedSystemId.HasValue)
+                                    {
+                                        <MudLink Href="@Utilities.GetConnectedSystemObjectHref(CsoConnectedSystemId.Value, CsoId.Value)"
+                                                 Typo="Typo.body1" Class="jim-text-code"
+                                                 Style="margin: 0;">
+                                            @CsoExternalId
+                                        </MudLink>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.body1" Class="jim-text-code"
+                                                 Style="margin: 0;">@CsoExternalId</MudText>
+                                    }
+                                }
+                                @if (!string.IsNullOrEmpty(CsoDisplayName) && CsoDisplayName != CsoExternalId)
+                                {
+                                    <MudText Typo="Typo.body1" Class="mud-text-secondary"
+                                             Style="margin: 0;">— @CsoDisplayName</MudText>
+                                }
+                            </div>
+                        </MudStack>
+
+                        @* Outcome nodes as children of the CSO *@
+                        <div class="outcome-children">
+                            @foreach (var rootOutcome in RootOutcomes)
+                            {
+                                <OutcomeTreeNode Outcome="rootOutcome"
+                                                 AttributeChanges="AttributeChanges"
+                                                 MvoAttributeChanges="MvoAttributeChanges"
+                                                 OnLoadPendingExport="OnLoadPendingExport" />
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        else
+        {
+            @* Fallback: no CSO context, render outcomes directly *@
+            @foreach (var rootOutcome in RootOutcomes)
+            {
+                <OutcomeTreeNode Outcome="rootOutcome"
+                                 AttributeChanges="AttributeChanges"
+                                 OnLoadPendingExport="OnLoadPendingExport" />
+            }
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public List<ActivityRunProfileExecutionItemSyncOutcome> Outcomes { get; set; } = [];
+
+    /// <summary>
+    /// Optional attribute changes from the RPEI's ConnectedSystemObjectChange,
+    /// used to show expandable attribute detail on AttributeFlow outcome nodes.
+    /// </summary>
+    [Parameter]
+    public List<ConnectedSystemObjectChangeAttribute>? AttributeChanges { get; set; }
+
+    /// <summary>
+    /// Optional MVO attribute changes from the RPEI's MetaverseObjectChange,
+    /// used to show expandable attribute detail on sync AttributeFlow outcome nodes.
+    /// </summary>
+    [Parameter]
+    public List<MetaverseObjectChangeAttribute>? MvoAttributeChanges { get; set; }
+
+    /// <summary>
+    /// Callback for loading pending export data on demand when a PendingExportCreated node is expanded.
+    /// </summary>
+    [Parameter]
+    public Func<Guid, Task<PendingExport?>>? OnLoadPendingExport { get; set; }
+
+    /// <summary>
+    /// Name of the connected system (e.g., "HR CSV Source"). Used as the top-level context header.
+    /// </summary>
+    [Parameter]
+    public string? ConnectedSystemName { get; set; }
+
+    /// <summary>
+    /// Name of the run profile that was executed (e.g., "Full Import", "Full Synchronisation").
+    /// Displayed alongside the connected system name.
+    /// </summary>
+    [Parameter]
+    public string? RunProfileName { get; set; }
+
+    /// <summary>
+    /// ID of the connected system, for generating the link.
+    /// </summary>
+    [Parameter]
+    public int? ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// External ID of the CSO (e.g., "EMP001").
+    /// </summary>
+    [Parameter]
+    public string? CsoExternalId { get; set; }
+
+    /// <summary>
+    /// Display name of the CSO (e.g., "John Smith"), used alongside the external ID.
+    /// </summary>
+    [Parameter]
+    public string? CsoDisplayName { get; set; }
+
+    /// <summary>
+    /// Object type name (e.g., "Person").
+    /// </summary>
+    [Parameter]
+    public string? CsoObjectTypeName { get; set; }
+
+    /// <summary>
+    /// ID of the CSO, for generating the link. Null if the CSO has been deleted.
+    /// </summary>
+    [Parameter]
+    public Guid? CsoId { get; set; }
+
+    /// <summary>
+    /// Connected system ID that the CSO belongs to, for generating the CSO detail link.
+    /// </summary>
+    [Parameter]
+    public int? CsoConnectedSystemId { get; set; }
+
+    private List<ActivityRunProfileExecutionItemSyncOutcome> RootOutcomes =>
+        Outcomes
+            .Where(o => o.ParentSyncOutcomeId == null)
+            .OrderBy(o => o.Ordinal)
+            .ToList();
+}

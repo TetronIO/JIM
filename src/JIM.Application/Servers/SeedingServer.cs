@@ -1,5 +1,6 @@
 ﻿using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.DataGeneration;
 using JIM.Models.Interfaces;
@@ -825,6 +826,21 @@ internal class SeedingServer
             Category = ServiceSettingCategory.History,
             ValueType = ServiceSettingValueType.Boolean,
             DefaultValue = "true",
+            IsReadOnly = false
+        });
+
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.ChangeTrackingSyncOutcomesLevel,
+            DisplayName = "Sync outcome tracking level",
+            Description = "Controls how much detail is recorded for sync outcome graphs on each run profile execution item. " +
+                          "None: no outcome tracking (legacy behaviour). Standard: root-level outcomes (enables stat chips). " +
+                          "Detailed: full causal chain with nested outcomes (default). " +
+                          "Higher levels provide richer audit trails but increase storage usage.",
+            Category = ServiceSettingCategory.History,
+            ValueType = ServiceSettingValueType.Enum,
+            EnumTypeName = nameof(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel),
+            DefaultValue = nameof(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed),
             IsReadOnly = false
         });
 

@@ -123,7 +123,7 @@ public async Task GetConnectedSystemObjectsModifiedSinceAsync_WithModifiedCsos_R
 **Example**: HR to Directory synchronisation scenario
 
 ```powershell
-./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Template Large -ApiKey "jim_..."
+./Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -Template Large
 ```
 
 **What Integration Tests Are Good At**:
@@ -262,7 +262,7 @@ public class FullSyncAfterImportWorkflowTests
 | Group Membership Sync | ✅ Done | `JIM.Workflow.Tests/Scenarios/Entitlement Management/GroupMembershipSyncTests.cs` |
 | Non-String Data Types | ✅ Done | `JIM.Workflow.Tests/Scenarios/Sync/NonStringDataTypeExportTests.cs` |
 | Projection (CSO -> MVO join) | ⚠️ Partial | Covered implicitly by sync tests; no dedicated test |
-| Export Evaluation (PendingExport) | ⚠️ Partial | Covered implicitly by drift detection; no dedicated test |
+| Export Evaluation (PendingExport) | ✅ Done | 67 dedicated unit tests in `JIM.Worker.Tests/OutboundSync/` (`ExportEvaluationTests.cs`, `ExportEvaluationMergeTests.cs`, `ExportEvaluationNoChangeTests.cs`) |
 
 ## ⚠️ CRITICAL: EF Core In-Memory Database Limitations ⚠️
 

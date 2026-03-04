@@ -442,58 +442,134 @@ public static class Helpers
     }
 
     /// <summary>
-    /// Gets the relevant ObjectChangeTypes for a given run type.
+    /// Gets a MudBlazor colour for the sync outcome type chip.
     /// </summary>
-    public static IEnumerable<ObjectChangeType> GetChangeTypesForRunType(ConnectedSystemRunType? runType)
+    public static Color GetOutcomeTypeMudBlazorColor(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
-        return runType switch
+        return outcomeType switch
         {
-            ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport =>
-                new[] { ObjectChangeType.Added, ObjectChangeType.Updated, ObjectChangeType.Deleted },
-            ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation =>
-                new[] { ObjectChangeType.Projected, ObjectChangeType.Joined, ObjectChangeType.AttributeFlow, ObjectChangeType.Disconnected, ObjectChangeType.Deleted },
-            ConnectedSystemRunType.Export =>
-                new[] { ObjectChangeType.Exported, ObjectChangeType.Deprovisioned },
-            _ => Array.Empty<ObjectChangeType>()
+            // Import outcomes
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded => Color.Success,
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated => Color.Info,
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => Color.Error,
+            ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected => Color.Warning,
+            ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => Color.Success,
+            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => Color.Error,
+
+            // Sync outcomes — inbound
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected => Color.Primary,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => Color.Secondary,
+            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => Color.Tertiary,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => Color.Warning,
+            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => Color.Warning,
+            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => Color.Error,
+            ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection => Color.Warning,
+
+            // Sync outcomes — outbound
+            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => Color.Primary,
+            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => Color.Info,
+
+            // Export outcomes
+            ActivityRunProfileExecutionItemSyncOutcomeType.Exported => Color.Info,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => Color.Error,
+
+            _ => Color.Default,
         };
     }
 
     /// <summary>
-    /// Gets the stat count for a specific change type from the stats model.
+    /// Gets a human-readable display name for a sync outcome type.
     /// </summary>
-    public static int GetStatCountForChangeType(ActivityRunProfileExecutionStats stats, ObjectChangeType changeType)
+    public static string GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
-        return changeType switch
+        return outcomeType switch
         {
-            // Import
-            ObjectChangeType.Added => stats.TotalCsoAdds,
-            ObjectChangeType.Updated => stats.TotalCsoUpdates,
-            ObjectChangeType.Deleted => stats.TotalCsoDeletes,
-            // Sync
-            ObjectChangeType.Projected => stats.TotalProjections,
-            ObjectChangeType.Joined => stats.TotalJoins,
-            ObjectChangeType.AttributeFlow => stats.TotalAttributeFlows,
-            ObjectChangeType.Disconnected => stats.TotalDisconnections,
-            // Export
-            ObjectChangeType.Exported => stats.TotalExported,
-            ObjectChangeType.Deprovisioned => stats.TotalDeprovisioned,
-            _ => 0
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded => "CSO Added",
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated => "CSO Updated",
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => "CSO Deleted",
+            ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected => "CSO Deletion Detected",
+            ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => "CSO Export Confirmed",
+            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => "CSO Export Failed",
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected => "MVO Projected",
+            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => "MVO Attribute Flow",
+            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => "CSO Joined",
+            ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => "CSO Disconnected",
+            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => "Out of Scope",
+            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => "MVO Deleted",
+            ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection => "CSO Drift Corrected",
+            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => "CSO Provisioned",
+            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => "CSO Pending Export",
+            ActivityRunProfileExecutionItemSyncOutcomeType.Exported => "CSO Exported",
+            ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => "CSO Deprovisioned",
+            _ => outcomeType.ToString()
         };
     }
 
     /// <summary>
-    /// Gets a human-readable display name for a change type with proper spacing.
+    /// Gets a Material icon string for a sync outcome type.
     /// </summary>
-    public static string GetChangeTypeDisplayName(ObjectChangeType changeType)
+    public static string GetOutcomeTypeIcon(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
-        return changeType switch
+        return outcomeType switch
         {
-            ObjectChangeType.AttributeFlow => "Attribute Flow",
-            ObjectChangeType.DriftCorrection => "Drift Correction",
-            ObjectChangeType.PendingExport => "Pending Export",
-            ObjectChangeType.PendingExportConfirmed => "Pending Export Confirmed",
-            _ => changeType.ToString()
+            // Import outcomes
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded => Icons.Material.Filled.AddCircle,
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated => Icons.Material.Filled.Edit,
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => Icons.Material.Filled.Delete,
+            ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected => Icons.Material.Filled.RemoveCircle,
+            ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => Icons.Material.Filled.CheckCircle,
+            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => Icons.Material.Filled.Cancel,
+
+            // Sync outcomes — inbound
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected => Icons.Material.Filled.PersonAdd,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => Icons.Material.Filled.Link,
+            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => Icons.Material.Filled.SyncAlt,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => Icons.Material.Filled.LinkOff,
+            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => Icons.Material.Filled.FilterAltOff,
+            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => Icons.Material.Filled.PersonRemove,
+            ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection => Icons.Material.Filled.CompareArrows,
+
+            // Sync outcomes — outbound
+            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => Icons.Material.Filled.CloudUpload,
+            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => Icons.Material.Filled.Schedule,
+
+            // Export outcomes
+            ActivityRunProfileExecutionItemSyncOutcomeType.Exported => Icons.Material.Filled.CloudDone,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => Icons.Material.Filled.CloudOff,
+
+            _ => Icons.Material.Filled.Circle,
         };
+    }
+
+    /// <summary>
+    /// Parses the denormalised OutcomeSummary string into outcome type/count pairs.
+    /// Format: "Projected:1,AttributeFlow:12,PendingExportCreated:2"
+    /// Returns empty list if null, empty, or unparseable.
+    /// </summary>
+    public static List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, int Count)> ParseOutcomeSummary(string? outcomeSummary)
+    {
+        var results = new List<(ActivityRunProfileExecutionItemSyncOutcomeType, int)>();
+        if (string.IsNullOrWhiteSpace(outcomeSummary))
+            return results;
+
+        foreach (var part in outcomeSummary.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var colonIndex = part.LastIndexOf(':');
+            if (colonIndex <= 0 || colonIndex >= part.Length - 1)
+                continue;
+
+            var typeName = part[..colonIndex];
+            var countStr = part[(colonIndex + 1)..];
+
+            if (Enum.TryParse<ActivityRunProfileExecutionItemSyncOutcomeType>(typeName, out var outcomeType)
+                && int.TryParse(countStr, out var count)
+                && count > 0)
+            {
+                results.Add((outcomeType, count));
+            }
+        }
+
+        return results;
     }
     #endregion
 }

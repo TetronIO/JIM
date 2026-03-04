@@ -1,6 +1,6 @@
 # RPEI Outcome Graph: Causal Chain Tracking Per Object
 
-- **Status:** Planned
+- **Status:** Complete
 - **Milestone:** Post-MVP
 - **Created:** 2026-03-01
 - **Issue:** #363
@@ -95,6 +95,7 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     CsoAdded,
     CsoUpdated,
     CsoDeleted,
+    DeletionDetected,
 
     // Import outcomes — confirming import (export confirmation)
     ExportConfirmed,
@@ -107,6 +108,7 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     Disconnected,
     DisconnectedOutOfScope,
     MvoDeleted,
+    DriftCorrection,
 
     // Sync outcomes — outbound (pending export creation during sync)
     Provisioned,
@@ -120,49 +122,90 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
 
 ### Example Outcome Trees
 
+These diagrams represent the visual structure of the Causality Tree as rendered on the
+RPEI detail page. Each tree starts with the connected system context and CSO identity,
+followed by the outcome nodes as children.
+
+**Visual conventions:**
+
+- `{Connected System Name} - {Run Profile Name}:` — connected system and run profile context header (CS name hyperlinks to CS detail page)
+- `CSO {ExternalID} - {DisplayName}` — CSO identity (hyperlink to CSO detail page)
+- `[Outcome]` — outcome type rendered as a coloured icon + display name
+- `--` — em dash separator between outcome type and inline target description (Projected, Joined, Provisioned show target inline; Joined uses "— to")
+- `Show changes >` / `[show >]` — expand/collapse button with rotating chevron icon
+- MVO names and CS names are hyperlinks to their respective detail pages
+
 **Sync: New employee imported and provisioned**
 
 ```
-RPEI: CSO "EMP001" (HR System)
-  |
-  +-- [Projected] MVO "John Smith" created
-        |
-        +-- [AttributeFlow] 12 attributes flowed to MVO
-              |
-              +-- [PendingExportCreated] AD — new CSO to provision
-              +-- [PendingExportCreated] LDAP — new CSO to provision
+HR CSV Source - Full Synchronisation:
+|
++-- CSO EMP001 - John Smith
+    |
+    +-- [Projected] -- John Smith
+          |
+          +-- [Attribute Flow] 12 attributes [show >]
+                |
+                +-- [Provisioned] -- AD [show >]
+                +-- [Provisioned] -- LDAP [show >]
+```
+
+**Sync: Employee joined to existing MVO**
+
+```
+HR CSV Source - Delta Synchronisation:
+|
++-- CSO EMP003 - Amelia Sullivan
+    |
+    +-- [Joined] -- to Amelia Sullivan
+          |
+          +-- [Attribute Flow] 8 attributes [show >]
 ```
 
 **Sync: Employee deleted from source**
 
 ```
-RPEI: CSO "EMP002" (HR System)
-  |
-  +-- [Disconnected] CSO disconnected from MVO "Jane Doe"
-        |
-        +-- [AttributeFlow] 8 attributes recalled from MVO
-        +-- [MvoDeleted] MVO deleted (last connector rule)
-              |
-              +-- [PendingExportCreated] AD — CSO to deprovision
-              +-- [PendingExportCreated] LDAP — CSO to deprovision
+HR CSV Source - Delta Synchronisation:
+|
++-- CSO EMP002 - Jane Doe
+    |
+    +-- [CSO Disconnected] from MVO: Jane Doe
+          |
+          +-- [Attribute Flow] 8 attributes recalled [show >]
+          +-- [MVO Deleted] MVO deleted: Jane Doe
+                |
+                +-- [Deprovisioned] AD
+                +-- [Deprovisioned] LDAP
 ```
 
 **Export: Pending exports executed**
 
 ```
-RPEI: CSO "CN=jsmith,OU=Staff,DC=ad,DC=local" (Active Directory)
-  |
-  +-- [Exported] CSO created in AD, 8 attributes written
+Active Directory - Export:
+|
++-- CSO CN=jsmith,OU=Staff,DC=ad,DC=local
+    |
+    +-- [Exported] CSO created, 8 attributes written
 ```
 
 **Import: New objects from source**
 
 ```
-RPEI: CSO "EMP001" (HR System)
-  |
-  +-- [CsoAdded] CSO created in staging
-        |
-        +-- [CsoUpdated] 15 attributes set
+HR CSV Source - Full Import:
+|
++-- User EMP001 - Joe Bloggs
+    |
+    +-- [CSO Added] 15 attributes [show >]
+```
+
+**Import: Deletion detected (full import, CSO missing from source)**
+
+```
+HR CSV Source - Full Import:
+|
++-- User EMP002 - Jane Doe
+    |
+    +-- [Deletion Detected]
 ```
 
 ### Synergy with Sync Preview (#288)
@@ -283,10 +326,10 @@ Clicking into an RPEI shows the outcome tree rendered as an indented list or tre
 
 ```
 CSO: EMP001 (HR System)
-  +-- Projected to MVO "John Smith"
-  |     +-- Attribute Flow: 12 attributes to MVO
-  |           +-- Pending Export: AD — new CSO to provision
-  |           +-- Pending Export: LDAP — new CSO to provision
+  +-- [Projected] -- John Smith
+  |     +-- [Attribute Flow] 12 attributes [show >]
+  |           +-- [Provisioned] -- AD
+  |           +-- [Provisioned] -- LDAP
 ```
 
 At **None** tracking level, this page shows only the RPEI's `ObjectChangeType` and existing `ConnectedSystemObjectChange` / `MetaverseObjectChange` detail (current behaviour).
@@ -397,55 +440,177 @@ new ServiceSetting
 }
 ```
 
+## Mapping Reference: Change Types, Outcomes, Stats & UI Labels
+
+This section documents the relationship between `ObjectChangeType` (per-RPEI), `SyncOutcomeType` (per-outcome node), stat box labels, and filter chip labels. These vary by run profile type.
+
+### Import (Full Import / Delta Import)
+
+| What Happened | ObjectChangeType | SyncOutcome(s) | Stat Box Label | Change Type Filter Chip | Outcome Filter Chip | Row Change Chip |
+|---------------|-----------------|----------------|---------------|------------------------|--------------------|--------------------|
+| New CSO staged | `Added` | `CsoAdded` | "CSOs Added" | "Added" | "CSO Added" | "Added" |
+| CSO attributes updated | `Updated` | `CsoUpdated` | "CSOs Updated" | "Updated" | "CSO Updated" | "Updated" |
+| CSO deletion detected (marked Obsolete) | `Deleted` | `DeletionDetected` | "CSO Deletions Detected" | "Deletions Detected" | "CSO Deletion Detected" | "Deletion Detected" |
+| Pending export confirmed | `PendingExportConfirmed` | `ExportConfirmed` | "CSO Exports Confirmed" | *(N/A)* | "CSO Export Confirmed" | "Pending Export Confirmed" |
+| Pending export retrying | *(error on RPEI)* | *(none)* | "Exports Retrying" | *(N/A)* | *(N/A)* | *(N/A)* |
+| Pending export failed | *(error on RPEI)* | `ExportFailed` | "CSO Exports Failed" | *(N/A)* | "CSO Export Failed" | *(N/A)* |
+
+**Key point — import deletions**: During import, the CSO is only marked `Obsolete` (not actually deleted). A `DeletionDetected` outcome is recorded to show the detection in the outcome tree. The actual deletion and `CsoDeleted` outcome occur during the subsequent sync run.
+
+### Synchronisation (Full Sync / Delta Sync)
+
+| What Happened | ObjectChangeType | SyncOutcome(s) | Stat Box Label | Change Type Filter Chip | Outcome Filter Chip | Row Change Chip |
+|---------------|-----------------|----------------|---------------|------------------------|--------------------|--------------------|
+| MVO projected | `Projected` | `Projected` (+ children) | "MVOs Projected" | "Projected" | "MVO Projected" | "Projected" |
+| CSO joined to MVO | `Joined` | `Joined` (+ children) | "CSOs Joined" | "Joined" | "CSO Joined" | "Joined" |
+| Attributes flowed (no join/project) | `AttributeFlow` | `AttributeFlow` | "MVOs with Attribute Flow" | "Attribute Flow" | "MVO Attribute Flow" | "Attribute Flow" |
+| CSO disconnected (obsoleted) | `Disconnected` | `Disconnected` + `CsoDeleted` | "CSOs Disconnected" / "CSOs Deleted" | "Disconnected" / "Deletions Processed" | "CSO Disconnected" / "CSO Deleted" | "Disconnected" |
+| CSO disconnected (out of scope) | `DisconnectedOutOfScope` | `DisconnectedOutOfScope` | *(via CSOs Disconnected)* | "Disconnected Out Of Scope" | *(via CSO Disconnected)* | "Disconnected Out Of Scope" |
+| Drift detected | `DriftCorrection` | `DriftCorrection` | "CSOs Drift Corrected" | "Drift Correction" | "CSO Drift Corrected" | "Drift Correction" |
+| CSO provisioned to target CS | *(N/A)* | `Provisioned` | "CSOs Provisioned" | *(N/A)* | "CSO Provisioned" | "Provisioned" |
+| Pending export created | `PendingExport` | `PendingExportCreated` | "CSO Pending Exports" | "Pending Export" | "CSO Pending Export" | "Pending Export" |
+| No attribute changes | `NoChange` | *(none)* | *(via Unchanged)* | *(filtered separately)* | *(N/A)* | "No Change" |
+
+**Key point — obsoleted CSOs**: When a joined CSO is marked Obsolete and processed during sync, a single RPEI is created with `ObjectChangeType.Disconnected`. The outcome graph contains sibling root nodes: `Disconnected` (for the join break) and `CsoDeleted` (for the actual CSO deletion). If an MVO deletion rule fires, there may also be `MvoDeleted` and `PendingExportCreated` child outcomes.
+
+### Export
+
+| What Happened | ObjectChangeType | SyncOutcome(s) | Stat Box Label | Change Type Filter Chip | Outcome Filter Chip | Row Change Chip |
+|---------------|-----------------|----------------|---------------|------------------------|--------------------|--------------------|
+| CSO exported | `Exported` | `Exported` | "CSOs Exported" | "Exported" | "CSO Exported" | "Exported" |
+| CSO deprovisioned | `Deprovisioned` | `Deprovisioned` | "CSOs Deprovisioned" | "Deprovisioned" | "CSO Deprovisioned" | "Deprovisioned" |
+
+### Stats Derivation Logic
+
+Statistics can be derived from two sources, with outcomes taking priority:
+
+1. **Outcome-based** (preferred): When RPEIs have sync outcomes, stats are counted from outcome nodes. This is the primary path for activities created with outcome tracking enabled.
+2. **RPEI-based** (legacy fallback): When no outcomes exist (tracking level = None, or legacy activities), stats are derived from `ObjectChangeType` counts on RPEIs.
+
+**Import deletions**: Import-phase deletion RPEIs record a `DeletionDetected` outcome. Sync-phase deletion RPEIs record a `CsoDeleted` outcome. The `TotalDeleted` stat combines both outcome types. These never overlap within a single activity since import and sync are separate run profile types.
+
+**Drift corrections**: When outcomes are available, `TotalDriftCorrections` is derived from `DriftCorrection` outcome nodes. Legacy fallback uses RPEI `ObjectChangeType.DriftCorrection` counts.
+
+### One-RPEI-per-CSO Rule
+
+Each CSO should produce at most one RPEI per activity. Multiple outcomes are recorded as sibling root nodes in the outcome graph on that single RPEI, rather than creating separate RPEIs. Examples:
+
+- **Import with confirmed export**: One RPEI with `CsoUpdated` + `ExportConfirmed` outcomes
+- **Sync obsoleted CSO**: One RPEI with `Disconnected` + `CsoDeleted` outcomes (+ children for MVO deletion, pending exports)
+- **Import deletion detection**: One RPEI with `ObjectChangeType.Deleted`, no outcomes (detection only)
+
 ## Implementation Phases
 
-### Phase 1: Data Model & Infrastructure
+### Phase 1: Data Model & Infrastructure ✅
 
-1. Create `ActivityRunProfileExecutionItemSyncOutcome` entity and `ActivityRunProfileExecutionItemSyncOutcomeType` enum
-2. Create `ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel` enum
-3. Add `OutcomeSummary` column to `ActivityRunProfileExecutionItem`
-4. Create EF configuration and database migration
-5. Add service setting key constant and seeding
-6. Add `ServiceSettingsServer.GetSyncOutcomeTrackingLevelAsync()` method
-7. Extend `BulkInsertRpeisAsync` to bulk insert outcomes
-8. Write unit tests for bulk insert, model, and setting
+1. ~~Create `ActivityRunProfileExecutionItemSyncOutcome` entity and `ActivityRunProfileExecutionItemSyncOutcomeType` enum~~
+2. ~~Create `ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel` enum~~
+3. ~~Add `OutcomeSummary` column to `ActivityRunProfileExecutionItem`~~
+4. ~~Create EF configuration and database migration~~
+5. ~~Add service setting key constant and seeding~~
+6. ~~Add `ServiceSettingsServer.GetSyncOutcomeTrackingLevelAsync()` method~~
+7. ~~Extend `BulkInsertRpeisAsync` to bulk insert outcomes~~
+8. ~~Write unit tests for bulk insert, model, and setting~~
 
-### Phase 2: Sync Processor Integration
+### Phase 2: Sync Processor Integration ✅
 
-1. Add outcome tree building to `SyncTaskProcessorBase` (join/project/attribute flow)
-2. Add export evaluation outcomes (pending export creation per target system)
-3. Add disconnection/deletion outcome chains
-4. Build `OutcomeSummary` string during tree construction
-5. Respect tracking level setting (None/Standard/Detailed)
-6. Write unit tests for outcome tree construction at each level
+1. ~~Add outcome tree building to `SyncTaskProcessorBase` (join/project/attribute flow)~~
+2. ~~Add export evaluation outcomes (pending export creation per target system)~~
+3. ~~Add disconnection/deletion outcome chains~~
+4. ~~Build `OutcomeSummary` string during tree construction~~
+5. ~~Respect tracking level setting (None/Standard/Detailed)~~
+6. ~~Write unit tests for outcome tree construction at each level~~
 
-### Phase 3: Import & Export Processor Integration
+### Phase 3: Import & Export Processor Integration ✅
 
-1. Add outcome tree building to `SyncImportTaskProcessor`
-2. Add outcome tree building to `SyncExportTaskProcessor`
-3. Respect tracking level setting
-4. Write unit tests
+1. ~~Add outcome tree building to `SyncImportTaskProcessor`~~
+2. ~~Add outcome tree building to `SyncExportTaskProcessor`~~
+3. ~~Respect tracking level setting~~
+4. ~~Write unit tests~~
 
-### Phase 4: Statistics & API
+### Phase 4: Statistics & API ✅
 
-1. Update `ActivityRunProfileExecutionStats` to derive from outcome types
-2. Update `GetActivityRunProfileExecutionStatsAsync` query
-3. Update `Worker.CalculateActivitySummaryStats` for denormalised activity fields
-4. Update API DTOs and endpoints to include outcome summary
-5. Write unit tests for stats calculation
+1. ~~Update `ActivityRunProfileExecutionStats` to derive from outcome types~~
+2. ~~Update `GetActivityRunProfileExecutionStatsAsync` query~~
+3. ~~Update `Worker.CalculateActivitySummaryStats` for denormalised activity fields~~
+4. ~~Update API DTOs and endpoints to include outcome summary~~
+5. ~~Write unit tests for stats calculation~~
 
-### Phase 5: UI — List View & Filters
+### Phase 4b: API Integration Tests ✅
 
-1. Add outcome stat chips to Activity Detail table rows (from `OutcomeSummary`)
-2. Update filter controls to support outcome type filtering
-3. Update Activity Detail stats display
-4. Update Operations History view
+End-to-end tests covering outcome recording and presentation through the API layer.
 
-### Phase 6: UI — RPEI Detail Page
+**NUnit repository-level tests** — `test/JIM.Web.Api.Tests/ActivityOutcomeStatsIntegrationTests.cs` (10 tests covering all 15 cases below):
 
-1. Create outcome tree view component for RPEI detail page
-2. Render tree at appropriate depth based on tracking level
-3. Handle graceful display when no outcomes exist (None level / legacy RPEIs)
+1. ~~Test outcome-based stats derivation via `GET /api/v1/activities/{id}/stats` for activities with outcomes~~
+2. ~~Test legacy fallback stats via `GET /api/v1/activities/{id}/stats` for activities without outcomes (tracking level = None)~~
+3. ~~Test `OutcomeSummary` appears in `GET /api/v1/activities/{id}/items` response for RPEIs with outcomes~~
+4. ~~Test `OutcomeSummary` is null for legacy RPEIs and RPEIs with tracking level = None~~
+5. ~~Test outcome trees at each tracking level (None / Standard / Detailed) produce correct stats~~
+6. ~~Test import outcome recording: CsoAdded, CsoUpdated, DeletionDetected, ExportConfirmed, ExportFailed~~
+7. ~~Test sync outcome recording: Projected → AttributeFlow → Provisioned → PendingExportCreated (nested tree)~~
+8. ~~Test sync outcome recording: Joined → AttributeFlow → PendingExportCreated (alternative root)~~
+9. ~~Test sync outcome recording: Disconnected + CsoDeleted sibling roots, DisconnectedOutOfScope, MvoDeleted → Deprovisioned chains~~
+10. ~~Test sync outcome recording: DriftCorrection → PendingExportCreated (corrective export chain)~~
+11. ~~Test export outcome recording: Exported, Deprovisioned~~
+12. ~~Test multi-system provisioning stats: one object provisioned to N systems = N Provisioned outcome nodes~~
+13. ~~Test multi-system export stats: one object exported to N systems = N Exported outcome nodes~~
+14. ~~Test RPEI-only stats (OutOfScopeRetainJoin, Created, NoChange) remain correct alongside outcome-based stats~~
+15. ~~Test error counting remains per-RPEI regardless of outcomes~~
+
+**PowerShell integration test enhancements** — outcome assertions added to Scenario 1:
+
+- Helper functions `Assert-ActivityOutcomeStats` and `Assert-ActivityItemsHaveOutcomeSummary` in `test/integration/utils/Test-Helpers.ps1`
+- Outcome assertions at Joiner (CsoAdded, Projected, Exported), Mover (AttributeFlow), and Leaver (DeletionDetected, Disconnected) steps in `test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1`
+- Coverage documented in `docs/INTEGRATION_TESTING.md` under Scenario 1
+
+### Phase 5: UI — List View & Filters ✅
+
+1. ~~Add outcome stat chips to Activity Detail table rows (from `OutcomeSummary`)~~
+2. ~~Update filter controls to support outcome type filtering~~
+3. ~~Update Activity Detail stats display~~ (already working via Phase 4 stats derivation)
+4. ~~Update Operations History view~~ (already working via Phase 4 denormalised Activity fields)
+
+### Phase 5b: RPEI Display Name & Object Type Snapshot Fix ✅
+
+Bug fix discovered during Phase 5 integration testing: RPEI header projection relied on live CSO
+navigation properties for Display Name and Object Type. When a CSO is deleted (FK set to NULL via
+`DeleteBehaviour.SetNull`), these fields showed as empty dashes in the Activity Detail view.
+
+1. ~~Add `DisplayNameSnapshot` and `ObjectTypeSnapshot` fields to `ActivityRunProfileExecutionItem`~~
+2. ~~Create migration for new columns~~
+3. ~~Update bulk insert SQL to include new columns~~
+4. ~~Add `SnapshotCsoDisplayFields()` helper method on RPEI model~~
+5. ~~Populate snapshots at all CSO→RPEI linking sites (import, sync, export processors)~~
+6. ~~Add centralised snapshot population in flush methods (defence-in-depth)~~
+7. ~~Update RPEI header projection to use snapshot fallbacks~~
+8. ~~Write unit tests for snapshot logic~~
+
+### Phase 6: UI — RPEI Detail Page ✅
+
+1. ~~Create outcome tree view component for RPEI detail page~~
+2. ~~Render tree at appropriate depth based on tracking level~~
+3. ~~Handle graceful display when no outcomes exist (None level / legacy RPEIs)~~
+
+### Phase 7: UI Simplification — Remove Change Type from Web UI ✅
+
+The outcome graph makes `ObjectChangeType` redundant in the UI. Outcomes provide a strict
+superset of the information Change Type offered — every Change Type has an equivalent Outcome
+Type, but outcomes also capture downstream consequences (e.g., pending exports, provisioning)
+that Change Type never could.
+
+1. ~~Remove "Filter by Change Type" section from Activity Detail page — the outcome filter covers all the same scenarios~~
+2. ~~Remove the "Change Type" column from the Activity Detail RPEI table — outcome chips on each row replace it~~
+3. ~~Remove `changeTypeFilter` parameter from repository/application stack~~
+4. ~~Remove unused helper methods from `Helpers.cs` (`GetChangeTypesForRunType`, `GetStatCountForChangeType`, `GetChangeTypeDisplayName`)~~
+5. ~~Relocate "Unchanged" informational chip to the outcome filter section~~
+
+**Does NOT affect:**
+- The data model — `ObjectChangeType` remains on `ActivityRunProfileExecutionItem` for
+  internal processing logic and legacy compatibility
+- Worker code — processors still set `ObjectChangeType` for their own orchestration
+- API contracts — existing API fields remain for backwards compatibility
+- RPEI detail page — "Operation" chip and conditional sections remain (useful context on detail view)
 
 ## Files to Modify
 

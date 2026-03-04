@@ -162,6 +162,9 @@ public class Activity
 
     /// <summary>Count of CSOs where drift was detected and corrective pending exports were created.</summary>
     public int TotalDriftCorrections { get; set; }
+
+    /// <summary>Count of CSOs provisioned to target connected systems during sync.</summary>
+    public int TotalProvisioned { get; set; }
     #endregion
 
     #region Export Stats

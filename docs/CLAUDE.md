@@ -4,7 +4,48 @@
 
 ## Feature Planning
 
-**When creating plans for new features or significant changes:**
+JIM uses a two-document workflow for new features:
+
+```
+PRD (what & why)  -->  Implementation Plan (how)  -->  Code
+   Developer writes      Claude generates             Claude implements
+```
+
+### Step 1: Write a PRD
+
+A **Product Requirements Document** defines what to build and why. It is the input a developer writes to communicate requirements to Claude.
+
+1. Run `jim-prd` — it prompts for a feature name and creates `docs/prd/PRD_YOUR_FEATURE_NAME.md` from the template
+2. Fill in all **required** sections (Problem Statement, Goals, Non-Goals, User Stories, Functional Requirements, Examples, Acceptance Criteria)
+3. Fill in optional sections where relevant
+4. Delete the comment block and any unused optional sections
+5. Create a GitHub issue linking to the PRD
+
+### Step 2: Generate an Implementation Plan
+
+Ask Claude to read the PRD and generate an implementation plan. Claude will:
+- Research the codebase to understand affected areas
+- Propose a phased implementation approach
+- Identify files to modify, risks, and mitigations
+- Add the plan sections below the PRD content (or in a separate document if the PRD is large)
+
+The implementation plan follows the structure guidelines below.
+
+### Step 3: Implement
+
+Once the plan is approved, Claude implements phase by phase, building and testing as it goes.
+
+### PRD Template
+
+See [`docs/prd/PRD_TEMPLATE.md`](prd/PRD_TEMPLATE.md) for the full template with guidance comments.
+
+**Required PRD sections:** Problem Statement, Goals, Non-Goals, User Stories, Functional Requirements, Examples and Scenarios, Acceptance Criteria.
+
+**Optional PRD sections:** Non-Functional Requirements, Constraints, Affected Areas, Dependencies, Open Questions, Additional Context.
+
+### Implementation Plan Structure
+
+When creating the implementation plan (either appended to the PRD or as a separate document):
 
 1. **Create a plan document in `docs/plans/`:**
    - Use uppercase filename with underscores: e.g., `PROGRESS_REPORTING.md`, `SCIM_SERVER_DESIGN.md`
@@ -90,6 +131,7 @@ This makes it easy to see at a glance what has been done within a partially-impl
 
 ## Documentation Organisation
 
+- `docs/prd/` - Product Requirements Documents (PRD template + feature PRDs)
 - `docs/plans/` - New/planned feature plans and design documents
 - `docs/plans/doing/` - Partially implemented or in-progress plans
 - `docs/plans/done/` - Completed plans

@@ -331,9 +331,9 @@ public class ActivityRepository : IActivityRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = false,
-        IEnumerable<ObjectChangeType>? changeTypeFilter = null,
         IEnumerable<string>? objectTypeFilter = null,
-        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null)
+        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null,
+        IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -353,16 +353,6 @@ public class ActivityRepository : IActivityRepository
                 .ThenInclude(cso => cso!.AttributeValues)
                     .ThenInclude(av => av.Attribute)
             .Where(a => a.Activity.Id == activityId);
-
-        // Apply change type filter if specified
-        if (changeTypeFilter != null)
-        {
-            var changeTypes = changeTypeFilter.ToList();
-            if (changeTypes.Count > 0)
-            {
-                query = query.Where(a => changeTypes.Contains(a.ObjectChangeType));
-            }
-        }
 
         // Apply object type filter if specified
         if (objectTypeFilter != null)
@@ -386,6 +376,20 @@ public class ActivityRepository : IActivityRepository
                 query = query.Where(a =>
                     a.ErrorType != null &&
                     errorTypes.Contains(a.ErrorType.Value));
+            }
+        }
+
+        // Apply outcome type filter if specified — matches against the denormalised OutcomeSummary string
+        if (outcomeTypeFilter != null)
+        {
+            var outcomeTypes = outcomeTypeFilter.ToList();
+            if (outcomeTypes.Count > 0)
+            {
+                // Build a predicate that requires at least one of the selected outcome types
+                // to appear in the OutcomeSummary string (e.g., "Projected:" prefix match)
+                query = query.Where(a =>
+                    a.OutcomeSummary != null &&
+                    outcomeTypes.Any(ot => a.OutcomeSummary.Contains(ot.ToString() + ":")));
             }
         }
 
@@ -449,9 +453,6 @@ public class ActivityRepository : IActivityRepository
                 : query.OrderBy(item => item.ConnectedSystemObject != null && item.ConnectedSystemObject.Type != null
                     ? item.ConnectedSystemObject.Type.Name
                     : null),
-            "changetype" => sortDescending
-                ? query.OrderByDescending(item => item.ObjectChangeType)
-                : query.OrderBy(item => item.ObjectChangeType),
             "errortype" => sortDescending
                 ? query.OrderByDescending(item => item.ErrorType)
                 : query.OrderBy(item => item.ErrorType),
@@ -468,15 +469,18 @@ public class ActivityRepository : IActivityRepository
         var entities = await query.Skip(offset).Take(pageSize).ToListAsync();
 
         // Project to DTO in memory
-        // Use ExternalIdSnapshot as fallback if CSO was deleted (preserves historical external ID)
+        // Use snapshot fields as fallback if CSO was deleted (preserves historical display data)
         var results = entities.Select(i => new ActivityRunProfileExecutionItemHeader
         {
             Id = i.Id,
             ExternalIdValue = i.ConnectedSystemObject?.ExternalIdAttributeValue?.ToStringNoName() ?? i.ExternalIdSnapshot,
-            DisplayName = i.ConnectedSystemObject?.AttributeValues.FirstOrDefault(av => av.Attribute.Name.Equals("displayname", StringComparison.OrdinalIgnoreCase))?.StringValue,
-            ConnectedSystemObjectType = i.ConnectedSystemObject?.Type?.Name,
+            DisplayName = i.ConnectedSystemObject?.AttributeValues.FirstOrDefault(av => av.Attribute.Name.Equals("displayname", StringComparison.OrdinalIgnoreCase))?.StringValue
+                ?? i.DisplayNameSnapshot,
+            ConnectedSystemObjectType = i.ConnectedSystemObject?.Type?.Name
+                ?? i.ObjectTypeSnapshot,
             ErrorType = i.ErrorType,
-            ObjectChangeType = i.ObjectChangeType
+            ObjectChangeType = i.ObjectChangeType,
+            OutcomeSummary = i.OutcomeSummary
         }).ToList();
 
         // Build paged result set
@@ -506,11 +510,17 @@ public class ActivityRepository : IActivityRepository
         var activity = await Repository.Database.Activities.FirstOrDefaultAsync(a => a.Id == activityId);
         var totalObjectsProcessed = activity?.ObjectsProcessed ?? 0;
 
-        // Single query to get all counts grouped by change type, error status, and no-change reason
-        // This replaces 15+ individual COUNT queries with one efficient GROUP BY query
         var rpeiQuery = Repository.Database.ActivityRunProfileExecutionItems
             .Where(q => q.Activity.Id == activityId);
 
+        // Check if this activity has sync outcome data (phases 1-3 of outcome graph).
+        // If outcomes exist, derive stats from outcome nodes for richer counting
+        // (e.g., multi-system exports count each target system separately).
+        // If no outcomes exist (legacy data or tracking level = None), fall back to RPEI ObjectChangeType counting.
+        var hasOutcomes = await Repository.Database.ActivityRunProfileExecutionItemSyncOutcomes
+            .AnyAsync(o => o.ActivityRunProfileExecutionItem.Activity.Id == activityId);
+
+        // --- RPEI-based aggregate data (always needed for shared stats, NoChange, errors, and RPEI-only types) ---
         var aggregateData = await rpeiQuery
             .GroupBy(q => new
             {
@@ -543,40 +553,88 @@ public class ActivityRepository : IActivityRepository
             .Select(g => new { ErrorType = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.ErrorType, x => x.Count);
 
-        // Calculate totals from grouped data
+        // Shared stats always come from RPEIs
         var totalObjectChangeCount = aggregateData.Sum(x => x.Count);
         var totalObjectErrors = aggregateData.Where(x => x.HasError).Sum(x => x.Count);
 
-        // Import stats
-        var totalCsoAdds = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Added).Sum(x => x.Count);
-        var totalCsoUpdates = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Updated).Sum(x => x.Count);
-        var totalCsoDeletes = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deleted).Sum(x => x.Count);
+        // --- Outcome-based or RPEI-based stats depending on whether outcomes exist ---
+        int totalCsoAdds, totalCsoUpdates, totalCsoDeletes;
+        int totalProjections, totalJoins, totalAttributeFlows;
+        int totalDisconnections, totalDisconnectedOutOfScope;
+        int totalExported, totalDeprovisioned;
+        int totalPendingExportsFromOutcomes;
+        int totalDriftCorrections;
+        int totalProvisioned;
 
-        // Sync stats
-        var totalProjections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Projected).Sum(x => x.Count);
-        var totalJoins = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Joined).Sum(x => x.Count);
-        // Attribute flows: count the number of OBJECTS that had standalone attribute flow
-        // (i.e., RPEIs whose primary change type is AttributeFlow). Attribute flows absorbed
-        // into Joined/Projected/Disconnected RPEIs are NOT counted here — those objects are
-        // already counted in their respective stats. This matches Worker.CalculateActivitySummaryStats.
-        var totalAttributeFlows = aggregateData
-            .Where(x => x.ObjectChangeType == ObjectChangeType.AttributeFlow)
-            .Sum(x => x.Count);
+        if (hasOutcomes)
+        {
+            // Derive stats from outcome nodes — counts outcome actions across all RPEIs.
+            // This gives richer semantics: e.g., one object exported to 2 systems = 2 Exported outcomes.
+            var outcomeCounts = await Repository.Database.ActivityRunProfileExecutionItemSyncOutcomes
+                .Where(o => o.ActivityRunProfileExecutionItem.Activity.Id == activityId)
+                .GroupBy(o => o.OutcomeType)
+                .Select(g => new { OutcomeType = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.OutcomeType, x => x.Count);
 
-        var totalDisconnections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Disconnected).Sum(x => x.Count);
-        var totalDisconnectedOutOfScope = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.DisconnectedOutOfScope).Sum(x => x.Count);
+            // Import stats from outcomes
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded, out totalCsoAdds);
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated, out totalCsoUpdates);
+            // Deletions: CsoDeleted (sync-phase actual deletions) + DeletionDetected (import-phase detection)
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted, out totalCsoDeletes);
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected, out var totalDeletionDetected);
+            totalCsoDeletes += totalDeletionDetected;
+
+            // Sync stats from outcomes
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Projected, out totalProjections);
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Joined, out totalJoins);
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow, out totalAttributeFlows);
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected, out totalDisconnections);
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope, out totalDisconnectedOutOfScope);
+
+            // Export stats from outcomes
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Exported, out totalExported);
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned, out totalDeprovisioned);
+
+            // Pending export stats from outcomes
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, out totalPendingExportsFromOutcomes);
+
+            // Drift correction from outcomes
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection, out totalDriftCorrections);
+
+            // Provisioned from outcomes (outcome-only concept, no legacy fallback)
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned, out totalProvisioned);
+        }
+        else
+        {
+            // Legacy fallback: derive stats from RPEI ObjectChangeType (pre-outcome graph behaviour)
+            totalCsoAdds = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Added).Sum(x => x.Count);
+            totalCsoUpdates = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Updated).Sum(x => x.Count);
+            totalCsoDeletes = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deleted).Sum(x => x.Count);
+
+            totalProjections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Projected).Sum(x => x.Count);
+            totalJoins = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Joined).Sum(x => x.Count);
+            totalAttributeFlows = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.AttributeFlow).Sum(x => x.Count);
+
+            totalDisconnections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Disconnected).Sum(x => x.Count);
+            totalDisconnectedOutOfScope = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.DisconnectedOutOfScope).Sum(x => x.Count);
+
+            totalExported = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Exported).Sum(x => x.Count);
+            totalDeprovisioned = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deprovisioned).Sum(x => x.Count);
+
+            totalPendingExportsFromOutcomes = 0;
+
+            totalDriftCorrections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.DriftCorrection).Sum(x => x.Count);
+
+            totalProvisioned = 0; // Provisioned is an outcome-only concept; no ObjectChangeType equivalent
+        }
+
+        // --- Stats that always come from RPEIs (no outcome type equivalent) ---
         var totalOutOfScopeRetainJoin = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.OutOfScopeRetainJoin).Sum(x => x.Count);
-        var totalDriftCorrections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.DriftCorrection).Sum(x => x.Count);
-
-        // Direct creation stats
         var totalCreated = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Created).Sum(x => x.Count);
 
-        // Export stats
-        var totalExported = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Exported).Sum(x => x.Count);
-        var totalDeprovisioned = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deprovisioned).Sum(x => x.Count);
-
-        // Pending export stats (surfaced during sync for operator visibility)
-        var totalPendingExports = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.PendingExport).Sum(x => x.Count);
+        // Pending export stats: use outcome-based count when available, otherwise fall back to RPEI count
+        var totalPendingExportsFromRpeis = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.PendingExport).Sum(x => x.Count);
+        var totalPendingExports = hasOutcomes ? totalPendingExportsFromOutcomes : totalPendingExportsFromRpeis;
 
         // Pending export reconciliation stats (populated during confirming import)
         // TotalPendingExportsConfirmed is stored directly on the Activity (not derived from RPEIs)
@@ -585,7 +643,7 @@ public class ActivityRepository : IActivityRepository
         errorTypeCounts.TryGetValue(ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed, out var totalPendingExportsRetrying);
         errorTypeCounts.TryGetValue(ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed, out var totalPendingExportsFailed);
 
-        // NoChange stats
+        // NoChange stats (always from RPEIs — no outcome equivalent)
         var noChangeItems = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.NoChange).ToList();
         var totalNoChanges = noChangeItems.Sum(x => x.Count);
         var totalMvoNoAttributeChanges = noChangeItems.Where(x => x.NoChangeReason == NoChangeReason.MvoNoAttributeChanges).Sum(x => x.Count);
@@ -614,6 +672,7 @@ public class ActivityRepository : IActivityRepository
             TotalDisconnectedOutOfScope = totalDisconnectedOutOfScope,
             TotalOutOfScopeRetainJoin = totalOutOfScopeRetainJoin,
             TotalDriftCorrections = totalDriftCorrections,
+            TotalProvisioned = totalProvisioned,
 
             // Direct creation stats
             TotalCreated = totalCreated,
@@ -675,7 +734,7 @@ public class ActivityRepository : IActivityRepository
             // For deletions, include the preserved object type to support deletion rule UI display
             .Include(q => q.ConnectedSystemObjectChange)
             .ThenInclude(c => c!.DeletedObjectType)
-            // MVO change includes (for future use when MetaverseObjectChange is populated during sync)
+            // MVO change includes (for sync operations that produce MVO attribute changes)
             .Include(q => q.MetaverseObjectChange)
             .ThenInclude(c => c!.MetaverseObject)
             .ThenInclude(mvo => mvo!.AttributeValues)
@@ -683,6 +742,23 @@ public class ActivityRepository : IActivityRepository
             .Include(q => q.MetaverseObjectChange)
             .ThenInclude(c => c!.MetaverseObject)
             .ThenInclude(mvo => mvo!.Type)
+            // MVO change attribute detail (for displaying MVO attribute changes in outcome tree)
+            .Include(q => q.MetaverseObjectChange)
+            .ThenInclude(c => c!.AttributeChanges)
+            .ThenInclude(ac => ac.Attribute)
+            .Include(q => q.MetaverseObjectChange)
+            .ThenInclude(c => c!.AttributeChanges)
+            .ThenInclude(ac => ac.ValueChanges)
+            .ThenInclude(vc => vc.ReferenceValue)
+            .ThenInclude(rv => rv!.Type)
+            .Include(q => q.MetaverseObjectChange)
+            .ThenInclude(c => c!.AttributeChanges)
+            .ThenInclude(ac => ac.ValueChanges)
+            .ThenInclude(vc => vc.ReferenceValue)
+            .ThenInclude(rv => rv!.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            // Sync outcome tree (causality chain)
+            .Include(q => q.SyncOutcomes)
             .SingleOrDefaultAsync(q => q.Id == id);
     }
     #endregion
@@ -729,6 +805,11 @@ public class ActivityRepository : IActivityRepository
 
             await BulkInsertRpeisRawAsync(rpeis);
 
+            // Bulk insert sync outcomes for all RPEIs (within the same transaction)
+            var allOutcomes = rpeis.SelectMany(r => FlattenSyncOutcomes(r)).ToList();
+            if (allOutcomes.Count > 0)
+                await BulkInsertSyncOutcomesRawAsync(allOutcomes);
+
             if (transaction != null)
                 await transaction.CommitAsync();
 
@@ -760,6 +841,14 @@ public class ActivityRepository : IActivityRepository
                 }
             }
 
+            // Pre-generate IDs and set FK references on sync outcomes before EF tracking.
+            // FlattenSyncOutcomes assigns IDs and links ParentSyncOutcomeId/ActivityRunProfileExecutionItemId.
+            // The outcomes themselves are NOT explicitly added via AddRange — EF's AddRange
+            // traverses RPEI → SyncOutcomes navigation and discovers them automatically.
+            // Explicitly adding them would cause duplicate key errors.
+            foreach (var rpei in rpeis)
+                FlattenSyncOutcomes(rpei);
+
             if (untracked.Count > 0)
                 Repository.Database.AddRange(untracked);
 
@@ -790,18 +879,123 @@ public class ActivityRepository : IActivityRepository
     }
 
     /// <summary>
+    /// Bulk updates OutcomeSummary and error fields on already-persisted RPEIs,
+    /// and inserts any new SyncOutcomes that were added after initial persistence.
+    /// Used by confirming imports to merge reconciliation outcomes onto existing import RPEIs.
+    /// </summary>
+    public async Task BulkUpdateRpeiOutcomesAsync(
+        List<ActivityRunProfileExecutionItem> rpeis,
+        List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes)
+    {
+        if (rpeis.Count == 0)
+            return;
+
+        IDbContextTransaction? transaction = null;
+        try
+        {
+            var existingTransaction = Repository.Database.Database.CurrentTransaction;
+            if (existingTransaction == null)
+                transaction = await Repository.Database.Database.BeginTransactionAsync();
+
+            // Bulk UPDATE OutcomeSummary and error fields on existing RPEIs
+            await BulkUpdateRpeiFieldsRawAsync(rpeis);
+
+            // Bulk INSERT new sync outcomes
+            if (newOutcomes.Count > 0)
+                await BulkInsertSyncOutcomesRawAsync(newOutcomes);
+
+            if (transaction != null)
+                await transaction.CommitAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
+        {
+            // Test environment detection — same pattern as BulkInsertRpeisAsync
+            if (transaction != null)
+                throw;
+
+            // EF fallback: mark modified fields as changed
+            foreach (var rpei in rpeis)
+            {
+                try
+                {
+                    var entry = Repository.Database.Entry(rpei);
+                    if (entry.State == EntityState.Detached)
+                        Repository.Database.Attach(rpei);
+                    entry.Property(r => r.OutcomeSummary).IsModified = true;
+                    entry.Property(r => r.ErrorType).IsModified = true;
+                    entry.Property(r => r.ErrorMessage).IsModified = true;
+                    entry.Property(r => r.DataSnapshot).IsModified = true;
+                }
+                catch (NullReferenceException)
+                {
+                    // Mocked DbContext — property marking not available
+                }
+            }
+
+            // EF will discover new outcomes via navigation property traversal
+            // when the RPEI is already tracked — no explicit AddRange needed.
+        }
+        finally
+        {
+            if (transaction != null)
+                await transaction.DisposeAsync();
+        }
+    }
+
+    /// <summary>
+    /// Bulk updates OutcomeSummary and error fields on already-persisted RPEIs using parameterised UPDATE statements.
+    /// </summary>
+    private async Task BulkUpdateRpeiFieldsRawAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    {
+        const int columnsPerRow = 5; // Id (WHERE) + OutcomeSummary, ErrorType, ErrorMessage, DataSnapshot
+        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+
+        foreach (var chunk in ChunkList(rpeis, chunkSize))
+        {
+            // Use individual UPDATE statements per RPEI within a single round-trip
+            var sql = new System.Text.StringBuilder();
+            var parameters = new List<NpgsqlParameter>();
+
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                var offset = i * columnsPerRow;
+                sql.Append(@"UPDATE ""ActivityRunProfileExecutionItems"" SET ""OutcomeSummary"" = @p");
+                sql.Append(offset);
+                sql.Append(@", ""ErrorType"" = @p");
+                sql.Append(offset + 1);
+                sql.Append(@", ""ErrorMessage"" = @p");
+                sql.Append(offset + 2);
+                sql.Append(@", ""DataSnapshot"" = @p");
+                sql.Append(offset + 3);
+                sql.Append(@" WHERE ""Id"" = @p");
+                sql.Append(offset + 4);
+                sql.Append("; ");
+
+                var rpei = chunk[i];
+                parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.OutcomeSummary ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 1}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = rpei.ErrorType.HasValue ? (object)(int)rpei.ErrorType.Value : DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 2}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ErrorMessage ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 3}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.DataSnapshot ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 4}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = rpei.Id });
+            }
+
+            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
+    }
+
+    /// <summary>
     /// Bulk inserts ActivityRunProfileExecutionItem rows using parameterised multi-row INSERT.
     /// Chunks automatically to stay within the PostgreSQL parameter limit.
     /// </summary>
     private async Task BulkInsertRpeisRawAsync(List<ActivityRunProfileExecutionItem> rpeis)
     {
-        const int columnsPerRow = 11;
+        const int columnsPerRow = 14;
         var chunkSize = MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in ChunkList(rpeis, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""ActivityRunProfileExecutionItems"" (""Id"", ""ActivityId"", ""ObjectChangeType"", ""NoChangeReason"", ""ConnectedSystemObjectId"", ""ExternalIdSnapshot"", ""DataSnapshot"", ""ErrorType"", ""ErrorMessage"", ""ErrorStackTrace"", ""AttributeFlowCount"") VALUES ");
+            sql.Append(@"INSERT INTO ""ActivityRunProfileExecutionItems"" (""Id"", ""ActivityId"", ""ObjectChangeType"", ""NoChangeReason"", ""ConnectedSystemObjectId"", ""ExternalIdSnapshot"", ""DisplayNameSnapshot"", ""ObjectTypeSnapshot"", ""DataSnapshot"", ""ErrorType"", ""ErrorMessage"", ""ErrorStackTrace"", ""AttributeFlowCount"", ""OutcomeSummary"") VALUES ");
 
             // Use NpgsqlParameter objects with explicit NpgsqlDbType for nullable columns.
             // EF Core's RawSqlCommandBuilder passes DbParameter objects through directly to the
@@ -811,7 +1005,7 @@ public class ActivityRepository : IActivityRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10})");
+                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10}, @p{offset + 11}, @p{offset + 12}, @p{offset + 13})");
 
                 var rpei = chunk[i];
                 parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = rpei.Id });
@@ -820,14 +1014,92 @@ public class ActivityRepository : IActivityRepository
                 parameters.Add(new NpgsqlParameter($"p{offset + 3}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = rpei.NoChangeReason.HasValue ? (object)(int)rpei.NoChangeReason.Value : DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 4}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)rpei.ConnectedSystemObjectId ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 5}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ExternalIdSnapshot ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 6}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.DataSnapshot ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 7}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = rpei.ErrorType.HasValue ? (object)(int)rpei.ErrorType.Value : DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 8}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ErrorMessage ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 9}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ErrorStackTrace ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 10}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)rpei.AttributeFlowCount ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 6}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.DisplayNameSnapshot ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 7}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ObjectTypeSnapshot ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 8}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.DataSnapshot ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 9}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = rpei.ErrorType.HasValue ? (object)(int)rpei.ErrorType.Value : DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 10}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ErrorMessage ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 11}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ErrorStackTrace ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 12}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)rpei.AttributeFlowCount ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 13}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.OutcomeSummary ?? DBNull.Value });
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
+    }
+
+    /// <summary>
+    /// Bulk inserts ActivityRunProfileExecutionItemSyncOutcome rows using parameterised multi-row INSERT.
+    /// Chunks automatically to stay within the PostgreSQL parameter limit.
+    /// </summary>
+    private async Task BulkInsertSyncOutcomesRawAsync(List<ActivityRunProfileExecutionItemSyncOutcome> outcomes)
+    {
+        const int columnsPerRow = 9;
+        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+
+        foreach (var chunk in ChunkList(outcomes, chunkSize))
+        {
+            var sql = new System.Text.StringBuilder();
+            sql.Append(@"INSERT INTO ""ActivityRunProfileExecutionItemSyncOutcomes"" (""Id"", ""ActivityRunProfileExecutionItemId"", ""ParentSyncOutcomeId"", ""OutcomeType"", ""TargetEntityId"", ""TargetEntityDescription"", ""DetailCount"", ""DetailMessage"", ""Ordinal"") VALUES ");
+
+            var parameters = new List<NpgsqlParameter>();
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                if (i > 0) sql.Append(", ");
+                var offset = i * columnsPerRow;
+                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8})");
+
+                var outcome = chunk[i];
+                parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = outcome.Id });
+                parameters.Add(new NpgsqlParameter($"p{offset + 1}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = outcome.ActivityRunProfileExecutionItemId });
+                parameters.Add(new NpgsqlParameter($"p{offset + 2}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)outcome.ParentSyncOutcomeId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 3}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)outcome.OutcomeType });
+                parameters.Add(new NpgsqlParameter($"p{offset + 4}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)outcome.TargetEntityId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 5}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)outcome.TargetEntityDescription ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 6}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)outcome.DetailCount ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 7}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)outcome.DetailMessage ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 8}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = outcome.Ordinal });
+            }
+
+            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
+    }
+
+    /// <summary>
+    /// Flattens the sync outcome tree for an RPEI into a list, pre-generating IDs
+    /// and setting FK references for bulk insertion.
+    /// </summary>
+    private static List<ActivityRunProfileExecutionItemSyncOutcome> FlattenSyncOutcomes(ActivityRunProfileExecutionItem rpei)
+    {
+        var result = new List<ActivityRunProfileExecutionItemSyncOutcome>();
+
+        // SyncOutcomeBuilder adds all nodes (root + children) to rpei.SyncOutcomes as a flat list,
+        // AND also builds a parent→Children tree. If we pass the full flat list to
+        // FlattenOutcomesRecursive, children get visited twice (once from the flat list, once from
+        // parent.Children recursion), causing duplicate inserts.
+        // Start from root outcomes only and let recursion reach children via parent.Children.
+        var roots = rpei.SyncOutcomes.Where(o => o.ParentSyncOutcome == null && o.ParentSyncOutcomeId == null).ToList();
+        FlattenOutcomesRecursive(roots, rpei.Id, null, result);
+        return result;
+    }
+
+    private static void FlattenOutcomesRecursive(
+        List<ActivityRunProfileExecutionItemSyncOutcome> outcomes,
+        Guid rpeiId,
+        Guid? parentId,
+        List<ActivityRunProfileExecutionItemSyncOutcome> result)
+    {
+        foreach (var outcome in outcomes)
+        {
+            if (outcome.Id == Guid.Empty)
+                outcome.Id = Guid.NewGuid();
+
+            outcome.ActivityRunProfileExecutionItemId = rpeiId;
+            outcome.ParentSyncOutcomeId = parentId;
+            result.Add(outcome);
+
+            if (outcome.Children.Count > 0)
+                FlattenOutcomesRecursive(outcome.Children, rpeiId, outcome.Id, result);
         }
     }
 

@@ -132,6 +132,18 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
+        /// Gets the sync outcome tracking level, which controls how much detail is recorded
+        /// for sync outcome graphs on each RPEI.
+        /// Default: Detailed (full causal chain with nested outcomes).
+        /// </summary>
+        public async Task<ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel> GetSyncOutcomeTrackingLevelAsync()
+        {
+            return await GetSettingValueAsync(
+                Constants.SettingKeys.ChangeTrackingSyncOutcomesLevel,
+                ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed);
+        }
+
+        /// <summary>
         /// Gets the history retention period (how long to keep change history and activities).
         /// Default: 90 days.
         /// </summary>

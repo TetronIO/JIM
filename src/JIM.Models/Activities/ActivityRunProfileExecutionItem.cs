@@ -46,6 +46,18 @@ public class ActivityRunProfileExecutionItem
     public string? ExternalIdSnapshot { get; set; }
 
     /// <summary>
+    /// Snapshot of the CSO display name at the time the RPEI was created.
+    /// Provides a fallback for display purposes when the CSO has been deleted.
+    /// </summary>
+    public string? DisplayNameSnapshot { get; set; }
+
+    /// <summary>
+    /// Snapshot of the CSO object type name at the time the RPEI was created.
+    /// Provides a fallback for display purposes when the CSO has been deleted.
+    /// </summary>
+    public string? ObjectTypeSnapshot { get; set; }
+
+    /// <summary>
     /// If this is for an import operation, what changes, if any were made to the Connected System Object in question?
     /// This needs populating for update and delete scenarios.
     /// </summary>
@@ -60,7 +72,7 @@ public class ActivityRunProfileExecutionItem
     // errors:
     // two-tiers of error logging, depending on system settings:
     // - individual error items with detailed error info
-    // - individual error items with detailed error info and json snapshot of exported/imported object
+    // - individual error items with detailed error info and json snapshot of exported/imported object (not yet implemented, but planned for future)
 
     /// <summary>
     /// If settings allow during run profile execution, a JSON representation of the data imported, or exported can be
@@ -82,6 +94,21 @@ public class ActivityRunProfileExecutionItem
     /// Null when no attribute changes occurred or when the primary type is already AttributeFlow.
     /// </summary>
     public int? AttributeFlowCount { get; set; }
+
+    /// <summary>
+    /// Denormalised summary of sync outcome types for fast list-view rendering.
+    /// Comma-separated outcome types with counts, e.g., "Projected:1,AttributeFlow:12,PendingExportCreated:2".
+    /// Populated during outcome tree construction — no separate maintenance path.
+    /// Null when no outcome tracking is configured or for legacy RPEIs.
+    /// </summary>
+    public string? OutcomeSummary { get; set; }
+
+    /// <summary>
+    /// The structured causal graph of sync outcomes for this RPEI.
+    /// Each root outcome can have nested children forming a tree that tells the complete
+    /// story of what happened when this CSO was processed.
+    /// </summary>
+    public List<ActivityRunProfileExecutionItemSyncOutcome> SyncOutcomes { get; set; } = [];
 
     public ConnectedSystemObjectAttributeValue? GetExternalIdAttributeValue()
     {
@@ -111,5 +138,19 @@ public class ActivityRunProfileExecutionItem
     public int? GetConnectedSystemId()
     {
         return ConnectedSystemObject?.ConnectedSystemId ?? ConnectedSystemObjectChange?.ConnectedSystemId;
+    }
+
+    /// <summary>
+    /// Populates the ExternalIdSnapshot, DisplayNameSnapshot, and ObjectTypeSnapshot fields
+    /// from the given CSO. Call this when creating or linking an RPEI to a CSO so the display
+    /// data is preserved even if the CSO is later deleted.
+    /// </summary>
+    public void SnapshotCsoDisplayFields(ConnectedSystemObject cso)
+    {
+        ExternalIdSnapshot ??= cso.ExternalIdAttributeValue?.ToStringNoName();
+        DisplayNameSnapshot ??= cso.AttributeValues
+            .FirstOrDefault(av => av.Attribute?.Name?.Equals("displayname", StringComparison.OrdinalIgnoreCase) == true)
+            ?.StringValue;
+        ObjectTypeSnapshot ??= cso.Type?.Name;
     }
 }

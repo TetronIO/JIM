@@ -43,9 +43,9 @@ public interface IActivityRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = false,
-        IEnumerable<ObjectChangeType>? changeTypeFilter = null,
         IEnumerable<string>? objectTypeFilter = null,
-        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null);
+        IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = null,
+        IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = null);
 
     public Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId);
 
@@ -78,6 +78,15 @@ public interface IActivityRepository
     /// false if the EF fallback was used (RPEIs remain tracked by EF).
     /// </summary>
     public Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis);
+
+    /// <summary>
+    /// Bulk updates OutcomeSummary and error fields on already-persisted RPEIs,
+    /// and inserts any new SyncOutcomes that were added after initial persistence.
+    /// Used by confirming imports to merge reconciliation outcomes onto existing import RPEIs.
+    /// </summary>
+    public Task BulkUpdateRpeiOutcomesAsync(
+        List<ActivityRunProfileExecutionItem> rpeis,
+        List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes);
 
     /// <summary>
     /// Detaches RPEIs from the EF change tracker so they are not persisted by subsequent

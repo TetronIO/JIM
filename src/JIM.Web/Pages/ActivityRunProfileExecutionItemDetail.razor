@@ -182,8 +182,23 @@
                                 <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
                             </MudStack>
                         }
+                        else if (!IsSyncContext() && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
+                        {
+                            @* Import context: CSO detected as deleted but not yet removed *@
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudTooltip
+                                    Text="This object has been detected as deleted from the source system and is pending removal during the next synchronisation."
+                                    Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Color="Color.Warning" Icon="@Icons.Material.Filled.Schedule">
+                                        Pending Removal
+                                    </MudChip>
+                                </MudTooltip>
+                                <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
+                            </MudStack>
+                        }
                         else
                         {
+                            @* Sync context or disconnected: CSO has been deleted *@
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                 <MudTooltip
                                     Text="This object has been deleted. The external ID shown is preserved from when this operation was recorded."
@@ -204,6 +219,31 @@
                 </MudItem>
             </MudGrid>
         </MudPaper>
+
+        @* Causality Tree - shows the outcome graph when outcomes are recorded *@
+        @if (_activityRunProfileExecutionItem.SyncOutcomes.Count > 0)
+        {
+            <MudText Typo="Typo.h6" Class="mb-2">
+                Causality Tree
+            </MudText>
+            <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
+                What happened during processing and the downstream consequences.
+            </MudText>
+            <MudPaper Class="pa-5 mb-5" Outlined="true">
+                <OutcomeTree Outcomes="_activityRunProfileExecutionItem.SyncOutcomes.ToList()"
+                             AttributeChanges="_activityRunProfileExecutionItem.ConnectedSystemObjectChange?.AttributeChanges?.ToList()"
+                             MvoAttributeChanges="_activityRunProfileExecutionItem.MetaverseObjectChange?.AttributeChanges?.ToList()"
+                             OnLoadPendingExport="LoadPendingExportAsync"
+                             ConnectedSystemName="@_connectedSystemHeader?.Name"
+                             ConnectedSystemId="@_connectedSystemHeader?.Id"
+                             RunProfileName="@_activity?.TargetName"
+                             CsoExternalId="@(_externalIdAttributeValue?.ToStringNoName() ?? _activityRunProfileExecutionItem.ExternalIdSnapshot)"
+                             CsoDisplayName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.DisplayNameOrId ?? _activityRunProfileExecutionItem.DisplayNameSnapshot)"
+                             CsoObjectTypeName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.Type?.Name ?? _activityRunProfileExecutionItem.ObjectTypeSnapshot)"
+                             CsoId="@_activityRunProfileExecutionItem.ConnectedSystemObjectId"
+                             CsoConnectedSystemId="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.ConnectedSystemId ?? _connectedSystemHeader?.Id)" />
+            </MudPaper>
+        }
 
         @* Projection Flow Visualisation - shown for Projected items *@
         @if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Projected)
@@ -459,8 +499,21 @@
         @if (_activityRunProfileExecutionItem.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected)
         {
             <MudText Typo="Typo.h6" Class="mb-3">Metaverse Impact</MudText>
+
             @if (_metaverseObjectType != null)
             {
+                @if (!IsSyncContext() && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
+                {
+                    @* Import context: deletion detected but not yet processed by sync *@
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-3">
+                        <MudText Typo="Typo.body1">
+                            The connected system object has been detected as deleted from the source system and marked for removal.
+                            When a Full Synchronisation or Delta Synchronisation run profile is executed, JIM will disconnect
+                            this object from the metaverse and evaluate the deletion rule for its object type.
+                        </MudText>
+                    </MudAlert>
+                }
+
                 @* Show concrete deletion rule based on object type configuration *@
                 <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
                     <MudStack Spacing="2">
@@ -557,12 +610,26 @@
 else
                         {
                             @* Fallback generic message when object type info not available *@
-                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
-                                <MudText Typo="Typo.body1">
-                                    When a connected system object is deleted from the source system, JIM disconnects it from
-                                    the metaverse. The metaverse object deletion rule for this object type determines what happens next.
-                                </MudText>
-                            </MudAlert>
+                            @if (!IsSyncContext() && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
+                            {
+                                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+                                    <MudText Typo="Typo.body1">
+                                        The connected system object has been detected as deleted from the source system and marked for removal.
+                                        When a Full Synchronisation or Delta Synchronisation run profile is executed, JIM will disconnect
+                                        this object from the metaverse. The metaverse object deletion rule for this object type determines
+                                        what happens next.
+                                    </MudText>
+                                </MudAlert>
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+                                    <MudText Typo="Typo.body1">
+                                        When a connected system object is deleted from the source system, JIM disconnects it from
+                                        the metaverse. The metaverse object deletion rule for this object type determines what happens next.
+                                    </MudText>
+                                </MudAlert>
+                            }
                         }
                     }
 
@@ -798,6 +865,14 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private MetaverseObjectType? _metaverseObjectType;
     private List<ConnectedSystemHeader>? _deletionTriggerSystems;
 
+    /// <summary>
+    /// Lazy-loads a pending export by ID for the outcome tree's expandable PE detail.
+    /// </summary>
+    private async Task<PendingExport?> LoadPendingExportAsync(Guid pendingExportId)
+    {
+        return await Jim.ConnectedSystems.GetPendingExportAsync(pendingExportId);
+    }
+
     private static string FormatGracePeriod(TimeSpan period)
     {
         var parts = new List<string>();
@@ -851,12 +926,12 @@ new("Item Details", href: null, disabled: true)
 };
         _externalIdAttributeValue = _activityRunProfileExecutionItem.GetExternalIdAttributeValue();
 
-        var connectedSystemId = _activityRunProfileExecutionItem.GetConnectedSystemId();
+        var connectedSystemId = _activityRunProfileExecutionItem.GetConnectedSystemId()
+                                ?? _activity?.ConnectedSystemId;
         if (connectedSystemId != null)
             _connectedSystemHeader = await Jim.ConnectedSystems.GetConnectedSystemHeaderAsync(connectedSystemId.Value);
 
         // For projected items, get the MVO from the MetaverseObjectChange or fall back to CSO.MetaverseObject
-        // Note: MetaverseObjectChange is not currently populated during sync, so we primarily use CSO.MetaverseObject
         if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Projected)
         {
             _metaverseObject = _activityRunProfileExecutionItem.MetaverseObjectChange?.MetaverseObject
@@ -872,8 +947,7 @@ new("Item Details", href: null, disabled: true)
             _activityRunProfileExecutionItem.ConnectedSystemObjectId.Value);
         }
 
-        // For deletion/disconnection items, load the object type to show concrete deletion rule information
-        if (_activityRunProfileExecutionItem.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected)
+        // Resolve the MVO type for headings and deletion rule display
         {
             // Try to get the MVO type from the CSO's linked MetaverseObject, or from sync rules
             int? mvoTypeId = null;
@@ -911,9 +985,10 @@ new("Item Details", href: null, disabled: true)
             {
                 _metaverseObjectType = await Jim.Metaverse.GetMetaverseObjectTypeAsync(mvoTypeId.Value, false);
 
-                // If the deletion rule uses authoritative sources, load their names
-                if (_metaverseObjectType?.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
-                && _metaverseObjectType.DeletionTriggerConnectedSystemIds.Count > 0)
+                // For deletion/disconnection items, load authoritative source names for deletion rule display
+                if (_activityRunProfileExecutionItem.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected
+                    && _metaverseObjectType?.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
+                    && _metaverseObjectType.DeletionTriggerConnectedSystemIds.Count > 0)
                 {
                     _deletionTriggerSystems = new List<ConnectedSystemHeader>();
                     foreach (var csId in _metaverseObjectType.DeletionTriggerConnectedSystemIds)
@@ -1090,24 +1165,49 @@ new("Item Details", href: null, disabled: true)
         if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
             return GetErrorPhaseTitle();
 
+        var typeName = GetObjectTypeName();
+        var mvoTypeName = GetMetaverseObjectTypeName();
+
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations
-            ObjectChangeType.Added => "Object Added to Staging",
-            ObjectChangeType.Updated => "Object Updated",
-            ObjectChangeType.Deleted => IsSyncContext() ? "Source Deletion Processed" : "Source Deletion Detected",
+            ObjectChangeType.Added => $"{typeName} Added to Staging",
+            ObjectChangeType.Updated => $"{typeName} Updated",
+            ObjectChangeType.Deleted => IsSyncContext() ? "Source Deletion Processed" : $"{typeName} Deletion Detected",
             // Sync operations
-            ObjectChangeType.Projected => "Projected New Metaverse Object",
-            ObjectChangeType.Joined => "Joined to Metaverse Object",
-            ObjectChangeType.AttributeFlow => "Attributes Flowed",
-            ObjectChangeType.Disconnected => "Disconnected from Metaverse",
+            ObjectChangeType.Projected => $"Projected {typeName} to the Metaverse",
+            ObjectChangeType.Joined => $"Joined {typeName} to Metaverse {mvoTypeName}",
+            ObjectChangeType.AttributeFlow => $"{typeName} Attributes Flowed to Metaverse {mvoTypeName}",
+            ObjectChangeType.Disconnected => $"Disconnected {typeName} from Metaverse",
             // Export operations
-            ObjectChangeType.Exported => "Object Exported",
-            ObjectChangeType.Deprovisioned => "Object Deprovisioned",
+            ObjectChangeType.Exported => $"{typeName} Exported",
+            ObjectChangeType.Deprovisioned => $"{typeName} Deprovisioned",
             // Other
             ObjectChangeType.NoChange => "No Changes",
             _ => "Synchronisation Complete"
         };
+    }
+
+    /// <summary>
+    /// Returns the CSO object type name with the first letter capitalised, or "Object" as a fallback.
+    /// </summary>
+    private string GetObjectTypeName()
+    {
+        var name = _activityRunProfileExecutionItem?.ConnectedSystemObject?.Type?.Name
+                   ?? _activityRunProfileExecutionItem?.ObjectTypeSnapshot;
+
+        if (string.IsNullOrEmpty(name))
+            return "Object";
+
+        return char.ToUpperInvariant(name[0]) + name[1..];
+    }
+
+    /// <summary>
+    /// Returns the Metaverse Object type name (e.g., "User", "Group"), or "Object" as a fallback.
+    /// </summary>
+    private string GetMetaverseObjectTypeName()
+    {
+        return _metaverseObjectType?.Name ?? "Object";
     }
 
     /// <summary>
@@ -1157,8 +1257,7 @@ new("Item Details", href: null, disabled: true)
             if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
                 return "External ID (from source data)";
 
-            // If no error but no CSO, it was deleted
-            return "External ID (Deleted)";
+            return "External ID";
         }
 
         // Fallback

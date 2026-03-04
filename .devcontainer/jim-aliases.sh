@@ -44,6 +44,9 @@ Reset:
 Diagrams:
   jim-diagrams       - Export Structurizr C4 diagrams as SVG
 
+Planning:
+  jim-prd            - Create a new PRD from template
+
 Help:
   jim                - Show this help message
 "'
@@ -210,6 +213,64 @@ jim-diagrams() {
     echo "ERROR: Diagram export failed."
     return 1
   fi
+}
+
+# Create a new PRD from template
+jim-prd() {
+  local repo_root prd_dir template raw_name converted_name target_file
+  repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo '/workspaces/JIM')"
+  prd_dir="${repo_root}/docs/prd"
+  template="${prd_dir}/PRD_TEMPLATE.md"
+
+  if [ ! -f "${template}" ]; then
+    echo "ERROR: PRD template not found at ${template}"
+    return 1
+  fi
+
+  # Prompt for feature name
+  printf "Feature/task name: "
+  read -r raw_name
+
+  if [ -z "${raw_name}" ]; then
+    echo "ERROR: No name provided."
+    return 1
+  fi
+
+  # Convert to UPPER_SNAKE_CASE:
+  # 1. Trim leading/trailing whitespace
+  # 2. Replace non-alphanumeric characters (hyphens, spaces, etc.) with underscores
+  # 3. Collapse multiple underscores into one
+  # 4. Strip leading/trailing underscores
+  # 5. Convert to uppercase
+  converted_name=$(echo "${raw_name}" \
+    | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' \
+    | sed 's/[^a-zA-Z0-9]/_/g' \
+    | sed 's/__*/_/g' \
+    | sed 's/^_//;s/_$//' \
+    | tr '[:lower:]' '[:upper:]')
+
+  if [ -z "${converted_name}" ]; then
+    echo "ERROR: Name converted to empty string."
+    return 1
+  fi
+
+  target_file="${prd_dir}/PRD_${converted_name}.md"
+
+  if [ -f "${target_file}" ]; then
+    echo "ERROR: ${target_file} already exists."
+    return 1
+  fi
+
+  # Copy template, replace the title placeholder and set today's date
+  sed -e "s/^# \[Feature Name\]/# ${converted_name//_/ }/" \
+      -e "s/YYYY-MM-DD/$(date -u +%Y-%m-%d)/" "${template}" > "${target_file}"
+
+  echo "Created: docs/prd/PRD_${converted_name}.md"
+  echo ""
+  echo "Next steps:"
+  echo "  1. Fill in the required sections in the PRD"
+  echo "  2. Create a GitHub issue linking to it"
+  echo "  3. Ask Claude to generate an implementation plan from the PRD"
 }
 
 # Wipe JIM data (reset to initial state without destroying database)

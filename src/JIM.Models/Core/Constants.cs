@@ -236,6 +236,14 @@ public static class Constants
         public const string ChangeTrackingCsoChangesEnabled = "ChangeTracking.CsoChanges.Enabled";
 
         /// <summary>
+        /// Controls how much detail is recorded for sync outcome graphs on each RPEI.
+        /// None: no outcome tracking (legacy). Standard: root-level outcomes.
+        /// Detailed: full causal chain with nested outcomes.
+        /// Default: Detailed.
+        /// </summary>
+        public const string ChangeTrackingSyncOutcomesLevel = "ChangeTracking.SyncOutcomes.Level";
+
+        /// <summary>
         /// Enables or disables change tracking for Metaverse Objects.
         /// When enabled, all MVO create/update/delete operations create MetaverseObjectChange records.
         /// When disabled, no change history is recorded for MVOs (improves performance but loses audit trail).

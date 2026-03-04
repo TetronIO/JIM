@@ -136,7 +136,8 @@
                             SecondaryId = null, // MVO doesn't have secondary external ID
                             Href = Utilities.GetMetaverseObjectHref(vc.ReferenceValue)
                         } : null,
-                        IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued
+                        IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued,
+                        AttributeType = ac.Attribute.Type
                     }))
                     .ToList()
             })

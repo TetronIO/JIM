@@ -668,6 +668,16 @@ try {
                 $ldapAttrUpdates[$attr.id] = @{ selected = $true }
             }
         }
+        # Validate all required attributes were found in the LDAP schema
+        $ldapSchemaAttrNames = @($ldapUserType.attributes | ForEach-Object { $_.name })
+        $missingLdapAttrs = @($requiredLdapAttributes | Where-Object { $_ -notin $ldapSchemaAttrNames })
+        if ($missingLdapAttrs.Count -gt 0) {
+            Write-Host "  ✗ Required LDAP attributes not found in schema: $($missingLdapAttrs -join ', ')" -ForegroundColor Red
+            Write-Host "    This usually means the Samba AD image is outdated and needs rebuilding." -ForegroundColor Yellow
+            Write-Host "    Run: docker rmi samba-ad-prebuilt:latest && jim-build" -ForegroundColor Yellow
+            throw "Missing required LDAP attributes in schema: $($missingLdapAttrs -join ', '). Rebuild the Samba AD image."
+        }
+
         $ldapResult = Set-JIMConnectedSystemAttribute -ConnectedSystemId $ldapSystem.id -ObjectTypeId $ldapUserType.id -AttributeUpdates $ldapAttrUpdates -PassThru -ErrorAction Stop
         Write-Host "  ✓ Selected $($ldapResult.updatedCount) LDAP attributes (minimal set for export)" -ForegroundColor Green
         Write-Host "    Attributes: $($requiredLdapAttributes -join ', ')" -ForegroundColor DarkGray

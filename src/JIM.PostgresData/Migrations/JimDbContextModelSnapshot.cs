@@ -197,6 +197,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("TotalProjected")
                         .HasColumnType("integer");
 
+                    b.Property<int>("TotalProvisioned")
+                        .HasColumnType("integer");
+
                     b.Property<int>("TotalUpdated")
                         .HasColumnType("integer");
 
@@ -233,6 +236,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("DataSnapshot")
                         .HasColumnType("text");
 
+                    b.Property<string>("DisplayNameSnapshot")
+                        .HasColumnType("text");
+
                     b.Property<string>("ErrorMessage")
                         .HasColumnType("text");
 
@@ -251,6 +257,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ObjectChangeType")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ObjectTypeSnapshot")
+                        .HasColumnType("text");
+
+                    b.Property<string>("OutcomeSummary")
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ActivityId");
@@ -258,6 +270,49 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ConnectedSystemObjectId");
 
                     b.ToTable("ActivityRunProfileExecutionItems");
+                });
+
+            modelBuilder.Entity("JIM.Models.Activities.ActivityRunProfileExecutionItemSyncOutcome", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActivityRunProfileExecutionItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("DetailCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DetailMessage")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OutcomeType")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ParentSyncOutcomeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TargetEntityDescription")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("TargetEntityId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActivityRunProfileExecutionItemId")
+                        .HasDatabaseName("IX_ActivityRunProfileExecutionItemSyncOutcomes_ActivityRunProfileExecutionItemId");
+
+                    b.HasIndex("ParentSyncOutcomeId");
+
+                    b.HasIndex("ActivityRunProfileExecutionItemId", "OutcomeType")
+                        .HasDatabaseName("IX_ActivityRunProfileExecutionItemSyncOutcomes_RpeiId_OutcomeType");
+
+                    b.ToTable("ActivityRunProfileExecutionItemSyncOutcomes");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseAttribute", b =>
@@ -3131,6 +3186,26 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ConnectedSystemObject");
                 });
 
+            modelBuilder.Entity("JIM.Models.Activities.ActivityRunProfileExecutionItemSyncOutcome", b =>
+                {
+                    b.HasOne("JIM.Models.Activities.ActivityRunProfileExecutionItem", "ActivityRunProfileExecutionItem")
+                        .WithMany("SyncOutcomes")
+                        .HasForeignKey("ActivityRunProfileExecutionItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncOutcomes_ActivityRunProfileExecutionItems");
+
+                    b.HasOne("JIM.Models.Activities.ActivityRunProfileExecutionItemSyncOutcome", "ParentSyncOutcome")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentSyncOutcomeId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_SyncOutcomes_ParentSyncOutcome");
+
+                    b.Navigation("ActivityRunProfileExecutionItem");
+
+                    b.Navigation("ParentSyncOutcome");
+                });
+
             modelBuilder.Entity("JIM.Models.Core.MetaverseObject", b =>
                 {
                     b.HasOne("JIM.Models.Core.MetaverseObjectType", "Type")
@@ -3968,6 +4043,13 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ConnectedSystemObjectChange");
 
                     b.Navigation("MetaverseObjectChange");
+
+                    b.Navigation("SyncOutcomes");
+                });
+
+            modelBuilder.Entity("JIM.Models.Activities.ActivityRunProfileExecutionItemSyncOutcome", b =>
+                {
+                    b.Navigation("Children");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseAttribute", b =>
