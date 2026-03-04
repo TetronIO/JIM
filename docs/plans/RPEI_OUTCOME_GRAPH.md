@@ -536,25 +536,33 @@ Each CSO should produce at most one RPEI per activity. Multiple outcomes are rec
 4. ~~Update API DTOs and endpoints to include outcome summary~~
 5. ~~Write unit tests for stats calculation~~
 
-### Phase 4b: API Integration Tests
+### Phase 4b: API Integration Tests ✅
 
-End-to-end tests covering outcome recording and presentation through the API layer. Deferred until after UI phases are complete and the solution has stabilised.
+End-to-end tests covering outcome recording and presentation through the API layer.
 
-1. Test outcome-based stats derivation via `GET /api/v1/activities/{id}/stats` for activities with outcomes
-2. Test legacy fallback stats via `GET /api/v1/activities/{id}/stats` for activities without outcomes (tracking level = None)
-3. Test `OutcomeSummary` appears in `GET /api/v1/activities/{id}/items` response for RPEIs with outcomes
-4. Test `OutcomeSummary` is null for legacy RPEIs and RPEIs with tracking level = None
-5. Test outcome trees at each tracking level (None / Standard / Detailed) produce correct stats
-6. Test import outcome recording: CsoAdded, CsoUpdated, DeletionDetected, ExportConfirmed, ExportFailed
-7. Test sync outcome recording: Projected → AttributeFlow → Provisioned → PendingExportCreated (nested tree)
-8. Test sync outcome recording: Joined → AttributeFlow → PendingExportCreated (alternative root)
-9. Test sync outcome recording: Disconnected + CsoDeleted sibling roots, DisconnectedOutOfScope, MvoDeleted → Deprovisioned chains
-10. Test sync outcome recording: DriftCorrection → PendingExportCreated (corrective export chain)
-11. Test export outcome recording: Exported, Deprovisioned
-12. Test multi-system provisioning stats: one object provisioned to N systems = N Provisioned outcome nodes
-13. Test multi-system export stats: one object exported to N systems = N Exported outcome nodes
-14. Test RPEI-only stats (OutOfScopeRetainJoin, Created, NoChange) remain correct alongside outcome-based stats
-15. Test error counting remains per-RPEI regardless of outcomes
+**NUnit repository-level tests** — `test/JIM.Web.Api.Tests/ActivityOutcomeStatsIntegrationTests.cs` (10 tests covering all 15 cases below):
+
+1. ~~Test outcome-based stats derivation via `GET /api/v1/activities/{id}/stats` for activities with outcomes~~
+2. ~~Test legacy fallback stats via `GET /api/v1/activities/{id}/stats` for activities without outcomes (tracking level = None)~~
+3. ~~Test `OutcomeSummary` appears in `GET /api/v1/activities/{id}/items` response for RPEIs with outcomes~~
+4. ~~Test `OutcomeSummary` is null for legacy RPEIs and RPEIs with tracking level = None~~
+5. ~~Test outcome trees at each tracking level (None / Standard / Detailed) produce correct stats~~
+6. ~~Test import outcome recording: CsoAdded, CsoUpdated, DeletionDetected, ExportConfirmed, ExportFailed~~
+7. ~~Test sync outcome recording: Projected → AttributeFlow → Provisioned → PendingExportCreated (nested tree)~~
+8. ~~Test sync outcome recording: Joined → AttributeFlow → PendingExportCreated (alternative root)~~
+9. ~~Test sync outcome recording: Disconnected + CsoDeleted sibling roots, DisconnectedOutOfScope, MvoDeleted → Deprovisioned chains~~
+10. ~~Test sync outcome recording: DriftCorrection → PendingExportCreated (corrective export chain)~~
+11. ~~Test export outcome recording: Exported, Deprovisioned~~
+12. ~~Test multi-system provisioning stats: one object provisioned to N systems = N Provisioned outcome nodes~~
+13. ~~Test multi-system export stats: one object exported to N systems = N Exported outcome nodes~~
+14. ~~Test RPEI-only stats (OutOfScopeRetainJoin, Created, NoChange) remain correct alongside outcome-based stats~~
+15. ~~Test error counting remains per-RPEI regardless of outcomes~~
+
+**PowerShell integration test enhancements** — outcome assertions added to Scenario 1:
+
+- Helper functions `Assert-ActivityOutcomeStats` and `Assert-ActivityItemsHaveOutcomeSummary` in `test/integration/utils/Test-Helpers.ps1`
+- Outcome assertions at Joiner (CsoAdded, Projected, Exported), Mover (AttributeFlow), and Leaver (DeletionDetected, Disconnected) steps in `test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1`
+- Coverage documented in `docs/INTEGRATION_TESTING.md` under Scenario 1
 
 ### Phase 5: UI — List View & Filters ✅
 

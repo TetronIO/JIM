@@ -1288,5 +1288,157 @@ function Assert-ParallelExecutionTiming {
     Write-Host "  ✓ $Name parallel execution validated ($validatedGroupCount/$parallelGroupCount parallel groups confirmed concurrent)" -ForegroundColor Green
 }
 
+function Assert-ActivityOutcomeStats {
+    <#
+    .SYNOPSIS
+        Assert that an activity's stats contain expected outcome-based counts.
+
+    .DESCRIPTION
+        Retrieves execution statistics for a Run Profile activity and validates
+        that specific stat properties match expected values. Used to verify that
+        the RPEI outcome graph is correctly recording and surfacing outcomes
+        through the stats API endpoint.
+
+    .PARAMETER ActivityId
+        The Activity ID (GUID) to validate.
+
+    .PARAMETER Name
+        A friendly name for the activity (used in output messages).
+
+    .PARAMETER ExpectedStats
+        A hashtable of stat property names and their expected values.
+        Only the specified properties are validated; others are ignored.
+        Property names match the JSON response (e.g., totalProjections, totalCsoAdds).
+
+    .EXAMPLE
+        Assert-ActivityOutcomeStats -ActivityId $syncResult.activityId -Name "Full Sync (Joiner)" -ExpectedStats @{
+            totalProjections = 10
+            totalAttributeFlows = 10
+            totalPendingExports = 10
+        }
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ActivityId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Name,
+
+        [Parameter(Mandatory=$true)]
+        [hashtable]$ExpectedStats
+    )
+
+    $stats = Get-JIMActivityStats -ActivityId $ActivityId
+
+    if (-not $stats) {
+        throw "Could not retrieve statistics for Activity '$Name' (ID: $ActivityId)"
+    }
+
+    $failures = @()
+    foreach ($key in $ExpectedStats.Keys) {
+        $expectedValue = $ExpectedStats[$key]
+        $actualValue = $stats.$key
+
+        if ($null -eq $actualValue) {
+            $failures += "  Property '$key' not found in stats response"
+            continue
+        }
+
+        if ($actualValue -ne $expectedValue) {
+            $failures += "  $key`: expected $expectedValue, got $actualValue"
+        }
+    }
+
+    if ($failures.Count -gt 0) {
+        $failureDetails = $failures -join "`n"
+        Write-Host "  ✗ $Name outcome stats validation failed:" -ForegroundColor Red
+        foreach ($f in $failures) {
+            Write-Host "    $f" -ForegroundColor Red
+        }
+        throw "Activity '$Name' outcome stats do not match expected values (ActivityId: $ActivityId):`n$failureDetails"
+    }
+
+    $checkedProps = ($ExpectedStats.Keys | Sort-Object) -join ", "
+    Write-Host "  ✓ $Name outcome stats validated ($checkedProps)" -ForegroundColor Green
+}
+
+function Assert-ActivityItemsHaveOutcomeSummary {
+    <#
+    .SYNOPSIS
+        Assert that execution items for an activity have OutcomeSummary values.
+
+    .DESCRIPTION
+        Retrieves execution items for a Run Profile activity and validates that
+        at least some items have non-null OutcomeSummary fields. Optionally checks
+        that items contain a specific outcome type in their summary string.
+
+        This verifies that the RPEI outcome graph is populating the denormalised
+        OutcomeSummary field used for stat chip rendering in the UI.
+
+    .PARAMETER ActivityId
+        The Activity ID (GUID) to validate.
+
+    .PARAMETER Name
+        A friendly name for the activity (used in output messages).
+
+    .PARAMETER ExpectedOutcomeType
+        Optional. If specified, validates that at least one item's OutcomeSummary
+        contains this outcome type (e.g., "Projected", "CsoAdded", "Exported").
+
+    .PARAMETER MinItemsWithSummary
+        Minimum number of items that must have a non-null OutcomeSummary.
+        Defaults to 1.
+
+    .EXAMPLE
+        Assert-ActivityItemsHaveOutcomeSummary -ActivityId $syncResult.activityId -Name "Full Sync" -ExpectedOutcomeType "Projected"
+
+    .EXAMPLE
+        Assert-ActivityItemsHaveOutcomeSummary -ActivityId $importResult.activityId -Name "CSV Import" -ExpectedOutcomeType "CsoAdded" -MinItemsWithSummary 5
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ActivityId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Name,
+
+        [Parameter(Mandatory=$false)]
+        [string]$ExpectedOutcomeType,
+
+        [Parameter(Mandatory=$false)]
+        [int]$MinItemsWithSummary = 1
+    )
+
+    # Get first page of execution items
+    $items = @(Get-JIMActivity -Id $ActivityId -ExecutionItems | Select-Object -First 100)
+
+    if ($items.Count -eq 0) {
+        throw "No execution items found for Activity '$Name' (ID: $ActivityId)"
+    }
+
+    # Check how many items have OutcomeSummary
+    $itemsWithSummary = @($items | Where-Object { $_.outcomeSummary })
+    $summaryCount = $itemsWithSummary.Count
+
+    if ($summaryCount -lt $MinItemsWithSummary) {
+        Write-Host "  ✗ $Name - Expected at least $MinItemsWithSummary items with OutcomeSummary, but found $summaryCount" -ForegroundColor Red
+        throw "Activity '$Name' has only $summaryCount items with OutcomeSummary (expected at least $MinItemsWithSummary) (ActivityId: $ActivityId)"
+    }
+
+    # Check for specific outcome type if requested
+    if ($ExpectedOutcomeType) {
+        $matchingItems = @($itemsWithSummary | Where-Object { $_.outcomeSummary -match "$ExpectedOutcomeType`:" })
+        if ($matchingItems.Count -eq 0) {
+            Write-Host "  ✗ $Name - No items have OutcomeSummary containing '$ExpectedOutcomeType'" -ForegroundColor Red
+            $sampleSummaries = ($itemsWithSummary | Select-Object -First 3 | ForEach-Object { $_.outcomeSummary }) -join "; "
+            throw "Activity '$Name' has no items with OutcomeSummary containing '$ExpectedOutcomeType'. Sample summaries: $sampleSummaries (ActivityId: $ActivityId)"
+        }
+        Write-Host "  ✓ $Name has $summaryCount items with OutcomeSummary ($($matchingItems.Count) contain '$ExpectedOutcomeType')" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  ✓ $Name has $summaryCount items with OutcomeSummary" -ForegroundColor Green
+    }
+}
+
 # Functions are automatically available when dot-sourced
 # No need for Export-ModuleMember

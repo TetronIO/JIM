@@ -377,16 +377,26 @@ try {
         Write-Host "Triggering CSV import..." -ForegroundColor Gray
         $importResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "CSV Import (Joiner)"
+        # Outcome graph: validate import outcomes (#363 Phase 4b)
+        Assert-ActivityItemsHaveOutcomeSummary -ActivityId $importResult.activityId -Name "CSV Import (Joiner)" -ExpectedOutcomeType "CsoAdded"
 
         # Trigger Full Sync (evaluates sync rules, creates MVOs and pending exports)
         Write-Host "Triggering Full Sync..." -ForegroundColor Gray
         $syncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Sync (Joiner)"
+        # Outcome graph: validate sync outcomes (#363 Phase 4b)
+        Assert-ActivityItemsHaveOutcomeSummary -ActivityId $syncResult.activityId -Name "Full Sync (Joiner)" -ExpectedOutcomeType "Projected"
+        # Each user is provisioned to 2 target systems (Samba AD + Cross-Domain CSV)
+        Assert-ActivityOutcomeStats -ActivityId $syncResult.activityId -Name "Full Sync (Joiner)" -ExpectedStats @{
+            totalProvisioned = (Get-TemplateScale -Template $Template).Users * 2
+        }
 
         # Trigger LDAP Export
         Write-Host "Triggering LDAP export..." -ForegroundColor Gray
         $exportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $exportResult.activityId -Name "LDAP Export (Joiner)"
+        # Outcome graph: validate export outcomes (#363 Phase 4b)
+        Assert-ActivityItemsHaveOutcomeSummary -ActivityId $exportResult.activityId -Name "LDAP Export (Joiner)" -ExpectedOutcomeType "Exported"
 
         # Wait for AD replication (local AD should be fast, but needs time to process)
         Write-Host "Waiting 5 seconds for AD replication..." -ForegroundColor Gray
@@ -605,8 +615,14 @@ try {
 
         # Trigger sync sequence with progress output
         Write-Host "Triggering sync sequence:" -ForegroundColor Gray
-        Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
+        $moverSyncResults = Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus
         Write-Host "  ✓ Sync sequence completed" -ForegroundColor Green
+
+        # Outcome graph: validate sync outcomes for mover (#363 Phase 4b)
+        $moverSyncStep = $moverSyncResults.Steps | Where-Object { $_.Name -eq "CSV Delta Sync" }
+        if ($moverSyncStep) {
+            Assert-ActivityItemsHaveOutcomeSummary -ActivityId $moverSyncStep.ActivityId -Name "CSV Delta Sync (Mover)" -ExpectedOutcomeType "AttributeFlow"
+        }
 
         # Validate title change
         Write-Host "Validating attribute update in AD..." -ForegroundColor Gray
@@ -906,8 +922,18 @@ try {
 
         # Trigger sync sequence with progress output
         Write-Host "Triggering sync sequence:" -ForegroundColor Gray
-        Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus | Out-Null
+        $leaverSyncResults = Invoke-SyncSequence -Config $config -ShowProgress -ValidateActivityStatus
         Write-Host "  ✓ Sync sequence completed" -ForegroundColor Green
+
+        # Outcome graph: validate disconnection outcomes for leaver (#363 Phase 4b)
+        $leaverImportStep = $leaverSyncResults.Steps | Where-Object { $_.Name -eq "CSV Full Import" }
+        if ($leaverImportStep) {
+            Assert-ActivityItemsHaveOutcomeSummary -ActivityId $leaverImportStep.ActivityId -Name "CSV Full Import (Leaver)" -ExpectedOutcomeType "DeletionDetected"
+        }
+        $leaverSyncStep = $leaverSyncResults.Steps | Where-Object { $_.Name -eq "CSV Delta Sync" }
+        if ($leaverSyncStep) {
+            Assert-ActivityItemsHaveOutcomeSummary -ActivityId $leaverSyncStep.ActivityId -Name "CSV Delta Sync (Leaver)" -ExpectedOutcomeType "Disconnected"
+        }
 
         # Validate user state in AD
         # With a 7-day grace period configured, the MVO won't be deleted immediately,
