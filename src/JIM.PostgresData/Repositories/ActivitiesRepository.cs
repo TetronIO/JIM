@@ -914,6 +914,12 @@ public class ActivityRepository : IActivityRepository
         if (changes.Count == 0)
             return;
 
+        // Null out RPEI navigation properties to prevent EF graph traversal from
+        // re-discovering already-persisted RPEIs (which would cause duplicate key violations).
+        // The FK (ActivityRunProfileExecutionItemId) is already set.
+        foreach (var change in changes)
+            change.ActivityRunProfileExecutionItem = null;
+
         Repository.Database.AddRange(changes);
         await Repository.Database.SaveChangesAsync();
     }
