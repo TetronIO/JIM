@@ -169,7 +169,7 @@
                             {
                                 @if (context.TotalProjected > 0)
                                 {
-                                    <MudTooltip Text="CSOs Projected" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="MVOs Projected" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"
                                                  Icon="@Icons.Material.Filled.Commit" Class="px-2">
                                             @context.TotalProjected.ToString("N0")
@@ -221,6 +221,15 @@
                                         </MudChip>
                                     </MudTooltip>
                                 }
+                                @if (context.TotalProvisioned > 0)
+                                {
+                                    <MudTooltip Text="CSOs Provisioned" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"
+                                                 Icon="@Icons.Material.Filled.PersonAdd" Class="px-2">
+                                            @context.TotalProvisioned.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
                                 @if (context.TotalPendingExports > 0)
                                 {
                                     <MudTooltip Text="CSO Pending Exports" Arrow="true" Placement="Placement.Top">
@@ -235,7 +244,7 @@
                             {
                                 @if (context.TotalExported > 0)
                                 {
-                                    <MudTooltip Text="CSO Exports" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="CSOs Exported" Arrow="true" Placement="Placement.Top">
                                         <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
                                                  Icon="@Icons.Material.Filled.Sync" Class="px-2">
                                             @context.TotalExported.ToString("N0")
@@ -396,16 +405,24 @@
                             else if (sidebarRunType == "Sync")
                             {
                                 <tr>
-                                    <td><MudText Typo="Typo.body2">CSOs Projected</MudText></td>
-                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Primary">@_selectedActivity.TotalProjected.ToString("N0")</MudText></td>
-                                </tr>
-                                <tr>
                                     <td><MudText Typo="Typo.body2">CSOs Joined</MudText></td>
                                     <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Secondary">@_selectedActivity.TotalJoined.ToString("N0")</MudText></td>
                                 </tr>
                                 <tr>
+                                    <td><MudText Typo="Typo.body2">MVOs Projected</MudText></td>
+                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Primary">@_selectedActivity.TotalProjected.ToString("N0")</MudText></td>
+                                </tr>
+                                <tr>
                                     <td><MudText Typo="Typo.body2">MVOs with Attribute Flow</MudText></td>
                                     <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Info">@_selectedActivity.TotalAttributeFlows.ToString("N0")</MudText></td>
+                                </tr>
+                                <tr>
+                                    <td><MudText Typo="Typo.body2">CSOs Provisioned</MudText></td>
+                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Primary">@_selectedActivity.TotalProvisioned.ToString("N0")</MudText></td>
+                                </tr>
+                                <tr>
+                                    <td><MudText Typo="Typo.body2">CSO Pending Exports</MudText></td>
+                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Info">@_selectedActivity.TotalPendingExports.ToString("N0")</MudText></td>
                                 </tr>
                                 <tr>
                                     <td><MudText Typo="Typo.body2">CSOs Disconnected</MudText></td>
@@ -419,15 +436,11 @@
                                     <td><MudText Typo="Typo.body2">CSOs Drift Corrected</MudText></td>
                                     <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Warning">@_selectedActivity.TotalDriftCorrections.ToString("N0")</MudText></td>
                                 </tr>
-                                <tr>
-                                    <td><MudText Typo="Typo.body2">CSO Pending Exports</MudText></td>
-                                    <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Info">@_selectedActivity.TotalPendingExports.ToString("N0")</MudText></td>
-                                </tr>
                             }
                             else if (sidebarRunType == "Export")
                             {
                                 <tr>
-                                    <td><MudText Typo="Typo.body2">CSO Exports</MudText></td>
+                                    <td><MudText Typo="Typo.body2">CSOs Exported</MudText></td>
                                     <td style="text-align: right;"><MudText Typo="Typo.body2" Color="Color.Info">@_selectedActivity.TotalExported.ToString("N0")</MudText></td>
                                 </tr>
                                 <tr>
@@ -656,7 +669,7 @@
     private static string BuildFingerprint(IEnumerable<Activity> activities)
     {
         return string.Join("|", activities.Select(a =>
-            $"{a.Id}:{a.Status}:{a.TotalAdded},{a.TotalUpdated},{a.TotalDeleted},{a.TotalProjected},{a.TotalJoined},{a.TotalAttributeFlows},{a.TotalDisconnected},{a.TotalDriftCorrections},{a.TotalExported},{a.TotalDeprovisioned},{a.TotalErrors}"));
+            $"{a.Id}:{a.Status}:{a.TotalAdded},{a.TotalUpdated},{a.TotalDeleted},{a.TotalProjected},{a.TotalJoined},{a.TotalAttributeFlows},{a.TotalDisconnected},{a.TotalDriftCorrections},{a.TotalProvisioned},{a.TotalExported},{a.TotalDeprovisioned},{a.TotalErrors}"));
     }
 
     private void OnConnectedSystemFilterChanged(IEnumerable<string> values)
@@ -717,6 +730,7 @@
             || activity.TotalDisconnectedOutOfScope > 0
             || activity.TotalOutOfScopeRetainJoin > 0
             || activity.TotalDriftCorrections > 0
+            || activity.TotalProvisioned > 0
             || activity.TotalExported > 0
             || activity.TotalDeprovisioned > 0
             || activity.TotalCreated > 0

@@ -113,10 +113,17 @@ public class HelpersOutcomeSummaryTests
     }
 
     [Test]
-    public void GetOutcomeTypeDisplayName_Projected_ReturnsCsoProjected()
+    public void GetOutcomeTypeDisplayName_Projected_ReturnsMvoProjectedAsync()
     {
         var result = Helpers.GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
-        Assert.That(result, Is.EqualTo("CSO Projected"));
+        Assert.That(result, Is.EqualTo("MVO Projected"));
+    }
+
+    [Test]
+    public void GetOutcomeTypeDisplayName_Provisioned_ReturnsCsoProvisionedAsync()
+    {
+        var result = Helpers.GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
+        Assert.That(result, Is.EqualTo("CSO Provisioned"));
     }
 
     #endregion

@@ -251,18 +251,37 @@
                 @* Sync-specific cards *@
                 @if (IsSyncRun())
                 {
-                    <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid var(--mud-palette-primary); min-width: 120px;")">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">CSOs Projected</MudText>
-                        <MudText Typo="Typo.h4" Color="Color.Primary">@_activityRunProfileExecutionStats.TotalProjections.ToString("N0")</MudText>
-                    </MudPaper>
                     <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid var(--mud-palette-secondary); min-width: 120px;")">
                         <MudText Typo="Typo.button" Class="mud-text-secondary">CSOs Joined</MudText>
                         <MudText Typo="Typo.h4" Color="Color.Secondary">@_activityRunProfileExecutionStats.TotalJoins.ToString("N0")</MudText>
+                    </MudPaper>
+                    <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid var(--mud-palette-primary); min-width: 120px;")">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">MVOs Projected</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Primary">@_activityRunProfileExecutionStats.TotalProjections.ToString("N0")</MudText>
                     </MudPaper>
                     <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid var(--mud-palette-tertiary); min-width: 120px;")">
                         <MudText Typo="Typo.button" Class="mud-text-secondary">MVOs with Attribute Flow</MudText>
                         <MudText Typo="Typo.h4" Color="Color.Tertiary">@_activityRunProfileExecutionStats.TotalAttributeFlows.ToString("N0")</MudText>
                     </MudPaper>
+
+                    @* CSOs Provisioned - new CSOs created in target systems via export evaluation *@
+                    @if (_activityRunProfileExecutionStats.TotalProvisioned > 0)
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid var(--mud-palette-primary); min-width: 120px;")">
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">CSOs Provisioned</MudText>
+                            <MudText Typo="Typo.h4" Color="Color.Primary">@_activityRunProfileExecutionStats.TotalProvisioned.ToString("N0")</MudText>
+                        </MudPaper>
+                    }
+
+                    @* Pending Exports - surfaced during sync to show what's awaiting confirmation *@
+                    @if (_activityRunProfileExecutionStats.TotalPendingExports > 0)
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Teal.Default}; min-width: 120px;")">
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">CSO Pending Exports</MudText>
+                            <MudText Typo="Typo.h4" Color="Color.Info">@_activityRunProfileExecutionStats.TotalPendingExports.ToString("N0")</MudText>
+                        </MudPaper>
+                    }
+
                     <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid var(--mud-palette-warning); min-width: 120px;")">
                         <MudText Typo="Typo.button" Class="mud-text-secondary">CSOs Disconnected</MudText>
                         <MudText Typo="Typo.h4" Color="Color.Warning">@_activityRunProfileExecutionStats.TotalDisconnections.ToString("N0")</MudText>
@@ -285,22 +304,13 @@
                             <MudText Typo="Typo.h4" Color="Color.Warning">@_activityRunProfileExecutionStats.TotalDriftCorrections.ToString("N0")</MudText>
                         </MudPaper>
                     }
-
-                    @* Pending Exports - surfaced during sync to show what's awaiting confirmation *@
-                    @if (_activityRunProfileExecutionStats.TotalPendingExports > 0)
-                    {
-                        <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Teal.Default}; min-width: 120px;")">
-                            <MudText Typo="Typo.button" Class="mud-text-secondary">CSO Pending Exports</MudText>
-                            <MudText Typo="Typo.h4" Color="Color.Info">@_activityRunProfileExecutionStats.TotalPendingExports.ToString("N0")</MudText>
-                        </MudPaper>
-                    }
                 }
 
                 @* Export-specific cards *@
                 @if (IsExportRun())
                 {
                     <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Teal.Default}; min-width: 120px;")">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">CSO Exports</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">CSOs Exported</MudText>
                         <MudText Typo="Typo.h4" Color="Color.Info">@_activityRunProfileExecutionStats.TotalExported.ToString("N0")</MudText>
                     </MudPaper>
                     <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Red.Default}; min-width: 120px;")">
@@ -744,6 +754,7 @@
         if (s.TotalDriftCorrections > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection, s.TotalDriftCorrections);
 
         // Outbound sync outcomes
+        if (s.TotalProvisioned > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned, s.TotalProvisioned);
         if (s.TotalPendingExports > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, s.TotalPendingExports);
 
         // Export outcomes

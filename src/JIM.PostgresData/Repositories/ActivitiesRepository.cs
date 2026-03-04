@@ -564,6 +564,7 @@ public class ActivityRepository : IActivityRepository
         int totalExported, totalDeprovisioned;
         int totalPendingExportsFromOutcomes;
         int totalDriftCorrections;
+        int totalProvisioned;
 
         if (hasOutcomes)
         {
@@ -599,6 +600,9 @@ public class ActivityRepository : IActivityRepository
 
             // Drift correction from outcomes
             outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection, out totalDriftCorrections);
+
+            // Provisioned from outcomes (outcome-only concept, no legacy fallback)
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned, out totalProvisioned);
         }
         else
         {
@@ -620,6 +624,8 @@ public class ActivityRepository : IActivityRepository
             totalPendingExportsFromOutcomes = 0;
 
             totalDriftCorrections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.DriftCorrection).Sum(x => x.Count);
+
+            totalProvisioned = 0; // Provisioned is an outcome-only concept; no ObjectChangeType equivalent
         }
 
         // --- Stats that always come from RPEIs (no outcome type equivalent) ---
@@ -666,6 +672,7 @@ public class ActivityRepository : IActivityRepository
             TotalDisconnectedOutOfScope = totalDisconnectedOutOfScope,
             TotalOutOfScopeRetainJoin = totalOutOfScopeRetainJoin,
             TotalDriftCorrections = totalDriftCorrections,
+            TotalProvisioned = totalProvisioned,
 
             // Direct creation stats
             TotalCreated = totalCreated,

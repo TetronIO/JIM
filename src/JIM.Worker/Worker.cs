@@ -773,6 +773,9 @@ public class Worker : BackgroundService
 
             // Drift correction from outcomes
             activity.TotalDriftCorrections = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection);
+
+            // Provisioned from outcomes (outcome-only concept, no legacy fallback)
+            activity.TotalProvisioned = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
         }
         else
         {
@@ -813,6 +816,7 @@ public class Worker : BackgroundService
             "Projected={Projected}, Joined={Joined}, AttributeFlows={AttributeFlows}, " +
             "Disconnected={Disconnected}, DisconnectedOutOfScope={DisconnectedOutOfScope}, " +
             "OutOfScopeRetainJoin={OutOfScopeRetainJoin}, DriftCorrections={DriftCorrections}, " +
+            "Provisioned={Provisioned}, " +
             "Exported={Exported}, Deprovisioned={Deprovisioned}, " +
             "Created={Created}, PendingExports={PendingExports}, Errors={Errors}",
             activity.Id, hasOutcomes,
@@ -820,6 +824,7 @@ public class Worker : BackgroundService
             activity.TotalProjected, activity.TotalJoined, activity.TotalAttributeFlows,
             activity.TotalDisconnected, activity.TotalDisconnectedOutOfScope,
             activity.TotalOutOfScopeRetainJoin, activity.TotalDriftCorrections,
+            activity.TotalProvisioned,
             activity.TotalExported, activity.TotalDeprovisioned,
             activity.TotalCreated, activity.TotalPendingExports, activity.TotalErrors);
     }

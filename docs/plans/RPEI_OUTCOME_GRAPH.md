@@ -461,12 +461,13 @@ This section documents the relationship between `ObjectChangeType` (per-RPEI), `
 
 | What Happened | ObjectChangeType | SyncOutcome(s) | Stat Box Label | Change Type Filter Chip | Outcome Filter Chip | Row Change Chip |
 |---------------|-----------------|----------------|---------------|------------------------|--------------------|--------------------|
-| MVO projected | `Projected` | `Projected` (+ children) | "CSOs Projected" | "Projected" | "CSO Projected" | "Projected" |
+| MVO projected | `Projected` | `Projected` (+ children) | "MVOs Projected" | "Projected" | "MVO Projected" | "Projected" |
 | CSO joined to MVO | `Joined` | `Joined` (+ children) | "CSOs Joined" | "Joined" | "CSO Joined" | "Joined" |
 | Attributes flowed (no join/project) | `AttributeFlow` | `AttributeFlow` | "MVOs with Attribute Flow" | "Attribute Flow" | "MVO Attribute Flow" | "Attribute Flow" |
 | CSO disconnected (obsoleted) | `Disconnected` | `Disconnected` + `CsoDeleted` | "CSOs Disconnected" / "CSOs Deleted" | "Disconnected" / "Deletions Processed" | "CSO Disconnected" / "CSO Deleted" | "Disconnected" |
 | CSO disconnected (out of scope) | `DisconnectedOutOfScope` | `DisconnectedOutOfScope` | *(via CSOs Disconnected)* | "Disconnected Out Of Scope" | *(via CSO Disconnected)* | "Disconnected Out Of Scope" |
 | Drift detected | `DriftCorrection` | `DriftCorrection` | "CSOs Drift Corrected" | "Drift Correction" | "CSO Drift Corrected" | "Drift Correction" |
+| CSO provisioned to target CS | *(N/A)* | `Provisioned` | "CSOs Provisioned" | *(N/A)* | "CSO Provisioned" | "Provisioned" |
 | Pending export created | `PendingExport` | `PendingExportCreated` | "CSO Pending Exports" | "Pending Export" | "CSO Pending Export" | "Pending Export" |
 | No attribute changes | `NoChange` | *(none)* | *(via Unchanged)* | *(filtered separately)* | *(N/A)* | "No Change" |
 
@@ -476,7 +477,7 @@ This section documents the relationship between `ObjectChangeType` (per-RPEI), `
 
 | What Happened | ObjectChangeType | SyncOutcome(s) | Stat Box Label | Change Type Filter Chip | Outcome Filter Chip | Row Change Chip |
 |---------------|-----------------|----------------|---------------|------------------------|--------------------|--------------------|
-| CSO exported | `Exported` | `Exported` | "CSO Exports" | "Exported" | "CSO Exported" | "Exported" |
+| CSO exported | `Exported` | `Exported` | "CSOs Exported" | "Exported" | "CSO Exported" | "Exported" |
 | CSO deprovisioned | `Deprovisioned` | `Deprovisioned` | "CSOs Deprovisioned" | "Deprovisioned" | "CSO Deprovisioned" | "Deprovisioned" |
 
 ### Stats Derivation Logic

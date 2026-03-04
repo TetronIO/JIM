@@ -146,6 +146,11 @@ public class ActivityHeader
     /// Count of CSOs where drift was detected and corrective pending exports were created.
     /// </summary>
     public int TotalDriftCorrections { get; set; }
+
+    /// <summary>
+    /// Count of CSOs provisioned to target connected systems during sync.
+    /// </summary>
+    public int TotalProvisioned { get; set; }
     #endregion
 
     #region Export Stats
@@ -219,6 +224,7 @@ public class ActivityHeader
             TotalDisconnectedOutOfScope = activity.TotalDisconnectedOutOfScope,
             TotalOutOfScopeRetainJoin = activity.TotalOutOfScopeRetainJoin,
             TotalDriftCorrections = activity.TotalDriftCorrections,
+            TotalProvisioned = activity.TotalProvisioned,
 
             // Export
             TotalExported = activity.TotalExported,
@@ -494,6 +500,11 @@ public class ActivityRunProfileExecutionStatsDto
     /// Number of CSOs where drift was detected and corrective pending exports were created.
     /// </summary>
     public int TotalDriftCorrections { get; set; }
+
+    /// <summary>
+    /// Number of CSOs provisioned to target connected systems during sync.
+    /// </summary>
+    public int TotalProvisioned { get; set; }
     #endregion
 
     #region Export Stats
@@ -571,6 +582,7 @@ public class ActivityRunProfileExecutionStatsDto
             TotalDisconnectedOutOfScope = stats.TotalDisconnectedOutOfScope,
             TotalOutOfScopeRetainJoin = stats.TotalOutOfScopeRetainJoin,
             TotalDriftCorrections = stats.TotalDriftCorrections,
+            TotalProvisioned = stats.TotalProvisioned,
 
             // Export
             TotalExported = stats.TotalExported,

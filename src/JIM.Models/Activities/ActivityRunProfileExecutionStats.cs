@@ -65,6 +65,12 @@ public class ActivityRunProfileExecutionStats
     /// Drift occurs when target system attributes differ from expected MVO values.
     /// </summary>
     public int TotalDriftCorrections { get; set; }
+
+    /// <summary>
+    /// Count of CSOs provisioned to target connected systems during sync.
+    /// Provisioning creates a new CSO in a target system as a result of export evaluation.
+    /// </summary>
+    public int TotalProvisioned { get; set; }
     #endregion
 
     #region Export Stats

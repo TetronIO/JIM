@@ -137,7 +137,7 @@
                         {
                             @if (context.TotalProjected > 0)
                             {
-                                <MudTooltip Text="CSOs Projected" Arrow="true" Placement="Placement.Top">
+                                <MudTooltip Text="MVOs Projected" Arrow="true" Placement="Placement.Top">
                                     <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"
                                              Icon="@Icons.Material.Filled.Commit" Class="px-2">
                                         @context.TotalProjected.ToString("N0")
@@ -189,6 +189,15 @@
                                     </MudChip>
                                 </MudTooltip>
                             }
+                            @if (context.TotalProvisioned > 0)
+                            {
+                                <MudTooltip Text="CSOs Provisioned" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"
+                                             Icon="@Icons.Material.Filled.PersonAdd" Class="px-2">
+                                        @context.TotalProvisioned.ToString("N0")
+                                    </MudChip>
+                                </MudTooltip>
+                            }
                             @if (context.TotalPendingExports > 0)
                             {
                                 <MudTooltip Text="CSO Pending Exports" Arrow="true" Placement="Placement.Top">
@@ -203,7 +212,7 @@
                         {
                             @if (context.TotalExported > 0)
                             {
-                                <MudTooltip Text="CSO Exports" Arrow="true" Placement="Placement.Top">
+                                <MudTooltip Text="CSOs Exported" Arrow="true" Placement="Placement.Top">
                                     <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
                                              Icon="@Icons.Material.Filled.Sync" Class="px-2">
                                         @context.TotalExported.ToString("N0")
@@ -550,6 +559,7 @@
             || activity.TotalDisconnectedOutOfScope > 0
             || activity.TotalOutOfScopeRetainJoin > 0
             || activity.TotalDriftCorrections > 0
+            || activity.TotalProvisioned > 0
             || activity.TotalExported > 0
             || activity.TotalDeprovisioned > 0
             || activity.TotalCreated > 0
