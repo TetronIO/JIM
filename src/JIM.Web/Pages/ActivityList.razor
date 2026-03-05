@@ -45,7 +45,7 @@
             </MudTableSortLabel>
         </MudTh>
         <MudTh>
-            <MudText Typo="Typo.button">Stats</MudText>
+            <MudText Typo="Typo.button">Outcomes</MudText>
         </MudTh>
         <MudTh>
             <MudTableSortLabel SortLabel="type" T="Activity">
@@ -93,7 +93,7 @@
                 <MudText Typo="Typo.body2" Class="mud-text-disabled">-</MudText>
             }
         </MudTd>
-        <MudTd DataLabel="Stats">
+        <MudTd DataLabel="Outcomes">
             @if (context.TargetType == ActivityTargetType.ConnectedSystemRunProfile
                  && context.TargetOperationType == ActivityTargetOperationType.Execute
                  && context.Status != ActivityStatus.InProgress)
