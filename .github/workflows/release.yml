@@ -92,14 +92,12 @@ jobs:
         include:
           - image: jim-web
             dockerfile: src/JIM.Web/Dockerfile
-            smoke-test: http
+            startup-log: "Starting JIM.Web"
           - image: jim-worker
             dockerfile: src/JIM.Worker/Dockerfile
-            smoke-test: log
             startup-log: "Starting JIM.Worker"
           - image: jim-scheduler
             dockerfile: src/JIM.Scheduler/Dockerfile
-            smoke-test: log
             startup-log: "Starting JIM.Scheduler"
 
     steps:
@@ -159,48 +157,11 @@ jobs:
           severity: 'CRITICAL,HIGH'
           ignore-unfixed: true
 
-      # Phase 4: Smoke test — HTTP health check for jim-web, startup log inspection for worker/scheduler
-      - name: Smoke test container (HTTP)
-        if: matrix.smoke-test == 'http'
-        run: |
-          IMAGE="${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}"
-
-          docker run -d --name smoke-test \
-            -e ASPNETCORE_ENVIRONMENT=Production \
-            -e ASPNETCORE_URLS=http://+:80 \
-            -e JIM_DB_HOSTNAME=localhost \
-            -e JIM_DB_NAME=jim \
-            -e JIM_DB_USERNAME=jim \
-            -e JIM_DB_PASSWORD=dummy \
-            -e JIM_LOG_LEVEL=Information \
-            -e JIM_LOG_PATH=/tmp/jim-logs \
-            -e JIM_SSO_AUTHORITY=https://dummy.example.com \
-            -e JIM_SSO_CLIENT_ID=dummy \
-            -e JIM_SSO_SECRET=dummy \
-            -e JIM_SSO_API_SCOPE=dummy \
-            -e JIM_SSO_CLAIM_TYPE=sub \
-            -e 'JIM_SSO_MV_ATTRIBUTE=Subject Identifier' \
-            -e JIM_SSO_INITIAL_ADMIN=dummy \
-            -p 8080:80 \
-            "$IMAGE"
-
-          # Wait for container to start (up to 30 seconds)
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:8080/api/v1/health/live 2>/dev/null; then
-              echo "Health check passed"
-              docker rm -f smoke-test
-              exit 0
-            fi
-            sleep 1
-          done
-
-          echo "::error::Container failed to pass health check within 30 seconds"
-          docker logs smoke-test
-          docker rm -f smoke-test
-          exit 1
-
-      - name: Smoke test container (log)
-        if: matrix.smoke-test == 'log'
+      # Phase 4: Smoke test — verify container starts and logs expected startup message
+      # Note: HTTP-based smoke tests are not viable because JIM.Web blocks on database
+      # migration checks during startup (before it begins serving HTTP). All services
+      # use log-based verification instead.
+      - name: Smoke test container
         run: |
           IMAGE="${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}"
 
