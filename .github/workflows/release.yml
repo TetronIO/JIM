@@ -93,13 +93,15 @@ jobs:
         include:
           - image: jim-web
             dockerfile: src/JIM.Web/Dockerfile
-            has-health-endpoint: true
+            smoke-test: http
           - image: jim-worker
             dockerfile: src/JIM.Worker/Dockerfile
-            has-health-endpoint: false
+            smoke-test: log
+            startup-log: "Starting JIM.Worker"
           - image: jim-scheduler
             dockerfile: src/JIM.Scheduler/Dockerfile
-            has-health-endpoint: false
+            smoke-test: log
+            startup-log: "Starting JIM.Scheduler"
 
     steps:
       - name: Checkout
@@ -154,9 +156,9 @@ jobs:
           severity: 'CRITICAL,HIGH'
           ignore-unfixed: true
 
-      # Phase 4: Smoke test (jim-web only — worker and scheduler have no HTTP endpoint)
-      - name: Smoke test container
-        if: matrix.has-health-endpoint
+      # Phase 4: Smoke test — HTTP health check for jim-web, startup log inspection for worker/scheduler
+      - name: Smoke test container (HTTP)
+        if: matrix.smoke-test == 'http'
         run: |
           IMAGE="${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}"
 
@@ -177,6 +179,35 @@ jobs:
           done
 
           echo "::error::Container failed to pass health check within 30 seconds"
+          docker logs smoke-test
+          docker rm -f smoke-test
+          exit 1
+
+      - name: Smoke test container (log)
+        if: matrix.smoke-test == 'log'
+        run: |
+          IMAGE="${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}"
+
+          # Start with a dummy connection string — the service will log its startup
+          # message before attempting database connection
+          docker run -d --name smoke-test \
+            -e JIM_DB_HOSTNAME=localhost \
+            -e JIM_DB_NAME=jim \
+            -e JIM_DB_USERNAME=jim \
+            -e JIM_DB_PASSWORD=dummy \
+            "$IMAGE"
+
+          # Wait up to 10 seconds for the startup log message
+          for i in $(seq 1 10); do
+            if docker logs smoke-test 2>&1 | grep -q "${{ matrix.startup-log }}"; then
+              echo "Startup log found: ${{ matrix.startup-log }}"
+              docker rm -f smoke-test
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "::error::Container did not log expected startup message within 10 seconds"
           docker logs smoke-test
           docker rm -f smoke-test
           exit 1
