@@ -38,7 +38,7 @@ The current release process is solid — cosign signing, air-gapped bundles, dig
 | 4 | No smoke test after image build | Medium | Small |
 | 5 | PostgreSQL image unpinned in bundle script (`postgres:18`) | Medium | Trivial |
 | 6 | No SBOM or SLSA provenance attestation | High (for target market) | Small |
-| 7 | No multi-architecture image builds | Medium | Medium |
+| 7 | No multi-architecture image builds (deferred — amd64-only) | Low | Medium |
 | 8 | No Docker layer caching in CI | Low (cost only) | Small |
 | 9 | No rollback documentation | Medium (operational) | Small |
 | 10 | Changelog extraction fails silently | Low | Trivial |
@@ -277,46 +277,25 @@ Upload the SBOM files as release assets alongside the bundle and checksums.
 
 ---
 
-### Phase 7: Multi-Architecture Image Builds
+### Phase 7: Multi-Architecture Image Builds (Deferred)
 
-**Problem**: Images are built only for `linux/amd64`. Air-gapped environments may run on ARM64 hardware (AWS Graviton, Apple Silicon for development). All top-tier containerised projects ship multi-arch manifests.
+**Status**: Deferred — amd64-only for now. Revisit when customer demand arises or native ARM runners become available. See [#375](https://github.com/TetronIO/JIM/issues/375).
 
-**Solution**: Use Docker Buildx with QEMU emulation to build for `linux/amd64` and `linux/arm64`.
+**Problem**: Images are built only for `linux/amd64`. Air-gapped environments may run on ARM64 hardware (AWS Graviton, Apple Silicon for development).
 
-**File**: `.github/workflows/release.yml`
+**Decision**: Stay with single-arch (amd64) builds. JIM's target environments (government, defence, healthcare, financial services) are overwhelmingly x86-64. Adding arm64 has significant trade-offs with no current demand:
 
-Add buildx setup steps to `build-containers`:
+| Factor | amd64 only (current) | Multi-arch (amd64 + arm64) |
+|--------|---------------------|---------------------------|
+| CI build time | ~5 min per image | ~15-20 min (QEMU emulation ~3-4x slower) |
+| Air-gapped bundle size | ~500MB-1GB | ~1-2GB (roughly doubles) |
+| Pipeline complexity | Simple | Buildx + QEMU setup, or native ARM runners |
+| Deployment coverage | Vast majority of enterprise servers | Adds Graviton, Ampere, Apple Silicon |
+| apt package verification | Known working | `libldap`, `cifs-utils` need arm64 verification |
 
-```yaml
-- name: Set up QEMU
-  uses: docker/setup-qemu-action@v3
+**When to revisit**: Customer/prospect explicitly requires ARM64 deployment, or GitHub native ARM runners become available on our plan (eliminating the QEMU penalty).
 
-- name: Set up Docker Buildx
-  uses: docker/setup-buildx-action@v3
-```
-
-Update the build-push step:
-
-```yaml
-- name: Build and push Docker image
-  uses: docker/build-push-action@v6
-  with:
-    context: .
-    file: ${{ matrix.dockerfile }}
-    platforms: linux/amd64,linux/arm64
-    push: true
-    tags: ${{ steps.meta.outputs.tags }}
-    labels: ${{ steps.meta.outputs.labels }}
-    build-args: |
-      VERSION=${{ steps.version.outputs.VERSION }}
-```
-
-**Considerations**:
-- QEMU emulation for ARM64 builds is slow (~3-4x slower than native). This increases CI time.
-- Alternative: Use GitHub's `ubuntu-latest-arm64` runners (if available on the plan) for native ARM builds with a matrix strategy.
-- The smoke test (Phase 4) should test the native arch image only to avoid QEMU overhead.
-- Air-gapped bundle must include both architectures: `docker save` produces a multi-arch tarball when saving a manifest list, or save platform-specific images separately.
-- Update `Build-ReleaseBundle.ps1` to handle multi-arch image export.
+**Implementation approach when needed**: Use Docker Buildx with QEMU emulation (or native ARM runners). For the air-gapped bundle, produce separate platform-specific bundles (`jim-release-X.Y.Z-linux-amd64.tar.gz`, `jim-release-X.Y.Z-linux-arm64.tar.gz`) rather than a single multi-arch tarball — keeps each bundle small and avoids forcing air-gapped deployers to transfer architecture-irrelevant images.
 
 **Effort**: ~2 hours including bundle script updates and testing.
 
@@ -453,7 +432,7 @@ All dependencies are well-maintained, widely adopted, and licence-compatible. No
 - [ ] PostgreSQL image in air-gapped bundle is digest-pinned
 - [ ] SBOM and SLSA provenance attestations are attached to every image
 - [ ] `cosign verify-attestation` succeeds for published images
-- [ ] Multi-arch images available for amd64 and arm64
+- [ ] ~~Multi-arch images available for amd64 and arm64~~ (deferred — amd64-only for now)
 - [ ] Release builds use cached Docker layers
 - [ ] `docs/RELEASE_PROCESS.md` includes rollback procedure
 - [ ] Stale manual migration step removed from air-gapped deployment docs
