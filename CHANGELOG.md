@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Interactive setup script (`setup.sh`) for one-command deployment — auto-detects latest release, downloads compose files, walks through SSO and database configuration, and starts JIM
+- Production Docker Compose override (`docker-compose.production.yml`) — removes build contexts and uses pre-built GHCR images for admin deployments without requiring source code
+- Standalone deployment files (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example`) attached as individual GitHub release assets for easy download
+- JIM ASCII art banner displayed after successful `Connect-JIM` authentication in the PowerShell module
+- Comprehensive [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) covering prerequisites, topology options, TLS/reverse proxy, upgrades, monitoring, and a production readiness checklist
 - Sortable columns on Attribute Flow table
 - Synchronisation Rules quick link on homepage dashboard
 - `Get-JIMMetaverseObject -All` switch to automatically paginate through all results
@@ -21,12 +26,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Outcome type filter on Activity Detail page — filter RPEIs by outcome type (Projected, Joined, AttributeFlow, etc.) (#363)
 - `DisplayNameSnapshot` and `ObjectTypeSnapshot` fields on RPEI — preserves CSO display data for historical RPEIs after CSO deletion (#363)
 - `SnapshotCsoDisplayFields()` helper on RPEI model — centralised snapshot population for ExternalId, DisplayName, and ObjectType
+- Export change history — `ConnectedSystemObjectChange` records created during export to persist attribute-level detail on export RPEIs, enabling the Causality Tree to show expandable attribute changes for Exported and Deprovisioned outcomes
+- Pending export snapshot on sync outcomes — `PendingExportCreated` outcome nodes now persist a `ConnectedSystemObjectChange` snapshot at sync time, so attribute detail remains available after the pending export is deleted during export confirmation
+- `ExportChangeHistoryBuilder` utility — maps `PendingExportAttributeValueChange` data into normalised `ConnectedSystemObjectChange` records for both export RPEIs and sync outcome snapshots
 
 ### Changed
 - Removed "Change Type" filter and column from Activity Detail page — outcome type filter and per-row outcome chips provide a strict superset of this information (#363)
 - Consolidated `ObjectChangeType.Provisioned` into `ObjectChangeType.Exported` — "Provisioned" is now reserved for the sync-phase concept (adding an MVO to a CS for the first time via `SyncOutcome`), while all export-phase operations use `Exported` regardless of whether the object was newly created or updated in the target system
 
+### Removed
+- `DataSnapshot` property from `ActivityRunProfileExecutionItem` — superseded by structured `ConnectedSystemObjectChange` records for export and pending export attribute history
+
 ### Fixed
+- Stale environment variable names in air-gapped deployment documentation (`SSO_AUTHORITY` → `JIM_SSO_AUTHORITY`, `DB_HOSTNAME` → `JIM_DB_HOSTNAME`, etc.)
 - `Get-JIMMetaverseObject` now correctly caps `-PageSize` at 100 to match the API maximum (previously accepted up to 1000, but the API silently capped at 100, returning incomplete results)
 - Skip export evaluation for metaverse objects queued for immediate deletion (0-grace-period), preventing spurious Update exports with invalid attribute values (e.g., empty DN from recalled attributes) alongside the correct Delete export
 - Sync activity attribute flow statistic now counts only standalone attribute flow objects, excluding flows already counted under projections, joins, or disconnections — previously summed individual attribute changes across all change types, inflating the count (e.g., 320k instead of the expected object count)

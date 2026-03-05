@@ -798,6 +798,7 @@ public class ExportExecutionServer
                     ChangeType = export.ChangeType,
                     ConnectedSystemObject = export.ConnectedSystemObject,
                     AttributeChangeCount = export.AttributeValueChanges.Count,
+                    AttributeValueChanges = export.AttributeValueChanges.ToList(),
                     Succeeded = false,
                     ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
                     ErrorCount = export.ErrorCount,
@@ -812,6 +813,7 @@ public class ExportExecutionServer
                 ChangeType = export.ChangeType,
                 ConnectedSystemObject = export.ConnectedSystemObject,
                 AttributeChangeCount = export.AttributeValueChanges.Count,
+                AttributeValueChanges = export.AttributeValueChanges.ToList(),
                 Succeeded = true
             });
 
@@ -1191,6 +1193,7 @@ public class ExportExecutionServer
                         ChangeType = export.ChangeType,
                         ConnectedSystemObject = export.ConnectedSystemObject,
                         AttributeChangeCount = export.AttributeValueChanges.Count,
+                        AttributeValueChanges = export.AttributeValueChanges.ToList(),
                         Succeeded = false,
                         ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
                         ErrorCount = export.ErrorCount,
@@ -1205,6 +1208,7 @@ public class ExportExecutionServer
                     ChangeType = export.ChangeType,
                     ConnectedSystemObject = export.ConnectedSystemObject,
                     AttributeChangeCount = export.AttributeValueChanges.Count,
+                    AttributeValueChanges = export.AttributeValueChanges.ToList(),
                     Succeeded = true
                 });
 
@@ -1465,6 +1469,7 @@ public class ExportExecutionServer
                 ChangeType = export.ChangeType,
                 ConnectedSystemObject = export.ConnectedSystemObject,
                 AttributeChangeCount = export.AttributeValueChanges.Count,
+                AttributeValueChanges = export.AttributeValueChanges.ToList(),
                 Succeeded = false,
                 ErrorMessage = exportResult.ErrorMessage ?? "Export failed",
                 ErrorCount = export.ErrorCount,
@@ -1479,6 +1484,7 @@ public class ExportExecutionServer
             ChangeType = export.ChangeType,
             ConnectedSystemObject = export.ConnectedSystemObject,
             AttributeChangeCount = export.AttributeValueChanges.Count,
+            AttributeValueChanges = export.AttributeValueChanges.ToList(),
             Succeeded = true
         });
 

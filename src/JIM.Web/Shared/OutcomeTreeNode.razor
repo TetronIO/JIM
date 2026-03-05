@@ -1,7 +1,6 @@
 @using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Staging
-@using JIM.Models.Transactional
 @using JIM.Utilities
 
 <div class="outcome-node">
@@ -18,9 +17,9 @@
                 {
                     @* Inline target entity shown on the same row as the outcome type (e.g., Projected → MVO name, Provisioned → CS name) *@
                     <MudText Typo="Typo.body1" Class="mud-text-secondary">@GetInlineSeparator()</MudText>
-                    @if (IsProvisionedWithCsLink)
+                    @if (HasCsLink)
                     {
-                        <MudLink Href="@GetProvisionedCsHref()" Typo="Typo.body1" Class="mud-text-secondary">
+                        <MudLink Href="@GetCsHref()" Typo="Typo.body1" Class="mud-text-secondary">
                             @Outcome.TargetEntityDescription
                         </MudLink>
                     }
@@ -52,11 +51,11 @@
                                        Size="Size.Small" OnClick="ToggleExpand" />
                     </MudTooltip>
                 }
-                @if (IsPendingExportExpandable)
+                @if (IsPendingExportWithChanges)
                 {
                     <MudTooltip Text="@(_expanded ? "Hide pending export detail" : "Show pending export detail")">
                         <MudIconButton Icon="@(_expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
-                                       Size="Size.Small" OnClick="TogglePendingExportExpandAsync" />
+                                       Size="Size.Small" OnClick="ToggleExpand" />
                     </MudTooltip>
                 }
             </MudStack>
@@ -67,7 +66,7 @@
             {
                 @description
             }
-            @if (!string.IsNullOrEmpty(Outcome.DetailMessage) && !IsProvisionedWithCsLink)
+            @if (!string.IsNullOrEmpty(Outcome.DetailMessage) && !HasCsLink)
             {
                 <MudText Typo="Typo.body1" Class="mud-text-secondary">
                     @Outcome.DetailMessage
@@ -86,44 +85,11 @@
         </div>
     }
 
-    @* Expandable attribute detail for PendingExportCreated nodes *@
-    @if (_expanded && IsPendingExportExpandable)
+    @* Expandable attribute detail for PendingExportCreated nodes (from persisted CSO change snapshot) *@
+    @if (_expanded && IsPendingExportWithChanges)
     {
-        <div class="mt-2">
-            @if (_pendingExportLoading)
-            {
-                <MudProgressLinear Indeterminate="true" />
-            }
-            else if (_pendingExport != null && _pendingExport.AttributeValueChanges.Count > 0)
-            {
-                <MudSimpleTable Dense="true" Hover="true" Elevation="0" Style="background: transparent;">
-                    <tbody>
-                        @foreach (var change in _pendingExport.AttributeValueChanges.OrderBy(c => c.Attribute.Name))
-                        {
-                            <tr>
-                                <td style="padding: 4px 12px 4px 0; border: none; vertical-align: top; white-space: nowrap;">
-                                    <MudText Class="mud-text-secondary">@change.Attribute.Name</MudText>
-                                </td>
-                                <td style="padding: 4px 8px 4px 0; border: none; vertical-align: top; white-space: nowrap;">
-                                    <MudChip T="string" Variant="Variant.Text"
-                                             Color="@GetPendingExportChangeColor(change.ChangeType)"
-                                             Size="Size.Small" Class="ml-0">
-                                        @change.ChangeType
-                                    </MudChip>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </MudSimpleTable>
-            }
-            else if (_pendingExport != null)
-            {
-                <MudText Class="mud-text-secondary">No attribute changes.</MudText>
-            }
-            else
-            {
-                <MudText Class="mud-text-secondary">Pending export detail not available.</MudText>
-            }
+        <div class="@($"mt-2{(Outcome.Children.Count > 0 ? " outcome-table-continuation" : "")}")">
+            <AttributeChangeTable AttributeChanges="Outcome.ConnectedSystemObjectChange!.AttributeChanges.ToList()" />
         </div>
     }
 
@@ -134,8 +100,7 @@
             {
                 <OutcomeTreeNode Outcome="child"
                                  AttributeChanges="AttributeChanges"
-                                 MvoAttributeChanges="MvoAttributeChanges"
-                                 OnLoadPendingExport="OnLoadPendingExport" />
+                                 MvoAttributeChanges="MvoAttributeChanges" />
             }
         </div>
     }
@@ -159,27 +124,23 @@
     [Parameter]
     public List<MetaverseObjectChangeAttribute>? MvoAttributeChanges { get; set; }
 
-    /// <summary>
-    /// Callback for loading pending export data on demand when a PendingExportCreated node is expanded.
-    /// </summary>
-    [Parameter]
-    public Func<Guid, Task<PendingExport?>>? OnLoadPendingExport { get; set; }
-
     private bool _expanded;
-    private PendingExport? _pendingExport;
-    private bool _pendingExportLoading;
 
     private bool IsAttributeFlowWithChanges =>
         (Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
          || Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded
-         || Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated)
+         || Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated
+         || Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported
+         || Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned)
         && ((AttributeChanges != null && AttributeChanges.Count > 0)
             || (MvoAttributeChanges != null && MvoAttributeChanges.Count > 0));
 
-    private bool IsPendingExportExpandable =>
+    /// <summary>
+    /// Whether this PendingExportCreated node has a persisted CSO change snapshot with attribute detail.
+    /// </summary>
+    private bool IsPendingExportWithChanges =>
         Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
-        && Outcome.TargetEntityId.HasValue
-        && OnLoadPendingExport != null;
+        && Outcome.ConnectedSystemObjectChange?.AttributeChanges.Count > 0;
 
     /// <summary>
     /// Outcome types that show their target entity inline on the title row
@@ -189,14 +150,25 @@
         !string.IsNullOrEmpty(Outcome.TargetEntityDescription)
         && Outcome.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
             or ActivityRunProfileExecutionItemSyncOutcomeType.Joined
-            or ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned;
+            or ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
+            or ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
+        && !IsPendingExportChildOfProvisioned;
 
     /// <summary>
-    /// Whether this Provisioned node has a connected system link available.
-    /// The CS integer ID is stored in DetailMessage as a convention for Provisioned outcomes.
+    /// Whether this PendingExportCreated node is a child of a Provisioned node.
+    /// When nested, the CS name is already shown on the parent so we suppress the inline description.
     /// </summary>
-    private bool IsProvisionedWithCsLink =>
-        Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
+    private bool IsPendingExportChildOfProvisioned =>
+        Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
+        && Outcome.ParentSyncOutcomeId.HasValue;
+
+    /// <summary>
+    /// Whether this outcome node has a connected system link available.
+    /// The CS integer ID is stored in DetailMessage as a convention for Provisioned and PendingExportCreated outcomes.
+    /// </summary>
+    private bool HasCsLink =>
+        Outcome.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
+            or ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
         && !string.IsNullOrEmpty(Outcome.DetailMessage)
         && int.TryParse(Outcome.DetailMessage, out _);
 
@@ -216,17 +188,6 @@
         _expanded = !_expanded;
     }
 
-    private async Task TogglePendingExportExpandAsync()
-    {
-        _expanded = !_expanded;
-        if (_expanded && _pendingExport == null && !_pendingExportLoading)
-        {
-            _pendingExportLoading = true;
-            _pendingExport = await OnLoadPendingExport!(Outcome.TargetEntityId!.Value);
-            _pendingExportLoading = false;
-        }
-    }
-
     /// <summary>
     /// Builds a contextual description as a RenderFragment, using MudLink when a target entity link is available.
     /// Returns null when there's nothing to display.
@@ -239,10 +200,11 @@
 
         return Outcome.OutcomeType switch
         {
-            // Projected, Joined, and Provisioned show their target inline on the title row
+            // Projected, Joined, Provisioned, and PendingExportCreated show their target inline on the title row
             ActivityRunProfileExecutionItemSyncOutcomeType.Projected => null,
             ActivityRunProfileExecutionItemSyncOutcomeType.Joined => null,
             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => null,
+            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => null,
             // AttributeFlow child nodes don't need a separate MVO description line
             ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => null,
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected
@@ -283,18 +245,9 @@
     private static string GetMvoHref(Guid mvoId) => $"/identity/search/{mvoId}";
 
     /// <summary>
-    /// Builds the connected system href for Provisioned outcomes.
+    /// Builds the connected system href for Provisioned and PendingExportCreated outcomes.
     /// The CS integer ID is stored in DetailMessage by convention.
     /// </summary>
-    private string GetProvisionedCsHref() => $"/admin/connected-systems/{Outcome.DetailMessage}";
+    private string GetCsHref() => $"/admin/connected-systems/{Outcome.DetailMessage}";
 
-    private static Color GetPendingExportChangeColor(PendingExportAttributeChangeType changeType) =>
-        changeType switch
-        {
-            PendingExportAttributeChangeType.Add => Color.Success,
-            PendingExportAttributeChangeType.Update => Color.Info,
-            PendingExportAttributeChangeType.Remove => Color.Warning,
-            PendingExportAttributeChangeType.RemoveAll => Color.Error,
-            _ => Color.Default
-        };
 }

@@ -88,6 +88,12 @@ public class ProcessedExportItem
     public int AttributeChangeCount { get; set; }
 
     /// <summary>
+    /// The attribute value changes from the pending export, captured before deletion.
+    /// Used to create ConnectedSystemObjectChange records for export change history.
+    /// </summary>
+    public List<PendingExportAttributeValueChange> AttributeValueChanges { get; set; } = [];
+
+    /// <summary>
     /// Whether the export succeeded.
     /// </summary>
     public bool Succeeded { get; set; }

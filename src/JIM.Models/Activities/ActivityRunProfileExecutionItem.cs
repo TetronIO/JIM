@@ -74,12 +74,6 @@ public class ActivityRunProfileExecutionItem
     // - individual error items with detailed error info
     // - individual error items with detailed error info and json snapshot of exported/imported object (not yet implemented, but planned for future)
 
-    /// <summary>
-    /// If settings allow during run profile execution, a JSON representation of the data imported, or exported can be
-    /// accessed here for investigative purposes in the event of an error.
-    /// </summary>
-    public string? DataSnapshot { get; set; }
-
     public ActivityRunProfileExecutionItemErrorType? ErrorType { get; set; } = ActivityRunProfileExecutionItemErrorType.NotSet;
 
     public string? ErrorMessage { get; set; }

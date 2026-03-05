@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using JIM.Models.Staging;
 
 namespace JIM.Models.Activities;
 
@@ -55,4 +56,13 @@ public class ActivityRunProfileExecutionItemSyncOutcome
     /// Ordering among siblings in the tree, for consistent display order.
     /// </summary>
     public int Ordinal { get; set; }
+
+    /// <summary>
+    /// Optional FK to a ConnectedSystemObjectChange that captures the attribute-level detail
+    /// for this outcome. Used by PendingExportCreated outcomes to persist a snapshot of the
+    /// pending export's attribute changes at sync time, before the PendingExport is deleted
+    /// during export confirmation.
+    /// </summary>
+    public Guid? ConnectedSystemObjectChangeId { get; set; }
+    public ConnectedSystemObjectChange? ConnectedSystemObjectChange { get; set; }
 }

@@ -142,12 +142,16 @@ HR CSV Source - Full Synchronisation:
 |
 +-- CSO EMP001 - John Smith
     |
-    +-- [Projected] -- John Smith
+    +-- [MVO Projected] -- John Smith
           |
-          +-- [Attribute Flow] 12 attributes [show >]
+          +-- [MVO Attribute Flow] 12 attributes [show >]
                 |
-                +-- [Provisioned] -- AD [show >]
-                +-- [Provisioned] -- LDAP [show >]
+                +-- [CSO Provisioned] -- AD
+                |     |
+                |     +-- [CSO Pending Export] 8 attributes [show >]
+                +-- [CSO Provisioned] -- LDAP
+                      |
+                      +-- [CSO Pending Export] 6 attributes [show >]
 ```
 
 **Sync: Employee joined to existing MVO**
@@ -157,9 +161,9 @@ HR CSV Source - Delta Synchronisation:
 |
 +-- CSO EMP003 - Amelia Sullivan
     |
-    +-- [Joined] -- to Amelia Sullivan
+    +-- [CSO Joined] -- to Amelia Sullivan
           |
-          +-- [Attribute Flow] 8 attributes [show >]
+          +-- [MVO Attribute Flow] 8 attributes [show >]
 ```
 
 **Sync: Employee deleted from source**
@@ -171,11 +175,11 @@ HR CSV Source - Delta Synchronisation:
     |
     +-- [CSO Disconnected] from MVO: Jane Doe
           |
-          +-- [Attribute Flow] 8 attributes recalled [show >]
+          +-- [MVO Attribute Flow] 8 attributes recalled [show >]
           +-- [MVO Deleted] MVO deleted: Jane Doe
                 |
-                +-- [Deprovisioned] AD
-                +-- [Deprovisioned] LDAP
+                +-- [CSO Deprovisioned] AD
+                +-- [CSO Deprovisioned] LDAP
 ```
 
 **Export: Pending exports executed**
@@ -185,7 +189,7 @@ Active Directory - Export:
 |
 +-- CSO CN=jsmith,OU=Staff,DC=ad,DC=local
     |
-    +-- [Exported] CSO created, 8 attributes written
+    +-- [CSO Exported] 8 attributes [show >]
 ```
 
 **Import: New objects from source**
@@ -205,7 +209,7 @@ HR CSV Source - Full Import:
 |
 +-- User EMP002 - Jane Doe
     |
-    +-- [Deletion Detected]
+    +-- [CSO Deletion Detected]
 ```
 
 ### Synergy with Sync Preview (#288)
@@ -442,43 +446,44 @@ new ServiceSetting
 
 ## Mapping Reference: Change Types, Outcomes, Stats & UI Labels
 
-This section documents the relationship between `ObjectChangeType` (per-RPEI), `SyncOutcomeType` (per-outcome node), stat box labels, and filter chip labels. These vary by run profile type.
+This section documents the relationship between `ObjectChangeType` (per-RPEI), `SyncOutcomeType` (per-outcome node), stat box labels, and UI labels. The Change Type filter was removed in Phase 7 — all filtering and display now uses outcome types. The Outcome Filter Chip and Row Outcome Chip columns both use `GetOutcomeTypeDisplayName()` which returns the same label.
 
 ### Import (Full Import / Delta Import)
 
-| What Happened | ObjectChangeType | SyncOutcome(s) | Stat Box Label | Change Type Filter Chip | Outcome Filter Chip | Row Change Chip |
-|---------------|-----------------|----------------|---------------|------------------------|--------------------|--------------------|
-| New CSO staged | `Added` | `CsoAdded` | "CSOs Added" | "Added" | "CSO Added" | "Added" |
-| CSO attributes updated | `Updated` | `CsoUpdated` | "CSOs Updated" | "Updated" | "CSO Updated" | "Updated" |
-| CSO deletion detected (marked Obsolete) | `Deleted` | `DeletionDetected` | "CSO Deletions Detected" | "Deletions Detected" | "CSO Deletion Detected" | "Deletion Detected" |
-| Pending export confirmed | `PendingExportConfirmed` | `ExportConfirmed` | "CSO Exports Confirmed" | *(N/A)* | "CSO Export Confirmed" | "Pending Export Confirmed" |
-| Pending export retrying | *(error on RPEI)* | *(none)* | "Exports Retrying" | *(N/A)* | *(N/A)* | *(N/A)* |
-| Pending export failed | *(error on RPEI)* | `ExportFailed` | "CSO Exports Failed" | *(N/A)* | "CSO Export Failed" | *(N/A)* |
+| What Happened | ObjectChangeType | SyncOutcome(s) | Stat Box Label | Outcome Display Name |
+|---------------|-----------------|----------------|---------------|---------------------|
+| New CSO staged | `Added` | `CsoAdded` | "CSOs Added" | "CSO Added" |
+| CSO attributes updated | `Updated` | `CsoUpdated` | "CSOs Updated" | "CSO Updated" |
+| CSO deletion detected (marked Obsolete) | `Deleted` | `DeletionDetected` | "CSO Deletions Detected" | "CSO Deletion Detected" |
+| Pending export confirmed | `PendingExportConfirmed` | `ExportConfirmed` | "CSO Exports Confirmed" | "CSO Export Confirmed" |
+| Pending export retrying | *(error on RPEI)* | *(none)* | "Exports Retrying" | *(N/A)* |
+| Pending export failed | *(error on RPEI)* | `ExportFailed` | "CSO Exports Failed" | "CSO Export Failed" |
 
 **Key point — import deletions**: During import, the CSO is only marked `Obsolete` (not actually deleted). A `DeletionDetected` outcome is recorded to show the detection in the outcome tree. The actual deletion and `CsoDeleted` outcome occur during the subsequent sync run.
 
 ### Synchronisation (Full Sync / Delta Sync)
 
-| What Happened | ObjectChangeType | SyncOutcome(s) | Stat Box Label | Change Type Filter Chip | Outcome Filter Chip | Row Change Chip |
-|---------------|-----------------|----------------|---------------|------------------------|--------------------|--------------------|
-| MVO projected | `Projected` | `Projected` (+ children) | "MVOs Projected" | "Projected" | "MVO Projected" | "Projected" |
-| CSO joined to MVO | `Joined` | `Joined` (+ children) | "CSOs Joined" | "Joined" | "CSO Joined" | "Joined" |
-| Attributes flowed (no join/project) | `AttributeFlow` | `AttributeFlow` | "MVOs with Attribute Flow" | "Attribute Flow" | "MVO Attribute Flow" | "Attribute Flow" |
-| CSO disconnected (obsoleted) | `Disconnected` | `Disconnected` + `CsoDeleted` | "CSOs Disconnected" / "CSOs Deleted" | "Disconnected" / "Deletions Processed" | "CSO Disconnected" / "CSO Deleted" | "Disconnected" |
-| CSO disconnected (out of scope) | `DisconnectedOutOfScope` | `DisconnectedOutOfScope` | *(via CSOs Disconnected)* | "Disconnected Out Of Scope" | *(via CSO Disconnected)* | "Disconnected Out Of Scope" |
-| Drift detected | `DriftCorrection` | `DriftCorrection` | "CSOs Drift Corrected" | "Drift Correction" | "CSO Drift Corrected" | "Drift Correction" |
-| CSO provisioned to target CS | *(N/A)* | `Provisioned` | "CSOs Provisioned" | *(N/A)* | "CSO Provisioned" | "Provisioned" |
-| Pending export created | `PendingExport` | `PendingExportCreated` | "CSO Pending Exports" | "Pending Export" | "CSO Pending Export" | "Pending Export" |
-| No attribute changes | `NoChange` | *(none)* | *(via Unchanged)* | *(filtered separately)* | *(N/A)* | "No Change" |
+| What Happened | ObjectChangeType | SyncOutcome(s) | Stat Box Label | Outcome Display Name |
+|---------------|-----------------|----------------|---------------|---------------------|
+| MVO projected | `Projected` | `Projected` (+ children) | "MVOs Projected" | "MVO Projected" |
+| CSO joined to MVO | `Joined` | `Joined` (+ children) | "CSOs Joined" | "CSO Joined" |
+| Attributes flowed (no join/project) | `AttributeFlow` | `AttributeFlow` | "MVOs with Attribute Flow" | "MVO Attribute Flow" |
+| CSO disconnected (obsoleted) | `Disconnected` | `Disconnected` + `CsoDeleted` | "CSOs Disconnected" / "CSOs Deleted" | "CSO Disconnected" / "CSO Deleted" |
+| CSO disconnected (out of scope) | `DisconnectedOutOfScope` | `DisconnectedOutOfScope` | *(via CSOs Disconnected)* | "Out of Scope" |
+| MVO deleted | *(N/A)* | `MvoDeleted` | *(N/A)* | "MVO Deleted" |
+| Drift detected | `DriftCorrection` | `DriftCorrection` | "CSOs Drift Corrected" | "CSO Drift Corrected" |
+| CSO provisioned to target CS | *(N/A)* | `Provisioned` | "CSOs Provisioned" | "CSO Provisioned" |
+| Pending export created | `PendingExport` | `PendingExportCreated` | "CSO Pending Exports" | "CSO Pending Export" |
+| No attribute changes | `NoChange` | *(none)* | "Unchanged" | *(N/A)* |
 
 **Key point — obsoleted CSOs**: When a joined CSO is marked Obsolete and processed during sync, a single RPEI is created with `ObjectChangeType.Disconnected`. The outcome graph contains sibling root nodes: `Disconnected` (for the join break) and `CsoDeleted` (for the actual CSO deletion). If an MVO deletion rule fires, there may also be `MvoDeleted` and `PendingExportCreated` child outcomes.
 
 ### Export
 
-| What Happened | ObjectChangeType | SyncOutcome(s) | Stat Box Label | Change Type Filter Chip | Outcome Filter Chip | Row Change Chip |
-|---------------|-----------------|----------------|---------------|------------------------|--------------------|--------------------|
-| CSO exported | `Exported` | `Exported` | "CSOs Exported" | "Exported" | "CSO Exported" | "Exported" |
-| CSO deprovisioned | `Deprovisioned` | `Deprovisioned` | "CSOs Deprovisioned" | "Deprovisioned" | "CSO Deprovisioned" | "Deprovisioned" |
+| What Happened | ObjectChangeType | SyncOutcome(s) | Stat Box Label | Outcome Display Name |
+|---------------|-----------------|----------------|---------------|---------------------|
+| CSO exported | `Exported` | `Exported` | "CSOs Exported" | "CSO Exported" |
+| CSO deprovisioned | `Deprovisioned` | `Deprovisioned` | "CSOs Deprovisioned" | "CSO Deprovisioned" |
 
 ### Stats Derivation Logic
 

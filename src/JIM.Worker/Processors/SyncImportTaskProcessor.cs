@@ -2279,7 +2279,7 @@ public class SyncImportTaskProcessor
                                     {
                                         existingRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed;
                                         existingRpei.ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.";
-                                        existingRpei.DataSnapshot = $"Failed attributes: {failedAttrNames}";
+
                                     }
                                     modifiedExistingRpeis.TryAdd(existingRpei.Id, existingRpei);
                                 }
@@ -2293,7 +2293,7 @@ public class SyncImportTaskProcessor
                                         ObjectChangeType = ObjectChangeType.Updated,
                                         ErrorType = ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed,
                                         ErrorMessage = $"Export confirmation failed after maximum retries for {result.FailedChanges.Count} attribute(s): {failedAttrNames}. Manual intervention may be required.",
-                                        DataSnapshot = $"Failed attributes: {failedAttrNames}"
+
                                     };
                                     executionItem.SnapshotCsoDisplayFields(cso);
 
@@ -2326,7 +2326,7 @@ public class SyncImportTaskProcessor
                                     {
                                         existingRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed;
                                         existingRpei.ErrorMessage = $"We exported a change, but did not get confirmation of it when a confirming import was performed. Details: {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will attempt to reassert the change on the next export run.";
-                                        existingRpei.DataSnapshot = $"Unconfirmed attributes: {retryAttrNames}";
+
                                     }
                                     modifiedExistingRpeis.TryAdd(existingRpei.Id, existingRpei);
                                 }
@@ -2340,7 +2340,7 @@ public class SyncImportTaskProcessor
                                         ObjectChangeType = ObjectChangeType.Updated,
                                         ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
                                         ErrorMessage = $"We exported a change, but did not get confirmation of it when a confirming import was performed. Details: {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will attempt to reassert the change on the next export run.",
-                                        DataSnapshot = $"Unconfirmed attributes: {retryAttrNames}"
+
                                     };
                                     executionItem.SnapshotCsoDisplayFields(cso);
 

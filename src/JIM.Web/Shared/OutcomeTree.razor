@@ -1,7 +1,6 @@
 @using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Staging
-@using JIM.Models.Transactional
 @using JIM.Utilities
 
 @if (Outcomes == null || Outcomes.Count == 0)
@@ -89,8 +88,7 @@ else
                             {
                                 <OutcomeTreeNode Outcome="rootOutcome"
                                                  AttributeChanges="AttributeChanges"
-                                                 MvoAttributeChanges="MvoAttributeChanges"
-                                                 OnLoadPendingExport="OnLoadPendingExport" />
+                                                 MvoAttributeChanges="MvoAttributeChanges" />
                             }
                         </div>
                     </div>
@@ -103,8 +101,7 @@ else
             @foreach (var rootOutcome in RootOutcomes)
             {
                 <OutcomeTreeNode Outcome="rootOutcome"
-                                 AttributeChanges="AttributeChanges"
-                                 OnLoadPendingExport="OnLoadPendingExport" />
+                                 AttributeChanges="AttributeChanges" />
             }
         }
     </div>
@@ -127,12 +124,6 @@ else
     /// </summary>
     [Parameter]
     public List<MetaverseObjectChangeAttribute>? MvoAttributeChanges { get; set; }
-
-    /// <summary>
-    /// Callback for loading pending export data on demand when a PendingExportCreated node is expanded.
-    /// </summary>
-    [Parameter]
-    public Func<Guid, Task<PendingExport?>>? OnLoadPendingExport { get; set; }
 
     /// <summary>
     /// Name of the connected system (e.g., "HR CSV Source"). Used as the top-level context header.

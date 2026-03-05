@@ -137,11 +137,7 @@ function Connect-JIMWithApiKey {
 
         Write-Verbose "Successfully connected to JIM using API key"
 
-        if ($serverVersion) {
-            Write-Host ""
-            Write-Host "Connected to JIM server v$serverVersion at $BaseUrl" -ForegroundColor Green
-            Write-Host ""
-        }
+        Show-JIMBanner -ServerVersion $serverVersion -Url $BaseUrl
 
         # Return connection info (without exposing full API key)
         $keyPreview = if ($ApiKey.Length -gt 12) {
@@ -284,14 +280,7 @@ function Connect-JIMInteractive {
         # Fetch server version
         $serverVersion = Get-JIMServerVersion
 
-        Write-Host ""
-        if ($serverVersion) {
-            Write-Host "Connected to JIM server v$serverVersion at $BaseUrl" -ForegroundColor Green
-        }
-        else {
-            Write-Host "Successfully connected to JIM!" -ForegroundColor Green
-        }
-        Write-Host ""
+        Show-JIMBanner -ServerVersion $serverVersion -Url $BaseUrl
 
         [PSCustomObject]@{
             Url           = $script:JIMConnection.Url

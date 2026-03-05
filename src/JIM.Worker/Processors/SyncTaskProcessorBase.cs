@@ -1,6 +1,7 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Expressions;
+using JIM.Application.Utilities;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Application.Servers;
@@ -10,6 +11,7 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using JIM.Utilities;
 using JIM.Worker.Models;
@@ -115,6 +117,11 @@ public abstract class SyncTaskProcessorBase
     // Loaded once at sync start by each processor subclass. Default: None (no overhead).
     protected ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel _syncOutcomeTrackingLevel =
         ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None;
+
+    // Controls whether CSO change history records are created for PendingExportCreated outcomes.
+    // Loaded once at sync start. When enabled, snapshots pending export attribute data so the
+    // Causality Tree can render attribute detail even after the PendingExport is deleted.
+    protected bool _csoChangeTrackingEnabled;
 
     // MVO ID → RPEI lookup for linking export evaluation results back to the originating RPEI.
     // Populated when RPEIs are created in ProcessMetaverseObjectChangesAsync.
@@ -1269,29 +1276,41 @@ public abstract class SyncTaskProcessorBase
                     // Use ConnectedSystemId directly (nav property may not be set for deferred provisioning CSOs)
                     var peCsId = pendingExport.ConnectedSystemId;
 
+                    ActivityRunProfileExecutionItemSyncOutcome peOutcome;
+
                     // If this PE matches a Provisioned CSO, nest it under the Provisioned node
                     if (peCsId > 0 && provisionedByCs.TryGetValue(peCsId, out var provisionedParent))
                     {
-                        SyncOutcomeBuilder.AddChildOutcome(originatingRpei, provisionedParent,
+                        peOutcome = SyncOutcomeBuilder.AddChildOutcome(originatingRpei, provisionedParent,
                             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
                             targetEntityId: pendingExport.Id,
-                            targetEntityDescription: provisionedParent.TargetEntityDescription);
+                            targetEntityDescription: provisionedParent.TargetEntityDescription,
+                            detailCount: pendingExport.AttributeValueChanges.Count,
+                            detailMessage: peCsId.ToString());
                     }
                     else if (exportParent != null)
                     {
                         // Update to existing CSO — attach under AttributeFlow or root
-                        SyncOutcomeBuilder.AddChildOutcome(originatingRpei, exportParent,
+                        peOutcome = SyncOutcomeBuilder.AddChildOutcome(originatingRpei, exportParent,
                             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
                             targetEntityId: pendingExport.Id,
-                            targetEntityDescription: pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name);
+                            targetEntityDescription: pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name,
+                            detailCount: pendingExport.AttributeValueChanges.Count,
+                            detailMessage: peCsId.ToString());
                     }
                     else
                     {
-                        SyncOutcomeBuilder.AddRootOutcome(originatingRpei,
+                        peOutcome = SyncOutcomeBuilder.AddRootOutcome(originatingRpei,
                             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
                             targetEntityId: pendingExport.Id,
-                            targetEntityDescription: pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name);
+                            targetEntityDescription: pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name,
+                            detailCount: pendingExport.AttributeValueChanges.Count,
+                            detailMessage: peCsId.ToString());
                     }
+
+                    // Snapshot PE attribute changes so the Causality Tree can render detail
+                    // even after the PendingExport is deleted during export confirmation
+                    SnapshotPendingExportChanges(peOutcome, pendingExport);
                 }
             }
             else if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Standard
@@ -1306,10 +1325,14 @@ public abstract class SyncTaskProcessorBase
 
                 foreach (var pe in result.PendingExports)
                 {
-                    SyncOutcomeBuilder.AddRootOutcome(standardRpei,
+                    var peOutcome = SyncOutcomeBuilder.AddRootOutcome(standardRpei,
                         ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
                         targetEntityId: pe.Id,
-                        targetEntityDescription: pe.ConnectedSystemObject?.ConnectedSystem?.Name);
+                        targetEntityDescription: pe.ConnectedSystemObject?.ConnectedSystem?.Name,
+                        detailCount: pe.AttributeValueChanges.Count,
+                        detailMessage: pe.ConnectedSystemId.ToString());
+
+                    SnapshotPendingExportChanges(peOutcome, pe);
                 }
             }
         }
@@ -2366,6 +2389,28 @@ public abstract class SyncTaskProcessorBase
         {
             _pendingExportEvaluations.Add((mvo, changedAttributes, removedAttributes));
         }
+    }
+
+    /// <summary>
+    /// Snapshots the pending export's attribute changes onto the outcome node as a
+    /// <see cref="ConnectedSystemObjectChange"/> record. This enables the Causality Tree to
+    /// render attribute detail for PendingExportCreated outcomes even after the PendingExport
+    /// is deleted during export confirmation.
+    /// </summary>
+    private void SnapshotPendingExportChanges(
+        ActivityRunProfileExecutionItemSyncOutcome outcome,
+        PendingExport pendingExport)
+    {
+        if (!_csoChangeTrackingEnabled || pendingExport.AttributeValueChanges.Count == 0)
+            return;
+
+        var change = ExportChangeHistoryBuilder.BuildFromPendingExport(
+            pendingExport,
+            _activity.InitiatedByType,
+            _activity.InitiatedById,
+            _activity.InitiatedByName);
+
+        outcome.ConnectedSystemObjectChange = change;
     }
 
     /// <summary>

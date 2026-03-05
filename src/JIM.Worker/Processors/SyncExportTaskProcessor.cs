@@ -1,5 +1,6 @@
 using JIM.Application;
 using JIM.Application.Diagnostics;
+using JIM.Application.Utilities;
 using JIM.Connectors;
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
@@ -39,6 +40,12 @@ public class SyncExportTaskProcessor
     private ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel _syncOutcomeTrackingLevel =
         ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None;
 
+    /// <summary>
+    /// Controls whether CSO change history records are created for export RPEIs.
+    /// Loaded once at export start from service settings.
+    /// </summary>
+    private bool _csoChangeTrackingEnabled;
+
     public SyncExportTaskProcessor(
         JimApplication jimApplication,
         IConnector connector,
@@ -75,8 +82,9 @@ public class SyncExportTaskProcessor
 
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Preparing export");
 
-        // Load sync outcome tracking level once at start of export
+        // Load settings once at start of export
         _syncOutcomeTrackingLevel = await _jim.ServiceSettings.GetSyncOutcomeTrackingLevelAsync();
+        _csoChangeTrackingEnabled = await _jim.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
 
         // Get count of pending exports for progress tracking
         int pendingExportCount;
@@ -216,7 +224,6 @@ public class SyncExportTaskProcessor
                     PendingExportChangeType.Delete => ObjectChangeType.Deprovisioned,
                     _ => ObjectChangeType.Exported
                 },
-                DataSnapshot = description
             };
 
             // Link to the Connected System Object if available
@@ -265,6 +272,19 @@ public class SyncExportTaskProcessor
                     detailCount: exportItem.AttributeChangeCount > 0 ? exportItem.AttributeChangeCount : null);
             }
 
+            // Create CSO change record for export change history (if enabled)
+            if (_csoChangeTrackingEnabled && exportItem.AttributeValueChanges.Count > 0)
+            {
+                var change = ExportChangeHistoryBuilder.BuildFromProcessedExportItem(
+                    exportItem,
+                    result.ConnectedSystemId,
+                    executionItem,
+                    _initiatedByType,
+                    _initiatedById,
+                    _initiatedByName);
+                executionItem.ConnectedSystemObjectChange = change;
+            }
+
             _activity.RunProfileExecutionItems.Add(executionItem);
         }
 
@@ -305,6 +325,11 @@ public class SyncExportTaskProcessor
             }
 
             await _jim.Activities.BulkInsertRpeisAsync(exportRpeis);
+
+            // Persist CSO change records separately — raw SQL bulk insert only covers
+            // RPEI scalar columns, not the ConnectedSystemObjectChange navigation graph.
+            if (_csoChangeTrackingEnabled)
+                await _jim.Activities.PersistRpeiCsoChangesAsync(exportRpeis);
         }
 
         // RPEIs remain in _activity.RunProfileExecutionItems for CalculateActivitySummaryStats

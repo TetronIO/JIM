@@ -1,0 +1,25 @@
+# Production override for JIM
+# Removes build contexts (uses pre-built images from GHCR) and sets production restart policy.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.production.yml --profile with-db up -d
+#
+# Requires DOCKER_REGISTRY and JIM_VERSION in .env, e.g.:
+#   DOCKER_REGISTRY=ghcr.io/tetronio/
+#   JIM_VERSION=0.3.0
+
+services:
+  jim.web:
+    build: !reset null
+    restart: unless-stopped
+
+  jim.worker:
+    build: !reset null
+    restart: unless-stopped
+
+  jim.scheduler:
+    build: !reset null
+    restart: unless-stopped
+
+  jim.database:
+    restart: unless-stopped

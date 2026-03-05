@@ -162,7 +162,17 @@ public class JimDbContext : DbContext
             .HasForeignKey(o => o.ParentSyncOutcomeId)
             .OnDelete(DeleteBehavior.SetNull)
             .HasConstraintName("FK_SyncOutcomes_ParentSyncOutcome");
-        
+
+        // Optional FK to ConnectedSystemObjectChange for PendingExportCreated outcomes.
+        // SetNull on delete: if the change record is cleaned up by retention, the outcome
+        // node remains but loses its expandable attribute detail.
+        modelBuilder.Entity<ActivityRunProfileExecutionItemSyncOutcome>()
+            .HasOne(o => o.ConnectedSystemObjectChange)
+            .WithMany()
+            .HasForeignKey(o => o.ConnectedSystemObjectChangeId)
+            .OnDelete(DeleteBehavior.SetNull)
+            .HasConstraintName("FK_SyncOutcomes_ConnectedSystemObjectChange");
+
         modelBuilder.Entity<ConnectedSystemObjectChange>()
             .HasMany(cso => cso.AttributeChanges)
             .WithOne(ac => ac.ConnectedSystemChange)
