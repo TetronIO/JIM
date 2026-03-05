@@ -143,6 +143,7 @@ try {
     $composeFiles = @(
         "docker-compose.yml"
         "docker-compose.override.yml"
+        "docker-compose.production.yml"
         ".env.example"
     )
 
@@ -153,33 +154,6 @@ try {
             Write-Host "  Copied: $file" -ForegroundColor Gray
         }
     }
-
-    # Create production compose override
-    $productionCompose = @"
-# Production override for JIM
-# Use with: docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
-
-services:
-  jim.web:
-    image: ghcr.io/tetronio/jim-web:$Version
-    restart: unless-stopped
-    build: !reset null
-
-  jim.worker:
-    image: ghcr.io/tetronio/jim-worker:$Version
-    restart: unless-stopped
-    build: !reset null
-
-  jim.scheduler:
-    image: ghcr.io/tetronio/jim-scheduler:$Version
-    restart: unless-stopped
-    build: !reset null
-
-  jim.db:
-    restart: unless-stopped
-"@
-    $productionCompose | Set-Content "$bundlePath/compose/docker-compose.production.yml"
-    Write-Host "  Created: docker-compose.production.yml" -ForegroundColor Gray
 
     # Copy PowerShell module
     Write-Host "`nCopying PowerShell module..." -ForegroundColor Cyan

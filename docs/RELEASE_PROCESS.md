@@ -330,7 +330,7 @@ docker compose exec jim.web dotnet ef database update
 
 1. Open your browser to `https://jim.your-domain.local` (or `http://localhost:5200` if no TLS)
 2. Log in with your SSO credentials
-3. The initial admin user (configured via `SSO_UNIQUE_IDENTIFIER_INITIAL_ADMIN_CLAIM_VALUE`) will have full access
+3. The initial admin user (configured via `JIM_SSO_INITIAL_ADMIN`) will have full access
 
 #### Step 11: Install PowerShell Module (Optional)
 

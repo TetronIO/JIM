@@ -512,6 +512,13 @@ Use `./test/integration/Run-IntegrationTests.ps1` (PowerShell) - never invoke sc
 
 The project uses [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Entries must be kept up to date as changes are made, not deferred until release time.
 
+**Audience and tone:**
+The changelog is a **customer-facing product document**. The audience is administrators and decision-makers wanting to know what's new. Entries should make JIM appear useful, reliable, sophisticated, and exciting.
+- Write entries as product changes, not developer notes — focus on the benefit or outcome, not the implementation detail
+- Use a leading emoji per entry to add energy and visual scanning context (e.g. ✨ for new features, 🐛 for fixes, ⚡ for performance, 🔒 for security)
+- Do NOT include: internal refactoring, test changes, developer tooling, CI/CD tweaks, or anything that has no user-facing impact
+- Trivial changes (renamed a CSS class, moved a file, updated a comment) do NOT belong in the changelog
+
 **When to add an entry:**
 - Add an entry under `## [Unreleased]` with each commit or PR that introduces user-facing changes
 - This includes: new features, bug fixes, performance improvements, changed behaviour, and removed functionality
@@ -522,6 +529,7 @@ The project uses [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format
 - Development tooling changes (`.editorconfig`, devcontainer config)
 - Refactoring with no user-facing impact
 - Test-only changes
+- Trivial UI tweaks with no meaningful user impact
 
 **Categories (use as applicable):**
 - **Added** — new features or capabilities
@@ -534,6 +542,7 @@ The project uses [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format
 - Use `####` subheadings to group related entries under a larger feature (e.g., `#### Scheduler Service (#168)`)
 - Reference GitHub issue numbers where applicable (e.g., `(#123)`)
 - Keep entries concise — one line per change, describe what changed from the user's perspective
+- Lead each entry with an appropriate emoji (✨ new, 🐛 fix, ⚡ performance, 🔄 changed, 🗑️ removed, 🔒 security, 📦 deployment/infrastructure, 🖥️ UI/UX)
 - Use imperative mood is not required — describe what was added/changed/fixed naturally
 
 **At release time:** Move all `[Unreleased]` entries to a new version section and update comparison links at the bottom of the file. See Release Process below.
