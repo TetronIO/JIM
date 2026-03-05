@@ -515,6 +515,40 @@ If you need to retract the release:
 2. **PSGallery publish fails**: Verify `PSGALLERY_API_KEY` secret is set correctly
 3. **Docker push fails**: Ensure `GITHUB_TOKEN` has `packages: write` permission
 
+### Runner Acquisition Timeout
+
+GitHub-hosted runners can occasionally fail to be acquired, causing jobs to time out with:
+
+```
+The job was not acquired by Runner of type hosted even after multiple attempts
+```
+
+This is a GitHub infrastructure issue, not a code problem. When this happens to the release workflow:
+
+1. **Go to the failed run**: `https://github.com/TetronIO/JIM/actions` and find the Release workflow run
+2. **Click "Re-run failed jobs"** (not "Re-run all jobs") — this re-runs only the jobs that failed, skipping any that already succeeded
+3. **If the entire workflow failed** (e.g., `validate` timed out and all downstream jobs were skipped), use **"Re-run all jobs"** instead
+
+**Important**: The release workflow is triggered by a tag push (`v*`). Re-running jobs on the existing workflow run is safe and does not require deleting and re-pushing the tag. GitHub retains the workflow run and its tag reference, so re-runs work correctly.
+
+**Workflow job dependency chain:**
+
+```
+validate
++-- build-containers (needs: validate)
+|   +-- create-bundle (needs: build-containers)
++-- publish-powershell (needs: validate)
++-- create-release (needs: build-containers, publish-powershell, create-bundle)
+```
+
+- If `validate` fails: all downstream jobs are skipped — re-run all jobs
+- If `build-containers` fails: `create-bundle` and `create-release` are skipped — re-run failed jobs
+- If `publish-powershell` fails: `create-release` is skipped — re-run failed jobs (PSGallery publish is idempotent; it skips if the version already exists)
+- If `create-bundle` fails: `create-release` is skipped — re-run failed jobs
+- If `create-release` fails: all artefacts are built, only the GitHub Release needs creating — re-run failed jobs
+
+**Note**: Unrelated workflows (e.g., CodeQL) may also fail due to runner timeouts. These do not affect the release and can be re-run independently.
+
 ### Image Load Fails in Air-Gapped Environment
 
 1. Verify the `.tar` file wasn't corrupted during transfer:
