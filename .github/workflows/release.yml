@@ -199,6 +199,7 @@ jobs:
             -e JIM_DB_USERNAME=jim \
             -e JIM_DB_PASSWORD=dummy \
             -e JIM_LOG_LEVEL=Information \
+            -e JIM_LOG_PATH=/tmp/jim-logs \
             "$IMAGE"
 
           # Wait up to 10 seconds for the startup log message
