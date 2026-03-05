@@ -1,7 +1,7 @@
 # CSO Large Multi-Valued Attribute Pagination
 
 **GitHub Issue:** #320
-**Status:** Planning
+**Status:** Doing
 **Date:** 2026-03-05
 
 ## Problem Statement
@@ -53,21 +53,23 @@ For a group with 10K members, this loads ~10K `ConnectedSystemObjectAttributeVal
 The fix must start at the repository/data layer, with both worker and web/API consuming leaner queries appropriate to their needs.
 
 ```
-+---------------------------------------------------+
-| Data Layer (Repository)                           |
-|                                                   |
-| GetCsoWithLightweightRefsAsync()        (new)     |
-|   Loads CSO + attribute values, but only IDs/FKs  |
-|   for reference values (no deep includes)         |
-|                                                   |
-| GetAttributeValuesPagedAsync()          (new)     |
-|   Paginated attribute values for a single attr    |
-|   with optional search/filter                     |
-|                                                   |
-| GetCsoReferenceProjectionsAsync()       (new)     |
-|   Lightweight projection: (RefValueId,            |
-|   MetaverseObjectId) — just what sync needs       |
-+---------------------------------------------------+
++-----------------------------------------------------+
+| Data Layer (Repository)                             |
+|                                                     |
+| GetConnectedSystemObjectAsync()         (fixed)     |
+|   Loads CSO + attribute values + shallow refs       |
+|   (no deep reference attribute includes)            |
+|   Optional loading strategy: all values (default),  |
+|   capped MVA values with counts, SVAs only          |
+|                                                     |
+| GetAttributeValuesPagedAsync()          (new)       |
+|   Paginated attribute values for a single attr      |
+|   with optional search/filter                       |
+|                                                     |
+| GetConnectedSystemObjectReferenceProjectionsAsync() |
+|   Lightweight projection: (RefValueId,        (new) |
+|   MetaverseObjectId) — just what sync needs         |
++-----------------------------------------------------+
           |                          |
           v                          v
 +------------------+    +---------------------+
@@ -78,6 +80,12 @@ The fix must start at the repository/data layer, with both worker and web/API co
 +------------------+    | graphs              |
                         +---------------------+
 ```
+
+### Fix `GetConnectedSystemObjectAsync` In Place
+
+Rather than creating a new method, **fix the existing `GetConnectedSystemObjectAsync`** to remove deep eager loading of referenced CSOs' attribute values. This is what the method should have been doing all along. All current consumers benefit immediately.
+
+**Loading strategy parameter (Phase 2):** Even with shallow references, loading 10K+ attribute value entities in one call is still too heavy for web/API consumers that only display a capped subset. In Phase 2, `GetConnectedSystemObjectAsync` gains an optional loading strategy parameter that controls how much attribute data is loaded (e.g. all values, capped MVA values with counts, SVAs only). This allows consumers to request only the data they need — the web detail page and API load a capped set, while the worker continues to load all values for sync processing. See section 2.1.
 
 ### Phase 1: Lightweight Worker Queries
 
@@ -96,9 +104,9 @@ The worker uses CSO attribute values in these ways:
 
 Key insight: `ProcessReferenceAttribute` only needs `(ReferenceValueId, MetaverseObjectId)` per reference — not the full referenced CSO entity with all its attributes. The deep includes exist only because the detail page needs display names and secondary IDs.
 
-#### 1.2 New Repository Method: Lightweight CSO Load
+#### 1.2 Fix `GetConnectedSystemObjectAsync`: Remove Deep Includes
 
-Create `GetConnectedSystemObjectWithAttributesAsync` (or rename/refactor existing) that:
+Fix the existing method so that it:
 
 - Loads the CSO with its `AttributeValues` and their `Attribute` metadata
 - Loads `ReferenceValue` navigation but **only** includes `Type` and `MetaverseObjectId` — NOT the referenced CSO's own `AttributeValues`
@@ -124,24 +132,26 @@ Currently `SyncRuleMappingProcessor.ProcessReferenceAttribute` loads all referen
 
 **Goal:** The web UI and API never load unbounded attribute values.
 
-#### 2.1 New Repository Method: Detail View with Cap
+#### 2.1 Loading Strategy Parameter on `GetConnectedSystemObjectAsync`
 
-Create `GetConnectedSystemObjectForDetailAsync` that:
+Add an optional parameter to `GetConnectedSystemObjectAsync` that controls attribute value loading. This keeps the API surface clean — one method, configurable behaviour:
 
-- Loads all single-valued attributes normally (lightweight)
-- For multi-valued attributes, loads only the first N values (e.g. 100)
-- Returns a total value count per attribute via a separate `COUNT(*)` query
-
+```csharp
+Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(
+    int connectedSystemId,
+    Guid id,
+    CsoAttributeLoadStrategy loadStrategy = CsoAttributeLoadStrategy.All);
 ```
-+----------------------------------------------+
-| GetConnectedSystemObjectForDetailAsync (new) |
-| - Used by web UI and API detail endpoints    |
-| - Caps MVA values at N per attribute         |
-| - Returns total count per attribute          |
-| - Includes reference display info for the    |
-|   capped set only                            |
-+----------------------------------------------+
-```
+
+Possible strategies:
+
+| Strategy | Behaviour | Consumer |
+|---|---|---|
+| `All` (default) | Loads all attribute values with shallow refs. Current behaviour after Phase 1 fix. | Worker |
+| `CappedMva` | Loads all SVA values normally. For MVA attributes, loads first N values (e.g. 100) and returns total count per attribute. | Web detail page, API detail endpoint |
+| `SvasOnly` | Loads only single-valued attribute values. | Future use / lightweight lookups |
+
+When using `CappedMva`, the method returns per-attribute value counts alongside the capped values (via a companion result object or a metadata property on the entity). The web page and API use this to show "10,247 total" and offer paginated access via `GetAttributeValuesPagedAsync`.
 
 #### 2.2 New Repository Method: Paginated Attribute Values
 
@@ -183,13 +193,15 @@ Response:
 
 - Supports server-side search/filter
 - Supports pagination
-- Used by both API consumers and the Blazor dialog
+- Used by API consumers (e.g. the JIM PowerShell module)
+- The Blazor dialog does not use this endpoint — it calls JIM.Application directly
 
 #### 2.4 Application Layer Changes
 
-- Add `GetConnectedSystemObjectForDetailAsync` to `ConnectedSystemServer`
+- Pass `CsoAttributeLoadStrategy` through `ConnectedSystemServer.GetConnectedSystemObjectAsync`
 - Add `GetAttributeValuesPagedAsync` to `ConnectedSystemServer`
-- Web page and API controller switch to these methods
+- Web page and API controller call `GetConnectedSystemObjectAsync` with `CappedMva` strategy
+- Worker continues calling with default `All` strategy (no change)
 
 #### 2.5 DTO Changes
 
@@ -238,7 +250,7 @@ For `ProcessReferenceAttribute` with very large MVAs (e.g. 50K+ members):
 Instead of loading full `ConnectedSystemObject` entities as reference values, use a projection:
 
 ```csharp
-Task<List<CsoReferenceProjection>> GetCsoReferenceProjectionsAsync(
+Task<List<CsoReferenceProjection>> GetConnectedSystemObjectReferenceProjectionsAsync(
     Guid connectedSystemObjectId,
     int attributeId);
 
@@ -271,12 +283,12 @@ Store a `DisplayName` column on `ConnectedSystemObject` maintained during import
 ```
 Phase 1 (Worker Safety)
 +-- 1.1 Analyse and document worker attribute usage patterns
-+-- 1.2 New lightweight repository method (no deep ref includes)
-+-- 1.3 Update worker to use lightweight method
++-- 1.2 Fix GetConnectedSystemObjectAsync (remove deep ref includes)
++-- 1.3 Verify all consumers work with the fixed method
 +-- Tests for all of the above
 
 Phase 2 (Web/API Pagination)
-+-- 2.1 New detail-view repository method with value cap
++-- 2.1 Add CsoAttributeLoadStrategy parameter to GetConnectedSystemObjectAsync
 +-- 2.2 New paginated attribute values repository method
 +-- 2.3 New paginated API endpoint
 +-- 2.4 Application layer methods
