@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-03-05
+
 ### Added
 - ✨ One-command deployment — new interactive installer auto-detects the latest release, configures SSO and database, and starts JIM in minutes
 - 📦 Production-ready Docker Compose configuration — deploy JIM from pre-built images without needing source code
@@ -14,16 +16,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Welcome banner displayed on successful PowerShell connection
 - 📖 Comprehensive [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) covering prerequisites, topology options, TLS, reverse proxy, upgrades, and monitoring
 - 🖥️ Sortable columns on the Attribute Flow table
+- 🖥️ Filter controls on the Attribute Flow table
+- ✨ Edit attribute flow mappings inline on the Sync Rule detail page
+- 🖥️ Sync Rule detail page redesign with expression highlighting, table/card views, and improved layout
 - 🖥️ Synchronisation Rules quick link on the homepage dashboard
+- 🖥️ Filter controls on the Connected System Objects list page
+- 🖥️ Full-width layout option for table-heavy pages
+- 🖥️ Confirmation dialog before deleting attribute flow mappings
 - ✨ `Get-JIMMetaverseObject -All` — automatically paginates through all results in a single command
+- ✨ Pronouns attribute support (#360, #362)
 - ✨ Sync Outcome Graph — full causal tracing of every change during synchronisation, showing exactly why each object was projected, joined, updated, disconnected, or exported (#363)
 - ✨ Configurable sync outcome tracking level (None / Standard / Detailed) — control how much causal detail is recorded per synchronisation (#363)
 - 🖥️ Colour-coded outcome summary chips on Activity Detail rows for at-a-glance sync result visibility (#363)
 - 🖥️ Filter activity results by outcome type — quickly find projections, joins, attribute flows, exports, and more (#363)
 - ✨ Export change history — drill into exactly which attributes were changed on each exported object, with before/after values
+- 🔒 Hardened release pipeline with container scanning, SBOM attestation, and build validation
+- 📦 Application blocks readiness until database migrations are applied
 
 ### Changed
 - 🔄 Replaced "Change Type" filter with richer outcome type filtering on the Activity Detail page (#363)
+- 🔄 Renamed Activity statistics labels for clarity ("Stats" → "Outcomes", "Unchanged" → "CSOs Unchanged")
 
 ### Fixed
 - 🐛 `Get-JIMMetaverseObject` now correctly returns all results when page size exceeds 100
@@ -31,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Activity attribute flow statistics now show accurate object counts instead of inflated per-attribute counts
 - 🐛 Connected system object join state now reliably persisted during synchronisation
 - 🐛 Activity Detail rows now show display name and object type even after the connected system object has been deleted (#363)
+- 🐛 OIDC `Identity.Name` now correctly resolved when claims are unmapped
+- 🐛 Two-pass CSO processing prevents false `CouldNotJoinDueToExistingJoin` errors during synchronisation
 
 ### Performance
 - ⚡ Sync engine performance — up to 37% faster synchronisation through optimised batch persistence of activity results (#338)
@@ -242,7 +256,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/TetronIO/JIM/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/TetronIO/JIM/compare/v0.2.0-alpha...v0.3.0
 [0.2.0-alpha]: https://github.com/TetronIO/JIM/compare/v0.1.0-alpha...v0.2.0-alpha
 [0.1.0-alpha]: https://github.com/TetronIO/JIM/releases/tag/v0.1.0-alpha

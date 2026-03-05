@@ -16,6 +16,7 @@ JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the Git
 
 | Version | Date | Notes |
 |---------|------|-------|
+| `0.4.0` | 2026-03-05 | Sync Outcome Graph with full causal tracing, export change history, one-command deployment installer, sync rule UX redesign, pronouns support, hardened release pipeline, 37% sync performance improvement. |
 | `0.3.0` | 2026-02-25 | First stable release. Scheduler service, change history, progress indication, dashboard redesign, major sync engine performance optimisations, 75 PowerShell cmdlets. First tag-based release via GitHub Actions. |
 | `0.2.0-alpha` | 2026-01-27 | PowerShell module expanded from 3 to 64 cmdlets. Published to [PSGallery](https://www.powershellgallery.com/packages/JIM/0.2.0-alpha) manually (no git tag created). |
 | `0.1.0-alpha` | 2025-12-12 | Initial preview. PowerShell module published to [PSGallery](https://www.powershellgallery.com/packages/JIM/0.1.0-alpha) with 3 connection cmdlets. Published manually (no git tag created). |

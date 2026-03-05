@@ -3,7 +3,7 @@
     RootModule = 'JIM.psm1'
 
     # Version number of this module.
-    ModuleVersion = '0.3.0'
+    ModuleVersion = '0.4.0'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Core', 'Desktop')
@@ -164,29 +164,32 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
-## 0.3.0
+## 0.4.0
 
 ### New Features
-- Scheduler service with cron and interval-based triggers, multi-step execution, and full management UI
-- Change history with full audit trail, timeline UI, and configurable retention
-- Real-time progress indication for running operations
-- Dashboard redesign with informative cards and version display
-- Interactive browser-based authentication for PowerShell module
-- API key authentication for sync endpoints
-- LDAP schema discovery enhancements (writability detection, omSyntax 66 support)
-- Split and Join functions for multi-valued attribute transforms
+- Sync Outcome Graph — full causal tracing of every change during synchronisation
+- Configurable sync outcome tracking level (None / Standard / Detailed)
+- Export change history with before/after attribute values
+- One-command deployment with interactive installer
+- Production-ready Docker Compose configuration for pre-built images
+- Sync Rule detail page redesign with expression highlighting and inline editing
+- Filter controls on Attribute Flow table and Connected System Objects list
+- Pronouns attribute support
+- Welcome banner on PowerShell connection
+- Comprehensive Deployment Guide
 
 ### Performance
-- Raw SQL for import/export bulk writes (replacing EF Core)
-- Parallel batch export processing and reference resolution
-- LDAP async pipelining with configurable concurrency
-- CSO lookup index eliminating N+1 import queries
-- Worker heartbeat-based crash recovery
+- Up to 37% faster synchronisation through optimised batch RPEI persistence
 
-### Module Changes
-- 75 cmdlets (11 new scheduler cmdlets)
-- Flattened directory structure
-- Server version display on Connect-JIM
+### Security
+- Hardened release pipeline with container scanning, SBOM attestation, and build validation
+- Application blocks readiness until database migrations are applied
+
+### Fixed
+- OIDC Identity.Name resolution with unmapped claims
+- Two-pass CSO processing prevents false join errors
+- Spurious export operations for objects queued for deletion
+- Accurate activity attribute flow statistics
 
 For full changelog, see: https://github.com/TetronIO/JIM/blob/main/CHANGELOG.md
 '@
