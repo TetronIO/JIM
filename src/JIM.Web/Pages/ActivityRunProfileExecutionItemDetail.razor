@@ -240,7 +240,8 @@
                              CsoDisplayName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.DisplayNameOrId ?? _activityRunProfileExecutionItem.DisplayNameSnapshot)"
                              CsoObjectTypeName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.Type?.Name ?? _activityRunProfileExecutionItem.ObjectTypeSnapshot)"
                              CsoId="@_activityRunProfileExecutionItem.ConnectedSystemObjectId"
-                             CsoConnectedSystemId="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.ConnectedSystemId ?? _connectedSystemHeader?.Id)" />
+                             CsoConnectedSystemId="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.ConnectedSystemId ?? _connectedSystemHeader?.Id)"
+                             InitiallyExpanded="@(_activityRunProfileExecutionItem.SyncOutcomes.Count(o => o.ParentSyncOutcomeId == null) == 1)" />
             </MudPaper>
         }
 
@@ -632,9 +633,12 @@ else
                         }
                     }
 
-                    @* Attribute Changes Section - hide for deletions since there are no attribute changes to show *@
+                    @* Attribute Changes Section - hide when:
+                       - deletions (no attribute changes to show)
+                       - Causality Tree is present (it already renders attribute detail inline) *@
                     @if (_activityRunProfileExecutionItem.ConnectedSystemObjectChange != null
-                    && _activityRunProfileExecutionItem.ObjectChangeType != ObjectChangeType.Deleted)
+                    && _activityRunProfileExecutionItem.ObjectChangeType != ObjectChangeType.Deleted
+                    && _activityRunProfileExecutionItem.SyncOutcomes.Count == 0)
                     {
                         var changeCount = _activityRunProfileExecutionItem.ConnectedSystemObjectChange.AttributeChanges
                         .Sum(c => c.ValueChanges.Count);

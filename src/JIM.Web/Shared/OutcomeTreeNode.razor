@@ -124,7 +124,23 @@
     [Parameter]
     public List<MetaverseObjectChangeAttribute>? MvoAttributeChanges { get; set; }
 
+    /// <summary>
+    /// When true, the attribute detail section starts expanded rather than collapsed.
+    /// </summary>
+    [Parameter]
+    public bool InitiallyExpanded { get; set; }
+
     private bool _expanded;
+    private bool _initializedExpanded;
+
+    protected override void OnParametersSet()
+    {
+        if (!_initializedExpanded)
+        {
+            _expanded = InitiallyExpanded;
+            _initializedExpanded = true;
+        }
+    }
 
     private bool IsAttributeFlowWithChanges =>
         (Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
