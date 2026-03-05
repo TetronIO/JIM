@@ -1343,7 +1343,7 @@ public abstract class SyncTaskProcessorBase
             await _jim.ExportEvaluation.EvaluateOutOfScopeExportsAsync(
                 mvo,
                 _connectedSystem,
-                _exportEvaluationCache);
+                _exportEvaluationCache!);
         }
     }
 
