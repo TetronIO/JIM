@@ -17,7 +17,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
 
 permissions:
   contents: write
@@ -107,6 +106,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set image prefix
+        id: prefix
+        run: echo "IMAGE_PREFIX=$(echo 'ghcr.io/${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Get version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
@@ -126,7 +129,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
+          images: ${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -139,7 +142,7 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           load: true
-          tags: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}
+          tags: ${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.version.outputs.VERSION }}
@@ -150,7 +153,7 @@ jobs:
       - name: Scan image for vulnerabilities
         uses: aquasecurity/trivy-action@0.34.2
         with:
-          image-ref: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}
+          image-ref: ${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}
           format: 'table'
           exit-code: '1'
           severity: 'CRITICAL,HIGH'
@@ -160,7 +163,7 @@ jobs:
       - name: Smoke test container (HTTP)
         if: matrix.smoke-test == 'http'
         run: |
-          IMAGE="${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}"
+          IMAGE="${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}"
 
           docker run -d --name smoke-test \
             -e ASPNETCORE_ENVIRONMENT=Production \
@@ -186,7 +189,7 @@ jobs:
       - name: Smoke test container (log)
         if: matrix.smoke-test == 'log'
         run: |
-          IMAGE="${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}"
+          IMAGE="${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}"
 
           # Start with a dummy connection string — the service will log its startup
           # message before attempting database connection
@@ -231,20 +234,20 @@ jobs:
 
       - name: Sign container image
         run: |
-          IMAGE_REF=$(echo "${{ env.IMAGE_PREFIX }}/${{ matrix.image }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_REF="${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}"
           cosign sign --yes "${IMAGE_REF}@${{ steps.build.outputs.digest }}"
 
       # Phase 6a: SBOM generation
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}@${{ steps.build.outputs.digest }}
+          image: ${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}@${{ steps.build.outputs.digest }}
           format: spdx-json
           output-file: sbom-${{ matrix.image }}.spdx.json
 
       - name: Attach SBOM to image
         run: |
-          IMAGE_REF=$(echo "${{ env.IMAGE_PREFIX }}/${{ matrix.image }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_REF="${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}"
           cosign attest --yes --type spdxjson \
             --predicate sbom-${{ matrix.image }}.spdx.json \
             "${IMAGE_REF}@${{ steps.build.outputs.digest }}"
@@ -253,7 +256,7 @@ jobs:
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
+          subject-name: ${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
 
@@ -266,10 +269,11 @@ jobs:
           retention-days: 5
 
   # Job 3: Publish PowerShell module to PSGallery
+  # Depends on build-containers to ensure nothing publishes if Docker builds fail
   publish-powershell:
     name: Publish PowerShell Module
     runs-on: ubuntu-latest
-    needs: validate
+    needs: [validate, build-containers]
 
     steps:
       - name: Checkout

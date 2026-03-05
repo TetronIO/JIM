@@ -536,13 +536,15 @@ This is a GitHub infrastructure issue, not a code problem. When this happens to 
 ```
 validate
 +-- build-containers (needs: validate)
+|   +-- publish-powershell (needs: validate, build-containers)
 |   +-- create-bundle (needs: build-containers)
-+-- publish-powershell (needs: validate)
-+-- create-release (needs: build-containers, publish-powershell, create-bundle)
+|   +-- create-release (needs: build-containers, publish-powershell, create-bundle)
 ```
 
+Nothing publishes unless Docker images build successfully — PSGallery publish waits for `build-containers` to prevent partial releases.
+
 - If `validate` fails: all downstream jobs are skipped — re-run all jobs
-- If `build-containers` fails: `create-bundle` and `create-release` are skipped — re-run failed jobs
+- If `build-containers` fails: everything downstream is skipped (no partial release) — re-run failed jobs
 - If `publish-powershell` fails: `create-release` is skipped — re-run failed jobs (PSGallery publish is idempotent; it skips if the version already exists)
 - If `create-bundle` fails: `create-release` is skipped — re-run failed jobs
 - If `create-release` fails: all artefacts are built, only the GitHub Release needs creating — re-run failed jobs
