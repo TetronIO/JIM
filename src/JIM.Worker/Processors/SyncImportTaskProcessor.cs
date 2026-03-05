@@ -571,7 +571,16 @@ public class SyncImportTaskProcessor
                 SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
         }
 
-        await _jim.Activities.BulkInsertRpeisAsync(_activityRunProfileExecutionItems);
+        var usedRawSql = await _jim.Activities.BulkInsertRpeisAsync(_activityRunProfileExecutionItems);
+
+        if (usedRawSql)
+        {
+            // Production: RPEIs are persisted via raw SQL. Detach from change tracker so no
+            // subsequent SaveChangesAsync re-inserts or overwrites them with stale in-memory state.
+            // This mirrors FlushRpeisAsync in SyncTaskProcessorBase.
+            _jim.Activities.DetachRpeisFromChangeTracker(_activityRunProfileExecutionItems);
+        }
+
         _allPersistedImportRpeis.AddRange(_activityRunProfileExecutionItems);
         _activityRunProfileExecutionItems.Clear();
     }
