@@ -115,6 +115,25 @@ updates:
         patterns:
           - "mcr.microsoft.com/dotnet/*"
 
+  # Docker Compose images (PostgreSQL)
+  # The digest-pinned postgres image in docker-compose.yml is the single source of truth —
+  # Build-ReleaseBundle.ps1 reads it automatically, so updating here updates the bundle too.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/London"
+    reviewers:
+      - "TetronIO/jim-maintainers"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"

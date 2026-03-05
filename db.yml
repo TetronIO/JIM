@@ -1,7 +1,7 @@
 services:
   jim.database:
     container_name: JIM.Database
-    image: postgres:18
+    image: postgres:18@sha256:69e8582b781cb44fa4557b98ed586fe68361e320d9b12f9707494335634f4f3d
     restart: always
     # shm_size must be >= shared_buffers - see docker-compose.yml for sizing guidance
     shm_size: '512mb'

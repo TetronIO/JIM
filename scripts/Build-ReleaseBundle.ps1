@@ -53,13 +53,18 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Pin PostgreSQL image digest for reproducible air-gapped bundles.
-# Update this digest when upgrading PostgreSQL versions.
-# Current: postgres 18 (Debian bookworm), pulled 2026-03-05
-$PostgresImage = "postgres:18@sha256:69e8582b781cb44fa4557b98ed586fe68361e320d9b12f9707494335634f4f3d"
-
 # Determine repository root
 $RepoRoot = Split-Path -Parent $PSScriptRoot
+
+# Read PostgreSQL image reference from docker-compose.yml (single source of truth).
+# The digest-pinned image in docker-compose.yml is maintained by Dependabot.
+$composeContent = Get-Content (Join-Path $RepoRoot "docker-compose.yml") -Raw
+if ($composeContent -match 'image:\s+(postgres:[^\s]+)') {
+    $PostgresImage = $Matches[1]
+    Write-Host "PostgreSQL image from docker-compose.yml: $PostgresImage" -ForegroundColor Gray
+} else {
+    throw "Could not find PostgreSQL image reference in docker-compose.yml"
+}
 Push-Location $RepoRoot
 
 try {
