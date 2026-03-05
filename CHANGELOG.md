@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interactive setup script (`setup.sh`) for one-command deployment — auto-detects latest release, downloads compose files, walks through SSO and database configuration, and starts JIM
 - Production Docker Compose override (`docker-compose.production.yml`) — removes build contexts and uses pre-built GHCR images for admin deployments without requiring source code
 - Standalone deployment files (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example`) attached as individual GitHub release assets for easy download
+- JIM ASCII art banner displayed after successful `Connect-JIM` authentication in the PowerShell module
+- Comprehensive [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) covering prerequisites, topology options, TLS/reverse proxy, upgrades, monitoring, and a production readiness checklist
 - Sortable columns on Attribute Flow table
 - Synchronisation Rules quick link on homepage dashboard
 - `Get-JIMMetaverseObject -All` switch to automatically paginate through all results

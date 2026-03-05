@@ -171,6 +171,8 @@ Each [release](https://github.com/TetronIO/JIM/releases) includes a downloadable
 
 Once running, **access JIM** at [http://localhost:5200](http://localhost:5200) — log in with your identity provider, then use the Example Data feature to populate JIM with sample users and groups for testing.
 
+For production hardening (TLS, reverse proxy, upgrades, monitoring), see the [Deployment Guide](docs/DEPLOYMENT_GUIDE.md).
+
 ### For Developers (Contribute)
 
 **Prerequisites:** Configure SSO using the [SSO Setup Guide](docs/SSO_SETUP_GUIDE.md) — JIM requires authentication even during development.

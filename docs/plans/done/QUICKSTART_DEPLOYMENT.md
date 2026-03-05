@@ -154,8 +154,8 @@ Add entry under `## [Unreleased]` / **Added**.
 
 ## Follow-up Items
 
-- [ ] **PowerShell module banner:** Show the JIM ASCII art banner in the PowerShell module after successful authentication (e.g., after `Connect-JIM`). Gives a consistent branded feel across the setup script and PS module.
-- [ ] **Deployment guide:** Create a comprehensive deployment guide (`docs/DEPLOYMENT_GUIDE.md`) covering both online (connected) and offline (air-gapped) scenarios. Should include prerequisites, network requirements, topology options (bundled vs external DB), TLS/reverse proxy configuration, upgrades, and backup/restore. The README Quick Start gives the 5-minute path; the deployment guide gives the full production-ready walkthrough.
+- [x] **PowerShell module banner:** Show the JIM ASCII art banner in the PowerShell module after successful authentication (e.g., after `Connect-JIM`). Gives a consistent branded feel across the setup script and PS module.
+- [x] **Deployment guide:** Create a comprehensive deployment guide (`docs/DEPLOYMENT_GUIDE.md`) covering both online (connected) and offline (air-gapped) scenarios. Should include prerequisites, network requirements, topology options (bundled vs external DB), TLS/reverse proxy configuration, upgrades, and backup/restore. The README Quick Start gives the 5-minute path; the deployment guide gives the full production-ready walkthrough.
 
 ## Verification
 
