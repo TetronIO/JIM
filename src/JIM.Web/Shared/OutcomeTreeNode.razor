@@ -17,9 +17,9 @@
                 {
                     @* Inline target entity shown on the same row as the outcome type (e.g., Projected → MVO name, Provisioned → CS name) *@
                     <MudText Typo="Typo.body1" Class="mud-text-secondary">@GetInlineSeparator()</MudText>
-                    @if (IsProvisionedWithCsLink)
+                    @if (HasCsLink)
                     {
-                        <MudLink Href="@GetProvisionedCsHref()" Typo="Typo.body1" Class="mud-text-secondary">
+                        <MudLink Href="@GetCsHref()" Typo="Typo.body1" Class="mud-text-secondary">
                             @Outcome.TargetEntityDescription
                         </MudLink>
                     }
@@ -66,7 +66,7 @@
             {
                 @description
             }
-            @if (!string.IsNullOrEmpty(Outcome.DetailMessage) && !IsProvisionedWithCsLink)
+            @if (!string.IsNullOrEmpty(Outcome.DetailMessage) && !HasCsLink)
             {
                 <MudText Typo="Typo.body1" Class="mud-text-secondary">
                     @Outcome.DetailMessage
@@ -150,14 +150,25 @@
         !string.IsNullOrEmpty(Outcome.TargetEntityDescription)
         && Outcome.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Projected
             or ActivityRunProfileExecutionItemSyncOutcomeType.Joined
-            or ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned;
+            or ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
+            or ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
+        && !IsPendingExportChildOfProvisioned;
 
     /// <summary>
-    /// Whether this Provisioned node has a connected system link available.
-    /// The CS integer ID is stored in DetailMessage as a convention for Provisioned outcomes.
+    /// Whether this PendingExportCreated node is a child of a Provisioned node.
+    /// When nested, the CS name is already shown on the parent so we suppress the inline description.
     /// </summary>
-    private bool IsProvisionedWithCsLink =>
-        Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
+    private bool IsPendingExportChildOfProvisioned =>
+        Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
+        && Outcome.ParentSyncOutcomeId.HasValue;
+
+    /// <summary>
+    /// Whether this outcome node has a connected system link available.
+    /// The CS integer ID is stored in DetailMessage as a convention for Provisioned and PendingExportCreated outcomes.
+    /// </summary>
+    private bool HasCsLink =>
+        Outcome.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
+            or ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
         && !string.IsNullOrEmpty(Outcome.DetailMessage)
         && int.TryParse(Outcome.DetailMessage, out _);
 
@@ -189,10 +200,11 @@
 
         return Outcome.OutcomeType switch
         {
-            // Projected, Joined, and Provisioned show their target inline on the title row
+            // Projected, Joined, Provisioned, and PendingExportCreated show their target inline on the title row
             ActivityRunProfileExecutionItemSyncOutcomeType.Projected => null,
             ActivityRunProfileExecutionItemSyncOutcomeType.Joined => null,
             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => null,
+            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => null,
             // AttributeFlow child nodes don't need a separate MVO description line
             ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => null,
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected
@@ -233,9 +245,9 @@
     private static string GetMvoHref(Guid mvoId) => $"/identity/search/{mvoId}";
 
     /// <summary>
-    /// Builds the connected system href for Provisioned outcomes.
+    /// Builds the connected system href for Provisioned and PendingExportCreated outcomes.
     /// The CS integer ID is stored in DetailMessage by convention.
     /// </summary>
-    private string GetProvisionedCsHref() => $"/admin/connected-systems/{Outcome.DetailMessage}";
+    private string GetCsHref() => $"/admin/connected-systems/{Outcome.DetailMessage}";
 
 }

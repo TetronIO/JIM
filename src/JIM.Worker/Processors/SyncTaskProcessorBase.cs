@@ -1284,7 +1284,9 @@ public abstract class SyncTaskProcessorBase
                         peOutcome = SyncOutcomeBuilder.AddChildOutcome(originatingRpei, provisionedParent,
                             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
                             targetEntityId: pendingExport.Id,
-                            targetEntityDescription: provisionedParent.TargetEntityDescription);
+                            targetEntityDescription: provisionedParent.TargetEntityDescription,
+                            detailCount: pendingExport.AttributeValueChanges.Count,
+                            detailMessage: peCsId.ToString());
                     }
                     else if (exportParent != null)
                     {
@@ -1292,14 +1294,18 @@ public abstract class SyncTaskProcessorBase
                         peOutcome = SyncOutcomeBuilder.AddChildOutcome(originatingRpei, exportParent,
                             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
                             targetEntityId: pendingExport.Id,
-                            targetEntityDescription: pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name);
+                            targetEntityDescription: pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name,
+                            detailCount: pendingExport.AttributeValueChanges.Count,
+                            detailMessage: peCsId.ToString());
                     }
                     else
                     {
                         peOutcome = SyncOutcomeBuilder.AddRootOutcome(originatingRpei,
                             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
                             targetEntityId: pendingExport.Id,
-                            targetEntityDescription: pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name);
+                            targetEntityDescription: pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name,
+                            detailCount: pendingExport.AttributeValueChanges.Count,
+                            detailMessage: peCsId.ToString());
                     }
 
                     // Snapshot PE attribute changes so the Causality Tree can render detail
@@ -1322,7 +1328,9 @@ public abstract class SyncTaskProcessorBase
                     var peOutcome = SyncOutcomeBuilder.AddRootOutcome(standardRpei,
                         ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
                         targetEntityId: pe.Id,
-                        targetEntityDescription: pe.ConnectedSystemObject?.ConnectedSystem?.Name);
+                        targetEntityDescription: pe.ConnectedSystemObject?.ConnectedSystem?.Name,
+                        detailCount: pe.AttributeValueChanges.Count,
+                        detailMessage: pe.ConnectedSystemId.ToString());
 
                     SnapshotPendingExportChanges(peOutcome, pe);
                 }
