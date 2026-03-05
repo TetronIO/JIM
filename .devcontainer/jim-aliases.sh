@@ -25,13 +25,13 @@ Database Management:
   jim-db-stop        - Stop PostgreSQL
   jim-db-logs        - View database logs
 
-Docker Stack Management:
+Docker Stack Management (auto-kills local JIM processes):
   jim-stack          - Start Docker stack
   jim-stack-logs     - View Docker stack logs
   jim-stack-down     - Stop Docker stack
   jim-restart        - Recreate stack (re-reads .env, no rebuild)
 
-Docker Builds (rebuild + start):
+Docker Builds (auto-kills local JIM processes, rebuild + start):
   jim-build          - Rebuild all services + start
   jim-build-web      - Rebuild jim.web + start
   jim-build-worker   - Rebuild jim.worker + start
@@ -119,17 +119,47 @@ alias jim-db-stop='docker compose -f db.yml down'
 alias jim-db-logs='docker compose -f db.yml logs -f'
 
 # Docker stack management
-alias jim-stack='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d'
+jim-stack() {
+  _jim_kill_local
+  docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d
+}
 alias jim-stack-logs='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db logs -f'
 alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down && docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --remove-orphans 2>/dev/null || true && docker rm -f samba-ad-primary samba-ad-source samba-ad-target 2>/dev/null || true'
-alias jim-restart='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d --force-recreate'
+jim-restart() {
+  _jim_kill_local
+  docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d --force-recreate
+}
+
+# Kill any locally-running JIM .NET processes (jim-web, jim-worker, jim-scheduler)
+# so they don't hold ports that Docker containers need to bind
+_jim_kill_local() {
+  local pids
+  pids=$(pgrep -f 'dotnet.*JIM\.(Web|Worker|Scheduler)' 2>/dev/null || true)
+  if [ -n "$pids" ]; then
+    echo "Stopping local JIM process(es) (PIDs: $(echo $pids | tr '\n' ' '))..."
+    echo "$pids" | xargs kill 2>/dev/null || true
+    sleep 1
+  fi
+}
 
 # Docker builds (rebuild and start services)
 # VERSION_SUFFIX is generated at build time so each Docker build gets a unique dev version
-alias jim-build='VERSION_SUFFIX="dev.$(date -u +%Y%m%d).$((10#$(date -u +%H)*60+10#$(date -u +%M)))" docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d --build'
-alias jim-build-web='VERSION_SUFFIX="dev.$(date -u +%Y%m%d).$((10#$(date -u +%H)*60+10#$(date -u +%M)))" docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db build jim.web && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d jim.web'
-alias jim-build-worker='VERSION_SUFFIX="dev.$(date -u +%Y%m%d).$((10#$(date -u +%H)*60+10#$(date -u +%M)))" docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db build jim.worker && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d jim.worker'
-alias jim-build-scheduler='VERSION_SUFFIX="dev.$(date -u +%Y%m%d).$((10#$(date -u +%H)*60+10#$(date -u +%M)))" docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db build jim.scheduler && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d jim.scheduler'
+jim-build() {
+  _jim_kill_local
+  VERSION_SUFFIX="dev.$(date -u +%Y%m%d).$((10#$(date -u +%H)*60+10#$(date -u +%M)))" docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d --build
+}
+jim-build-web() {
+  _jim_kill_local
+  VERSION_SUFFIX="dev.$(date -u +%Y%m%d).$((10#$(date -u +%H)*60+10#$(date -u +%M)))" docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db build jim.web && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d jim.web
+}
+jim-build-worker() {
+  _jim_kill_local
+  VERSION_SUFFIX="dev.$(date -u +%Y%m%d).$((10#$(date -u +%H)*60+10#$(date -u +%M)))" docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db build jim.worker && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d jim.worker
+}
+jim-build-scheduler() {
+  _jim_kill_local
+  VERSION_SUFFIX="dev.$(date -u +%Y%m%d).$((10#$(date -u +%H)*60+10#$(date -u +%M)))" docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db build jim.scheduler && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d jim.scheduler
+}
 
 # Reset
 alias jim-reset='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down --rmi local --volumes && docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --rmi local --volumes --remove-orphans 2>/dev/null || true && docker rm -f samba-ad-primary samba-ad-source samba-ad-target sqlserver-hris-a oracle-hris-b postgres-target openldap-test mysql-test 2>/dev/null || true && docker volume ls --format "{{.Name}}" | grep jim-integration | xargs -r docker volume rm 2>/dev/null || true && docker volume rm -f jim-db-volume jim-logs-volume 2>/dev/null || true && echo "JIM reset complete. All containers, images, and volumes removed. Run jim-build to rebuild."'
