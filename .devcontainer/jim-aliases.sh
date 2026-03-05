@@ -118,18 +118,6 @@ alias jim-db='docker compose -f db.yml up -d'
 alias jim-db-stop='docker compose -f db.yml down'
 alias jim-db-logs='docker compose -f db.yml logs -f'
 
-# Docker stack management
-jim-stack() {
-  _jim_kill_local
-  docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d
-}
-alias jim-stack-logs='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db logs -f'
-alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down && docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --remove-orphans 2>/dev/null || true && docker rm -f samba-ad-primary samba-ad-source samba-ad-target 2>/dev/null || true'
-jim-restart() {
-  _jim_kill_local
-  docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d --force-recreate
-}
-
 # Kill any locally-running JIM .NET processes (jim-web, jim-worker, jim-scheduler)
 # so they don't hold ports that Docker containers need to bind
 _jim_kill_local() {
@@ -140,6 +128,21 @@ _jim_kill_local() {
     echo "$pids" | xargs kill 2>/dev/null || true
     sleep 1
   fi
+}
+
+# Clear any previous aliases before defining functions (zsh cannot redefine alias as function)
+unalias jim-stack jim-restart jim-build jim-build-web jim-build-worker jim-build-scheduler 2>/dev/null || true
+
+# Docker stack management
+jim-stack() {
+  _jim_kill_local
+  docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d
+}
+alias jim-stack-logs='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db logs -f'
+alias jim-stack-down='docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down && docker compose -f docker-compose.integration-tests.yml --profile scenario2 --profile scenario8 down --remove-orphans 2>/dev/null || true && docker rm -f samba-ad-primary samba-ad-source samba-ad-target 2>/dev/null || true'
+jim-restart() {
+  _jim_kill_local
+  docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d --force-recreate
 }
 
 # Docker builds (rebuild and start services)
