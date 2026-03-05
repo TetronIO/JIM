@@ -89,9 +89,14 @@ public class PostgresDataRepository : IRepository
         Log.Verbose($"TakeServiceOutOfMaintenanceModeAsync: Done");
     }
 
+    public async Task<bool> HasPendingMigrationsAsync()
+    {
+        return (await Database.Database.GetPendingMigrationsAsync()).Any();
+    }
+
     private async Task MigrateDatabaseAsync()
     {
-        if ((await Database.Database.GetPendingMigrationsAsync()).Any())
+        if (await HasPendingMigrationsAsync())
             await Database.Database.MigrateAsync();
     }
 

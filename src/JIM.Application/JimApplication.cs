@@ -156,6 +156,13 @@ public class JimApplication : IDisposable
     public async Task<bool> IsApplicationReadyAsync()
     {
         Log.Verbose("JIM.Application: IsApplicationReadyAsync()");
+
+        if (await Repository.HasPendingMigrationsAsync())
+        {
+            Log.Information("JIM.Application: Database has pending migrations. Not ready.");
+            return false;
+        }
+
         var serviceSettings = await ServiceSettings.GetServiceSettingsAsync();
         return serviceSettings is { IsServiceInMaintenanceMode: false };
     }

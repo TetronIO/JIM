@@ -54,6 +54,7 @@ public class HealthControllerTests
         mockServiceSettingsRepo.Setup(s => s.GetServiceSettingsAsync())
             .ReturnsAsync(new JIM.Models.Core.ServiceSettings { IsServiceInMaintenanceMode = false });
         mockRepository.Setup(r => r.ServiceSettings).Returns(mockServiceSettingsRepo.Object);
+        mockRepository.Setup(r => r.HasPendingMigrationsAsync()).ReturnsAsync(false);
 
         var application = new JimApplication(mockRepository.Object);
         var controller = new HealthController(application);
@@ -71,6 +72,7 @@ public class HealthControllerTests
         mockServiceSettingsRepo.Setup(s => s.GetServiceSettingsAsync())
             .ReturnsAsync(new JIM.Models.Core.ServiceSettings { IsServiceInMaintenanceMode = false });
         mockRepository.Setup(r => r.ServiceSettings).Returns(mockServiceSettingsRepo.Object);
+        mockRepository.Setup(r => r.HasPendingMigrationsAsync()).ReturnsAsync(false);
 
         var application = new JimApplication(mockRepository.Object);
         var controller = new HealthController(application);
@@ -91,6 +93,7 @@ public class HealthControllerTests
         mockServiceSettingsRepo.Setup(s => s.GetServiceSettingsAsync())
             .ReturnsAsync(new JIM.Models.Core.ServiceSettings { IsServiceInMaintenanceMode = true });
         mockRepository.Setup(r => r.ServiceSettings).Returns(mockServiceSettingsRepo.Object);
+        mockRepository.Setup(r => r.HasPendingMigrationsAsync()).ReturnsAsync(false);
 
         var application = new JimApplication(mockRepository.Object);
         var controller = new HealthController(application);
@@ -101,9 +104,40 @@ public class HealthControllerTests
     }
 
     [Test]
+    public async Task ReadyAsync_WhenPendingMigrations_Returns503()
+    {
+        var mockRepository = new Mock<IRepository>();
+        mockRepository.Setup(r => r.HasPendingMigrationsAsync()).ReturnsAsync(true);
+
+        var application = new JimApplication(mockRepository.Object);
+        var controller = new HealthController(application);
+
+        var result = await controller.ReadyAsync() as ObjectResult;
+
+        Assert.That(result?.StatusCode, Is.EqualTo(503));
+    }
+
+    [Test]
+    public async Task ReadyAsync_WhenPendingMigrations_DoesNotCheckServiceSettings()
+    {
+        var mockRepository = new Mock<IRepository>();
+        var mockServiceSettingsRepo = new Mock<IServiceSettingsRepository>();
+        mockRepository.Setup(r => r.HasPendingMigrationsAsync()).ReturnsAsync(true);
+        mockRepository.Setup(r => r.ServiceSettings).Returns(mockServiceSettingsRepo.Object);
+
+        var application = new JimApplication(mockRepository.Object);
+        var controller = new HealthController(application);
+
+        await controller.ReadyAsync();
+
+        mockServiceSettingsRepo.Verify(s => s.GetServiceSettingsAsync(), Times.Never);
+    }
+
+    [Test]
     public async Task ReadyAsync_WhenDatabaseThrowsException_Returns503()
     {
         var mockRepository = new Mock<IRepository>();
+        mockRepository.Setup(r => r.HasPendingMigrationsAsync()).ReturnsAsync(false);
         var mockServiceSettingsRepo = new Mock<IServiceSettingsRepository>();
         mockServiceSettingsRepo.Setup(s => s.GetServiceSettingsAsync())
             .ThrowsAsync(new Exception("Connection failed"));
@@ -121,6 +155,7 @@ public class HealthControllerTests
     public async Task ReadyAsync_WhenDatabaseThrowsException_ReturnsErrorMessage()
     {
         var mockRepository = new Mock<IRepository>();
+        mockRepository.Setup(r => r.HasPendingMigrationsAsync()).ReturnsAsync(false);
         var mockServiceSettingsRepo = new Mock<IServiceSettingsRepository>();
         mockServiceSettingsRepo.Setup(s => s.GetServiceSettingsAsync())
             .ThrowsAsync(new Exception("Connection failed"));

@@ -21,6 +21,13 @@ public interface IRepository : IDisposable
     public Task InitialisationCompleteAsync();
 
     /// <summary>
+    /// Checks whether there are any EF Core migrations that have not yet been applied to the database.
+    /// Used by secondary application instances (e.g. JIM.Web) to block startup until the primary
+    /// instance (JIM.Worker) has applied all migrations.
+    /// </summary>
+    public Task<bool> HasPendingMigrationsAsync();
+
+    /// <summary>
     /// Clears all tracked entities from the change tracker.
     /// Use after long-running operations where accumulated tracked entities cause performance degradation.
     /// All tracked entities will become detached — any subsequent updates must re-attach them.
