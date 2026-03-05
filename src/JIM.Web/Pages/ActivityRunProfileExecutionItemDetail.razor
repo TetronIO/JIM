@@ -241,7 +241,7 @@
                              CsoObjectTypeName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.Type?.Name ?? _activityRunProfileExecutionItem.ObjectTypeSnapshot)"
                              CsoId="@_activityRunProfileExecutionItem.ConnectedSystemObjectId"
                              CsoConnectedSystemId="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.ConnectedSystemId ?? _connectedSystemHeader?.Id)"
-                             InitiallyExpanded="@(_activityRunProfileExecutionItem.SyncOutcomes.Count(o => o.ParentSyncOutcomeId == null) == 1)" />
+                             InitiallyExpanded="true" />
             </MudPaper>
         }
 
