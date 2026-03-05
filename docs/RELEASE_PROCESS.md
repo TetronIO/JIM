@@ -318,13 +318,20 @@ docker compose ps
 docker compose logs -f
 ```
 
-#### Step 9: Apply Database Migrations
+#### Step 9: Verify Startup
 
-On first run, apply database migrations:
+JIM automatically applies any pending database migrations on first startup — no manual migration step is required. Watch the logs to confirm:
 
 ```bash
-docker compose exec jim.web dotnet ef database update
+docker compose logs jim.worker --tail=50
 ```
+
+Look for "Database migrations applied" or "Database is up to date" in the worker logs. The web interface will show a loading screen until migrations complete and the worker signals readiness.
+
+> **Troubleshooting**: If migrations fail (e.g., due to a permissions issue), the worker logs will contain the full error. Fix the underlying issue and restart the services. As a manual fallback:
+> ```bash
+> docker compose exec jim.web dotnet ef database update
+> ```
 
 #### Step 10: Access JIM
 
@@ -436,6 +443,68 @@ For air-gapped environments, copy the module from the release bundle:
 Copy-Item -Recurse ./powershell/JIM "$env:USERPROFILE\Documents\PowerShell\Modules\"
 Import-Module JIM
 ```
+
+## Rolling Back a Release
+
+If a release causes issues in production, follow these steps to roll back to the previous version.
+
+### 1. Roll Back Docker Services
+
+Update `.env` to point to the previous version:
+
+```bash
+# Change JIM_VERSION to the previous working version
+JIM_VERSION=0.3.0
+```
+
+Then restart services:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
+```
+
+Docker images are immutable — the previous version's images are still available locally (or in GHCR for online environments). This is the fastest rollback path.
+
+### 2. Roll Back Database Migrations (If Needed)
+
+If the new release applied database migrations, you may need to reverse them. First, identify the previous migration:
+
+```bash
+# List applied migrations
+docker compose exec jim.web dotnet ef migrations list
+```
+
+Then roll back to the migration that was active before the upgrade:
+
+```bash
+docker compose exec jim.web dotnet ef database update <PreviousMigrationName>
+```
+
+> **Important**: This only works if the migration has a `Down()` method. Always verify migration reversibility before releasing. If the migration is not reversible, restore from your pre-upgrade database backup instead.
+
+### 3. Roll Back PowerShell Module
+
+```powershell
+# From PSGallery (online)
+Install-Module JIM -RequiredVersion 0.3.0 -Force
+
+# From air-gapped bundle (offline)
+Remove-Item -Recurse "$env:PSModulePath/JIM"
+Copy-Item -Recurse ./previous-bundle/powershell/JIM "$env:PSModulePath/"
+```
+
+### 4. Clean Up GitHub Release (If Needed)
+
+If you need to retract the release:
+- Delete or edit the GitHub Release via the Releases page
+- Docker images on GHCR can be deleted via the Packages settings UI
+- PSGallery packages cannot be deleted, but you can publish a corrected version
+
+### Prevention
+
+- **Always backup your database** before upgrading JIM
+- Deploy to a staging environment first and run smoke tests before promoting to production
+- Keep previous Docker images available locally — do not prune images immediately after upgrading
 
 ## Troubleshooting
 

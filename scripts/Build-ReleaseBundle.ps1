@@ -55,6 +55,16 @@ $ErrorActionPreference = 'Stop'
 
 # Determine repository root
 $RepoRoot = Split-Path -Parent $PSScriptRoot
+
+# Read PostgreSQL image reference from docker-compose.yml (single source of truth).
+# The digest-pinned image in docker-compose.yml is maintained by Dependabot.
+$composeContent = Get-Content (Join-Path $RepoRoot "docker-compose.yml") -Raw
+if ($composeContent -match 'image:\s+(postgres:[^\s]+)') {
+    $PostgresImage = $Matches[1]
+    Write-Host "PostgreSQL image from docker-compose.yml: $PostgresImage" -ForegroundColor Gray
+} else {
+    throw "Could not find PostgreSQL image reference in docker-compose.yml"
+}
 Push-Location $RepoRoot
 
 try {
@@ -124,12 +134,17 @@ try {
             Write-Host "  Exported: $tarPath" -ForegroundColor Green
         }
 
-        # Export PostgreSQL image
+        # Export PostgreSQL image (digest-pinned for reproducibility)
         if ($IncludePostgres) {
-            Write-Host "  Pulling and exporting postgres:18..." -ForegroundColor Gray
-            docker pull postgres:18
+            Write-Host "  Pulling and exporting PostgreSQL (digest-pinned)..." -ForegroundColor Gray
+            docker pull $PostgresImage
+
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to pull PostgreSQL image"
+            }
+
             $postgresTar = Join-Path $bundlePath "docker-images/postgres-18.tar"
-            docker save -o $postgresTar postgres:18
+            docker save -o $postgresTar $PostgresImage
             Write-Host "  Exported: $postgresTar" -ForegroundColor Green
         }
     }
