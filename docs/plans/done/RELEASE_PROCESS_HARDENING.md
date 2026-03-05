@@ -1,6 +1,7 @@
 # Release Process Hardening
 
-- **Status:** Planned
+- **Status:** Done
+- **Note:** Phase 7 (multi-architecture builds) deferred — see [#375](https://github.com/TetronIO/JIM/issues/375)
 - **Priority:** High
 - **Effort:** Large (9 phases, most individually small)
 
@@ -50,7 +51,7 @@ Phases are ordered by risk reduction per unit of effort. Each phase is independe
 
 ---
 
-### Phase 1: Version Validation Gate
+### Phase 1: Version Validation Gate ✅
 
 **Problem**: If someone pushes tag `v0.4.0` but the VERSION file still says `0.3.0`, Docker images get tagged `0.4.0` (from the git tag) but the .NET assemblies report `0.3.0` (from `Directory.Build.props`). There is no CI gate to catch this.
 
@@ -91,7 +92,7 @@ Also validate the PowerShell manifest `ModuleVersion` matches (numeric part):
 
 ---
 
-### Phase 2: Conditional `latest` Tag
+### Phase 2: Conditional `latest` Tag ✅
 
 **Problem**: Every tag push — including prereleases like `v0.4.0-alpha` — applies the `latest` Docker tag. Prerelease images should never be `latest`.
 
@@ -114,7 +115,7 @@ The `enable` condition checks whether the tag contains a hyphen (SemVer prerelea
 
 ---
 
-### Phase 3: Container Vulnerability Scanning
+### Phase 3: Container Vulnerability Scanning ✅
 
 **Problem**: Images are pushed without checking for known CVEs. A base image update might introduce vulnerabilities that slip through undetected.
 
@@ -147,7 +148,7 @@ Add after the build step in `build-containers`, before the push:
 
 ---
 
-### Phase 4: Smoke Test After Build
+### Phase 4: Smoke Test After Build ✅
 
 **Problem**: The `validate` job tests .NET code, but never tests whether the containerised application actually starts and responds to health checks. A Dockerfile misconfiguration or missing runtime dependency could produce images that pass unit tests but fail to boot.
 
@@ -191,7 +192,7 @@ Add a step after image build in `build-containers` (or as a separate job):
 
 ---
 
-### Phase 5: Pin PostgreSQL Digest in Bundle Script
+### Phase 5: Pin PostgreSQL Digest in Bundle Script ✅
 
 **Problem**: `Build-ReleaseBundle.ps1` does `docker pull postgres:18` — an unpinned floating tag. Two bundle builds on different days could ship different PostgreSQL binaries. This contradicts the project's own dependency pinning policy.
 
@@ -220,7 +221,7 @@ Also update the `docker save` command to use `$PostgresImage`.
 
 ---
 
-### Phase 6: SBOM and SLSA Provenance Attestation
+### Phase 6: SBOM and SLSA Provenance Attestation ✅
 
 **Problem**: Images are signed with cosign but lack SBOM (Software Bill of Materials) and SLSA provenance attestations. For government and defence customers, these are increasingly mandatory. CISA's Secure by Design guidance and the UK Software Security Code of Practice both require supply chain transparency.
 
@@ -301,7 +302,7 @@ Upload the SBOM files as release assets alongside the bundle and checksums.
 
 ---
 
-### Phase 8: Docker Layer Caching in CI
+### Phase 8: Docker Layer Caching in CI ✅
 
 **Problem**: Every release does a full Docker build from scratch. This wastes CI minutes and slows the release pipeline.
 
@@ -336,7 +337,7 @@ Update the build-push step in `build-containers`:
 
 ---
 
-### Phase 9: Rollback Documentation, Changelog Validation, and Stale Docs Cleanup
+### Phase 9: Rollback Documentation, Changelog Validation, and Stale Docs Cleanup ✅
 
 **Problem**: If a release goes wrong in production, there is no documented rollback procedure. Separately, if the changelog extraction regex fails, the release ships with a generic "Release X.Y.Z" note and nobody is alerted.
 

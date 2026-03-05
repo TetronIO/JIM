@@ -53,6 +53,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Pin PostgreSQL image digest for reproducible air-gapped bundles.
+# Update this digest when upgrading PostgreSQL versions.
+# Current: postgres 18 (Debian bookworm), pulled 2026-03-05
+$PostgresImage = "postgres:18@sha256:69e8582b781cb44fa4557b98ed586fe68361e320d9b12f9707494335634f4f3d"
+
 # Determine repository root
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $RepoRoot
@@ -124,12 +129,17 @@ try {
             Write-Host "  Exported: $tarPath" -ForegroundColor Green
         }
 
-        # Export PostgreSQL image
+        # Export PostgreSQL image (digest-pinned for reproducibility)
         if ($IncludePostgres) {
-            Write-Host "  Pulling and exporting postgres:18..." -ForegroundColor Gray
-            docker pull postgres:18
+            Write-Host "  Pulling and exporting PostgreSQL (digest-pinned)..." -ForegroundColor Gray
+            docker pull $PostgresImage
+
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to pull PostgreSQL image"
+            }
+
             $postgresTar = Join-Path $bundlePath "docker-images/postgres-18.tar"
-            docker save -o $postgresTar postgres:18
+            docker save -o $postgresTar $PostgresImage
             Write-Host "  Exported: $postgresTar" -ForegroundColor Green
         }
     }

@@ -2,8 +2,8 @@
 # Triggered by pushing a tag like v0.2.0
 #
 # This workflow:
-# 1. Validates the build and runs tests
-# 2. Builds and pushes Docker images to ghcr.io
+# 1. Validates the build, tests, and version consistency
+# 2. Builds, scans, smoke-tests, and pushes Docker images to ghcr.io
 # 3. Publishes PowerShell module to PSGallery
 # 4. Creates an air-gapped release bundle
 # 5. Creates a GitHub Release with all assets
@@ -22,10 +22,11 @@ env:
 permissions:
   contents: write
   packages: write
-  id-token: write  # For cosign signing
+  id-token: write    # For cosign signing
+  attestations: write # For SLSA provenance
 
 jobs:
-  # Job 1: Validate build and tests
+  # Job 1: Validate build, tests, and version consistency
   validate:
     name: Validate Build & Tests
     runs-on: ubuntu-latest
@@ -33,6 +34,29 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # Phase 1: Version validation gate
+      - name: Validate version consistency
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
+          if [ "$TAG_VERSION" != "$FILE_VERSION" ]; then
+            echo "::error::Version mismatch: tag is v${TAG_VERSION} but VERSION file contains ${FILE_VERSION}"
+            exit 1
+          fi
+          echo "Version validated: ${TAG_VERSION}"
+
+      - name: Validate PowerShell manifest version
+        shell: pwsh
+        run: |
+          $tagVersion = '${{ github.ref_name }}'.TrimStart('v')
+          $numericVersion = ($tagVersion -split '-')[0]  # Strip prerelease suffix
+          $manifest = Import-PowerShellDataFile './src/JIM.PowerShell/JIM.psd1'
+          if ($manifest.ModuleVersion -ne $numericVersion) {
+            Write-Error "PowerShell manifest version ($($manifest.ModuleVersion)) does not match tag ($numericVersion)"
+            exit 1
+          }
+          Write-Host "PowerShell manifest version validated: $numericVersion"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -58,7 +82,7 @@ jobs:
           $config.Output.Verbosity = 'Detailed'
           Invoke-Pester -Configuration $config
 
-  # Job 2: Build and push Docker images
+  # Job 2: Build, scan, smoke-test, and push Docker images
   build-containers:
     name: Build & Push Docker Images
     runs-on: ubuntu-latest
@@ -69,10 +93,13 @@ jobs:
         include:
           - image: jim-web
             dockerfile: src/JIM.Web/Dockerfile
+            has-health-endpoint: true
           - image: jim-worker
             dockerfile: src/JIM.Worker/Dockerfile
+            has-health-endpoint: false
           - image: jim-scheduler
             dockerfile: src/JIM.Scheduler/Dockerfile
+            has-health-endpoint: false
 
     steps:
       - name: Checkout
@@ -81,6 +108,10 @@ jobs:
       - name: Get version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      # Phase 8: Docker layer caching
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -97,9 +128,61 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
 
-      - name: Build and push Docker image
+      # Phase 3 & 4: Build locally first, scan, smoke-test, then push
+      - name: Build Docker image (local)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          load: true
+          tags: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.VERSION }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+
+      # Phase 3: Container vulnerability scanning
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+
+      # Phase 4: Smoke test (jim-web only — worker and scheduler have no HTTP endpoint)
+      - name: Smoke test container
+        if: matrix.has-health-endpoint
+        run: |
+          IMAGE="${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}"
+
+          docker run -d --name smoke-test \
+            -e ASPNETCORE_ENVIRONMENT=Production \
+            -e ASPNETCORE_URLS=http://+:80 \
+            -p 8080:80 \
+            "$IMAGE"
+
+          # Wait for container to start (up to 30 seconds)
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/api/v1/health/live 2>/dev/null; then
+              echo "Health check passed"
+              docker rm -f smoke-test
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "::error::Container failed to pass health check within 30 seconds"
+          docker logs smoke-test
+          docker rm -f smoke-test
+          exit 1
+
+      # Push the image (after scan and smoke test pass)
+      - name: Push Docker image
         id: build
         uses: docker/build-push-action@v6
         with:
@@ -110,6 +193,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.version.outputs.VERSION }}
+          cache-from: type=gha,scope=${{ matrix.image }}
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
@@ -118,6 +202,37 @@ jobs:
         run: |
           IMAGE_REF=$(echo "${{ env.IMAGE_PREFIX }}/${{ matrix.image }}" | tr '[:upper:]' '[:lower:]')
           cosign sign --yes "${IMAGE_REF}@${{ steps.build.outputs.digest }}"
+
+      # Phase 6a: SBOM generation
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom-${{ matrix.image }}.spdx.json
+
+      - name: Attach SBOM to image
+        run: |
+          IMAGE_REF=$(echo "${{ env.IMAGE_PREFIX }}/${{ matrix.image }}" | tr '[:upper:]' '[:lower:]')
+          cosign attest --yes --type spdxjson \
+            --predicate sbom-${{ matrix.image }}.spdx.json \
+            "${IMAGE_REF}@${{ steps.build.outputs.digest }}"
+
+      # Phase 6b: SLSA provenance attestation
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      # Phase 6c: Upload SBOM as artifact for GitHub Release
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.image }}
+          path: sbom-${{ matrix.image }}.spdx.json
+          retention-days: 5
 
   # Job 3: Publish PowerShell module to PSGallery
   publish-powershell:
@@ -273,6 +388,14 @@ jobs:
           name: checksums
           path: ./artifacts
 
+      - name: Download SBOM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: sbom-*
+          path: ./artifacts/sbom
+          merge-multiple: true
+
+      # Phase 9b: Changelog extraction validation
       - name: Extract release notes from CHANGELOG
         id: changelog
         shell: pwsh
@@ -287,7 +410,11 @@ jobs:
           if ($changelog -match $pattern) {
             $notes = $Matches[1].Trim()
           } else {
-            $notes = "Release $version"
+            Write-Error "No changelog section found for version $version. Ensure CHANGELOG.md has a ## [$version] section."
+            exit 1
+          }
+          if ($notes.Length -lt 20) {
+            Write-Warning "Changelog section for $version is suspiciously short ($($notes.Length) chars). Verify content."
           }
 
           # Write to file for GitHub CLI
@@ -306,6 +433,7 @@ jobs:
             --notes-file ./release-notes.md \
             ./artifacts/jim-release-${VERSION}.tar.gz \
             ./artifacts/checksums.sha256 \
+            ./artifacts/sbom/*.spdx.json \
             ./docker-compose.yml \
             ./docker-compose.production.yml \
             ./.env.example
