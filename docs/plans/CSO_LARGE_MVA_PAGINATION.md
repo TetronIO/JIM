@@ -6,90 +6,160 @@
 
 ## Problem Statement
 
-The CSO detail page (`ConnectedSystemObjectDetail.razor`) and the API endpoint (`GET /api/connected-systems/{id}/objects/{id}`) have performance and UX issues when a CSO has multi-valued attributes with large numbers of values (e.g. a group with 10,000 members).
+The `GetConnectedSystemObjectAsync` repository method eagerly loads ALL attribute values with deep `.Include()` chains. For a CSO with a large multi-valued attribute (e.g. a group with 10,000 members), this loads the full entity graph into memory in a single query — including every reference value and their attribute values.
 
-### Root Causes
+This is a **data layer problem** that affects every consumer:
 
-1. **Database query loads all values eagerly** — `GetConnectedSystemObjectAsync` in `ConnectedSystemRepository` uses deep `.Include()` chains to load ALL attribute values, their reference values, and those reference values' own attribute values. For a 10K-member group, this produces a massive query even with `AsSplitQuery()`.
-
-2. **All values held in Blazor Server memory** — The `CsoMvaDialog` receives the full `List<ConnectedSystemObjectAttributeValue>` in-memory. While it uses `Virtualize="true"` for rendering, the entire dataset is still loaded server-side.
-
-3. **API returns unbounded attribute values** — `ConnectedSystemObjectDetailDto.FromEntity()` maps ALL attribute values into the response JSON with no cap or pagination.
-
-### Affected Code
-
-| File | Concern |
+| Consumer | Impact |
 |---|---|
-| `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` (~line 1026) | Eager loading all values with deep includes |
-| `src/JIM.Web/Pages/Admin/ConnectedSystemObjectDetail.razor` | Page consumes full CSO with all values |
-| `src/JIM.Web/Shared/CsoMvaDialog.razor` | Dialog receives all values in-memory |
-| `src/JIM.Web/Controllers/Api/SynchronisationController.cs` (~line 377) | API endpoint returns all values |
-| `src/JIM.Web/Models/Api/ConnectedSystemDto.cs` (~line 164) | DTO maps all values without cap |
-| `src/JIM.Application/Servers/ConnectedSystemServer.cs` (~line 2512) | Pass-through, but shares method with worker |
+| **Worker** (sync processing) | Memory pressure, change tracker overhead, potential OOM/timeouts with concurrent sync tasks processing multiple large groups |
+| **Web UI** (CSO detail page) | Slow page load, all values held in Blazor Server memory |
+| **API** (CSO detail endpoint) | Unbounded JSON response, slow serialisation |
+
+### Root Cause: Deep Eager Loading
+
+The core issue is in `ConnectedSystemRepository.GetConnectedSystemObjectAsync` (~line 1026):
+
+```
+ConnectedSystemObject
+  +-- AttributeValues (10,000 for a large group)
+       +-- Attribute
+       +-- ReferenceValue (another ConnectedSystemObject)
+            +-- Type
+            +-- AttributeValues (all attributes of referenced CSO)
+                 +-- Attribute
+  +-- MetaverseObject
+       +-- Type
+       +-- AttributeValues
+            +-- Attribute
+```
+
+For a group with 10K members, this loads ~10K `ConnectedSystemObjectAttributeValue` entities, each with a `ReferenceValue` navigation pointing to another `ConnectedSystemObject`, each with their own `AttributeValues`. That's potentially **100K+ tracked entities** for a single group object.
+
+### Stability Risks
+
+- **EF Core change tracker** scales poorly with entity count — `SaveChangesAsync` diffs every tracked entity
+- **Memory pressure** — multiple groups being processed concurrently compounds the problem
+- **Query timeouts** — even with `AsSplitQuery()`, the split queries for 10K reference values' attribute values are heavy
+- **Blazor Server** holds the full entity graph in circuit memory for the duration of the page session
 
 ### What Already Works Well
 
-- Inline display is capped at `MvaInlineThreshold = 10` with a "+N more" button — the page itself won't render 10K components.
-- `CsoMvaDialog` uses `Virtualize="true"` and has search/filter — good UX patterns, just needs server-side backing.
+- Inline display on the CSO detail page is capped at `MvaInlineThreshold = 10` with a "+N more" button
+- `CsoMvaDialog` uses `Virtualize="true"` and has search/filter — good UX patterns, just needs server-side backing
 
-## Proposed Solution: Hybrid Approach
+## Proposed Solution: Fix at the Data Layer, Resolve Upward
 
-Combine a quick repository-level cap with a new paginated attribute endpoint for full access.
+The fix must start at the repository/data layer, with both worker and web/API consuming leaner queries appropriate to their needs.
 
-### Phase 1: Cap Values in Detail View (Quick Win)
+```
++---------------------------------------------------+
+| Data Layer (Repository)                           |
+|                                                   |
+| GetCsoWithLightweightRefsAsync()        (new)     |
+|   Loads CSO + attribute values, but only IDs/FKs  |
+|   for reference values (no deep includes)         |
+|                                                   |
+| GetAttributeValuesPagedAsync()          (new)     |
+|   Paginated attribute values for a single attr    |
+|   with optional search/filter                     |
+|                                                   |
+| GetCsoReferenceProjectionsAsync()       (new)     |
+|   Lightweight projection: (RefValueId,            |
+|   MetaverseObjectId) — just what sync needs       |
++---------------------------------------------------+
+          |                          |
+          v                          v
++------------------+    +---------------------+
+| Web / API        |    | Worker              |
+| Server-side      |    | Lightweight ref     |
+| pagination for   |    | projections instead |
+| display          |    | of deep entity      |
++------------------+    | graphs              |
+                        +---------------------+
+```
 
-**Goal:** Prevent the main CSO detail load from fetching unbounded values.
+### Phase 1: Lightweight Worker Queries
 
-#### 1.1 New Repository Method for Detail View
+**Goal:** Eliminate deep eager loading from sync processing. The worker doesn't need full entity graphs — it needs specific data for specific operations.
 
-Create a new method `GetConnectedSystemObjectDetailAsync` (or add an overload) that:
+#### 1.1 Analyse Worker Usage Patterns
+
+The worker uses CSO attribute values in these ways:
+
+| Operation | What it needs | Current cost |
+|---|---|---|
+| **Scoping evaluation** (`IsCsoInScopeForImportRule`) | SVA values for the CSO being evaluated | Loads ALL values including MVA references |
+| **Attribute mapping** (`SyncRuleMappingProcessor`) | CSO attribute values by attribute ID | Loads ALL values; filters in memory |
+| **Reference resolution** (`ProcessReferenceAttribute`) | For each ref value: `ReferenceValueId`, `ReferenceValue.MetaverseObjectId` | Loads full `ReferenceValue` entity with all its `AttributeValues` |
+| **Export confirmation** | CSO attribute values by attribute ID | Loads ALL values; filters in memory |
+
+Key insight: `ProcessReferenceAttribute` only needs `(ReferenceValueId, MetaverseObjectId)` per reference — not the full referenced CSO entity with all its attributes. The deep includes exist only because the detail page needs display names and secondary IDs.
+
+#### 1.2 New Repository Method: Lightweight CSO Load
+
+Create `GetConnectedSystemObjectWithAttributesAsync` (or rename/refactor existing) that:
+
+- Loads the CSO with its `AttributeValues` and their `Attribute` metadata
+- Loads `ReferenceValue` navigation but **only** includes `Type` and `MetaverseObjectId` — NOT the referenced CSO's own `AttributeValues`
+- Loads `MetaverseObject` with `Type` and `AttributeValues` (needed for mapping)
+
+This eliminates the most expensive part: loading every referenced CSO's full attribute set.
+
+```
+Before (current):
+  CSO -> 10K AttributeValues -> 10K ReferenceValues -> 10K * N AttributeValues
+  ~100K+ entities
+
+After (Phase 1):
+  CSO -> 10K AttributeValues -> 10K ReferenceValues (Id, Type, MetaverseObjectId only)
+  ~20K entities
+```
+
+#### 1.3 Evaluate Whether Worker Needs Full Collection
+
+Currently `SyncRuleMappingProcessor.ProcessReferenceAttribute` loads all reference values to compute a full diff (add/remove). Consider whether this can be chunked or streamed for very large MVAs, though this may be Phase 3 scope depending on measured improvement from 1.2.
+
+### Phase 2: Web/API Pagination
+
+**Goal:** The web UI and API never load unbounded attribute values.
+
+#### 2.1 New Repository Method: Detail View with Cap
+
+Create `GetConnectedSystemObjectForDetailAsync` that:
 
 - Loads all single-valued attributes normally (lightweight)
 - For multi-valued attributes, loads only the first N values (e.g. 100)
-- Returns a total value count per attribute so the UI/API can show "100 of 10,247"
+- Returns a total value count per attribute via a separate `COUNT(*)` query
 
 ```
-+----------------------------------------------+
-| GetConnectedSystemObjectAsync (existing)     |
-| - Used by worker/sync processing             |
-| - Loads ALL values (needed for sync logic)   |
-+----------------------------------------------+
-
 +----------------------------------------------+
 | GetConnectedSystemObjectForDetailAsync (new) |
 | - Used by web UI and API detail endpoints    |
 | - Caps MVA values at N per attribute         |
 | - Returns total count per attribute          |
+| - Includes reference display info for the    |
+|   capped set only                            |
 +----------------------------------------------+
 ```
 
-**Key consideration:** The existing `GetConnectedSystemObjectAsync` is also used by `SyncTaskProcessorBase` which needs all values. We must NOT change its behaviour. Instead, add a new method specifically for the detail/display use case.
+#### 2.2 New Repository Method: Paginated Attribute Values
 
-#### 1.2 Application Layer Changes
+New method on `IConnectedSystemRepository`:
 
-- Add `GetConnectedSystemObjectForDetailAsync` to `ConnectedSystemServer`
-- Returns a DTO or wrapper that includes per-attribute total counts
-- Web page and API controller switch to this method
-
-#### 1.3 DTO Changes
-
-Add metadata to the API response:
-
-```
-ConnectedSystemObjectDetailDto
-  AttributeValues: [...]          // capped at N
-  AttributeValueSummaries:        // NEW: per-attribute metadata
-    - AttributeName: "member"
-      TotalCount: 10247
-      ReturnedCount: 100
-      HasMore: true
+```csharp
+Task<PagedResult<ConnectedSystemObjectAttributeValue>>
+    GetAttributeValuesPagedAsync(
+        Guid connectedSystemObjectId,
+        string attributeName,
+        int page,
+        int pageSize,
+        string? searchText);
 ```
 
-### Phase 2: Paginated Attribute Values Endpoint
+Queries the database with `Skip`/`Take` and optional `WHERE` filtering. For reference attributes, includes display info (type name, display name, secondary ID) only for the current page.
 
-**Goal:** Allow the dialog and API consumers to page through large MVAs server-side.
-
-#### 2.1 New API Endpoint
+#### 2.3 New API Endpoint
 
 ```
 GET /api/connected-systems/{csId}/objects/{csoId}/attributes/{attributeName}/values
@@ -115,46 +185,76 @@ Response:
 - Supports pagination
 - Used by both API consumers and the Blazor dialog
 
-#### 2.2 Repository Method
+#### 2.4 Application Layer Changes
 
-New method on `IConnectedSystemRepository`:
+- Add `GetConnectedSystemObjectForDetailAsync` to `ConnectedSystemServer`
+- Add `GetAttributeValuesPagedAsync` to `ConnectedSystemServer`
+- Web page and API controller switch to these methods
 
-```csharp
-Task<PagedResult<ConnectedSystemObjectAttributeValue>>
-    GetAttributeValuesPagedAsync(
-        Guid connectedSystemObjectId,
-        string attributeName,
-        int page,
-        int pageSize,
-        string? searchText);
+#### 2.5 DTO Changes
+
+Add metadata to the API response:
+
+```
+ConnectedSystemObjectDetailDto
+  AttributeValues: [...]          // capped at N per attribute
+  AttributeValueSummaries:        // NEW: per-attribute metadata
+    - AttributeName: "member"
+      TotalCount: 10247
+      ReturnedCount: 100
+      HasMore: true
 ```
 
-This queries the database directly with `Skip`/`Take` and optional `WHERE` filtering, avoiding loading all values into memory.
-
-#### 2.3 CsoMvaDialog: Server-Side Data
+#### 2.6 CsoMvaDialog: Server-Side Data
 
 Convert `CsoMvaDialog` from client-side filtering to `MudTable` `ServerData` callback:
 
-- Dialog receives only the attribute name, CSO ID, and total count
+- Dialog receives only the attribute name, CSO ID, connected system ID, and total count
 - On open (and on search/page change), calls the application layer which calls the paginated repository method
 - Search and pagination happen in the database
 - Memory usage is bounded to one page of results
 
-#### 2.4 Web Page Changes
+#### 2.7 Web Page Changes
 
-- `ConnectedSystemObjectDetail.razor` passes CSO ID + attribute name to the dialog instead of the full value list
+- `ConnectedSystemObjectDetail.razor` uses the detail-view method (capped values)
+- Passes CSO ID + attribute name to the dialog instead of the full value list
 - No change to inline display (already capped at 10)
 
-### Phase 3: Optimise Reference Value Loading (Optional)
+### Phase 3: Further Worker Optimisation (If Needed)
 
-The current query loads reference values' own attribute values to display secondary external IDs. For 10K reference members, this means loading 10K CSOs' attribute values.
+After measuring the impact of Phase 1, consider these additional optimisations if large MVA processing is still problematic:
 
-Options:
-- **Materialise display names** — Store a `DisplayName` column on `ConnectedSystemObject` that's maintained during import, avoiding the need to traverse reference value attributes
-- **Lazy-load reference details** — Load only reference value IDs and type in the main query; load display names on demand (per page) in the paginated endpoint
-- **Database view/projection** — Create a lightweight projection that returns just what the UI needs (type name, display name, secondary ID) without full entity loading
+#### 3.1 Chunked Reference Processing
 
-This is the biggest performance win for reference-heavy attributes but also the largest change.
+For `ProcessReferenceAttribute` with very large MVAs (e.g. 50K+ members):
+
+- Load reference values in chunks (e.g. 1000 at a time) using `Skip`/`Take`
+- Build the resolved MVO ID set incrementally
+- Perform the diff (add/remove) after all chunks are processed
+- This bounds peak memory to chunk size rather than full MVA size
+
+#### 3.2 Projection-Based Reference Loading
+
+Instead of loading full `ConnectedSystemObject` entities as reference values, use a projection:
+
+```csharp
+Task<List<CsoReferenceProjection>> GetCsoReferenceProjectionsAsync(
+    Guid connectedSystemObjectId,
+    int attributeId);
+
+// Returns only what ProcessReferenceAttribute needs:
+record CsoReferenceProjection(
+    Guid AttributeValueId,
+    Guid? ReferenceValueId,
+    Guid? MetaverseObjectId,
+    string? UnresolvedReferenceValue);
+```
+
+This avoids EF Core entity tracking entirely for reference resolution.
+
+#### 3.3 Materialised Display Names
+
+Store a `DisplayName` column on `ConnectedSystemObject` maintained during import, eliminating the need to traverse reference value attribute values for display purposes. Benefits both the detail view and the worker (logging/diagnostics).
 
 ## Design Decisions Needed
 
@@ -163,44 +263,47 @@ This is the biggest performance win for reference-heavy attributes but also the 
 | Default cap for detail view | 50 / 100 / 200 | 100 — balances completeness with performance |
 | Default page size for paginated endpoint | 25 / 50 / 100 | 50 — standard pagination size |
 | Should API always include `AttributeValueSummaries`? | Always / Only when capped | Always — API consumers need predictable structure |
-| Split repository method or parameterise? | New method / Optional parameter | New method — keeps sync path untouched, clear separation of concerns |
-| Phase 3 approach | Materialised display name / Lazy load / Projection | Defer decision until Phase 1+2 results are measured |
+| Phase 1 approach | Remove deep includes / Projection / Chunked | Remove deep includes first (simplest), measure, then consider projection |
+| Phase 3 trigger | Always implement / Only if Phase 1 insufficient | Measure after Phase 1 — may not be needed for typical deployments |
 
 ## Implementation Order
 
 ```
-Phase 1 (Quick Win)
-+-- 1.1 New repository method with value cap
-+-- 1.2 Application layer method
-+-- 1.3 DTO changes with summaries
-+-- 1.4 Update web page + API controller to use new method
+Phase 1 (Worker Safety)
++-- 1.1 Analyse and document worker attribute usage patterns
++-- 1.2 New lightweight repository method (no deep ref includes)
++-- 1.3 Update worker to use lightweight method
 +-- Tests for all of the above
 
-Phase 2 (Full Pagination)
-+-- 2.1 New paginated repository method
-+-- 2.2 New API endpoint
-+-- 2.3 Application layer method
-+-- 2.4 Convert CsoMvaDialog to ServerData
-+-- 2.5 Update web page to pass IDs instead of values
+Phase 2 (Web/API Pagination)
++-- 2.1 New detail-view repository method with value cap
++-- 2.2 New paginated attribute values repository method
++-- 2.3 New paginated API endpoint
++-- 2.4 Application layer methods
++-- 2.5 DTO changes with summaries
++-- 2.6 Convert CsoMvaDialog to ServerData
++-- 2.7 Update web page to use detail-view method
 +-- Tests for all of the above
 
-Phase 3 (Optional Optimisation)
+Phase 3 (Further Optimisation — If Needed)
 +-- Measure performance after Phase 1+2
-+-- Decide on reference value loading strategy
-+-- Implement if needed
++-- 3.1 Chunked reference processing (if memory still an issue)
++-- 3.2 Projection-based reference loading (if change tracker overhead still an issue)
++-- 3.3 Materialised display names (if reference display info is a bottleneck)
 ```
 
 ## Non-Goals
 
-- Changing how sync processing loads CSOs (worker needs full data)
 - Pagination of the CSO object list page (separate concern)
 - Pagination of change history (separate concern, already bounded by time)
+- Changing sync semantics — the worker must still process all values, just loaded more efficiently
 
 ## Acceptance Criteria
 
+- [ ] Worker loads CSOs without deep-including all referenced CSOs' attribute values
+- [ ] Worker remains stable when processing groups with 10K+ members
 - [ ] CSO detail page loads in reasonable time for a group with 10K+ members
 - [ ] Web UI shows value count and provides access to all values via paginated dialog
 - [ ] API endpoint returns capped values with metadata indicating total count
 - [ ] New paginated attribute values API endpoint supports search and pagination
-- [ ] Existing sync/worker functionality is unaffected
 - [ ] Unit tests cover new repository methods, application layer, and API endpoints
