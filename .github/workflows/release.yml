@@ -191,13 +191,14 @@ jobs:
         run: |
           IMAGE="${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}"
 
-          # Start with a dummy connection string — the service will log its startup
+          # Start with dummy config — the service will log its startup
           # message before attempting database connection
           docker run -d --name smoke-test \
             -e JIM_DB_HOSTNAME=localhost \
             -e JIM_DB_NAME=jim \
             -e JIM_DB_USERNAME=jim \
             -e JIM_DB_PASSWORD=dummy \
+            -e JIM_LOG_LEVEL=Information \
             "$IMAGE"
 
           # Wait up to 10 seconds for the startup log message
