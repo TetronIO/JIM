@@ -2126,9 +2126,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             await transaction.CommitAsync();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
         {
-            // Fallback for unit tests with mocked DbContext where raw SQL is not available
+            // Fallback for unit tests with mocked DbContext where raw SQL is not available.
+            // Only catch InvalidOperationException (in-memory provider can't begin transactions)
+            // and NullReferenceException (mocked DbContext). All other exceptions (SQL errors,
+            // constraint violations) must propagate — falling back to AddRangeAsync in production
+            // causes graph traversal identity conflicts with already-tracked entities.
+            Log.Warning(ex, "CreatePendingExportsAsync: Raw SQL path failed, falling back to EF AddRangeAsync (test environment)");
             await Repository.Database.PendingExports.AddRangeAsync(pendingExportsList);
             await Repository.Database.SaveChangesAsync();
         }
@@ -3479,16 +3484,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 var pe = chunk[i];
                 parameters.Add(pe.Id);
                 parameters.Add(pe.ConnectedSystemId);
-                parameters.Add((object?)pe.ConnectedSystemObjectId ?? DBNull.Value);
+                parameters.Add(NullableParam(pe.ConnectedSystemObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add((int)pe.ChangeType);
                 parameters.Add((int)pe.Status);
                 parameters.Add(pe.ErrorCount);
                 parameters.Add(pe.MaxRetries);
-                parameters.Add((object?)pe.LastAttemptedAt ?? DBNull.Value);
-                parameters.Add((object?)pe.NextRetryAt ?? DBNull.Value);
-                parameters.Add((object?)pe.LastErrorMessage ?? DBNull.Value);
-                parameters.Add((object?)pe.LastErrorStackTrace ?? DBNull.Value);
-                parameters.Add((object?)pe.SourceMetaverseObjectId ?? DBNull.Value);
+                parameters.Add(NullableParam(pe.LastAttemptedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(NullableParam(pe.NextRetryAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(NullableParam(pe.LastErrorMessage, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(NullableParam(pe.LastErrorStackTrace, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(NullableParam(pe.SourceMetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(pe.HasUnresolvedReferences);
                 parameters.Add(pe.CreatedAt);
             }
@@ -3522,19 +3527,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(avc.Id);
                 parameters.Add(pendingExportId);
                 parameters.Add(avc.AttributeId);
-                parameters.Add((object?)avc.StringValue ?? DBNull.Value);
-                parameters.Add((object?)avc.DateTimeValue ?? DBNull.Value);
-                parameters.Add((object?)avc.IntValue ?? DBNull.Value);
-                parameters.Add((object?)avc.LongValue ?? DBNull.Value);
-                parameters.Add((object?)avc.ByteValue ?? DBNull.Value);
-                parameters.Add((object?)avc.GuidValue ?? DBNull.Value);
-                parameters.Add((object?)avc.BoolValue ?? DBNull.Value);
-                parameters.Add((object?)avc.UnresolvedReferenceValue ?? DBNull.Value);
+                parameters.Add(NullableParam(avc.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(NullableParam(avc.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(NullableParam(avc.IntValue, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(NullableParam(avc.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint));
+                parameters.Add(NullableParam(avc.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea));
+                parameters.Add(NullableParam(avc.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(NullableParam(avc.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean));
+                parameters.Add(NullableParam(avc.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add((int)avc.ChangeType);
                 parameters.Add((int)avc.Status);
                 parameters.Add(avc.ExportAttemptCount);
-                parameters.Add((object?)avc.LastExportedAt ?? DBNull.Value);
-                parameters.Add((object?)avc.LastImportedValue ?? DBNull.Value);
+                parameters.Add(NullableParam(avc.LastExportedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(NullableParam(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -3667,6 +3672,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             chunks.Add(source.GetRange(i, Math.Min(chunkSize, source.Count - i)));
         }
         return chunks;
+    }
+
+    /// <summary>
+    /// Creates a typed NpgsqlParameter for nullable values. Npgsql's ExecuteSqlRawAsync cannot
+    /// infer the PostgreSQL type from DBNull.Value when ALL rows in a chunk have null for a column.
+    /// Using an explicit NpgsqlDbType ensures the parameter is correctly typed even when null.
+    /// </summary>
+    private static Npgsql.NpgsqlParameter NullableParam(object? value, NpgsqlTypes.NpgsqlDbType dbType)
+    {
+        return new Npgsql.NpgsqlParameter { Value = value ?? DBNull.Value, NpgsqlDbType = dbType };
     }
 
     #endregion
