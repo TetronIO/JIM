@@ -975,6 +975,16 @@ if (-not $IgnoreSnapshots -and $Scenario -like "*Scenario1*") {
         $env:SAMBA_IMAGE_PRIMARY = $s1Tag
         $script:UsingSnapshots = $true
         Write-Host "  ${GREEN}Using snapshot: $s1Tag${NC}"
+    } else {
+        Write-Host "  ${YELLOW}No snapshot found for $s1Tag — building (first run only)...${NC}"
+        & "$scriptRoot/Build-SambaSnapshots.ps1" -Scenario Scenario1 -Template $Template
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Snapshot build failed — falling back to live population"
+        } elseif (Test-SnapshotAvailable -ImageTag $s1Tag -ExpectedHash $s1Hash) {
+            $env:SAMBA_IMAGE_PRIMARY = $s1Tag
+            $script:UsingSnapshots = $true
+            Write-Host "  ${GREEN}Snapshot built and ready: $s1Tag${NC}"
+        }
     }
 }
 
@@ -1012,6 +1022,18 @@ if ($Scenario -like "*Scenario8*") {
             $env:SAMBA_IMAGE_TARGET = $s8TargetTag
             $script:UsingSnapshots = $true
             Write-Host "  ${GREEN}Using snapshots: $s8SourceTag, $s8TargetTag${NC}"
+        } else {
+            Write-Host "  ${YELLOW}No snapshots found for Scenario 8 — building (first run only)...${NC}"
+            & "$scriptRoot/Build-SambaSnapshots.ps1" -Scenario Scenario8 -Template $Template
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "Snapshot build failed — falling back to live population"
+            } elseif ((Test-SnapshotAvailable -ImageTag $s8SourceTag -ExpectedHash $s8Hash) -and
+                      (Test-SnapshotAvailable -ImageTag $s8TargetTag -ExpectedHash $s8Hash)) {
+                $env:SAMBA_IMAGE_SOURCE = $s8SourceTag
+                $env:SAMBA_IMAGE_TARGET = $s8TargetTag
+                $script:UsingSnapshots = $true
+                Write-Host "  ${GREEN}Snapshots built and ready: $s8SourceTag, $s8TargetTag${NC}"
+            }
         }
     }
 
