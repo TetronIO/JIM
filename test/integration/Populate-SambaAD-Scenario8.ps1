@@ -34,7 +34,10 @@ param(
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("Source", "Target")]
-    [string]$Instance = "Source"
+    [string]$Instance = "Source",
+
+    [Parameter(Mandatory=$false)]
+    [string]$Container = ""
 )
 
 Set-StrictMode -Version Latest
@@ -90,7 +93,7 @@ $containerMap = @{
 }
 
 $config = $containerMap[$Instance]
-$container = $config.Container
+$container = if ($Container) { $Container } else { $config.Container }
 $domain = $config.Domain
 $domainDN = $config.DomainDN
 $domainSuffix = $config.DomainSuffix

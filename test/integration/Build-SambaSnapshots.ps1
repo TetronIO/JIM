@@ -279,7 +279,7 @@ foreach ($scen in $scenariosToProcess) {
                     DNS_FORWARDER = "8.8.8.8"
                 } `
                 -PopulateAction {
-                    & "$scriptRoot/Populate-SambaAD.ps1" -Template $Template -Instance Primary
+                    & "$scriptRoot/Populate-SambaAD.ps1" -Template $Template -Instance Primary -Container "samba-snapshot-primary"
                     if ($LASTEXITCODE -ne 0) { throw "Populate-SambaAD.ps1 failed" }
                 }
 
@@ -317,7 +317,7 @@ foreach ($scen in $scenariosToProcess) {
                         DNS_FORWARDER = "8.8.8.8"
                     } `
                     -PopulateAction {
-                        & "$scriptRoot/Populate-SambaAD-Scenario8.ps1" -Template $Template -Instance Source
+                        & "$scriptRoot/Populate-SambaAD-Scenario8.ps1" -Template $Template -Instance Source -Container "samba-snapshot-source"
                         if ($LASTEXITCODE -ne 0) { throw "Populate-SambaAD-Scenario8.ps1 (Source) failed" }
                     }
             }
@@ -346,7 +346,7 @@ foreach ($scen in $scenariosToProcess) {
                         DNS_FORWARDER = "8.8.8.8"
                     } `
                     -PopulateAction {
-                        & "$scriptRoot/Populate-SambaAD-Scenario8.ps1" -Template $Template -Instance Target
+                        & "$scriptRoot/Populate-SambaAD-Scenario8.ps1" -Template $Template -Instance Target -Container "samba-snapshot-target"
                         if ($LASTEXITCODE -ne 0) { throw "Populate-SambaAD-Scenario8.ps1 (Target) failed" }
                     }
             }
