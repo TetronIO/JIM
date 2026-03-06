@@ -1,7 +1,7 @@
 # CSO Large Multi-Valued Attribute Pagination
 
 **GitHub Issue:** #320
-**Status:** Doing
+**Status:** Doing (Phase 1.2 complete)
 **Date:** 2026-03-05
 
 ## Problem Statement
@@ -104,7 +104,7 @@ The worker uses CSO attribute values in these ways:
 
 Key insight: `ProcessReferenceAttribute` only needs `(ReferenceValueId, MetaverseObjectId)` per reference — not the full referenced CSO entity with all its attributes. The deep includes exist only because the detail page needs display names and secondary IDs.
 
-#### 1.2 Fix `GetConnectedSystemObjectAsync`: Remove Deep Includes
+#### 1.2 Fix `GetConnectedSystemObjectAsync`: Remove Deep Includes ✅
 
 Fix the existing method so that it:
 
@@ -283,7 +283,7 @@ Store a `DisplayName` column on `ConnectedSystemObject` maintained during import
 ```
 Phase 1 (Worker Safety)
 +-- 1.1 Analyse and document worker attribute usage patterns
-+-- 1.2 Fix GetConnectedSystemObjectAsync (remove deep ref includes)
++-- 1.2 Fix GetConnectedSystemObjectAsync (remove deep ref includes) ✅
 +-- 1.3 Verify all consumers work with the fixed method
 +-- Tests for all of the above
 
