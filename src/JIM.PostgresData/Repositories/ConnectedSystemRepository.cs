@@ -1033,10 +1033,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.ReferenceValue)
             .ThenInclude(cso => cso!.Type)
-            .Include(cso => cso.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
+            // Note: ReferenceValue.AttributeValues intentionally NOT included (shallow refs).
+            // For 10K+ member groups, deep-including every referenced CSO's attribute values
+            // caused 100K+ tracked entities. Consumers needing ref external IDs should use
+            // GetReferenceExternalIdsAsync() instead. See #320.
             // Include MetaverseObject for the detail view link
             .Include(cso => cso.MetaverseObject)
             .ThenInclude(mvo => mvo!.Type)
@@ -1056,11 +1056,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
-            // Include resolved reference values and their attributes for delta import comparison
+            // Include resolved reference values with shallow refs (Type only, no AttributeValues).
+            // Ref external IDs for delta import comparison are loaded via GetReferenceExternalIdsAsync(). See #320.
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(refCso => refCso!.AttributeValues)
-            .ThenInclude(refAv => refAv.Attribute)
+            .ThenInclude(refCso => refCso!.Type)
             // Use case-insensitive comparison for string lookups (DNs, etc.)
             .Where(x =>
                 x.ConnectedSystem.Id == connectedSystemId &&
@@ -1085,11 +1085,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
-            // Include resolved reference values and their attributes for delta import comparison
+            // Include resolved reference values with shallow refs (Type only, no AttributeValues). See #320.
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(refCso => refCso!.AttributeValues)
-            .ThenInclude(refAv => refAv.Attribute)
+            .ThenInclude(refCso => refCso!.Type)
             .Where(cso =>
                 cso.ConnectedSystem.Id == connectedSystemId &&
                 cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.IntValue == attributeValue))
@@ -1113,11 +1112,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
-            // Include resolved reference values and their attributes for delta import comparison
+            // Include resolved reference values with shallow refs (Type only, no AttributeValues). See #320.
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(refCso => refCso!.AttributeValues)
-            .ThenInclude(refAv => refAv.Attribute)
+            .ThenInclude(refCso => refCso!.Type)
             .Where(cso =>
                 cso.ConnectedSystem.Id == connectedSystemId &&
                 cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.LongValue == attributeValue))
@@ -1141,11 +1139,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
-            // Include resolved reference values and their attributes for delta import comparison
+            // Include resolved reference values with shallow refs (Type only, no AttributeValues). See #320.
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(refCso => refCso!.AttributeValues)
-            .ThenInclude(refAv => refAv.Attribute)
+            .ThenInclude(refCso => refCso!.Type)
             .Where(x =>
                 x.ConnectedSystem.Id == connectedSystemId &&
                 x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.GuidValue == attributeValue))
