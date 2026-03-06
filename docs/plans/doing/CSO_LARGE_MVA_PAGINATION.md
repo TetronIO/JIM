@@ -148,7 +148,7 @@ Possible strategies:
 | Strategy | Behaviour | Consumer |
 |---|---|---|
 | `All` (default) | Loads all attribute values with shallow refs. Current behaviour after Phase 1 fix. | Worker |
-| `CappedMva` | Loads all SVA values normally. For MVA attributes, loads first N values (e.g. 100) and returns total count per attribute. | Web detail page, API detail endpoint |
+| `CappedMva` | Loads all SVA values normally. For MVA attributes, loads first N values (matching inline display threshold, currently 10) and returns total count per attribute. | Web detail page, API detail endpoint |
 | `SvasOnly` | Loads only single-valued attribute values. | Future use / lightweight lookups |
 
 When using `CappedMva`, the method returns per-attribute value counts alongside the capped values (via a companion result object or a metadata property on the entity). The web page and API use this to show "10,247 total" and offer paginated access via `GetAttributeValuesPagedAsync`.
@@ -209,11 +209,11 @@ Add metadata to the API response:
 
 ```
 ConnectedSystemObjectDetailDto
-  AttributeValues: [...]          // capped at N per attribute
+  AttributeValues: [...]          // capped at 10 per MVA attribute
   AttributeValueSummaries:        // NEW: per-attribute metadata
     - AttributeName: "member"
       TotalCount: 10247
-      ReturnedCount: 100
+      ReturnedCount: 10
       HasMore: true
 ```
 
@@ -272,7 +272,7 @@ Store a `DisplayName` column on `ConnectedSystemObject` maintained during import
 
 | Decision | Options | Recommendation |
 |---|---|---|
-| Default cap for detail view | 50 / 100 / 200 | 100 — balances completeness with performance |
+| Default cap for detail view | 10 / 50 / 100 | 10 — matches inline display threshold; dialog fetches its own pages |
 | Default page size for paginated endpoint | 25 / 50 / 100 | 50 — standard pagination size |
 | Should API always include `AttributeValueSummaries`? | Always / Only when capped | Always — API consumers need predictable structure |
 | Phase 1 approach | Remove deep includes / Projection / Chunked | Remove deep includes first (simplest), measure, then consider projection |
