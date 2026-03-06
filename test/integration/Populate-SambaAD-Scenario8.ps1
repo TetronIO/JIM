@@ -407,22 +407,31 @@ for ($g = 0; $g -lt $createdGroups.Count; $g++) {
     # Add selected candidates to the group (deduplicate first)
     $uniqueCandidates = @($candidates | Sort-Object -Property SamAccountName -Unique)
 
-    # OPTIMISATION: Batch add all members in a single samba-tool call
-    # This reduces Docker exec overhead from O(members) to O(1) per group
+    # OPTIMISATION: Batch add members in chunked samba-tool calls
+    # Chunk size chosen to stay well under Linux ARG_MAX (~2 MB) for docker exec
     if ($uniqueCandidates.Count -gt 0) {
-        # Build comma-separated member list (samba-tool requires commas, not spaces)
-        $memberList = ($uniqueCandidates.SamAccountName) -join ','
-        $result = docker exec $container samba-tool group addmembers `
-            $group.SAMAccountName `
-            $memberList 2>&1
+        $chunkSize = 500
+        $allNames = $uniqueCandidates.SamAccountName
+        $memberCount = 0
 
-        if ($LASTEXITCODE -eq 0 -or $result -match "already a member") {
-            $memberCount = $uniqueCandidates.Count
-            $totalMemberships += $memberCount
+        for ($c = 0; $c -lt $allNames.Count; $c += $chunkSize) {
+            $end = [Math]::Min($c + $chunkSize, $allNames.Count) - 1
+            $chunk = $allNames[$c..$end]
+            $memberList = $chunk -join ','
+            $result = docker exec $container samba-tool group addmembers `
+                $group.SAMAccountName `
+                $memberList 2>&1
+
+            if ($LASTEXITCODE -eq 0 -or $result -match "already a member") {
+                $memberCount += $chunk.Count
+            }
+            else {
+                Write-Warning "Failed to add members to group $($group.SAMAccountName): $result"
+                break
+            }
         }
-        else {
-            Write-Warning "Failed to add members to group $($group.SAMAccountName): $result"
-        }
+
+        $totalMemberships += $memberCount
     }
 
     if (($g % 5) -eq 0 -or $g -eq ($createdGroups.Count - 1)) {

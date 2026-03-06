@@ -312,21 +312,30 @@ $totalMemberships = 0
 $processedGroups = 0
 
 foreach ($groupName in $groupMemberships.Keys) {
-    $members = $groupMemberships[$groupName]
-    # Build comma-separated member list (samba-tool requires commas, not spaces)
-    $memberList = $members -join ','
+    $members = @($groupMemberships[$groupName])
+    # Chunk members to stay under Linux ARG_MAX (~2 MB) for docker exec
+    $chunkSize = 500
+    $groupAdded = 0
 
-    $result = docker exec $container samba-tool group addmembers `
-        $groupName `
-        $memberList 2>&1
+    for ($c = 0; $c -lt $members.Count; $c += $chunkSize) {
+        $end = [Math]::Min($c + $chunkSize, $members.Count) - 1
+        $chunk = $members[$c..$end]
+        $memberList = $chunk -join ','
 
-    if ($LASTEXITCODE -eq 0 -or $result -match "already a member") {
-        $totalMemberships += $members.Count
+        $result = docker exec $container samba-tool group addmembers `
+            $groupName `
+            $memberList 2>&1
+
+        if ($LASTEXITCODE -eq 0 -or $result -match "already a member") {
+            $groupAdded += $chunk.Count
+        }
+        else {
+            Write-Warning "Failed to add members to group ${groupName}: $result"
+            break
+        }
     }
-    else {
-        Write-Warning "Failed to add members to group ${groupName}: $result"
-    }
 
+    $totalMemberships += $groupAdded
     $processedGroups++
     if (($processedGroups % 10) -eq 0) {
         Write-Host "    Processed $processedGroups groups, $totalMemberships memberships..." -ForegroundColor Gray
