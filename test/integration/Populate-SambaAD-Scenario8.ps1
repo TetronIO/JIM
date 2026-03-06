@@ -192,77 +192,101 @@ $createdUsers = @()
 $sortedCompanyKeys = $scenario8CompanyNames.Keys | Sort-Object
 $sortedDepartmentKeys = $scenario8DepartmentNames.Keys | Sort-Object
 
-# OPTIMISATION: Generate user data and LDIF in memory, then bulk import via ldbadd
-# Chunk into batches of 10,000 users to avoid ldbadd choking on very large files
-Write-Host "  Generating user data..." -ForegroundColor Gray
+# OPTIMISATION: Generate user data in parallel across cores, then build LDIF and import in chunks
+# Step 1: Generate all user data objects in parallel (CPU-bound, benefits from multiple cores)
+# Step 2: Build LDIF strings and import sequentially (ldbadd is single-writer)
+Write-Host "  Generating user data (parallel)..." -ForegroundColor Gray
+
+$userGenStart = Get-Date
+$indices = 0..($groupScale.Users - 1)
+$sortedCompanyKeysArray = @($sortedCompanyKeys)
+$sortedDepartmentKeysArray = @($sortedDepartmentKeys)
+$companyCount = $scenario8CompanyNames.Count
+$departmentCount = $scenario8DepartmentNames.Count
+
+# Generate user data in parallel using ForEach-Object -Parallel
+# Each parallel runspace calls New-TestUser and computes company/department assignment
+$createdUsers = $indices | ForEach-Object -Parallel {
+    $i = $_
+    $helperPath = $using:PSScriptRoot
+    . "$helperPath/utils/Test-Helpers.ps1"
+
+    $user = New-TestUser -Index $i -Domain $using:domainSuffix
+
+    $companyTechnicalName = ($using:sortedCompanyKeysArray)[$i % $using:companyCount]
+    $departmentTechnicalName = ($using:sortedDepartmentKeysArray)[$i % $using:departmentCount]
+
+    [PSCustomObject]@{
+        Index              = $i
+        SamAccountName     = $user.SamAccountName
+        DisplayName        = $user.DisplayName
+        FirstName          = $user.FirstName
+        LastName           = $user.LastName
+        Email              = $user.Email
+        Title              = $user.Title
+        Pronouns           = $user.Pronouns
+        Department         = $departmentTechnicalName
+        Company            = $companyTechnicalName
+        DN                 = "CN=$($user.DisplayName),$using:usersOU"
+    }
+} -ThrottleLimit ([Math]::Min(8, [Environment]::ProcessorCount))
+
+# Sort by index to ensure deterministic order for LDIF generation
+$createdUsers = @($createdUsers | Sort-Object -Property Index)
+
+$userGenDuration = ((Get-Date) - $userGenStart).TotalSeconds
+Write-Host "  ✓ Generated $($createdUsers.Count) user records in $([Math]::Round($userGenDuration, 1))s" -ForegroundColor Green
+
+# Build LDIF and import in chunks (ldbadd is single-writer, must be sequential)
+Write-Host "  Importing users via ldbadd..." -ForegroundColor Gray
 
 $ldifChunkSize = 5000
 $totalAdded = 0
 $ldifBuilder = [System.Text.StringBuilder]::new()
 $chunkIndex = 0
 
-for ($i = 0; $i -lt $groupScale.Users; $i++) {
-    $user = New-TestUser -Index $i -Domain $domainSuffix
+for ($i = 0; $i -lt $createdUsers.Count; $i++) {
+    $u = $createdUsers[$i]
+    $companyDisplayName = $scenario8CompanyNames[$u.Company]
+    $departmentDisplayName = $scenario8DepartmentNames[$u.Department]
 
-    # Override company and department with Scenario 8 consistent values
-    $companyTechnicalName = $sortedCompanyKeys[$i % $scenario8CompanyNames.Count]
-    $departmentTechnicalName = $sortedDepartmentKeys[$i % $scenario8DepartmentNames.Count]
-    $companyDisplayName = $scenario8CompanyNames[$companyTechnicalName]
-    $departmentDisplayName = $scenario8DepartmentNames[$departmentTechnicalName]
-
-    $dn = "CN=$($user.DisplayName),$usersOU"
-
-    # Build LDIF entry for this user
-    [void]$ldifBuilder.AppendLine("dn: $dn")
+    # Build LDIF entry
+    [void]$ldifBuilder.AppendLine("dn: $($u.DN)")
     [void]$ldifBuilder.AppendLine("objectClass: top")
     [void]$ldifBuilder.AppendLine("objectClass: person")
     [void]$ldifBuilder.AppendLine("objectClass: organizationalPerson")
     [void]$ldifBuilder.AppendLine("objectClass: user")
-    [void]$ldifBuilder.AppendLine("cn: $($user.DisplayName)")
-    [void]$ldifBuilder.AppendLine("sn: $($user.LastName)")
-    [void]$ldifBuilder.AppendLine("givenName: $($user.FirstName)")
-    [void]$ldifBuilder.AppendLine("sAMAccountName: $($user.SamAccountName)")
-    [void]$ldifBuilder.AppendLine("displayName: $($user.DisplayName)")
-    [void]$ldifBuilder.AppendLine("userPrincipalName: $($user.Email)")
-    [void]$ldifBuilder.AppendLine("mail: $($user.Email)")
+    [void]$ldifBuilder.AppendLine("cn: $($u.DisplayName)")
+    [void]$ldifBuilder.AppendLine("sn: $($u.LastName)")
+    [void]$ldifBuilder.AppendLine("givenName: $($u.FirstName)")
+    [void]$ldifBuilder.AppendLine("sAMAccountName: $($u.SamAccountName)")
+    [void]$ldifBuilder.AppendLine("displayName: $($u.DisplayName)")
+    [void]$ldifBuilder.AppendLine("userPrincipalName: $($u.Email)")
+    [void]$ldifBuilder.AppendLine("mail: $($u.Email)")
     [void]$ldifBuilder.AppendLine("department: $departmentDisplayName")
-    [void]$ldifBuilder.AppendLine("title: $($user.Title)")
+    [void]$ldifBuilder.AppendLine("title: $($u.Title)")
     [void]$ldifBuilder.AppendLine("company: $companyDisplayName")
 
-    # Set pronouns in extensionAttribute1 (~25% of users)
-    if ($null -ne $user.Pronouns) {
-        [void]$ldifBuilder.AppendLine("extensionAttribute1: $($user.Pronouns)")
+    if ($null -ne $u.Pronouns) {
+        [void]$ldifBuilder.AppendLine("extensionAttribute1: $($u.Pronouns)")
     }
 
     [void]$ldifBuilder.AppendLine("")
 
-    # Build tracking data
-    $createdUsers += @{
-        SamAccountName = $user.SamAccountName
-        DisplayName = $user.DisplayName
-        Department = $departmentTechnicalName
-        DepartmentDisplay = $departmentDisplayName
-        Title = $user.Title
-        Company = $companyTechnicalName
-        CompanyDisplay = $companyDisplayName
-        DN = $dn
-    }
-
-    # Import in chunks to avoid ldbadd failing on very large LDIF files
-    if ((($i + 1) % $ldifChunkSize -eq 0) -or ($i -eq $groupScale.Users - 1)) {
+    # Import in chunks to avoid ldbadd OOM on very large LDB databases
+    if ((($i + 1) % $ldifChunkSize -eq 0) -or ($i -eq $createdUsers.Count - 1)) {
         $chunkIndex++
         $chunkCount = if (($i + 1) % $ldifChunkSize -eq 0) { $ldifChunkSize } else { ($i + 1) % $ldifChunkSize }
         $ldifPath = [System.IO.Path]::GetTempFileName()
         [System.IO.File]::WriteAllText($ldifPath, $ldifBuilder.ToString())
 
-        Write-Host "  Importing chunk $chunkIndex ($chunkCount users, total $($i + 1)/$($groupScale.Users))..." -ForegroundColor Gray
+        Write-Host "  Importing chunk $chunkIndex ($chunkCount users, total $($i + 1)/$($createdUsers.Count))..." -ForegroundColor Gray
         docker cp $ldifPath "${container}:/tmp/users.ldif" 2>&1 | Out-Null
         $result = docker exec $container ldbadd -H /usr/local/samba/private/sam.ldb /tmp/users.ldif 2>&1
         $exitCode = $LASTEXITCODE
         docker exec $container rm -f /tmp/users.ldif 2>&1 | Out-Null
         Remove-Item $ldifPath -Force -ErrorAction SilentlyContinue
 
-        # ldbadd output can be a single string or array of strings
         $resultText = if ($result -is [array]) { $result -join "`n" } else { "$result" }
 
         if ($resultText -match "Added (\d+) records") {
@@ -272,7 +296,6 @@ for ($i = 0; $i -lt $groupScale.Users; $i++) {
             Write-Host "    ⚠ Some users in chunk already exist (idempotent)" -ForegroundColor Yellow
         }
         elseif ($exitCode -eq 0 -and [string]::IsNullOrWhiteSpace($resultText)) {
-            # ldbadd succeeded silently (some versions don't print a summary)
             $totalAdded += $chunkCount
             Write-Host "    ✓ Chunk $chunkIndex imported (exit code 0, no output)" -ForegroundColor Gray
         }
@@ -376,131 +399,170 @@ else {
 # ============================================================================
 Write-TestStep "Step 4" "Assigning group members"
 
-$totalMemberships = 0
 $membershipOperation = Start-TimedOperation -Name "Assigning memberships" -TotalSteps $createdGroups.Count
 
-# Intelligent membership assignment based on group category and user attributes
+# Pre-compute group -> member mappings (sequential — reads shared $createdUsers)
+Write-Host "  Computing group memberships..." -ForegroundColor Gray
+
+# Build lookup tables for fast filtering
+$usersByCompany = @{}
+$usersByDepartment = @{}
+foreach ($u in $createdUsers) {
+    if (-not $usersByCompany.ContainsKey($u.Company)) { $usersByCompany[$u.Company] = [System.Collections.Generic.List[string]]::new() }
+    $usersByCompany[$u.Company].Add($u.SamAccountName)
+    if (-not $usersByDepartment.ContainsKey($u.Department)) { $usersByDepartment[$u.Department] = [System.Collections.Generic.List[string]]::new() }
+    $usersByDepartment[$u.Department].Add($u.SamAccountName)
+}
+
+# All SamAccountNames as array for index-based access (Location/Project groups)
+$allSamNames = @($createdUsers.SamAccountName)
+$userCount = $createdUsers.Count
+
+# Build work items: array of @{ GroupName; Members } for parallel execution
+$membershipWorkItems = [System.Collections.Generic.List[object]]::new()
+
 for ($g = 0; $g -lt $createdGroups.Count; $g++) {
     $group = $createdGroups[$g]
-    $memberCount = 0
-
-    # Select candidate users based on group category
-    $candidates = @()
+    $memberNames = @()
 
     switch ($group.Category) {
         "Company" {
-            # Company groups contain users from that company
-            # Extract technical name from group name (e.g., "Company-NexusDynamics" -> "NexusDynamics")
             $companyName = $group.Name -replace "^Company-", ""
-            $candidates = $createdUsers | Where-Object { $_.Company -eq $companyName }
+            if ($usersByCompany.ContainsKey($companyName)) {
+                $memberNames = @($usersByCompany[$companyName])
+            }
         }
         "Department" {
-            # Department groups contain users from that department
-            # Extract technical name from group name (e.g., "Dept-Human-Resources" -> "Human-Resources")
             $deptName = $group.Name -replace "^Dept-", ""
-            $candidates = $createdUsers | Where-Object { $_.Department -eq $deptName }
+            if ($usersByDepartment.ContainsKey($deptName)) {
+                $memberNames = @($usersByDepartment[$deptName])
+            }
         }
         "Location" {
-            # Location groups: distribute users with location matching
-            # For now, use a percentage-based distribution (~30% of users)
-            $targetPercent = 0.3
-            $targetMembers = [Math]::Max(1, [Math]::Floor($createdUsers.Count * $targetPercent))
-            $offset = ($g * 7) % $createdUsers.Count
+            $targetMembers = [Math]::Max(1, [Math]::Floor($userCount * 0.3))
+            $offset = ($g * 7) % $userCount
+            $seen = [System.Collections.Generic.HashSet[string]]::new()
             for ($u = 0; $u -lt $targetMembers; $u++) {
-                $userIndex = ($offset + $u) % $createdUsers.Count
-                $candidates += $createdUsers[$userIndex]
+                $userIndex = ($offset + $u) % $userCount
+                [void]$seen.Add($allSamNames[$userIndex])
             }
+            $memberNames = @($seen)
         }
         "Project" {
-            # Project groups: distribute users with project assignment (~20% of users)
-            $targetPercent = 0.2
-            $targetMembers = [Math]::Max(1, [Math]::Floor($createdUsers.Count * $targetPercent))
-            $offset = ($g * 11) % $createdUsers.Count
+            $targetMembers = [Math]::Max(1, [Math]::Floor($userCount * 0.2))
+            $offset = ($g * 11) % $userCount
+            $seen = [System.Collections.Generic.HashSet[string]]::new()
             for ($u = 0; $u -lt $targetMembers; $u++) {
-                $userIndex = ($offset + $u) % $createdUsers.Count
-                $candidates += $createdUsers[$userIndex]
+                $userIndex = ($offset + $u) % $userCount
+                [void]$seen.Add($allSamNames[$userIndex])
             }
+            $memberNames = @($seen)
         }
     }
 
-    # Add selected candidates to the group (deduplicate first)
-    $uniqueCandidates = @($candidates | Sort-Object -Property SamAccountName -Unique)
-
-    # OPTIMISATION: Batch add members in chunked samba-tool calls
-    # Chunk size chosen to stay well under Linux ARG_MAX (~2 MB) for docker exec
-    if ($uniqueCandidates.Count -gt 0) {
-        $chunkSize = 500
-        $allNames = $uniqueCandidates.SamAccountName
-        $memberCount = 0
-
-        for ($c = 0; $c -lt $allNames.Count; $c += $chunkSize) {
-            $end = [Math]::Min($c + $chunkSize, $allNames.Count) - 1
-            $chunk = $allNames[$c..$end]
-            $memberList = $chunk -join ','
-            $result = docker exec $container samba-tool group addmembers `
-                $group.SAMAccountName `
-                $memberList 2>&1
-
-            if ($LASTEXITCODE -eq 0 -or $result -match "already a member") {
-                $memberCount += $chunk.Count
-            }
-            else {
-                Write-Warning "Failed to add members to group $($group.SAMAccountName): $result"
-                break
-            }
-        }
-
-        $totalMemberships += $memberCount
-    }
-
-    if (($g % 5) -eq 0 -or $g -eq ($createdGroups.Count - 1)) {
-        Update-OperationProgress -Operation $membershipOperation -CurrentStep ($g + 1) -Status "$totalMemberships memberships"
+    if ($memberNames.Count -gt 0) {
+        $membershipWorkItems.Add(@{
+            GroupName = $group.SAMAccountName
+            Members  = $memberNames
+        })
     }
 }
+
+Write-Host "  ✓ Computed memberships for $($membershipWorkItems.Count) groups" -ForegroundColor Green
+
+# Execute membership assignments in parallel (samba-tool serialises on LDB lock,
+# but parallelism eliminates docker exec round-trip latency between calls)
+Write-Host "  Assigning memberships (parallel, throttle=4)..." -ForegroundColor Gray
+
+$chunkSize = 500
+$membershipResults = $membershipWorkItems | ForEach-Object -Parallel {
+    $item = $_
+    $groupName = $item.GroupName
+    $members = $item.Members
+    $added = 0
+
+    for ($c = 0; $c -lt $members.Count; $c += $using:chunkSize) {
+        $end = [Math]::Min($c + $using:chunkSize, $members.Count) - 1
+        $chunk = $members[$c..$end]
+        $memberList = $chunk -join ','
+        $result = docker exec $using:container samba-tool group addmembers `
+            $groupName `
+            $memberList 2>&1
+
+        if ($LASTEXITCODE -eq 0 -or "$result" -match "already a member") {
+            $added += $chunk.Count
+        }
+        else {
+            Write-Warning "Failed to add members to group ${groupName}: ${result}"
+            break
+        }
+    }
+
+    [PSCustomObject]@{ GroupName = $groupName; Added = $added }
+} -ThrottleLimit 4
+
+$totalMemberships = ($membershipResults | Measure-Object -Property Added -Sum).Sum
+Write-Host "  ✓ Assigned $totalMemberships memberships across $($membershipWorkItems.Count) groups" -ForegroundColor Green
 
 Complete-TimedOperation -Operation $membershipOperation -Message "Assigned $totalMemberships memberships"
 
 # ============================================================================
-# Step 5: Assign managedBy
+# Step 5: Assign managedBy (batched into single ldbmodify call)
 # ============================================================================
 Write-TestStep "Step 5" "Assigning group owners (managedBy)"
 
-$managedByCount = 0
-$managedByOperation = Start-TimedOperation -Name "Assigning managedBy" -TotalSteps $createdGroups.Count
+$managedByOperation = Start-TimedOperation -Name "Assigning managedBy" -TotalSteps 1
 
 # Find users with Manager or Director titles for group ownership
 $managers = @($createdUsers | Where-Object { $_.Title -match "Manager|Director" })
 if ($managers.Count -eq 0) {
-    $managers = $createdUsers  # Fallback to any user
+    $managers = @($createdUsers)  # Fallback to any user
 }
+
+# Build a single LDIF modify file for all managedBy assignments
+$modifyBuilder = [System.Text.StringBuilder]::new()
+$managedByCount = 0
 
 for ($g = 0; $g -lt $createdGroups.Count; $g++) {
     $group = $createdGroups[$g]
-
     if ($group.HasManagedBy) {
-        # Select a manager based on group index
         $managerIndex = $g % $managers.Count
         $manager = $managers[$managerIndex]
 
-        # Set managedBy using ldapmodify
-        $ldifContent = @"
-dn: $($group.DN)
-changetype: modify
-replace: managedBy
-managedBy: $($manager.DN)
-"@
-        $ldifFile = "/tmp/group_managedby_$g.ldif"
-        docker exec $container bash -c "echo '$ldifContent' > $ldifFile" 2>&1 | Out-Null
-        $result = docker exec $container ldapmodify -x -H ldap://localhost -D "CN=Administrator,CN=Users,$domainDN" -w "Test@123!" -f $ldifFile 2>&1
-        docker exec $container rm -f $ldifFile 2>&1 | Out-Null
-
-        if ($LASTEXITCODE -eq 0) {
-            $managedByCount++
+        if ($managedByCount -gt 0) {
+            # Separate entries with a blank line
+            [void]$modifyBuilder.AppendLine("")
         }
+        [void]$modifyBuilder.AppendLine("dn: $($group.DN)")
+        [void]$modifyBuilder.AppendLine("changetype: modify")
+        [void]$modifyBuilder.AppendLine("replace: managedBy")
+        [void]$modifyBuilder.AppendLine("managedBy: $($manager.DN)")
+        $managedByCount++
     }
+}
 
-    if (($g % 5) -eq 0 -or $g -eq ($createdGroups.Count - 1)) {
-        Update-OperationProgress -Operation $managedByOperation -CurrentStep ($g + 1) -Status "$managedByCount assigned"
+if ($managedByCount -gt 0) {
+    Write-Host "  Applying $managedByCount managedBy assignments via ldbmodify..." -ForegroundColor Gray
+    $modifyPath = [System.IO.Path]::GetTempFileName()
+    [System.IO.File]::WriteAllText($modifyPath, $modifyBuilder.ToString())
+
+    docker cp $modifyPath "${container}:/tmp/managedby.ldif" 2>&1 | Out-Null
+    $result = docker exec $container ldbmodify -H /usr/local/samba/private/sam.ldb /tmp/managedby.ldif 2>&1
+    $exitCode = $LASTEXITCODE
+    docker exec $container rm -f /tmp/managedby.ldif 2>&1 | Out-Null
+    Remove-Item $modifyPath -Force -ErrorAction SilentlyContinue
+
+    $resultText = if ($result -is [array]) { $result -join "`n" } else { "$result" }
+
+    if ($resultText -match "Modified (\d+) records") {
+        $modifiedCount = [int]$Matches[1]
+        Write-Host "  ✓ Set managedBy on $modifiedCount groups via ldbmodify" -ForegroundColor Green
+    }
+    elseif ($exitCode -eq 0) {
+        Write-Host "  ✓ Set managedBy on $managedByCount groups via ldbmodify" -ForegroundColor Green
+    }
+    else {
+        Write-Warning "managedBy ldbmodify returned exit code ${exitCode}: ${resultText}"
     }
 }
 
