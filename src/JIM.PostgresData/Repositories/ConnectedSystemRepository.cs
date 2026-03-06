@@ -1046,7 +1046,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
     }
 
-    private const int CappedMvaLimit = 100;
+    private const int CappedMvaLimit = 10;
 
     public async Task<CsoDetailResult?> GetConnectedSystemObjectDetailAsync(
         int connectedSystemId,

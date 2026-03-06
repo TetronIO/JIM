@@ -181,7 +181,7 @@
                                         {
                                             <CsoAttributeValue Value="@group.Values[0]" />
                                         }
-                                        else if (group.Values.Count <= MvaInlineThreshold)
+                                        else if (group.TotalCount <= MvaInlineThreshold)
                                         {
                                             <div class="jim-attr-expanded">
                                                 @foreach (var val in group.Values)
