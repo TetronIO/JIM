@@ -202,16 +202,25 @@ for ($i = 1; $i -lt $scale.Users + 1; $i++) {
             Write-Host "    Importing chunk $chunkIndex ($chunkCount users, total $i/$($scale.Users))..." -ForegroundColor Gray
             docker cp $ldifPath "${container}:/tmp/users.ldif" 2>&1 | Out-Null
             $result = docker exec $container ldbadd -H /usr/local/samba/private/sam.ldb /tmp/users.ldif 2>&1
+            $exitCode = $LASTEXITCODE
             docker exec $container rm -f /tmp/users.ldif 2>&1 | Out-Null
 
-            if ($result -match "Added (\d+) records") {
+            # ldbadd output can be a single string or array of strings
+            $resultText = if ($result -is [array]) { $result -join "`n" } else { "$result" }
+
+            if ($resultText -match "Added (\d+) records") {
                 $totalAdded += [int]$Matches[1]
             }
-            elseif ($result -match "already exists") {
+            elseif ($resultText -match "already exists") {
                 Write-Host "      ⚠ Some users in chunk already exist (idempotent)" -ForegroundColor Yellow
             }
+            elseif ($exitCode -eq 0 -and [string]::IsNullOrWhiteSpace($resultText)) {
+                # ldbadd succeeded silently (some versions don't print a summary)
+                $totalAdded += $chunkCount
+                Write-Host "      ✓ Chunk $chunkIndex imported (exit code 0, no output)" -ForegroundColor Gray
+            }
             else {
-                throw "LDIF import failed for chunk ${chunkIndex}: ${result}"
+                throw "LDIF import failed for chunk ${chunkIndex}, exit code ${exitCode}: ${resultText}"
             }
         }
         finally {
