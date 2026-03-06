@@ -473,27 +473,28 @@ for ($g = 0; $g -lt $createdGroups.Count; $g++) {
 
 Write-Host "  ✓ Computed memberships for $($membershipWorkItems.Count) groups" -ForegroundColor Green
 
-# Execute membership assignments in parallel (samba-tool serialises on LDB lock,
-# but parallelism eliminates docker exec round-trip latency between calls)
-Write-Host "  Assigning memberships (parallel, throttle=4)..." -ForegroundColor Gray
+# Execute membership assignments sequentially (samba-tool holds an LDB write lock,
+# so parallel docker exec calls serialise anyway — sequential is simpler)
+Write-Host "  Assigning memberships ($($membershipWorkItems.Count) groups)..." -ForegroundColor Gray
 
 $chunkSize = 500
-$membershipResults = $membershipWorkItems | ForEach-Object -Parallel {
-    $item = $_
+$totalMemberships = 0
+
+for ($w = 0; $w -lt $membershipWorkItems.Count; $w++) {
+    $item = $membershipWorkItems[$w]
     $groupName = $item.GroupName
     $members = $item.Members
-    $added = 0
 
-    for ($c = 0; $c -lt $members.Count; $c += $using:chunkSize) {
-        $end = [Math]::Min($c + $using:chunkSize, $members.Count) - 1
+    for ($c = 0; $c -lt $members.Count; $c += $chunkSize) {
+        $end = [Math]::Min($c + $chunkSize, $members.Count) - 1
         $chunk = $members[$c..$end]
         $memberList = $chunk -join ','
-        $result = docker exec $using:container samba-tool group addmembers `
+        $result = docker exec $container samba-tool group addmembers `
             $groupName `
             $memberList 2>&1
 
         if ($LASTEXITCODE -eq 0 -or "$result" -match "already a member") {
-            $added += $chunk.Count
+            $totalMemberships += $chunk.Count
         }
         else {
             Write-Warning "Failed to add members to group ${groupName}: ${result}"
@@ -501,10 +502,11 @@ $membershipResults = $membershipWorkItems | ForEach-Object -Parallel {
         }
     }
 
-    [PSCustomObject]@{ GroupName = $groupName; Added = $added }
-} -ThrottleLimit 4
+    if (($w + 1) % 100 -eq 0) {
+        Write-Host "    Progress: $($w + 1)/$($membershipWorkItems.Count) groups..." -ForegroundColor Gray
+    }
+}
 
-$totalMemberships = ($membershipResults | Measure-Object -Property Added -Sum).Sum
 Write-Host "  ✓ Assigned $totalMemberships memberships across $($membershipWorkItems.Count) groups" -ForegroundColor Green
 
 Complete-TimedOperation -Operation $membershipOperation -Message "Assigned $totalMemberships memberships"
