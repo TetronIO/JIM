@@ -192,11 +192,14 @@ $createdUsers = @()
 $sortedCompanyKeys = $scenario8CompanyNames.Keys | Sort-Object
 $sortedDepartmentKeys = $scenario8DepartmentNames.Keys | Sort-Object
 
-# OPTIMISATION: Generate all user data and LDIF in memory, then bulk import via ldbadd
-# This reduces 1000+ docker exec calls to a single docker cp + ldbadd call
-Write-Host "  Generating user LDIF..." -ForegroundColor Gray
+# OPTIMISATION: Generate user data and LDIF in memory, then bulk import via ldbadd
+# Chunk into batches of 10,000 users to avoid ldbadd choking on very large files
+Write-Host "  Generating user data..." -ForegroundColor Gray
 
+$ldifChunkSize = 10000
+$totalAdded = 0
 $ldifBuilder = [System.Text.StringBuilder]::new()
+$chunkIndex = 0
 
 for ($i = 0; $i -lt $groupScale.Users; $i++) {
     $user = New-TestUser -Index $i -Domain $domainSuffix
@@ -244,28 +247,35 @@ for ($i = 0; $i -lt $groupScale.Users; $i++) {
         CompanyDisplay = $companyDisplayName
         DN = $dn
     }
+
+    # Import in chunks to avoid ldbadd failing on very large LDIF files
+    if ((($i + 1) % $ldifChunkSize -eq 0) -or ($i -eq $groupScale.Users - 1)) {
+        $chunkIndex++
+        $chunkCount = if (($i + 1) % $ldifChunkSize -eq 0) { $ldifChunkSize } else { ($i + 1) % $ldifChunkSize }
+        $ldifPath = [System.IO.Path]::GetTempFileName()
+        [System.IO.File]::WriteAllText($ldifPath, $ldifBuilder.ToString())
+
+        Write-Host "  Importing chunk $chunkIndex ($chunkCount users, total $($i + 1)/$($groupScale.Users))..." -ForegroundColor Gray
+        docker cp $ldifPath "${container}:/tmp/users.ldif" 2>&1 | Out-Null
+        $result = docker exec $container ldbadd -H /usr/local/samba/private/sam.ldb /tmp/users.ldif 2>&1
+        docker exec $container rm -f /tmp/users.ldif 2>&1 | Out-Null
+        Remove-Item $ldifPath -Force -ErrorAction SilentlyContinue
+
+        if ($result -match "Added (\d+) records") {
+            $totalAdded += [int]$Matches[1]
+        }
+        elseif ($result -match "already exists") {
+            Write-Host "    ⚠ Some users in chunk already exist (idempotent)" -ForegroundColor Yellow
+        }
+        else {
+            throw "LDIF import failed for chunk $chunkIndex (users $($i + 1 - $chunkCount) to ${i}): ${result}"
+        }
+
+        $ldifBuilder.Clear() | Out-Null
+    }
 }
 
-# Write LDIF to temp file and bulk import
-$ldifPath = [System.IO.Path]::GetTempFileName()
-[System.IO.File]::WriteAllText($ldifPath, $ldifBuilder.ToString())
-
-Write-Host "  Importing $($groupScale.Users) users via ldbadd..." -ForegroundColor Gray
-docker cp $ldifPath "${container}:/tmp/users.ldif" 2>&1 | Out-Null
-$result = docker exec $container ldbadd -H /usr/local/samba/private/sam.ldb /tmp/users.ldif 2>&1
-docker exec $container rm -f /tmp/users.ldif 2>&1 | Out-Null
-Remove-Item $ldifPath -Force -ErrorAction SilentlyContinue
-
-if ($result -match "Added (\d+) records") {
-    $addedCount = [int]$Matches[1]
-    Write-Host "  ✓ Created $addedCount users via LDIF bulk import" -ForegroundColor Green
-}
-elseif ($result -match "already exists") {
-    Write-Host "  ⚠ Some users already exist (idempotent)" -ForegroundColor Yellow
-}
-else {
-    Write-Warning "LDIF import result: $result"
-}
+Write-Host "  ✓ Created $totalAdded users via LDIF bulk import ($chunkIndex chunks)" -ForegroundColor Green
 
 # ============================================================================
 # Step 3: Create Groups (Source only) via LDIF bulk import

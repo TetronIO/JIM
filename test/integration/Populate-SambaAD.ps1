@@ -150,6 +150,9 @@ $usersOU = "OU=TestUsers,$domainDN"
 $fileTimeEpoch = [DateTime]::new(1601, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)
 
 $ldifBuilder = [System.Text.StringBuilder]::new()
+$ldifChunkSize = 10000
+$totalAdded = 0
+$chunkIndex = 0
 
 for ($i = 1; $i -lt $scale.Users + 1; $i++) {
     $user = New-TestUser -Index $i -Domain ($domain.ToLower() + ".local")
@@ -188,38 +191,38 @@ for ($i = 1; $i -lt $scale.Users + 1; $i++) {
 
     $createdUsers += $user
 
-    if (($i % 1000) -eq 0) {
-        Write-Host "    Prepared $i / $($scale.Users) users for import..." -ForegroundColor Gray
-    }
-}
+    # Import in chunks to avoid ldbadd failing on very large LDIF files
+    if (($i % $ldifChunkSize -eq 0) -or ($i -eq $scale.Users)) {
+        $chunkIndex++
+        $chunkCount = if ($i % $ldifChunkSize -eq 0) { $ldifChunkSize } else { $i % $ldifChunkSize }
+        $ldifPath = [System.IO.Path]::GetTempFileName()
+        try {
+            [System.IO.File]::WriteAllText($ldifPath, $ldifBuilder.ToString())
 
-# Write LDIF to temp file and import via ldbadd
-$ldifPath = [System.IO.Path]::GetTempFileName()
-try {
-    [System.IO.File]::WriteAllText($ldifPath, $ldifBuilder.ToString())
-    $ldifSizeKB = [Math]::Round((Get-Item $ldifPath).Length / 1024, 1)
-    Write-Host "    LDIF file: $ldifSizeKB KB for $($scale.Users) users" -ForegroundColor Gray
+            Write-Host "    Importing chunk $chunkIndex ($chunkCount users, total $i/$($scale.Users))..." -ForegroundColor Gray
+            docker cp $ldifPath "${container}:/tmp/users.ldif" 2>&1 | Out-Null
+            $result = docker exec $container ldbadd -H /usr/local/samba/private/sam.ldb /tmp/users.ldif 2>&1
+            docker exec $container rm -f /tmp/users.ldif 2>&1 | Out-Null
 
-    # Copy LDIF into container and import
-    docker cp $ldifPath "${container}:/tmp/users.ldif" 2>&1 | Out-Null
-    $result = docker exec $container ldbadd -H /usr/local/samba/private/sam.ldb /tmp/users.ldif 2>&1
-
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "    Warning: LDIF import returned errors: $result" -ForegroundColor Yellow
-        # Check if some users already exist (partial import)
-        if ($result -match "already exists") {
-            Write-Host "    Some users already exist (idempotent)" -ForegroundColor Gray
+            if ($result -match "Added (\d+) records") {
+                $totalAdded += [int]$Matches[1]
+            }
+            elseif ($result -match "already exists") {
+                Write-Host "      ⚠ Some users in chunk already exist (idempotent)" -ForegroundColor Yellow
+            }
+            else {
+                throw "LDIF import failed for chunk ${chunkIndex}: ${result}"
+            }
         }
+        finally {
+            Remove-Item $ldifPath -Force -ErrorAction SilentlyContinue
+        }
+
+        $ldifBuilder.Clear() | Out-Null
     }
-
-    # Clean up container temp file
-    docker exec $container rm -f /tmp/users.ldif 2>&1 | Out-Null
-}
-finally {
-    Remove-Item $ldifPath -Force -ErrorAction SilentlyContinue
 }
 
-Write-Host "  ✓ Imported $($createdUsers.Count) users ($usersWithExpiry with account expiry)" -ForegroundColor Green
+Write-Host "  ✓ Created $totalAdded users via LDIF bulk import ($usersWithExpiry with account expiry, $chunkIndex chunks)" -ForegroundColor Green
 
 # Create groups via LDIF bulk import
 Write-TestStep "Step 3" "Creating $($scale.Groups) groups via LDIF bulk import"
