@@ -1,8 +1,8 @@
 # CSO Large Multi-Valued Attribute Pagination
 
 **GitHub Issue:** #320
-**Status:** Doing (Phases 1–2 complete)
-**Date:** 2026-03-05
+**Status:** Done (Phases 1–2 complete; Phase 3 deferred to separate issue)
+**Date:** 2026-03-06
 
 ## Problem Statement
 
@@ -232,9 +232,20 @@ Convert `CsoMvaDialog` from client-side filtering to `MudTable` `ServerData` cal
 - Passes CSO ID + attribute name to the dialog instead of the full value list
 - No change to inline display (already capped at 10)
 
-### Phase 3: Further Worker Optimisation (If Needed)
+### Phase 3: Further Worker Optimisation (Deferred — See #383)
 
-After measuring the impact of Phase 1, consider these additional optimisations if large MVA processing is still problematic:
+Phases 1–2 are sufficient for groups up to ~50K members. Beyond that scale, EF Core change tracker overhead and memory pressure under concurrency become problematic. Phase 3 is deferred to a separate GitHub issue for implementation if/when needed.
+
+**Scale assessment (after Phase 1 shallow refs):**
+
+| Group size | Tracked entities | Approx. memory (x1) | Risk under concurrency |
+|---|---|---|---|
+| 10K | ~20K | ~10–20 MB | Low |
+| 50K | ~100K | ~50–100 MB | Moderate |
+| 100K | ~200K | ~100–200 MB | High — SaveChangesAsync slowdown |
+| 500K+ | ~1M+ | ~500 MB+ | Critical — OOM risk with concurrent tasks |
+
+If large MVA processing is still problematic at scale, consider these optimisations:
 
 #### 3.1 Chunked Reference Processing
 
@@ -297,7 +308,7 @@ Phase 2 (Web/API Pagination)
 +-- 2.7 Update web page to use detail-view method ✅
 +-- Tests for all of the above ✅
 
-Phase 3 (Further Optimisation — If Needed)
+Phase 3 (Further Optimisation — Deferred to #383)
 +-- Measure performance after Phase 1+2
 +-- 3.1 Chunked reference processing (if memory still an issue)
 +-- 3.2 Projection-based reference loading (if change tracker overhead still an issue)
@@ -312,8 +323,8 @@ Phase 3 (Further Optimisation — If Needed)
 
 ## Acceptance Criteria
 
-- [ ] Worker loads CSOs without deep-including all referenced CSOs' attribute values
-- [ ] Worker remains stable when processing groups with 10K+ members
+- [x] Worker loads CSOs without deep-including all referenced CSOs' attribute values
+- [x] Worker remains stable when processing groups with 10K+ members
 - [x] CSO detail page loads in reasonable time for a group with 10K+ members
 - [x] Web UI shows value count and provides access to all values via paginated dialog
 - [x] API endpoint returns capped values with metadata indicating total count
