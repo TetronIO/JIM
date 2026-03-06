@@ -1,22 +1,24 @@
+@using JIM.Application
 @using JIM.Models.Staging
 @using JIM.Models.Core
 @using JIM.Utilities
+@inject JimApplication Jim
 
 <MudDialog>
     <DialogContent>
         <MudText Typo="Typo.body1" Class="mb-3 mud-text-secondary">
-            @Values.Count.ToString("N0") values
+            @TotalCount.ToString("N0") values
         </MudText>
         @if (_isReferenceAttribute)
         {
-            <MudTable T="ConnectedSystemObjectAttributeValue" Items="@Values"
+            <MudTable @ref="_table" T="ConnectedSystemObjectAttributeValue"
+                      ServerData="ServerReloadAsync"
                       Dense="true" Hover="true" Elevation="0" Outlined="true"
                       FixedHeader="true" Height="400px"
-                      Filter="new Func<ConnectedSystemObjectAttributeValue, bool>(FilterValue)"
-                      Virtualize="true">
+                      Loading="@_loading" LoadingProgressColor="Color.Primary">
                 <ToolBarContent>
                     <MudTextField T="string" Value="@_searchText"
-                                  ValueChanged="@(v => _searchText = v)"
+                                  ValueChanged="@OnSearch"
                                   Placeholder="@($"Search {AttributeName.ToLower()}...")"
                                   Adornment="Adornment.Start"
                                   AdornmentIcon="@Icons.Material.Filled.Search"
@@ -72,14 +74,14 @@
         }
         else
         {
-            <MudTable T="ConnectedSystemObjectAttributeValue" Items="@Values"
+            <MudTable @ref="_table" T="ConnectedSystemObjectAttributeValue"
+                      ServerData="ServerReloadAsync"
                       Dense="true" Hover="true" Elevation="0" Outlined="true"
                       FixedHeader="true" Height="400px"
-                      Filter="new Func<ConnectedSystemObjectAttributeValue, bool>(FilterValue)"
-                      Virtualize="true">
+                      Loading="@_loading" LoadingProgressColor="Color.Primary">
                 <ToolBarContent>
                     <MudTextField T="string" Value="@_searchText"
-                                  ValueChanged="@(v => _searchText = v)"
+                                  ValueChanged="@OnSearch"
                                   Placeholder="@($"Search {AttributeName.ToLower()}...")"
                                   Adornment="Adornment.Start"
                                   AdornmentIcon="@Icons.Material.Filled.Search"
@@ -113,44 +115,54 @@
     public string AttributeName { get; set; } = string.Empty;
 
     [Parameter]
-    public List<ConnectedSystemObjectAttributeValue> Values { get; set; } = new();
+    public Guid ConnectedSystemObjectId { get; set; }
 
+    [Parameter]
+    public int TotalCount { get; set; }
+
+    [Parameter]
+    public bool IsReferenceAttribute { get; set; }
+
+    private MudTable<ConnectedSystemObjectAttributeValue>? _table;
     private string _searchText = string.Empty;
     private bool _isReferenceAttribute;
+    private bool _loading;
 
     protected override void OnInitialized()
     {
-        _isReferenceAttribute = Values.Any(v =>
-            v.ReferenceValue != null || v.UnresolvedReferenceValue != null);
+        _isReferenceAttribute = IsReferenceAttribute;
     }
 
-    private bool FilterValue(ConnectedSystemObjectAttributeValue value)
+    private async Task<TableData<ConnectedSystemObjectAttributeValue>> ServerReloadAsync(
+        TableState state, CancellationToken token)
     {
-        if (string.IsNullOrWhiteSpace(_searchText))
-            return true;
+        _loading = true;
 
-        if (value.ReferenceValue != null)
+        try
         {
-            var displayName = value.ReferenceValue.DisplayNameOrId ?? "";
-            if (displayName.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
-                return true;
+            var page = state.Page + 1; // MudBlazor is 0-indexed
+            var pageSize = state.PageSize;
+            var searchText = string.IsNullOrWhiteSpace(_searchText) ? null : _searchText;
 
-            var typeName = value.ReferenceValue.Type?.Name ?? "";
-            if (typeName.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
-                return true;
+            var result = await Jim.ConnectedSystems.GetAttributeValuesPagedAsync(
+                ConnectedSystemObjectId, AttributeName, page, pageSize, searchText);
 
-            var secondaryId = value.ReferenceValue.SecondaryExternalIdAttributeValue?.ToStringNoName() ?? "";
-            if (secondaryId.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            return false;
+            return new TableData<ConnectedSystemObjectAttributeValue>
+            {
+                Items = result.Results,
+                TotalItems = result.TotalResults
+            };
         }
+        finally
+        {
+            _loading = false;
+        }
+    }
 
-        if (value.UnresolvedReferenceValue != null)
-            return value.UnresolvedReferenceValue.Contains(_searchText, StringComparison.OrdinalIgnoreCase);
-
-        var displayValue = value.ToStringNoName() ?? string.Empty;
-        return displayValue.Contains(_searchText, StringComparison.OrdinalIgnoreCase);
+    private void OnSearch(string text)
+    {
+        _searchText = text;
+        _table?.ReloadServerData();
     }
 
     private void Close() => MudDialog.Close();

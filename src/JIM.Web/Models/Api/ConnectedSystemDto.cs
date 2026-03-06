@@ -1,4 +1,5 @@
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 
 namespace JIM.Web.Models.Api;
 
@@ -161,6 +162,12 @@ public class ConnectedSystemObjectDetailDto
     public string? MetaverseObjectDisplayName { get; set; }
     public List<ConnectedSystemObjectAttributeValueDto> AttributeValues { get; set; } = new();
 
+    /// <summary>
+    /// Per-attribute metadata showing total value counts. Present when the detail was loaded
+    /// with a capped strategy so consumers know when values have been truncated.
+    /// </summary>
+    public List<AttributeValueSummaryDto>? AttributeValueSummaries { get; set; }
+
     public static ConnectedSystemObjectDetailDto FromEntity(ConnectedSystemObject entity)
     {
         return new ConnectedSystemObjectDetailDto
@@ -183,6 +190,42 @@ public class ConnectedSystemObjectDetailDto
                 .ToList()
         };
     }
+
+    public static ConnectedSystemObjectDetailDto FromDetailResult(CsoDetailResult result)
+    {
+        var dto = FromEntity(result.ConnectedSystemObject);
+
+        if (result.AttributeValueTotalCounts.Count > 0)
+        {
+            var returnedCounts = result.ConnectedSystemObject.AttributeValues
+                .GroupBy(av => av.Attribute?.Name ?? string.Empty)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            dto.AttributeValueSummaries = result.AttributeValueTotalCounts
+                .Select(kvp => new AttributeValueSummaryDto
+                {
+                    AttributeName = kvp.Key,
+                    TotalCount = kvp.Value,
+                    ReturnedCount = returnedCounts.GetValueOrDefault(kvp.Key, 0),
+                    HasMore = kvp.Value > returnedCounts.GetValueOrDefault(kvp.Key, 0)
+                })
+                .OrderBy(s => s.AttributeName)
+                .ToList();
+        }
+
+        return dto;
+    }
+}
+
+/// <summary>
+/// Per-attribute metadata showing total vs. returned value counts.
+/// </summary>
+public class AttributeValueSummaryDto
+{
+    public string AttributeName { get; set; } = null!;
+    public int TotalCount { get; set; }
+    public int ReturnedCount { get; set; }
+    public bool HasMore { get; set; }
 }
 
 /// <summary>

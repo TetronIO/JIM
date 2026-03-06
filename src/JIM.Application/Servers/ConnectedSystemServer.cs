@@ -2514,6 +2514,33 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, id);
     }
 
+    /// <summary>
+    /// Loads a Connected System Object with attribute loading controlled by the specified strategy.
+    /// <see cref="CsoAttributeLoadStrategy.CappedMva"/> caps MVA values and includes per-attribute total counts.
+    /// </summary>
+    public async Task<CsoDetailResult?> GetConnectedSystemObjectDetailAsync(
+        int connectedSystemId,
+        Guid id,
+        CsoAttributeLoadStrategy loadStrategy)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectDetailAsync(connectedSystemId, id, loadStrategy);
+    }
+
+    /// <summary>
+    /// Returns a paginated set of attribute values for a specific attribute on a Connected System Object.
+    /// Supports server-side search and pagination for large multi-valued attributes.
+    /// </summary>
+    public async Task<PagedResultSet<ConnectedSystemObjectAttributeValue>> GetAttributeValuesPagedAsync(
+        Guid connectedSystemObjectId,
+        string attributeName,
+        int page,
+        int pageSize,
+        string? searchText = null)
+    {
+        return await Application.Repository.ConnectedSystems.GetAttributeValuesPagedAsync(
+            connectedSystemObjectId, attributeName, page, pageSize, searchText);
+    }
+
     public async Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(
         int connectedSystemId,
         int page = 1,

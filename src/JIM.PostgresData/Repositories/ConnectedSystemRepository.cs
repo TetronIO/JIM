@@ -1046,6 +1046,132 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
     }
 
+    private const int CappedMvaLimit = 100;
+
+    public async Task<CsoDetailResult?> GetConnectedSystemObjectDetailAsync(
+        int connectedSystemId,
+        Guid id,
+        CsoAttributeLoadStrategy loadStrategy)
+    {
+        if (loadStrategy == CsoAttributeLoadStrategy.All)
+        {
+            var cso = await GetConnectedSystemObjectAsync(connectedSystemId, id);
+            return cso == null ? null : new CsoDetailResult { ConnectedSystemObject = cso };
+        }
+
+        // CappedMva strategy: load the CSO with capped MVA values
+        // Step 1: Load the CSO shell with metadata (no attribute values yet)
+        var entity = await Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
+            .Include(cso => cso.Type)
+            .Include(cso => cso.MetaverseObject)
+            .ThenInclude(mvo => mvo!.Type)
+            .Include(cso => cso.MetaverseObject)
+            .ThenInclude(mvo => mvo!.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
+
+        if (entity == null)
+            return null;
+
+        // Step 2: Get per-attribute value counts for this CSO
+        var attributeValueCounts = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+            .Where(av => av.ConnectedSystemObject.Id == id)
+            .GroupBy(av => av.Attribute.Name)
+            .Select(g => new { AttributeName = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var totalCounts = attributeValueCounts.ToDictionary(x => x.AttributeName, x => x.Count);
+
+        // Step 3: Load SVA values (all of them) and MVA values (capped)
+        // Identify which attributes are multi-valued
+        var mvaAttributeIds = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+            .Where(av => av.ConnectedSystemObject.Id == id)
+            .Select(av => new { av.AttributeId, av.Attribute.AttributePlurality })
+            .Distinct()
+            .ToListAsync();
+
+        var multiValuedAttributeIds = mvaAttributeIds
+            .Where(a => a.AttributePlurality == Models.Core.AttributePlurality.MultiValued)
+            .Select(a => a.AttributeId)
+            .ToHashSet();
+
+        // Load all SVA values
+        var svaValues = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+            .Where(av => av.ConnectedSystemObject.Id == id && !multiValuedAttributeIds.Contains(av.AttributeId))
+            .Include(av => av.Attribute)
+            .Include(av => av.ReferenceValue)
+            .ThenInclude(rv => rv!.Type)
+            .ToListAsync();
+
+        // Load capped MVA values per attribute
+        var cappedMvaValues = new List<ConnectedSystemObjectAttributeValue>();
+        foreach (var attrId in multiValuedAttributeIds)
+        {
+            var values = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+                .Where(av => av.ConnectedSystemObject.Id == id && av.AttributeId == attrId)
+                .OrderBy(av => av.Id)
+                .Take(CappedMvaLimit)
+                .Include(av => av.Attribute)
+                .Include(av => av.ReferenceValue)
+                .ThenInclude(rv => rv!.Type)
+                .ToListAsync();
+
+            cappedMvaValues.AddRange(values);
+        }
+
+        // Combine and attach to entity
+        entity.AttributeValues = svaValues.Concat(cappedMvaValues).ToList();
+
+        return new CsoDetailResult
+        {
+            ConnectedSystemObject = entity,
+            AttributeValueTotalCounts = totalCounts
+        };
+    }
+
+    public async Task<PagedResultSet<ConnectedSystemObjectAttributeValue>> GetAttributeValuesPagedAsync(
+        Guid connectedSystemObjectId,
+        string attributeName,
+        int page,
+        int pageSize,
+        string? searchText = null)
+    {
+        var query = Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+            .Where(av => av.ConnectedSystemObject.Id == connectedSystemObjectId
+                         && av.Attribute.Name == attributeName);
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            var search = searchText.ToLowerInvariant();
+            query = query.Where(av =>
+                (av.StringValue != null && av.StringValue.ToLower().Contains(search))
+                || (av.UnresolvedReferenceValue != null && av.UnresolvedReferenceValue.ToLower().Contains(search))
+                || (av.ReferenceValue != null && av.ReferenceValue.AttributeValues
+                    .Any(rav => rav.StringValue != null && rav.StringValue.ToLower().Contains(search)))
+            );
+        }
+
+        var totalCount = await query.CountAsync();
+
+        var values = await query
+            .OrderBy(av => av.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Include(av => av.Attribute)
+            .Include(av => av.ReferenceValue)
+            .ThenInclude(rv => rv!.Type)
+            .ToListAsync();
+
+        return new PagedResultSet<ConnectedSystemObjectAttributeValue>
+        {
+            Results = values,
+            TotalResults = totalCount,
+            CurrentPage = page,
+            PageSize = pageSize
+        };
+    }
+
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
     {
         // Use case-insensitive comparison for string attributes (e.g., DNs which are case-insensitive in LDAP)

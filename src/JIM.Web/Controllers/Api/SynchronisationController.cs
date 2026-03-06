@@ -369,7 +369,7 @@ public class SynchronisationController(
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
     /// <param name="id">The unique identifier (GUID) of the connected system object.</param>
-    /// <returns>The connected system object details including all attribute values.</returns>
+    /// <returns>The connected system object details with capped MVA values and per-attribute summaries.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}/objects/{id:guid}", Name = "GetConnectedSystemObject")]
     [ProducesResponseType(typeof(ConnectedSystemObjectDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -377,11 +377,54 @@ public class SynchronisationController(
     public async Task<IActionResult> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
     {
         _logger.LogTrace("Requested object {ObjectId} for connected system: {SystemId}", id, connectedSystemId);
-        var obj = await _application.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, id);
-        if (obj == null)
+        var result = await _application.ConnectedSystems.GetConnectedSystemObjectDetailAsync(
+            connectedSystemId, id, CsoAttributeLoadStrategy.CappedMva);
+        if (result == null)
             return NotFound(ApiErrorResponse.NotFound($"Object with ID {id} not found in connected system {connectedSystemId}."));
 
-        return Ok(ConnectedSystemObjectDetailDto.FromEntity(obj));
+        return Ok(ConnectedSystemObjectDetailDto.FromDetailResult(result));
+    }
+
+    /// <summary>
+    /// Gets a paginated list of attribute values for a specific attribute on a Connected System Object.
+    /// </summary>
+    /// <remarks>
+    /// Use this endpoint to retrieve large multi-valued attribute data (e.g. group members)
+    /// with server-side search and pagination. The CSO detail endpoint caps MVA values;
+    /// use this endpoint to page through all values.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="csoId">The unique identifier (GUID) of the connected system object.</param>
+    /// <param name="attributeName">The attribute name to retrieve values for.</param>
+    /// <param name="page">Page number (1-based). Default: 1.</param>
+    /// <param name="pageSize">Number of values per page (1-100). Default: 50.</param>
+    /// <param name="search">Optional search text to filter values.</param>
+    /// <returns>A paginated set of attribute values with total count.</returns>
+    [HttpGet("connected-systems/{connectedSystemId:int}/objects/{csoId:guid}/attributes/{attributeName}/values", Name = "GetAttributeValuesPaged")]
+    [ProducesResponseType(typeof(PaginatedResponse<ConnectedSystemObjectAttributeValueDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetAttributeValuesPagedAsync(
+        int connectedSystemId,
+        Guid csoId,
+        string attributeName,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string? search = null)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 50;
+        if (pageSize > 100) pageSize = 100;
+
+        var result = await _application.ConnectedSystems.GetAttributeValuesPagedAsync(
+            csoId, attributeName, page, pageSize, search);
+
+        return Ok(new PaginatedResponse<ConnectedSystemObjectAttributeValueDto>
+        {
+            Items = result.Results.Select(ConnectedSystemObjectAttributeValueDto.FromEntity),
+            TotalCount = result.TotalResults,
+            Page = result.CurrentPage,
+            PageSize = result.PageSize
+        });
     }
 
     /// <summary>

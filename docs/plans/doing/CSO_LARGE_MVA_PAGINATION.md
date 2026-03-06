@@ -1,7 +1,7 @@
 # CSO Large Multi-Valued Attribute Pagination
 
 **GitHub Issue:** #320
-**Status:** Doing (Phase 1.2 complete)
+**Status:** Doing (Phases 1–2 complete)
 **Date:** 2026-03-05
 
 ## Problem Statement
@@ -128,7 +128,7 @@ After (Phase 1):
 
 Currently `SyncRuleMappingProcessor.ProcessReferenceAttribute` loads all reference values to compute a full diff (add/remove). Consider whether this can be chunked or streamed for very large MVAs, though this may be Phase 3 scope depending on measured improvement from 1.2.
 
-### Phase 2: Web/API Pagination
+### Phase 2: Web/API Pagination ✅
 
 **Goal:** The web UI and API never load unbounded attribute values.
 
@@ -285,17 +285,17 @@ Phase 1 (Worker Safety)
 +-- 1.1 Analyse and document worker attribute usage patterns
 +-- 1.2 Fix GetConnectedSystemObjectAsync (remove deep ref includes) ✅
 +-- 1.3 Verify all consumers work with the fixed method
-+-- Tests for all of the above
++-- Tests for all of the above ✅
 
 Phase 2 (Web/API Pagination)
-+-- 2.1 Add CsoAttributeLoadStrategy parameter to GetConnectedSystemObjectAsync
-+-- 2.2 New paginated attribute values repository method
-+-- 2.3 New paginated API endpoint
-+-- 2.4 Application layer methods
-+-- 2.5 DTO changes with summaries
-+-- 2.6 Convert CsoMvaDialog to ServerData
-+-- 2.7 Update web page to use detail-view method
-+-- Tests for all of the above
++-- 2.1 Add CsoAttributeLoadStrategy parameter to GetConnectedSystemObjectAsync ✅
++-- 2.2 New paginated attribute values repository method ✅
++-- 2.3 New paginated API endpoint ✅
++-- 2.4 Application layer methods ✅
++-- 2.5 DTO changes with summaries ✅
++-- 2.6 Convert CsoMvaDialog to ServerData ✅
++-- 2.7 Update web page to use detail-view method ✅
++-- Tests for all of the above ✅
 
 Phase 3 (Further Optimisation — If Needed)
 +-- Measure performance after Phase 1+2
@@ -314,8 +314,8 @@ Phase 3 (Further Optimisation — If Needed)
 
 - [ ] Worker loads CSOs without deep-including all referenced CSOs' attribute values
 - [ ] Worker remains stable when processing groups with 10K+ members
-- [ ] CSO detail page loads in reasonable time for a group with 10K+ members
-- [ ] Web UI shows value count and provides access to all values via paginated dialog
-- [ ] API endpoint returns capped values with metadata indicating total count
-- [ ] New paginated attribute values API endpoint supports search and pagination
-- [ ] Unit tests cover new repository methods, application layer, and API endpoints
+- [x] CSO detail page loads in reasonable time for a group with 10K+ members
+- [x] Web UI shows value count and provides access to all values via paginated dialog
+- [x] API endpoint returns capped values with metadata indicating total count
+- [x] New paginated attribute values API endpoint supports search and pagination
+- [x] Unit tests cover new repository methods, application layer, and API endpoints

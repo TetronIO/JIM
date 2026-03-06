@@ -82,6 +82,24 @@ public enum ConnectedSystemSettingType
     File
 }
 
+/// <summary>
+/// Controls how much attribute data is loaded when fetching a Connected System Object.
+/// Used to optimise queries for different consumers (worker vs. web/API).
+/// </summary>
+public enum CsoAttributeLoadStrategy
+{
+    /// <summary>
+    /// Loads all attribute values with shallow references.
+    /// Used by the worker for sync processing.
+    /// </summary>
+    All = 0,
+    /// <summary>
+    /// Loads all SVA values normally. For MVA attributes, loads first N values (capped)
+    /// and returns total count per attribute. Used by the web detail page and API.
+    /// </summary>
+    CappedMva = 1
+}
+
 public enum ConnectedSystemImportObjectError
 {
     NotSet,
