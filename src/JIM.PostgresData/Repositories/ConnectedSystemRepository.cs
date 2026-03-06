@@ -1096,25 +1096,33 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Select(a => a.AttributeId)
             .ToHashSet();
 
-        // Load all SVA values
+        // Load all SVA values (including referenced CSO display info for bounded set)
         var svaValues = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+            .AsSplitQuery()
             .Where(av => av.ConnectedSystemObject.Id == id && !multiValuedAttributeIds.Contains(av.AttributeId))
             .Include(av => av.Attribute)
             .Include(av => av.ReferenceValue)
             .ThenInclude(rv => rv!.Type)
+            .Include(av => av.ReferenceValue)
+            .ThenInclude(rv => rv!.AttributeValues)
+            .ThenInclude(rav => rav.Attribute)
             .ToListAsync();
 
-        // Load capped MVA values per attribute
+        // Load capped MVA values per attribute (including referenced CSO display info for bounded page)
         var cappedMvaValues = new List<ConnectedSystemObjectAttributeValue>();
         foreach (var attrId in multiValuedAttributeIds)
         {
             var values = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+                .AsSplitQuery()
                 .Where(av => av.ConnectedSystemObject.Id == id && av.AttributeId == attrId)
                 .OrderBy(av => av.Id)
                 .Take(CappedMvaLimit)
                 .Include(av => av.Attribute)
                 .Include(av => av.ReferenceValue)
                 .ThenInclude(rv => rv!.Type)
+                .Include(av => av.ReferenceValue)
+                .ThenInclude(rv => rv!.AttributeValues)
+                .ThenInclude(rav => rav.Attribute)
                 .ToListAsync();
 
             cappedMvaValues.AddRange(values);
@@ -1155,12 +1163,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var totalCount = await query.CountAsync();
 
         var values = await query
+            .AsSplitQuery()
             .OrderBy(av => av.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Include(av => av.Attribute)
             .Include(av => av.ReferenceValue)
             .ThenInclude(rv => rv!.Type)
+            .Include(av => av.ReferenceValue)
+            .ThenInclude(rv => rv!.AttributeValues)
+            .ThenInclude(rav => rav.Attribute)
             .ToListAsync();
 
         return new PagedResultSet<ConnectedSystemObjectAttributeValue>
