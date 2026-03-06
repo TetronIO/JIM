@@ -34,7 +34,10 @@ param(
     [string]$Template = "Small",
 
     [Parameter(Mandatory=$false)]
-    [int]$WaitSeconds = 60
+    [int]$WaitSeconds = 60,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$SkipPopulate
 )
 
 Set-StrictMode -Version Latest

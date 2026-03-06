@@ -115,7 +115,10 @@ param(
     [string]$ApiKey,
 
     [Parameter(Mandatory=$false)]
-    [int]$WaitSeconds = 30
+    [int]$WaitSeconds = 30,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$SkipPopulate
 )
 
 Set-StrictMode -Version Latest

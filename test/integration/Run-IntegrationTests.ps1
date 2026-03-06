@@ -141,7 +141,10 @@ param(
     [int]$TimeoutSeconds = 180,
 
     [Parameter(Mandatory=$false)]
-    [switch]$CaptureMetrics
+    [switch]$CaptureMetrics,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$IgnoreSnapshots
 )
 
 Set-StrictMode -Version Latest
@@ -161,6 +164,45 @@ $NC = "$ESC[0m"
 # Script root
 $scriptRoot = $PSScriptRoot
 $repoRoot = (Get-Item $scriptRoot).Parent.Parent.FullName
+
+# ============================================================================
+# Snapshot detection utilities
+# ============================================================================
+
+function Get-PopulateScriptHash {
+    param([string]$ScenarioName)
+    $filesToHash = @(
+        "$scriptRoot/utils/Test-Helpers.ps1",
+        "$scriptRoot/utils/Test-GroupHelpers.ps1"
+    )
+    switch ($ScenarioName) {
+        "Scenario1" { $filesToHash += "$scriptRoot/Populate-SambaAD.ps1" }
+        "Scenario8" { $filesToHash += "$scriptRoot/Populate-SambaAD-Scenario8.ps1" }
+    }
+    $combinedContent = ""
+    foreach ($file in $filesToHash) {
+        if (Test-Path $file) { $combinedContent += Get-Content -Path $file -Raw }
+    }
+    $hashBytes = [System.Security.Cryptography.SHA256]::HashData(
+        [System.Text.Encoding]::UTF8.GetBytes($combinedContent)
+    )
+    return [System.BitConverter]::ToString($hashBytes).Replace("-", "").Substring(0, 16).ToLower()
+}
+
+function Get-SnapshotImageTag {
+    param([string]$Role, [string]$Size)
+    return "jim-samba-ad:${Role}-$($Size.ToLower())"
+}
+
+function Test-SnapshotAvailable {
+    param([string]$ImageTag, [string]$ExpectedHash)
+    $inspect = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.samba.snapshot-hash"}}' 2>&1
+    if ($LASTEXITCODE -ne 0) { return $false }
+    return "$inspect" -eq $ExpectedHash
+}
+
+# Track whether snapshots are being used (set during Samba container startup)
+$script:UsingSnapshots = $false
 
 # Interactive scenario selection function
 function Show-ScenarioMenu {
@@ -925,6 +967,17 @@ Write-Success "JIM stack started"
 
 Start-Sleep -Seconds 2
 
+# Check for pre-populated snapshot images (Scenario 1 / primary)
+if (-not $IgnoreSnapshots -and $Scenario -like "*Scenario1*") {
+    $s1Hash = Get-PopulateScriptHash -ScenarioName "Scenario1"
+    $s1Tag = Get-SnapshotImageTag -Role "primary" -Size $Template
+    if (Test-SnapshotAvailable -ImageTag $s1Tag -ExpectedHash $s1Hash) {
+        $env:SAMBA_IMAGE_PRIMARY = $s1Tag
+        $script:UsingSnapshots = $true
+        Write-Host "  ${GREEN}Using snapshot: $s1Tag${NC}"
+    }
+}
+
 Write-Step "Starting Samba AD (Primary)..."
 $sambaResult = docker compose -f docker-compose.integration-tests.yml up -d 2>&1
 if ($LASTEXITCODE -ne 0) {
@@ -948,9 +1001,24 @@ if ($Scenario -like "*Scenario2*") {
 
 # Start Scenario 8 containers if running Scenario 8
 if ($Scenario -like "*Scenario8*") {
+    # Check for pre-populated snapshot images
+    if (-not $IgnoreSnapshots) {
+        $s8Hash = Get-PopulateScriptHash -ScenarioName "Scenario8"
+        $s8SourceTag = Get-SnapshotImageTag -Role "source-s8" -Size $Template
+        $s8TargetTag = Get-SnapshotImageTag -Role "target-s8" -Size $Template
+        if ((Test-SnapshotAvailable -ImageTag $s8SourceTag -ExpectedHash $s8Hash) -and
+            (Test-SnapshotAvailable -ImageTag $s8TargetTag -ExpectedHash $s8Hash)) {
+            $env:SAMBA_IMAGE_SOURCE = $s8SourceTag
+            $env:SAMBA_IMAGE_TARGET = $s8TargetTag
+            $script:UsingSnapshots = $true
+            Write-Host "  ${GREEN}Using snapshots: $s8SourceTag, $s8TargetTag${NC}"
+        }
+    }
+
     # Scale Samba container memory for larger templates (ldbadd is memory-intensive —
     # it loads the full LDB into memory, so memory needs grow with user count)
-    if ($Template -in @("XLarge", "XXLarge")) {
+    # Only needed when NOT using snapshots (snapshots don't run ldbadd)
+    if (-not $script:UsingSnapshots -and $Template -in @("XLarge", "XXLarge")) {
         $env:SAMBA_SOURCE_MEMORY = "8G"
         $env:SAMBA_TARGET_MEMORY = "4G"
         Write-Host "  Samba source memory scaled to 8G for $Template template" -ForegroundColor Gray
@@ -1066,7 +1134,8 @@ $timings["4. Wait for Services"] = (Get-Date) - $step4Start
 # Step 4b: Prepare Samba AD for testing
 # For Scenario 1, we need a clean Corp OU - delete if exists and recreate
 # Scenario 2 uses TestUsers OU which is handled by the scenario setup script
-if ($Scenario -like "*Scenario1*") {
+# Skip when using snapshots — the snapshot already has populated data
+if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots) {
     Write-Section "Step 4b: Preparing Samba AD for Testing"
 
     # First, try to delete the Corp OU if it exists (to ensure clean state)
@@ -1281,6 +1350,11 @@ $scenarioParams = @{
     Template = $Template
     Step = $Step
     ApiKey = $apiKey
+}
+
+# Skip population if using snapshot images
+if ($script:UsingSnapshots) {
+    $scenarioParams.SkipPopulate = $true
 }
 
 # Export tuning params only apply to scenarios that accept them and have LDAP exports
