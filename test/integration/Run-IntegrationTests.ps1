@@ -948,11 +948,12 @@ if ($Scenario -like "*Scenario2*") {
 
 # Start Scenario 8 containers if running Scenario 8
 if ($Scenario -like "*Scenario8*") {
-    # Scale Samba container memory for larger templates (ldbadd is memory-intensive)
+    # Scale Samba container memory for larger templates (ldbadd is memory-intensive —
+    # it loads the full LDB into memory, so memory needs grow with user count)
     if ($Template -in @("XLarge", "XXLarge")) {
-        $env:SAMBA_SOURCE_MEMORY = "4G"
+        $env:SAMBA_SOURCE_MEMORY = "8G"
         $env:SAMBA_TARGET_MEMORY = "4G"
-        Write-Host "  Samba memory scaled to 4G for $Template template" -ForegroundColor Gray
+        Write-Host "  Samba source memory scaled to 8G for $Template template" -ForegroundColor Gray
     }
     Write-Step "Starting Samba AD (Source and Target for Scenario 8)..."
     $scenario8Result = docker compose -f docker-compose.integration-tests.yml --profile scenario8 up -d 2>&1
