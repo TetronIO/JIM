@@ -196,7 +196,7 @@ $sortedDepartmentKeys = $scenario8DepartmentNames.Keys | Sort-Object
 # Chunk into batches of 10,000 users to avoid ldbadd choking on very large files
 Write-Host "  Generating user data..." -ForegroundColor Gray
 
-$ldifChunkSize = 10000
+$ldifChunkSize = 5000
 $totalAdded = 0
 $ldifBuilder = [System.Text.StringBuilder]::new()
 $chunkIndex = 0
