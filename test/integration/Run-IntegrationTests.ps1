@@ -20,6 +20,9 @@
 .PARAMETER Scenario
     The test scenario to run. If not specified, an interactive menu will be displayed.
     Available scenarios are in test/integration/scenarios/
+    Use "All" to run every implemented (non-stub) scenario sequentially. Docker images
+    are built once on the first scenario; subsequent scenarios reset the environment
+    without rebuilding. A pass/fail summary is printed at the end.
 
 .PARAMETER Template
     The test data template size. Default: "Nano"
@@ -99,6 +102,13 @@
     ./Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync" -Template MediumLarge -CaptureMetrics
 
     Runs Scenario 8 with MediumLarge template and forces performance metrics capture.
+
+.EXAMPLE
+    ./Run-IntegrationTests.ps1 -Scenario All -Template Small
+
+    Runs all implemented (non-stub) scenarios sequentially with the Small template.
+    Docker images are built once; the environment is reset between each scenario.
+    A pass/fail summary is printed at the end.
 #>
 
 param(
@@ -464,6 +474,133 @@ if (-not $Scenario) {
         else {
             $Template = "Nano"
         }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Handle "-Scenario All": run every implemented scenario sequentially
+# ---------------------------------------------------------------------------
+if ($Scenario -eq "All") {
+
+    # Incompatible with -SetupOnly
+    if ($SetupOnly) {
+        Write-Host "${RED}ERROR: -SetupOnly cannot be combined with -Scenario All${NC}"
+        exit 1
+    }
+
+    # Discover scenario scripts and filter out stubs
+    $scenariosPath = Join-Path $scriptRoot "scenarios"
+    $scenarioFiles = Get-ChildItem $scenariosPath -Filter "Invoke-*.ps1" | Sort-Object Name
+    $implementedScenarios = @()
+
+    foreach ($file in $scenarioFiles) {
+        $fileContent = Get-Content $file.FullName -Raw
+        if ($fileContent -match 'Write-Host\s+"[\s]*NOT YET IMPLEMENTED[\s]*"') {
+            continue
+        }
+        $implementedScenarios += ($file.BaseName -replace '^Invoke-', '')
+    }
+
+    if ($implementedScenarios.Count -eq 0) {
+        Write-Host "${RED}ERROR: No implemented scenarios found in $scenariosPath${NC}"
+        exit 1
+    }
+
+    # Display plan
+    Write-Host ""
+    Write-Host "${CYAN}$("=" * 65)${NC}"
+    Write-Host "${CYAN}  JIM Integration Test Runner — All Scenarios${NC}"
+    Write-Host "${CYAN}$("=" * 65)${NC}"
+    Write-Host ""
+    Write-Host "${GRAY}Scenarios to run ($($implementedScenarios.Count)):${NC}"
+    foreach ($s in $implementedScenarios) {
+        Write-Host "  ${CYAN}$s${NC}"
+    }
+    Write-Host ""
+
+    # Build common parameters as a hashtable for proper splatting
+    $commonParams = @{}
+    if ($Template)   { $commonParams.Template = $Template }
+    if ($Step)       { $commonParams.Step = $Step }
+    if ($PSBoundParameters.ContainsKey('ExportConcurrency'))    { $commonParams.ExportConcurrency = $ExportConcurrency }
+    if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) { $commonParams.MaxExportParallelism = $MaxExportParallelism }
+    if ($TimeoutSeconds -ne 180)                                { $commonParams.TimeoutSeconds = $TimeoutSeconds }
+    if ($CaptureMetrics)                                        { $commonParams.CaptureMetrics = $true }
+
+    # Run each scenario, collecting results
+    $results = @()
+    $allStart = Get-Date
+    $selfScript = Join-Path $scriptRoot "Run-IntegrationTests.ps1"
+    $anyFailed = $false
+
+    for ($i = 0; $i -lt $implementedScenarios.Count; $i++) {
+        $scenarioName = $implementedScenarios[$i]
+        $index = $i + 1
+
+        Write-Host ""
+        Write-Host "${CYAN}$("=" * 65)${NC}"
+        Write-Host "${CYAN}  [$index/$($implementedScenarios.Count)] $scenarioName${NC}"
+        Write-Host "${CYAN}$("=" * 65)${NC}"
+        Write-Host ""
+
+        $scenarioStart = Get-Date
+
+        # First scenario: full build. Subsequent scenarios: skip build, but still reset.
+        $scenarioParams = @{ Scenario = $scenarioName } + $commonParams
+        if ($i -gt 0) {
+            $scenarioParams.SkipBuild = $true
+        }
+
+        & $selfScript @scenarioParams
+        $exitCode = $LASTEXITCODE
+
+        $scenarioDuration = (Get-Date) - $scenarioStart
+
+        $passed = ($exitCode -eq 0)
+        if (-not $passed) { $anyFailed = $true }
+
+        $results += @{
+            Name     = $scenarioName
+            Passed   = $passed
+            ExitCode = $exitCode
+            Duration = $scenarioDuration
+        }
+
+        $status = if ($passed) { "${GREEN}PASSED${NC}" } else { "${RED}FAILED (exit code $exitCode)${NC}" }
+        Write-Host ""
+        Write-Host "  Result: $status  Duration: $($scenarioDuration.ToString('hh\:mm\:ss'))"
+        Write-Host ""
+    }
+
+    # Print summary
+    $allDuration = (Get-Date) - $allStart
+    $passCount = ($results | Where-Object { $_.Passed }).Count
+    $failCount = $results.Count - $passCount
+
+    Write-Host ""
+    Write-Host "${CYAN}$("=" * 65)${NC}"
+    Write-Host "${CYAN}  All Scenarios — Summary${NC}"
+    Write-Host "${CYAN}$("=" * 65)${NC}"
+    Write-Host ""
+
+    foreach ($r in $results) {
+        $icon   = if ($r.Passed) { "${GREEN}PASS${NC}" } else { "${RED}FAIL${NC}" }
+        $dur    = $r.Duration.ToString('hh\:mm\:ss')
+        Write-Host ("  [{0}]  {1,-50} {2}" -f $icon, $r.Name, $dur)
+    }
+
+    Write-Host ""
+    Write-Host "${CYAN}Total Duration: ${NC}$($allDuration.ToString('hh\:mm\:ss'))"
+    Write-Host "${CYAN}Passed: ${NC}$passCount / $($results.Count)    ${CYAN}Failed: ${NC}$failCount / $($results.Count)"
+    Write-Host ""
+
+    if ($anyFailed) {
+        Write-Host "${RED}One or more scenarios failed.${NC}"
+        exit 1
+    }
+    else {
+        Write-Host "${GREEN}All scenarios passed.${NC}"
+        exit 0
     }
 }
 
