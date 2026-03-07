@@ -442,7 +442,8 @@ for ($g = 0; $g -lt $createdGroups.Count; $g++) {
             }
         }
         "Location" {
-            $targetMembers = [Math]::Max(1, [Math]::Floor($userCount * 0.3))
+            # Location groups: 30-50% of users, capped at 50K (tests upper MVA range)
+            $targetMembers = [Math]::Min(50000, [Math]::Max(1, [Math]::Floor($userCount * (0.3 + ($g % 5) * 0.05))))
             $offset = ($g * 7) % $userCount
             $seen = [System.Collections.Generic.HashSet[string]]::new()
             for ($u = 0; $u -lt $targetMembers; $u++) {
@@ -452,7 +453,11 @@ for ($g = 0; $g -lt $createdGroups.Count; $g++) {
             $memberNames = @($seen)
         }
         "Project" {
-            $targetMembers = [Math]::Max(1, [Math]::Floor($userCount * 0.2))
+            # Project groups: varied sizes (50 to 5000) for broad coverage
+            # Distribute across size tiers: tiny(50), small(200), medium(1000), large(3000), xlarge(5000)
+            $sizeTiers = @(50, 200, 500, 1000, 2000, 3000, 5000)
+            $tierIndex = $g % $sizeTiers.Count
+            $targetMembers = [Math]::Min($sizeTiers[$tierIndex], $userCount)
             $offset = ($g * 11) % $userCount
             $seen = [System.Collections.Generic.HashSet[string]]::new()
             for ($u = 0; $u -lt $targetMembers; $u++) {

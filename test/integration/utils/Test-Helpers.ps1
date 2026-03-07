@@ -211,14 +211,18 @@ function Get-TemplateScale {
             Groups = 500
             AvgMemberships = 10
         }
+        # XLarge/XXLarge: Capped group counts to keep total memberships under ~500K.
+        # samba-tool holds an LDB write lock per call, making millions of membership
+        # writes impractical. Fewer groups with higher avg memberships gives better
+        # coverage without the population time explosion.
         XLarge = @{
             Users = 100000
-            Groups = 2000
+            Groups = 50
             AvgMemberships = 12
         }
         XXLarge = @{
             Users = 1000000
-            Groups = 10000
+            Groups = 80
             AvgMemberships = 15
         }
     }
