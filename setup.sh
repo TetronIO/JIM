@@ -224,7 +224,14 @@ check_prerequisites() {
 
     # Check Docker daemon is running
     if ! docker info >/dev/null 2>&1; then
-        fatal "Docker daemon is not running. Start it with: sudo systemctl start docker"
+        # Provide context-appropriate advice based on installed Docker variant
+        if systemctl --user list-unit-files docker-desktop.service >/dev/null 2>&1; then
+            fatal "Docker daemon is not running. Start Docker Desktop from your applications menu, or run: systemctl --user start docker-desktop"
+        elif systemctl list-unit-files docker.service >/dev/null 2>&1; then
+            fatal "Docker daemon is not running. Start it with: sudo systemctl start docker"
+        else
+            fatal "Docker daemon is not running. Please start your Docker service (Docker Desktop or Docker Engine)."
+        fi
     fi
 
     success "All prerequisites met"
