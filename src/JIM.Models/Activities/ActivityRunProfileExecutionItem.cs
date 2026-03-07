@@ -9,12 +9,19 @@ namespace JIM.Models.Activities;
 /// </summary>
 public class ActivityRunProfileExecutionItem
 {
+    /// <summary>
+    /// Unique identifier for this run profile execution item.
+    /// </summary>
     public Guid Id { get; set; }
 
     /// <summary>
-    /// The parent for this run profile execution item. For EF navigation purposes.
+    /// The parent activity for this run profile execution item. For EF navigation purposes.
     /// </summary>
     public Activity Activity { get; set; } = null!;
+
+    /// <summary>
+    /// Foreign key for the parent <see cref="Activity"/> navigation property.
+    /// </summary>
     public Guid ActivityId { get; set; }
 
     /// <summary>
@@ -76,8 +83,16 @@ public class ActivityRunProfileExecutionItem
 
     public ActivityRunProfileExecutionItemErrorType? ErrorType { get; set; } = ActivityRunProfileExecutionItemErrorType.NotSet;
 
+    /// <summary>
+    /// Human-readable error message describing what went wrong during processing.
+    /// Null when no error occurred.
+    /// </summary>
     public string? ErrorMessage { get; set; }
 
+    /// <summary>
+    /// Stack trace captured from the exception, for diagnostic purposes.
+    /// Null when no error occurred or when the error type does not originate from an exception.
+    /// </summary>
     public string? ErrorStackTrace { get; set; }
 
     /// <summary>
