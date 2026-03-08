@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-03-08
+
+### Added
+- ✨ Self-contained object matching rules — sync rules now carry their own matching logic for import and export, enabling fully portable rule definitions (#386)
+- ✨ CRUD API endpoints for sync rule object matching rules (`GET`, `POST`, `PUT`, `DELETE` `/api/v1/synchronisation/sync-rules/{id}/matching-rules`)
+- ✨ Matching mode switching API — toggle between simple and advanced object matching per connected system
+- 🖥️ Sortable Object Mapping and Capabilities columns on the Sync Rules page
+
+### Fixed
+- 🐛 Setup script now correctly detects Docker Desktop alongside Docker Engine
+
 ## [0.4.0] - 2026-03-05
 
 ### Added
@@ -256,7 +267,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/TetronIO/JIM/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/TetronIO/JIM/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/TetronIO/JIM/compare/v0.2.0-alpha...v0.3.0
 [0.2.0-alpha]: https://github.com/TetronIO/JIM/compare/v0.1.0-alpha...v0.2.0-alpha

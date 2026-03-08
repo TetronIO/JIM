@@ -3,7 +3,7 @@
     RootModule = 'JIM.psm1'
 
     # Version number of this module.
-    ModuleVersion = '0.4.0'
+    ModuleVersion = '0.5.0'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Core', 'Desktop')
@@ -164,32 +164,16 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
-## 0.4.0
+## 0.5.0
 
 ### New Features
-- Sync Outcome Graph — full causal tracing of every change during synchronisation
-- Configurable sync outcome tracking level (None / Standard / Detailed)
-- Export change history with before/after attribute values
-- One-command deployment with interactive installer
-- Production-ready Docker Compose configuration for pre-built images
-- Sync Rule detail page redesign with expression highlighting and inline editing
-- Filter controls on Attribute Flow table and Connected System Objects list
-- Pronouns attribute support
-- Welcome banner on PowerShell connection
-- Comprehensive Deployment Guide
-
-### Performance
-- Up to 37% faster synchronisation through optimised batch RPEI persistence
-
-### Security
-- Hardened release pipeline with container scanning, SBOM attestation, and build validation
-- Application blocks readiness until database migrations are applied
+- Self-contained object matching rules — sync rules carry their own matching logic for import and export
+- CRUD API endpoints for sync rule object matching rules
+- Matching mode switching API — toggle between simple and advanced object matching per connected system
+- Sortable Object Mapping and Capabilities columns on the Sync Rules page
 
 ### Fixed
-- OIDC Identity.Name resolution with unmapped claims
-- Two-pass CSO processing prevents false join errors
-- Spurious export operations for objects queued for deletion
-- Accurate activity attribute flow statistics
+- Setup script now correctly detects Docker Desktop alongside Docker Engine
 
 For full changelog, see: https://github.com/TetronIO/JIM/blob/main/CHANGELOG.md
 '@
