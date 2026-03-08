@@ -931,6 +931,7 @@ try {
                 try {
                     New-JIMMatchingRule -ConnectedSystemId $sourceSystem.id `
                         -ObjectTypeId $sourceUserType.id `
+                        -MetaverseObjectTypeId $mvUserType.id `
                         -TargetMetaverseAttributeId $mvAccountNameAttr.id `
                         -SourceAttributeId $sourceSamAttr.id | Out-Null
                     Write-Host "  ✓ Source matching rule configured (sAMAccountName → Account Name)" -ForegroundColor Green
@@ -959,6 +960,7 @@ try {
                 try {
                     New-JIMMatchingRule -ConnectedSystemId $targetSystem.id `
                         -ObjectTypeId $targetUserType.id `
+                        -MetaverseObjectTypeId $mvUserType.id `
                         -TargetMetaverseAttributeId $mvAccountNameAttr.id `
                         -SourceAttributeId $targetSamAttr.id | Out-Null
                     Write-Host "  ✓ Target matching rule configured (sAMAccountName → Account Name)" -ForegroundColor Green

@@ -1,6 +1,6 @@
 # Simple Mode Object Matching for Import and Export
 
-- **Status:** Doing (Steps 1–23 complete; Step 24 deferred to integration test run)
+- **Status:** Done
 
 ## Context
 
@@ -488,7 +488,7 @@ Tests for the integration in `CreateOrUpdatePendingExportWithNoNetChangeAsync`:
 - `Set-JIMObjectMatchingMode` — calls correct endpoint
 - `Set-JIMObjectMatchingMode` without `-Force` — prompts for confirmation
 
-### 24. Update Scenario 8 setup
+### 24. Update Scenario 8 setup ✅
 
 **File:** `test/integration/Setup-Scenario8.ps1`
 

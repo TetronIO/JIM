@@ -1029,6 +1029,7 @@ try {
             if (-not $matchingRuleExists) {
                 New-JIMMatchingRule -ConnectedSystemId $csvSystem.id `
                     -ObjectTypeId $csvUserType.id `
+                    -MetaverseObjectTypeId $mvUserType.id `
                     -SourceAttributeId $csvEmployeeIdAttr.id `
                     -TargetMetaverseAttributeId $mvEmployeeIdAttr.id | Out-Null
                 Write-Host "  ✓ Object matching rule configured (employeeId → Employee ID)" -ForegroundColor Green
@@ -1068,6 +1069,7 @@ try {
         if (-not $ldapMatchingRuleExists) {
             New-JIMMatchingRule -ConnectedSystemId $ldapSystem.id `
                 -ObjectTypeId $ldapUserType.id `
+                -MetaverseObjectTypeId $mvUserType.id `
                 -SourceAttributeId $ldapEmployeeIdAttr.id `
                 -TargetMetaverseAttributeId $mvEmployeeIdAttr.id | Out-Null
             Write-Host "  ✓ LDAP object matching rule configured (employeeID → Employee ID)" -ForegroundColor Green
@@ -1180,6 +1182,7 @@ try {
                 if (-not $trainingMatchingRuleExists) {
                     New-JIMMatchingRule -ConnectedSystemId $trainingSystem.id `
                         -ObjectTypeId $trainingRecordType.id `
+                        -MetaverseObjectTypeId $mvUserType.id `
                         -SourceAttributeId $trainingEmployeeIdAttr.id `
                         -TargetMetaverseAttributeId $mvEmployeeIdAttr.id | Out-Null
                     Write-Host "  ✓ Training object matching rule configured (employeeId → Employee ID)" -ForegroundColor Green
@@ -1296,6 +1299,7 @@ try {
                 if (-not $crossDomainMatchingRuleExists) {
                     New-JIMMatchingRule -ConnectedSystemId $crossDomainSystem.id `
                         -ObjectTypeId $crossDomainUserType.id `
+                        -MetaverseObjectTypeId $mvUserType.id `
                         -SourceAttributeId $crossDomainEmployeeIdAttr.id `
                         -TargetMetaverseAttributeId $mvEmployeeIdAttr.id | Out-Null
                     Write-Host "  ✓ Cross-Domain object matching rule configured (employeeId → Employee ID)" -ForegroundColor Green
