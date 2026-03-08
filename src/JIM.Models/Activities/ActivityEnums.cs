@@ -1,6 +1,28 @@
 namespace JIM.Models.Activities;
 
 /// <summary>
+/// High-level outcome stat types used for filtering activities by their outcome columns.
+/// Maps to the granular summary stat fields on Activity (TotalAdded, TotalUpdated, etc.).
+/// </summary>
+public enum ActivityOutcomeType
+{
+    Added,
+    Updated,
+    Deleted,
+    Projected,
+    Joined,
+    AttributeFlows,
+    Disconnected,
+    DriftCorrections,
+    Provisioned,
+    Exported,
+    Deprovisioned,
+    Created,
+    PendingExports,
+    Errors
+}
+
+/// <summary>
 /// The type of outcome recorded in an RPEI sync outcome node.
 /// Covers all three run profile types: import, sync, and export.
 /// </summary>

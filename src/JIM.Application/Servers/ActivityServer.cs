@@ -268,15 +268,25 @@ public class ActivityServer
     /// <param name="sortBy">Optional column to sort by (e.g., "type", "target", "created", "status").</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
     /// <param name="initiatedById">Optional filter to only show activities initiated by a specific user.</param>
+    /// <param name="operationFilter">Optional filter for operation types (additive/OR within filter).</param>
+    /// <param name="outcomeFilter">Optional filter for outcome stat types (additive/OR within filter).</param>
+    /// <param name="typeFilter">Optional filter for target types (additive/OR within filter).</param>
+    /// <param name="statusFilter">Optional filter for activity statuses (additive/OR within filter).</param>
     public async Task<PagedResultSet<Activity>> GetActivitiesAsync(
         int page = 1,
         int pageSize = 20,
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        Guid? initiatedById = null)
+        Guid? initiatedById = null,
+        IEnumerable<ActivityTargetOperationType>? operationFilter = null,
+        IEnumerable<ActivityOutcomeType>? outcomeFilter = null,
+        IEnumerable<ActivityTargetType>? typeFilter = null,
+        IEnumerable<ActivityStatus>? statusFilter = null)
     {
-        return await Application.Repository.Activity.GetActivitiesAsync(page, pageSize, searchQuery, sortBy, sortDescending, initiatedById);
+        return await Application.Repository.Activity.GetActivitiesAsync(
+            page, pageSize, searchQuery, sortBy, sortDescending, initiatedById,
+            operationFilter, outcomeFilter, typeFilter, statusFilter);
     }
 
     /// <summary>
