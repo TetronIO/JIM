@@ -18,17 +18,21 @@ Simple mode object matching (`ObjectMatchingRuleMode.ConnectedSystem`) stores ma
 
 2. **No export matching:** When provisioning objects to a target system, JIM cannot use object matching rules to find and join to existing CSOs. This means if an object already exists in the target system, JIM will attempt to provision a duplicate rather than joining to the existing object.
 
+### Root Cause
+
+Both problems stem from the same limitation: `ObjectMatchingRule` is not self-contained. It knows *what to match* (source/target attributes) and *how to match* (case sensitivity), but not *where to search* — the target `MetaverseObjectType` comes from the `SyncRule`, which couples matching to sync rule existence.
+
 ### Goal
 
-Enable simple mode object matching to work for **both inbound and outbound** matching:
+Make `ObjectMatchingRule` self-contained by adding a `MetaverseObjectTypeId` FK directly to the rule. This enables simple mode object matching to work for **both inbound and outbound** matching without requiring sync rules to provide context:
 
-1. **Import:** Allow `AttemptJoinAsync` to use simple mode matching rules directly from the object type without requiring an import sync rule. This requires knowing which `MetaverseObjectType` to search, which currently only comes from the sync rule.
+1. **Import:** `AttemptJoinAsync` can evaluate matching rules directly from the object type — each rule knows which MVO type to search.
 
-2. **Export:** Integrate `FindMatchingConnectedSystemObjectAsync` into the export/provisioning flow so that before provisioning a new CSO, JIM checks whether a matching object already exists in the target system and joins to it instead.
+2. **Export:** `FindMatchingConnectedSystemObjectAsync` can be integrated into the provisioning flow — before creating a new CSO, JIM checks whether a matching object already exists in the target system.
 
 ## Entity Relationship Diagram
 
-Entities involved in object matching. The new `MatchingTargetMetaverseObjectTypeId` FK is marked.
+Entities involved in object matching. New properties are marked.
 
 ```mermaid
 erDiagram
@@ -43,7 +47,6 @@ erDiagram
         int ConnectedSystemId FK
         string Name
         bool Selected
-        int MatchingTargetMetaverseObjectTypeId FK "NEW - nullable"
     }
 
     MetaverseObjectType {
@@ -66,6 +69,7 @@ erDiagram
         int Order
         int ConnectedSystemObjectTypeId FK "nullable - simple mode"
         int SyncRuleId FK "nullable - advanced mode"
+        int MetaverseObjectTypeId FK "NEW - nullable, simple mode only"
         int TargetMetaverseAttributeId FK
         bool CaseSensitive
     }
@@ -92,65 +96,79 @@ erDiagram
     ConnectedSystem ||--o{ ConnectedSystemObjectType : "has"
     ConnectedSystem ||--o{ SyncRule : "has"
     ConnectedSystemObjectType ||--o{ ObjectMatchingRule : "has (simple mode)"
-    ConnectedSystemObjectType }o--|| MetaverseObjectType : "matching target (NEW)"
     SyncRule ||--o{ ObjectMatchingRule : "has (advanced mode)"
     SyncRule }o--|| ConnectedSystemObjectType : "applies to"
     SyncRule }o--|| MetaverseObjectType : "maps to"
+    ObjectMatchingRule }o--o| MetaverseObjectType : "searches (NEW, simple mode)"
     ObjectMatchingRule ||--|{ ObjectMatchingRuleSource : "has"
     ObjectMatchingRule }o--|| MetaverseAttribute : "target"
     ObjectMatchingRuleSource }o--o| ConnectedSystemObjectTypeAttribute : "source (import)"
     ObjectMatchingRuleSource }o--o| MetaverseAttribute : "source (export)"
 ```
 
+## Design Decision: Self-Contained Matching Rules
+
+In advanced mode, `ObjectMatchingRule` belongs to a `SyncRule` which already carries `MetaverseObjectTypeId`. The rule doesn't need its own copy — the sync rule provides the context.
+
+In simple mode, rules belong to `ConnectedSystemObjectType` and there may be no sync rule at all. The new `MetaverseObjectTypeId` on `ObjectMatchingRule` fills this gap, making simple mode rules self-contained:
+
+- **Simple mode rules:** `MetaverseObjectTypeId` is populated — the rule knows where to search
+- **Advanced mode rules:** `MetaverseObjectTypeId` is null — the sync rule provides the MVO type as before
+
+This keeps matching logic contained within `ObjectMatchingRule` rather than spreading it across `ConnectedSystemObjectType`.
+
 ## Changes
 
-### Part A: Import Matching Without Import Sync Rules
+### 1. Add `MetaverseObjectTypeId` FK to `ObjectMatchingRule`
 
-#### 1. Add `MatchingTargetMetaverseObjectTypeId` FK to `ConnectedSystemObjectType`
+**File:** `src/JIM.Models/Logic/ObjectMatchingRule.cs`
 
-**File:** `src/JIM.Models/Staging/ConnectedSystemObjectType.cs`
+Add after `TargetMetaverseAttributeId` (line 92):
+- `int? MetaverseObjectTypeId` (nullable FK)
+- `MetaverseObjectType? MetaverseObjectType` (navigation property)
 
-Add after `RemoveContributedAttributesOnObsoletion` (line 27):
-- `int? MatchingTargetMetaverseObjectTypeId` (nullable FK)
-- `MetaverseObjectType? MatchingTargetMetaverseObjectType` (navigation property)
+XML doc comment: "The Metaverse Object Type to search when evaluating this rule. Required for simple mode rules (`ObjectMatchingRuleMode.ConnectedSystem`) where no sync rule provides the MVO type. Null for advanced mode rules where the sync rule's `MetaverseObjectTypeId` is used instead."
 
-XML doc comment should make clear this is specifically for simple mode object matching — when `ObjectMatchingRuleMode.ConnectedSystem` is active and no import sync rule exists for this object type, the matching rules on this object type use this MVO type to scope the metaverse search.
-
-#### 2. EF Core configuration
+### 2. EF Core configuration
 
 **File:** `src/JIM.PostgresData/JimDbContext.cs`
 
-Add relationship config: `HasOne(MatchingTargetMetaverseObjectType).WithMany().OnDelete(SetNull)`.
+Add relationship config for `ObjectMatchingRule`: `HasOne(r => r.MetaverseObjectType).WithMany().HasForeignKey(r => r.MetaverseObjectTypeId).OnDelete(SetNull)`.
 
-#### 3. EF Migration
+### 3. EF Migration
 
-Run `dotnet ef migrations add AddMatchingTargetMetaverseObjectTypeToConnectedSystemObjectType --project src/JIM.PostgresData`.
+Run `dotnet ef migrations add AddMetaverseObjectTypeToObjectMatchingRule --project src/JIM.PostgresData`.
 
-#### 4. Update repository loading queries
+### 4. Update `ObjectMatchingRule.IsValid()`
+
+**File:** `src/JIM.Models/Logic/ObjectMatchingRule.cs`
+
+Add validation: when the rule belongs to a `ConnectedSystemObjectType` (simple mode), `MetaverseObjectTypeId` must be set. When it belongs to a `SyncRule` (advanced mode), it should be null.
+
+### 5. Update repository loading queries
 
 **File:** `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs`
 
 **`GetObjectTypesAsync` (line 1626)** — used by sync processors via `_objectTypes`. Add:
-- `.Include(q => q.MatchingTargetMetaverseObjectType)`
+- `.Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.MetaverseObjectType)`
 - `.Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.ConnectedSystemAttribute)`
 - `.Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.MetaverseAttribute)`
 - `.Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.TargetMetaverseAttribute)`
 
-Currently this query only includes `Attributes`. The matching rules and MVO type are needed for the simple mode fallback in `AttemptJoinAsync`.
+Currently this query only includes `Attributes`. The matching rules and their MVO types are needed for simple mode matching in `AttemptJoinAsync`.
 
-**`GetConnectedSystemAsync` (line 155)** — the types sub-query already includes `ObjectMatchingRules`. Add `.Include(ot => ot.MatchingTargetMetaverseObjectType)`.
-
-#### 5. New overload on `ObjectMatchingServer.FindMatchingMetaverseObjectAsync`
+### 6. Update `ObjectMatchingServer.FindMatchingMetaverseObjectAsync`
 
 **File:** `src/JIM.Application/Servers/ObjectMatchingServer.cs`
 
-Add overload that takes `MetaverseObjectType` and `csoTypeId` directly (instead of `SyncRule`):
-- Uses `GetConnectedSystemObjectTypeRules(connectedSystem, csoTypeId)` for matching rules
-- Passes `metaverseObjectType` directly to `FindMetaverseObjectUsingMatchingRuleAsync` (no change needed to the repository method)
+Add a new overload that takes a `ConnectedSystemObjectType` directly (no `SyncRule`):
+- Gets matching rules from `connectedSystemObjectType.ObjectMatchingRules`
+- For each rule, reads `MetaverseObjectType` from the rule itself
+- Calls `FindMetaverseObjectUsingMatchingRuleAsync` with the rule's MVO type
 
-The existing `SyncRule`-based overload remains unchanged.
+The existing `SyncRule`-based overload remains unchanged for advanced mode.
 
-#### 6. Modify `AttemptJoinAsync` — simple mode fallback
+### 7. Modify `AttemptJoinAsync` — simple mode fallback
 
 **File:** `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs` (line 1734)
 
@@ -159,7 +177,7 @@ After the existing `foreach` loop over import sync rules (before `return false`)
 - Check `_connectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem`
 - Check no import sync rules were already evaluated for this CSO type
 - Look up `_objectTypes.FirstOrDefault(ot => ot.Id == connectedSystemObject.TypeId)`
-- If `objectType.MatchingTargetMetaverseObjectType != null`, call the new `FindMatchingMetaverseObjectAsync` overload
+- If `objectType.ObjectMatchingRules.Count > 0`, call the new `FindMatchingMetaverseObjectAsync` overload
 - If match found, run the same join validation and establishment logic
 
 **Extract join validation into a private helper** to avoid duplicating the `existingCsoJoinCount` / `_pendingDisconnectedMvoIds` checks between the sync rule path and simple mode path. Something like:
@@ -169,55 +187,15 @@ private async Task<bool> EstablishJoinAsync(ConnectedSystemObject cso, Metaverse
 
 This helper encapsulates: checking existing join count, adjusting for pending disconnects, throwing `SyncJoinException` for duplicates, setting FK/navigation properties, clearing `LastConnectorDisconnectedDate`.
 
-#### 7. Relax early-return guards
+### 8. Relax early-return guards
 
 **File:** `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs`
 
-**`ProcessActiveConnectedSystemObjectAsync` (line 197):** The `if (activeSyncRules.Count == 0) return;` guard prevents processing even when simple mode could handle it. Relax to allow processing when the connected system is in simple mode and the CSO's object type has a `MatchingTargetMetaverseObjectType` configured.
+**`ProcessActiveConnectedSystemObjectAsync` (line 197):** The `if (activeSyncRules.Count == 0) return;` guard prevents processing even when simple mode could handle it. Relax to allow processing when the connected system is in simple mode and the CSO's object type has matching rules with MVO types configured.
 
 **`ProcessMetaverseObjectChangesAsync` (line 719):** Same guard, same relaxation. When there are no sync rules but simple mode is available, allow fall-through to the join attempt. The subsequent inbound attribute flow loop (line 793) already gracefully handles an empty list (zero iterations).
 
-#### 8. Update API layer
-
-**`src/JIM.Web/Models/Api/ConnectedSystemRequestDtos.cs`** — Add `int? MatchingTargetMetaverseObjectTypeId` to `UpdateConnectedSystemObjectTypeRequest`.
-
-**`src/JIM.Web/Models/Api/ConnectedSystemDto.cs`** — Add `MatchingTargetMetaverseObjectTypeId` and `MatchingTargetMetaverseObjectTypeName` to `ConnectedSystemObjectTypeDto`, update `FromEntity`.
-
-**`src/JIM.Web/Controllers/Api/SynchronisationController.cs`** — In the PUT endpoint for object types (line 128), handle the new property: validate the MVO type exists, set on the entity.
-
-#### 9. Update PowerShell cmdlet
-
-**File:** `src/JIM.PowerShell/Public/ConnectedSystems/Set-JIMConnectedSystemObjectType.ps1`
-
-Add `-MatchingTargetMetaverseObjectTypeId` parameter, include in request body when specified.
-
-#### 10. Unit tests
-
-**`test/JIM.Worker.Tests/OutboundSync/ObjectMatchingServerTests.cs`** — Add tests for the new overload:
-- Match found with MVO type passed directly
-- No matching rules returns null
-- Multiple matches throws `MultipleMatchesException`
-
-**New file: `test/JIM.Worker.Tests/Synchronisation/SimpleMatchingModeJoinTests.cs`** — Tests for the `AttemptJoinAsync` simple mode fallback:
-- CSO joins via simple mode when no import sync rules exist
-- CSO does not join when `MatchingTargetMetaverseObjectTypeId` is null (graceful no-op)
-- Warning logged when matching rules exist but `MatchingTargetMetaverseObjectTypeId` is not set
-- Existing join prevents duplicate (same validation as sync rule path)
-
-#### 11. Update Scenario 8 setup (follow-up)
-
-**File:** `test/integration/Setup-Scenario8.ps1`
-
-After the main changes, update the setup to:
-- Set `MatchingTargetMetaverseObjectTypeId` on the target group object type via `Set-JIMConnectedSystemObjectType`
-- Remove the empty "EMEA AD Import Groups" sync rule creation (lines 598-611)
-- Verify the DeleteGroup test passes without the empty rule
-
-### Part B: Export Matching Integration
-
-Currently `ObjectMatchingServer.FindMatchingConnectedSystemObjectAsync` exists with full simple/advanced mode support, but is never called from any sync processor. The export provisioning flow in `ExportEvaluationServer.CreateOrUpdatePendingExportWithNoNetChangeAsync` always creates a new `PendingProvisioning` CSO when no existing CSO is found — it never attempts to find a matching CSO in the target system using object matching rules.
-
-#### 12. Integrate export matching into `CreateOrUpdatePendingExportWithNoNetChangeAsync`
+### 9. Integrate export matching into `CreateOrUpdatePendingExportWithNoNetChangeAsync`
 
 **File:** `src/JIM.Application/Servers/ExportEvaluationServer.cs` (line ~918)
 
@@ -233,13 +211,13 @@ In `CreateOrUpdatePendingExportWithNoNetChangeAsync`, when `existingCso == null`
 
 This needs access to the `ConnectedSystem` object. Check whether `exportRule.ConnectedSystem` navigation property is loaded in the export evaluation cache; if not, add it to the cache loading query.
 
-#### 13. Ensure matching rules are loaded in export evaluation cache
+### 10. Ensure matching rules are loaded in export evaluation cache
 
 **File:** `src/JIM.Application/Servers/ExportEvaluationServer.cs`
 
 In `BuildExportEvaluationCacheAsync`, verify that export sync rules include their `ConnectedSystem` with `ObjectTypes` and `ObjectMatchingRules` (with `Sources` and attributes). The matching server needs these to evaluate rules. If not already included, add the necessary `.Include()` chains.
 
-#### 14. Ensure `FindConnectedSystemObjectUsingMatchingRuleAsync` repository method exists
+### 11. Ensure `FindConnectedSystemObjectUsingMatchingRuleAsync` repository method exists
 
 **File:** `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs`
 
@@ -251,19 +229,53 @@ Verify `FindConnectedSystemObjectUsingMatchingRuleAsync` is implemented and hand
 
 This method is already referenced by `ObjectMatchingServer.FindMatchingConnectedSystemObjectAsync` (line 120) — confirm it exists and works correctly.
 
-#### 15. Unit tests for export matching
+### 12. Update API layer
 
-**`test/JIM.Worker.Tests/OutboundSync/ObjectMatchingServerTests.cs`** — The existing tests for `FindMatchingConnectedSystemObjectAsync` should already cover basic scenarios. Verify and add if missing:
-- Simple mode: match found using object type rules
-- Simple mode: no matching rules returns null
-- Advanced mode: match found using sync rule rules
-- No match returns null
+**`src/JIM.Web/Models/Api/ConnectedSystemDto.cs`** — Add `MetaverseObjectTypeId` and `MetaverseObjectTypeName` to `ObjectMatchingRuleDto`, update `FromEntity`.
+
+**`src/JIM.Web/Controllers/Api/SynchronisationController.cs`** — In endpoints that create/update matching rules, handle the new `MetaverseObjectTypeId` property: validate the MVO type exists when provided, set on the entity.
+
+### 13. Update PowerShell cmdlets
+
+Update any PowerShell cmdlets that create or modify object matching rules to accept a `-MetaverseObjectTypeId` parameter and include it in the request body.
+
+### 14. Update mode switching logic
+
+**File:** `src/JIM.Application/Servers/ConnectedSystemServer.cs`
+
+In `SwitchObjectMatchingModeAsync`:
+- **Simple → Advanced:** When copying rules from object type to sync rules, clear `MetaverseObjectTypeId` on the copied rules (sync rules provide their own MVO type).
+- **Advanced → Simple:** When migrating rules to object types, populate `MetaverseObjectTypeId` from the sync rule's `MetaverseObjectTypeId`.
+
+### 15. Unit tests
+
+**`test/JIM.Worker.Tests/OutboundSync/ObjectMatchingServerTests.cs`** — Add tests for the new overload and export matching:
+- Import: match found using rule's MVO type directly (no sync rule)
+- Import: no matching rules returns null
+- Import: multiple matches throws `MultipleMatchesException`
+- Export (simple mode): match found using object type rules
+- Export (simple mode): no matching rules returns null
+- Export (advanced mode): match found using sync rule rules
+
+**New file: `test/JIM.Worker.Tests/Synchronisation/SimpleMatchingModeJoinTests.cs`** — Tests for the `AttemptJoinAsync` simple mode fallback:
+- CSO joins via simple mode when no import sync rules exist
+- CSO does not join when no matching rules exist (graceful no-op)
+- CSO does not join when matching rules exist but `MetaverseObjectTypeId` is null
+- Existing join prevents duplicate (same validation as sync rule path)
 
 **New file: `test/JIM.Worker.Tests/OutboundSync/ExportMatchingIntegrationTests.cs`** — Tests for the integration in `CreateOrUpdatePendingExportWithNoNetChangeAsync`:
 - When matching CSO found, no new provisioning CSO created — existing CSO used with Update change type
 - When no matching CSO found, provisioning CSO created as before
 - When matching is disabled (no matching rules), provisioning CSO created as before
-- Export matching respects simple vs advanced mode
+
+### 16. Update Scenario 8 setup (follow-up)
+
+**File:** `test/integration/Setup-Scenario8.ps1`
+
+After the main changes, update the setup to:
+- Ensure matching rules on the target group object type have `MetaverseObjectTypeId` set
+- Remove the empty "EMEA AD Import Groups" sync rule creation (lines 598-611)
+- Verify the DeleteGroup test passes without the empty rule
 
 ## Verification
 
