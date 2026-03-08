@@ -231,6 +231,5 @@ public class ObjectMatchingServer
         var objectType = connectedSystem.ObjectTypes.FirstOrDefault(ot => ot.Id == objectTypeId);
         return objectType?.ObjectMatchingRules?.ToList() ?? new List<ObjectMatchingRule>();
     }
-
     #endregion
 }
