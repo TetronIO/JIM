@@ -1,6 +1,6 @@
 # Simple Mode Object Matching for Import and Export
 
-- **Status:** Planned
+- **Status:** Doing (Steps 1–11 complete)
 
 ## Context
 
@@ -135,7 +135,7 @@ This removes `GetMatchingRulesForImport`, `GetMatchingRulesForExport`, and `GetC
 
 ## Changes
 
-### 1. Add `MetaverseObjectTypeId` FK to `ObjectMatchingRule`
+### 1. Add `MetaverseObjectTypeId` ✅ FK to `ObjectMatchingRule`
 
 **File:** `src/JIM.Models/Logic/ObjectMatchingRule.cs`
 
@@ -145,23 +145,23 @@ Add after `TargetMetaverseAttributeId` (line 92):
 
 XML doc comment: "The Metaverse Object Type to search when evaluating this rule. Required for simple mode rules (`ObjectMatchingRuleMode.ConnectedSystem`) where no sync rule provides the MVO type. Null for advanced mode rules where the sync rule's `MetaverseObjectTypeId` is used instead."
 
-### 2. EF Core configuration
+### 2. EF Core configuration ✅
 
 **File:** `src/JIM.PostgresData/JimDbContext.cs`
 
 Add relationship config for `ObjectMatchingRule`: `HasOne(r => r.MetaverseObjectType).WithMany().HasForeignKey(r => r.MetaverseObjectTypeId).OnDelete(SetNull)`.
 
-### 3. EF Migration
+### 3. EF Migration ✅
 
 Run `dotnet ef migrations add AddMetaverseObjectTypeToObjectMatchingRule --project src/JIM.PostgresData`.
 
-### 4. Update `ObjectMatchingRule.IsValid()`
+### 4. Update `ObjectMatchingRule.IsValid()` ✅
 
 **File:** `src/JIM.Models/Logic/ObjectMatchingRule.cs`
 
 Add validation: when the rule belongs to a `ConnectedSystemObjectType` (simple mode), `MetaverseObjectTypeId` must be set. When it belongs to a `SyncRule` (advanced mode), it should be null.
 
-### 5. Update repository loading queries
+### 5. Update repository loading queries ✅
 
 **File:** `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs`
 
@@ -173,7 +173,7 @@ Add validation: when the rule belongs to a `ConnectedSystemObjectType` (simple m
 
 Currently this query only includes `Attributes`. The matching rules and their MVO types are needed for simple mode matching in `AttemptJoinAsync`.
 
-### 6. Simplify `ObjectMatchingServer` to a pure matching engine
+### 6. Simplify `ObjectMatchingServer` ✅ to a pure matching engine
 
 **File:** `src/JIM.Application/Servers/ObjectMatchingServer.cs`
 
@@ -209,7 +209,7 @@ public async Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync
 
 `ComputeMatchingValueFromMvo` remains unchanged (already takes a single rule).
 
-### 7. Modify `AttemptJoinAsync` — caller resolves rules
+### 7. Modify `AttemptJoinAsync` ✅ — caller resolves rules
 
 **File:** `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs` (line 1734)
 
@@ -234,7 +234,7 @@ private async Task<bool> EstablishJoinAsync(ConnectedSystemObject cso, Metaverse
 
 This helper encapsulates: checking existing join count, adjusting for pending disconnects, throwing `SyncJoinException` for duplicates, setting FK/navigation properties, clearing `LastConnectorDisconnectedDate`.
 
-### 8. Relax early-return guards
+### 8. Relax early-return guards ✅
 
 **File:** `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs`
 
@@ -242,7 +242,7 @@ This helper encapsulates: checking existing join count, adjusting for pending di
 
 **`ProcessMetaverseObjectChangesAsync` (line 719):** Same guard, same relaxation. When there are no sync rules but simple mode is available, allow fall-through to the join attempt. The subsequent inbound attribute flow loop (line 793) already gracefully handles an empty list (zero iterations).
 
-### 9. Integrate export matching into `CreateOrUpdatePendingExportWithNoNetChangeAsync`
+### 9. Integrate export matching ✅ into `CreateOrUpdatePendingExportWithNoNetChangeAsync`
 
 **File:** `src/JIM.Application/Servers/ExportEvaluationServer.cs` (line ~918)
 
@@ -261,13 +261,13 @@ In `CreateOrUpdatePendingExportWithNoNetChangeAsync`, when `existingCso == null`
 
 This needs access to the `ConnectedSystem` object and its object types with matching rules. Check whether these navigation properties are loaded in the export evaluation cache; if not, add to the cache loading query (step 10).
 
-### 10. Ensure matching rules are loaded in export evaluation cache
+### 10. Ensure matching rules are loaded ✅ in export evaluation cache
 
 **File:** `src/JIM.Application/Servers/ExportEvaluationServer.cs`
 
 In `BuildExportEvaluationCacheAsync`, verify that export sync rules include their `ConnectedSystem` with `ObjectTypes` and `ObjectMatchingRules` (with `Sources` and attributes). The matching server needs these to evaluate rules. If not already included, add the necessary `.Include()` chains.
 
-### 11. Ensure `FindConnectedSystemObjectUsingMatchingRuleAsync` repository method exists
+### 11. Ensure `FindConnectedSystemObjectUsingMatchingRuleAsync` ✅ repository method exists
 
 **File:** `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs`
 
