@@ -337,8 +337,9 @@ public abstract class SyncTaskProcessorBase
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
             return;
 
-        // Skip if no sync rules defined - nothing to join/project/flow
-        if (activeSyncRules.Count == 0)
+        // Skip if no sync rules defined AND not in simple mode — nothing to join/project/flow.
+        // In simple mode, matching rules on the object type can drive joining even without sync rules.
+        if (activeSyncRules.Count == 0 && _connectedSystem.ObjectMatchingRuleMode != ObjectMatchingRuleMode.ConnectedSystem)
             return;
 
         Log.Verbose($"ProcessActiveConnectedSystemObjectAsync: Pass 2 for CSO: {connectedSystemObject}.");
@@ -943,7 +944,9 @@ public abstract class SyncTaskProcessorBase
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
             return MetaverseObjectChangeResult.NoChanges();
 
-        if (activeSyncRules.Count == 0)
+        // Skip if no sync rules AND not in simple mode — nothing to join/project/flow.
+        // In simple mode, matching rules on the object type can drive joining even without sync rules.
+        if (activeSyncRules.Count == 0 && _connectedSystem.ObjectMatchingRuleMode != ObjectMatchingRuleMode.ConnectedSystem)
             return MetaverseObjectChangeResult.NoChanges();
 
         // Track what kind of change occurred
@@ -2241,82 +2244,131 @@ public abstract class SyncTaskProcessorBase
     /// <exception cref="InvalidDataException">Thrown if an unsupported join state is found preventing processing.</exception>
     protected async Task<bool> AttemptJoinAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
+        var isSimpleMode = _connectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem;
+        var attemptedMatching = false;
+
         // Enumerate import sync rules for this CSO type to attempt matching.
-        // Uses ObjectMatchingServer which handles both ConnectedSystem mode (rules on object type)
-        // and SyncRule mode (rules on sync rule).
         foreach (var importSyncRule in activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
         {
-            // Use ObjectMatchingServer to find a matching MVO - this properly handles both matching modes
-            MetaverseObject? mvo;
-            try
+            attemptedMatching = true;
+
+            // Resolve matching rules based on mode
+            var matchingRules = isSimpleMode
+                ? GetSimpleModeMatchingRules(connectedSystemObject.TypeId)
+                : importSyncRule.ObjectMatchingRules.ToList();
+
+            if (matchingRules.Count == 0)
+                continue;
+
+            // For advanced mode, set MetaverseObjectType on each rule from the sync rule
+            if (!isSimpleMode)
             {
-                mvo = await _jim.ObjectMatching.FindMatchingMetaverseObjectAsync(
-                    connectedSystemObject,
-                    _connectedSystem,
-                    importSyncRule);
-            }
-            catch (JIM.Models.Exceptions.MultipleMatchesException ex)
-            {
-                throw new SyncJoinException(
-                    ActivityRunProfileExecutionItemErrorType.AmbiguousMatch,
-                    $"Multiple Metaverse Objects ({ex.Matches.Count}) match this Connected System Object. " +
-                    $"An MVO can only be joined to a single CSO per Connected System. " +
-                    $"Check your Object Matching Rules to ensure unique matches. Matching MVO IDs: {string.Join(", ", ex.Matches)}");
+                foreach (var rule in matchingRules)
+                    rule.MetaverseObjectType = importSyncRule.MetaverseObjectType;
             }
 
+            var mvo = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
             if (mvo == null)
                 continue;
 
-            // MVO must not already be joined to a connected system object in this connected system. Joins are 1:1.
-            // Use a count query to check for existing joins without loading the CSO entities.
-            var existingCsoJoinCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMvoAsync(
-                _connectedSystem.Id, mvo.Id);
+            return await EstablishJoinAsync(connectedSystemObject, mvo);
+        }
 
-            // Account for CSOs that have been disconnected in-memory but not yet flushed to the database.
-            // During batch processing, obsolete CSOs are disconnected from their MVOs in-memory and queued
-            // for deletion, but the database still reflects the old join until the page boundary flush.
-            // _pendingDisconnectedMvoIds tracks which MVOs have had CSOs disconnected in this batch.
-            if (existingCsoJoinCount > 0 && _pendingDisconnectedMvoIds.Contains(mvo.Id))
+        // Simple mode fallback: if no import sync rules were evaluated, try matching directly from object type rules.
+        // This enables simple mode joining without requiring empty import sync rules.
+        if (!attemptedMatching && isSimpleMode)
+        {
+            var matchingRules = GetSimpleModeMatchingRules(connectedSystemObject.TypeId);
+            if (matchingRules.Count > 0)
             {
-                var pendingDisconnectCount = _pendingDisconnectedMvoIds.Count(id => id == mvo.Id);
-                existingCsoJoinCount -= pendingDisconnectCount;
-                Log.Debug("AttemptJoinAsync: Adjusted existing join count for MVO {MvoId} from {DbCount} to {AdjustedCount} " +
-                    "(accounting for {PendingCount} pending disconnection(s) not yet flushed to database)",
-                    mvo.Id, existingCsoJoinCount + pendingDisconnectCount, existingCsoJoinCount, pendingDisconnectCount);
+                var mvo = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
+                if (mvo != null)
+                    return await EstablishJoinAsync(connectedSystemObject, mvo);
             }
-
-            if (existingCsoJoinCount > 1)
-                throw new InvalidDataException($"More than one CSO is already joined to the MVO {mvo} we found that matches the matching rules. This is not good!");
-
-            if (existingCsoJoinCount == 1)
-            {
-                throw new SyncJoinException(
-                    ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin,
-                    $"Cannot join this Connected System Object to Metaverse Object ({mvo}) - it already has a connector from this Connected System. " +
-                    $"Check for duplicate data in your source system, or review your Object Matching Rules for uniqueness.");
-            }
-
-            // Establish join! First rule to match, wins.
-            connectedSystemObject.MetaverseObject = mvo;
-            connectedSystemObject.MetaverseObjectId = mvo.Id;
-            connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Joined;
-            connectedSystemObject.DateJoined = DateTime.UtcNow;
-            _pendingCsoJoinUpdates.Add(connectedSystemObject);
-            mvo.ConnectedSystemObjects.Add(connectedSystemObject);
-
-            // If the MVO was marked for deletion (reconnection scenario), clear the disconnection date
-            if (mvo.LastConnectorDisconnectedDate.HasValue)
-            {
-                Log.Information($"AttemptJoinAsync: Clearing LastConnectorDisconnectedDate for MVO {mvo.Id} as connector has reconnected.");
-                mvo.LastConnectorDisconnectedDate = null;
-            }
-
-            Log.Information("AttemptJoinAsync: Established join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvo.Id);
-            return true;
         }
 
         // No join could be established.
         return false;
+    }
+
+    /// <summary>
+    /// Gets simple mode matching rules from the object type loaded in _objectTypes.
+    /// </summary>
+    private List<ObjectMatchingRule> GetSimpleModeMatchingRules(int? csoTypeId)
+    {
+        if (csoTypeId == null || _objectTypes == null)
+            return new List<ObjectMatchingRule>();
+
+        var objectType = _objectTypes.FirstOrDefault(ot => ot.Id == csoTypeId);
+        return objectType?.ObjectMatchingRules?.ToList() ?? new List<ObjectMatchingRule>();
+    }
+
+    /// <summary>
+    /// Calls the matching engine and translates MultipleMatchesException into SyncJoinException.
+    /// </summary>
+    private async Task<MetaverseObject?> FindMatchingMvoForJoinAsync(ConnectedSystemObject connectedSystemObject, List<ObjectMatchingRule> matchingRules)
+    {
+        try
+        {
+            return await _jim.ObjectMatching.FindMatchingMetaverseObjectAsync(connectedSystemObject, matchingRules);
+        }
+        catch (JIM.Models.Exceptions.MultipleMatchesException ex)
+        {
+            throw new SyncJoinException(
+                ActivityRunProfileExecutionItemErrorType.AmbiguousMatch,
+                $"Multiple Metaverse Objects ({ex.Matches.Count}) match this Connected System Object. " +
+                $"An MVO can only be joined to a single CSO per Connected System. " +
+                $"Check your Object Matching Rules to ensure unique matches. Matching MVO IDs: {string.Join(", ", ex.Matches)}");
+        }
+    }
+
+    /// <summary>
+    /// Validates join constraints and establishes the join between a CSO and MVO.
+    /// </summary>
+    private async Task<bool> EstablishJoinAsync(ConnectedSystemObject connectedSystemObject, MetaverseObject mvo)
+    {
+        // MVO must not already be joined to a connected system object in this connected system. Joins are 1:1.
+        var existingCsoJoinCount = await _jim.ConnectedSystems.GetConnectedSystemObjectCountByMvoAsync(
+            _connectedSystem.Id, mvo.Id);
+
+        // Account for CSOs that have been disconnected in-memory but not yet flushed to the database.
+        if (existingCsoJoinCount > 0 && _pendingDisconnectedMvoIds.Contains(mvo.Id))
+        {
+            var pendingDisconnectCount = _pendingDisconnectedMvoIds.Count(id => id == mvo.Id);
+            existingCsoJoinCount -= pendingDisconnectCount;
+            Log.Debug("EstablishJoinAsync: Adjusted existing join count for MVO {MvoId} from {DbCount} to {AdjustedCount} " +
+                "(accounting for {PendingCount} pending disconnection(s) not yet flushed to database)",
+                mvo.Id, existingCsoJoinCount + pendingDisconnectCount, existingCsoJoinCount, pendingDisconnectCount);
+        }
+
+        if (existingCsoJoinCount > 1)
+            throw new InvalidDataException($"More than one CSO is already joined to the MVO {mvo} we found that matches the matching rules. This is not good!");
+
+        if (existingCsoJoinCount == 1)
+        {
+            throw new SyncJoinException(
+                ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin,
+                $"Cannot join this Connected System Object to Metaverse Object ({mvo}) - it already has a connector from this Connected System. " +
+                $"Check for duplicate data in your source system, or review your Object Matching Rules for uniqueness.");
+        }
+
+        // Establish join! First rule to match, wins.
+        connectedSystemObject.MetaverseObject = mvo;
+        connectedSystemObject.MetaverseObjectId = mvo.Id;
+        connectedSystemObject.JoinType = ConnectedSystemObjectJoinType.Joined;
+        connectedSystemObject.DateJoined = DateTime.UtcNow;
+        _pendingCsoJoinUpdates.Add(connectedSystemObject);
+        mvo.ConnectedSystemObjects.Add(connectedSystemObject);
+
+        // If the MVO was marked for deletion (reconnection scenario), clear the disconnection date
+        if (mvo.LastConnectorDisconnectedDate.HasValue)
+        {
+            Log.Information($"EstablishJoinAsync: Clearing LastConnectorDisconnectedDate for MVO {mvo.Id} as connector has reconnected.");
+            mvo.LastConnectorDisconnectedDate = null;
+        }
+
+        Log.Information("EstablishJoinAsync: Established join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvo.Id);
+        return true;
     }
 
     /// <summary>

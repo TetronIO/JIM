@@ -6,10 +6,9 @@ using Serilog;
 namespace JIM.Application.Servers;
 
 /// <summary>
-/// Provides object matching functionality for both import (CSO→MVO join) and export evaluation (MVO→CSO lookup).
-/// Supports two modes:
-/// - ConnectedSystem mode (default): Uses ObjectMatchingRules defined on ConnectedSystemObjectType
-/// - SyncRule mode (advanced): Uses ObjectMatchingRules defined on individual SyncRules
+/// Pure matching engine for object matching during import (CSO→MVO join) and export (MVO→CSO lookup).
+/// Callers are responsible for resolving which matching rules apply (based on mode).
+/// This server evaluates the provided rules and returns matches.
 /// </summary>
 public class ObjectMatchingServer
 {
@@ -27,33 +26,34 @@ public class ObjectMatchingServer
     #region public methods
 
     /// <summary>
-    /// Attempts to find a Metaverse Object that matches a Connected System Object using the appropriate matching rules.
+    /// Attempts to find a Metaverse Object that matches a Connected System Object using the provided matching rules.
     /// This is used during import to join CSOs to existing MVOs.
+    /// The caller is responsible for resolving which rules apply based on the matching mode.
     /// </summary>
     /// <param name="connectedSystemObject">The CSO to find a matching MVO for.</param>
-    /// <param name="connectedSystem">The Connected System (needed to determine matching mode).</param>
-    /// <param name="syncRule">The sync rule being evaluated. Used to get rules in SyncRule mode, or to filter by object type in ConnectedSystem mode.</param>
+    /// <param name="matchingRules">The matching rules to evaluate. Each rule must carry its own
+    /// <see cref="ObjectMatchingRule.MetaverseObjectType"/> (simple mode) or the caller must set it
+    /// from the sync rule before passing (advanced mode).</param>
     /// <returns>The matching MVO, or null if no match found.</returns>
     /// <exception cref="MultipleMatchesException">Thrown if multiple MVOs match the criteria.</exception>
     public async Task<MetaverseObject?> FindMatchingMetaverseObjectAsync(
         ConnectedSystemObject connectedSystemObject,
-        ConnectedSystem connectedSystem,
-        SyncRule syncRule)
+        List<ObjectMatchingRule> matchingRules)
     {
-        var matchingRules = GetMatchingRulesForImport(connectedSystem, syncRule, connectedSystemObject.TypeId);
-
         if (matchingRules.Count == 0)
         {
-            Log.Debug("FindMatchingMetaverseObjectAsync: No matching rules found for CSO type {TypeId}", connectedSystemObject.TypeId);
+            Log.Debug("FindMatchingMetaverseObjectAsync: No matching rules provided for CSO {CsoId}", connectedSystemObject.Id);
             return null;
         }
 
         // Evaluate rules in order until we find a match
         foreach (var matchingRule in matchingRules.OrderBy(r => r.Order))
         {
-            if (!matchingRule.IsValid())
+            // Rule must have a MetaverseObjectType to know where to search
+            var metaverseObjectType = matchingRule.MetaverseObjectType;
+            if (metaverseObjectType == null)
             {
-                Log.Warning("FindMatchingMetaverseObjectAsync: Skipping invalid matching rule {RuleId}", matchingRule.Id);
+                Log.Warning("FindMatchingMetaverseObjectAsync: Skipping matching rule {RuleId} — no MetaverseObjectType set", matchingRule.Id);
                 continue;
             }
 
@@ -61,7 +61,7 @@ public class ObjectMatchingServer
             {
                 var mvo = await Application.Repository.Metaverse.FindMetaverseObjectUsingMatchingRuleAsync(
                     connectedSystemObject,
-                    syncRule.MetaverseObjectType!,
+                    metaverseObjectType,
                     matchingRule);
 
                 if (mvo != null)
@@ -87,40 +87,35 @@ public class ObjectMatchingServer
 
     /// <summary>
     /// Attempts to find an existing Connected System Object in a target system that matches a Metaverse Object.
-    /// This is used during export evaluation to find existing CSOs for provisioning/update decisions.
+    /// This is used during export evaluation to find existing CSOs before provisioning.
+    /// The caller is responsible for resolving which rules apply based on the matching mode.
     /// </summary>
     /// <param name="metaverseObject">The MVO to find a matching CSO for.</param>
-    /// <param name="connectedSystem">The target Connected System.</param>
-    /// <param name="syncRule">The export sync rule being evaluated.</param>
+    /// <param name="connectedSystem">The target Connected System (needed to scope the CSO search).</param>
+    /// <param name="connectedSystemObjectType">The CSO type to search within.</param>
+    /// <param name="matchingRules">The matching rules to evaluate.</param>
     /// <returns>The matching CSO, or null if no match found.</returns>
     public async Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync(
         MetaverseObject metaverseObject,
         ConnectedSystem connectedSystem,
-        SyncRule syncRule)
+        ConnectedSystemObjectType connectedSystemObjectType,
+        List<ObjectMatchingRule> matchingRules)
     {
-        var matchingRules = GetMatchingRulesForExport(connectedSystem, syncRule);
-
         if (matchingRules.Count == 0)
         {
-            Log.Debug("FindMatchingConnectedSystemObjectAsync: No matching rules found for export to CS {CsId}", connectedSystem.Id);
+            Log.Debug("FindMatchingConnectedSystemObjectAsync: No matching rules provided for export to CS {CsId}", connectedSystem.Id);
             return null;
         }
 
         // Evaluate rules in order until we find a match
         foreach (var matchingRule in matchingRules.OrderBy(r => r.Order))
         {
-            if (!matchingRule.IsValid())
-            {
-                Log.Warning("FindMatchingConnectedSystemObjectAsync: Skipping invalid matching rule {RuleId}", matchingRule.Id);
-                continue;
-            }
-
             try
             {
                 var cso = await Application.Repository.ConnectedSystems.FindConnectedSystemObjectUsingMatchingRuleAsync(
                     metaverseObject,
                     connectedSystem,
-                    syncRule.ConnectedSystemObjectType!,
+                    connectedSystemObjectType,
                     matchingRule);
 
                 if (cso != null)
@@ -149,7 +144,7 @@ public class ObjectMatchingServer
     /// <returns>The computed value, or null if the value cannot be computed.</returns>
     public object? ComputeMatchingValueFromMvo(MetaverseObject metaverseObject, ObjectMatchingRule matchingRule)
     {
-        if (!matchingRule.IsValid() || matchingRule.Sources.Count == 0)
+        if (matchingRule.Sources.Count == 0)
             return null;
 
         var source = matchingRule.Sources.OrderBy(s => s.Order).First();
@@ -190,46 +185,5 @@ public class ObjectMatchingServer
         return null;
     }
 
-    #endregion
-
-    #region private methods
-
-    /// <summary>
-    /// Gets the appropriate matching rules for import (CSO→MVO join) based on the Connected System's mode.
-    /// </summary>
-    private List<ObjectMatchingRule> GetMatchingRulesForImport(ConnectedSystem connectedSystem, SyncRule syncRule, int csoTypeId)
-    {
-        return connectedSystem.ObjectMatchingRuleMode switch
-        {
-            ObjectMatchingRuleMode.ConnectedSystem => GetConnectedSystemObjectTypeRules(connectedSystem, csoTypeId),
-            ObjectMatchingRuleMode.SyncRule => syncRule.ObjectMatchingRules.ToList(),
-            _ => new List<ObjectMatchingRule>()
-        };
-    }
-
-    /// <summary>
-    /// Gets the appropriate matching rules for export (MVO→CSO lookup) based on the Connected System's mode.
-    /// </summary>
-    private List<ObjectMatchingRule> GetMatchingRulesForExport(ConnectedSystem connectedSystem, SyncRule syncRule)
-    {
-        return connectedSystem.ObjectMatchingRuleMode switch
-        {
-            ObjectMatchingRuleMode.ConnectedSystem => GetConnectedSystemObjectTypeRules(connectedSystem, syncRule.ConnectedSystemObjectTypeId),
-            ObjectMatchingRuleMode.SyncRule => syncRule.ObjectMatchingRules.ToList(),
-            _ => new List<ObjectMatchingRule>()
-        };
-    }
-
-    /// <summary>
-    /// Gets matching rules from the ConnectedSystemObjectType (Mode A - default).
-    /// </summary>
-    private List<ObjectMatchingRule> GetConnectedSystemObjectTypeRules(ConnectedSystem connectedSystem, int? objectTypeId)
-    {
-        if (objectTypeId == null || connectedSystem.ObjectTypes == null)
-            return new List<ObjectMatchingRule>();
-
-        var objectType = connectedSystem.ObjectTypes.FirstOrDefault(ot => ot.Id == objectTypeId);
-        return objectType?.ObjectMatchingRules?.ToList() ?? new List<ObjectMatchingRule>();
-    }
     #endregion
 }

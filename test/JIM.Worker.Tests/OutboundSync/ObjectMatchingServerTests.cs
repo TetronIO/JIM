@@ -306,6 +306,7 @@ public class ObjectMatchingServerTests
         var mvAttr = new MetaverseAttribute { Id = 1, Name = "EmployeeId" };
         var csAttr = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "employeeNumber" };
         var objectType = ConnectedSystemObjectTypesData[0];
+        var mvoType = MetaverseObjectTypesData[0];
 
         var rule = new ObjectMatchingRule
         {
@@ -313,6 +314,8 @@ public class ObjectMatchingServerTests
             Order = 1,
             ConnectedSystemObjectTypeId = objectType.Id,
             ConnectedSystemObjectType = objectType,
+            MetaverseObjectTypeId = mvoType.Id,
+            MetaverseObjectType = mvoType,
             TargetMetaverseAttribute = mvAttr,
             TargetMetaverseAttributeId = mvAttr.Id,
             Sources = new List<ObjectMatchingRuleSource>
@@ -500,6 +503,80 @@ public class ObjectMatchingServerTests
         Assert.That(isValid, Is.True);
     }
 
+    [Test]
+    public void ObjectMatchingRule_IsValid_SimpleMode_WithoutMetaverseObjectTypeId_ReturnsFalse()
+    {
+        // Arrange - Simple mode rule without MetaverseObjectTypeId
+        var mvAttr = new MetaverseAttribute { Id = 1, Name = "EmployeeId" };
+        var csAttr = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "employeeNumber" };
+        var objectType = ConnectedSystemObjectTypesData[0];
+
+        var rule = new ObjectMatchingRule
+        {
+            Id = 1,
+            Order = 1,
+            ConnectedSystemObjectTypeId = objectType.Id,
+            ConnectedSystemObjectType = objectType,
+            // MetaverseObjectTypeId not set — invalid for simple mode
+            TargetMetaverseAttribute = mvAttr,
+            TargetMetaverseAttributeId = mvAttr.Id,
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new()
+                {
+                    Id = 1,
+                    Order = 1,
+                    ConnectedSystemAttribute = csAttr,
+                    ConnectedSystemAttributeId = csAttr.Id
+                }
+            }
+        };
+
+        // Act
+        var isValid = rule.IsValid();
+
+        // Assert
+        Assert.That(isValid, Is.False, "Simple mode rules must have MetaverseObjectTypeId set");
+    }
+
+    [Test]
+    public void ObjectMatchingRule_IsValid_AdvancedMode_WithMetaverseObjectTypeId_ReturnsFalse()
+    {
+        // Arrange - Advanced mode rule WITH MetaverseObjectTypeId (invalid — sync rule provides MVO type)
+        var mvAttr = new MetaverseAttribute { Id = 1, Name = "EmployeeId" };
+        var csAttr = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "employeeNumber" };
+        var syncRule = SyncRulesData[0];
+        var mvoType = MetaverseObjectTypesData[0];
+
+        var rule = new ObjectMatchingRule
+        {
+            Id = 1,
+            Order = 1,
+            SyncRuleId = syncRule.Id,
+            SyncRule = syncRule,
+            MetaverseObjectTypeId = mvoType.Id,
+            MetaverseObjectType = mvoType,
+            TargetMetaverseAttribute = mvAttr,
+            TargetMetaverseAttributeId = mvAttr.Id,
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new()
+                {
+                    Id = 1,
+                    Order = 1,
+                    ConnectedSystemAttribute = csAttr,
+                    ConnectedSystemAttributeId = csAttr.Id
+                }
+            }
+        };
+
+        // Act
+        var isValid = rule.IsValid();
+
+        // Assert
+        Assert.That(isValid, Is.False, "Advanced mode rules must not have MetaverseObjectTypeId set");
+    }
+
     #endregion
 
     #region Mode Selection Tests
@@ -625,6 +702,7 @@ public class ObjectMatchingServerTests
         var mvAttr = new MetaverseAttribute { Id = 1, Name = "EmployeeId" };
         var csAttr = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "employeeNumber" };
         var objectType = ConnectedSystemObjectTypesData[0];
+        var mvoType = MetaverseObjectTypesData[0];
 
         var rule = new ObjectMatchingRule
         {
@@ -632,6 +710,8 @@ public class ObjectMatchingServerTests
             Order = 1,
             ConnectedSystemObjectTypeId = objectType.Id,
             ConnectedSystemObjectType = objectType,
+            MetaverseObjectTypeId = mvoType.Id,
+            MetaverseObjectType = mvoType,
             TargetMetaverseAttribute = mvAttr,
             TargetMetaverseAttributeId = mvAttr.Id,
             CaseSensitive = false,
@@ -917,6 +997,7 @@ public class ObjectMatchingServerTests
         var mvAttr = new MetaverseAttribute { Id = 1, Name = "EmployeeId" };
         var csAttr = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "employeeNumber" };
         var objectType = ConnectedSystemObjectTypesData[0];
+        var mvoType = MetaverseObjectTypesData[0];
 
         var rule = new ObjectMatchingRule
         {
@@ -924,6 +1005,8 @@ public class ObjectMatchingServerTests
             Order = 1,
             ConnectedSystemObjectTypeId = objectType.Id,
             ConnectedSystemObjectType = objectType,
+            MetaverseObjectTypeId = mvoType.Id,
+            MetaverseObjectType = mvoType,
             TargetMetaverseAttribute = mvAttr,
             TargetMetaverseAttributeId = mvAttr.Id,
             Sources = new List<ObjectMatchingRuleSource>

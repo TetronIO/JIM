@@ -238,6 +238,12 @@ public class JimDbContext : DbContext
             .HasForeignKey(omr => omr.ConnectedSystemObjectTypeId);
 
         modelBuilder.Entity<ObjectMatchingRule>()
+            .HasOne(omr => omr.MetaverseObjectType)
+            .WithMany()
+            .HasForeignKey(omr => omr.MetaverseObjectTypeId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<ObjectMatchingRule>()
             .HasMany(omr => omr.Sources)
             .WithOne(s => s.ObjectMatchingRule)
             .HasForeignKey(s => s.ObjectMatchingRuleId)

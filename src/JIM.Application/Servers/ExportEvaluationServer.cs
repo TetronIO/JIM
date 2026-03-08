@@ -917,21 +917,55 @@ public class ExportEvaluationServer
 
             if (existingCso == null)
             {
-                // Create CSO with PendingProvisioning status to establish the relationship before export
-                // When deferSave is true, CSO is created in-memory and the caller batch-saves it
-                using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("CreateProvisioningCso"))
+                // Before provisioning, attempt export matching to find an existing CSO in the target system.
+                // This prevents creating duplicates when the object already exists in the target.
+                ConnectedSystemObject? matchedCso = null;
+                using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("ExportMatching"))
                 {
-                    csoForExport = await CreatePendingProvisioningCsoAsync(mvo, exportRule, deferSave);
-                    provisioningCso = csoForExport; // Track for batch saving
+                    matchedCso = await AttemptExportMatchingAsync(mvo, exportRule);
                 }
 
-                // Update the cache with the newly created CSO so subsequent lookups find it
-                cache.CsoLookup[lookupKey] = csoForExport;
-                createdNewCso = true;
-            }
-            // else: reuse existing PendingProvisioning CSO (already has secondary external ID)
+                if (matchedCso != null)
+                {
+                    // Join the MVO to the existing CSO instead of provisioning
+                    matchedCso.MetaverseObjectId = mvo.Id;
+                    matchedCso.Status = ConnectedSystemObjectStatus.Normal;
+                    matchedCso.JoinType = ConnectedSystemObjectJoinType.Joined;
+                    matchedCso.DateJoined = DateTime.UtcNow;
 
-            changeType = PendingExportChangeType.Create;
+                    await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(matchedCso);
+
+                    // Update cache so subsequent lookups find the joined CSO
+                    cache.CsoLookup[lookupKey] = matchedCso;
+
+                    Log.Information("CreateOrUpdatePendingExportWithNoNetChangeAsync: Export matching found existing CSO {CsoId} for MVO {MvoId} in system {SystemId} — joined instead of provisioning",
+                        matchedCso.Id, mvo.Id, exportRule.ConnectedSystemId);
+
+                    csoForExport = matchedCso;
+                    needsProvisioning = false;
+                    changeType = PendingExportChangeType.Update;
+                }
+                else
+                {
+                    // No match found — create CSO with PendingProvisioning status to establish the relationship before export
+                    // When deferSave is true, CSO is created in-memory and the caller batch-saves it
+                    using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("CreateProvisioningCso"))
+                    {
+                        csoForExport = await CreatePendingProvisioningCsoAsync(mvo, exportRule, deferSave);
+                        provisioningCso = csoForExport; // Track for batch saving
+                    }
+
+                    // Update the cache with the newly created CSO so subsequent lookups find it
+                    cache.CsoLookup[lookupKey] = csoForExport;
+                    createdNewCso = true;
+                    changeType = PendingExportChangeType.Create;
+                }
+            }
+            else
+            {
+                // Reuse existing PendingProvisioning CSO (already has secondary external ID)
+                changeType = PendingExportChangeType.Create;
+            }
         }
         else
         {
@@ -1859,5 +1893,46 @@ public class ExportEvaluationServer
             ?? string.Empty;
 
         return $"{change.AttributeId}:{valueId}";
+    }
+
+    /// <summary>
+    /// Attempts to find an existing CSO in the target system that matches the MVO using object matching rules.
+    /// This prevents provisioning duplicates when the object already exists in the target.
+    /// </summary>
+    private async Task<ConnectedSystemObject?> AttemptExportMatchingAsync(MetaverseObject mvo, SyncRule exportRule)
+    {
+        if (exportRule.ConnectedSystem == null || exportRule.ConnectedSystemObjectType == null)
+            return null;
+
+        // Resolve matching rules based on mode
+        List<ObjectMatchingRule> matchingRules;
+        if (exportRule.ConnectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem)
+        {
+            // Simple mode: rules from the object type
+            matchingRules = exportRule.ConnectedSystemObjectType.ObjectMatchingRules?.ToList() ?? new List<ObjectMatchingRule>();
+        }
+        else
+        {
+            // Advanced mode: rules from the sync rule
+            matchingRules = exportRule.ObjectMatchingRules?.ToList() ?? new List<ObjectMatchingRule>();
+        }
+
+        if (matchingRules.Count == 0)
+            return null;
+
+        try
+        {
+            return await Application.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+                mvo,
+                exportRule.ConnectedSystem,
+                exportRule.ConnectedSystemObjectType,
+                matchingRules);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "AttemptExportMatchingAsync: Error during export matching for MVO {MvoId} to system {SystemId}",
+                mvo.Id, exportRule.ConnectedSystemId);
+            return null;
+        }
     }
 }
