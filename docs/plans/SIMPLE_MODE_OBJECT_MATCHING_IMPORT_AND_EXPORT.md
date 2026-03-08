@@ -117,6 +117,22 @@ In simple mode, rules belong to `ConnectedSystemObjectType` and there may be no 
 
 This keeps matching logic contained within `ObjectMatchingRule` rather than spreading it across `ConnectedSystemObjectType`.
 
+## Design Decision: ObjectMatchingServer as Pure Matching Engine
+
+Currently `ObjectMatchingServer` has two responsibilities:
+
+1. **Mode resolution** — deciding which rules to use based on `ObjectMatchingRuleMode` (via `GetMatchingRulesForImport`, `GetMatchingRulesForExport`, `GetConnectedSystemObjectTypeRules`)
+2. **Rule evaluation** — evaluating matching rules against the repository
+
+With self-contained rules, mode resolution can move to the callers (sync processors, export evaluation) who already have the context to determine which rules apply. `ObjectMatchingServer` becomes a pure matching engine:
+
+- **Before:** `FindMatchingMetaverseObjectAsync(cso, connectedSystem, syncRule)` — server navigates `connectedSystem.ObjectTypes` to resolve rules, reads MVO type from `syncRule`
+- **After:** `FindMatchingMetaverseObjectAsync(cso, matchingRules)` — caller passes the applicable rules, each rule carries its own MVO type (simple mode) or caller sets it from the sync rule (advanced mode)
+
+Same simplification for `FindMatchingConnectedSystemObjectAsync`.
+
+This removes `GetMatchingRulesForImport`, `GetMatchingRulesForExport`, and `GetConnectedSystemObjectTypeRules` entirely. The mode distinction (`ObjectMatchingRuleMode`) becomes a concern of the caller, not the matching engine. Cleaner separation of responsibilities.
+
 ## Changes
 
 ### 1. Add `MetaverseObjectTypeId` FK to `ObjectMatchingRule`
@@ -157,30 +173,61 @@ Add validation: when the rule belongs to a `ConnectedSystemObjectType` (simple m
 
 Currently this query only includes `Attributes`. The matching rules and their MVO types are needed for simple mode matching in `AttemptJoinAsync`.
 
-### 6. Update `ObjectMatchingServer.FindMatchingMetaverseObjectAsync`
+### 6. Simplify `ObjectMatchingServer` to a pure matching engine
 
 **File:** `src/JIM.Application/Servers/ObjectMatchingServer.cs`
 
-Add a new overload that takes a `ConnectedSystemObjectType` directly (no `SyncRule`):
-- Gets matching rules from `connectedSystemObjectType.ObjectMatchingRules`
-- For each rule, reads `MetaverseObjectType` from the rule itself
-- Calls `FindMetaverseObjectUsingMatchingRuleAsync` with the rule's MVO type
+**Replace** the existing `FindMatchingMetaverseObjectAsync(cso, connectedSystem, syncRule)` with a simplified signature:
 
-The existing `SyncRule`-based overload remains unchanged for advanced mode.
+```csharp
+public async Task<MetaverseObject?> FindMatchingMetaverseObjectAsync(
+    ConnectedSystemObject connectedSystemObject,
+    List<ObjectMatchingRule> matchingRules)
+```
 
-### 7. Modify `AttemptJoinAsync` — simple mode fallback
+- Caller resolves which rules apply (based on mode) and passes them in
+- For each rule, reads `MetaverseObjectType` from either the rule itself (simple mode) or as set by the caller (advanced mode — caller copies `syncRule.MetaverseObjectType` onto the rule before passing)
+- Evaluates rules in `Order` sequence until first match
+
+**Replace** the existing `FindMatchingConnectedSystemObjectAsync(mvo, connectedSystem, syncRule)` with:
+
+```csharp
+public async Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync(
+    MetaverseObject metaverseObject,
+    ConnectedSystem connectedSystem,
+    ConnectedSystemObjectType connectedSystemObjectType,
+    List<ObjectMatchingRule> matchingRules)
+```
+
+- Same pattern: caller resolves rules, server evaluates them
+- `connectedSystem` and `connectedSystemObjectType` are still needed for the repository query (scoping CSO search)
+
+**Remove** the following private methods entirely:
+- `GetMatchingRulesForImport` — mode resolution moves to callers
+- `GetMatchingRulesForExport` — mode resolution moves to callers
+- `GetConnectedSystemObjectTypeRules` — navigation through `ConnectedSystem.ObjectTypes` no longer needed
+
+`ComputeMatchingValueFromMvo` remains unchanged (already takes a single rule).
+
+### 7. Modify `AttemptJoinAsync` — caller resolves rules
 
 **File:** `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs` (line 1734)
 
-After the existing `foreach` loop over import sync rules (before `return false`), add:
+Refactor `AttemptJoinAsync` so the caller resolves matching rules based on mode, then passes them to `ObjectMatchingServer`:
 
-- Check `_connectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem`
-- Check no import sync rules were already evaluated for this CSO type
+**Existing sync rule path (advanced mode or simple mode with import sync rules):**
+- For each import sync rule, resolve rules:
+  - Advanced mode: use `syncRule.ObjectMatchingRules`
+  - Simple mode: use `objectType.ObjectMatchingRules`
+- Call `FindMatchingMetaverseObjectAsync(cso, matchingRules)`
+
+**New fallback (simple mode, no import sync rules):**
+- After the sync rule loop, check `_connectedSystem.ObjectMatchingRuleMode == ConnectedSystem` and no import sync rules were evaluated
 - Look up `_objectTypes.FirstOrDefault(ot => ot.Id == connectedSystemObject.TypeId)`
-- If `objectType.ObjectMatchingRules.Count > 0`, call the new `FindMatchingMetaverseObjectAsync` overload
+- If `objectType.ObjectMatchingRules.Count > 0`, call `FindMatchingMetaverseObjectAsync(cso, objectType.ObjectMatchingRules)`
 - If match found, run the same join validation and establishment logic
 
-**Extract join validation into a private helper** to avoid duplicating the `existingCsoJoinCount` / `_pendingDisconnectedMvoIds` checks between the sync rule path and simple mode path. Something like:
+**Extract join validation into a private helper** to avoid duplicating the `existingCsoJoinCount` / `_pendingDisconnectedMvoIds` checks between the sync rule path and simple mode path:
 ```csharp
 private async Task<bool> EstablishJoinAsync(ConnectedSystemObject cso, MetaverseObject mvo)
 ```
@@ -201,15 +248,18 @@ This helper encapsulates: checking existing join count, adjusting for pending di
 
 In `CreateOrUpdatePendingExportWithNoNetChangeAsync`, when `existingCso == null` and provisioning is enabled, **before** creating a new `PendingProvisioning` CSO:
 
-1. Call `FindMatchingConnectedSystemObjectAsync(mvo, connectedSystem, exportRule)` to search for an existing CSO in the target system
-2. If a match is found:
+1. Resolve matching rules (caller responsibility):
+   - Advanced mode: use `exportRule.ObjectMatchingRules`
+   - Simple mode: use `exportRule.ConnectedSystemObjectType.ObjectMatchingRules`
+2. If rules exist, call `FindMatchingConnectedSystemObjectAsync(mvo, connectedSystem, csoType, matchingRules)` to search for an existing CSO
+3. If a match is found:
    - Join the MVO to the existing CSO (set `MetaverseObjectId` FK, update status to `Normal`)
    - Set `csoForExport = matchedCso` and `needsProvisioning = false`
    - Use `PendingExportChangeType.Update` instead of `Create`
    - Log the join at Information level
-3. If no match is found, proceed with existing provisioning logic (create new `PendingProvisioning` CSO)
+4. If no match is found, proceed with existing provisioning logic (create new `PendingProvisioning` CSO)
 
-This needs access to the `ConnectedSystem` object. Check whether `exportRule.ConnectedSystem` navigation property is loaded in the export evaluation cache; if not, add it to the cache loading query.
+This needs access to the `ConnectedSystem` object and its object types with matching rules. Check whether these navigation properties are loaded in the export evaluation cache; if not, add to the cache loading query (step 10).
 
 ### 10. Ensure matching rules are loaded in export evaluation cache
 
