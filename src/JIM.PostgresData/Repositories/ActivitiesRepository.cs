@@ -122,13 +122,14 @@ public class ActivityRepository : IActivityRepository
             }
         }
 
-        // Apply search filter (target name and context only — type has its own filter)
+        // Apply search filter (target name, context, and initiated by name)
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
             var searchLower = searchQuery.ToLower();
             query = query.Where(a =>
                 (a.TargetName != null && a.TargetName.ToLower().Contains(searchLower)) ||
-                (a.TargetContext != null && a.TargetContext.ToLower().Contains(searchLower)));
+                (a.TargetContext != null && a.TargetContext.ToLower().Contains(searchLower)) ||
+                (a.InitiatedByName != null && a.InitiatedByName.ToLower().Contains(searchLower)));
         }
 
         // Apply sorting
