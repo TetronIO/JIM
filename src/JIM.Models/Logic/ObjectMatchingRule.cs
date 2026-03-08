@@ -79,6 +79,15 @@ public class ObjectMatchingRule : IAuditable
     public ConnectedSystemObjectType? ConnectedSystemObjectType { get; set; }
 
     /// <summary>
+    /// The Metaverse Object Type to search when evaluating this rule.
+    /// Required for simple mode rules (<see cref="Staging.ObjectMatchingRuleMode.ConnectedSystem"/>)
+    /// where no sync rule provides the MVO type. Null for advanced mode rules where the
+    /// sync rule's <see cref="SyncRule.MetaverseObjectTypeId"/> is used instead.
+    /// </summary>
+    public int? MetaverseObjectTypeId { get; set; }
+    public MetaverseObjectType? MetaverseObjectType { get; set; }
+
+    /// <summary>
     /// The sources that provide the value(s) to match against. Typically a Connected System attribute
     /// or an expression that transforms attribute values.
     /// </summary>
@@ -108,6 +117,14 @@ public class ObjectMatchingRule : IAuditable
 
         if (hasSyncRule == hasObjectType)
             return false; // Must have exactly one, not both or neither
+
+        // Simple mode rules must have MetaverseObjectTypeId set (no sync rule to provide MVO type)
+        if (hasObjectType && MetaverseObjectTypeId == null && MetaverseObjectType == null)
+            return false;
+
+        // Advanced mode rules must NOT have MetaverseObjectTypeId (sync rule provides MVO type)
+        if (hasSyncRule && (MetaverseObjectTypeId != null || MetaverseObjectType != null))
+            return false;
 
         // Must have at least one source
         if (Sources.Count == 0)

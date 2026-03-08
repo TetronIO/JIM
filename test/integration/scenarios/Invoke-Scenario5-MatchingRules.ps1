@@ -480,6 +480,7 @@ try {
         # CSV object type is "person" not "User" (LDAP uses "User")
         $csvUserType = $csvObjectTypes | Where-Object { $_.name -eq "person" }
         $mvAttributes = Get-JIMMetaverseAttribute
+        $mvUserType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } | Select-Object -First 1
 
         if (-not $csvSystem -or -not $csvUserType) {
             Write-Host "  Could not find CSV system or User object type" -ForegroundColor Red
@@ -507,6 +508,7 @@ try {
                     try {
                         New-JIMMatchingRule -ConnectedSystemId $csvSystem.id `
                             -ObjectTypeId $csvUserType.id `
+                            -MetaverseObjectTypeId $mvUserType.id `
                             -SourceAttributeId $csvEmailAttr.id `
                             -TargetMetaverseAttributeId $mvEmailAttr.id `
                             -Order 1 | Out-Null
