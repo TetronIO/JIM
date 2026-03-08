@@ -605,23 +605,6 @@ else {
     Write-Host "  Sync rule '$targetGroupExportRuleName' already exists" -ForegroundColor Gray
 }
 
-# Target Import (groups - for confirming import)
-$targetGroupImportRuleName = "EMEA AD Import Groups"
-$targetGroupImportRule = $existingRules | Where-Object { $_.name -eq $targetGroupImportRuleName }
-if (-not $targetGroupImportRule) {
-    $targetGroupImportRule = New-JIMSyncRule `
-        -Name $targetGroupImportRuleName `
-        -ConnectedSystemId $targetSystem.id `
-        -ConnectedSystemObjectTypeId $targetGroupType.id `
-        -MetaverseObjectTypeId $mvGroupType.id `
-        -Direction Import `
-        -PassThru
-    Write-Host "  ✓ Created: $targetGroupImportRuleName" -ForegroundColor Green
-}
-else {
-    Write-Host "  Sync rule '$targetGroupImportRuleName' already exists" -ForegroundColor Gray
-}
-
 # ============================================================================
 # Step 10: Configure Attribute Flow Mappings
 # ============================================================================
@@ -892,6 +875,7 @@ if ($sourceUserSamAttr -and $mvAccountNameAttr) {
     if (-not $matchingRuleExists) {
         New-JIMMatchingRule -ConnectedSystemId $sourceSystem.id `
             -ObjectTypeId $sourceUserType.id `
+            -MetaverseObjectTypeId $mvUserType.id `
             -TargetMetaverseAttributeId $mvAccountNameAttr.id `
             -SourceAttributeId $sourceUserSamAttr.id | Out-Null
         Write-Host "  ✓ Source user matching rule (sAMAccountName → Account Name)" -ForegroundColor Green
@@ -911,6 +895,7 @@ if ($targetUserSamAttr -and $mvAccountNameAttr) {
     if (-not $matchingRuleExists) {
         New-JIMMatchingRule -ConnectedSystemId $targetSystem.id `
             -ObjectTypeId $targetUserType.id `
+            -MetaverseObjectTypeId $mvUserType.id `
             -TargetMetaverseAttributeId $mvAccountNameAttr.id `
             -SourceAttributeId $targetUserSamAttr.id | Out-Null
         Write-Host "  ✓ Target user matching rule (sAMAccountName → Account Name)" -ForegroundColor Green
@@ -930,6 +915,7 @@ if ($sourceGroupSamAttr -and $mvAccountNameAttr) {
     if (-not $matchingRuleExists) {
         New-JIMMatchingRule -ConnectedSystemId $sourceSystem.id `
             -ObjectTypeId $sourceGroupType.id `
+            -MetaverseObjectTypeId $mvGroupType.id `
             -TargetMetaverseAttributeId $mvAccountNameAttr.id `
             -SourceAttributeId $sourceGroupSamAttr.id | Out-Null
         Write-Host "  ✓ Source group matching rule (sAMAccountName → Account Name)" -ForegroundColor Green
@@ -949,6 +935,7 @@ if ($targetGroupSamAttr -and $mvAccountNameAttr) {
     if (-not $matchingRuleExists) {
         New-JIMMatchingRule -ConnectedSystemId $targetSystem.id `
             -ObjectTypeId $targetGroupType.id `
+            -MetaverseObjectTypeId $mvGroupType.id `
             -TargetMetaverseAttributeId $mvAccountNameAttr.id `
             -SourceAttributeId $targetGroupSamAttr.id | Out-Null
         Write-Host "  ✓ Target group matching rule (sAMAccountName → Account Name)" -ForegroundColor Green

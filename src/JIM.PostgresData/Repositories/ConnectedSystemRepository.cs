@@ -163,6 +163,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .ThenInclude(s => s.MetaverseAttribute)
             .Include(ot => ot.ObjectMatchingRules)
                 .ThenInclude(omr => omr.TargetMetaverseAttribute)
+            .Include(ot => ot.ObjectMatchingRules)
+                .ThenInclude(omr => omr.MetaverseObjectType)
             .Where(q => q.ConnectedSystemId == id).ToListAsync();
 
         // Load partitions with container hierarchy using a single joined query (no AsSplitQuery).
@@ -399,6 +401,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(s => s.MetaverseAttribute)
             .Include(omr => omr.TargetMetaverseAttribute)
             .Include(omr => omr.ConnectedSystemObjectType)
+            .Include(omr => omr.MetaverseObjectType)
             .SingleOrDefaultAsync(omr => omr.Id == id);
     }
     #endregion
@@ -1806,7 +1809,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
     {
         return await Repository.Database.ConnectedSystemObjectTypes
+            .AsSplitQuery()
             .Include(q => q.Attributes)
+            .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.MetaverseObjectType)
+            .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.MetaverseAttribute)
+            .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Where(x => x.ConnectedSystemId == connectedSystemId).OrderBy(x => x.Name)
             .ToListAsync();
     }
@@ -2957,8 +2965,32 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.ConnectedSystem)
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.ObjectMatchingRules)
+            .ThenInclude(omr => omr.Sources)
+            .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.ObjectMatchingRules)
+            .ThenInclude(omr => omr.Sources)
+            .ThenInclude(s => s.MetaverseAttribute)
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.ObjectMatchingRules)
+            .ThenInclude(omr => omr.TargetMetaverseAttribute)
+            .Include(sr => sr.ConnectedSystemObjectType)
+            .ThenInclude(csot => csot.ObjectMatchingRules)
+            .ThenInclude(omr => omr.MetaverseObjectType)
             .Include(sr => sr.MetaverseObjectType)
             .ThenInclude(mvot => mvot.Attributes.OrderBy(a => a.Name))
+            .Include(sr => sr.ObjectMatchingRules.OrderBy(q => q.Order))
+            .ThenInclude(omr => omr.Sources)
+            .ThenInclude(s => s.ConnectedSystemAttribute)
+            .Include(sr => sr.ObjectMatchingRules)
+            .ThenInclude(omr => omr.Sources)
+            .ThenInclude(s => s.MetaverseAttribute)
+            .Include(sr => sr.ObjectMatchingRules)
+            .ThenInclude(omr => omr.TargetMetaverseAttribute)
+            .Include(sr => sr.ObjectMatchingRules)
+            .ThenInclude(omr => omr.MetaverseObjectType)
             .Include(sr => sr.ObjectScopingCriteriaGroups)
             .ThenInclude(g => g.Criteria)
             .ThenInclude(c => c.MetaverseAttribute)
@@ -2969,7 +3001,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .OrderBy(x => x.Name)
             .ToListAsync();
     }
-    
+
     /// <summary>
     /// Retrieves all the sync rules for a given Connected System.
     /// </summary>
@@ -2999,6 +3031,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(s => s.ConnectedSystemAttribute)
             .Include(sr => sr.ObjectMatchingRules)
             .ThenInclude(omr => omr.TargetMetaverseAttribute)
+            .Include(sr => sr.ObjectMatchingRules)
+            .ThenInclude(omr => omr.MetaverseObjectType)
             .Where(sr => sr.ConnectedSystemId == connectedSystemId);
 
         if (!includeDisabledSyncRules)
@@ -3163,6 +3197,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(s => s.MetaverseAttribute)
             .Include(sr => sr.ObjectMatchingRules)
             .ThenInclude(omr => omr.TargetMetaverseAttribute)
+            .Include(sr => sr.ObjectMatchingRules)
+            .ThenInclude(omr => omr.MetaverseObjectType)
             .SingleOrDefaultAsync(x => x.Id == id);
     }
 

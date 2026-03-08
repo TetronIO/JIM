@@ -4,6 +4,7 @@
 ARG VERSION=dev
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0@sha256:302f77633b8d9a944bd98ff249079c8a353506b83084579216b46a264992025f AS base
+ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Web"
 LABEL org.opencontainers.image.description="JIM (Junctional Identity Manager) - Web and API service"

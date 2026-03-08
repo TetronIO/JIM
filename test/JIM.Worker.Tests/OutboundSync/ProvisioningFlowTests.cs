@@ -437,12 +437,15 @@ public class ProvisioningFlowTests
         var objectType = ConnectedSystemObjectTypesData[0];
         var mvAttr = MetaverseObjectTypesData[0].Attributes.First();
 
+        var mvoType = MetaverseObjectTypesData[0];
         var matchingRule = new ObjectMatchingRule
         {
             Id = 1,
             Order = 1,
             ConnectedSystemObjectType = objectType,
             ConnectedSystemObjectTypeId = objectType.Id,
+            MetaverseObjectTypeId = mvoType.Id,
+            MetaverseObjectType = mvoType,
             TargetMetaverseAttribute = mvAttr,
             TargetMetaverseAttributeId = mvAttr.Id,
             Sources = new List<ObjectMatchingRuleSource>

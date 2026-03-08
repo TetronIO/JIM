@@ -503,6 +503,7 @@ public class ConnectedSystemServer
                         {
                             Order = sourceRule.Order,
                             ConnectedSystemObjectTypeId = objectTypeId,
+                            MetaverseObjectTypeId = sourceSyncRule.MetaverseObjectTypeId,
                             TargetMetaverseAttributeId = sourceRule.TargetMetaverseAttributeId,
                             CaseSensitive = sourceRule.CaseSensitive,
                             Sources = sourceRule.Sources.Select(s => new ObjectMatchingRuleSource

@@ -46,10 +46,14 @@
                 </MudTableSortLabel>
             </MudTh>
             <MudTh>
-                <MudText Typo="Typo.button">Object Mapping</MudText>
+                <MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Direction == SyncRuleDirection.Import ? x.ConnectedSystemObjectTypeName : x.MetaverseObjectTypeName)">
+                    <MudText Typo="Typo.button">Object Mapping</MudText>
+                </MudTableSortLabel>
             </MudTh>
             <MudTh>
-                <MudText Typo="Typo.button">Capabilities</MudText>
+                <MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => GetCapabilityText(x))">
+                    <MudText Typo="Typo.button">Capabilities</MudText>
+                </MudTableSortLabel>
             </MudTh>
             <MudTh>
                 <MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => x.Enabled)">
@@ -184,6 +188,15 @@
     }
 
     private bool FilterFunc1(SyncRuleHeader element) => FilterFunc(element, _searchString);
+
+    private static string GetCapabilityText(SyncRuleHeader element)
+    {
+        if (element.Direction == SyncRuleDirection.Import && element.ProjectToMetaverse == true)
+            return "Projects";
+        if (element.Direction == SyncRuleDirection.Export && element.ProvisionToConnectedSystem == true)
+            return "Provisions";
+        return "";
+    }
 
     private static bool FilterFunc(SyncRuleHeader element, string searchString)
     {

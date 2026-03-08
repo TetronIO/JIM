@@ -4,6 +4,7 @@
 ARG VERSION=dev
 
 FROM mcr.microsoft.com/dotnet/runtime:9.0@sha256:1cc59a29be89c6d42acf0e1191f458c20034c0ab213b2646b8af94c836c9e9bf AS base
+ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Scheduler"
 LABEL org.opencontainers.image.description="JIM (Junctional Identity Manager) - Job scheduler service"
