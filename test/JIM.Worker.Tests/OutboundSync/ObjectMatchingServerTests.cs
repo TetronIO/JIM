@@ -1063,4 +1063,174 @@ public class ObjectMatchingServerTests
     }
 
     #endregion
+
+    #region FindMatchingMetaverseObjectAsync Tests
+
+    [Test]
+    public async Task FindMatchingMetaverseObjectAsync_WithEmptyRules_ReturnsNullAsync()
+    {
+        // Arrange
+        var cso = ConnectedSystemObjectsData[0];
+        var emptyRules = new List<ObjectMatchingRule>();
+
+        // Act
+        var result = await Jim.ObjectMatching.FindMatchingMetaverseObjectAsync(cso, emptyRules);
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task FindMatchingMetaverseObjectAsync_SkipsRuleWithoutMetaverseObjectType_ReturnsNullAsync()
+    {
+        // Arrange
+        var cso = ConnectedSystemObjectsData[0];
+        var objectType = ConnectedSystemObjectTypesData[0];
+        var mvAttr = new MetaverseAttribute { Id = 1, Name = "EmployeeId" };
+
+        var rules = new List<ObjectMatchingRule>
+        {
+            new()
+            {
+                Id = 1,
+                Order = 1,
+                ConnectedSystemObjectTypeId = objectType.Id,
+                ConnectedSystemObjectType = objectType,
+                MetaverseObjectType = null, // No MVO type - should be skipped
+                MetaverseObjectTypeId = null,
+                TargetMetaverseAttribute = mvAttr,
+                TargetMetaverseAttributeId = mvAttr.Id,
+                Sources = new List<ObjectMatchingRuleSource>
+                {
+                    new()
+                    {
+                        Id = 1,
+                        Order = 1,
+                        ConnectedSystemAttribute = objectType.Attributes.First(),
+                        ConnectedSystemAttributeId = objectType.Attributes.First().Id
+                    }
+                }
+            }
+        };
+
+        // Act
+        var result = await Jim.ObjectMatching.FindMatchingMetaverseObjectAsync(cso, rules);
+
+        // Assert
+        Assert.That(result, Is.Null, "Should return null when all rules lack MetaverseObjectType");
+    }
+
+    #endregion
+
+    #region FindMatchingConnectedSystemObjectAsync Tests
+
+    [Test]
+    public async Task FindMatchingConnectedSystemObjectAsync_WithEmptyRules_ReturnsNullAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var connectedSystem = ConnectedSystemsData[0];
+        var objectType = ConnectedSystemObjectTypesData[0];
+        var emptyRules = new List<ObjectMatchingRule>();
+
+        // Act
+        var result = await Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, connectedSystem, objectType, emptyRules);
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    #endregion
+
+    #region GetSourceType Tests
+
+    [Test]
+    public void ObjectMatchingRule_GetSourceType_WithNoSources_ReturnsNotSet()
+    {
+        // Arrange
+        var rule = new ObjectMatchingRule
+        {
+            Sources = new List<ObjectMatchingRuleSource>()
+        };
+
+        // Act
+        var sourceType = rule.GetSourceType();
+
+        // Assert
+        Assert.That(sourceType, Is.EqualTo(SyncRuleMappingSourcesType.NotSet));
+    }
+
+    [Test]
+    public void ObjectMatchingRule_GetSourceType_WithCsAttribute_ReturnsAttributeMapping()
+    {
+        // Arrange
+        var csAttr = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "employeeNumber" };
+        var rule = new ObjectMatchingRule
+        {
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new()
+                {
+                    ConnectedSystemAttribute = csAttr,
+                    ConnectedSystemAttributeId = csAttr.Id
+                }
+            }
+        };
+
+        // Act
+        var sourceType = rule.GetSourceType();
+
+        // Assert
+        Assert.That(sourceType, Is.EqualTo(SyncRuleMappingSourcesType.AttributeMapping));
+    }
+
+    [Test]
+    public void ObjectMatchingRule_GetSourceType_WithMvAttribute_ReturnsAttributeMapping()
+    {
+        // Arrange
+        var mvAttr = new MetaverseAttribute { Id = 1, Name = "EmployeeId" };
+        var rule = new ObjectMatchingRule
+        {
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new()
+                {
+                    MetaverseAttribute = mvAttr,
+                    MetaverseAttributeId = mvAttr.Id
+                }
+            }
+        };
+
+        // Act
+        var sourceType = rule.GetSourceType();
+
+        // Assert
+        Assert.That(sourceType, Is.EqualTo(SyncRuleMappingSourcesType.AttributeMapping));
+    }
+
+    [Test]
+    public void ObjectMatchingRule_GetSourceType_WithExpression_ReturnsExpressionMapping()
+    {
+        // Arrange
+        var rule = new ObjectMatchingRule
+        {
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new()
+                {
+                    Expression = "ToUpper(employeeNumber)"
+                }
+            }
+        };
+
+        // Act
+        var sourceType = rule.GetSourceType();
+
+        // Assert
+        Assert.That(sourceType, Is.EqualTo(SyncRuleMappingSourcesType.ExpressionMapping));
+    }
+
+    #endregion
+
 }

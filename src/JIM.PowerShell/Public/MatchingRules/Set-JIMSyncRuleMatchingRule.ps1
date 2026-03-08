@@ -1,23 +1,20 @@
-function Set-JIMMatchingRule {
+function Set-JIMSyncRuleMatchingRule {
     <#
     .SYNOPSIS
-        Updates an existing Object Matching Rule in JIM.
+        Updates an existing Object Matching Rule on a Sync Rule (advanced mode).
 
     .DESCRIPTION
-        Updates an Object Matching Rule for a Connected System.
+        Updates an Object Matching Rule on a specific Sync Rule.
         You can update the order, target Metaverse attribute, or source attributes.
 
-    .PARAMETER ConnectedSystemId
-        The unique identifier of the Connected System.
+    .PARAMETER SyncRuleId
+        The unique identifier of the Sync Rule.
 
     .PARAMETER Id
         The unique identifier of the Matching Rule to update.
 
     .PARAMETER Order
         The new evaluation order for this rule (lower values are evaluated first).
-
-    .PARAMETER MetaverseObjectTypeId
-        The new Metaverse Object Type ID to search when evaluating this rule.
 
     .PARAMETER TargetMetaverseAttributeId
         The new Metaverse attribute ID to match against.
@@ -42,39 +39,31 @@ function Set-JIMMatchingRule {
         If -PassThru is specified, returns the updated Matching Rule object.
 
     .EXAMPLE
-        Set-JIMMatchingRule -ConnectedSystemId 1 -Id 5 -Order 0
+        Set-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 12 -Order 0
 
-        Updates the order of Matching Rule 5 to be first (order 0).
-
-    .EXAMPLE
-        Set-JIMMatchingRule -ConnectedSystemId 1 -Id 5 -TargetMetaverseAttributeId 10 -PassThru
-
-        Updates the target MV attribute and returns the updated rule.
+        Updates the order of Matching Rule 12 on Sync Rule 5 to be first (order 0).
 
     .EXAMPLE
-        Get-JIMMatchingRule -ConnectedSystemId 1 -Id 5 | Set-JIMMatchingRule -Order 2
+        Get-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 12 | Set-JIMSyncRuleMatchingRule -CaseSensitive $false
 
-        Updates the order using pipeline input.
+        Updates case sensitivity using pipeline input.
 
     .LINK
-        Get-JIMMatchingRule
-        New-JIMMatchingRule
-        Remove-JIMMatchingRule
+        Get-JIMSyncRuleMatchingRule
+        New-JIMSyncRuleMatchingRule
+        Remove-JIMSyncRuleMatchingRule
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
     [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
-        [int]$ConnectedSystemId,
+        [int]$SyncRuleId,
 
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$Id,
 
         [Parameter()]
         [int]$Order,
-
-        [Parameter()]
-        [int]$MetaverseObjectTypeId,
 
         [Parameter()]
         [int]$TargetMetaverseAttributeId,
@@ -102,10 +91,6 @@ function Set-JIMMatchingRule {
 
         if ($PSBoundParameters.ContainsKey('Order')) {
             $body.order = $Order
-        }
-
-        if ($PSBoundParameters.ContainsKey('MetaverseObjectTypeId')) {
-            $body.metaverseObjectTypeId = $MetaverseObjectTypeId
         }
 
         if ($PSBoundParameters.ContainsKey('TargetMetaverseAttributeId')) {
@@ -138,16 +123,16 @@ function Set-JIMMatchingRule {
             return
         }
 
-        if ($PSCmdlet.ShouldProcess("Matching Rule $Id", "Update")) {
-            Write-Verbose "Updating Matching Rule ID: $Id for Connected System ID: $ConnectedSystemId"
+        if ($PSCmdlet.ShouldProcess("Matching Rule $Id on Sync Rule $SyncRuleId", "Update")) {
+            Write-Verbose "Updating Matching Rule ID: $Id for Sync Rule ID: $SyncRuleId"
 
             try {
-                $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/matching-rules/$Id" -Method 'PUT' -Body $body
+                $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/matching-rules/$Id" -Method 'PUT' -Body $body
 
                 Write-Verbose "Updated Matching Rule ID: $Id"
 
                 if ($PassThru) {
-                    $result | Add-Member -NotePropertyName 'ConnectedSystemId' -NotePropertyValue $ConnectedSystemId -PassThru -Force
+                    $result | Add-Member -NotePropertyName 'SyncRuleId' -NotePropertyValue $SyncRuleId -PassThru -Force
                 }
             }
             catch {

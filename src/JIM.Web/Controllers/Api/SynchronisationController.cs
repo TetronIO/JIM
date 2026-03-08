@@ -2325,6 +2325,11 @@ public class SynchronisationController(
         if (objectType == null)
             return NotFound(ApiErrorResponse.NotFound($"Object type with ID {request.ConnectedSystemObjectTypeId} not found in connected system {connectedSystemId}."));
 
+        // Validate Metaverse Object Type exists
+        var metaverseObjectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(request.MetaverseObjectTypeId, false);
+        if (metaverseObjectType == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse object type with ID {request.MetaverseObjectTypeId} not found."));
+
         // Validate target MV attribute exists
         var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
         var targetMvAttr = mvAttributes?.FirstOrDefault(a => a.Id == request.TargetMetaverseAttributeId);
@@ -2341,6 +2346,8 @@ public class SynchronisationController(
             Order = order,
             ConnectedSystemObjectTypeId = objectType.Id,
             ConnectedSystemObjectType = objectType,
+            MetaverseObjectTypeId = metaverseObjectType.Id,
+            MetaverseObjectType = metaverseObjectType,
             TargetMetaverseAttributeId = targetMvAttr.Id,
             TargetMetaverseAttribute = targetMvAttr,
             CaseSensitive = request.CaseSensitive
@@ -2441,6 +2448,17 @@ public class SynchronisationController(
         // Update order if specified
         if (request.Order.HasValue)
             rule.Order = request.Order.Value;
+
+        // Update Metaverse Object Type if specified
+        if (request.MetaverseObjectTypeId.HasValue)
+        {
+            var metaverseObjectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(request.MetaverseObjectTypeId.Value, false);
+            if (metaverseObjectType == null)
+                return NotFound(ApiErrorResponse.NotFound($"Metaverse object type with ID {request.MetaverseObjectTypeId} not found."));
+
+            rule.MetaverseObjectTypeId = metaverseObjectType.Id;
+            rule.MetaverseObjectType = metaverseObjectType;
+        }
 
         // Update target MV attribute if specified
         if (request.TargetMetaverseAttributeId.HasValue)
@@ -2564,6 +2582,382 @@ public class SynchronisationController(
         _logger.LogInformation("Deleted object matching rule {RuleId} for connected system {SystemId}", ruleId, connectedSystemId);
 
         return NoContent();
+    }
+
+    #endregion
+
+    #region Sync Rule Object Matching Rules (Advanced Mode)
+
+    /// <summary>
+    /// Gets all object matching rules for a sync rule (advanced mode).
+    /// </summary>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <returns>A list of object matching rules.</returns>
+    /// <response code="200">Returns the list of object matching rules.</response>
+    /// <response code="404">Sync rule not found.</response>
+    [HttpGet("sync-rules/{syncRuleId:int}/matching-rules", Name = "GetSyncRuleObjectMatchingRules")]
+    [ProducesResponseType(typeof(IEnumerable<ObjectMatchingRuleDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetSyncRuleObjectMatchingRulesAsync(int syncRuleId)
+    {
+        _logger.LogInformation("Getting object matching rules for sync rule {SyncRuleId}", syncRuleId);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+
+        var rules = syncRule.ObjectMatchingRules
+            .OrderBy(r => r.Order)
+            .Select(ObjectMatchingRuleDto.FromEntity)
+            .ToList();
+
+        return Ok(rules);
+    }
+
+    /// <summary>
+    /// Gets a specific object matching rule on a sync rule by ID (advanced mode).
+    /// </summary>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="ruleId">The unique identifier of the matching rule.</param>
+    /// <returns>The object matching rule.</returns>
+    /// <response code="200">Returns the object matching rule.</response>
+    /// <response code="404">Sync rule or matching rule not found.</response>
+    [HttpGet("sync-rules/{syncRuleId:int}/matching-rules/{ruleId:int}", Name = "GetSyncRuleObjectMatchingRule")]
+    [ProducesResponseType(typeof(ObjectMatchingRuleDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetSyncRuleObjectMatchingRuleAsync(int syncRuleId, int ruleId)
+    {
+        _logger.LogInformation("Getting object matching rule {RuleId} for sync rule {SyncRuleId}", ruleId, syncRuleId);
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+
+        var rule = syncRule.ObjectMatchingRules.FirstOrDefault(r => r.Id == ruleId);
+        if (rule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found on sync rule {syncRuleId}."));
+
+        return Ok(ObjectMatchingRuleDto.FromEntity(rule));
+    }
+
+    /// <summary>
+    /// Creates a new object matching rule on a sync rule (advanced mode).
+    /// </summary>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="request">The rule creation request.</param>
+    /// <returns>The created object matching rule.</returns>
+    /// <response code="201">Object matching rule created successfully.</response>
+    /// <response code="400">Invalid request data.</response>
+    /// <response code="404">Sync rule or referenced entities not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPost("sync-rules/{syncRuleId:int}/matching-rules", Name = "CreateSyncRuleObjectMatchingRule")]
+    [ProducesResponseType(typeof(ObjectMatchingRuleDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CreateSyncRuleObjectMatchingRuleAsync(int syncRuleId, [FromBody] CreateSyncRuleObjectMatchingRuleRequest request)
+    {
+        _logger.LogInformation("Creating object matching rule for sync rule {SyncRuleId}", syncRuleId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for matching rule creation");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+
+        // Validate target MV attribute exists
+        var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
+        var targetMvAttr = mvAttributes?.FirstOrDefault(a => a.Id == request.TargetMetaverseAttributeId);
+        if (targetMvAttr == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.TargetMetaverseAttributeId} not found."));
+
+        // Calculate order if not specified
+        var order = request.Order ?? (syncRule.ObjectMatchingRules.Count > 0
+            ? syncRule.ObjectMatchingRules.Max(r => r.Order) + 1
+            : 0);
+
+        var rule = new ObjectMatchingRule
+        {
+            Order = order,
+            SyncRuleId = syncRule.Id,
+            SyncRule = syncRule,
+            TargetMetaverseAttributeId = targetMvAttr.Id,
+            TargetMetaverseAttribute = targetMvAttr,
+            CaseSensitive = request.CaseSensitive
+        };
+
+        // Add sources - for advanced mode, sources reference CS attributes from the sync rule's object type
+        var objectType = syncRule.ConnectedSystemObjectType;
+        foreach (var sourceRequest in request.Sources)
+        {
+            var source = new ObjectMatchingRuleSource
+            {
+                Order = sourceRequest.Order
+            };
+
+            if (sourceRequest.ConnectedSystemAttributeId.HasValue)
+            {
+                var csAttr = objectType?.Attributes?.FirstOrDefault(a => a.Id == sourceRequest.ConnectedSystemAttributeId.Value);
+                if (csAttr == null)
+                    return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {sourceRequest.ConnectedSystemAttributeId} not found in object type."));
+                source.ConnectedSystemAttributeId = csAttr.Id;
+                source.ConnectedSystemAttribute = csAttr;
+            }
+            else if (sourceRequest.MetaverseAttributeId.HasValue)
+            {
+                var mvAttr = mvAttributes?.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
+                if (mvAttr == null)
+                    return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
+                source.MetaverseAttributeId = mvAttr.Id;
+                source.MetaverseAttribute = mvAttr;
+            }
+            else
+            {
+                return BadRequest(ApiErrorResponse.BadRequest("Each source must specify either ConnectedSystemAttributeId or MetaverseAttributeId."));
+            }
+
+            rule.Sources.Add(source);
+        }
+
+        try
+        {
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, apiKey);
+            else
+                await _application.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, initiatedBy);
+
+            _logger.LogInformation("Created object matching rule {RuleId} for sync rule {SyncRuleId}", rule.Id, syncRuleId);
+
+            return CreatedAtRoute("GetSyncRuleObjectMatchingRule",
+                new { syncRuleId, ruleId = rule.Id },
+                ObjectMatchingRuleDto.FromEntity(rule));
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to create object matching rule: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Updates an existing object matching rule on a sync rule (advanced mode).
+    /// </summary>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="ruleId">The unique identifier of the matching rule.</param>
+    /// <param name="request">The update request.</param>
+    /// <returns>The updated object matching rule.</returns>
+    /// <response code="200">Object matching rule updated successfully.</response>
+    /// <response code="400">Invalid request data.</response>
+    /// <response code="404">Sync rule or matching rule not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPut("sync-rules/{syncRuleId:int}/matching-rules/{ruleId:int}", Name = "UpdateSyncRuleObjectMatchingRule")]
+    [ProducesResponseType(typeof(ObjectMatchingRuleDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateSyncRuleObjectMatchingRuleAsync(int syncRuleId, int ruleId, [FromBody] UpdateObjectMatchingRuleRequest request)
+    {
+        _logger.LogInformation("Updating object matching rule {RuleId} for sync rule {SyncRuleId}", ruleId, syncRuleId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for matching rule update");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+
+        var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
+        if (rule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found."));
+
+        // Verify the rule belongs to this sync rule
+        if (rule.SyncRuleId != syncRuleId)
+            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found on sync rule {syncRuleId}."));
+
+        // Update order if specified
+        if (request.Order.HasValue)
+            rule.Order = request.Order.Value;
+
+        // Update target MV attribute if specified
+        if (request.TargetMetaverseAttributeId.HasValue)
+        {
+            var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
+            var targetMvAttr = mvAttributes?.FirstOrDefault(a => a.Id == request.TargetMetaverseAttributeId.Value);
+            if (targetMvAttr == null)
+                return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.TargetMetaverseAttributeId} not found."));
+
+            rule.TargetMetaverseAttributeId = targetMvAttr.Id;
+            rule.TargetMetaverseAttribute = targetMvAttr;
+        }
+
+        // Update sources if specified
+        if (request.Sources != null)
+        {
+            var objectType = syncRule.ConnectedSystemObjectType;
+            var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
+
+            rule.Sources.Clear();
+
+            foreach (var sourceRequest in request.Sources)
+            {
+                var source = new ObjectMatchingRuleSource
+                {
+                    Order = sourceRequest.Order,
+                    ObjectMatchingRuleId = rule.Id
+                };
+
+                if (sourceRequest.ConnectedSystemAttributeId.HasValue)
+                {
+                    var csAttr = objectType?.Attributes?.FirstOrDefault(a => a.Id == sourceRequest.ConnectedSystemAttributeId.Value);
+                    if (csAttr == null)
+                        return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {sourceRequest.ConnectedSystemAttributeId} not found in object type."));
+                    source.ConnectedSystemAttributeId = csAttr.Id;
+                    source.ConnectedSystemAttribute = csAttr;
+                }
+                else if (sourceRequest.MetaverseAttributeId.HasValue)
+                {
+                    var mvAttr = mvAttributes?.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
+                    if (mvAttr == null)
+                        return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
+                    source.MetaverseAttributeId = mvAttr.Id;
+                    source.MetaverseAttribute = mvAttr;
+                }
+                else
+                {
+                    return BadRequest(ApiErrorResponse.BadRequest("Each source must specify either ConnectedSystemAttributeId or MetaverseAttributeId."));
+                }
+
+                rule.Sources.Add(source);
+            }
+        }
+
+        // Update case sensitivity if specified
+        if (request.CaseSensitive.HasValue)
+            rule.CaseSensitive = request.CaseSensitive.Value;
+
+        try
+        {
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, apiKey);
+            else
+                await _application.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, initiatedBy);
+
+            _logger.LogInformation("Updated object matching rule {RuleId} for sync rule {SyncRuleId}", ruleId, syncRuleId);
+
+            return Ok(ObjectMatchingRuleDto.FromEntity(rule));
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to update object matching rule: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Deletes an object matching rule from a sync rule (advanced mode).
+    /// </summary>
+    /// <param name="syncRuleId">The unique identifier of the sync rule.</param>
+    /// <param name="ruleId">The unique identifier of the matching rule.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">Object matching rule deleted successfully.</response>
+    /// <response code="404">Sync rule or matching rule not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpDelete("sync-rules/{syncRuleId:int}/matching-rules/{ruleId:int}", Name = "DeleteSyncRuleObjectMatchingRule")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> DeleteSyncRuleObjectMatchingRuleAsync(int syncRuleId, int ruleId)
+    {
+        _logger.LogInformation("Deleting object matching rule {RuleId} from sync rule {SyncRuleId}", ruleId, syncRuleId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for matching rule deletion");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Sync rule with ID {syncRuleId} not found."));
+
+        var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
+        if (rule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found."));
+
+        // Verify the rule belongs to this sync rule
+        if (rule.SyncRuleId != syncRuleId)
+            return NotFound(ApiErrorResponse.NotFound($"Object matching rule with ID {ruleId} not found on sync rule {syncRuleId}."));
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        if (apiKey != null)
+            await _application.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule, apiKey);
+        else
+            await _application.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule, initiatedBy);
+
+        _logger.LogInformation("Deleted object matching rule {RuleId} from sync rule {SyncRuleId}", ruleId, syncRuleId);
+
+        return NoContent();
+    }
+
+    #endregion
+
+    #region Object Matching Mode Switching
+
+    /// <summary>
+    /// Switches the object matching rule mode for a connected system.
+    /// When switching to advanced mode, matching rules are copied from object types to sync rules.
+    /// When switching to simple mode, matching rules are migrated from sync rules to object types.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <param name="request">The mode switch request.</param>
+    /// <returns>The result of the mode switch operation.</returns>
+    /// <response code="200">Mode switched successfully.</response>
+    /// <response code="400">Mode switch failed.</response>
+    /// <response code="404">Connected system not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/matching-mode", Name = "SwitchObjectMatchingMode")]
+    [ProducesResponseType(typeof(ObjectMatchingModeSwitchResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SwitchObjectMatchingModeAsync(int connectedSystemId, [FromBody] SwitchObjectMatchingModeRequest request)
+    {
+        _logger.LogInformation("Switching object matching mode for connected system {SystemId} to {Mode}", connectedSystemId, request.Mode);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for matching mode switch");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected system with ID {connectedSystemId} not found."));
+
+        var result = await _application.ConnectedSystems.SwitchObjectMatchingModeAsync(connectedSystem, request.Mode, initiatedBy);
+
+        if (!result.Success)
+        {
+            _logger.LogWarning("Failed to switch matching mode for connected system {SystemId}: {Error}", connectedSystemId, result.ErrorMessage);
+            return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage ?? "Failed to switch object matching mode."));
+        }
+
+        _logger.LogInformation("Switched object matching mode for connected system {SystemId} to {Mode}", connectedSystemId, result.NewMode);
+
+        return Ok(result);
     }
 
     #endregion

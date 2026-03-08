@@ -1,6 +1,6 @@
 # Simple Mode Object Matching for Import and Export
 
-- **Status:** Doing (Steps 1–11 complete)
+- **Status:** Doing (Steps 1–23 complete; Step 24 deferred to integration test run)
 
 ## Context
 
@@ -279,7 +279,7 @@ Verify `FindConnectedSystemObjectUsingMatchingRuleAsync` is implemented and hand
 
 This method is already referenced by `ObjectMatchingServer.FindMatchingConnectedSystemObjectAsync` (line 120) — confirm it exists and works correctly.
 
-### 12. Update simple mode API endpoints
+### 12. Update simple mode API endpoints ✅
 
 **Files:** `src/JIM.Web/Models/Api/ConnectedSystemDto.cs`, `src/JIM.Web/Controllers/Api/SynchronisationController.cs`
 
@@ -295,7 +295,7 @@ Update existing simple mode matching rule endpoints (`/api/v1/synchronisation/co
 - In `CreateMatchingRule` / `UpdateMatchingRule`: validate `MetaverseObjectTypeId` exists when provided (return 400 if invalid)
 - In `GetMatchingRules` / `GetMatchingRule`: include `MetaverseObjectType` in response via DTO mapping
 
-### 13. Add advanced mode API endpoints
+### 13. Add advanced mode API endpoints ✅
 
 **File:** `src/JIM.Web/Controllers/Api/SynchronisationController.cs`
 
@@ -317,7 +317,7 @@ Add new endpoints for managing matching rules on individual sync rules (advanced
 **Application layer:**
 - Add corresponding methods in `ConnectedSystemServer` (or appropriate Application layer server) that the controller calls — respect n-tier architecture
 
-### 14. Add mode switching API endpoint
+### 14.  Add mode switching API endpoint ✅
 
 **File:** `src/JIM.Web/Controllers/Api/SynchronisationController.cs`
 
@@ -338,7 +338,7 @@ Add new endpoints for managing matching rules on individual sync rules (advanced
 - Returns 409 Conflict if already in the requested mode
 - Returns 400 if the mode value is invalid
 
-### 15. Update PowerShell cmdlets — simple mode
+### 15.  Update PowerShell cmdlets — simple mode ✅
 
 **Files:** `src/JIM.PowerShell/Public/MatchingRules/New-JIMMatchingRule.ps1`, `Set-JIMMatchingRule.ps1`
 
@@ -357,7 +357,7 @@ Add new endpoints for managing matching rules on individual sync rules (advanced
 **`Remove-JIMMatchingRule`:**
 - No changes needed — deletion is mode-agnostic
 
-### 16. Add PowerShell cmdlets — advanced mode
+### 16.  Add PowerShell cmdlets — advanced mode ✅
 
 **Directory:** `src/JIM.PowerShell/Public/MatchingRules/`
 
@@ -384,7 +384,7 @@ Create four new cmdlets for managing matching rules on sync rules:
 
 All four cmdlets follow the same patterns as the existing simple mode cmdlets (connection check, `Invoke-JIMApi`, `ValueFromPipelineByPropertyName`, `Write-Verbose`, `Write-Error`).
 
-### 17. Add mode switching PowerShell cmdlet
+### 17.  Add mode switching PowerShell cmdlet ✅
 
 **File:** `src/JIM.PowerShell/Public/MatchingRules/Set-JIMObjectMatchingMode.ps1`
 
@@ -394,7 +394,7 @@ All four cmdlets follow the same patterns as the existing simple mode cmdlets (c
 - `SupportsShouldProcess`, `ConfirmImpact = 'High'` (mode switching migrates rules)
 - `-Force` to skip confirmation
 
-### 18. Update mode switching logic
+### 18.  Update mode switching logic ✅
 
 **File:** `src/JIM.Application/Servers/ConnectedSystemServer.cs`
 
@@ -402,7 +402,7 @@ In `SwitchObjectMatchingModeAsync`:
 - **Simple → Advanced:** When copying rules from object type to sync rules, clear `MetaverseObjectTypeId` on the copied rules (sync rules provide their own MVO type).
 - **Advanced → Simple:** When migrating rules to object types, populate `MetaverseObjectTypeId` from the sync rule's `MetaverseObjectTypeId`.
 
-### 19. Unit tests — matching engine
+### 19.  Unit tests — matching engine ✅
 
 **File:** `test/JIM.Worker.Tests/OutboundSync/ObjectMatchingServerTests.cs`
 
@@ -423,7 +423,7 @@ Tests for the simplified `ObjectMatchingServer` signatures:
 - Scoped correctly to `ConnectedSystemObjectType`
 - Case-sensitive and case-insensitive matching behaviour
 
-### 20. Unit tests — sync processor (import join)
+### 20.  Unit tests — sync processor (import join) ✅
 
 **File:** `test/JIM.Worker.Tests/Synchronisation/SimpleMatchingModeJoinTests.cs` (new)
 
@@ -435,7 +435,7 @@ Tests for the `AttemptJoinAsync` simple mode fallback:
 - Existing join prevents duplicate (same validation as sync rule path)
 - Early-return guards relaxed: `ProcessActiveConnectedSystemObjectAsync` and `ProcessMetaverseObjectChangesAsync` proceed in simple mode with zero sync rules
 
-### 21. Unit tests — export matching integration
+### 21.  Unit tests — export matching integration ✅
 
 **File:** `test/JIM.Worker.Tests/OutboundSync/ExportMatchingIntegrationTests.cs` (new)
 
@@ -446,7 +446,7 @@ Tests for the integration in `CreateOrUpdatePendingExportWithNoNetChangeAsync`:
 - When connected system is in advanced mode: uses sync rule's matching rules, not object type's
 - When connected system is in simple mode: uses object type's matching rules
 
-### 22. Unit tests — API endpoints
+### 22.  Unit tests — API endpoints ✅
 
 **File:** `test/JIM.Web.Api.Tests/SynchronisationControllerTests.cs` (or new file as appropriate)
 
@@ -467,7 +467,7 @@ Tests for the integration in `CreateOrUpdatePendingExportWithNoNetChangeAsync`:
 - Switch to current mode — returns 409 Conflict
 - Invalid mode value — returns 400
 
-### 23. PowerShell tests (Pester)
+### 23.  PowerShell tests (Pester) ✅
 
 **File:** `test/JIM.PowerShell.Tests/MatchingRules.Tests.ps1` (new or extend existing)
 

@@ -80,6 +80,21 @@ public class ObjectMatchingRuleDto
     public string? ConnectedSystemObjectTypeName { get; set; }
 
     /// <summary>
+    /// The Metaverse Object Type to search when evaluating this rule (simple mode only).
+    /// </summary>
+    public int? MetaverseObjectTypeId { get; set; }
+
+    /// <summary>
+    /// The name of the Metaverse Object Type (for display).
+    /// </summary>
+    public string? MetaverseObjectTypeName { get; set; }
+
+    /// <summary>
+    /// The Sync Rule this rule belongs to (advanced mode only).
+    /// </summary>
+    public int? SyncRuleId { get; set; }
+
+    /// <summary>
     /// The target Metaverse attribute ID to match against.
     /// </summary>
     public int? TargetMetaverseAttributeId { get; set; }
@@ -116,6 +131,9 @@ public class ObjectMatchingRuleDto
             Order = rule.Order,
             ConnectedSystemObjectTypeId = rule.ConnectedSystemObjectTypeId ?? 0,
             ConnectedSystemObjectTypeName = rule.ConnectedSystemObjectType?.Name,
+            MetaverseObjectTypeId = rule.MetaverseObjectTypeId,
+            MetaverseObjectTypeName = rule.MetaverseObjectType?.Name,
+            SyncRuleId = rule.SyncRuleId,
             TargetMetaverseAttributeId = rule.TargetMetaverseAttributeId,
             TargetMetaverseAttributeName = rule.TargetMetaverseAttribute?.Name,
             Sources = rule.Sources.Select(ObjectMatchingRuleSourceDto.FromEntity).ToList(),
