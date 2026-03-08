@@ -1291,8 +1291,9 @@ if ($SetupOnly) {
     Write-Host ""
 
     # Docker Cleanup (prune unused images and build cache to prevent disk space accumulation)
-    Write-Step "Pruning Docker unused images and build cache..."
-    $pruneOutput = docker system prune -af 2>&1
+    Write-Step "Pruning unused images and build cache (preserving snapshots)..."
+    $pruneOutput = docker image prune -af --filter "label!=jim.samba.snapshot-hash" 2>&1
+    $pruneOutput += docker builder prune -af 2>&1
     $reclaimedMatch = $pruneOutput | Select-String "Total reclaimed space:\s*(.+)"
     if ($reclaimedMatch) {
         Write-Success "Reclaimed: $($reclaimedMatch.Matches[0].Groups[1].Value)"
@@ -1682,8 +1683,10 @@ $timings["6. Capture Metrics"] = (Get-Date) - $step6Start
 $step7Start = Get-Date
 Write-Section "Step 7: Docker Cleanup"
 
-Write-Step "Pruning unused images, build cache, and volumes..."
-$pruneOutput = docker system prune -af 2>&1
+Write-Step "Pruning unused images and build cache (preserving snapshots)..."
+# Use --filter to exclude snapshot images from pruning (they take hours to build)
+$pruneOutput = docker image prune -af --filter "label!=jim.samba.snapshot-hash" 2>&1
+$pruneOutput += docker builder prune -af 2>&1
 $reclaimedMatch = $pruneOutput | Select-String "Total reclaimed space:\s*(.+)"
 if ($reclaimedMatch) {
     Write-Success "Reclaimed: $($reclaimedMatch.Matches[0].Groups[1].Value)"
