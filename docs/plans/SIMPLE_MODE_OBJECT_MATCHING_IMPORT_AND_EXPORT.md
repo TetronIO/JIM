@@ -279,17 +279,122 @@ Verify `FindConnectedSystemObjectUsingMatchingRuleAsync` is implemented and hand
 
 This method is already referenced by `ObjectMatchingServer.FindMatchingConnectedSystemObjectAsync` (line 120) — confirm it exists and works correctly.
 
-### 12. Update API layer
+### 12. Update simple mode API endpoints
 
-**`src/JIM.Web/Models/Api/ConnectedSystemDto.cs`** — Add `MetaverseObjectTypeId` and `MetaverseObjectTypeName` to `ObjectMatchingRuleDto`, update `FromEntity`.
+**Files:** `src/JIM.Web/Models/Api/ConnectedSystemDto.cs`, `src/JIM.Web/Controllers/Api/SynchronisationController.cs`
 
-**`src/JIM.Web/Controllers/Api/SynchronisationController.cs`** — In endpoints that create/update matching rules, handle the new `MetaverseObjectTypeId` property: validate the MVO type exists when provided, set on the entity.
+Update existing simple mode matching rule endpoints (`/api/v1/synchronisation/connected-systems/{csId}/matching-rules/...`) to support the new properties:
 
-### 13. Update PowerShell cmdlets
+**DTO changes (`ObjectMatchingRuleDto`):**
+- Add `MetaverseObjectTypeId` (int?, read/write) — the MVO type this rule searches
+- Add `MetaverseObjectTypeName` (string?, read-only) — human-readable name for display
+- Add `SourceMetaverseAttributeId` support in `ObjectMatchingRuleSourceDto` — currently only `ConnectedSystemAttributeId` is exposed; add `MetaverseAttributeId` for export-direction sources
+- Update `FromEntity` / `ToEntity` mapping methods
 
-Update any PowerShell cmdlets that create or modify object matching rules to accept a `-MetaverseObjectTypeId` parameter and include it in the request body.
+**Controller changes:**
+- In `CreateMatchingRule` / `UpdateMatchingRule`: validate `MetaverseObjectTypeId` exists when provided (return 400 if invalid)
+- In `GetMatchingRules` / `GetMatchingRule`: include `MetaverseObjectType` in response via DTO mapping
 
-### 14. Update mode switching logic
+### 13. Add advanced mode API endpoints
+
+**File:** `src/JIM.Web/Controllers/Api/SynchronisationController.cs`
+
+Add new endpoints for managing matching rules on individual sync rules (advanced mode):
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| `GET` | `/api/v1/synchronisation/sync-rules/{syncRuleId}/matching-rules` | List matching rules for a sync rule |
+| `GET` | `/api/v1/synchronisation/sync-rules/{syncRuleId}/matching-rules/{id}` | Get a specific matching rule |
+| `POST` | `/api/v1/synchronisation/sync-rules/{syncRuleId}/matching-rules` | Create a matching rule on a sync rule |
+| `PUT` | `/api/v1/synchronisation/sync-rules/{syncRuleId}/matching-rules/{id}` | Update a matching rule on a sync rule |
+| `DELETE` | `/api/v1/synchronisation/sync-rules/{syncRuleId}/matching-rules/{id}` | Delete a matching rule from a sync rule |
+
+**Validation:**
+- Verify the connected system is in advanced mode (`ObjectMatchingRuleMode.SyncRule`) — return 409 Conflict if in simple mode
+- `MetaverseObjectTypeId` must be null for advanced mode rules (sync rule provides the MVO type) — return 400 if set
+- Reuse `ObjectMatchingRuleDto` / `ObjectMatchingRuleSourceDto` from step 12
+
+**Application layer:**
+- Add corresponding methods in `ConnectedSystemServer` (or appropriate Application layer server) that the controller calls — respect n-tier architecture
+
+### 14. Add mode switching API endpoint
+
+**File:** `src/JIM.Web/Controllers/Api/SynchronisationController.cs`
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| `PUT` | `/api/v1/synchronisation/connected-systems/{csId}/matching-rule-mode` | Switch between simple and advanced mode |
+
+**Request body:**
+```json
+{
+  "mode": "ConnectedSystem"  // or "SyncRule"
+}
+```
+
+**Behaviour:**
+- Calls `SwitchObjectMatchingModeAsync` in the Application layer
+- Returns 200 with the updated connected system on success
+- Returns 409 Conflict if already in the requested mode
+- Returns 400 if the mode value is invalid
+
+### 15. Update PowerShell cmdlets — simple mode
+
+**Files:** `src/JIM.PowerShell/Public/MatchingRules/New-JIMMatchingRule.ps1`, `Set-JIMMatchingRule.ps1`
+
+**`New-JIMMatchingRule`:**
+- Add `-MetaverseObjectTypeId` parameter (int, optional) — maps to `metaverseObjectTypeId` in request body
+- Add `-SourceMetaverseAttributeId` parameter (int, optional) — creates a source with `metaverseAttributeId` instead of `connectedSystemAttributeId`
+- Validation: `-SourceAttributeId` and `-SourceMetaverseAttributeId` are mutually exclusive (use parameter sets)
+
+**`Set-JIMMatchingRule`:**
+- Add `-MetaverseObjectTypeId` parameter (int, optional)
+- Add `-SourceMetaverseAttributeId` parameter (int, optional) — replaces sources with an export-direction source
+
+**`Get-JIMMatchingRule`:**
+- No changes needed — the API response already includes any new properties; PowerShell passes through the full object
+
+**`Remove-JIMMatchingRule`:**
+- No changes needed — deletion is mode-agnostic
+
+### 16. Add PowerShell cmdlets — advanced mode
+
+**Directory:** `src/JIM.PowerShell/Public/MatchingRules/`
+
+Create four new cmdlets for managing matching rules on sync rules:
+
+**`Get-JIMSyncRuleMatchingRule`:**
+- Parameters: `-SyncRuleId` (mandatory), `-Id` (optional, for single rule)
+- Endpoint: `GET /api/v1/synchronisation/sync-rules/{syncRuleId}/matching-rules[/{id}]`
+- Adds `SyncRuleId` NoteProperty for pipeline support
+
+**`New-JIMSyncRuleMatchingRule`:**
+- Parameters: `-SyncRuleId` (mandatory), `-SourceAttributeId` or `-SourceMetaverseAttributeId` (mandatory, mutually exclusive), `-TargetMetaverseAttributeId` (mandatory), `-Order` (optional), `-CaseSensitive` (optional), `-PassThru` (optional)
+- Endpoint: `POST /api/v1/synchronisation/sync-rules/{syncRuleId}/matching-rules`
+- Note: `MetaverseObjectTypeId` is intentionally excluded — advanced mode rules inherit MVO type from the sync rule
+
+**`Set-JIMSyncRuleMatchingRule`:**
+- Parameters: `-SyncRuleId` (mandatory), `-Id` (mandatory), `-Order`, `-TargetMetaverseAttributeId`, `-SourceAttributeId`, `-SourceMetaverseAttributeId`, `-CaseSensitive`, `-PassThru` (all optional except keys)
+- Endpoint: `PUT /api/v1/synchronisation/sync-rules/{syncRuleId}/matching-rules/{id}`
+
+**`Remove-JIMSyncRuleMatchingRule`:**
+- Parameters: `-SyncRuleId` (mandatory), `-Id` (mandatory), `-Force` (optional)
+- Endpoint: `DELETE /api/v1/synchronisation/sync-rules/{syncRuleId}/matching-rules/{id}`
+- `SupportsShouldProcess`, `ConfirmImpact = 'High'`
+
+All four cmdlets follow the same patterns as the existing simple mode cmdlets (connection check, `Invoke-JIMApi`, `ValueFromPipelineByPropertyName`, `Write-Verbose`, `Write-Error`).
+
+### 17. Add mode switching PowerShell cmdlet
+
+**File:** `src/JIM.PowerShell/Public/MatchingRules/Set-JIMObjectMatchingMode.ps1`
+
+**`Set-JIMObjectMatchingMode`:**
+- Parameters: `-ConnectedSystemId` (mandatory), `-Mode` (mandatory, `[ValidateSet('ConnectedSystem', 'SyncRule')]`)
+- Endpoint: `PUT /api/v1/synchronisation/connected-systems/{csId}/matching-rule-mode`
+- `SupportsShouldProcess`, `ConfirmImpact = 'High'` (mode switching migrates rules)
+- `-Force` to skip confirmation
+
+### 18. Update mode switching logic
 
 **File:** `src/JIM.Application/Servers/ConnectedSystemServer.cs`
 
@@ -297,28 +402,93 @@ In `SwitchObjectMatchingModeAsync`:
 - **Simple → Advanced:** When copying rules from object type to sync rules, clear `MetaverseObjectTypeId` on the copied rules (sync rules provide their own MVO type).
 - **Advanced → Simple:** When migrating rules to object types, populate `MetaverseObjectTypeId` from the sync rule's `MetaverseObjectTypeId`.
 
-### 15. Unit tests
+### 19. Unit tests — matching engine
 
-**`test/JIM.Worker.Tests/OutboundSync/ObjectMatchingServerTests.cs`** — Add tests for the new overload and export matching:
-- Import: match found using rule's MVO type directly (no sync rule)
-- Import: no matching rules returns null
-- Import: multiple matches throws `MultipleMatchesException`
-- Export (simple mode): match found using object type rules
-- Export (simple mode): no matching rules returns null
-- Export (advanced mode): match found using sync rule rules
+**File:** `test/JIM.Worker.Tests/OutboundSync/ObjectMatchingServerTests.cs`
 
-**New file: `test/JIM.Worker.Tests/Synchronisation/SimpleMatchingModeJoinTests.cs`** — Tests for the `AttemptJoinAsync` simple mode fallback:
+Tests for the simplified `ObjectMatchingServer` signatures:
+
+**Import matching (`FindMatchingMetaverseObjectAsync`):**
+- Match found using rule's `MetaverseObjectTypeId` directly (no sync rule context needed)
+- No matching rules returns null
+- Multiple rules evaluated in `Order` sequence, first match wins
+- Multiple matches on a single rule throws `MultipleMatchesException`
+- Case-sensitive and case-insensitive matching behaviour
+- Rule with null `MetaverseObjectTypeId` is skipped (or throws — define expected behaviour)
+
+**Export matching (`FindMatchingConnectedSystemObjectAsync`):**
+- Match found using export-direction source (`MetaverseAttributeId`)
+- No matching rules returns null
+- Multiple matches throws exception
+- Scoped correctly to `ConnectedSystemObjectType`
+- Case-sensitive and case-insensitive matching behaviour
+
+### 20. Unit tests — sync processor (import join)
+
+**File:** `test/JIM.Worker.Tests/Synchronisation/SimpleMatchingModeJoinTests.cs` (new)
+
+Tests for the `AttemptJoinAsync` simple mode fallback:
 - CSO joins via simple mode when no import sync rules exist
-- CSO does not join when no matching rules exist (graceful no-op)
+- CSO joins via simple mode when import sync rules exist (rules come from object type, not sync rule)
+- CSO does not join when no matching rules exist on the object type (graceful no-op)
 - CSO does not join when matching rules exist but `MetaverseObjectTypeId` is null
 - Existing join prevents duplicate (same validation as sync rule path)
+- Early-return guards relaxed: `ProcessActiveConnectedSystemObjectAsync` and `ProcessMetaverseObjectChangesAsync` proceed in simple mode with zero sync rules
 
-**New file: `test/JIM.Worker.Tests/OutboundSync/ExportMatchingIntegrationTests.cs`** — Tests for the integration in `CreateOrUpdatePendingExportWithNoNetChangeAsync`:
-- When matching CSO found, no new provisioning CSO created — existing CSO used with Update change type
-- When no matching CSO found, provisioning CSO created as before
-- When matching is disabled (no matching rules), provisioning CSO created as before
+### 21. Unit tests — export matching integration
 
-### 16. Update Scenario 8 setup (follow-up)
+**File:** `test/JIM.Worker.Tests/OutboundSync/ExportMatchingIntegrationTests.cs` (new)
+
+Tests for the integration in `CreateOrUpdatePendingExportWithNoNetChangeAsync`:
+- When matching CSO found: no new provisioning CSO created, existing CSO joined with `Update` change type
+- When no matching CSO found: provisioning CSO created as before (existing behaviour preserved)
+- When no matching rules exist: provisioning CSO created as before (matching skipped)
+- When connected system is in advanced mode: uses sync rule's matching rules, not object type's
+- When connected system is in simple mode: uses object type's matching rules
+
+### 22. Unit tests — API endpoints
+
+**File:** `test/JIM.Web.Api.Tests/SynchronisationControllerTests.cs` (or new file as appropriate)
+
+**Simple mode endpoints (updated):**
+- Create matching rule with `MetaverseObjectTypeId` — succeeds, value persisted
+- Create matching rule with invalid `MetaverseObjectTypeId` — returns 400
+- Get matching rule — response includes `MetaverseObjectTypeId` and `MetaverseObjectTypeName`
+- Create matching rule with `SourceMetaverseAttributeId` — creates export-direction source
+
+**Advanced mode endpoints (new):**
+- CRUD operations on sync rule matching rules — standard happy path
+- Create on simple mode connected system — returns 409 Conflict
+- Create with `MetaverseObjectTypeId` set — returns 400
+
+**Mode switching endpoint (new):**
+- Switch from simple to advanced — rules migrated, `MetaverseObjectTypeId` cleared
+- Switch from advanced to simple — rules migrated, `MetaverseObjectTypeId` populated
+- Switch to current mode — returns 409 Conflict
+- Invalid mode value — returns 400
+
+### 23. PowerShell tests (Pester)
+
+**File:** `test/JIM.PowerShell.Tests/MatchingRules.Tests.ps1` (new or extend existing)
+
+**Simple mode cmdlets:**
+- `New-JIMMatchingRule` with `-MetaverseObjectTypeId` — included in request body
+- `New-JIMMatchingRule` with `-SourceMetaverseAttributeId` — creates export source
+- `New-JIMMatchingRule` with both `-SourceAttributeId` and `-SourceMetaverseAttributeId` — error (mutually exclusive)
+- `Set-JIMMatchingRule` with `-MetaverseObjectTypeId` — included in request body
+
+**Advanced mode cmdlets:**
+- `Get-JIMSyncRuleMatchingRule` — calls correct endpoint
+- `New-JIMSyncRuleMatchingRule` — calls correct endpoint, excludes `MetaverseObjectTypeId`
+- `Set-JIMSyncRuleMatchingRule` — calls correct endpoint
+- `Remove-JIMSyncRuleMatchingRule` — calls correct endpoint, respects `-Force`
+- Pipeline support: `Get-JIMSyncRuleMatchingRule | Remove-JIMSyncRuleMatchingRule -Force`
+
+**Mode switching:**
+- `Set-JIMObjectMatchingMode` — calls correct endpoint
+- `Set-JIMObjectMatchingMode` without `-Force` — prompts for confirmation
+
+### 24. Update Scenario 8 setup
 
 **File:** `test/integration/Setup-Scenario8.ps1`
 
@@ -326,10 +496,13 @@ After the main changes, update the setup to:
 - Ensure matching rules on the target group object type have `MetaverseObjectTypeId` set
 - Remove the empty "EMEA AD Import Groups" sync rule creation (lines 598-611)
 - Verify the DeleteGroup test passes without the empty rule
+- Use new cmdlets where appropriate (e.g., `Set-JIMObjectMatchingMode` if mode needs setting)
 
 ## Verification
 
 1. `dotnet build JIM.sln` — zero errors
-2. `dotnet test JIM.sln` — all tests pass including new ones
+2. `dotnet test JIM.sln` — all tests pass including new matching engine, sync processor, export integration, API, and Pester tests
 3. Run Scenario 8 integration test to verify the DeleteGroup step passes without the spurious rename export
 4. Verify export matching: configure simple mode matching rules on a target connected system object type, provision an MVO that matches an existing CSO, and confirm JIM joins to the existing CSO rather than creating a duplicate
+5. Verify API coverage: all simple mode, advanced mode, and mode switching endpoints return correct responses and error codes
+6. Verify PowerShell coverage: all cmdlets work for both simple and advanced mode, including pipeline support and mode switching
