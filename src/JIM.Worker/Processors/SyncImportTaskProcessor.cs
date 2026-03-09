@@ -341,7 +341,7 @@ public class SyncImportTaskProcessor
 
                 var batchSw = System.Diagnostics.Stopwatch.StartNew();
                 await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
-                Log.Information("PerformFullImportAsync: CreateConnectedSystemObjectsAsync took {ElapsedMs}ms for {Count} CSOs",
+                Log.Debug("PerformFullImportAsync: CreateConnectedSystemObjectsAsync took {ElapsedMs}ms for {Count} CSOs",
                     batchSw.ElapsedMilliseconds, batchSize);
 
                 // Now that CSOs have real IDs (assigned by EF), sync the FK on RPEIs
@@ -370,7 +370,7 @@ public class SyncImportTaskProcessor
                 var batchRpeiCount = batchRpeis.Count;
                 batchSw.Restart();
                 await FlushImportRpeisAsync(batchRpeis);
-                Log.Information("PerformFullImportAsync: FlushImportRpeisAsync took {ElapsedMs}ms for {Count} RPEIs",
+                Log.Debug("PerformFullImportAsync: FlushImportRpeisAsync took {ElapsedMs}ms for {Count} RPEIs",
                     batchSw.ElapsedMilliseconds, batchRpeiCount);
 
                 // Remove processed CSOs from the front of the list so their attribute values
@@ -1933,41 +1933,43 @@ public class SyncImportTaskProcessor
             .Where(cso => cso.PendingAttributeValueAdditions.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
             .ToList();
 
-        Parallel.ForEach(createdCsosWithRefs, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, csoToProcess =>
+        // Process created CSOs in batches with progress reporting.
+        // Each batch uses Parallel.ForEach for CPU-bound dictionary lookups, then reports progress.
+        var allCsosWithRefs = createdCsosWithRefs
+            .Select(cso => (Cso: cso, IsCreated: true))
+            .Concat(updatedCsosWithRefs.Select(cso => (Cso: cso, IsCreated: false)))
+            .ToList();
+
+        var totalToResolve = allCsosWithRefs.Count;
+        for (var batchStart = 0; batchStart < totalToResolve; batchStart += ImportBatchSize)
         {
-            var externalIdAttribute = csoToProcess.Type.Attributes.Single(a => a.IsExternalId);
-            var secondaryExternalIdAttribute = csoToProcess.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
-            var externalIdAttributeToUse = secondaryExternalIdAttribute ?? externalIdAttribute;
+            var batchSize = Math.Min(ImportBatchSize, totalToResolve - batchStart);
+            var batch = allCsosWithRefs.GetRange(batchStart, batchSize);
 
-            foreach (var referenceAttributeValue in csoToProcess.AttributeValues.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
+            Parallel.ForEach(batch, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, item =>
             {
-                var resolved = ResolveAttributeValueFromLookups(referenceAttributeValue, externalIdAttributeToUse, externalIdLookups);
-                if (!resolved)
-                    unresolvedItems.Add((csoToProcess, referenceAttributeValue, externalIdAttributeToUse));
-            }
+                var csoToProcess = item.Cso;
+                var externalIdAttribute = csoToProcess.Type.Attributes.Single(a => a.IsExternalId);
+                var secondaryExternalIdAttribute = csoToProcess.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
+                var externalIdAttributeToUse = secondaryExternalIdAttribute ?? externalIdAttribute;
 
-            Interlocked.Increment(ref processedCount);
-        });
+                var attributeValues = item.IsCreated
+                    ? csoToProcess.AttributeValues.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))
+                    : csoToProcess.PendingAttributeValueAdditions.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue));
 
-        Parallel.ForEach(updatedCsosWithRefs, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, csoToProcess =>
-        {
-            var externalIdAttribute = csoToProcess.Type.Attributes.Single(a => a.IsExternalId);
-            var secondaryExternalIdAttribute = csoToProcess.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
-            var externalIdAttributeToUse = secondaryExternalIdAttribute ?? externalIdAttribute;
+                foreach (var referenceAttributeValue in attributeValues)
+                {
+                    var resolved = ResolveAttributeValueFromLookups(referenceAttributeValue, externalIdAttributeToUse, externalIdLookups);
+                    if (!resolved)
+                        unresolvedItems.Add((csoToProcess, referenceAttributeValue, externalIdAttributeToUse));
+                }
 
-            foreach (var referenceAttributeValue in csoToProcess.PendingAttributeValueAdditions.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
-            {
-                var resolved = ResolveAttributeValueFromLookups(referenceAttributeValue, externalIdAttributeToUse, externalIdLookups);
-                if (!resolved)
-                    unresolvedItems.Add((csoToProcess, referenceAttributeValue, externalIdAttributeToUse));
-            }
+                Interlocked.Increment(ref processedCount);
+            });
 
-            Interlocked.Increment(ref processedCount);
-        });
-
-        // Update progress after parallel processing completes
-        _activity.ObjectsProcessed = processedCount;
-        await _jim.Activities.UpdateActivityAsync(_activity);
+            _activity.ObjectsProcessed = processedCount;
+            await _jim.Activities.UpdateActivityProgressOutOfBandAsync(_activity);
+        }
 
         // Phase 2: Batch DB query for remaining unresolved references (eliminates N+1 individual queries)
         if (unresolvedItems.Count > 0)

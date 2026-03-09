@@ -1222,7 +1222,7 @@ public class ExportEvaluationServer
             await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(cso);
         }
 
-        Log.Information("CreatePendingProvisioningCsoAsync: Created PendingProvisioning CSO {CsoId} for MVO {MvoId} in system {SystemId} (deferSave={DeferSave})",
+        Log.Debug("CreatePendingProvisioningCsoAsync: Created PendingProvisioning CSO {CsoId} for MVO {MvoId} in system {SystemId} (deferSave={DeferSave})",
             cso.Id, mvo.Id, exportRule.ConnectedSystemId, deferSave);
 
         return cso;
@@ -1291,7 +1291,7 @@ public class ExportEvaluationServer
                 Application.ConnectedSystems.AddCsoToCache(cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryIdChange.StringValue, cso.Id);
         }
 
-        Log.Information("AddSecondaryExternalIdToCsoAsync: Added secondary external ID value '{SecondaryIdValue}' to CSO {CsoId} for confirming import matching (deferSave={DeferSave})",
+        Log.Debug("AddSecondaryExternalIdToCsoAsync: Added secondary external ID value '{SecondaryIdValue}' to CSO {CsoId} for confirming import matching (deferSave={DeferSave})",
             secondaryIdChange.StringValue ?? secondaryIdChange.IntValue?.ToString() ?? "unknown", cso.Id, deferSave);
     }
 
