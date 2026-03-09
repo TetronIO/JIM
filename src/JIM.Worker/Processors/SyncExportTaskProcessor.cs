@@ -304,6 +304,7 @@ public class SyncExportTaskProcessor
 
         // Bulk insert RPEIs via raw SQL (bypasses change tracker for performance)
         var exportRpeis = _activity.RunProfileExecutionItems.ToList();
+        var hasRawSqlSupport = false;
         if (exportRpeis.Count > 0)
         {
             foreach (var rpei in exportRpeis)
@@ -324,7 +325,7 @@ public class SyncExportTaskProcessor
                     SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
             }
 
-            await _jim.Activities.BulkInsertRpeisAsync(exportRpeis);
+            hasRawSqlSupport = await _jim.Activities.BulkInsertRpeisAsync(exportRpeis);
 
             // Persist CSO change records separately — raw SQL bulk insert only covers
             // RPEI scalar columns, not the ConnectedSystemObjectChange navigation graph.
@@ -332,7 +333,16 @@ public class SyncExportTaskProcessor
                 await _jim.Activities.PersistRpeiCsoChangesAsync(exportRpeis);
         }
 
-        // RPEIs remain in _activity.RunProfileExecutionItems for CalculateActivitySummaryStats
+        // Compute summary stats from the local list, then clear RPEIs from the Activity.
+        // Loading RPEIs onto the EF entity causes the change tracker to traverse the entire
+        // entity graph (RPEIs → CSOs → AttributeValues → etc.), exhausting memory at scale.
+        Worker.CalculateActivitySummaryStats(_activity, exportRpeis);
+
+        // Production (raw SQL): clear RPEIs from the Activity to free memory.
+        // Test environments (EF fallback): keep RPEIs on the Activity for test assertions.
+        if (hasRawSqlSupport)
+            _activity.RunProfileExecutionItems.Clear();
+
         await _jim.Activities.UpdateActivityMessageAsync(_activity, completionMessage);
         await _jim.Activities.UpdateActivityAsync(_activity);
 

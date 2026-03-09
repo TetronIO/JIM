@@ -41,6 +41,13 @@ public class SyncImportTaskProcessor
     private ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel _syncOutcomeTrackingLevel =
         ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None;
 
+    /// <summary>
+    /// Set to true when raw SQL bulk insert is available (production with real database).
+    /// When false (test environments using in-memory EF), RPEIs are kept on the Activity's
+    /// navigation collection for test assertions.
+    /// </summary>
+    private bool _hasRawSqlSupport;
+
     public SyncImportTaskProcessor(
         JimApplication jimApplication,
         IConnector connector,
@@ -452,9 +459,19 @@ public class SyncImportTaskProcessor
         await FlushImportRpeisAsync();
         _activity.ObjectsProcessed = remainingRpeiCount;
 
-        // Restore all persisted RPEIs to the Activity for CalculateActivitySummaryStats
-        // and for tests that verify activity.RunProfileExecutionItems.
-        _activity.AddRunProfileExecutionItems(_allPersistedImportRpeis);
+        // Compute summary stats from accumulated RPEIs without loading them onto the Activity.
+        // Loading RPEIs onto the EF entity causes the change tracker to traverse the entire
+        // entity graph (RPEIs → CSOs → AttributeValues → etc.), exhausting memory at scale.
+        Worker.CalculateActivitySummaryStats(_activity, _allPersistedImportRpeis);
+
+        if (!_hasRawSqlSupport)
+        {
+            // Test environments (EF fallback): restore RPEIs to the Activity for test assertions.
+            // Test datasets are small so this doesn't cause memory issues.
+            _activity.AddRunProfileExecutionItems(_allPersistedImportRpeis);
+        }
+
+        _allPersistedImportRpeis.Clear();
         await _jim.Activities.UpdateActivityAsync(_activity);
 
         importSpan.SetTag("totalObjectsImported", totalObjectsImported);
@@ -600,6 +617,8 @@ public class SyncImportTaskProcessor
 
         if (usedRawSql)
         {
+            _hasRawSqlSupport = true;
+
             // Production: RPEIs are persisted via raw SQL. Detach from change tracker so no
             // subsequent SaveChangesAsync re-inserts or overwrites them with stale in-memory state.
             // This mirrors FlushRpeisAsync in SyncTaskProcessorBase.

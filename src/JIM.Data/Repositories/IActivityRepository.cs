@@ -103,6 +103,13 @@ public interface IActivityRepository
     public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis);
 
     /// <summary>
+    /// Queries the database for RPEI error counts for an activity, returning the total number of
+    /// RPEIs with errors and the total number of RPEIs. Used by the worker to determine activity
+    /// completion status (success/warning/failure) without loading RPEIs into memory.
+    /// </summary>
+    public Task<(int TotalWithErrors, int TotalRpeis)> GetActivityRpeiErrorCountsAsync(Guid activityId);
+
+    /// <summary>
     /// Persists ConnectedSystemObjectChange records that are attached to RPEIs.
     /// Used by the export processor to persist export change history records after
     /// RPEIs have been bulk-inserted via raw SQL (which only inserts RPEI scalar columns).

@@ -660,37 +660,22 @@ public class Worker : BackgroundService
         try
         {
             // Calculate summary stats from RPEIs for activity list display.
-            // Sync processors may have already computed stats from their accumulated RPEI list
-            // (via Worker.CalculateActivitySummaryStats(activity, rpeis)) because RPEIs were
-            // flushed via raw SQL and cleared from Activity.RunProfileExecutionItems.
-            // Import/export processors still have RPEIs in the collection, so we recompute.
+            // Processors pre-compute stats via CalculateActivitySummaryStats before returning.
+            // If RPEIs are still in the collection (legacy/test path), recompute here.
             if (activity.RunProfileExecutionItems.Count > 0)
             {
                 CalculateActivitySummaryStats(activity);
             }
             // else: stats were pre-computed by the processor — use as-is
 
-            // Determine final status using summary stats (TotalErrors) which are always available
-            // whether RPEIs are in the collection or were pre-computed by the processor.
-            // Note: .All() returns true for empty collections, so we must check hasItems first.
-            bool hasItems, hasErrors, allErrors;
+            // Query the database for precise RPEI error counts.
+            // This avoids loading RPEIs into memory (which causes OOM at scale) and provides
+            // precise has-errors/all-errors detection for all processor types uniformly.
+            var (totalWithErrors, totalRpeis) = await jim.Activities.GetActivityRpeiErrorCountsAsync(activity.Id);
 
-            if (activity.RunProfileExecutionItems.Count > 0)
-            {
-                // RPEIs available in collection — use precise per-RPEI error checking
-                hasItems = true;
-                hasErrors = activity.RunProfileExecutionItems.Any(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
-                allErrors = activity.RunProfileExecutionItems.All(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
-            }
-            else
-            {
-                // RPEIs flushed via raw SQL — use pre-computed summary stats
-                hasItems = activity.TotalErrors > 0 || activity.ObjectsProcessed > 0;
-                hasErrors = activity.TotalErrors > 0;
-                // Without per-RPEI granularity, we can't distinguish "all errors" from "some errors".
-                // Conservatively treat as partial errors (CompleteWithWarning) unless nothing succeeded.
-                allErrors = hasErrors && activity.ObjectsProcessed == 0;
-            }
+            var hasItems = totalRpeis > 0;
+            var hasErrors = totalWithErrors > 0;
+            var allErrors = hasItems && totalWithErrors == totalRpeis;
 
             if (allErrors)
             {

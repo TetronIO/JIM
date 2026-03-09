@@ -286,6 +286,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         var allRpeis = _allPersistedRpeis.Concat(_activity.RunProfileExecutionItems).ToList();
         Worker.CalculateActivitySummaryStats(_activity, allRpeis);
 
+        // Free accumulated RPEIs now that stats are computed — they are no longer needed.
+        // Error detection is handled by a database query in CompleteActivityBasedOnExecutionResultsAsync.
+        _allPersistedRpeis.Clear();
+
         syncSpan.SetSuccess();
     }
 

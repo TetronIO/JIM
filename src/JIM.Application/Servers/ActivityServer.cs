@@ -349,6 +349,16 @@ public class ActivityServer
         return await Application.Repository.Activity.GetActivityRunProfileExecutionStatsAsync(activityId);
     }
 
+    /// <summary>
+    /// Queries the database for RPEI error counts for an activity. Returns the total number of
+    /// RPEIs with errors and the total number of RPEIs, enabling precise activity completion
+    /// status determination without loading RPEIs into memory.
+    /// </summary>
+    public async Task<(int TotalWithErrors, int TotalRpeis)> GetActivityRpeiErrorCountsAsync(Guid activityId)
+    {
+        return await Application.Repository.Activity.GetActivityRpeiErrorCountsAsync(activityId);
+    }
+
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)
     {
         return await Application.Repository.Activity.GetActivityRunProfileExecutionItemAsync(id);
