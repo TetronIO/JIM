@@ -940,6 +940,7 @@ public class SyncImportTaskProcessor
                                 }
                                 // Clear the CSO reference from the RPEI since we're not persisting it
                                 firstOccurrence.rpei.ConnectedSystemObject = null;
+                                firstOccurrence.rpei.ConnectedSystemObjectId = null;
                             }
 
                             // Track this as a known duplicate for any subsequent occurrences (3rd, 4th, etc.)
@@ -1025,6 +1026,7 @@ public class SyncImportTaskProcessor
                     if (connectedSystemObject != null)
                     {
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
+                        activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
                         activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
                         connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
 
