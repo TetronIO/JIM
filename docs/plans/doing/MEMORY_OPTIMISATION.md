@@ -1,6 +1,6 @@
 # Memory Optimisation for Sync Processors
 
-- **Status:** Doing
+- **Status:** Doing (Phases 1–2 complete)
 > **Milestone**: Post-MVP
 > **Priority**: High
 > **Effort**: Medium (3 phases)
@@ -15,15 +15,14 @@ Enterprise deployments synchronising 100K+ objects can exhaust container memory 
 
 ## Findings
 
-### 1. RPEI Accumulation for Summary Stats (HIGH RISK)
+### 1. RPEI Accumulation for Summary Stats ✅
 
-- **Location**: `SyncTaskProcessorBase._allPersistedRpeis` (line ~109), `SyncImportTaskProcessor._allPersistedImportRpeis`
-- **Problem**: All RPEIs from every page are accumulated in `_allPersistedRpeis` across the entire sync run. At 100K objects with outcome tracking, each RPEI carries SyncOutcome graphs, CSO snapshots, and error details. Peak memory: 100-500MB for 100K objects.
-- **Current state**: RPEIs are bulk-inserted to the database per page, but kept in memory for `CalculateActivitySummaryStats` at the end.
-- **Fix**: Compute summary stats incrementally during each `FlushRpeisAsync` call instead of accumulating all RPEIs. Replace the final `CalculateActivitySummaryStats(allRpeis)` with a running tally updated per-page. This eliminates the need to hold all RPEIs in memory.
-- **Effort**: Medium -- requires refactoring `CalculateActivitySummaryStats` to support incremental updates.
+- **Location**: `SyncTaskProcessorBase._allPersistedRpeis`, `SyncImportTaskProcessor._allPersistedImportRpeis`
+- **Problem**: All RPEIs from every page were accumulated across the entire sync run. At 100K objects with change tracking, each RPEI carried ConnectedSystemObjectChange graphs (~50 attribute changes each), creating ~5M objects in memory.
+- **Fix**: Added `AccumulateActivitySummaryStats` to `Worker.cs` — computes running tallies using `+=` during each `FlushRpeisAsync` call. Removed `_allPersistedRpeis` and `_allPersistedImportRpeis` accumulation lists entirely. RPEIs are released immediately after each flush. Import processor retains only a lightweight `_reconciliationRpeiLookup` dictionary for the update-phase RPEIs needed by pending export reconciliation.
+- **Commits**: `ec43acee`
 
-### 2. RPEI Error Detection (DONE)
+### 2. RPEI Error Detection ✅
 
 - **Problem**: Previously loaded all RPEIs onto `Activity.RunProfileExecutionItems` (EF navigation property) to check for errors, triggering EF change tracker graph traversal across RPEIs, CSOs, AttributeValues, etc.
 - **Fix**: Replaced with `GetActivityRpeiErrorCountsAsync` -- a single `GROUP BY` query returning `(totalWithErrors, totalRpeis)`. Implemented across all four processor types (import, export, full sync, delta sync).
@@ -61,13 +60,14 @@ Enterprise deployments synchronising 100K+ objects can exhaust container memory 
 
 ## Implementation Phases
 
-### Phase 1: Incremental Summary Stats (HIGH PRIORITY)
+### Phase 1: Incremental Summary Stats ✅
 
-Replace `_allPersistedRpeis` accumulation with running tallies updated during each `FlushRpeisAsync` call.
+Replaced `_allPersistedRpeis` accumulation with `AccumulateActivitySummaryStats` — running tallies updated during each `FlushRpeisAsync` call.
 
-- Modify `CalculateActivitySummaryStats` to accept incremental updates
-- Update `FlushRpeisAsync` in both `SyncTaskProcessorBase` and `SyncImportTaskProcessor` to compute stats before clearing RPEIs
-- Remove `_allPersistedRpeis` and `_allPersistedImportRpeis` accumulation lists
+- Added `AccumulateActivitySummaryStats` to `Worker.cs` (uses `+=` vs `=` in `CalculateActivitySummaryStats`)
+- Updated `FlushRpeisAsync` in `SyncTaskProcessorBase` and `FlushImportRpeisAsync` in `SyncImportTaskProcessor` to compute stats before releasing RPEIs
+- Removed `_allPersistedRpeis` and `_allPersistedImportRpeis` accumulation lists
+- Import processor retains lightweight `_reconciliationRpeiLookup` for update-phase RPEIs only
 - Estimated memory savings: 100-500MB for 100K object syncs
 
 ### Phase 2: Export Evaluation Cache Optimisation (DEFERRED)

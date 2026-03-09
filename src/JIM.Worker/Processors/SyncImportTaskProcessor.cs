@@ -612,6 +612,17 @@ public class SyncImportTaskProcessor
 
         var usedRawSql = await _jim.Activities.BulkInsertRpeisAsync(rpeis);
 
+        // Persist CSO change records separately — raw SQL bulk insert only covers
+        // RPEI scalar columns, not the ConnectedSystemObjectChange navigation graph.
+        // This must happen for both production and test paths.
+        await _jim.Activities.PersistRpeiCsoChangesAsync(rpeis);
+
+        // Release the change object graphs to allow GC. At 100K CSOs with ~20 attributes each,
+        // the ConnectedSystemObjectChange + ChangeAttribute + ChangeAttributeValue objects
+        // consume ~3-7GB of memory if held until activity completion.
+        foreach (var rpei in rpeis)
+            rpei.ConnectedSystemObjectChange = null;
+
         if (usedRawSql)
         {
             // Production: accumulate summary stats from this batch before releasing RPEIs.

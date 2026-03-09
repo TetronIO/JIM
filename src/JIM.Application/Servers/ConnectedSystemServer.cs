@@ -2932,12 +2932,21 @@ public class ConnectedSystemServer
         // Check if CSO change tracking is enabled
         var changeTrackingEnabled = await Application.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
 
-        // add a Change Object to the relevant Activity Run Profile Execution Item for each cso.
-        // they will be persisted further up the call stack, when the activity gets persisted.
+        // Build O(1) lookup by CSO ID to avoid O(n²) linear scan at scale.
+        // At 100K CSOs, the previous SingleOrDefault scan caused 10 billion comparisons.
+        var rpeisByCsoId = new Dictionary<Guid, ActivityRunProfileExecutionItem>(activityRunProfileExecutionItems.Count);
+        foreach (var rpei in activityRunProfileExecutionItems)
+        {
+            if (rpei.ConnectedSystemObject != null)
+                rpeisByCsoId.TryAdd(rpei.ConnectedSystemObject.Id, rpei);
+        }
+
+        // Add a Change Object to the relevant Activity Run Profile Execution Item for each CSO.
+        // They will be persisted further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
         {
-            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ??
-                                                  throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created before now.");
+            if (!rpeisByCsoId.TryGetValue(cso.Id, out var activityRunProfileExecutionItem))
+                throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created before now.");
 
             // Explicitly set the FK now that the CSO has been persisted and has an ID.
             // This ensures the FK is properly tracked when the execution item is saved later.
@@ -2964,13 +2973,21 @@ public class ConnectedSystemServer
         // Check if CSO change tracking is enabled
         var changeTrackingEnabled = await Application.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
 
-        // add a change object to the relevant activity run profile execution item for each cso to be updated.
-        // the change objects will be persisted later, further up the call stack, when the activity gets persisted.
+        // Build O(1) lookup by CSO ID to avoid O(n²) linear scan at scale.
+        var rpeisByCsoId = new Dictionary<Guid, ActivityRunProfileExecutionItem>(activityRunProfileExecutionItems.Count);
+        foreach (var rpei in activityRunProfileExecutionItems)
+        {
+            if (rpei.ConnectedSystemObject != null)
+                rpeisByCsoId.TryAdd(rpei.ConnectedSystemObject.Id, rpei);
+        }
+
+        // Add a change object to the relevant activity run profile execution item for each CSO to be updated.
+        // The change objects will be persisted later, further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
         {
             // Find the RPEI for this CSO - may be null if no attribute changes occurred (CSO was added to update list
             // for reference resolution purposes only)
-            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.FirstOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id);
+            rpeisByCsoId.TryGetValue(cso.Id, out var activityRunProfileExecutionItem);
 
             if (activityRunProfileExecutionItem != null)
             {
