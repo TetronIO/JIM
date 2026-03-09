@@ -187,10 +187,11 @@ function Build-Snapshot {
     & $PopulateAction
 
     # Copy volume data to backup locations (volumes aren't captured by docker commit)
+    # IMPORTANT: Use /* glob to copy CONTENTS, not the directory itself, into the existing .provisioned dirs
     Write-Host "  Backing up volume data for commit..." -ForegroundColor Gray
-    docker exec $ContainerName bash -c "cp -a /usr/local/samba/etc /usr/local/samba/etc.provisioned" 2>&1 | Out-Null
-    docker exec $ContainerName bash -c "cp -a /usr/local/samba/private /usr/local/samba/private.provisioned" 2>&1 | Out-Null
-    docker exec $ContainerName bash -c "cp -a /usr/local/samba/var /usr/local/samba/var.provisioned" 2>&1 | Out-Null
+    docker exec $ContainerName bash -c "cp -a /usr/local/samba/etc/* /usr/local/samba/etc.provisioned/" 2>&1 | Out-Null
+    docker exec $ContainerName bash -c "cp -a /usr/local/samba/private/* /usr/local/samba/private.provisioned/" 2>&1 | Out-Null
+    docker exec $ContainerName bash -c "cp -a /usr/local/samba/var/* /usr/local/samba/var.provisioned/" 2>&1 | Out-Null
 
     # Ensure start-samba.sh exists (it restores volume data on startup)
     $startScript = docker exec $ContainerName test -f /start-samba.sh 2>&1
