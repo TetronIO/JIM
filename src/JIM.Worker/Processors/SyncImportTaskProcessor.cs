@@ -638,6 +638,15 @@ public class SyncImportTaskProcessor
 
         var usedRawSql = await _jim.Activities.BulkInsertRpeisAsync(rpeis);
 
+        // Sync change object FKs: RPEI Ids were generated above (lines 623-624) after
+        // CreateConnectedSystemObjectsAsync set ActivityRunProfileExecutionItemId = Guid.Empty.
+        // Update the FK now that real Ids exist, before persisting the change objects.
+        foreach (var rpei in rpeis)
+        {
+            if (rpei.ConnectedSystemObjectChange != null)
+                rpei.ConnectedSystemObjectChange.ActivityRunProfileExecutionItemId = rpei.Id;
+        }
+
         // Persist CSO change records separately — raw SQL bulk insert only covers
         // RPEI scalar columns, not the ConnectedSystemObjectChange navigation graph.
         // This must happen for both production and test paths.
