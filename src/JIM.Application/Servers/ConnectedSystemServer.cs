@@ -3026,6 +3026,7 @@ public class ConnectedSystemServer
         var change = new ConnectedSystemObjectChange
         {
             ConnectedSystemId = connectedSystemObject.ConnectedSystemId,
+            ConnectedSystemObjectId = connectedSystemObject.Id,
             ConnectedSystemObject = connectedSystemObject,
             ChangeType = ObjectChangeType.Added,
             ChangeTime = DateTime.UtcNow,
@@ -3090,6 +3091,7 @@ public class ConnectedSystemServer
             var change = new ConnectedSystemObjectChange
             {
                 ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
+                ConnectedSystemObjectId = connectedSystemObject.Id,
                 ConnectedSystemObject = connectedSystemObject,
                 ChangeType = ObjectChangeType.Updated,
                 ChangeTime = DateTime.UtcNow,

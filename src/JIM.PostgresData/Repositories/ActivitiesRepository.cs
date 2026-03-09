@@ -965,11 +965,17 @@ public class ActivityRepository : IActivityRepository
         if (changes.Count == 0)
             return;
 
-        // Null out RPEI navigation properties to prevent EF graph traversal from
-        // re-discovering already-persisted RPEIs (which would cause duplicate key violations).
-        // The FK (ActivityRunProfileExecutionItemId) is already set.
+        // Null out navigation properties to prevent EF graph traversal from discovering
+        // already-persisted entities. Without this, AddRange traverses
+        // ConnectedSystemObject → AttributeValues and adds them to the change tracker,
+        // causing massive memory usage at scale (100K CSOs × 20 attrs = 2M+ tracked entities).
+        // Both FKs (ActivityRunProfileExecutionItemId, ConnectedSystemObjectId) are explicit
+        // properties on the model, so nulling the navigations is safe.
         foreach (var change in changes)
+        {
             change.ActivityRunProfileExecutionItem = null;
+            change.ConnectedSystemObject = null;
+        }
 
         Repository.Database.AddRange(changes);
         await Repository.Database.SaveChangesAsync();

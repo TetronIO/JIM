@@ -263,6 +263,11 @@ public class SyncImportTaskProcessor
             }
         }
 
+        Log.Information("PerformFullImportAsync: Import complete. CSOs to create: {Creates}, to update: {Updates}, GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
+            connectedSystemObjectsToBeCreated.Count, connectedSystemObjectsToBeUpdated.Count,
+            GC.GetTotalMemory(false) / 1024 / 1024,
+            System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
+
         // now that all objects have been imported, we can attempt to resolve unresolved reference attribute values
         // i.e. attempt to convert unresolved reference strings into hard links to other Connected System Objects
         var objectsWithReferences = connectedSystemObjectsToBeCreated.Count(cso => cso.AttributeValues.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))) +
@@ -280,6 +285,15 @@ public class SyncImportTaskProcessor
         var totalChanges = createdCount + connectedSystemObjectsToBeUpdated.Count;
         _activity.ObjectsToProcess = totalChanges;
         _activity.ObjectsProcessed = 0;
+        // Force GC before the memory-intensive save phase to reclaim import result objects,
+        // temporary strings, and other transient allocations from the import processing.
+        // At 100K objects, this can reclaim hundreds of MB.
+        GC.Collect(2, GCCollectionMode.Aggressive, true, true);
+        GC.WaitForPendingFinalizers();
+        Log.Information("PerformFullImportAsync: Starting save phase. Creates: {Creates}, Updates: {Updates}, RPEIs: {Rpeis}, GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
+            createdCount, connectedSystemObjectsToBeUpdated.Count, _activityRunProfileExecutionItems.Count,
+            GC.GetTotalMemory(true) / 1024 / 1024,
+            System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Saving changes");
         using (var persistSpan = Diagnostics.Database.StartSpan("PersistConnectedSystemObjects"))
         {
@@ -336,6 +350,10 @@ public class SyncImportTaskProcessor
 
                 totalCreatedSoFar += csoBatch.Count;
                 _activity.ObjectsProcessed = totalCreatedSoFar;
+                Log.Information("PerformFullImportAsync: Batch {BatchStart}-{BatchEnd} complete. GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
+                    batchStart, batchEnd,
+                    GC.GetTotalMemory(false) / 1024 / 1024,
+                    System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
                 await _jim.Activities.UpdateActivityProgressOutOfBandAsync(_activity);
             }
 

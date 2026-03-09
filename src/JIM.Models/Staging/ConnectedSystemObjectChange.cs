@@ -27,6 +27,7 @@ public class ConnectedSystemObjectChange
     /// What Connected System Object does this change relate to?
     /// Will be null if the CSO has since been deleted.
     /// </summary>
+    public Guid? ConnectedSystemObjectId { get; set; }
     public ConnectedSystemObject? ConnectedSystemObject { get; set; }
 
     /// <summary>
