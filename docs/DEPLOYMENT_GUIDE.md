@@ -18,18 +18,18 @@ Storage scales with the number of identity objects and the frequency of synchron
 
 #### Memory Scaling by Identity Object Count
 
-The worker service loads all objects from a connector page into memory during import processing (CSOs, attribute values, RPEIs, duplicate detection structures). Memory requirements scale linearly with the number of objects in the largest connected system:
+The worker service loads all objects from a connector into memory during full import processing (CSOs, attribute values, RPEIs, duplicate detection structures). Memory requirements scale linearly with the number of objects in the largest connected system. These figures are for the **host machine** (or VM) running the Docker stack — they must cover the operating system, all JIM containers, and the database.
 
-| Connected System Size | Minimum RAM (Stack) | Recommended RAM (Stack) |
-|----------------------|--------------------|-----------------------|
+| Connected System Size | Minimum Host RAM | Recommended Host RAM |
+|----------------------|-----------------|---------------------|
 | Up to 10,000 objects | 4 GB | 8 GB |
-| 10,000 - 50,000 objects | 8 GB | 12 GB |
-| 50,000 - 100,000 objects | 12 GB | 16 GB |
-| 100,000+ objects | 16 GB | 24 GB |
+| 10,000 - 50,000 objects | 8 GB | 16 GB |
+| 50,000 - 100,000 objects | 20 GB | 24 GB |
+| 100,000+ objects | 24 GB | 32 GB |
 
-These figures cover the entire Docker stack (web, worker, scheduler, database). The worker is the primary memory consumer during sync operations — a full import of 100K objects with 20 attributes each requires approximately 1.5 GB of worker memory at peak. The database also requires additional memory during bulk insert operations.
+**Why large imports need significant memory:** During a full import, the worker loads all imported objects with their attributes into memory before the save phase begins (for duplicate detection, deletion detection, and reference resolution). A full import of 100,000 objects with 20 attributes each produces a worker peak working set of approximately 2.3 GB. The database requires an additional 1–2 GB during bulk inserts. Combined with the web, scheduler, and operating system overhead, total system memory consumption reaches 8–10 GB for 100K objects. A machine with only 16 GB total RAM is **not sufficient** for 100K object imports — the worker will be OOM-killed during the save phase.
 
-**Note:** These requirements apply to the largest single import run. If you have multiple connected systems of 50K objects each but import them sequentially (not concurrently), size for 50K, not the sum.
+**Note:** These requirements apply to the largest single full import. If you have multiple connected systems of 50K objects each but import them sequentially (not concurrently), size for 50K, not the sum. Delta imports process only changed objects and require significantly less memory.
 
 ### Software Requirements
 

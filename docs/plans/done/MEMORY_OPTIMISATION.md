@@ -24,16 +24,18 @@ Measured from XLarge integration tests (100K objects, 20 attributes each):
 | After GC.Collect | 696 MB | 984 MB | Import result objects released |
 | Per save batch (2000 CSOs) | +200-500 MB | +300-600 MB | CSO persistence + change objects |
 
-**Recommended stack RAM by connected system size:**
+**Recommended host RAM by connected system size:**
 
-| Connected System Size | Minimum RAM (Stack) | Recommended RAM (Stack) |
-|----------------------|--------------------|-----------------------|
+| Connected System Size | Minimum Host RAM | Recommended Host RAM |
+|----------------------|-----------------|---------------------|
 | Up to 10,000 objects | 4 GB | 8 GB |
-| 10,000 - 50,000 objects | 8 GB | 12 GB |
-| 50,000 - 100,000 objects | 12 GB | 16 GB |
-| 100,000+ objects | 16 GB | 24 GB |
+| 10,000 - 50,000 objects | 8 GB | 16 GB |
+| 50,000 - 100,000 objects | 20 GB | 24 GB |
+| 100,000+ objects | 24 GB | 32 GB |
 
-**Development environments:** A 16 GB Codespace cannot run XLarge tests because the IDE and dev tools consume ~9-10 GB, leaving insufficient memory for the Docker stack. Use a 32 GB environment or a dedicated test machine.
+**Verified:** A 16 GB machine (GitHub Codespace) is **not sufficient** for 100K object imports — the worker is OOM-killed during the save phase. Total stack consumption at 100K objects reaches 8–10 GB (worker 2.3 GB peak + database 1–2 GB under bulk inserts + web/scheduler/OS overhead), but Linux memory management requires headroom beyond the sum of working sets.
+
+**Development environments:** Use a 32 GB Codespace or dedicated test machine for XLarge tests.
 
 ## Findings
 
@@ -136,7 +138,7 @@ The remaining memory bottleneck is `ProcessImportObjectsAsync`, which loads all 
 - Runs deletion detection against the full set of imported external IDs
 - Uses `seenExternalIds` dictionary for within-page and cross-page duplicate detection
 
-**When to implement:** If customers need 100K+ object imports on machines with less than 16 GB RAM, or if connector page sizes are impractically small for the current approach.
+**When to implement:** If customers need 100K+ object imports on machines with less than 20 GB RAM, or if connector page sizes are impractically small for the current approach.
 
 ### Phase 5: Export Evaluation Cache Optimisation (DEFERRED)
 
@@ -155,14 +157,14 @@ Only pursue if subsequent full imports of 100K+ objects cause issues.
 ## Success Criteria
 
 - ✅ Imports up to 10K objects complete reliably on 4 GB RAM
-- ✅ Imports up to 50K objects complete reliably on 8-12 GB RAM
+- ✅ Imports up to 10K objects complete reliably on 4-8 GB host RAM
 - ✅ Save phase memory is bounded by batch size (2000 CSOs), not total object count
 - ✅ No regression in sync performance (wall clock time)
-- ⬚ XLarge integration tests (100K objects) — requires 16+ GB stack RAM (OOM in 16 GB Codespace due to IDE overhead)
+- ⬚ XLarge integration tests (100K objects) — requires 20+ GB host RAM (OOM-killed on 16 GB machine)
 
 ## Benefits
 
-- **Reliability**: Eliminates OOM crashes for imports up to 50K objects on recommended hardware
+- **Reliability**: Eliminates OOM crashes for imports up to 10K objects on minimum hardware (4 GB)
 - **Scalability**: Save phase memory bounded by batch size; import phase scales linearly with object count
 - **Predictability**: Documented memory requirements per deployment size
 - **Observability**: GC heap and working set logged at each batch boundary for capacity planning
