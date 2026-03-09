@@ -367,10 +367,11 @@ public class SyncImportTaskProcessor
 
                 // Remove batch RPEIs from the main list and flush them
                 _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObject != null && batchCsoSet.Contains(r.ConnectedSystemObject));
+                var batchRpeiCount = batchRpeis.Count;
                 batchSw.Restart();
                 await FlushImportRpeisAsync(batchRpeis);
                 Log.Information("PerformFullImportAsync: FlushImportRpeisAsync took {ElapsedMs}ms for {Count} RPEIs",
-                    batchSw.ElapsedMilliseconds, batchRpeis.Count);
+                    batchSw.ElapsedMilliseconds, batchRpeiCount);
 
                 // Remove processed CSOs from the front of the list so their attribute values
                 // (~20 per CSO × ~200 bytes = ~4KB per CSO) become GC-eligible immediately.
