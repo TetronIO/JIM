@@ -2,6 +2,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Staging;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -977,8 +978,73 @@ public class ActivityRepository : IActivityRepository
             change.ConnectedSystemObject = null;
         }
 
-        Repository.Database.AddRange(changes);
-        await Repository.Database.SaveChangesAsync();
+        // Increase command timeout for large batches. With 2000+ changes × ~20 attribute changes,
+        // EF generates ~80K+ INSERT operations which can exceed the default 30s timeout.
+        int? previousTimeout = null;
+        try
+        {
+            previousTimeout = Repository.Database.Database.GetCommandTimeout();
+            Repository.Database.Database.SetCommandTimeout(300); // 5 minutes
+        }
+        catch { /* In-memory test DB — ignore */ }
+
+        // Process in sub-batches to limit EF change tracker pressure. Each change has
+        // ~20 AttributeChanges × ValueChanges = ~40 child entities, so 500 changes = ~20K entities.
+        const int subBatchSize = 500;
+        for (var i = 0; i < changes.Count; i += subBatchSize)
+        {
+            var batch = changes.GetRange(i, Math.Min(subBatchSize, changes.Count - i));
+
+            // In in-memory test DB, EF auto-tracks entities discovered via navigation properties.
+            // The change objects may already be tracked (Added state) from when the RPEI was saved.
+            // Only add entities that aren't already tracked to avoid duplicate key errors.
+            var untrackedChanges = new List<ConnectedSystemObjectChange>();
+            foreach (var change in batch)
+            {
+                try
+                {
+                    var entry = Repository.Database.Entry(change);
+                    if (entry.State == EntityState.Detached)
+                        untrackedChanges.Add(change);
+                }
+                catch
+                {
+                    // Entry() can fail on mock DbContexts — treat as untracked
+                    untrackedChanges.Add(change);
+                }
+            }
+
+            if (untrackedChanges.Count > 0)
+            {
+                Repository.Database.AddRange(untrackedChanges);
+                await Repository.Database.SaveChangesAsync();
+            }
+            else
+            {
+                // All entities already tracked (in-memory test DB) — just save
+                await Repository.Database.SaveChangesAsync();
+            }
+
+            // Detach persisted change objects and their children to free tracker memory.
+            foreach (var change in batch)
+            {
+                foreach (var attrChange in change.AttributeChanges)
+                {
+                    foreach (var valueChange in attrChange.ValueChanges)
+                    {
+                        try { Repository.Database.Entry(valueChange).State = EntityState.Detached; } catch { }
+                    }
+                    try { Repository.Database.Entry(attrChange).State = EntityState.Detached; } catch { }
+                }
+                try { Repository.Database.Entry(change).State = EntityState.Detached; } catch { }
+            }
+        }
+
+        try
+        {
+            Repository.Database.Database.SetCommandTimeout(previousTimeout);
+        }
+        catch { /* In-memory test DB — ignore */ }
     }
 
     /// <summary>

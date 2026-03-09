@@ -320,6 +320,8 @@ public class SyncImportTaskProcessor
             for (var batchStart = 0; batchStart < connectedSystemObjectsToBeCreated.Count; batchStart += createBatchSize)
             {
                 var batchEnd = Math.Min(batchStart + createBatchSize, connectedSystemObjectsToBeCreated.Count);
+                Log.Information("PerformFullImportAsync: Starting batch {BatchStart}-{BatchEnd} of {Total}",
+                    batchStart, batchEnd, connectedSystemObjectsToBeCreated.Count);
                 var csoBatch = connectedSystemObjectsToBeCreated.GetRange(batchStart, batchEnd - batchStart);
 
                 // Extract just the RPEIs for this batch of CSOs
