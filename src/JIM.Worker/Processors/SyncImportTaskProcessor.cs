@@ -314,7 +314,7 @@ public class SyncImportTaskProcessor
             // creates ConnectedSystemObjectChange graphs (~20 ChangeAttribute + ChangeAttributeValue
             // objects per CSO). At 100K CSOs this creates ~2-6M objects consuming 3-7GB if done at once.
             // Batching ensures change objects are persisted and released per batch via FlushImportRpeisAsync.
-            const int createBatchSize = 5000;
+            const int createBatchSize = 2000;
             var totalCreatedSoFar = 0;
 
             for (var batchStart = 0; batchStart < connectedSystemObjectsToBeCreated.Count; batchStart += createBatchSize)
@@ -653,6 +653,12 @@ public class SyncImportTaskProcessor
             // Stats are computed incrementally per-flush, eliminating the need to keep all RPEIs
             // in memory for a final calculation (which caused OOM at 100K+ objects).
             Worker.AccumulateActivitySummaryStats(_activity, rpeis);
+
+            // Null out CSO navigation on RPEIs so the CSO objects become GC-eligible.
+            // The ConnectedSystemObjectId FK is already set, so the navigation is not needed.
+            // At 100K CSOs × ~3KB each, this releases ~300MB incrementally per batch.
+            foreach (var rpei in rpeis)
+                rpei.ConnectedSystemObject = null;
 
             // Detach from change tracker so no subsequent SaveChangesAsync re-inserts or
             // overwrites them with stale in-memory state.
