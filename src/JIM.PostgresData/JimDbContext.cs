@@ -173,6 +173,14 @@ public class JimDbContext : DbContext
             .OnDelete(DeleteBehavior.SetNull)
             .HasConstraintName("FK_SyncOutcomes_ConnectedSystemObjectChange");
 
+        // When an RPEI is deleted, set the FK to null on any change objects that reference it.
+        // This preserves change history while allowing RPEI cleanup.
+        modelBuilder.Entity<ConnectedSystemObjectChange>()
+            .HasOne(c => c.ActivityRunProfileExecutionItem)
+            .WithOne(r => r.ConnectedSystemObjectChange)
+            .HasForeignKey<ConnectedSystemObjectChange>(c => c.ActivityRunProfileExecutionItemId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         modelBuilder.Entity<ConnectedSystemObjectChange>()
             .HasMany(cso => cso.AttributeChanges)
             .WithOne(ac => ac.ConnectedSystemChange)
