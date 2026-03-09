@@ -571,6 +571,7 @@ public interface IConnectedSystemRepository
     public Task CreateConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition);
     public Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject);
     public Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
+    public Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, Func<int, Task>? onBatchPersisted);
     public Task CreateConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer);
     public Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem);
     public Task CreateSyncRuleAsync(SyncRule syncRule);

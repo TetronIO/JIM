@@ -2924,10 +2924,10 @@ public class ConnectedSystemServer
     /// <summary>
     /// Bulk persists Connected System Objects and appends a Change Object to the Activity Run Profile Execution Item.
     /// </summary>
-    public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, List<ActivityRunProfileExecutionItem> activityRunProfileExecutionItems)
+    public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, List<ActivityRunProfileExecutionItem> activityRunProfileExecutionItems, Func<int, Task>? onBatchPersisted = null)
     {
         // bulk persist csos creates
-        await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjects);
+        await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjects, onBatchPersisted);
 
         // Check if CSO change tracking is enabled
         var changeTrackingEnabled = await Application.ServiceSettings.GetCsoChangeTrackingEnabledAsync();

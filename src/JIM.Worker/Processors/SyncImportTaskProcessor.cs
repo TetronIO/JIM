@@ -290,7 +290,11 @@ public class SyncImportTaskProcessor
                     string.Join("; ", rpeiWithErrors.Select(r => $"[Id={r.Id}, ErrorType={r.ErrorType}, Message={r.ErrorMessage}]")));
             }
 
-            await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activityRunProfileExecutionItems);
+            await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activityRunProfileExecutionItems, async (objectsPersisted) =>
+            {
+                _activity.ObjectsProcessed = objectsPersisted;
+                await _jim.Activities.UpdateActivityAsync(_activity);
+            });
 
             // NOTE: Do NOT flush RPEIs here. The _activityRunProfileExecutionItems list contains RPEIs
             // for BOTH creates and updates (added during import processing). UpdateConnectedSystemObjectsAsync
@@ -428,8 +432,12 @@ public class SyncImportTaskProcessor
         }
 
         // Flush any remaining RPEIs (e.g., from reconciliation or validation)
+        var remainingRpeiCount = _activityRunProfileExecutionItems.Count;
+        _activity.ObjectsToProcess = remainingRpeiCount;
+        _activity.ObjectsProcessed = 0;
         await _jim.Activities.UpdateActivityMessageAsync(_activity, "Creating activity run profile execution items");
         await FlushImportRpeisAsync();
+        _activity.ObjectsProcessed = remainingRpeiCount;
 
         // Restore all persisted RPEIs to the Activity for CalculateActivitySummaryStats
         // and for tests that verify activity.RunProfileExecutionItems.

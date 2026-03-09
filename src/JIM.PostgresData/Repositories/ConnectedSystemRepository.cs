@@ -1577,6 +1577,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
     {
+        await CreateConnectedSystemObjectsAsync(connectedSystemObjects, onBatchPersisted: null);
+    }
+
+    public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, Func<int, Task>? onBatchPersisted)
+    {
         if (connectedSystemObjects.Count == 0)
             return;
 
@@ -1598,7 +1603,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             await using var transaction = await Repository.Database.Database.BeginTransactionAsync();
 
             // Step 1: INSERT parent CSO rows
-            await BulkInsertConnectedSystemObjectsRawAsync(connectedSystemObjects);
+            await BulkInsertConnectedSystemObjectsRawAsync(connectedSystemObjects, onBatchPersisted);
 
             // Step 2: INSERT child attribute value rows
             var allAttributeValues = connectedSystemObjects
@@ -3560,10 +3565,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// Bulk inserts ConnectedSystemObject rows using parameterised multi-row INSERT.
     /// Chunks automatically to stay within the PostgreSQL parameter limit.
     /// </summary>
-    private async Task BulkInsertConnectedSystemObjectsRawAsync(List<ConnectedSystemObject> objects)
+    private async Task BulkInsertConnectedSystemObjectsRawAsync(List<ConnectedSystemObject> objects, Func<int, Task>? onBatchPersisted = null)
     {
         const int columnsPerRow = 11;
         var chunkSize = MaxParametersPerStatement / columnsPerRow;
+        var totalPersisted = 0;
 
         foreach (var chunk in ChunkList(objects, chunkSize))
         {
@@ -3592,6 +3598,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+
+            if (onBatchPersisted != null)
+            {
+                totalPersisted += chunk.Count;
+                await onBatchPersisted(totalPersisted);
+            }
         }
     }
 
