@@ -149,7 +149,7 @@ jobs:
 
       # Phase 3: Container vulnerability scanning
       - name: Scan image for vulnerabilities
-        uses: aquasecurity/trivy-action@0.34.2
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: ${{ steps.prefix.outputs.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.version.outputs.VERSION }}
           format: 'table'

@@ -99,7 +99,11 @@ public class ActivityRepository : IActivityRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        Guid? initiatedById = null)
+        Guid? initiatedById = null,
+        IEnumerable<ActivityTargetOperationType>? operationFilter = null,
+        IEnumerable<ActivityOutcomeType>? outcomeFilter = null,
+        IEnumerable<ActivityTargetType>? typeFilter = null,
+        IEnumerable<ActivityStatus>? statusFilter = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -122,13 +126,62 @@ public class ActivityRepository : IActivityRepository
             query = query.Where(a => a.InitiatedById == initiatedById.Value);
         }
 
-        // Apply search filter
+        // Apply operation filter
+        if (operationFilter != null)
+        {
+            var operations = operationFilter.ToList();
+            if (operations.Count > 0)
+                query = query.Where(a => operations.Contains(a.TargetOperationType));
+        }
+
+        // Apply type filter
+        if (typeFilter != null)
+        {
+            var types = typeFilter.ToList();
+            if (types.Count > 0)
+                query = query.Where(a => types.Contains(a.TargetType));
+        }
+
+        // Apply status filter
+        if (statusFilter != null)
+        {
+            var statuses = statusFilter.ToList();
+            if (statuses.Count > 0)
+                query = query.Where(a => statuses.Contains(a.Status));
+        }
+
+        // Apply outcome filter (activities that have > 0 for any of the selected outcome stat types)
+        if (outcomeFilter != null)
+        {
+            var outcomes = outcomeFilter.ToList();
+            if (outcomes.Count > 0)
+            {
+                query = query.Where(a =>
+                    (outcomes.Contains(ActivityOutcomeType.Added) && a.TotalAdded > 0) ||
+                    (outcomes.Contains(ActivityOutcomeType.Updated) && a.TotalUpdated > 0) ||
+                    (outcomes.Contains(ActivityOutcomeType.Deleted) && a.TotalDeleted > 0) ||
+                    (outcomes.Contains(ActivityOutcomeType.Projected) && a.TotalProjected > 0) ||
+                    (outcomes.Contains(ActivityOutcomeType.Joined) && a.TotalJoined > 0) ||
+                    (outcomes.Contains(ActivityOutcomeType.AttributeFlows) && a.TotalAttributeFlows > 0) ||
+                    (outcomes.Contains(ActivityOutcomeType.Disconnected) && a.TotalDisconnected > 0) ||
+                    (outcomes.Contains(ActivityOutcomeType.DriftCorrections) && a.TotalDriftCorrections > 0) ||
+                    (outcomes.Contains(ActivityOutcomeType.Provisioned) && a.TotalProvisioned > 0) ||
+                    (outcomes.Contains(ActivityOutcomeType.Exported) && a.TotalExported > 0) ||
+                    (outcomes.Contains(ActivityOutcomeType.Deprovisioned) && a.TotalDeprovisioned > 0) ||
+                    (outcomes.Contains(ActivityOutcomeType.Created) && a.TotalCreated > 0) ||
+                    (outcomes.Contains(ActivityOutcomeType.PendingExports) && a.TotalPendingExports > 0) ||
+                    (outcomes.Contains(ActivityOutcomeType.Errors) && a.TotalErrors > 0));
+            }
+        }
+
+        // Apply search filter (target name, context, and initiated by name)
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
             var searchLower = searchQuery.ToLower();
             query = query.Where(a =>
                 (a.TargetName != null && a.TargetName.ToLower().Contains(searchLower)) ||
-                EF.Functions.ILike(a.TargetType.ToString(), $"%{searchQuery}%"));
+                (a.TargetContext != null && a.TargetContext.ToLower().Contains(searchLower)) ||
+                (a.InitiatedByName != null && a.InitiatedByName.ToLower().Contains(searchLower)));
         }
 
         // Apply sorting

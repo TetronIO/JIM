@@ -18,18 +18,92 @@
 <MudText Typo="Typo.h4">@_pageTitle</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2 mb-2">
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2 mb-0">
     @_pageDescription
 </MudText>
 
 @if (_preferencesLoaded)
 {
+<MudGrid Spacing="3" Class="mt-0">
+    <MudItem xs="12" sm="6" md="3">
+        <MudSelect T="ActivityTargetOperationType" Label="Operation" Variant="Variant.Outlined"
+                   Dense="true" Clearable="true" MultiSelection="true"
+                   SelectedValues="_filterOperations"
+                   SelectedValuesChanged="OnOperationFilterChanged"
+                   MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Create">Create</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Read">Read</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Update">Update</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Delete">Delete</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Clear">Clear</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Execute">Execute</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.ImportHierarchy">Import Hierarchy</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.ImportSchema">Import Schema</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Revert">Revert</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudSelect T="ActivityOutcomeType" Label="Outcomes" Variant="Variant.Outlined"
+                   Dense="true" Clearable="true" MultiSelection="true"
+                   SelectedValues="_filterOutcomes"
+                   SelectedValuesChanged="OnOutcomeFilterChanged"
+                   MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Added">Added</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Updated">Updated</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Deleted">Deleted</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Projected">Projected</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Joined">Joined</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.AttributeFlows">Attribute Flows</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Disconnected">Disconnected</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.DriftCorrections">Drift Corrections</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Provisioned">Provisioned</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Exported">Exported</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Deprovisioned">Deprovisioned</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Created">Created</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.PendingExports">Pending Exports</MudSelectItem>
+            <MudSelectItem T="ActivityOutcomeType" Value="ActivityOutcomeType.Errors">Errors</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudSelect T="ActivityTargetType" Label="Type" Variant="Variant.Outlined"
+                   Dense="true" Clearable="true" MultiSelection="true"
+                   SelectedValues="_filterTypes"
+                   SelectedValuesChanged="OnTypeFilterChanged"
+                   MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ConnectedSystem">Connected System</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ConnectedSystemRunProfile">Connected System Run Profile</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.SyncRule">Sync Rule</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.MetaverseObject">Metaverse Object</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.MetaverseAttribute">Metaverse Attribute</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.DataGenerationTemplate">Data Generation Template</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.TrustedCertificate">Trusted Certificate</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ObjectMatchingRule">Object Matching Rule</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ServiceSetting">Service Setting</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.HistoryRetentionCleanup">History Retention Cleanup</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudSelect T="ActivityStatus" Label="Status" Variant="Variant.Outlined"
+                   Dense="true" Clearable="true" MultiSelection="true"
+                   SelectedValues="_filterStatuses"
+                   SelectedValuesChanged="OnStatusFilterChanged"
+                   MultiSelectionTextFunc="@(new Func<List<string>, string>(GetMultiSelectText))">
+            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.InProgress">In Progress</MudSelectItem>
+            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Complete">Complete</MudSelectItem>
+            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithWarning">Complete With Warning</MudSelectItem>
+            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.CompleteWithError">Complete With Error</MudSelectItem>
+            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.FailedWithError">Failed With Error</MudSelectItem>
+            <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Cancelled">Cancelled</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+</MudGrid>
+
 <MudTable @ref="_table" T="Activity" ServerData="ServerReload" @bind-CurrentPage="_currentPage" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
     Class="mt-5" Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer" Loading="@_loading"
     LoadingProgressColor="Color.Primary">
     <ToolBarContent>
         <MudSpacer />
-        <MudTextField T="string" ValueChanged="@(s => OnSearch(s))" Variant="Variant.Outlined" Placeholder="Search type or target" Margin="Margin.Dense"
+        <MudTextField T="string" ValueChanged="@(s => OnSearch(s))" Variant="Variant.Outlined" Placeholder="Search target or initiator" Margin="Margin.Dense"
             Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium"
             Class="mt-0" />
     </ToolBarContent>
@@ -376,6 +450,12 @@
     private int _rowsPerPage = 10;
     private bool _preferencesLoaded;
 
+    // Filter state
+    private IEnumerable<ActivityTargetOperationType> _filterOperations = [];
+    private IEnumerable<ActivityOutcomeType> _filterOutcomes = [];
+    private IEnumerable<ActivityTargetType> _filterTypes = [];
+    private IEnumerable<ActivityStatus> _filterStatuses = [];
+
     protected override async Task OnInitializedAsync()
     {
         NavManager.LocationChanged += OnLocationChanged;
@@ -494,13 +574,22 @@
             // Update URL with current page (without triggering navigation/reload)
             UpdateUrlWithPage(page);
 
+            var operations = _filterOperations.Any() ? _filterOperations : null;
+            var outcomes = _filterOutcomes.Any() ? _filterOutcomes : null;
+            var types = _filterTypes.Any() ? _filterTypes : null;
+            var statuses = _filterStatuses.Any() ? _filterStatuses : null;
+
             var result = await Jim.Activities.GetActivitiesAsync(
                 page,
                 state.PageSize,
                 string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
                 state.SortLabel,
                 sortDescending,
-                _currentUserId);
+                _currentUserId,
+                operations,
+                outcomes,
+                types,
+                statuses);
 
             return new TableData<Activity>
             {
@@ -565,6 +654,40 @@
             || activity.TotalCreated > 0
             || activity.TotalPendingExports > 0
             || activity.TotalErrors > 0;
+    }
+
+    private void OnOperationFilterChanged(IEnumerable<ActivityTargetOperationType> values)
+    {
+        _filterOperations = values;
+        _table?.ReloadServerData();
+    }
+
+    private void OnOutcomeFilterChanged(IEnumerable<ActivityOutcomeType> values)
+    {
+        _filterOutcomes = values;
+        _table?.ReloadServerData();
+    }
+
+    private void OnTypeFilterChanged(IEnumerable<ActivityTargetType> values)
+    {
+        _filterTypes = values;
+        _table?.ReloadServerData();
+    }
+
+    private void OnStatusFilterChanged(IEnumerable<ActivityStatus> values)
+    {
+        _filterStatuses = values;
+        _table?.ReloadServerData();
+    }
+
+    private static string GetMultiSelectText(List<string> selectedValues)
+    {
+        return selectedValues.Count switch
+        {
+            0 => string.Empty,
+            1 => selectedValues[0],
+            _ => $"{selectedValues.Count} selected"
+        };
     }
 
     /// <summary>

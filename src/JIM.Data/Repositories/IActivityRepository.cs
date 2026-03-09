@@ -30,7 +30,11 @@ public interface IActivityRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        Guid? initiatedById = null);
+        Guid? initiatedById = null,
+        IEnumerable<ActivityTargetOperationType>? operationFilter = null,
+        IEnumerable<ActivityOutcomeType>? outcomeFilter = null,
+        IEnumerable<ActivityTargetType>? typeFilter = null,
+        IEnumerable<ActivityStatus>? statusFilter = null);
 
     public Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
         int page,
