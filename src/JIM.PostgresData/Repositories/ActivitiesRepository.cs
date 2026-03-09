@@ -1191,7 +1191,10 @@ public class ActivityRepository : IActivityRepository
                 parameters.Add(NullableParam(v.ByteValueLength, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(NullableParam(v.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(NullableParam(v.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean));
-                parameters.Add(NullableParam(v.ReferenceValue?.Id, NpgsqlTypes.NpgsqlDbType.Uuid));
+                // ReferenceValue?.Id can be Guid.Empty if the referenced CSO hasn't been persisted yet.
+                // Treat Guid.Empty as null to avoid FK violations against ConnectedSystemObjects.
+                var refId = v.ReferenceValue?.Id;
+                parameters.Add(NullableParam(refId == Guid.Empty ? null : refId, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
