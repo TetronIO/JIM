@@ -32,6 +32,12 @@ public class SyncImportTaskProcessor
     private readonly CancellationTokenSource _cancellationTokenSource;
 
     /// <summary>
+    /// Batch size for create and update phases of full import. Limits EF change tracker pressure
+    /// and enables per-batch progress reporting. Chosen to balance throughput vs memory usage.
+    /// </summary>
+    private const int ImportBatchSize = 2000;
+
+    /// <summary>
     /// When true, the connected system has no existing CSOs, so all imported objects are known to be new.
     /// This eliminates N unnecessary DB round-trips during first-ever imports.
     /// </summary>
@@ -316,13 +322,12 @@ public class SyncImportTaskProcessor
             // Batching ensures change objects are persisted and released per batch via FlushImportRpeisAsync.
             // We consume from the front of the list so processed CSOs and their attribute values
             // (~400MB at 100K objects) become GC-eligible immediately.
-            const int createBatchSize = 2000;
             var totalCreatedSoFar = 0;
             var totalToCreate = connectedSystemObjectsToBeCreated.Count;
 
             while (connectedSystemObjectsToBeCreated.Count > 0)
             {
-                var batchSize = Math.Min(createBatchSize, connectedSystemObjectsToBeCreated.Count);
+                var batchSize = Math.Min(ImportBatchSize, connectedSystemObjectsToBeCreated.Count);
                 Log.Information("PerformFullImportAsync: Starting batch {BatchStart}-{BatchEnd} of {Total}",
                     totalCreatedSoFar, totalCreatedSoFar + batchSize, totalToCreate);
                 var csoBatch = connectedSystemObjectsToBeCreated.GetRange(0, batchSize);
@@ -381,15 +386,14 @@ public class SyncImportTaskProcessor
             // only ~2K entities at a time and progress is reported after each batch.
             // Note: unlike the create phase, we don't RemoveRange here because the reconciliation phase
             // (ReconcilePendingExportsAsync) needs the full CSO list with updated attribute values.
-            const int updateBatchSize = 2000;
             var totalToUpdate = connectedSystemObjectsToBeUpdated.Count;
 
             _activity.ObjectsProcessed = createdCount;
             await _jim.Activities.UpdateActivityAsync(_activity);
 
-            for (var batchStart = 0; batchStart < totalToUpdate; batchStart += updateBatchSize)
+            for (var batchStart = 0; batchStart < totalToUpdate; batchStart += ImportBatchSize)
             {
-                var batchSize = Math.Min(updateBatchSize, totalToUpdate - batchStart);
+                var batchSize = Math.Min(ImportBatchSize, totalToUpdate - batchStart);
                 Log.Information("PerformFullImportAsync: Starting update batch {BatchStart}-{BatchEnd} of {Total}",
                     batchStart, batchStart + batchSize, totalToUpdate);
                 var csoBatch = connectedSystemObjectsToBeUpdated.GetRange(batchStart, batchSize);
