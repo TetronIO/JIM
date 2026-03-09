@@ -75,7 +75,8 @@ function Get-PopulateScriptHash {
 
     $filesToHash = @(
         "$scriptRoot/utils/Test-Helpers.ps1",
-        "$scriptRoot/utils/Test-GroupHelpers.ps1"
+        "$scriptRoot/utils/Test-GroupHelpers.ps1",
+        "$scriptRoot/Build-SambaSnapshots.ps1"
     )
 
     switch ($ScenarioName) {

@@ -173,7 +173,8 @@ function Get-PopulateScriptHash {
     param([string]$ScenarioName)
     $filesToHash = @(
         "$scriptRoot/utils/Test-Helpers.ps1",
-        "$scriptRoot/utils/Test-GroupHelpers.ps1"
+        "$scriptRoot/utils/Test-GroupHelpers.ps1",
+        "$scriptRoot/Build-SambaSnapshots.ps1"
     )
     switch ($ScenarioName) {
         "Scenario1" { $filesToHash += "$scriptRoot/Populate-SambaAD.ps1" }

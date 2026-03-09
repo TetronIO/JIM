@@ -1559,7 +1559,7 @@ For larger templates (XLarge, XXLarge), populating Samba AD with test data (user
 
 1. **First run**: The runner detects no snapshot exists, builds one automatically by starting a base Samba container, running the populate scripts, and committing the result as a Docker image
 2. **Subsequent runs**: The runner detects the snapshot, uses it as the Samba image, and skips population entirely
-3. **Staleness detection**: A SHA256 hash of the populate scripts is stored as a Docker image label (`jim.samba.snapshot-hash`). If you modify the populate scripts, the hash won't match and the snapshot is rebuilt automatically
+3. **Staleness detection**: A SHA256 hash of the populate scripts and `Build-SambaSnapshots.ps1` is stored as a Docker image label (`jim.samba.snapshot-hash`). If you modify any of these files, the hash won't match and the snapshot is rebuilt automatically
 
 ### Snapshot Image Tags
 
