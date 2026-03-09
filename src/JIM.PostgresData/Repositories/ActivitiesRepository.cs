@@ -1072,9 +1072,11 @@ public class ActivityRepository : IActivityRepository
             // Restore previous timeout
             Repository.Database.Database.SetCommandTimeout(previousTimeout);
         }
-        catch
+        catch (Exception ex)
         {
             // Fallback for unit tests with mocked/in-memory DbContext where raw SQL is not available.
+            Serilog.Log.Warning(ex, "PersistRpeiCsoChangesAsync: Raw SQL bulk insert failed, falling back to EF. This will be slow for large batches. Count={Count}", changes.Count);
+
             // Null out navigation properties to prevent EF graph traversal from discovering
             // already-persisted entities (CSOs, attribute values, etc.).
             foreach (var change in changes)

@@ -1623,9 +1623,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // Restore previous timeout
             Repository.Database.Database.SetCommandTimeout(previousTimeout);
         }
-        catch
+        catch (Exception ex)
         {
-            // Fallback for unit tests with mocked DbContext where raw SQL is not available
+            // Fallback for unit tests with mocked DbContext where raw SQL is not available.
+            // Log in production so we know the raw SQL path failed — EF fallback is orders of
+            // magnitude slower and will cause the import to appear stuck.
+            Serilog.Log.Warning(ex, "CreateConnectedSystemObjectsAsync: Raw SQL bulk insert failed, falling back to EF. This will be slow for large batches. Count={Count}", connectedSystemObjects.Count);
             Repository.Database.ConnectedSystemObjects.AddRange(connectedSystemObjects);
             await Repository.Database.SaveChangesAsync();
         }
@@ -1667,9 +1670,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // Flush pending child entity changes (attribute value adds/deletes)
             await Repository.Database.SaveChangesAsync();
         }
-        catch
+        catch (Exception ex)
         {
             // Fallback for unit tests with mocked DbContext where raw SQL is not available
+            Serilog.Log.Warning(ex, "UpdateConnectedSystemObjectsAsync: Raw SQL bulk update failed, falling back to EF. Count={Count}", connectedSystemObjects.Count);
             Repository.Database.ConnectedSystemObjects.UpdateRange(connectedSystemObjects);
             await Repository.Database.SaveChangesAsync();
         }
@@ -3595,14 +3599,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(cso.Id);
                 parameters.Add(cso.ConnectedSystemId);
                 parameters.Add(cso.Created);
-                parameters.Add((object?)cso.LastUpdated ?? DBNull.Value);
+                parameters.Add(NullableParam(cso.LastUpdated, NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add(cso.TypeId);
                 parameters.Add(cso.ExternalIdAttributeId);
-                parameters.Add((object?)cso.SecondaryExternalIdAttributeId ?? DBNull.Value);
+                parameters.Add(NullableParam(cso.SecondaryExternalIdAttributeId, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add((int)cso.Status);
-                parameters.Add((object?)cso.MetaverseObjectId ?? DBNull.Value);
+                parameters.Add(NullableParam(cso.MetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add((int)cso.JoinType);
-                parameters.Add((object?)cso.DateJoined ?? DBNull.Value);
+                parameters.Add(NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -3640,15 +3644,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(av.Id);
                 parameters.Add(csoId);
                 parameters.Add(av.AttributeId);
-                parameters.Add((object?)av.StringValue ?? DBNull.Value);
-                parameters.Add((object?)av.DateTimeValue ?? DBNull.Value);
-                parameters.Add((object?)av.IntValue ?? DBNull.Value);
-                parameters.Add((object?)av.LongValue ?? DBNull.Value);
-                parameters.Add((object?)av.ByteValue ?? DBNull.Value);
-                parameters.Add((object?)av.GuidValue ?? DBNull.Value);
-                parameters.Add((object?)av.BoolValue ?? DBNull.Value);
-                parameters.Add((object?)av.ReferenceValueId ?? DBNull.Value);
-                parameters.Add((object?)av.UnresolvedReferenceValue ?? DBNull.Value);
+                parameters.Add(NullableParam(av.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(NullableParam(av.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(NullableParam(av.IntValue, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(NullableParam(av.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint));
+                parameters.Add(NullableParam(av.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea));
+                parameters.Add(NullableParam(av.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(NullableParam(av.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean));
+                parameters.Add(NullableParam(av.ReferenceValueId, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(NullableParam(av.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -3764,13 +3768,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
                 var cso = chunk[i];
                 parameters.Add(cso.Id);
-                parameters.Add((object?)cso.LastUpdated ?? DBNull.Value);
+                parameters.Add(NullableParam(cso.LastUpdated, NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add((int)cso.Status);
-                parameters.Add((object?)cso.MetaverseObjectId ?? DBNull.Value);
+                parameters.Add(NullableParam(cso.MetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add((int)cso.JoinType);
-                parameters.Add((object?)cso.DateJoined ?? DBNull.Value);
+                parameters.Add(NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add(cso.ExternalIdAttributeId);
-                parameters.Add((object?)cso.SecondaryExternalIdAttributeId ?? DBNull.Value);
+                parameters.Add(NullableParam(cso.SecondaryExternalIdAttributeId, NpgsqlTypes.NpgsqlDbType.Integer));
             }
 
             sql.Append(@") AS v(""Id"", ""LastUpdated"", ""Status"", ""MetaverseObjectId"", ""JoinType"", ""DateJoined"", ""ExternalIdAttributeId"", ""SecondaryExternalIdAttributeId"") WHERE t.""Id"" = v.""Id""");
@@ -3803,9 +3807,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
                 var cso = chunk[i];
                 parameters.Add(cso.Id);
-                parameters.Add((object?)cso.MetaverseObjectId ?? DBNull.Value);
+                parameters.Add(NullableParam(cso.MetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add((int)cso.JoinType);
-                parameters.Add((object?)cso.DateJoined ?? DBNull.Value);
+                parameters.Add(NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
             }
 
             sql.Append(@") AS v(""Id"", ""MetaverseObjectId"", ""JoinType"", ""DateJoined"") WHERE t.""Id"" = v.""Id""");
@@ -3841,12 +3845,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add((int)pe.Status);
                 parameters.Add(pe.ErrorCount);
                 parameters.Add(pe.MaxRetries);
-                parameters.Add((object?)pe.LastAttemptedAt ?? DBNull.Value);
-                parameters.Add((object?)pe.NextRetryAt ?? DBNull.Value);
-                parameters.Add((object?)pe.LastErrorMessage ?? DBNull.Value);
-                parameters.Add((object?)pe.LastErrorStackTrace ?? DBNull.Value);
+                parameters.Add(NullableParam(pe.LastAttemptedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(NullableParam(pe.NextRetryAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(NullableParam(pe.LastErrorMessage, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(NullableParam(pe.LastErrorStackTrace, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(pe.HasUnresolvedReferences);
-                parameters.Add((object?)pe.ConnectedSystemObjectId ?? DBNull.Value);
+                parameters.Add(NullableParam(pe.ConnectedSystemObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
             sql.Append(@") AS v(""Id"", ""Status"", ""ErrorCount"", ""MaxRetries"", ""LastAttemptedAt"", ""NextRetryAt"", ""LastErrorMessage"", ""LastErrorStackTrace"", ""HasUnresolvedReferences"", ""ConnectedSystemObjectId"") WHERE t.""Id"" = v.""Id""");

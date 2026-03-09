@@ -339,7 +339,10 @@ public class SyncImportTaskProcessor
                     .Where(r => r.ConnectedSystemObject != null && batchCsoSet.Contains(r.ConnectedSystemObject))
                     .ToList();
 
+                var batchSw = System.Diagnostics.Stopwatch.StartNew();
                 await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
+                Log.Information("PerformFullImportAsync: CreateConnectedSystemObjectsAsync took {ElapsedMs}ms for {Count} CSOs",
+                    batchSw.ElapsedMilliseconds, batchSize);
 
                 // Now that CSOs have real IDs (assigned by EF), sync the FK on RPEIs
                 foreach (var rpei in batchRpeis)
@@ -364,7 +367,10 @@ public class SyncImportTaskProcessor
 
                 // Remove batch RPEIs from the main list and flush them
                 _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObject != null && batchCsoSet.Contains(r.ConnectedSystemObject));
+                batchSw.Restart();
                 await FlushImportRpeisAsync(batchRpeis);
+                Log.Information("PerformFullImportAsync: FlushImportRpeisAsync took {ElapsedMs}ms for {Count} RPEIs",
+                    batchSw.ElapsedMilliseconds, batchRpeis.Count);
 
                 // Remove processed CSOs from the front of the list so their attribute values
                 // (~20 per CSO × ~200 bytes = ~4KB per CSO) become GC-eligible immediately.
