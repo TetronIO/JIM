@@ -374,89 +374,117 @@ public class SyncImportTaskProcessor
                 await _jim.Activities.UpdateActivityProgressOutOfBandAsync(_activity);
             }
 
+            // Process CSO updates in batches to reduce EF change tracker pressure and report progress.
+            // UpdateConnectedSystemObjectsAsync builds ConnectedSystemObjectChange graphs and EF tracks
+            // child entity changes (attribute value adds/deletes). At 100K CSOs this creates millions of
+            // tracked entities consuming GBs if done at once. Batching ensures SaveChangesAsync processes
+            // only ~2K entities at a time and progress is reported after each batch.
+            // Note: unlike the create phase, we don't RemoveRange here because the reconciliation phase
+            // (ReconcilePendingExportsAsync) needs the full CSO list with updated attribute values.
+            const int updateBatchSize = 2000;
+            var totalToUpdate = connectedSystemObjectsToBeUpdated.Count;
+
             _activity.ObjectsProcessed = createdCount;
             await _jim.Activities.UpdateActivityAsync(_activity);
 
-            // Capture old external ID values BEFORE the update mutates AttributeValues,
-            // so we can evict stale cache entries if external IDs changed during import.
-            var oldExternalIds = new Dictionary<Guid, (string? primaryIdValue, string? secondaryIdValue)>();
-            foreach (var cso in connectedSystemObjectsToBeUpdated)
+            for (var batchStart = 0; batchStart < totalToUpdate; batchStart += updateBatchSize)
             {
-                var oldPrimaryValue = cso.ExternalIdAttributeValue;
-                var oldPrimaryId = oldPrimaryValue?.StringValue
-                    ?? oldPrimaryValue?.IntValue?.ToString()
-                    ?? oldPrimaryValue?.LongValue?.ToString()
-                    ?? oldPrimaryValue?.GuidValue?.ToString();
+                var batchSize = Math.Min(updateBatchSize, totalToUpdate - batchStart);
+                Log.Information("PerformFullImportAsync: Starting update batch {BatchStart}-{BatchEnd} of {Total}",
+                    batchStart, batchStart + batchSize, totalToUpdate);
+                var csoBatch = connectedSystemObjectsToBeUpdated.GetRange(batchStart, batchSize);
 
-                string? oldSecondaryId = null;
-                if (cso.SecondaryExternalIdAttributeId.HasValue)
+                // Capture old external ID values BEFORE the update mutates AttributeValues,
+                // so we can evict stale cache entries if external IDs changed during import.
+                var oldExternalIds = new Dictionary<Guid, (string? primaryIdValue, string? secondaryIdValue)>();
+                foreach (var cso in csoBatch)
                 {
-                    var oldSecondaryValue = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
-                    oldSecondaryId = oldSecondaryValue?.StringValue;
+                    var oldPrimaryValue = cso.ExternalIdAttributeValue;
+                    var oldPrimaryId = oldPrimaryValue?.StringValue
+                        ?? oldPrimaryValue?.IntValue?.ToString()
+                        ?? oldPrimaryValue?.LongValue?.ToString()
+                        ?? oldPrimaryValue?.GuidValue?.ToString();
+
+                    string? oldSecondaryId = null;
+                    if (cso.SecondaryExternalIdAttributeId.HasValue)
+                    {
+                        var oldSecondaryValue = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
+                        oldSecondaryId = oldSecondaryValue?.StringValue;
+                    }
+
+                    oldExternalIds[cso.Id] = (oldPrimaryId, oldSecondaryId);
                 }
 
-                oldExternalIds[cso.Id] = (oldPrimaryId, oldSecondaryId);
-            }
+                // Extract just the RPEIs for this batch of CSOs.
+                // Update-phase CSOs already have real IDs, so we match by ConnectedSystemObjectId.
+                var batchCsoIds = new HashSet<Guid>(csoBatch.Select(c => c.Id));
+                var batchRpeis = _activityRunProfileExecutionItems
+                    .Where(r => r.ConnectedSystemObjectId.HasValue && batchCsoIds.Contains(r.ConnectedSystemObjectId.Value))
+                    .ToList();
 
-            await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activityRunProfileExecutionItems);
+                await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
 
-            // Populate the reconciliation RPEI lookup before flushing.
-            // Only update-phase RPEIs are needed — created CSOs can't have pending exports.
-            // This retains only the RPEI references needed for reconciliation, not the entire list.
-            foreach (var rpei in _activityRunProfileExecutionItems)
-            {
-                if (rpei.ConnectedSystemObjectId.HasValue)
-                    _reconciliationRpeiLookup.TryAdd(rpei.ConnectedSystemObjectId.Value, rpei);
-            }
-
-            // Flush update-RPEIs now that UpdateConnectedSystemObjectsAsync has processed them.
-            // Create-RPEIs were already flushed above after CSO creation.
-            await FlushImportRpeisAsync();
-
-            // Update cache for CSOs that were updated during import.
-            // For PendingProvisioning → Normal transitions: the confirming import has assigned a primary
-            // external ID, so evict the old secondary-keyed cache entry and add a primary-keyed one.
-            // For Normal CSOs: refresh the cache with the current primary external ID.
-            // If any external ID changed (e.g. DN rename), evict the stale cache entry.
-            foreach (var updatedCso in connectedSystemObjectsToBeUpdated)
-            {
-                var extIdValue = updatedCso.ExternalIdAttributeValue;
-                if (extIdValue == null)
-                    continue;
-
-                var newPrimaryId = extIdValue.StringValue
-                    ?? extIdValue.IntValue?.ToString()
-                    ?? extIdValue.LongValue?.ToString()
-                    ?? extIdValue.GuidValue?.ToString();
-
-                oldExternalIds.TryGetValue(updatedCso.Id, out var oldIds);
-
-                // Evict old primary cache entry if primary external ID changed
-                if (oldIds.primaryIdValue != null && newPrimaryId != null
-                    && !oldIds.primaryIdValue.Equals(newPrimaryId, StringComparison.OrdinalIgnoreCase))
+                // Populate the reconciliation RPEI lookup before flushing.
+                // Only update-phase RPEIs are needed — created CSOs can't have pending exports.
+                foreach (var rpei in batchRpeis)
                 {
-                    _jim.ConnectedSystems.EvictCsoFromCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, oldIds.primaryIdValue);
+                    if (rpei.ConnectedSystemObjectId.HasValue)
+                        _reconciliationRpeiLookup.TryAdd(rpei.ConnectedSystemObjectId.Value, rpei);
                 }
 
-                // Evict old secondary cache entry if this CSO has a secondary external ID
-                if (updatedCso.SecondaryExternalIdAttributeId.HasValue && oldIds.secondaryIdValue != null)
+                // Remove batch RPEIs from the main list and flush them
+                _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObjectId.HasValue && batchCsoIds.Contains(r.ConnectedSystemObjectId.Value));
+                await FlushImportRpeisAsync(batchRpeis);
+
+                // Update cache for CSOs that were updated during import.
+                // For PendingProvisioning → Normal transitions: the confirming import has assigned a primary
+                // external ID, so evict the old secondary-keyed cache entry and add a primary-keyed one.
+                // For Normal CSOs: refresh the cache with the current primary external ID.
+                // If any external ID changed (e.g. DN rename), evict the stale cache entry.
+                foreach (var updatedCso in csoBatch)
                 {
-                    _jim.ConnectedSystems.EvictCsoFromCache(_connectedSystem.Id, updatedCso.SecondaryExternalIdAttributeId.Value, oldIds.secondaryIdValue);
+                    var extIdValue = updatedCso.ExternalIdAttributeValue;
+                    if (extIdValue == null)
+                        continue;
+
+                    var newPrimaryId = extIdValue.StringValue
+                        ?? extIdValue.IntValue?.ToString()
+                        ?? extIdValue.LongValue?.ToString()
+                        ?? extIdValue.GuidValue?.ToString();
+
+                    oldExternalIds.TryGetValue(updatedCso.Id, out var oldIds);
+
+                    // Evict old primary cache entry if primary external ID changed
+                    if (oldIds.primaryIdValue != null && newPrimaryId != null
+                        && !oldIds.primaryIdValue.Equals(newPrimaryId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _jim.ConnectedSystems.EvictCsoFromCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, oldIds.primaryIdValue);
+                    }
+
+                    // Evict old secondary cache entry if this CSO has a secondary external ID
+                    if (updatedCso.SecondaryExternalIdAttributeId.HasValue && oldIds.secondaryIdValue != null)
+                    {
+                        _jim.ConnectedSystems.EvictCsoFromCache(_connectedSystem.Id, updatedCso.SecondaryExternalIdAttributeId.Value, oldIds.secondaryIdValue);
+                    }
+
+                    // Add/refresh primary external ID cache entry
+                    if (extIdValue.StringValue != null)
+                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.StringValue, updatedCso.Id);
+                    else if (extIdValue.IntValue != null)
+                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), updatedCso.Id);
+                    else if (extIdValue.LongValue != null)
+                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), updatedCso.Id);
+                    else if (extIdValue.GuidValue != null)
+                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), updatedCso.Id);
                 }
 
-                // Add/refresh primary external ID cache entry
-                if (extIdValue.StringValue != null)
-                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.StringValue, updatedCso.Id);
-                else if (extIdValue.IntValue != null)
-                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), updatedCso.Id);
-                else if (extIdValue.LongValue != null)
-                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), updatedCso.Id);
-                else if (extIdValue.GuidValue != null)
-                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), updatedCso.Id);
+                _activity.ObjectsProcessed = createdCount + batchStart + batchSize;
+                Log.Information("PerformFullImportAsync: Update batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
+                    batchStart + batchSize, totalToUpdate,
+                    GC.GetTotalMemory(false) / 1024 / 1024,
+                    System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
+                await _jim.Activities.UpdateActivityProgressOutOfBandAsync(_activity);
             }
-
-            _activity.ObjectsProcessed = totalChanges;
-            await _jim.Activities.UpdateActivityAsync(_activity);
         }
 
         // CSO → RPEI lookup for reconciliation was populated during the update-phase flush.
