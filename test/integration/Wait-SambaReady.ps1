@@ -110,14 +110,36 @@ Write-Host ""
 if ($ready) {
     Write-Host "${GREEN}✓ Samba AD is ready!${NC}"
     Write-Host ""
-    Write-Host "${GRAY}Domain Information:${NC}"
-
     # Show domain info (try new path first, fall back to old)
     $domainInfo = docker exec samba-ad-primary /usr/local/samba/bin/samba-tool domain info 127.0.0.1 2>&1
     if ($LASTEXITCODE -ne 0) {
         $domainInfo = docker exec samba-ad-primary samba-tool domain info 127.0.0.1 2>&1
     }
-    Write-Host "${GRAY}$domainInfo${NC}"
+
+    # Parse domain info into a table
+    $infoLines = if ($domainInfo -is [array]) { $domainInfo } else { $domainInfo -split "`n" }
+    $maxKeyLen = 0
+    $maxValLen = 0
+    $entries = @()
+    foreach ($line in $infoLines) {
+        $trimmed = "$line".Trim()
+        if ($trimmed -match '^(.+?)\s*:\s*(.+)$') {
+            $key = $Matches[1].Trim()
+            $val = $Matches[2].Trim()
+            if ($key.Length -gt $maxKeyLen) { $maxKeyLen = $key.Length }
+            if ($val.Length -gt $maxValLen) { $maxValLen = $val.Length }
+            $entries += @{ Key = $key; Value = $val }
+        }
+    }
+
+    Write-Host "${GRAY}  Domain Information:${NC}"
+    Write-Host "${GRAY}  ┌$("─" * ($maxKeyLen + 2))┬$("─" * ($maxValLen + 2))┐${NC}"
+    foreach ($entry in $entries) {
+        $paddedKey = $entry.Key.PadRight($maxKeyLen)
+        $paddedVal = $entry.Value.PadRight($maxValLen)
+        Write-Host "${GRAY}  │ ${NC}${paddedKey}${GRAY} │ ${NC}${paddedVal}${GRAY} │${NC}"
+    }
+    Write-Host "${GRAY}  └$("─" * ($maxKeyLen + 2))┴$("─" * ($maxValLen + 2))┘${NC}"
 
     Write-Host ""
     Write-Host "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
