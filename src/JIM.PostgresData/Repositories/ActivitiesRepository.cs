@@ -32,6 +32,29 @@ public class ActivityRepository : IActivityRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    public async Task UpdateActivityProgressOutOfBandAsync(Activity activity)
+    {
+        // Open an independent connection to bypass any in-flight transaction on the main DbContext.
+        // This ensures progress updates are immediately visible to other sessions (e.g., UI polling).
+        var connectionString = Repository.Database.Database.GetConnectionString();
+        if (string.IsNullOrEmpty(connectionString))
+        {
+            // Fallback for in-memory test databases that have no connection string
+            await UpdateActivityAsync(activity);
+            return;
+        }
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"UPDATE ""Activities"" SET ""ObjectsProcessed"" = @processed, ""ObjectsToProcess"" = @toProcess, ""Message"" = @message WHERE ""Id"" = @id";
+        command.Parameters.AddWithValue("processed", activity.ObjectsProcessed);
+        command.Parameters.AddWithValue("toProcess", activity.ObjectsToProcess);
+        command.Parameters.AddWithValue("message", (object?)activity.Message ?? DBNull.Value);
+        command.Parameters.AddWithValue("id", activity.Id);
+        await command.ExecuteNonQueryAsync();
+    }
+
     public async Task DeleteActivityAsync(Activity activity)
     {
         Repository.Database.Activities.Remove(activity);

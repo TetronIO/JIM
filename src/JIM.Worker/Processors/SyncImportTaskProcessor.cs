@@ -294,7 +294,7 @@ public class SyncImportTaskProcessor
             await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activityRunProfileExecutionItems, async (objectsPersisted) =>
             {
                 _activity.ObjectsProcessed = objectsPersisted;
-                await _jim.Activities.UpdateActivityAsync(_activity);
+                await _jim.Activities.UpdateActivityProgressOutOfBandAsync(_activity);
             });
 
             // Add newly created CSOs to the lookup cache so subsequent imports (delta or full) can find them
