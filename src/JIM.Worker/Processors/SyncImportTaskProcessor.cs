@@ -324,13 +324,21 @@ public class SyncImportTaskProcessor
                     batchStart, batchEnd, connectedSystemObjectsToBeCreated.Count);
                 var csoBatch = connectedSystemObjectsToBeCreated.GetRange(batchStart, batchEnd - batchStart);
 
-                // Extract just the RPEIs for this batch of CSOs
-                var batchCsoIds = new HashSet<Guid>(csoBatch.Select(c => c.Id));
+                // Extract just the RPEIs for this batch of CSOs using object references (not IDs,
+                // since CSO IDs are Guid.Empty before CreateConnectedSystemObjectsAsync assigns them).
+                var batchCsoSet = new HashSet<ConnectedSystemObject>(csoBatch);
                 var batchRpeis = _activityRunProfileExecutionItems
-                    .Where(r => r.ConnectedSystemObject != null && batchCsoIds.Contains(r.ConnectedSystemObject.Id))
+                    .Where(r => r.ConnectedSystemObject != null && batchCsoSet.Contains(r.ConnectedSystemObject))
                     .ToList();
 
                 await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
+
+                // Now that CSOs have real IDs (assigned by EF), sync the FK on RPEIs
+                foreach (var rpei in batchRpeis)
+                {
+                    if (rpei.ConnectedSystemObject != null)
+                        rpei.ConnectedSystemObjectId = rpei.ConnectedSystemObject.Id;
+                }
 
                 // Add newly created CSOs to the lookup cache
                 foreach (var newCso in csoBatch)
@@ -346,8 +354,8 @@ public class SyncImportTaskProcessor
                         _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), newCso.Id);
                 }
 
-                // Remove batch RPEIs from the main list and flush them (persists change objects + releases memory)
-                _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObjectId.HasValue && batchCsoIds.Contains(r.ConnectedSystemObjectId.Value));
+                // Remove batch RPEIs from the main list and flush them
+                _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObject != null && batchCsoSet.Contains(r.ConnectedSystemObject));
                 await FlushImportRpeisAsync(batchRpeis);
 
                 totalCreatedSoFar += csoBatch.Count;
@@ -1026,7 +1034,6 @@ public class SyncImportTaskProcessor
                     if (connectedSystemObject != null)
                     {
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
-                        activityRunProfileExecutionItem.ConnectedSystemObjectId = connectedSystemObject.Id;
                         activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
                         connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
 
