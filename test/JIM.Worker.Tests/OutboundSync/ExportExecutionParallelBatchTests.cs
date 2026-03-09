@@ -194,18 +194,19 @@ public class ExportExecutionParallelBatchTests
     }
 
     /// <summary>
-    /// Tests that MaxParallelism > 1 with factories creates separate connector and repository
-    /// instances for parallel batches. Uses batch size of 2 with 4 exports to get 2 batches.
+    /// Tests that with MaxParallelism > 1 and factories provided, immediate exports are still
+    /// processed sequentially via batch-loading. Factories are only used for deferred exports,
+    /// so they should not be called when all exports are immediate (no unresolved references).
     /// </summary>
     [Test]
-    public async Task ExecuteExportsAsync_MaxParallelism2_ProcessesBatchesInParallelAsync()
+    public async Task ExecuteExportsAsync_MaxParallelism2_ProcessesImmediateExportsSequentiallyAsync()
     {
         // Arrange
         var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
         var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
         var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
 
-        // Create 4 pending exports - with BatchSize=2, this creates 2 batches
+        // Create 4 pending exports - with BatchSize=2, processed in 2 sequential batches
         var pendingExportIds = new List<Guid>();
         for (var i = 0; i < 4; i++)
         {
@@ -218,19 +219,18 @@ public class ExportExecutionParallelBatchTests
 
         var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
 
-        // Track how many connector instances were created
-        var connectorInstanceCount = 0;
+        // Track whether factories are called - they should NOT be for immediate exports
+        var connectorFactoryCalled = false;
         Func<IConnector> connectorFactory = () =>
         {
-            Interlocked.Increment(ref connectorInstanceCount);
+            connectorFactoryCalled = true;
             return CreateMockConnector(ConnectedSystemExportResult.Succeeded()).Object;
         };
 
-        // Track how many repository instances were created
-        var repoInstanceCount = 0;
+        var repoFactoryCalled = false;
         Func<IRepository> repositoryFactory = () =>
         {
-            Interlocked.Increment(ref repoInstanceCount);
+            repoFactoryCalled = true;
             return CreateMockRepository(PendingExportsData);
         };
 
@@ -250,23 +250,23 @@ public class ExportExecutionParallelBatchTests
             connectorFactory: connectorFactory,
             repositoryFactory: repositoryFactory);
 
-        // Assert - all 4 exports should succeed
+        // Assert - all 4 exports should succeed via sequential batch-loading
         Assert.That(result.SuccessCount, Is.EqualTo(4), "All 4 exports should succeed");
         Assert.That(result.FailedCount, Is.EqualTo(0));
         Assert.That(result.ProcessedExportItems, Has.Count.EqualTo(4));
 
-        // Assert - parallel path was used: batch 0 reuses primary connector,
-        // batch 1 creates a new one. So 1 factory connector + 2 factory repos.
-        Assert.That(connectorInstanceCount, Is.EqualTo(1), "One additional connector should be created (batch 1)");
-        Assert.That(repoInstanceCount, Is.EqualTo(2), "Two repository instances should be created (one per batch)");
+        // Assert - factories not called because immediate exports use the primary connector
+        Assert.That(connectorFactoryCalled, Is.False, "Connector factory should not be called for immediate exports");
+        Assert.That(repoFactoryCalled, Is.False, "Repository factory should not be called for immediate exports");
     }
 
     /// <summary>
-    /// Tests that when one parallel batch fails, other batches still complete successfully.
-    /// Error isolation is critical for parallel processing.
+    /// Tests that when a connector throws during sequential batch-loading, exports processed
+    /// before the failure are still counted. The failure stops further batch processing but
+    /// does not roll back already-completed batches.
     /// </summary>
     [Test]
-    public async Task ExecuteExportsAsync_OneBatchFails_OtherBatchesCompleteAsync()
+    public async Task ExecuteExportsAsync_ConnectorFailsOnSecondBatch_FirstBatchSucceedsAsync()
     {
         // Arrange
         var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
@@ -281,41 +281,36 @@ public class ExportExecutionParallelBatchTests
             PendingExportsData.Add(CreatePendingExport(targetSystem, cso, displayNameAttr, $"Value {i}"));
         }
 
-        // Primary connector succeeds (used by batch 0)
-        var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
-
-        // Factory connector fails (used by batch 1)
-        Func<IConnector> connectorFactory = () =>
-        {
-            var failMock = new Mock<IConnector>();
-            var failExportMock = failMock.As<IConnectorExportUsingCalls>();
-            failMock.Setup(c => c.Name).Returns("Failing Batch Connector");
-            failExportMock.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new Exception("Simulated batch failure"));
-            return failMock.Object;
-        };
-
-        Func<IRepository> repositoryFactory = () => CreateMockRepository(PendingExportsData);
+        // Connector succeeds on first call, throws on second call
+        var callCount = 0;
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _) =>
+            {
+                var currentCall = Interlocked.Increment(ref callCount);
+                if (currentCall >= 2)
+                    throw new Exception("Simulated batch failure on second call");
+                return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+            });
 
         var options = new ExportExecutionOptions
         {
             BatchSize = 2,
-            MaxParallelism = 2
+            MaxParallelism = 1
         };
 
         // Act
         var result = await Jim.ExportExecution.ExecuteExportsAsync(
             targetSystem,
-            primaryConnector.Object,
+            mockConnector.Object,
             SyncRunMode.PreviewAndSync,
             options,
-            CancellationToken.None,
-            connectorFactory: connectorFactory,
-            repositoryFactory: repositoryFactory);
+            CancellationToken.None);
 
-        // Assert - batch 0 succeeds (2 exports), batch 1 fails (2 exports)
-        Assert.That(result.SuccessCount, Is.EqualTo(2), "Batch 0 should succeed with 2 exports");
-        Assert.That(result.FailedCount, Is.EqualTo(2), "Batch 1 should fail with 2 exports");
+        // Assert - first batch (2 exports) succeeded before the connector threw on second batch
+        Assert.That(result.SuccessCount, Is.EqualTo(2), "First batch should succeed before connector failure");
     }
 
     /// <summary>

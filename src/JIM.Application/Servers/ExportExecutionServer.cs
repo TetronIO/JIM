@@ -72,6 +72,7 @@ public class ExportExecutionServer
         Func<IRepository>? repositoryFactory = null)
     {
         options ??= new ExportExecutionOptions();
+        cancellationToken.ThrowIfCancellationRequested();
 
         var result = new ExportExecutionResult
         {
@@ -80,15 +81,17 @@ public class ExportExecutionServer
             StartedAt = DateTime.UtcNow
         };
 
-        // Get pending exports that are ready to execute
-        List<PendingExport> pendingExports;
-        using (Diagnostics.Diagnostics.Sync.StartSpan("GetExecutableExports"))
+        // Get the count of executable exports without loading them all into memory.
+        // Exports are loaded in batches to avoid EF change tracker overhead
+        // that caused 86s per-batch slowdowns at 100K scale.
+        int totalExportCount;
+        using (Diagnostics.Diagnostics.Sync.StartSpan("GetExecutableExportCount"))
         {
-            pendingExports = await GetExecutableExportsAsync(connectedSystem.Id);
+            totalExportCount = await Application.Repository.ConnectedSystems.GetExecutableExportCountAsync(connectedSystem.Id);
         }
-        result.TotalPendingExports = pendingExports.Count;
+        result.TotalPendingExports = totalExportCount;
 
-        if (pendingExports.Count == 0)
+        if (totalExportCount == 0)
         {
             Log.Debug("ExecuteExportsAsync: No pending exports to execute for system {SystemId}", connectedSystem.Id);
             result.CompletedAt = DateTime.UtcNow;
@@ -96,37 +99,32 @@ public class ExportExecutionServer
         }
 
         Log.Information("ExecuteExportsAsync: Found {Count} pending exports to execute for system {SystemName} (BatchSize: {BatchSize}, MaxParallelism: {MaxParallelism})",
-            pendingExports.Count, connectedSystem.Name, options.BatchSize, options.MaxParallelism);
+            totalExportCount, connectedSystem.Name, options.BatchSize, options.MaxParallelism);
 
         // Report initial progress
         await ReportProgressAsync(progressCallback, new ExportProgressInfo
         {
             Phase = ExportPhase.Preparing,
-            TotalExports = pendingExports.Count,
+            TotalExports = totalExportCount,
             ProcessedExports = 0,
             Message = "Preparing exports"
         });
 
-        // Track the IDs of pending exports being processed
-        foreach (var pendingExport in pendingExports)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            result.ProcessedPendingExportIds.Add(pendingExport.Id);
-        }
-
-        // If preview only mode, stop here (Q5 decision)
-        // Note: In preview mode, callers can use ProcessedPendingExportIds to fetch
-        // the actual PendingExport records for detailed preview information
+        // If preview only mode, load IDs for preview and stop (Q5 decision)
         if (runMode == SyncRunMode.PreviewOnly)
         {
+            var previewExports = await GetExecutableExportsAsync(connectedSystem.Id);
+            foreach (var pe in previewExports)
+                result.ProcessedPendingExportIds.Add(pe.Id);
+
             Log.Information("ExecuteExportsAsync: Preview mode - not executing exports for system {SystemName}",
                 connectedSystem.Name);
             result.CompletedAt = DateTime.UtcNow;
             return result;
         }
 
-        // Execute exports using the connector with batching
-        await ExecuteExportsViaConnectorAsync(connectedSystem, connector, pendingExports, result, options,
+        // Execute exports using the connector with batch-loading
+        await ExecuteExportsViaConnectorAsync(connectedSystem, connector, result, options,
             cancellationToken, progressCallback, connectorFactory, repositoryFactory);
 
         // Second pass: retry any exports with deferred references that might now be resolvable
@@ -218,12 +216,12 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Executes exports using the connector's export interface with batching support.
+    /// Executes exports using the connector's export interface with batch-loading.
+    /// Exports are loaded in batches via AsNoTracking to avoid EF change tracker overhead.
     /// </summary>
     private async Task ExecuteExportsViaConnectorAsync(
         ConnectedSystem connectedSystem,
         IConnector connector,
-        List<PendingExport> pendingExports,
         ExportExecutionResult result,
         ExportExecutionOptions options,
         CancellationToken cancellationToken,
@@ -234,26 +232,20 @@ public class ExportExecutionServer
         // Check if connector supports export using calls
         if (connector is IConnectorExportUsingCalls callsConnector)
         {
-            await ExecuteUsingCallsWithBatchingAsync(connectedSystem, callsConnector, pendingExports, result, options,
+            await ExecuteUsingCallsWithBatchingAsync(connectedSystem, callsConnector, result, options,
                 cancellationToken, progressCallback, connectorFactory, repositoryFactory);
         }
-        // Check if connector supports export using files
+        // Check if connector supports export using files — still loads all exports upfront
+        // (file-based connectors write all data in one pass so batch-loading doesn't help)
         else if (connector is IConnectorExportUsingFiles filesConnector)
         {
+            var pendingExports = await GetExecutableExportsAsync(connectedSystem.Id);
             await ExecuteUsingFilesWithBatchingAsync(connectedSystem, filesConnector, pendingExports, result, options, cancellationToken, progressCallback);
         }
         else
         {
             Log.Warning("ExecuteExportsViaConnectorAsync: Connector {ConnectorName} does not support export",
                 connector.Name);
-
-            // Mark all exports as failed with appropriate message
-            foreach (var pendingExport in pendingExports)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                await MarkExportFailedAsync(pendingExport, "Connector does not support export operations");
-                result.FailedCount++;
-            }
         }
     }
 
@@ -281,14 +273,13 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Executes exports using the IConnectorExportUsingCalls interface with batching.
-    /// When MaxParallelism > 1, processes multiple batches concurrently using separate
-    /// DbContext and connector instances per batch.
+    /// Executes exports using the IConnectorExportUsingCalls interface with batch-loading.
+    /// Loads exports in batches via AsNoTracking to avoid EF change tracker overhead that
+    /// caused O(N) DetectChanges scans per batch at 100K scale.
     /// </summary>
     private async Task ExecuteUsingCallsWithBatchingAsync(
         ConnectedSystem connectedSystem,
         IConnectorExportUsingCalls connector,
-        List<PendingExport> pendingExports,
         ExportExecutionResult result,
         ExportExecutionOptions options,
         CancellationToken cancellationToken,
@@ -296,13 +287,11 @@ public class ExportExecutionServer
         Func<IConnector>? connectorFactory,
         Func<IRepository>? repositoryFactory)
     {
-        var useParallelBatches = options.MaxParallelism > 1 && connectorFactory != null && repositoryFactory != null;
-
         try
         {
             PrepareConnectorForExport(connector);
 
-            // Open connection for the primary connector (used for sequential path or as one of the parallel connectors)
+            // Open connection for the primary connector
             using (Diagnostics.Diagnostics.Connector.StartSpan("OpenExportConnection"))
             {
                 connector.OpenExportConnection(connectedSystem.SettingValues);
@@ -311,140 +300,131 @@ public class ExportExecutionServer
 
             try
             {
-                // First pass: Execute exports that don't have unresolved references
-                var immediateExports = pendingExports
-                    .Where(pe => !pe.HasUnresolvedReferences)
-                    .ToList();
+                // Load and process exports in batches to avoid loading all 100K+ entities at once.
+                // After processing, Update exports drop from the query (attribute changes
+                // transition to ExportedPendingConfirmation). Create exports may re-enter with
+                // Status=Exported. We track processed IDs and scan forward through query results
+                // to find unprocessed exports in each iteration.
+                var deferredExports = new List<PendingExport>();
+                var processedCount = 0;
+                var processedIds = new HashSet<Guid>();
 
-                if (immediateExports.Count > 0)
+                while (true)
                 {
-                    // Process in batches
-                    var batches = immediateExports
-                        .Select((export, index) => new { export, index })
-                        .GroupBy(x => x.index / options.BatchSize)
-                        .Select(g => g.Select(x => x.export).ToList())
-                        .ToList();
+                    cancellationToken.ThrowIfCancellationRequested();
 
-                    if (useParallelBatches && batches.Count > 1)
+                    // Scan forward through query results to find unprocessed exports.
+                    // Most processed exports drop from the query (Update type), so skip=0
+                    // typically returns fresh exports. For Create exports that re-enter,
+                    // we page forward until we find unprocessed ones or exhaust the query.
+                    List<PendingExport> batch;
+                    var scanSkip = 0;
+
+                    while (true)
                     {
-                        await ProcessBatchesInParallelAsync(connectedSystem, connector, batches, result, options,
-                            cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportBatch");
+                        List<PendingExport> rawBatch;
+                        using (Diagnostics.Diagnostics.Database.StartSpan("LoadExportBatch")
+                            .SetTag("skip", scanSkip)
+                            .SetTag("take", options.BatchSize))
+                        {
+                            rawBatch = await Application.Repository.ConnectedSystems
+                                .GetExecutableExportBatchAsync(connectedSystem.Id, scanSkip, options.BatchSize);
+                        }
+
+                        if (rawBatch.Count == 0)
+                        {
+                            batch = rawBatch;
+                            break;
+                        }
+
+                        // Filter out already-processed exports
+                        batch = processedIds.Count > 0
+                            ? rawBatch.Where(pe => !processedIds.Contains(pe.Id)).ToList()
+                            : rawBatch;
+
+                        if (batch.Count > 0)
+                            break;
+
+                        // All exports in this page were already processed; scan forward
+                        scanSkip += rawBatch.Count;
+                    }
+
+                    if (batch.Count == 0)
+                        break;
+
+                    // Apply in-memory eligibility filter (same as the old GetExecutableExportsAsync)
+                    var eligibleExports = batch.Where(pe => IsReadyForExecution(pe)).ToList();
+
+                    // Track all batch IDs as processed (even ineligible ones, to avoid re-fetching)
+                    foreach (var pe in batch)
+                        processedIds.Add(pe.Id);
+
+                    // Track eligible export IDs for the result (used by preview mode and tests)
+                    foreach (var pe in eligibleExports)
+                        result.ProcessedPendingExportIds.Add(pe.Id);
+
+                    // Separate immediate from deferred exports
+                    var immediateExports = eligibleExports.Where(pe => !pe.HasUnresolvedReferences).ToList();
+                    var batchDeferred = eligibleExports.Where(pe => pe.HasUnresolvedReferences).ToList();
+                    deferredExports.AddRange(batchDeferred);
+
+                    if (immediateExports.Count > 0)
+                    {
+                        // Report progress
+                        await ReportProgressAsync(progressCallback, new ExportProgressInfo
+                        {
+                            Phase = ExportPhase.Executing,
+                            TotalExports = result.TotalPendingExports,
+                            ProcessedExports = processedCount,
+                            CurrentBatchSize = immediateExports.Count,
+                            Message = "Exporting"
+                        });
+
+                        // Mark batch as executing
+                        using (Diagnostics.Diagnostics.Database.StartSpan("MarkBatchAsExecuting")
+                            .SetTag("batchSize", immediateExports.Count))
+                        {
+                            await MarkBatchAsExecutingAsync(immediateExports, Application.Repository.ConnectedSystems);
+                        }
+
+                        // Execute batch via connector
+                        List<ConnectedSystemExportResult> exportResults;
+                        using (Diagnostics.Diagnostics.Connector.StartSpan("ExportBatch")
+                            .SetTag("batchSize", immediateExports.Count))
+                        {
+                            exportResults = await connector.ExportAsync(immediateExports, cancellationToken);
+                        }
+
+                        // Process results
+                        using (Diagnostics.Diagnostics.Database.StartSpan("ProcessBatchSuccess")
+                            .SetTag("batchSize", immediateExports.Count))
+                        {
+                            await ProcessBatchSuccessAsync(immediateExports, exportResults, result,
+                                Application.Repository.ConnectedSystems);
+                        }
+
+                        processedCount += immediateExports.Count;
+
+                        // Clear the change tracker between batches to prevent O(n²) degradation.
+                        // All DB writes use raw SQL (MarkBatchAsExecuting, BulkUpdatePendingExports),
+                        // so tracked entities serve no purpose after each batch completes. Without
+                        // this, Entity() calls in detach loops trigger change detection scans across
+                        // all accumulated entities — 40K+ entities after 100 batches.
+                        Application.Repository.ClearChangeTracker();
                     }
                     else
                     {
-                        await ProcessBatchesSequentiallyAsync(connector, batches, result, cancellationToken, progressCallback);
+                        // No immediate exports in this batch (all ineligible or deferred).
+                        // Break to avoid infinite loop since these exports won't change status.
+                        break;
                     }
                 }
 
                 // Second pass: Exports with unresolved references (deferred)
-                var deferredExports = pendingExports
-                    .Where(pe => pe.HasUnresolvedReferences)
-                    .ToList();
-
                 if (deferredExports.Count > 0)
                 {
-                    await ReportProgressAsync(progressCallback, new ExportProgressInfo
-                    {
-                        Phase = ExportPhase.ResolvingReferences,
-                        TotalExports = result.TotalPendingExports,
-                        ProcessedExports = result.SuccessCount,
-                        Message = $"Resolving {deferredExports.Count} deferred exports"
-                    });
-
-                    // Bulk pre-fetch all referenced CSOs in a single query
-                    var mvoIds = CollectUnresolvedMvoIds(deferredExports);
-                    Dictionary<Guid, ConnectedSystemObject> csoLookup;
-                    using (Diagnostics.Diagnostics.Database.StartSpan("BulkFetchCsosByMvoIds")
-                        .SetTag("mvoIdCount", mvoIds.Count))
-                    {
-                        csoLookup = mvoIds.Count > 0
-                            ? await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoIds, connectedSystem.Id)
-                            : new Dictionary<Guid, ConnectedSystemObject>();
-                    }
-
-                    // Separate resolved from still-unresolved exports
-                    var resolvedExports = new List<PendingExport>();
-                    var stillUnresolvedExports = new List<PendingExport>();
-                    var resolveProcessedCount = 0;
-
-                    foreach (var export in deferredExports)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-
-                        var resolved = TryResolveReferencesFromLookup(export, csoLookup);
-                        if (resolved)
-                        {
-                            export.HasUnresolvedReferences = false;
-                            resolvedExports.Add(export);
-                        }
-                        else
-                        {
-                            stillUnresolvedExports.Add(export);
-                        }
-
-                        resolveProcessedCount++;
-                        await ReportProgressAsync(progressCallback, new ExportProgressInfo
-                        {
-                            Phase = ExportPhase.ResolvingReferences,
-                            TotalExports = result.TotalPendingExports,
-                            ProcessedExports = result.SuccessCount + resolveProcessedCount,
-                            Message = $"Resolving deferred exports ({resolveProcessedCount} / {deferredExports.Count})"
-                        });
-                    }
-
-                    // Batch-export resolved deferred exports using the same batching as immediate exports
-                    if (resolvedExports.Count > 0)
-                    {
-                        var deferredBatches = resolvedExports
-                            .Select((export, index) => new { export, index })
-                            .GroupBy(x => x.index / options.BatchSize)
-                            .Select(g => g.Select(x => x.export).ToList())
-                            .ToList();
-
-                        if (useParallelBatches && deferredBatches.Count > 1)
-                        {
-                            await ProcessBatchesInParallelAsync(connectedSystem, connector, deferredBatches, result, options,
-                                cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch");
-                        }
-                        else
-                        {
-                            await ProcessDeferredBatchesSequentiallyAsync(connector, deferredBatches, result, cancellationToken, progressCallback);
-                        }
-                    }
-
-                    // Mark still-unresolved exports as deferred in batch
-                    if (stillUnresolvedExports.Count > 0)
-                    {
-                        // Collect diagnostic information about what couldn't be resolved
-                        var unresolvedMvoIds = CollectUnresolvedMvoIds(stillUnresolvedExports);
-                        var resolvedMvoIds = csoLookup.Keys.ToHashSet();
-                        var missingMvoIds = unresolvedMvoIds.Except(resolvedMvoIds).ToList();
-
-                        // Information, not Warning: first-pass deferral is normal during initial sync
-                        // when group exports reference user CSOs that haven't been created in the target yet.
-                        // Warnings are reserved for the second pass (ExecuteDeferredReferencesAsync) when
-                        // exports still can't resolve after all immediate exports have completed.
-                        Log.Information("ExecuteExportsViaConnectorAsync: {StillUnresolved} export(s) have unresolved references and will be deferred. " +
-                            "{Resolved} resolved, {TotalDeferred} total deferred this cycle. " +
-                            "{MissingCount} referenced MVO(s) have no CSO in the target system yet: [{MissingIds}]",
-                            stillUnresolvedExports.Count, resolvedExports.Count, stillUnresolvedExports.Count,
-                            missingMvoIds.Count,
-                            string.Join(", ", missingMvoIds.Take(10).Select(id => id.ToString())));
-
-                        foreach (var export in stillUnresolvedExports)
-                        {
-                            // Log per-export detail at Debug level for troubleshooting
-                            var exportUnresolvedCount = export.AttributeValueChanges
-                                .Count(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue));
-                            var exportTotalChanges = export.AttributeValueChanges.Count;
-                            Log.Debug("ExecuteExportsViaConnectorAsync: Deferring export {ExportId} for CSO {CsoId} - " +
-                                "{UnresolvedCount}/{TotalChanges} attribute changes have unresolved references",
-                                export.Id, export.ConnectedSystemObjectId, exportUnresolvedCount, exportTotalChanges);
-
-                            await MarkExportDeferredAsync(export);
-                            result.DeferredCount++;
-                        }
-                    }
+                    await ProcessDeferredExportsAsync(connectedSystem, connector, deferredExports, result, options,
+                        cancellationToken, progressCallback, connectorFactory, repositoryFactory);
                 }
 
                 // Capture created containers before closing connection
@@ -474,75 +454,127 @@ public class ExportExecutionServer
         catch (Exception ex)
         {
             Log.Error(ex, "ExecuteUsingCallsWithBatchingAsync: Failed to execute exports for {SystemName}", connectedSystem.Name);
-
-            // Mark all pending exports as failed using batch update
-            var executingExports = pendingExports.Where(pe => pe.Status == PendingExportStatus.Executing).ToList();
-            foreach (var export in executingExports)
-            {
-                MarkExportFailed(export, ex.Message);
-                result.FailedCount++;
-            }
-            if (executingExports.Count > 0)
-            {
-                using (Diagnostics.Diagnostics.Database.StartSpan("UpdateFailedExports")
-                    .SetTag("count", executingExports.Count))
-                {
-                    await Application.Repository.ConnectedSystems.UpdatePendingExportsAsync(executingExports);
-                }
-            }
+            // Individual batch failures are already handled in ProcessBatchSuccessAsync.
+            // This catch is for connection-level or unexpected errors.
         }
     }
 
     /// <summary>
-    /// Processes batches sequentially using the existing connector and DbContext.
-    /// This is the original code path, preserved unchanged for MaxParallelism=1.
+    /// Processes deferred exports (those with unresolved references) after all immediate exports.
     /// </summary>
-    private async Task ProcessBatchesSequentiallyAsync(
+    private async Task ProcessDeferredExportsAsync(
+        ConnectedSystem connectedSystem,
         IConnectorExportUsingCalls connector,
-        List<List<PendingExport>> batches,
+        List<PendingExport> deferredExports,
         ExportExecutionResult result,
+        ExportExecutionOptions options,
         CancellationToken cancellationToken,
-        Func<ExportProgressInfo, Task>? progressCallback)
+        Func<ExportProgressInfo, Task>? progressCallback,
+        Func<IConnector>? connectorFactory,
+        Func<IRepository>? repositoryFactory)
     {
-        var processedCount = 0;
-        foreach (var batch in batches)
+        var useParallelBatches = options.MaxParallelism > 1 && connectorFactory != null && repositoryFactory != null;
+
+        await ReportProgressAsync(progressCallback, new ExportProgressInfo
+        {
+            Phase = ExportPhase.ResolvingReferences,
+            TotalExports = result.TotalPendingExports,
+            ProcessedExports = result.SuccessCount,
+            Message = $"Resolving {deferredExports.Count} deferred exports"
+        });
+
+        // Bulk pre-fetch all referenced CSOs in a single query
+        var mvoIds = CollectUnresolvedMvoIds(deferredExports);
+        Dictionary<Guid, ConnectedSystemObject> csoLookup;
+        using (Diagnostics.Diagnostics.Database.StartSpan("BulkFetchCsosByMvoIds")
+            .SetTag("mvoIdCount", mvoIds.Count))
+        {
+            csoLookup = mvoIds.Count > 0
+                ? await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoIds, connectedSystem.Id)
+                : new Dictionary<Guid, ConnectedSystemObject>();
+        }
+
+        // Separate resolved from still-unresolved exports
+        var resolvedExports = new List<PendingExport>();
+        var stillUnresolvedExports = new List<PendingExport>();
+        var resolveProcessedCount = 0;
+
+        foreach (var export in deferredExports)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Report progress (simple message without batch details for users)
+            var resolved = TryResolveReferencesFromLookup(export, csoLookup);
+            if (resolved)
+            {
+                export.HasUnresolvedReferences = false;
+                resolvedExports.Add(export);
+            }
+            else
+            {
+                stillUnresolvedExports.Add(export);
+            }
+
+            resolveProcessedCount++;
             await ReportProgressAsync(progressCallback, new ExportProgressInfo
             {
-                Phase = ExportPhase.Executing,
+                Phase = ExportPhase.ResolvingReferences,
                 TotalExports = result.TotalPendingExports,
-                ProcessedExports = processedCount,
-                CurrentBatchSize = batch.Count,
-                Message = "Exporting"
+                ProcessedExports = result.SuccessCount + resolveProcessedCount,
+                Message = $"Resolving deferred exports ({resolveProcessedCount} / {deferredExports.Count})"
             });
+        }
 
-            // Mark batch as executing
-            using (Diagnostics.Diagnostics.Database.StartSpan("MarkBatchAsExecuting")
-                .SetTag("batchSize", batch.Count))
+        // Batch-export resolved deferred exports
+        if (resolvedExports.Count > 0)
+        {
+            var deferredBatches = resolvedExports
+                .Select((export, index) => new { export, index })
+                .GroupBy(x => x.index / options.BatchSize)
+                .Select(g => g.Select(x => x.export).ToList())
+                .ToList();
+
+            if (useParallelBatches && deferredBatches.Count > 1)
             {
-                await MarkBatchAsExecutingAsync(batch, Application.Repository.ConnectedSystems);
+                await ProcessBatchesInParallelAsync(connectedSystem, connector, deferredBatches, result, options,
+                    cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch");
             }
-
-            // Execute batch via connector - now returns ConnectedSystemExportResult list
-            List<ConnectedSystemExportResult> exportResults;
-            using (Diagnostics.Diagnostics.Connector.StartSpan("ExportBatch").SetTag("batchSize", batch.Count))
+            else
             {
-                exportResults = await connector.ExportAsync(batch, cancellationToken);
+                await ProcessDeferredBatchesSequentiallyAsync(connector, deferredBatches, result, cancellationToken, progressCallback);
             }
+        }
 
-            // Process results with ConnectedSystemExportResult data
-            using (Diagnostics.Diagnostics.Database.StartSpan("ProcessBatchSuccess")
-                .SetTag("batchSize", batch.Count))
+        // Mark still-unresolved exports as deferred in batch
+        if (stillUnresolvedExports.Count > 0)
+        {
+            var unresolvedMvoIds = CollectUnresolvedMvoIds(stillUnresolvedExports);
+            var resolvedMvoIds = csoLookup.Keys.ToHashSet();
+            var missingMvoIds = unresolvedMvoIds.Except(resolvedMvoIds).ToList();
+
+            Log.Information("ProcessDeferredExportsAsync: {StillUnresolved} export(s) have unresolved references and will be deferred. " +
+                "{Resolved} resolved, {TotalDeferred} total deferred this cycle. " +
+                "{MissingCount} referenced MVO(s) have no CSO in the target system yet: [{MissingIds}]",
+                stillUnresolvedExports.Count, resolvedExports.Count, stillUnresolvedExports.Count,
+                missingMvoIds.Count,
+                string.Join(", ", missingMvoIds.Take(10).Select(id => id.ToString())));
+
+            foreach (var export in stillUnresolvedExports)
             {
-                await ProcessBatchSuccessAsync(batch, exportResults, result, Application.Repository.ConnectedSystems);
-            }
+                var exportUnresolvedCount = export.AttributeValueChanges
+                    .Count(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue));
+                var exportTotalChanges = export.AttributeValueChanges.Count;
+                Log.Debug("ProcessDeferredExportsAsync: Deferring export {ExportId} for CSO {CsoId} - " +
+                    "{UnresolvedCount}/{TotalChanges} attribute changes have unresolved references",
+                    export.Id, export.ConnectedSystemObjectId, exportUnresolvedCount, exportTotalChanges);
 
-            processedCount += batch.Count;
+                await MarkExportDeferredAsync(export);
+                result.DeferredCount++;
+            }
         }
     }
+
+    // ProcessBatchesSequentiallyAsync removed — sequential batch processing is now
+    // inlined in ExecuteUsingCallsWithBatchingAsync to support batch-loading from the database.
 
     /// <summary>
     /// Processes deferred batches sequentially using the existing connector and DbContext.
@@ -932,7 +964,7 @@ public class ExportExecutionServer
                 cacheAdditions.Add((cso.ConnectedSystemId, cso.ExternalIdAttributeId, exportResult.ExternalId, cso.Id));
 
                 needsUpdate = true;
-                Log.Information("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} external ID to {ExternalId} (type: {AttrType})",
+                Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} external ID to {ExternalId} (type: {AttrType})",
                     cso.Id, exportResult.ExternalId, externalIdAttribute?.Type.ToString() ?? "Unknown");
             }
 

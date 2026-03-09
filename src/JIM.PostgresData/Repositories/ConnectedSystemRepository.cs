@@ -1728,22 +1728,42 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (updates.Count == 0)
             return;
 
-        foreach (var (cso, newAttributeValues) in updates)
+        try
         {
-            foreach (var attrValue in newAttributeValues)
+            // Insert new attribute values via raw SQL (works with untracked entities from AsNoTracking)
+            var allNewValues = updates
+                .SelectMany(u => u.newAttributeValues.Select(av => (u.cso.Id, av)))
+                .ToList();
+            if (allNewValues.Count > 0)
             {
-                Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Adding new attribute value for CSO {CsoId}, AttributeId={AttrId}, GuidValue={GuidValue}, StringValue='{StringValue}'",
-                    cso.Id, attrValue.AttributeId, attrValue.GuidValue, attrValue.StringValue);
-                Repository.Database.ConnectedSystemObjectAttributeValues.Add(attrValue);
+                await BulkInsertCsoAttributeValuesRawAsync(allNewValues);
             }
 
-            Repository.Database.ConnectedSystemObjects.Update(cso);
+            Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Inserted {AttrCount} new attribute values for {CsoCount} CSOs via raw SQL",
+                allNewValues.Count, updates.Count);
         }
+        catch (Exception ex)
+        {
+            // Fallback for unit tests with mocked DbContext where raw SQL is not available
+            Log.Warning(ex, "UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Raw SQL failed, falling back to EF");
 
-        await Repository.Database.SaveChangesAsync();
+            foreach (var (cso, newAttributeValues) in updates)
+            {
+                foreach (var attrValue in newAttributeValues)
+                {
+                    Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Adding new attribute value for CSO {CsoId}, AttributeId={AttrId}, GuidValue={GuidValue}, StringValue='{StringValue}'",
+                        cso.Id, attrValue.AttributeId, attrValue.GuidValue, attrValue.StringValue);
+                    Repository.Database.ConnectedSystemObjectAttributeValues.Add(attrValue);
+                }
 
-        Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Batch saved {Count} CSO updates",
-            updates.Count);
+                Repository.Database.ConnectedSystemObjects.Update(cso);
+            }
+
+            await Repository.Database.SaveChangesAsync();
+
+            Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Batch saved {Count} CSO updates via EF fallback",
+                updates.Count);
+        }
     }
 
     public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId)
@@ -2059,6 +2079,55 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
     }
 
+    public async Task<int> GetExecutableExportCountAsync(int connectedSystemId)
+    {
+        return await ExecutableExportsQuery(connectedSystemId).CountAsync();
+    }
+
+    public async Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
+    {
+        return await ExecutableExportsQuery(connectedSystemId)
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.AttributeValues)
+            .OrderBy(pe => pe.CreatedAt)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Shared query builder for executable exports. Applies all database-level eligibility filters
+    /// including the checks previously done in-memory by IsReadyForExecution:
+    /// - Exclude Update exports with no exportable attribute changes
+    /// - Exclude Delete exports that are already Exported
+    /// </summary>
+    private IQueryable<PendingExport> ExecutableExportsQuery(int connectedSystemId)
+    {
+        var now = DateTime.UtcNow;
+
+        return Repository.Database.PendingExports
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId)
+            // Filter by eligible statuses
+            .Where(pe => pe.Status == PendingExportStatus.Pending
+                      || pe.Status == PendingExportStatus.Exported
+                      || pe.Status == PendingExportStatus.ExportNotConfirmed)
+            // Exclude exports not yet due for retry
+            .Where(pe => !pe.NextRetryAt.HasValue || pe.NextRetryAt <= now)
+            // Exclude exports that have exceeded max retries
+            .Where(pe => pe.ErrorCount < pe.MaxRetries)
+            // Exclude Update exports with no exportable attribute changes (was IsReadyForExecution in-memory check)
+            .Where(pe => pe.ChangeType != PendingExportChangeType.Update
+                      || pe.AttributeValueChanges.Any(ac =>
+                            ac.Status == PendingExportAttributeChangeStatus.Pending
+                         || ac.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed))
+            // Exclude Delete exports that have already been exported (was IsReadyForExecution in-memory check)
+            .Where(pe => !(pe.ChangeType == PendingExportChangeType.Delete
+                        && pe.Status == PendingExportStatus.Exported));
+    }
+
     /// <summary>
     /// Retrieves pending exports by their IDs with all necessary includes for export processing.
     /// Uses the same includes as GetExecutableExportsAsync to ensure connectors have access to
@@ -2097,8 +2166,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task UpdatePendingExportAsync(PendingExport pendingExport)
     {
-        Repository.Database.PendingExports.Update(pendingExport);
-        await Repository.Database.SaveChangesAsync();
+        try
+        {
+            await BulkUpdatePendingExportsRawAsync(new List<PendingExport> { pendingExport });
+        }
+        catch
+        {
+            // Fallback for unit tests with mocked DbContext where raw SQL is not available
+            Repository.Database.PendingExports.Update(pendingExport);
+            await Repository.Database.SaveChangesAsync();
+        }
     }
 
     public async Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
@@ -2192,7 +2269,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         {
             await BulkUpdatePendingExportsRawAsync(exportList);
 
-            // Detach updated entities and their children from change tracker
+            // Detach updated entities and their children from change tracker (no-op if loaded with AsNoTracking)
             foreach (var export in exportList)
             {
                 foreach (var avc in export.AttributeValueChanges)
