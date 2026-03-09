@@ -314,15 +314,18 @@ public class SyncImportTaskProcessor
             // creates ConnectedSystemObjectChange graphs (~20 ChangeAttribute + ChangeAttributeValue
             // objects per CSO). At 100K CSOs this creates ~2-6M objects consuming 3-7GB if done at once.
             // Batching ensures change objects are persisted and released per batch via FlushImportRpeisAsync.
+            // We consume from the front of the list so processed CSOs and their attribute values
+            // (~400MB at 100K objects) become GC-eligible immediately.
             const int createBatchSize = 2000;
             var totalCreatedSoFar = 0;
+            var totalToCreate = connectedSystemObjectsToBeCreated.Count;
 
-            for (var batchStart = 0; batchStart < connectedSystemObjectsToBeCreated.Count; batchStart += createBatchSize)
+            while (connectedSystemObjectsToBeCreated.Count > 0)
             {
-                var batchEnd = Math.Min(batchStart + createBatchSize, connectedSystemObjectsToBeCreated.Count);
+                var batchSize = Math.Min(createBatchSize, connectedSystemObjectsToBeCreated.Count);
                 Log.Information("PerformFullImportAsync: Starting batch {BatchStart}-{BatchEnd} of {Total}",
-                    batchStart, batchEnd, connectedSystemObjectsToBeCreated.Count);
-                var csoBatch = connectedSystemObjectsToBeCreated.GetRange(batchStart, batchEnd - batchStart);
+                    totalCreatedSoFar, totalCreatedSoFar + batchSize, totalToCreate);
+                var csoBatch = connectedSystemObjectsToBeCreated.GetRange(0, batchSize);
 
                 // Extract just the RPEIs for this batch of CSOs using object references (not IDs,
                 // since CSO IDs are Guid.Empty before CreateConnectedSystemObjectsAsync assigns them).
@@ -358,16 +361,18 @@ public class SyncImportTaskProcessor
                 _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObject != null && batchCsoSet.Contains(r.ConnectedSystemObject));
                 await FlushImportRpeisAsync(batchRpeis);
 
-                totalCreatedSoFar += csoBatch.Count;
+                // Remove processed CSOs from the front of the list so their attribute values
+                // (~20 per CSO × ~200 bytes = ~4KB per CSO) become GC-eligible immediately.
+                connectedSystemObjectsToBeCreated.RemoveRange(0, batchSize);
+
+                totalCreatedSoFar += batchSize;
                 _activity.ObjectsProcessed = totalCreatedSoFar;
-                Log.Information("PerformFullImportAsync: Batch {BatchStart}-{BatchEnd} complete. GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
-                    batchStart, batchEnd,
+                Log.Information("PerformFullImportAsync: Batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
+                    totalCreatedSoFar, totalToCreate,
                     GC.GetTotalMemory(false) / 1024 / 1024,
                     System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
                 await _jim.Activities.UpdateActivityProgressOutOfBandAsync(_activity);
             }
-
-            connectedSystemObjectsToBeCreated.Clear();
 
             _activity.ObjectsProcessed = createdCount;
             await _jim.Activities.UpdateActivityAsync(_activity);
