@@ -296,44 +296,50 @@ public class SyncImportTaskProcessor
                     string.Join("; ", rpeiWithErrors.Select(r => $"[Id={r.Id}, ErrorType={r.ErrorType}, Message={r.ErrorMessage}]")));
             }
 
-            await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjectsToBeCreated, _activityRunProfileExecutionItems, async (objectsPersisted) =>
-            {
-                _activity.ObjectsProcessed = objectsPersisted;
-                await _jim.Activities.UpdateActivityProgressOutOfBandAsync(_activity);
-            });
+            // Process CSO creates in batches to bound memory. CreateConnectedSystemObjectsAsync
+            // creates ConnectedSystemObjectChange graphs (~20 ChangeAttribute + ChangeAttributeValue
+            // objects per CSO). At 100K CSOs this creates ~2-6M objects consuming 3-7GB if done at once.
+            // Batching ensures change objects are persisted and released per batch via FlushImportRpeisAsync.
+            const int createBatchSize = 5000;
+            var totalCreatedSoFar = 0;
 
-            // Add newly created CSOs to the lookup cache so subsequent imports (delta or full) can find them
-            foreach (var newCso in connectedSystemObjectsToBeCreated)
+            for (var batchStart = 0; batchStart < connectedSystemObjectsToBeCreated.Count; batchStart += createBatchSize)
             {
-                var extIdValue = newCso.ExternalIdAttributeValue;
-                if (extIdValue?.StringValue != null)
-                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.StringValue, newCso.Id);
-                else if (extIdValue?.IntValue != null)
-                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), newCso.Id);
-                else if (extIdValue?.LongValue != null)
-                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), newCso.Id);
-                else if (extIdValue?.GuidValue != null)
-                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), newCso.Id);
-            }
+                var batchEnd = Math.Min(batchStart + createBatchSize, connectedSystemObjectsToBeCreated.Count);
+                var csoBatch = connectedSystemObjectsToBeCreated.GetRange(batchStart, batchEnd - batchStart);
 
-            // Memory optimisation: release the created CSO list now that they're persisted and cached.
-            // We capture the count above for span tags. This frees ~250MB for 100K object imports.
-            var createdCsoIds = new HashSet<Guid>(connectedSystemObjectsToBeCreated.Select(c => c.Id));
-            connectedSystemObjectsToBeCreated.Clear();
-
-            // Flush create-RPEIs now. UpdateConnectedSystemObjectsAsync only looks up RPEIs by CSO ID
-            // for *updated* CSOs, so create-RPEIs are safe to flush here. This prevents holding all
-            // RPEIs in memory simultaneously during large imports.
-            // Partition: extract create-RPEIs, flush them, leave update-RPEIs for the update phase.
-            if (createdCsoIds.Count > 0)
-            {
-                var createRpeis = _activityRunProfileExecutionItems
-                    .Where(r => r.ConnectedSystemObjectId.HasValue && createdCsoIds.Contains(r.ConnectedSystemObjectId.Value))
+                // Extract just the RPEIs for this batch of CSOs
+                var batchCsoIds = new HashSet<Guid>(csoBatch.Select(c => c.Id));
+                var batchRpeis = _activityRunProfileExecutionItems
+                    .Where(r => r.ConnectedSystemObject != null && batchCsoIds.Contains(r.ConnectedSystemObject.Id))
                     .ToList();
-                _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObjectId.HasValue && createdCsoIds.Contains(r.ConnectedSystemObjectId.Value));
 
-                await FlushImportRpeisAsync(createRpeis);
+                await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
+
+                // Add newly created CSOs to the lookup cache
+                foreach (var newCso in csoBatch)
+                {
+                    var extIdValue = newCso.ExternalIdAttributeValue;
+                    if (extIdValue?.StringValue != null)
+                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.StringValue, newCso.Id);
+                    else if (extIdValue?.IntValue != null)
+                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), newCso.Id);
+                    else if (extIdValue?.LongValue != null)
+                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), newCso.Id);
+                    else if (extIdValue?.GuidValue != null)
+                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), newCso.Id);
+                }
+
+                // Remove batch RPEIs from the main list and flush them (persists change objects + releases memory)
+                _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObjectId.HasValue && batchCsoIds.Contains(r.ConnectedSystemObjectId.Value));
+                await FlushImportRpeisAsync(batchRpeis);
+
+                totalCreatedSoFar += csoBatch.Count;
+                _activity.ObjectsProcessed = totalCreatedSoFar;
+                await _jim.Activities.UpdateActivityProgressOutOfBandAsync(_activity);
             }
+
+            connectedSystemObjectsToBeCreated.Clear();
 
             _activity.ObjectsProcessed = createdCount;
             await _jim.Activities.UpdateActivityAsync(_activity);
@@ -637,12 +643,16 @@ public class SyncImportTaskProcessor
         else
         {
             // Test environments (EF fallback): add RPEIs to the Activity's navigation collection
-            // so test assertions can inspect them. EF in-memory doesn't auto-populate inverse
-            // navigation properties from AddRange, so we do it explicitly.
+            // so test assertions can inspect them. EF in-memory may auto-populate inverse
+            // navigation properties from AddRange in some cases (when change tracking detects
+            // the ActivityId FK), so check before adding to avoid duplicates.
             // Stats are computed at activity completion by CalculateActivitySummaryStats
             // in CompleteActivityBasedOnExecutionResultsAsync (assignment, not accumulation).
             foreach (var rpei in rpeis)
-                _activity.RunProfileExecutionItems.Add(rpei);
+            {
+                if (!_activity.RunProfileExecutionItems.Contains(rpei))
+                    _activity.RunProfileExecutionItems.Add(rpei);
+            }
         }
 
         rpeis.Clear();

@@ -36,7 +36,18 @@ public class ActivityRepository : IActivityRepository
     {
         // Open an independent connection to bypass any in-flight transaction on the main DbContext.
         // This ensures progress updates are immediately visible to other sessions (e.g., UI polling).
-        var connectionString = Repository.Database.Database.GetConnectionString();
+        string? connectionString;
+        try
+        {
+            connectionString = Repository.Database.Database.GetConnectionString();
+        }
+        catch
+        {
+            // In-memory test databases don't support relational extensions — GetConnectionString()
+            // throws NullReferenceException via GetFacadeDependencies.
+            connectionString = null;
+        }
+
         if (string.IsNullOrEmpty(connectionString))
         {
             // Fallback for in-memory test databases that have no connection string
