@@ -103,10 +103,9 @@ public abstract class SyncTaskProcessorBase
     // and reference attributes are re-processed in ResolveCrossPageReferencesAsync.
     protected readonly List<(Guid CsoId, List<int> SyncRuleIds)> _unresolvedCrossPageReferences = [];
 
-    // Accumulates all RPEIs persisted via bulk insert across pages.
-    // Used to compute summary stats at the end of processing via CalculateActivitySummaryStats.
-    // RPEIs are NOT restored to Activity.RunProfileExecutionItems to avoid EF tracking conflicts.
-    protected readonly List<ActivityRunProfileExecutionItem> _allPersistedRpeis = [];
+    // Summary stats are accumulated incrementally during each FlushRpeisAsync call via
+    // Worker.AccumulateActivitySummaryStats, so RPEIs can be released immediately without
+    // keeping them in memory for a final calculation.
 
     // Set to true when raw SQL is available (production with real database).
     // Used to conditionally apply ClearChangeTracker after MVO deletions — only needed in
@@ -152,7 +151,7 @@ public abstract class SyncTaskProcessorBase
 
     /// <summary>
     /// Flushes the current page's RPEIs to the database via raw SQL bulk insert,
-    /// then moves them to _allPersistedRpeis for later summary stat computation.
+    /// accumulates summary stats incrementally, then releases the RPEIs from memory.
     ///
     /// IMPORTANT: This method MUST be called BEFORE any SaveChangesAsync that might trigger
     /// DetectChanges() while RPEIs are in Activity.RunProfileExecutionItems. DetectChanges()
@@ -233,22 +232,20 @@ public abstract class SyncTaskProcessorBase
 
         if (usedRawSql)
         {
-            // Production: RPEIs are persisted via raw SQL. Clear from Activity's collection
-            // and detach from change tracker so no subsequent SaveChangesAsync re-inserts them.
+            // Production: accumulate summary stats from this batch before clearing RPEIs.
+            // Stats are computed incrementally per-flush, eliminating the need to keep all RPEIs
+            // in memory for a final calculation (which caused OOM at 100K+ objects).
+            Worker.AccumulateActivitySummaryStats(_activity, pageRpeis);
+
+            // Clear from Activity's collection and detach from change tracker so no
+            // subsequent SaveChangesAsync re-inserts them.
             _activity.RunProfileExecutionItems.Clear();
             _jim.Activities.DetachRpeisFromChangeTracker(pageRpeis);
             _hasRawSqlSupport = true;
-
-            // Move to accumulated list for summary stats at activity completion.
-            // Only needed when raw SQL is used — RPEIs were cleared from Activity.RunProfileExecutionItems
-            // so _allPersistedRpeis is the only place they're tracked for stats.
-            // In the EF fallback (tests), RPEIs stay in Activity.RunProfileExecutionItems
-            // and _allPersistedRpeis is not used, avoiding double-counting in the concat at completion.
-            _allPersistedRpeis.AddRange(pageRpeis);
         }
         // Tests (EF fallback): RPEIs stay in Activity.RunProfileExecutionItems for test
-        // assertions. They're tracked by EF (via AddRange in fallback) and will be persisted
-        // by the next SaveChangesAsync (typically UpdateActivityAsync).
+        // assertions. Stats are computed at activity completion by CalculateActivitySummaryStats
+        // in CompleteActivityBasedOnExecutionResultsAsync (assignment, not accumulation).
 
         // Clear per-page MVO→RPEI lookup (only used within a single page's processing)
         _mvoIdToRpei.Clear();

@@ -333,15 +333,14 @@ public class SyncExportTaskProcessor
                 await _jim.Activities.PersistRpeiCsoChangesAsync(exportRpeis);
         }
 
-        // Compute summary stats from the local list, then clear RPEIs from the Activity.
-        // Loading RPEIs onto the EF entity causes the change tracker to traverse the entire
-        // entity graph (RPEIs → CSOs → AttributeValues → etc.), exhausting memory at scale.
-        Worker.CalculateActivitySummaryStats(_activity, exportRpeis);
-
-        // Production (raw SQL): clear RPEIs from the Activity to free memory.
-        // Test environments (EF fallback): keep RPEIs on the Activity for test assertions.
         if (hasRawSqlSupport)
+        {
+            // Production: accumulate summary stats before clearing RPEIs from memory.
+            Worker.AccumulateActivitySummaryStats(_activity, exportRpeis);
             _activity.RunProfileExecutionItems.Clear();
+        }
+        // Test environments (EF fallback): keep RPEIs on the Activity for test assertions.
+        // Stats are computed at activity completion by CalculateActivitySummaryStats.
 
         await _jim.Activities.UpdateActivityMessageAsync(_activity, completionMessage);
         await _jim.Activities.UpdateActivityAsync(_activity);

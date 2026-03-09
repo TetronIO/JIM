@@ -25,7 +25,10 @@ public class SyncImportTaskProcessor
     private readonly string? _initiatedByName;
     private readonly JIM.Models.Activities.Activity _activity;
     private readonly List<ActivityRunProfileExecutionItem> _activityRunProfileExecutionItems;
-    private List<ActivityRunProfileExecutionItem> _allPersistedImportRpeis;
+    // Lightweight RPEI lookup for reconciliation. Populated during the update-phase flush
+    // so that ReconcilePendingExportsAsync can merge outcomes onto already-persisted RPEIs.
+    // Only contains RPEIs for updated CSOs (not created CSOs, which can't have pending exports).
+    private readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _reconciliationRpeiLookup = new();
     private readonly CancellationTokenSource _cancellationTokenSource;
 
     /// <summary>
@@ -41,12 +44,6 @@ public class SyncImportTaskProcessor
     private ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel _syncOutcomeTrackingLevel =
         ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None;
 
-    /// <summary>
-    /// Set to true when raw SQL bulk insert is available (production with real database).
-    /// When false (test environments using in-memory EF), RPEIs are kept on the Activity's
-    /// navigation collection for test assertions.
-    /// </summary>
-    private bool _hasRawSqlSupport;
 
     public SyncImportTaskProcessor(
         JimApplication jimApplication,
@@ -71,7 +68,8 @@ public class SyncImportTaskProcessor
         // the entire run's RPEIs in memory before persisting. The raw SQL bulk insert only uses scalar FKs,
         // so there is no risk of EF persisting CSOs prematurely via navigation properties.
         _activityRunProfileExecutionItems = new List<ActivityRunProfileExecutionItem>();
-        _allPersistedImportRpeis = new List<ActivityRunProfileExecutionItem>();
+        // Summary stats are accumulated incrementally via AccumulateActivitySummaryStats during each flush.
+        // RPEI lookup for reconciliation is populated during the update-phase flush only.
     }
 
     public async Task PerformFullImportAsync()
@@ -363,6 +361,15 @@ public class SyncImportTaskProcessor
 
             await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activityRunProfileExecutionItems);
 
+            // Populate the reconciliation RPEI lookup before flushing.
+            // Only update-phase RPEIs are needed — created CSOs can't have pending exports.
+            // This retains only the RPEI references needed for reconciliation, not the entire list.
+            foreach (var rpei in _activityRunProfileExecutionItems)
+            {
+                if (rpei.ConnectedSystemObjectId.HasValue)
+                    _reconciliationRpeiLookup.TryAdd(rpei.ConnectedSystemObjectId.Value, rpei);
+            }
+
             // Flush update-RPEIs now that UpdateConnectedSystemObjectsAsync has processed them.
             // Create-RPEIs were already flushed above after CSO creation.
             await FlushImportRpeisAsync();
@@ -413,12 +420,9 @@ public class SyncImportTaskProcessor
             await _jim.Activities.UpdateActivityAsync(_activity);
         }
 
-        // Build CSO → RPEI lookup so reconciliation can merge outcomes onto existing import RPEIs
-        // rather than creating duplicate RPEIs (one-RPEI-per-CSO rule)
-        var importRpeisByCsoId = _allPersistedImportRpeis
-            .Where(r => r.ConnectedSystemObjectId.HasValue)
-            .GroupBy(r => r.ConnectedSystemObjectId!.Value)
-            .ToDictionary(g => g.Key, g => g.First());
+        // CSO → RPEI lookup for reconciliation was populated during the update-phase flush.
+        // Only updated CSOs can have pending exports, so create-RPEIs are not included.
+        var importRpeisByCsoId = _reconciliationRpeiLookup;
 
         // Reconcile pending exports against imported values (confirming import)
         // This confirms exported attribute changes or marks them for retry
@@ -459,19 +463,12 @@ public class SyncImportTaskProcessor
         await FlushImportRpeisAsync();
         _activity.ObjectsProcessed = remainingRpeiCount;
 
-        // Compute summary stats from accumulated RPEIs without loading them onto the Activity.
-        // Loading RPEIs onto the EF entity causes the change tracker to traverse the entire
-        // entity graph (RPEIs → CSOs → AttributeValues → etc.), exhausting memory at scale.
-        Worker.CalculateActivitySummaryStats(_activity, _allPersistedImportRpeis);
+        // Summary stats were accumulated incrementally during each FlushImportRpeisAsync call (production).
+        // In tests (EF fallback), RPEIs were added to Activity.RunProfileExecutionItems — compute stats
+        // from them now so tests that check stats before CompleteActivityBasedOnExecutionResultsAsync work.
+        if (_activity.RunProfileExecutionItems.Count > 0)
+            Worker.CalculateActivitySummaryStats(_activity);
 
-        if (!_hasRawSqlSupport)
-        {
-            // Test environments (EF fallback): restore RPEIs to the Activity for test assertions.
-            // Test datasets are small so this doesn't cause memory issues.
-            _activity.AddRunProfileExecutionItems(_allPersistedImportRpeis);
-        }
-
-        _allPersistedImportRpeis.Clear();
         await _jim.Activities.UpdateActivityAsync(_activity);
 
         importSpan.SetTag("totalObjectsImported", totalObjectsImported);
@@ -617,15 +614,26 @@ public class SyncImportTaskProcessor
 
         if (usedRawSql)
         {
-            _hasRawSqlSupport = true;
+            // Production: accumulate summary stats from this batch before releasing RPEIs.
+            // Stats are computed incrementally per-flush, eliminating the need to keep all RPEIs
+            // in memory for a final calculation (which caused OOM at 100K+ objects).
+            Worker.AccumulateActivitySummaryStats(_activity, rpeis);
 
-            // Production: RPEIs are persisted via raw SQL. Detach from change tracker so no
-            // subsequent SaveChangesAsync re-inserts or overwrites them with stale in-memory state.
-            // This mirrors FlushRpeisAsync in SyncTaskProcessorBase.
+            // Detach from change tracker so no subsequent SaveChangesAsync re-inserts or
+            // overwrites them with stale in-memory state.
             _jim.Activities.DetachRpeisFromChangeTracker(rpeis);
         }
+        else
+        {
+            // Test environments (EF fallback): add RPEIs to the Activity's navigation collection
+            // so test assertions can inspect them. EF in-memory doesn't auto-populate inverse
+            // navigation properties from AddRange, so we do it explicitly.
+            // Stats are computed at activity completion by CalculateActivitySummaryStats
+            // in CompleteActivityBasedOnExecutionResultsAsync (assignment, not accumulation).
+            foreach (var rpei in rpeis)
+                _activity.RunProfileExecutionItems.Add(rpei);
+        }
 
-        _allPersistedImportRpeis.AddRange(rpeis);
         rpeis.Clear();
     }
 

@@ -249,14 +249,11 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // Update the watermark to mark this sync as complete
         await UpdateDeltaSyncWatermarkAsync();
 
-        // Compute summary stats from all RPEIs (flushed + any remaining in Activity).
-        // _allPersistedRpeis contains RPEIs from all pages; Activity may have unflushed RPEIs.
-        var allRpeis = _allPersistedRpeis.Concat(_activity.RunProfileExecutionItems).ToList();
-        Worker.CalculateActivitySummaryStats(_activity, allRpeis);
-
-        // Free accumulated RPEIs now that stats are computed — they are no longer needed.
-        // Error detection is handled by a database query in CompleteActivityBasedOnExecutionResultsAsync.
-        _allPersistedRpeis.Clear();
+        // Summary stats were accumulated incrementally during each FlushRpeisAsync call (production).
+        // In tests (EF fallback), RPEIs remain in Activity.RunProfileExecutionItems — compute stats
+        // from them now so tests that check stats before CompleteActivityBasedOnExecutionResultsAsync work.
+        if (!_hasRawSqlSupport && _activity.RunProfileExecutionItems.Count > 0)
+            Worker.CalculateActivitySummaryStats(_activity);
 
         syncSpan.SetSuccess();
     }
