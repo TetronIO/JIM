@@ -1019,85 +1019,186 @@ public class ActivityRepository : IActivityRepository
         if (changes.Count == 0)
             return;
 
-        // Null out navigation properties to prevent EF graph traversal from discovering
-        // already-persisted entities. Without this, AddRange traverses
-        // ConnectedSystemObject → AttributeValues and adds them to the change tracker,
-        // causing massive memory usage at scale (100K CSOs × 20 attrs = 2M+ tracked entities).
-        // Both FKs (ActivityRunProfileExecutionItemId, ConnectedSystemObjectId) are explicit
-        // properties on the model, so nulling the navigations is safe.
+        // Pre-generate IDs for all entities in the graph so FK relationships are known
+        // before we build the raw SQL statements.
         foreach (var change in changes)
         {
-            change.ActivityRunProfileExecutionItem = null;
-            change.ConnectedSystemObject = null;
+            if (change.Id == Guid.Empty)
+                change.Id = Guid.NewGuid();
+
+            foreach (var attrChange in change.AttributeChanges)
+            {
+                if (attrChange.Id == Guid.Empty)
+                    attrChange.Id = Guid.NewGuid();
+
+                foreach (var valueChange in attrChange.ValueChanges)
+                {
+                    if (valueChange.Id == Guid.Empty)
+                        valueChange.Id = Guid.NewGuid();
+                }
+            }
         }
 
-        // Increase command timeout for large batches. With 2000+ changes × ~20 attribute changes,
-        // EF generates ~80K+ INSERT operations which can exceed the default 30s timeout.
-        int? previousTimeout = null;
         try
         {
-            previousTimeout = Repository.Database.Database.GetCommandTimeout();
+            // Increase command timeout for large batches
+            var previousTimeout = Repository.Database.Database.GetCommandTimeout();
             Repository.Database.Database.SetCommandTimeout(300); // 5 minutes
-        }
-        catch { /* In-memory test DB — ignore */ }
 
-        // Process in sub-batches to limit EF change tracker pressure. Each change has
-        // ~20 AttributeChanges × ValueChanges = ~40 child entities, so 500 changes = ~20K entities.
-        const int subBatchSize = 500;
-        for (var i = 0; i < changes.Count; i += subBatchSize)
-        {
-            var batch = changes.GetRange(i, Math.Min(subBatchSize, changes.Count - i));
+            await using var transaction = await Repository.Database.Database.BeginTransactionAsync();
 
-            // In in-memory test DB, EF auto-tracks entities discovered via navigation properties.
-            // The change objects may already be tracked (Added state) from when the RPEI was saved.
-            // Only add entities that aren't already tracked to avoid duplicate key errors.
-            var untrackedChanges = new List<ConnectedSystemObjectChange>();
-            foreach (var change in batch)
-            {
-                try
-                {
-                    var entry = Repository.Database.Entry(change);
-                    if (entry.State == EntityState.Detached)
-                        untrackedChanges.Add(change);
-                }
-                catch
-                {
-                    // Entry() can fail on mock DbContexts — treat as untracked
-                    untrackedChanges.Add(change);
-                }
-            }
+            // Step 1: INSERT parent ConnectedSystemObjectChange rows
+            await BulkInsertCsoChangesRawAsync(changes);
 
-            if (untrackedChanges.Count > 0)
-            {
-                Repository.Database.AddRange(untrackedChanges);
-                await Repository.Database.SaveChangesAsync();
-            }
-            else
-            {
-                // All entities already tracked (in-memory test DB) — just save
-                await Repository.Database.SaveChangesAsync();
-            }
+            // Step 2: INSERT ConnectedSystemObjectChangeAttribute rows
+            var allAttrChanges = changes
+                .SelectMany(c => c.AttributeChanges.Select(ac => (ChangeId: c.Id, AttributeId: ac.Attribute.Id, AttrChange: ac)))
+                .ToList();
 
-            // Detach persisted change objects and their children to free tracker memory.
-            foreach (var change in batch)
-            {
-                foreach (var attrChange in change.AttributeChanges)
-                {
-                    foreach (var valueChange in attrChange.ValueChanges)
-                    {
-                        try { Repository.Database.Entry(valueChange).State = EntityState.Detached; } catch { }
-                    }
-                    try { Repository.Database.Entry(attrChange).State = EntityState.Detached; } catch { }
-                }
-                try { Repository.Database.Entry(change).State = EntityState.Detached; } catch { }
-            }
-        }
+            if (allAttrChanges.Count > 0)
+                await BulkInsertCsoChangeAttributesRawAsync(allAttrChanges);
 
-        try
-        {
+            // Step 3: INSERT ConnectedSystemObjectChangeAttributeValue rows
+            var allValueChanges = changes
+                .SelectMany(c => c.AttributeChanges
+                    .SelectMany(ac => ac.ValueChanges.Select(vc => (AttrChangeId: ac.Id, Value: vc))))
+                .ToList();
+
+            if (allValueChanges.Count > 0)
+                await BulkInsertCsoChangeAttributeValuesRawAsync(allValueChanges);
+
+            await transaction.CommitAsync();
+
+            // Restore previous timeout
             Repository.Database.Database.SetCommandTimeout(previousTimeout);
         }
-        catch { /* In-memory test DB — ignore */ }
+        catch
+        {
+            // Fallback for unit tests with mocked/in-memory DbContext where raw SQL is not available.
+            // Null out navigation properties to prevent EF graph traversal from discovering
+            // already-persisted entities (CSOs, attribute values, etc.).
+            foreach (var change in changes)
+            {
+                change.ActivityRunProfileExecutionItem = null;
+                change.ConnectedSystemObject = null;
+            }
+
+            Repository.Database.AddRange(changes);
+            await Repository.Database.SaveChangesAsync();
+        }
+    }
+
+    /// <summary>
+    /// Bulk inserts ConnectedSystemObjectChange rows using parameterised multi-row INSERT.
+    /// </summary>
+    private async Task BulkInsertCsoChangesRawAsync(List<ConnectedSystemObjectChange> changes)
+    {
+        const int columnsPerRow = 13;
+        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+
+        foreach (var chunk in ChunkList(changes, chunkSize))
+        {
+            var sql = new System.Text.StringBuilder();
+            sql.Append(@"INSERT INTO ""ConnectedSystemObjectChanges"" (""Id"", ""ActivityRunProfileExecutionItemId"", ""ConnectedSystemId"", ""ConnectedSystemObjectId"", ""ChangeTime"", ""ChangeType"", ""InitiatedByType"", ""InitiatedById"", ""InitiatedByName"", ""DeletedObjectTypeId"", ""DeletedObjectExternalIdAttributeValueId"", ""DeletedObjectExternalId"", ""DeletedObjectDisplayName"") VALUES ");
+
+            var parameters = new List<object>();
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                if (i > 0) sql.Append(", ");
+                var offset = i * 13;
+                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}}, {{{offset + 11}}}, {{{offset + 12}}})");
+
+                var c = chunk[i];
+                parameters.Add(c.Id);
+                parameters.Add(NullableParam(c.ActivityRunProfileExecutionItemId, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(c.ConnectedSystemId);
+                parameters.Add(NullableParam(c.ConnectedSystemObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(c.ChangeTime);
+                parameters.Add((int)c.ChangeType);
+                parameters.Add((int)c.InitiatedByType);
+                parameters.Add(NullableParam(c.InitiatedById, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(NullableParam(c.InitiatedByName, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(NullableParam(c.DeletedObjectType?.Id, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(NullableParam(c.DeletedObjectExternalIdAttributeValue?.Id, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(NullableParam(c.DeletedObjectExternalId, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(NullableParam(c.DeletedObjectDisplayName, NpgsqlTypes.NpgsqlDbType.Text));
+            }
+
+            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
+    }
+
+    /// <summary>
+    /// Bulk inserts ConnectedSystemObjectChangeAttribute rows using parameterised multi-row INSERT.
+    /// </summary>
+    private async Task BulkInsertCsoChangeAttributesRawAsync(List<(Guid ChangeId, int AttributeId, ConnectedSystemObjectChangeAttribute AttrChange)> attrChanges)
+    {
+        const int columnsPerRow = 3;
+        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+
+        foreach (var chunk in ChunkList(attrChanges, chunkSize))
+        {
+            var sql = new System.Text.StringBuilder();
+            sql.Append(@"INSERT INTO ""ConnectedSystemObjectChangeAttributes"" (""Id"", ""ConnectedSystemChangeId"", ""AttributeId"") VALUES ");
+
+            var parameters = new List<object>();
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                if (i > 0) sql.Append(", ");
+                var offset = i * columnsPerRow;
+                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}})");
+
+                var (changeId, attributeId, attrChange) = chunk[i];
+                parameters.Add(attrChange.Id);
+                parameters.Add(changeId);
+                parameters.Add(attributeId);
+            }
+
+            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
+    }
+
+    /// <summary>
+    /// Bulk inserts ConnectedSystemObjectChangeAttributeValue rows using parameterised multi-row INSERT.
+    /// </summary>
+    private async Task BulkInsertCsoChangeAttributeValuesRawAsync(List<(Guid AttrChangeId, ConnectedSystemObjectChangeAttributeValue Value)> valueChanges)
+    {
+        const int columnsPerRow = 11;
+        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+
+        foreach (var chunk in ChunkList(valueChanges, chunkSize))
+        {
+            var sql = new System.Text.StringBuilder();
+            sql.Append(@"INSERT INTO ""ConnectedSystemObjectChangeAttributeValues"" (""Id"", ""ConnectedSystemObjectChangeAttributeId"", ""ValueChangeType"", ""StringValue"", ""DateTimeValue"", ""IntValue"", ""LongValue"", ""ByteValueLength"", ""GuidValue"", ""BoolValue"", ""ReferenceValueId"") VALUES ");
+
+            var parameters = new List<object>();
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                if (i > 0) sql.Append(", ");
+                var offset = i * 11;
+                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}})");
+
+                var (attrChangeId, v) = chunk[i];
+                parameters.Add(v.Id);
+                parameters.Add(attrChangeId);
+                parameters.Add((int)v.ValueChangeType);
+                parameters.Add(NullableParam(v.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(NullableParam(v.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(NullableParam(v.IntValue, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(NullableParam(v.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint));
+                parameters.Add(NullableParam(v.ByteValueLength, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(NullableParam(v.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(NullableParam(v.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean));
+                parameters.Add(NullableParam(v.ReferenceValue?.Id, NpgsqlTypes.NpgsqlDbType.Uuid));
+            }
+
+            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
+    }
+
+    private static NpgsqlParameter NullableParam(object? value, NpgsqlTypes.NpgsqlDbType dbType)
+    {
+        return new NpgsqlParameter { Value = value ?? DBNull.Value, NpgsqlDbType = dbType };
     }
 
     /// <summary>
