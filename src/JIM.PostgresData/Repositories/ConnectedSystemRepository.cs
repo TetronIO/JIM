@@ -1600,6 +1600,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 }
             }
 
+            // Increase command timeout for large bulk inserts. At 100K+ objects with 20 attributes each,
+            // individual SQL statements can take 30+ seconds under memory pressure or slower I/O.
+            var previousTimeout = Repository.Database.Database.GetCommandTimeout();
+            Repository.Database.Database.SetCommandTimeout(300); // 5 minutes
+
             await using var transaction = await Repository.Database.Database.BeginTransactionAsync();
 
             // Step 1: INSERT parent CSO rows
@@ -1614,6 +1619,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 await BulkInsertCsoAttributeValuesRawAsync(allAttributeValues);
 
             await transaction.CommitAsync();
+
+            // Restore previous timeout
+            Repository.Database.Database.SetCommandTimeout(previousTimeout);
         }
         catch
         {
