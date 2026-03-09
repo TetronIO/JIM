@@ -20,6 +20,9 @@
 .PARAMETER Scenario
     The test scenario to run. If not specified, an interactive menu will be displayed.
     Available scenarios are in test/integration/scenarios/
+    Use "All" to run every implemented (non-stub) scenario sequentially. Docker images
+    are built once on the first scenario; subsequent scenarios reset the environment
+    without rebuilding. A pass/fail summary is printed at the end.
 
 .PARAMETER Template
     The test data template size. Default: "Nano"
@@ -99,6 +102,13 @@
     ./Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync" -Template MediumLarge -CaptureMetrics
 
     Runs Scenario 8 with MediumLarge template and forces performance metrics capture.
+
+.EXAMPLE
+    ./Run-IntegrationTests.ps1 -Scenario All -Template Small
+
+    Runs all implemented (non-stub) scenarios sequentially with the Small template.
+    Docker images are built once; the environment is reset between each scenario.
+    A pass/fail summary is printed at the end.
 #>
 
 param(
@@ -131,7 +141,10 @@ param(
     [int]$TimeoutSeconds = 180,
 
     [Parameter(Mandatory=$false)]
-    [switch]$CaptureMetrics
+    [switch]$CaptureMetrics,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$IgnoreSnapshots
 )
 
 Set-StrictMode -Version Latest
@@ -151,6 +164,45 @@ $NC = "$ESC[0m"
 # Script root
 $scriptRoot = $PSScriptRoot
 $repoRoot = (Get-Item $scriptRoot).Parent.Parent.FullName
+
+# ============================================================================
+# Snapshot detection utilities
+# ============================================================================
+
+function Get-PopulateScriptHash {
+    param([string]$ScenarioName)
+    $filesToHash = @(
+        "$scriptRoot/utils/Test-Helpers.ps1",
+        "$scriptRoot/utils/Test-GroupHelpers.ps1"
+    )
+    switch ($ScenarioName) {
+        "Scenario1" { $filesToHash += "$scriptRoot/Populate-SambaAD.ps1" }
+        "Scenario8" { $filesToHash += "$scriptRoot/Populate-SambaAD-Scenario8.ps1" }
+    }
+    $combinedContent = ""
+    foreach ($file in $filesToHash) {
+        if (Test-Path $file) { $combinedContent += Get-Content -Path $file -Raw }
+    }
+    $hashBytes = [System.Security.Cryptography.SHA256]::HashData(
+        [System.Text.Encoding]::UTF8.GetBytes($combinedContent)
+    )
+    return [System.BitConverter]::ToString($hashBytes).Replace("-", "").Substring(0, 16).ToLower()
+}
+
+function Get-SnapshotImageTag {
+    param([string]$Role, [string]$Size)
+    return "jim-samba-ad:${Role}-$($Size.ToLower())"
+}
+
+function Test-SnapshotAvailable {
+    param([string]$ImageTag, [string]$ExpectedHash)
+    $inspect = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.samba.snapshot-hash"}}' 2>&1
+    if ($LASTEXITCODE -ne 0) { return $false }
+    return "$inspect" -eq $ExpectedHash
+}
+
+# Track whether snapshots are being used (set during Samba container startup)
+$script:UsingSnapshots = $false
 
 # Interactive scenario selection function
 function Show-ScenarioMenu {
@@ -464,6 +516,133 @@ if (-not $Scenario) {
         else {
             $Template = "Nano"
         }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Handle "-Scenario All": run every implemented scenario sequentially
+# ---------------------------------------------------------------------------
+if ($Scenario -eq "All") {
+
+    # Incompatible with -SetupOnly
+    if ($SetupOnly) {
+        Write-Host "${RED}ERROR: -SetupOnly cannot be combined with -Scenario All${NC}"
+        exit 1
+    }
+
+    # Discover scenario scripts and filter out stubs
+    $scenariosPath = Join-Path $scriptRoot "scenarios"
+    $scenarioFiles = Get-ChildItem $scenariosPath -Filter "Invoke-*.ps1" | Sort-Object Name
+    $implementedScenarios = @()
+
+    foreach ($file in $scenarioFiles) {
+        $fileContent = Get-Content $file.FullName -Raw
+        if ($fileContent -match 'Write-Host\s+"[\s]*NOT YET IMPLEMENTED[\s]*"') {
+            continue
+        }
+        $implementedScenarios += ($file.BaseName -replace '^Invoke-', '')
+    }
+
+    if ($implementedScenarios.Count -eq 0) {
+        Write-Host "${RED}ERROR: No implemented scenarios found in $scenariosPath${NC}"
+        exit 1
+    }
+
+    # Display plan
+    Write-Host ""
+    Write-Host "${CYAN}$("=" * 65)${NC}"
+    Write-Host "${CYAN}  JIM Integration Test Runner — All Scenarios${NC}"
+    Write-Host "${CYAN}$("=" * 65)${NC}"
+    Write-Host ""
+    Write-Host "${GRAY}Scenarios to run ($($implementedScenarios.Count)):${NC}"
+    foreach ($s in $implementedScenarios) {
+        Write-Host "  ${CYAN}$s${NC}"
+    }
+    Write-Host ""
+
+    # Build common parameters as a hashtable for proper splatting
+    $commonParams = @{}
+    if ($Template)   { $commonParams.Template = $Template }
+    if ($Step)       { $commonParams.Step = $Step }
+    if ($PSBoundParameters.ContainsKey('ExportConcurrency'))    { $commonParams.ExportConcurrency = $ExportConcurrency }
+    if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) { $commonParams.MaxExportParallelism = $MaxExportParallelism }
+    if ($TimeoutSeconds -ne 180)                                { $commonParams.TimeoutSeconds = $TimeoutSeconds }
+    if ($CaptureMetrics)                                        { $commonParams.CaptureMetrics = $true }
+
+    # Run each scenario, collecting results
+    $results = @()
+    $allStart = Get-Date
+    $selfScript = Join-Path $scriptRoot "Run-IntegrationTests.ps1"
+    $anyFailed = $false
+
+    for ($i = 0; $i -lt $implementedScenarios.Count; $i++) {
+        $scenarioName = $implementedScenarios[$i]
+        $index = $i + 1
+
+        Write-Host ""
+        Write-Host "${CYAN}$("=" * 65)${NC}"
+        Write-Host "${CYAN}  [$index/$($implementedScenarios.Count)] $scenarioName${NC}"
+        Write-Host "${CYAN}$("=" * 65)${NC}"
+        Write-Host ""
+
+        $scenarioStart = Get-Date
+
+        # First scenario: full build. Subsequent scenarios: skip build, but still reset.
+        $scenarioParams = @{ Scenario = $scenarioName } + $commonParams
+        if ($i -gt 0) {
+            $scenarioParams.SkipBuild = $true
+        }
+
+        & $selfScript @scenarioParams
+        $exitCode = $LASTEXITCODE
+
+        $scenarioDuration = (Get-Date) - $scenarioStart
+
+        $passed = ($exitCode -eq 0)
+        if (-not $passed) { $anyFailed = $true }
+
+        $results += @{
+            Name     = $scenarioName
+            Passed   = $passed
+            ExitCode = $exitCode
+            Duration = $scenarioDuration
+        }
+
+        $status = if ($passed) { "${GREEN}PASSED${NC}" } else { "${RED}FAILED (exit code $exitCode)${NC}" }
+        Write-Host ""
+        Write-Host "  Result: $status  Duration: $($scenarioDuration.ToString('hh\:mm\:ss'))"
+        Write-Host ""
+    }
+
+    # Print summary
+    $allDuration = (Get-Date) - $allStart
+    $passCount = ($results | Where-Object { $_.Passed }).Count
+    $failCount = $results.Count - $passCount
+
+    Write-Host ""
+    Write-Host "${CYAN}$("=" * 65)${NC}"
+    Write-Host "${CYAN}  All Scenarios — Summary${NC}"
+    Write-Host "${CYAN}$("=" * 65)${NC}"
+    Write-Host ""
+
+    foreach ($r in $results) {
+        $icon   = if ($r.Passed) { "${GREEN}PASS${NC}" } else { "${RED}FAIL${NC}" }
+        $dur    = $r.Duration.ToString('hh\:mm\:ss')
+        Write-Host ("  [{0}]  {1,-50} {2}" -f $icon, $r.Name, $dur)
+    }
+
+    Write-Host ""
+    Write-Host "${CYAN}Total Duration: ${NC}$($allDuration.ToString('hh\:mm\:ss'))"
+    Write-Host "${CYAN}Passed: ${NC}$passCount / $($results.Count)    ${CYAN}Failed: ${NC}$failCount / $($results.Count)"
+    Write-Host ""
+
+    if ($anyFailed) {
+        Write-Host "${RED}One or more scenarios failed.${NC}"
+        exit 1
+    }
+    else {
+        Write-Host "${GREEN}All scenarios passed.${NC}"
+        exit 0
     }
 }
 
@@ -788,6 +967,27 @@ Write-Success "JIM stack started"
 
 Start-Sleep -Seconds 2
 
+# Check for pre-populated snapshot images (Scenario 1 / primary)
+if (-not $IgnoreSnapshots -and $Scenario -like "*Scenario1*") {
+    $s1Hash = Get-PopulateScriptHash -ScenarioName "Scenario1"
+    $s1Tag = Get-SnapshotImageTag -Role "primary" -Size $Template
+    if (Test-SnapshotAvailable -ImageTag $s1Tag -ExpectedHash $s1Hash) {
+        $env:SAMBA_IMAGE_PRIMARY = $s1Tag
+        $script:UsingSnapshots = $true
+        Write-Host "  ${GREEN}Using snapshot: $s1Tag${NC}"
+    } else {
+        Write-Host "  ${YELLOW}No snapshot found for $s1Tag — building (first run only)...${NC}"
+        & "$scriptRoot/Build-SambaSnapshots.ps1" -Scenario Scenario1 -Template $Template
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Snapshot build failed — falling back to live population"
+        } elseif (Test-SnapshotAvailable -ImageTag $s1Tag -ExpectedHash $s1Hash) {
+            $env:SAMBA_IMAGE_PRIMARY = $s1Tag
+            $script:UsingSnapshots = $true
+            Write-Host "  ${GREEN}Snapshot built and ready: $s1Tag${NC}"
+        }
+    }
+}
+
 Write-Step "Starting Samba AD (Primary)..."
 $sambaResult = docker compose -f docker-compose.integration-tests.yml up -d 2>&1
 if ($LASTEXITCODE -ne 0) {
@@ -811,6 +1011,40 @@ if ($Scenario -like "*Scenario2*") {
 
 # Start Scenario 8 containers if running Scenario 8
 if ($Scenario -like "*Scenario8*") {
+    # Check for pre-populated snapshot images
+    if (-not $IgnoreSnapshots) {
+        $s8Hash = Get-PopulateScriptHash -ScenarioName "Scenario8"
+        $s8SourceTag = Get-SnapshotImageTag -Role "source-s8" -Size $Template
+        $s8TargetTag = Get-SnapshotImageTag -Role "target-s8" -Size $Template
+        if ((Test-SnapshotAvailable -ImageTag $s8SourceTag -ExpectedHash $s8Hash) -and
+            (Test-SnapshotAvailable -ImageTag $s8TargetTag -ExpectedHash $s8Hash)) {
+            $env:SAMBA_IMAGE_SOURCE = $s8SourceTag
+            $env:SAMBA_IMAGE_TARGET = $s8TargetTag
+            $script:UsingSnapshots = $true
+            Write-Host "  ${GREEN}Using snapshots: $s8SourceTag, $s8TargetTag${NC}"
+        } else {
+            Write-Host "  ${YELLOW}No snapshots found for Scenario 8 — building (first run only)...${NC}"
+            & "$scriptRoot/Build-SambaSnapshots.ps1" -Scenario Scenario8 -Template $Template
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning "Snapshot build failed — falling back to live population"
+            } elseif ((Test-SnapshotAvailable -ImageTag $s8SourceTag -ExpectedHash $s8Hash) -and
+                      (Test-SnapshotAvailable -ImageTag $s8TargetTag -ExpectedHash $s8Hash)) {
+                $env:SAMBA_IMAGE_SOURCE = $s8SourceTag
+                $env:SAMBA_IMAGE_TARGET = $s8TargetTag
+                $script:UsingSnapshots = $true
+                Write-Host "  ${GREEN}Snapshots built and ready: $s8SourceTag, $s8TargetTag${NC}"
+            }
+        }
+    }
+
+    # Scale Samba container memory for larger templates (ldbadd is memory-intensive —
+    # it loads the full LDB into memory, so memory needs grow with user count)
+    # Only needed when NOT using snapshots (snapshots don't run ldbadd)
+    if (-not $script:UsingSnapshots -and $Template -in @("XLarge", "XXLarge")) {
+        $env:SAMBA_SOURCE_MEMORY = "8G"
+        $env:SAMBA_TARGET_MEMORY = "4G"
+        Write-Host "  Samba source memory scaled to 8G for $Template template" -ForegroundColor Gray
+    }
     Write-Step "Starting Samba AD (Source and Target for Scenario 8)..."
     $scenario8Result = docker compose -f docker-compose.integration-tests.yml --profile scenario8 up -d 2>&1
     if ($LASTEXITCODE -ne 0) {
@@ -922,7 +1156,8 @@ $timings["4. Wait for Services"] = (Get-Date) - $step4Start
 # Step 4b: Prepare Samba AD for testing
 # For Scenario 1, we need a clean Corp OU - delete if exists and recreate
 # Scenario 2 uses TestUsers OU which is handled by the scenario setup script
-if ($Scenario -like "*Scenario1*") {
+# Skip when using snapshots — the snapshot already has populated data
+if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots) {
     Write-Section "Step 4b: Preparing Samba AD for Testing"
 
     # First, try to delete the Corp OU if it exists (to ensure clean state)
@@ -1056,8 +1291,9 @@ if ($SetupOnly) {
     Write-Host ""
 
     # Docker Cleanup (prune unused images and build cache to prevent disk space accumulation)
-    Write-Step "Pruning Docker unused images and build cache..."
-    $pruneOutput = docker system prune -af 2>&1
+    Write-Step "Pruning unused images and build cache (preserving snapshots)..."
+    $pruneOutput = docker image prune -af --filter "label!=jim.samba.snapshot-hash" 2>&1
+    $pruneOutput += docker builder prune -af 2>&1
     $reclaimedMatch = $pruneOutput | Select-String "Total reclaimed space:\s*(.+)"
     if ($reclaimedMatch) {
         Write-Success "Reclaimed: $($reclaimedMatch.Matches[0].Groups[1].Value)"
@@ -1137,6 +1373,11 @@ $scenarioParams = @{
     Template = $Template
     Step = $Step
     ApiKey = $apiKey
+}
+
+# Skip population if using snapshot images
+if ($script:UsingSnapshots) {
+    $scenarioParams.SkipPopulate = $true
 }
 
 # Export tuning params only apply to scenarios that accept them and have LDAP exports
@@ -1442,8 +1683,10 @@ $timings["6. Capture Metrics"] = (Get-Date) - $step6Start
 $step7Start = Get-Date
 Write-Section "Step 7: Docker Cleanup"
 
-Write-Step "Pruning unused images, build cache, and volumes..."
-$pruneOutput = docker system prune -af 2>&1
+Write-Step "Pruning unused images and build cache (preserving snapshots)..."
+# Use --filter to exclude snapshot images from pruning (they take hours to build)
+$pruneOutput = docker image prune -af --filter "label!=jim.samba.snapshot-hash" 2>&1
+$pruneOutput += docker builder prune -af 2>&1
 $reclaimedMatch = $pruneOutput | Select-String "Total reclaimed space:\s*(.+)"
 if ($reclaimedMatch) {
     Write-Success "Reclaimed: $($reclaimedMatch.Matches[0].Groups[1].Value)"

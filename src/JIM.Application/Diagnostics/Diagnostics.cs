@@ -36,7 +36,7 @@ public static class Diagnostics
     {
         return new DiagnosticListener(
             sourcePrefix: "JIM.",
-            logLevel: Serilog.Events.LogEventLevel.Information,
+            logLevel: Serilog.Events.LogEventLevel.Debug,
             slowOperationThresholdMs: slowOperationThresholdMs);
     }
 }

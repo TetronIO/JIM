@@ -15,6 +15,27 @@ public interface IConnectedSystemRepository
     public Task<ConnectedSystem?> GetConnectedSystemAsync(int id);
     public Task<ConnectedSystemHeader?> GetConnectedSystemHeaderAsync(int id);
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id);
+
+    /// <summary>
+    /// Loads a Connected System Object with attribute loading controlled by the specified strategy.
+    /// <see cref="CsoAttributeLoadStrategy.CappedMva"/> caps MVA values and includes per-attribute total counts.
+    /// </summary>
+    public Task<CsoDetailResult?> GetConnectedSystemObjectDetailAsync(
+        int connectedSystemId,
+        Guid id,
+        CsoAttributeLoadStrategy loadStrategy);
+
+    /// <summary>
+    /// Returns a paginated set of attribute values for a specific attribute on a Connected System Object.
+    /// Supports server-side search and pagination for large multi-valued attributes.
+    /// </summary>
+    public Task<PagedResultSet<ConnectedSystemObjectAttributeValue>> GetAttributeValuesPagedAsync(
+        Guid connectedSystemObjectId,
+        string attributeName,
+        int page,
+        int pageSize,
+        string? searchText = null);
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, Guid attributeValue);
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, int attributeValue);
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, long attributeValue);
@@ -550,6 +571,7 @@ public interface IConnectedSystemRepository
     public Task CreateConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition);
     public Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject);
     public Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
+    public Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, Func<int, Task>? onBatchPersisted);
     public Task CreateConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer);
     public Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem);
     public Task CreateSyncRuleAsync(SyncRule syncRule);

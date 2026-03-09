@@ -2515,6 +2515,33 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, id);
     }
 
+    /// <summary>
+    /// Loads a Connected System Object with attribute loading controlled by the specified strategy.
+    /// <see cref="CsoAttributeLoadStrategy.CappedMva"/> caps MVA values and includes per-attribute total counts.
+    /// </summary>
+    public async Task<CsoDetailResult?> GetConnectedSystemObjectDetailAsync(
+        int connectedSystemId,
+        Guid id,
+        CsoAttributeLoadStrategy loadStrategy)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectDetailAsync(connectedSystemId, id, loadStrategy);
+    }
+
+    /// <summary>
+    /// Returns a paginated set of attribute values for a specific attribute on a Connected System Object.
+    /// Supports server-side search and pagination for large multi-valued attributes.
+    /// </summary>
+    public async Task<PagedResultSet<ConnectedSystemObjectAttributeValue>> GetAttributeValuesPagedAsync(
+        Guid connectedSystemObjectId,
+        string attributeName,
+        int page,
+        int pageSize,
+        string? searchText = null)
+    {
+        return await Application.Repository.ConnectedSystems.GetAttributeValuesPagedAsync(
+            connectedSystemObjectId, attributeName, page, pageSize, searchText);
+    }
+
     public async Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(
         int connectedSystemId,
         int page = 1,
@@ -2897,20 +2924,29 @@ public class ConnectedSystemServer
     /// <summary>
     /// Bulk persists Connected System Objects and appends a Change Object to the Activity Run Profile Execution Item.
     /// </summary>
-    public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, List<ActivityRunProfileExecutionItem> activityRunProfileExecutionItems)
+    public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, List<ActivityRunProfileExecutionItem> activityRunProfileExecutionItems, Func<int, Task>? onBatchPersisted = null)
     {
         // bulk persist csos creates
-        await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjects);
+        await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectsAsync(connectedSystemObjects, onBatchPersisted);
 
         // Check if CSO change tracking is enabled
         var changeTrackingEnabled = await Application.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
 
-        // add a Change Object to the relevant Activity Run Profile Execution Item for each cso.
-        // they will be persisted further up the call stack, when the activity gets persisted.
+        // Build O(1) lookup by CSO ID to avoid O(n²) linear scan at scale.
+        // At 100K CSOs, the previous SingleOrDefault scan caused 10 billion comparisons.
+        var rpeisByCsoId = new Dictionary<Guid, ActivityRunProfileExecutionItem>(activityRunProfileExecutionItems.Count);
+        foreach (var rpei in activityRunProfileExecutionItems)
+        {
+            if (rpei.ConnectedSystemObject != null)
+                rpeisByCsoId.TryAdd(rpei.ConnectedSystemObject.Id, rpei);
+        }
+
+        // Add a Change Object to the relevant Activity Run Profile Execution Item for each CSO.
+        // They will be persisted further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
         {
-            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.SingleOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id) ??
-                                                  throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created before now.");
+            if (!rpeisByCsoId.TryGetValue(cso.Id, out var activityRunProfileExecutionItem))
+                throw new InvalidDataException($"Couldn't find an ActivityRunProfileExecutionItem referencing CSO {cso.Id}! It should have been created before now.");
 
             // Explicitly set the FK now that the CSO has been persisted and has an ID.
             // This ensures the FK is properly tracked when the execution item is saved later.
@@ -2937,13 +2973,21 @@ public class ConnectedSystemServer
         // Check if CSO change tracking is enabled
         var changeTrackingEnabled = await Application.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
 
-        // add a change object to the relevant activity run profile execution item for each cso to be updated.
-        // the change objects will be persisted later, further up the call stack, when the activity gets persisted.
+        // Build O(1) lookup by CSO ID to avoid O(n²) linear scan at scale.
+        var rpeisByCsoId = new Dictionary<Guid, ActivityRunProfileExecutionItem>(activityRunProfileExecutionItems.Count);
+        foreach (var rpei in activityRunProfileExecutionItems)
+        {
+            if (rpei.ConnectedSystemObject != null)
+                rpeisByCsoId.TryAdd(rpei.ConnectedSystemObject.Id, rpei);
+        }
+
+        // Add a change object to the relevant activity run profile execution item for each CSO to be updated.
+        // The change objects will be persisted later, further up the call stack, when the activity gets persisted.
         foreach (var cso in connectedSystemObjects)
         {
             // Find the RPEI for this CSO - may be null if no attribute changes occurred (CSO was added to update list
             // for reference resolution purposes only)
-            var activityRunProfileExecutionItem = activityRunProfileExecutionItems.FirstOrDefault(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Id == cso.Id);
+            rpeisByCsoId.TryGetValue(cso.Id, out var activityRunProfileExecutionItem);
 
             if (activityRunProfileExecutionItem != null)
             {
@@ -2982,6 +3026,7 @@ public class ConnectedSystemServer
         var change = new ConnectedSystemObjectChange
         {
             ConnectedSystemId = connectedSystemObject.ConnectedSystemId,
+            ConnectedSystemObjectId = connectedSystemObject.Id,
             ConnectedSystemObject = connectedSystemObject,
             ChangeType = ObjectChangeType.Added,
             ChangeTime = DateTime.UtcNow,
@@ -3046,6 +3091,7 @@ public class ConnectedSystemServer
             var change = new ConnectedSystemObjectChange
             {
                 ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
+                ConnectedSystemObjectId = connectedSystemObject.Id,
                 ConnectedSystemObject = connectedSystemObject,
                 ChangeType = ObjectChangeType.Updated,
                 ChangeTime = DateTime.UtcNow,

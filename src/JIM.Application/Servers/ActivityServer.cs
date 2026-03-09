@@ -209,6 +209,17 @@ public class ActivityServer
     }
 
     /// <summary>
+    /// Updates only the progress fields (ObjectsProcessed, ObjectsToProcess, Message) on an Activity
+    /// using an independent database connection, bypassing any in-flight transaction on the main DbContext.
+    /// Use this when progress updates need to be immediately visible to other sessions (e.g., the UI)
+    /// whilst a long-running transaction is in progress.
+    /// </summary>
+    public async Task UpdateActivityProgressOutOfBandAsync(Activity activity)
+    {
+        await Application.Repository.Activity.UpdateActivityProgressOutOfBandAsync(activity);
+    }
+
+    /// <summary>
     /// Bulk inserts ActivityRunProfileExecutionItems directly via raw SQL,
     /// bypassing the EF change tracker for performance during large sync runs.
     /// Returns true if raw SQL was used (RPEIs persisted outside EF), false if EF fallback was used.
@@ -346,6 +357,16 @@ public class ActivityServer
     public async Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId)
     {
         return await Application.Repository.Activity.GetActivityRunProfileExecutionStatsAsync(activityId);
+    }
+
+    /// <summary>
+    /// Queries the database for RPEI error counts for an activity. Returns the total number of
+    /// RPEIs with errors and the total number of RPEIs, enabling precise activity completion
+    /// status determination without loading RPEIs into memory.
+    /// </summary>
+    public async Task<(int TotalWithErrors, int TotalRpeis)> GetActivityRpeiErrorCountsAsync(Guid activityId)
+    {
+        return await Application.Repository.Activity.GetActivityRpeiErrorCountsAsync(activityId);
     }
 
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)

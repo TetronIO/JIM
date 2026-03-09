@@ -211,14 +211,18 @@ function Get-TemplateScale {
             Groups = 500
             AvgMemberships = 10
         }
+        # XLarge/XXLarge: Capped group counts to keep total memberships under ~500K.
+        # samba-tool holds an LDB write lock per call, making millions of membership
+        # writes impractical. Fewer groups with higher avg memberships gives better
+        # coverage without the population time explosion.
         XLarge = @{
             Users = 100000
-            Groups = 2000
+            Groups = 50
             AvgMemberships = 12
         }
         XXLarge = @{
             Users = 1000000
-            Groups = 10000
+            Groups = 80
             AvgMemberships = 15
         }
     }
@@ -318,7 +322,6 @@ function New-TestUser {
     $nameData = Get-TestNameData
     $firstNames = $nameData.FirstNames
     $lastNames = $nameData.LastNames
-    $totalCombinations = $nameData.TotalCombinations
 
     # Match the departments from src/JIM.Application/Resources/Departments.en.txt
     $departments = @("Marketing", "Operations", "Finance", "Sales", "Human Resources", "Procurement",
@@ -369,10 +372,12 @@ function New-TestUser {
     $hrId = [guid]::new("{0:D8}-0000-0000-0000-000000000000" -f $Index).ToString()
     $employeeId = "EMP{0:D6}" -f $Index
 
-    # For display name, add suffix only if we've exhausted unique combinations
-    $displayName = if ($Index -ge $totalCombinations) {
-        $suffix = [int][Math]::Floor($Index / $totalCombinations) + 1
-        "$firstName $lastName ($suffix)"
+    # The effective unique name cycle is min(firstNameCount, lastNameCount * gcd factor),
+    # which in practice equals firstNameCount (~2000) since first names cycle at that interval.
+    # Beyond that, (firstName, lastName) pairs repeat. Always include the index for datasets
+    # larger than the first name pool to guarantee unique DNs in AD.
+    $displayName = if ($Index -ge $firstNameCount) {
+        "$firstName $lastName ($Index)"
     } else {
         "$firstName $lastName"
     }

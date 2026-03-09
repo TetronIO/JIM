@@ -95,8 +95,10 @@ Choose a template based on your testing goals:
 - **Medium**: 1,000 users, 100 groups - **< 2 min** - Medium enterprise, CI/CD pipelines
 - **MediumLarge**: 5,000 users, 250 groups - **< 5 min** - Large medium enterprise, performance validation
 - **Large**: 10,000 users, 500 groups - **< 15 min** - Large enterprise, performance baselines
-- **XLarge**: 100,000 users, 2,000 groups - **< 2 hours** - Very large enterprise, stress testing
-- **XXLarge**: 1,000,000 users, 10,000 groups - **TBD** - Global enterprise, scale limits
+- **XLarge**: 100,000 users, 2,000 groups - **< 2 hours** - Very large enterprise, stress testing (**requires 20+ GB host RAM** — see note below)
+- **XXLarge**: 1,000,000 users, 10,000 groups - **TBD** - Global enterprise, scale limits (**requires 32+ GB host RAM**)
+
+> **Memory requirements for large templates:** The XLarge and XXLarge templates require significantly more memory than smaller templates. The worker loads all imported objects into memory during processing — a 100K object import produces a worker peak working set of approximately 2.3 GB, plus 1–2 GB for the database during bulk inserts. **A 16 GB machine is not sufficient for XLarge** — the worker will be OOM-killed during the save phase even without IDE overhead. In a GitHub Codespace (16 GB total), the problem is worse because the IDE and dev tools consume additional memory. Run XLarge tests on a machine with at least 20–24 GB total RAM. See the [Deployment Guide — Memory Scaling](../DEPLOYMENT_GUIDE.md#memory-scaling-by-identity-object-count) for detailed requirements.
 
 See [Data Scale Templates](#data-scale-templates) for detailed template specifications.
 
@@ -1546,6 +1548,70 @@ catch (Exception ex)
 ### Path to OpenTelemetry
 
 The diagnostics infrastructure uses `System.Diagnostics.ActivitySource` (the .NET OpenTelemetry API). To export telemetry to external systems like Jaeger, Zipkin, or Azure Monitor, add OpenTelemetry exporters without any instrumentation code changes. See [GitHub Issue #212](https://github.com/TetronIO/JIM/issues/212) for .NET Aspire evaluation.
+
+---
+
+## Samba AD Snapshot Images
+
+For larger templates (XLarge, XXLarge), populating Samba AD with test data (users, groups, memberships) can take **many hours**. To avoid repeating this on every test run, the framework supports **snapshot images** — pre-populated Docker images that start in seconds.
+
+### How Snapshots Work
+
+1. **First run**: The runner detects no snapshot exists, builds one automatically by starting a base Samba container, running the populate scripts, and committing the result as a Docker image
+2. **Subsequent runs**: The runner detects the snapshot, uses it as the Samba image, and skips population entirely
+3. **Staleness detection**: A SHA256 hash of the populate scripts is stored as a Docker image label (`jim.samba.snapshot-hash`). If you modify the populate scripts, the hash won't match and the snapshot is rebuilt automatically
+
+### Snapshot Image Tags
+
+| Scenario | Role | Image Tag |
+|----------|------|-----------|
+| Scenario 1 | Primary AD | `jim-samba-ad:primary-{size}` |
+| Scenario 8 | Source AD (APAC) | `jim-samba-ad:source-s8-{size}` |
+| Scenario 8 | Target AD (EMEA) | `jim-samba-ad:target-s8-{size}` |
+
+Where `{size}` is the lowercase template name (e.g., `xlarge`, `nano`).
+
+### Manual Snapshot Management
+
+```powershell
+# Build snapshots manually (without running tests)
+./test/integration/Build-SambaSnapshots.ps1 -Scenario Scenario8 -Template XLarge
+
+# Force rebuild even if hash matches
+./test/integration/Build-SambaSnapshots.ps1 -Scenario Scenario8 -Template XLarge -Force
+
+# Ignore snapshots and force live population during a test run
+./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario8-CrossDomainEntitlementSync -Template XLarge -IgnoreSnapshots
+```
+
+### Backup and Restore
+
+Snapshot images live inside the devcontainer's Docker daemon (Docker-in-Docker). They are **not visible** from the host machine's Docker. Large snapshots (e.g., XLarge at ~3.7GB) take hours to build, so backing them up is strongly recommended.
+
+**Export (run inside devcontainer terminal):**
+
+```bash
+docker save jim-samba-ad:source-s8-xlarge | gzip > /workspaces/JIM/samba-snapshot-source-s8-xlarge.tar.gz
+docker save jim-samba-ad:target-s8-xlarge | gzip > /workspaces/JIM/samba-snapshot-target-s8-xlarge.tar.gz
+```
+
+The files appear in your repo workspace directory (bind-mounted from the host). Move them to external storage (NAS, cloud, etc.) from there. The `*.tar.gz` pattern is already in `.gitignore`.
+
+**Restore (run inside devcontainer terminal):**
+
+```bash
+docker load < /workspaces/JIM/samba-snapshot-source-s8-xlarge.tar.gz
+docker load < /workspaces/JIM/samba-snapshot-target-s8-xlarge.tar.gz
+```
+
+The images are restored with their original tags and labels. The integration test runner will detect them automatically on the next run.
+
+### Important Notes
+
+- Snapshots are **preserved during post-test Docker cleanup** — the runner's prune step filters by the `jim.samba.snapshot-hash` label
+- Snapshots are **per-scenario and per-size** — an XLarge snapshot is not used for a Small run
+- If you delete the devcontainer or run `docker system prune -a` inside it, the snapshots are lost
+- `docker save`/`docker load` are single-threaded — exporting a 2.7GB image takes a few minutes
 
 ---
 

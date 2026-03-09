@@ -58,7 +58,10 @@ param(
     [int]$ExportConcurrency = 1,
 
     [Parameter(Mandatory=$false)]
-    [int]$MaxExportParallelism = 1
+    [int]$MaxExportParallelism = 1,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$SkipPopulate
 )
 
 Set-StrictMode -Version Latest
@@ -109,13 +112,17 @@ try {
 
     # Populate test data in Source AD, then Target AD
     # Note: Target population is very fast (OU structure only, no data)
-    Write-Host "Populating test data in Source AD..." -ForegroundColor Gray
-    & "$PSScriptRoot/../Populate-SambaAD-Scenario8.ps1" -Template $Template -Instance Source
+    if (-not $SkipPopulate) {
+        Write-Host "Populating test data in Source AD..." -ForegroundColor Gray
+        & "$PSScriptRoot/../Populate-SambaAD-Scenario8.ps1" -Template $Template -Instance Source
 
-    Write-Host "Creating OU structure in Target AD..." -ForegroundColor Gray
-    & "$PSScriptRoot/../Populate-SambaAD-Scenario8.ps1" -Template $Template -Instance Target
+        Write-Host "Creating OU structure in Target AD..." -ForegroundColor Gray
+        & "$PSScriptRoot/../Populate-SambaAD-Scenario8.ps1" -Template $Template -Instance Target
 
-    Write-Host "✓ Test data populated" -ForegroundColor Green
+        Write-Host "✓ Test data populated" -ForegroundColor Green
+    } else {
+        Write-Host "✓ Using pre-populated snapshot — skipping population" -ForegroundColor Green
+    }
 
     # Run Setup-Scenario8 to configure JIM
     Write-Host "Running Scenario 8 setup..." -ForegroundColor Gray

@@ -112,20 +112,24 @@ function Get-Scenario8GroupScale {
             TotalGroups = 530
             Users = 10000
         }
+        # XLarge/XXLarge: Capped group counts to keep total memberships under ~500K.
+        # samba-tool group addmembers holds an LDB write lock per call, so millions
+        # of membership writes are impractical. Fewer groups with varied sizes gives
+        # better test coverage (50–50K members) without the combinatorial explosion.
         XLarge = @{
-            Companies = 10
-            Departments = 15
-            Locations = 15
-            Projects = 2000
-            TotalGroups = 2040
+            Companies = 5
+            Departments = 10
+            Locations = 5
+            Projects = 30
+            TotalGroups = 50
             Users = 100000
         }
         XXLarge = @{
-            Companies = 15
-            Departments = 20
-            Locations = 20
-            Projects = 10000
-            TotalGroups = 10055
+            Companies = 5
+            Departments = 10
+            Locations = 5
+            Projects = 50
+            TotalGroups = 70
             Users = 1000000
         }
     }

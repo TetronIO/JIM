@@ -659,38 +659,22 @@ public class Worker : BackgroundService
     {
         try
         {
-            // Calculate summary stats from RPEIs for activity list display.
-            // Sync processors may have already computed stats from their accumulated RPEI list
-            // (via Worker.CalculateActivitySummaryStats(activity, rpeis)) because RPEIs were
-            // flushed via raw SQL and cleared from Activity.RunProfileExecutionItems.
-            // Import/export processors still have RPEIs in the collection, so we recompute.
+            // Summary stats are accumulated incrementally during FlushRpeisAsync calls.
+            // In test environments (EF fallback), RPEIs may remain in the Activity's collection —
+            // recompute stats from them to ensure consistency (assignment overwrites incremental values).
             if (activity.RunProfileExecutionItems.Count > 0)
             {
                 CalculateActivitySummaryStats(activity);
             }
-            // else: stats were pre-computed by the processor — use as-is
 
-            // Determine final status using summary stats (TotalErrors) which are always available
-            // whether RPEIs are in the collection or were pre-computed by the processor.
-            // Note: .All() returns true for empty collections, so we must check hasItems first.
-            bool hasItems, hasErrors, allErrors;
+            // Query the database for precise RPEI error counts.
+            // This avoids loading RPEIs into memory (which causes OOM at scale) and provides
+            // precise has-errors/all-errors detection for all processor types uniformly.
+            var (totalWithErrors, totalRpeis) = await jim.Activities.GetActivityRpeiErrorCountsAsync(activity.Id);
 
-            if (activity.RunProfileExecutionItems.Count > 0)
-            {
-                // RPEIs available in collection — use precise per-RPEI error checking
-                hasItems = true;
-                hasErrors = activity.RunProfileExecutionItems.Any(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
-                allErrors = activity.RunProfileExecutionItems.All(q => q.ErrorType.HasValue && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
-            }
-            else
-            {
-                // RPEIs flushed via raw SQL — use pre-computed summary stats
-                hasItems = activity.TotalErrors > 0 || activity.ObjectsProcessed > 0;
-                hasErrors = activity.TotalErrors > 0;
-                // Without per-RPEI granularity, we can't distinguish "all errors" from "some errors".
-                // Conservatively treat as partial errors (CompleteWithWarning) unless nothing succeeded.
-                allErrors = hasErrors && activity.ObjectsProcessed == 0;
-            }
+            var hasItems = totalRpeis > 0;
+            var hasErrors = totalWithErrors > 0;
+            var allErrors = hasItems && totalWithErrors == totalRpeis;
 
             if (allErrors)
             {
@@ -735,6 +719,68 @@ public class Worker : BackgroundService
     internal static void CalculateActivitySummaryStats(Activity activity)
     {
         CalculateActivitySummaryStatsInternal(activity, activity.RunProfileExecutionItems);
+    }
+
+    /// <summary>
+    /// Incrementally accumulates summary stats from a batch of RPEIs into the Activity's running totals.
+    /// Called during each flush to avoid accumulating all RPEIs in memory for a final calculation.
+    /// This is the memory-efficient alternative to calling CalculateActivitySummaryStats with the
+    /// full list at the end — stats are added per-batch and RPEIs can be released immediately.
+    /// </summary>
+    internal static void AccumulateActivitySummaryStats(Activity activity, IReadOnlyList<ActivityRunProfileExecutionItem> rpeis)
+    {
+        if (rpeis.Count == 0)
+            return;
+
+        var hasOutcomes = rpeis.Any(r => r.SyncOutcomes.Count > 0);
+
+        if (hasOutcomes)
+        {
+            var allOutcomes = rpeis.SelectMany(r => r.SyncOutcomes).ToList();
+
+            activity.TotalAdded += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded);
+            activity.TotalUpdated += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated);
+            activity.TotalDeleted += allOutcomes.Count(o => o.OutcomeType is
+                ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted
+                or ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected);
+
+            activity.TotalProjected += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
+            activity.TotalJoined += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined);
+            activity.TotalAttributeFlows += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
+            activity.TotalDisconnected += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected);
+            activity.TotalDisconnectedOutOfScope += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope);
+
+            activity.TotalExported += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
+            activity.TotalDeprovisioned += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned);
+
+            activity.TotalPendingExports += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+            activity.TotalDriftCorrections += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection);
+            activity.TotalProvisioned += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
+        }
+        else
+        {
+            activity.TotalAdded += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Added);
+            activity.TotalUpdated += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Updated);
+            activity.TotalDeleted += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Deleted);
+
+            activity.TotalProjected += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Projected);
+            activity.TotalJoined += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Joined);
+            activity.TotalAttributeFlows += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.AttributeFlow);
+
+            activity.TotalDisconnected += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Disconnected);
+            activity.TotalDisconnectedOutOfScope += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.DisconnectedOutOfScope);
+
+            activity.TotalExported += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Exported);
+            activity.TotalDeprovisioned += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Deprovisioned);
+
+            activity.TotalPendingExports += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.PendingExport);
+            activity.TotalDriftCorrections += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.DriftCorrection);
+        }
+
+        activity.TotalOutOfScopeRetainJoin += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.OutOfScopeRetainJoin);
+        activity.TotalCreated += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Created);
+        activity.TotalErrors += rpeis.Count(r =>
+            r.ErrorType.HasValue && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
     }
 
     private static void CalculateActivitySummaryStatsInternal(Activity activity, IReadOnlyList<ActivityRunProfileExecutionItem> rpeis)

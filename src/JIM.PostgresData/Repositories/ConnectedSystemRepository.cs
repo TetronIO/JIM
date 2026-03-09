@@ -1036,10 +1036,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.ReferenceValue)
             .ThenInclude(cso => cso!.Type)
-            .Include(cso => cso.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
+            // Note: ReferenceValue.AttributeValues intentionally NOT included (shallow refs).
+            // For 10K+ member groups, deep-including every referenced CSO's attribute values
+            // caused 100K+ tracked entities. Consumers needing ref external IDs should use
+            // GetReferenceExternalIdsAsync() instead. See #320.
             // Include MetaverseObject for the detail view link
             .Include(cso => cso.MetaverseObject)
             .ThenInclude(mvo => mvo!.Type)
@@ -1047,6 +1047,144 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(mvo => mvo!.AttributeValues)
             .ThenInclude(av => av.Attribute)
             .SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
+    }
+
+    private const int CappedMvaLimit = 10;
+
+    public async Task<CsoDetailResult?> GetConnectedSystemObjectDetailAsync(
+        int connectedSystemId,
+        Guid id,
+        CsoAttributeLoadStrategy loadStrategy)
+    {
+        if (loadStrategy == CsoAttributeLoadStrategy.All)
+        {
+            var cso = await GetConnectedSystemObjectAsync(connectedSystemId, id);
+            return cso == null ? null : new CsoDetailResult { ConnectedSystemObject = cso };
+        }
+
+        // CappedMva strategy: load the CSO with capped MVA values
+        // Step 1: Load the CSO shell with metadata (no attribute values yet)
+        var entity = await Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
+            .Include(cso => cso.Type)
+            .Include(cso => cso.MetaverseObject)
+            .ThenInclude(mvo => mvo!.Type)
+            .Include(cso => cso.MetaverseObject)
+            .ThenInclude(mvo => mvo!.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .SingleOrDefaultAsync(x => x.ConnectedSystem.Id == connectedSystemId && x.Id == id);
+
+        if (entity == null)
+            return null;
+
+        // Step 2: Get per-attribute value counts for this CSO
+        var attributeValueCounts = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+            .Where(av => av.ConnectedSystemObject.Id == id)
+            .GroupBy(av => av.Attribute.Name)
+            .Select(g => new { AttributeName = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var totalCounts = attributeValueCounts.ToDictionary(x => x.AttributeName, x => x.Count);
+
+        // Step 3: Load SVA values (all of them) and MVA values (capped)
+        // Identify which attributes are multi-valued
+        var mvaAttributeIds = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+            .Where(av => av.ConnectedSystemObject.Id == id)
+            .Select(av => new { av.AttributeId, av.Attribute.AttributePlurality })
+            .Distinct()
+            .ToListAsync();
+
+        var multiValuedAttributeIds = mvaAttributeIds
+            .Where(a => a.AttributePlurality == Models.Core.AttributePlurality.MultiValued)
+            .Select(a => a.AttributeId)
+            .ToHashSet();
+
+        // Load all SVA values (including referenced CSO display info for bounded set)
+        var svaValues = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+            .AsSplitQuery()
+            .Where(av => av.ConnectedSystemObject.Id == id && !multiValuedAttributeIds.Contains(av.AttributeId))
+            .Include(av => av.Attribute)
+            .Include(av => av.ReferenceValue)
+            .ThenInclude(rv => rv!.Type)
+            .Include(av => av.ReferenceValue)
+            .ThenInclude(rv => rv!.AttributeValues)
+            .ThenInclude(rav => rav.Attribute)
+            .ToListAsync();
+
+        // Load capped MVA values per attribute (including referenced CSO display info for bounded page)
+        var cappedMvaValues = new List<ConnectedSystemObjectAttributeValue>();
+        foreach (var attrId in multiValuedAttributeIds)
+        {
+            var values = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+                .AsSplitQuery()
+                .Where(av => av.ConnectedSystemObject.Id == id && av.AttributeId == attrId)
+                .OrderBy(av => av.Id)
+                .Take(CappedMvaLimit)
+                .Include(av => av.Attribute)
+                .Include(av => av.ReferenceValue)
+                .ThenInclude(rv => rv!.Type)
+                .Include(av => av.ReferenceValue)
+                .ThenInclude(rv => rv!.AttributeValues)
+                .ThenInclude(rav => rav.Attribute)
+                .ToListAsync();
+
+            cappedMvaValues.AddRange(values);
+        }
+
+        // Combine and attach to entity
+        entity.AttributeValues = svaValues.Concat(cappedMvaValues).ToList();
+
+        return new CsoDetailResult
+        {
+            ConnectedSystemObject = entity,
+            AttributeValueTotalCounts = totalCounts
+        };
+    }
+
+    public async Task<PagedResultSet<ConnectedSystemObjectAttributeValue>> GetAttributeValuesPagedAsync(
+        Guid connectedSystemObjectId,
+        string attributeName,
+        int page,
+        int pageSize,
+        string? searchText = null)
+    {
+        var query = Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+            .Where(av => av.ConnectedSystemObject.Id == connectedSystemObjectId
+                         && av.Attribute.Name == attributeName);
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            var search = searchText.ToLowerInvariant();
+            query = query.Where(av =>
+                (av.StringValue != null && av.StringValue.ToLower().Contains(search))
+                || (av.UnresolvedReferenceValue != null && av.UnresolvedReferenceValue.ToLower().Contains(search))
+                || (av.ReferenceValue != null && av.ReferenceValue.AttributeValues
+                    .Any(rav => rav.StringValue != null && rav.StringValue.ToLower().Contains(search)))
+            );
+        }
+
+        var totalCount = await query.CountAsync();
+
+        var values = await query
+            .AsSplitQuery()
+            .OrderBy(av => av.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Include(av => av.Attribute)
+            .Include(av => av.ReferenceValue)
+            .ThenInclude(rv => rv!.Type)
+            .Include(av => av.ReferenceValue)
+            .ThenInclude(rv => rv!.AttributeValues)
+            .ThenInclude(rav => rav.Attribute)
+            .ToListAsync();
+
+        return new PagedResultSet<ConnectedSystemObjectAttributeValue>
+        {
+            Results = values,
+            TotalResults = totalCount,
+            CurrentPage = page,
+            PageSize = pageSize
+        };
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue)
@@ -1059,11 +1197,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
-            // Include resolved reference values and their attributes for delta import comparison
+            // Include resolved reference values with shallow refs (Type only, no AttributeValues).
+            // Ref external IDs for delta import comparison are loaded via GetReferenceExternalIdsAsync(). See #320.
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(refCso => refCso!.AttributeValues)
-            .ThenInclude(refAv => refAv.Attribute)
+            .ThenInclude(refCso => refCso!.Type)
             // Use case-insensitive comparison for string lookups (DNs, etc.)
             .Where(x =>
                 x.ConnectedSystem.Id == connectedSystemId &&
@@ -1088,11 +1226,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
-            // Include resolved reference values and their attributes for delta import comparison
+            // Include resolved reference values with shallow refs (Type only, no AttributeValues). See #320.
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(refCso => refCso!.AttributeValues)
-            .ThenInclude(refAv => refAv.Attribute)
+            .ThenInclude(refCso => refCso!.Type)
             .Where(cso =>
                 cso.ConnectedSystem.Id == connectedSystemId &&
                 cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.IntValue == attributeValue))
@@ -1116,11 +1253,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
-            // Include resolved reference values and their attributes for delta import comparison
+            // Include resolved reference values with shallow refs (Type only, no AttributeValues). See #320.
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(refCso => refCso!.AttributeValues)
-            .ThenInclude(refAv => refAv.Attribute)
+            .ThenInclude(refCso => refCso!.Type)
             .Where(cso =>
                 cso.ConnectedSystem.Id == connectedSystemId &&
                 cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.LongValue == attributeValue))
@@ -1144,11 +1280,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
-            // Include resolved reference values and their attributes for delta import comparison
+            // Include resolved reference values with shallow refs (Type only, no AttributeValues). See #320.
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(refCso => refCso!.AttributeValues)
-            .ThenInclude(refAv => refAv.Attribute)
+            .ThenInclude(refCso => refCso!.Type)
             .Where(x =>
                 x.ConnectedSystem.Id == connectedSystemId &&
                 x.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.GuidValue == attributeValue))
@@ -1442,6 +1577,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
     {
+        await CreateConnectedSystemObjectsAsync(connectedSystemObjects, onBatchPersisted: null);
+    }
+
+    public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, Func<int, Task>? onBatchPersisted)
+    {
         if (connectedSystemObjects.Count == 0)
             return;
 
@@ -1460,10 +1600,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 }
             }
 
+            // Increase command timeout for large bulk inserts. At 100K+ objects with 20 attributes each,
+            // individual SQL statements can take 30+ seconds under memory pressure or slower I/O.
+            var previousTimeout = Repository.Database.Database.GetCommandTimeout();
+            Repository.Database.Database.SetCommandTimeout(300); // 5 minutes
+
             await using var transaction = await Repository.Database.Database.BeginTransactionAsync();
 
             // Step 1: INSERT parent CSO rows
-            await BulkInsertConnectedSystemObjectsRawAsync(connectedSystemObjects);
+            await BulkInsertConnectedSystemObjectsRawAsync(connectedSystemObjects, onBatchPersisted);
 
             // Step 2: INSERT child attribute value rows
             var allAttributeValues = connectedSystemObjects
@@ -1474,6 +1619,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 await BulkInsertCsoAttributeValuesRawAsync(allAttributeValues);
 
             await transaction.CommitAsync();
+
+            // Restore previous timeout
+            Repository.Database.Database.SetCommandTimeout(previousTimeout);
         }
         catch
         {
@@ -2137,9 +2285,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             await transaction.CommitAsync();
         }
-        catch
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
         {
-            // Fallback for unit tests with mocked DbContext where raw SQL is not available
+            // Fallback for unit tests with mocked DbContext where raw SQL is not available.
+            // Only catch InvalidOperationException (in-memory provider can't begin transactions)
+            // and NullReferenceException (mocked DbContext). All other exceptions (SQL errors,
+            // constraint violations) must propagate — falling back to AddRangeAsync in production
+            // causes graph traversal identity conflicts with already-tracked entities.
+            Log.Warning(ex, "CreatePendingExportsAsync: Raw SQL path failed, falling back to EF AddRangeAsync (test environment)");
             await Repository.Database.PendingExports.AddRangeAsync(pendingExportsList);
             await Repository.Database.SaveChangesAsync();
         }
@@ -3420,10 +3573,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// Bulk inserts ConnectedSystemObject rows using parameterised multi-row INSERT.
     /// Chunks automatically to stay within the PostgreSQL parameter limit.
     /// </summary>
-    private async Task BulkInsertConnectedSystemObjectsRawAsync(List<ConnectedSystemObject> objects)
+    private async Task BulkInsertConnectedSystemObjectsRawAsync(List<ConnectedSystemObject> objects, Func<int, Task>? onBatchPersisted = null)
     {
         const int columnsPerRow = 11;
         var chunkSize = MaxParametersPerStatement / columnsPerRow;
+        var totalPersisted = 0;
 
         foreach (var chunk in ChunkList(objects, chunkSize))
         {
@@ -3452,6 +3606,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+
+            if (onBatchPersisted != null)
+            {
+                totalPersisted += chunk.Count;
+                await onBatchPersisted(totalPersisted);
+            }
         }
     }
 
@@ -3518,16 +3678,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 var pe = chunk[i];
                 parameters.Add(pe.Id);
                 parameters.Add(pe.ConnectedSystemId);
-                parameters.Add((object?)pe.ConnectedSystemObjectId ?? DBNull.Value);
+                parameters.Add(NullableParam(pe.ConnectedSystemObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add((int)pe.ChangeType);
                 parameters.Add((int)pe.Status);
                 parameters.Add(pe.ErrorCount);
                 parameters.Add(pe.MaxRetries);
-                parameters.Add((object?)pe.LastAttemptedAt ?? DBNull.Value);
-                parameters.Add((object?)pe.NextRetryAt ?? DBNull.Value);
-                parameters.Add((object?)pe.LastErrorMessage ?? DBNull.Value);
-                parameters.Add((object?)pe.LastErrorStackTrace ?? DBNull.Value);
-                parameters.Add((object?)pe.SourceMetaverseObjectId ?? DBNull.Value);
+                parameters.Add(NullableParam(pe.LastAttemptedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(NullableParam(pe.NextRetryAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(NullableParam(pe.LastErrorMessage, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(NullableParam(pe.LastErrorStackTrace, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(NullableParam(pe.SourceMetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(pe.HasUnresolvedReferences);
                 parameters.Add(pe.CreatedAt);
             }
@@ -3561,19 +3721,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(avc.Id);
                 parameters.Add(pendingExportId);
                 parameters.Add(avc.AttributeId);
-                parameters.Add((object?)avc.StringValue ?? DBNull.Value);
-                parameters.Add((object?)avc.DateTimeValue ?? DBNull.Value);
-                parameters.Add((object?)avc.IntValue ?? DBNull.Value);
-                parameters.Add((object?)avc.LongValue ?? DBNull.Value);
-                parameters.Add((object?)avc.ByteValue ?? DBNull.Value);
-                parameters.Add((object?)avc.GuidValue ?? DBNull.Value);
-                parameters.Add((object?)avc.BoolValue ?? DBNull.Value);
-                parameters.Add((object?)avc.UnresolvedReferenceValue ?? DBNull.Value);
+                parameters.Add(NullableParam(avc.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(NullableParam(avc.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(NullableParam(avc.IntValue, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(NullableParam(avc.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint));
+                parameters.Add(NullableParam(avc.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea));
+                parameters.Add(NullableParam(avc.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(NullableParam(avc.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean));
+                parameters.Add(NullableParam(avc.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add((int)avc.ChangeType);
                 parameters.Add((int)avc.Status);
                 parameters.Add(avc.ExportAttemptCount);
-                parameters.Add((object?)avc.LastExportedAt ?? DBNull.Value);
-                parameters.Add((object?)avc.LastImportedValue ?? DBNull.Value);
+                parameters.Add(NullableParam(avc.LastExportedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(NullableParam(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -3706,6 +3866,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             chunks.Add(source.GetRange(i, Math.Min(chunkSize, source.Count - i)));
         }
         return chunks;
+    }
+
+    /// <summary>
+    /// Creates a typed NpgsqlParameter for nullable values. Npgsql's ExecuteSqlRawAsync cannot
+    /// infer the PostgreSQL type from DBNull.Value when ALL rows in a chunk have null for a column.
+    /// Using an explicit NpgsqlDbType ensures the parameter is correctly typed even when null.
+    /// </summary>
+    private static Npgsql.NpgsqlParameter NullableParam(object? value, NpgsqlTypes.NpgsqlDbType dbType)
+    {
+        return new Npgsql.NpgsqlParameter { Value = value ?? DBNull.Value, NpgsqlDbType = dbType };
     }
 
     #endregion

@@ -12,6 +12,14 @@ public interface IActivityRepository
 
     public Task UpdateActivityAsync(Activity activity);
 
+    /// <summary>
+    /// Updates only the progress fields (ObjectsProcessed, ObjectsToProcess, Message) on an Activity
+    /// using an independent database connection, bypassing any in-flight transaction on the main DbContext.
+    /// Use this when progress updates need to be immediately visible to other sessions (e.g., the UI)
+    /// whilst a long-running transaction is in progress.
+    /// </summary>
+    public Task UpdateActivityProgressOutOfBandAsync(Activity activity);
+
     public Task DeleteActivityAsync(Activity activity);
 
     public Task<Activity?> GetActivityAsync(Guid id);
@@ -97,6 +105,13 @@ public interface IActivityRepository
     /// SaveChangesAsync calls. Call this after raw SQL bulk insert has persisted them.
     /// </summary>
     public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis);
+
+    /// <summary>
+    /// Queries the database for RPEI error counts for an activity, returning the total number of
+    /// RPEIs with errors and the total number of RPEIs. Used by the worker to determine activity
+    /// completion status (success/warning/failure) without loading RPEIs into memory.
+    /// </summary>
+    public Task<(int TotalWithErrors, int TotalRpeis)> GetActivityRpeiErrorCountsAsync(Guid activityId);
 
     /// <summary>
     /// Persists ConnectedSystemObjectChange records that are attached to RPEIs.

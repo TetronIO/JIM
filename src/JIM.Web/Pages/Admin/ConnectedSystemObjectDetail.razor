@@ -7,6 +7,7 @@
 @using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Enums
+@using JIM.Models.Utility
 @using JIM.Utilities
 @inject JimApplication Jim
 @inject NavigationManager NavManager
@@ -180,7 +181,7 @@
                                         {
                                             <CsoAttributeValue Value="@group.Values[0]" />
                                         }
-                                        else if (group.Values.Count <= MvaInlineThreshold)
+                                        else if (group.TotalCount <= MvaInlineThreshold)
                                         {
                                             <div class="jim-attr-expanded">
                                                 @foreach (var val in group.Values)
@@ -201,8 +202,8 @@
                                                     </div>
                                                 }
                                                 <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"
-                                                    OnClick="@(() => OpenMvaDialogAsync(group.AttributeName, group.Values))">
-                                                    +@(group.Values.Count - MvaInlineThreshold) more
+                                                    OnClick="@(() => OpenMvaDialogAsync(group.AttributeName, group.TotalCount, group.IsReference))">
+                                                    +@(group.TotalCount - MvaInlineThreshold) more
                                                 </MudButton>
                                             </div>
                                         }
@@ -273,6 +274,8 @@
 
     private ConnectedSystemObject? ConnectedSystemObject { get; set; }
 
+    private Dictionary<string, int> AttributeValueTotalCounts { get; set; } = new();
+
     private ConnectedSystemObjectAttributeValue? ExternalIdAttributeValue { get; set; }
 
     private ConnectedSystemObjectAttributeValue? SecondaryExternalIdAttributeValue { get; set; }
@@ -300,13 +303,17 @@
             return;
         }
 
-        ConnectedSystemObject = await Jim.ConnectedSystems.GetConnectedSystemObjectAsync(CsId, connectedSystemObjectId);
-        if (ConnectedSystemObject == null)
+        var detailResult = await Jim.ConnectedSystems.GetConnectedSystemObjectDetailAsync(
+            CsId, connectedSystemObjectId, CsoAttributeLoadStrategy.CappedMva);
+        if (detailResult == null)
         {
             // ConnectedSystemObject not found, redirect to Connected System Objects index page
             NavManager.NavigateTo(Utilities.GetConnectedSystemObjectsHref(CsId));
             return;
         }
+
+        ConnectedSystemObject = detailResult.ConnectedSystemObject;
+        AttributeValueTotalCounts = detailResult.AttributeValueTotalCounts;
 
         Breadcrumbs = new List<BreadcrumbItem>
         {
@@ -332,7 +339,9 @@
     private record AttributeGroup(
     string AttributeName,
     List<ConnectedSystemObjectAttributeValue> Values,
-    bool IsMultiValued);
+    bool IsMultiValued,
+    int TotalCount,
+    bool IsReference);
 
     private List<AttributeGroup> GetGroupedAttributes()
     {
@@ -342,10 +351,18 @@
         return ConnectedSystemObject.AttributeValues
         .GroupBy(v => v.Attribute.Name)
         .OrderBy(g => g.Key)
-        .Select(g => new AttributeGroup(
-        g.Key,
-        g.ToList(),
-        g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued))
+        .Select(g =>
+        {
+            var values = g.ToList();
+            var totalCount = AttributeValueTotalCounts.GetValueOrDefault(g.Key, values.Count);
+            var isReference = values.Any(v => v.ReferenceValue != null || v.UnresolvedReferenceValue != null);
+            return new AttributeGroup(
+                g.Key,
+                values,
+                g.First().Attribute.AttributePlurality == AttributePlurality.MultiValued,
+                totalCount,
+                isReference);
+        })
         .ToList();
     }
 
@@ -363,12 +380,16 @@
         return attributeId == ConnectedSystemObject.SecondaryExternalIdAttributeId;
     }
 
-    private async Task OpenMvaDialogAsync(string attributeName, List<ConnectedSystemObjectAttributeValue> values)
+    private async Task OpenMvaDialogAsync(string attributeName, int totalCount, bool isReference)
     {
+        if (ConnectedSystemObject == null) return;
+
         var parameters = new DialogParameters<CsoMvaDialog>
         {
             { x => x.AttributeName, attributeName },
-            { x => x.Values, values }
+            { x => x.ConnectedSystemObjectId, ConnectedSystemObject.Id },
+            { x => x.TotalCount, totalCount },
+            { x => x.IsReferenceAttribute, isReference }
         };
 
         var options = new DialogOptions

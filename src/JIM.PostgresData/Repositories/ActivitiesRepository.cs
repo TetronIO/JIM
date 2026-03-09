@@ -2,6 +2,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Staging;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -30,6 +31,57 @@ public class ActivityRepository : IActivityRepository
         // causing identity conflicts with shared MetaverseAttribute/MetaverseObjectType instances.
         Repository.UpdateDetachedSafe(activity);
         await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task UpdateActivityProgressOutOfBandAsync(Activity activity)
+    {
+        // Open an independent connection to bypass any in-flight transaction on the main DbContext.
+        // This ensures progress updates are immediately visible to other sessions (e.g., UI polling).
+        string? connectionString;
+        try
+        {
+            connectionString = Repository.Database.Database.GetConnectionString();
+        }
+        catch
+        {
+            // In-memory test databases don't support relational extensions — GetConnectionString()
+            // throws NullReferenceException via GetFacadeDependencies.
+            connectionString = null;
+        }
+
+        if (string.IsNullOrEmpty(connectionString))
+        {
+            // Fallback for in-memory test databases that have no connection string
+            await UpdateActivityAsync(activity);
+            return;
+        }
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"UPDATE ""Activities"" SET ""ObjectsProcessed"" = @processed, ""ObjectsToProcess"" = @toProcess, ""Message"" = @message WHERE ""Id"" = @id";
+        command.Parameters.AddWithValue("processed", activity.ObjectsProcessed);
+        command.Parameters.AddWithValue("toProcess", activity.ObjectsToProcess);
+        command.Parameters.AddWithValue("message", (object?)activity.Message ?? DBNull.Value);
+        command.Parameters.AddWithValue("id", activity.Id);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task<(int TotalWithErrors, int TotalRpeis)> GetActivityRpeiErrorCountsAsync(Guid activityId)
+    {
+        var counts = await Repository.Database.ActivityRunProfileExecutionItems
+            .Where(r => r.Activity.Id == activityId)
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                TotalRpeis = g.Count(),
+                TotalWithErrors = g.Count(r => r.ErrorType != null && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+            })
+            .FirstOrDefaultAsync();
+
+        return counts != null
+            ? (counts.TotalWithErrors, counts.TotalRpeis)
+            : (0, 0);
     }
 
     public async Task DeleteActivityAsync(Activity activity)
@@ -967,14 +1019,85 @@ public class ActivityRepository : IActivityRepository
         if (changes.Count == 0)
             return;
 
-        // Null out RPEI navigation properties to prevent EF graph traversal from
-        // re-discovering already-persisted RPEIs (which would cause duplicate key violations).
-        // The FK (ActivityRunProfileExecutionItemId) is already set.
+        // Null out navigation properties to prevent EF graph traversal from discovering
+        // already-persisted entities. Without this, AddRange traverses
+        // ConnectedSystemObject → AttributeValues and adds them to the change tracker,
+        // causing massive memory usage at scale (100K CSOs × 20 attrs = 2M+ tracked entities).
+        // Both FKs (ActivityRunProfileExecutionItemId, ConnectedSystemObjectId) are explicit
+        // properties on the model, so nulling the navigations is safe.
         foreach (var change in changes)
+        {
             change.ActivityRunProfileExecutionItem = null;
+            change.ConnectedSystemObject = null;
+        }
 
-        Repository.Database.AddRange(changes);
-        await Repository.Database.SaveChangesAsync();
+        // Increase command timeout for large batches. With 2000+ changes × ~20 attribute changes,
+        // EF generates ~80K+ INSERT operations which can exceed the default 30s timeout.
+        int? previousTimeout = null;
+        try
+        {
+            previousTimeout = Repository.Database.Database.GetCommandTimeout();
+            Repository.Database.Database.SetCommandTimeout(300); // 5 minutes
+        }
+        catch { /* In-memory test DB — ignore */ }
+
+        // Process in sub-batches to limit EF change tracker pressure. Each change has
+        // ~20 AttributeChanges × ValueChanges = ~40 child entities, so 500 changes = ~20K entities.
+        const int subBatchSize = 500;
+        for (var i = 0; i < changes.Count; i += subBatchSize)
+        {
+            var batch = changes.GetRange(i, Math.Min(subBatchSize, changes.Count - i));
+
+            // In in-memory test DB, EF auto-tracks entities discovered via navigation properties.
+            // The change objects may already be tracked (Added state) from when the RPEI was saved.
+            // Only add entities that aren't already tracked to avoid duplicate key errors.
+            var untrackedChanges = new List<ConnectedSystemObjectChange>();
+            foreach (var change in batch)
+            {
+                try
+                {
+                    var entry = Repository.Database.Entry(change);
+                    if (entry.State == EntityState.Detached)
+                        untrackedChanges.Add(change);
+                }
+                catch
+                {
+                    // Entry() can fail on mock DbContexts — treat as untracked
+                    untrackedChanges.Add(change);
+                }
+            }
+
+            if (untrackedChanges.Count > 0)
+            {
+                Repository.Database.AddRange(untrackedChanges);
+                await Repository.Database.SaveChangesAsync();
+            }
+            else
+            {
+                // All entities already tracked (in-memory test DB) — just save
+                await Repository.Database.SaveChangesAsync();
+            }
+
+            // Detach persisted change objects and their children to free tracker memory.
+            foreach (var change in batch)
+            {
+                foreach (var attrChange in change.AttributeChanges)
+                {
+                    foreach (var valueChange in attrChange.ValueChanges)
+                    {
+                        try { Repository.Database.Entry(valueChange).State = EntityState.Detached; } catch { }
+                    }
+                    try { Repository.Database.Entry(attrChange).State = EntityState.Detached; } catch { }
+                }
+                try { Repository.Database.Entry(change).State = EntityState.Detached; } catch { }
+            }
+        }
+
+        try
+        {
+            Repository.Database.Database.SetCommandTimeout(previousTimeout);
+        }
+        catch { /* In-memory test DB — ignore */ }
     }
 
     /// <summary>

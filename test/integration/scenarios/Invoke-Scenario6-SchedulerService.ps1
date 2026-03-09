@@ -73,7 +73,10 @@ param(
     [int]$ExportConcurrency,
 
     [Parameter(Mandatory=$false)]
-    [int]$MaxExportParallelism
+    [int]$MaxExportParallelism,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$SkipPopulate
 )
 
 Set-StrictMode -Version Latest
