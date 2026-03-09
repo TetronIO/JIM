@@ -16,6 +16,21 @@ This guide covers deploying JIM to a production environment. It consolidates pre
 
 Storage scales with the number of identity objects and the frequency of synchronisation runs (change history, logs, etc.).
 
+#### Memory Scaling by Identity Object Count
+
+The worker service loads all objects from a connector page into memory during import processing (CSOs, attribute values, RPEIs, duplicate detection structures). Memory requirements scale linearly with the number of objects in the largest connected system:
+
+| Connected System Size | Minimum RAM (Stack) | Recommended RAM (Stack) |
+|----------------------|--------------------|-----------------------|
+| Up to 10,000 objects | 4 GB | 8 GB |
+| 10,000 - 50,000 objects | 8 GB | 12 GB |
+| 50,000 - 100,000 objects | 12 GB | 16 GB |
+| 100,000+ objects | 16 GB | 24 GB |
+
+These figures cover the entire Docker stack (web, worker, scheduler, database). The worker is the primary memory consumer during sync operations — a full import of 100K objects with 20 attributes each requires approximately 1.5 GB of worker memory at peak. The database also requires additional memory during bulk insert operations.
+
+**Note:** These requirements apply to the largest single import run. If you have multiple connected systems of 50K objects each but import them sequentially (not concurrently), size for 50K, not the sum.
+
 ### Software Requirements
 
 - **Docker Engine** 20.10+ with Compose v2

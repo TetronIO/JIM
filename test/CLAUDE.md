@@ -145,3 +145,4 @@ cd /workspaces/JIM
 - **Small**: 100 users, 20 groups (~2 min) - Small business scenarios
 - **Medium**: 1,000 users, 100 groups (~2 min) - Medium enterprise
 - **Large**: 10,000 users, 500 groups (~15 min) - Large enterprise
+- **XLarge**: 100,000 users, 2,000 groups - Requires 16+ GB RAM for Docker (will OOM in a standard 16GB Codespace due to IDE overhead)

@@ -95,8 +95,10 @@ Choose a template based on your testing goals:
 - **Medium**: 1,000 users, 100 groups - **< 2 min** - Medium enterprise, CI/CD pipelines
 - **MediumLarge**: 5,000 users, 250 groups - **< 5 min** - Large medium enterprise, performance validation
 - **Large**: 10,000 users, 500 groups - **< 15 min** - Large enterprise, performance baselines
-- **XLarge**: 100,000 users, 2,000 groups - **< 2 hours** - Very large enterprise, stress testing
-- **XXLarge**: 1,000,000 users, 10,000 groups - **TBD** - Global enterprise, scale limits
+- **XLarge**: 100,000 users, 2,000 groups - **< 2 hours** - Very large enterprise, stress testing (**requires 16+ GB RAM** allocated to Docker — see note below)
+- **XXLarge**: 1,000,000 users, 10,000 groups - **TBD** - Global enterprise, scale limits (**requires 24+ GB RAM**)
+
+> **Memory requirements for large templates:** The XLarge and XXLarge templates require significantly more memory than smaller templates. The worker loads all imported objects into memory during processing — a 100K object import requires approximately 1.5 GB of worker memory at peak, plus database memory for bulk inserts. In a GitHub Codespace (16 GB total), the XLarge template may fail with OOM kills because the IDE and dev tools consume ~9-10 GB, leaving insufficient memory for the Docker stack. Run XLarge/XXLarge tests on a machine with at least 24 GB total RAM, or in a dedicated environment without IDE overhead. See the [Deployment Guide — Memory Scaling](../DEPLOYMENT_GUIDE.md#memory-scaling-by-identity-object-count) for detailed requirements.
 
 See [Data Scale Templates](#data-scale-templates) for detailed template specifications.
 
