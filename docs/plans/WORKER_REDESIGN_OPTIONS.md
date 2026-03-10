@@ -124,64 +124,115 @@ Keep the current architecture but surgically extract the sync processing logic i
 
 ```
 +-------------------------------------------------------+
-|                JIM.Worker (Host)                      |
+|          JIM.Worker (Host + Orchestration)            |
+|                                                       |
 |  BackgroundService + .NET Generic Host DI             |
 |  IHostedService with IServiceScopeFactory             |
+|                                                       |
+|  Sync Orchestrator (new)                              |
+|    Coordinates phases: Import -> Sync -> Export       |
+|    Manages parallelism per phase                      |
+|    Injected via DI, owns cancellation/progress        |
+|                                                       |
+|  Task Processors (existing, refactored)               |
+|    SyncImportTaskProcessor                            |
+|    SyncFullSyncTaskProcessor / SyncDeltaSyncTask...   |
+|    SyncExportTaskProcessor                            |
+|    Consume ISyncEngine + ISyncDataAccess via DI       |
 +-------------------------------------------------------+
                           |
                           v
 +-------------------------------------------------------+
-|            Sync Orchestrator (new)                    |
-|  Coordinates phases: Import -> Sync -> Export         |
-|  Manages parallelism per phase                        |
-|  Injected via DI, owns cancellation/progress          |
-+-------------------------------------------------------+
-                          |
-                          v
-+-------------------------------------------------------+
-|         Sync Domain Engine (new - pure logic)         |
-|  ISyncEngine interface                                |
-|  ProcessCso() -> SyncDecision (join/project/flow)     |
-|  EvaluateExport() -> ExportDecision                   |
-|  NO database calls - operates on in-memory models     |
-|  100% unit testable with plain C# objects             |
+|          JIM.Application (Business Logic)             |
+|                                                       |
+|  ISyncEngine interface (new - defined here)           |
+|    ProcessCso() -> SyncDecision                       |
+|    EvaluateExport() -> ExportDecision                 |
+|    Pure domain logic - NO I/O dependencies            |
+|    100% unit testable with plain C# objects           |
+|                                                       |
+|  SyncEngine implementation (new - lives here)         |
+|    Extracted from SyncTaskProcessorBase +             |
+|    SyncRuleMappingProcessor (~3,330 LOC)              |
+|                                                       |
+|  JimApplication facade (existing, unchanged)          |
+|    Used by JIM.Web for admin/config operations        |
 +-------------------------------------------------------+
                           |  produces decisions
                           v
 +-------------------------------------------------------+
-|       ISyncDataAccess (new - explicit boundary)       |
-|  GetCsoBatch() -> CsoBatchDto                         |
-|  PersistSyncResults(decisions) -> void                |
-|  BulkCreateCsos() / BulkUpdateCsos()                  |
-|  Two implementations:                                 |
-|    - PostgresSyncDataAccess (Npgsql bulk + raw SQL)   |
-|    - InMemorySyncDataAccess (for unit/workflow tests) |
+|         JIM.Data (Repository Interfaces)              |
+|                                                       |
+|  ISyncDataAccess interface (new - defined here)       |
+|    GetCsoBatch() -> CsoBatchDto                       |
+|    PersistSyncResults(decisions) -> void              |
+|    BulkCreateCsos() / BulkUpdateCsos()                |
+|                                                       |
+|  Existing repository interfaces (unchanged)           |
+|    IConnectedSystemRepository, IMetaverseRepository   |
 +-------------------------------------------------------+
                           |
                           v
 +-------------------------------------------------------+
-|  PostgreSQL (hot paths: Npgsql COPY/raw SQL)          |
-|  EF Core retained for admin/config operations         |
+|      JIM.PostgresData (EF Core Implementations)       |
+|                                                       |
+|  PostgresSyncDataAccess (new - implements             |
+|    ISyncDataAccess using Npgsql bulk + raw SQL)       |
+|                                                       |
+|  Existing repositories (unchanged)                    |
+|    EF Core retained for admin/config operations       |
++-------------------------------------------------------+
+                          |
+                          v
++-------------------------------------------------------+
+|                    PostgreSQL                         |
+|  Hot paths: Npgsql COPY / raw SQL                     |
+|  Admin/config: EF Core                                |
++-------------------------------------------------------+
+
++-------------------------------------------------------+
+|     JIM.InMemoryData (Test Implementation)            |
+|                                                       |
+|  InMemorySyncDataAccess (new - implements             |
+|    ISyncDataAccess for unit/workflow tests)            |
+|  Purpose-built, no EF Core quirks                     |
+|  References only JIM.Data + JIM.Models                |
+|  No database dependencies whatsoever                  |
 +-------------------------------------------------------+
 ```
 
+**Tier placement summary:**
+
+| Component | Tier | Rationale |
+|-----------|------|-----------|
+| Sync Orchestrator | JIM.Worker | Orchestration is a worker concern — coordinates phases, manages parallelism |
+| Task Processors | JIM.Worker | Existing processors remain here, refactored to consume injected interfaces |
+| ISyncEngine (interface) | JIM.Application | Domain logic interface belongs in the business logic layer |
+| SyncEngine (implementation) | JIM.Application | Pure domain logic — join/project/flow decisions are business rules |
+| ISyncDataAccess (interface) | JIM.Data | Data access interface, follows the same pattern as existing repository interfaces |
+| PostgresSyncDataAccess | JIM.PostgresData | Production implementation using raw SQL/Npgsql — same tier as all other repository implementations |
+| InMemorySyncDataAccess | JIM.InMemoryData (new project) | Test implementation — references only JIM.Data + JIM.Models, no database dependencies. Follows the same pattern as JIM.PostgresData: a standalone project that implements JIM.Data interfaces |
+
 ### Key Changes
 
-1. **Extract `ISyncEngine`** - Pure domain logic, no I/O dependencies — **NOT STARTED**
+1. **Extract `ISyncEngine`** (JIM.Application) - Pure domain logic, no I/O dependencies — **NOT STARTED**
+   - Interface defined in JIM.Application; implementation lives alongside existing Servers
    - Takes in-memory objects (CSO batch, sync rules, MVO candidates)
    - Returns decisions/commands (JoinDecision, ProjectDecision, FlowDecision, ExportDecision)
    - Fully unit testable with plain objects - no mocking needed
    - The ~3,330 lines of SyncTaskProcessorBase + SyncRuleMappingProcessor become the engine
 
-2. **Extract `ISyncDataAccess`** - Explicit data boundary for sync hot paths — **PARTIALLY DONE (#338)**
-   - `InMemorySyncDataAccess` for tests - purpose-built, not EF's leaky in-memory provider — **not done** (tests use EF fallback via try/catch). This is the **single highest-value change for test reliability**: it eliminates the three-way code path divergence (raw SQL / in-memory EF provider / mocked DbContext) that currently requires two-tier try/catch fallback logic across 7 repository methods (see Pain Point 5)
-   - `PostgresSyncDataAccess` for production - uses raw SQL, no change tracking — **done** for CSO creates/updates, pending export CRUD, and RPEI persistence; MVO operations still use EF
+2. **Extract `ISyncDataAccess`** (JIM.Data / JIM.PostgresData) - Explicit data boundary for sync hot paths — **PARTIALLY DONE (#338)**
+   - Interface defined in JIM.Data alongside existing repository interfaces (e.g., `IConnectedSystemRepository`)
+   - `PostgresSyncDataAccess` in JIM.PostgresData for production - uses raw SQL, no change tracking — **done** for CSO creates/updates, pending export CRUD, and RPEI persistence; MVO operations still use EF
+   - `InMemorySyncDataAccess` in a new JIM.InMemoryData project for tests - purpose-built, not EF's leaky in-memory provider, references only JIM.Data + JIM.Models with no database dependencies — **not done** (tests use EF fallback via try/catch). This is the **single highest-value change for test reliability**: it eliminates the three-way code path divergence (raw SQL / in-memory EF provider / mocked DbContext) that currently requires two-tier try/catch fallback logic across 7 repository methods (see Pain Point 5)
    - Batch-oriented API: `GetCsoBatch()`, `PersistSyncResults()`, `BulkUpsertCsos()` — **not formalised as an interface** (raw SQL is embedded in existing repository methods with EF fallback)
    - CSO lookup cache via `IMemoryCache` eliminates N+1 import queries — **done**
    - Lightweight ID-only MVO matching with `Take(2)` — **done**
 
-3. **Introduce DI throughout the worker** — **NOT STARTED**
+3. **Introduce DI throughout the worker** (JIM.Worker) — **NOT STARTED**
    - Replace `new JimApplication(new PostgresDataRepository(new JimDbContext()))` with `IServiceScopeFactory`
+   - Task processors receive `ISyncEngine` and `ISyncDataAccess` via constructor injection
    - Each task gets a DI scope with properly scoped `DbContext`
    - Enables clean testing via service substitution
 
