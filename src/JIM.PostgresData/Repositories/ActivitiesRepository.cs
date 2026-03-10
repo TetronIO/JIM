@@ -980,9 +980,27 @@ public class ActivityRepository : IActivityRepository
                 FlattenSyncOutcomes(rpei);
 
             if (untracked.Count > 0)
-                Repository.Database.AddRange(untracked);
+            {
+                try
+                {
+                    // Use per-entity Entry().State to avoid graph traversal that causes
+                    // identity conflicts with already-tracked shared entities
+                    // (e.g. ConnectedSystemObjectTypeAttribute) after ClearChangeTracker.
+                    foreach (var rpei in untracked)
+                    {
+                        var entry = Repository.Database.Entry(rpei);
+                        if (entry.State == EntityState.Detached)
+                            entry.State = EntityState.Added;
+                    }
+                }
+                catch (NullReferenceException)
+                {
+                    // Mocked DbContext: Entry() not available — fall back to AddRange
+                    Repository.Database.AddRange(untracked);
+                }
+            }
 
-            return false; // EF fallback used — RPEIs tracked by EF via AddRange
+            return false; // EF fallback used — RPEIs tracked by EF
         }
         finally
         {

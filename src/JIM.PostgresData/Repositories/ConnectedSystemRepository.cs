@@ -2438,27 +2438,36 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // After ClearChangeTracker, a subsequent query may re-load and auto-track a NEW
             // PendingExport instance for the same ID. We must find and update that tracked
             // instance rather than trying to attach our original (now-stale) copy.
-            foreach (var export in exportList)
+            try
             {
-                var tracked = Repository.Database.ChangeTracker.Entries<PendingExport>()
-                    .FirstOrDefault(e => e.Entity.Id == export.Id);
+                foreach (var export in exportList)
+                {
+                    var tracked = Repository.Database.ChangeTracker.Entries<PendingExport>()
+                        .FirstOrDefault(e => e.Entity.Id == export.Id);
 
-                if (tracked != null)
-                {
-                    // Update the already-tracked instance to match our in-memory entity
-                    tracked.Entity.Status = export.Status;
-                    tracked.Entity.HasUnresolvedReferences = export.HasUnresolvedReferences;
-                    tracked.Entity.LastAttemptedAt = export.LastAttemptedAt;
-                    tracked.Entity.ErrorCount = export.ErrorCount;
-                    tracked.State = EntityState.Modified;
+                    if (tracked != null)
+                    {
+                        // Update the already-tracked instance to match our in-memory entity
+                        tracked.Entity.Status = export.Status;
+                        tracked.Entity.HasUnresolvedReferences = export.HasUnresolvedReferences;
+                        tracked.Entity.LastAttemptedAt = export.LastAttemptedAt;
+                        tracked.Entity.ErrorCount = export.ErrorCount;
+                        tracked.State = EntityState.Modified;
+                    }
+                    else
+                    {
+                        // Not tracked — safe to attach
+                        var entry = Repository.Database.Entry(export);
+                        if (entry.State == EntityState.Detached)
+                            entry.State = EntityState.Modified;
+                    }
                 }
-                else
-                {
-                    // Not tracked — safe to attach
-                    var entry = Repository.Database.Entry(export);
-                    if (entry.State == EntityState.Detached)
-                        entry.State = EntityState.Modified;
-                }
+            }
+            catch (NullReferenceException)
+            {
+                // Mocked DbContext: ChangeTracker/Entry() are null — fall back to Update()
+                foreach (var export in exportList)
+                    Repository.Database.PendingExports.Update(export);
             }
             await Repository.Database.SaveChangesAsync();
         }
@@ -2487,25 +2496,34 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // After ClearChangeTracker, a subsequent query (e.g. CSO lookup) may re-load and
             // auto-track a NEW PendingExport instance for the same ID. We must find and update
             // that tracked instance rather than trying to attach our original (now-stale) copy.
-            foreach (var pe in pendingExports)
+            try
             {
-                var tracked = Repository.Database.ChangeTracker.Entries<PendingExport>()
-                    .FirstOrDefault(e => e.Entity.Id == pe.Id);
+                foreach (var pe in pendingExports)
+                {
+                    var tracked = Repository.Database.ChangeTracker.Entries<PendingExport>()
+                        .FirstOrDefault(e => e.Entity.Id == pe.Id);
 
-                if (tracked != null)
-                {
-                    // Update the already-tracked instance directly
-                    tracked.Entity.Status = PendingExportStatus.Executing;
-                    tracked.Entity.LastAttemptedAt = DateTime.UtcNow;
-                    tracked.State = EntityState.Modified;
+                    if (tracked != null)
+                    {
+                        // Update the already-tracked instance directly
+                        tracked.Entity.Status = PendingExportStatus.Executing;
+                        tracked.Entity.LastAttemptedAt = DateTime.UtcNow;
+                        tracked.State = EntityState.Modified;
+                    }
+                    else
+                    {
+                        // Not tracked — safe to attach
+                        var entry = Repository.Database.Entry(pe);
+                        if (entry.State == EntityState.Detached)
+                            entry.State = EntityState.Modified;
+                    }
                 }
-                else
-                {
-                    // Not tracked — safe to attach
-                    var entry = Repository.Database.Entry(pe);
-                    if (entry.State == EntityState.Detached)
-                        entry.State = EntityState.Modified;
-                }
+            }
+            catch (NullReferenceException)
+            {
+                // Mocked DbContext: ChangeTracker/Entry() are null — fall back to Update()
+                foreach (var pe in pendingExports)
+                    Repository.Database.PendingExports.Update(pe);
             }
             await Repository.Database.SaveChangesAsync();
         }

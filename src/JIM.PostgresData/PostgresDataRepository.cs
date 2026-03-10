@@ -150,7 +150,34 @@ public class PostgresDataRepository : IRepository
         try
         {
             var entry = Database.Entry(entity);
-            entry.State = EntityState.Modified;
+            if (entry.State == EntityState.Detached)
+                entry.State = EntityState.Modified;
+            // If already tracked (e.g. Added, Modified, Unchanged), leave as-is —
+            // it's the same instance and EF will persist changes on SaveChanges.
+        }
+        catch (InvalidOperationException)
+        {
+            // Identity conflict: another instance with the same key is already tracked
+            // (e.g. after ClearChangeTracker, a query re-loaded the entity).
+            // Find the tracked instance and copy current values into it.
+            // We cannot call Database.Entry(entity) here as it would throw the same exception,
+            // so we extract key values via the EF model metadata and CLR property accessors.
+            var entityType = Database.Model.FindEntityType(typeof(T));
+            var keyProperties = entityType?.FindPrimaryKey()?.Properties;
+
+            if (keyProperties != null)
+            {
+                var trackedEntry = Database.ChangeTracker.Entries<T>()
+                    .FirstOrDefault(e => keyProperties.All(p =>
+                        Equals(e.Property(p.Name).CurrentValue,
+                               p.PropertyInfo?.GetValue(entity) ?? p.FieldInfo?.GetValue(entity))));
+
+                if (trackedEntry != null)
+                {
+                    trackedEntry.CurrentValues.SetValues(entity);
+                    trackedEntry.State = EntityState.Modified;
+                }
+            }
         }
         catch (NullReferenceException)
         {
