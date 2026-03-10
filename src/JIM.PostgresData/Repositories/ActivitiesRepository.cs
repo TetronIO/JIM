@@ -1077,15 +1077,30 @@ public class ActivityRepository : IActivityRepository
             // Fallback for unit tests with mocked/in-memory DbContext where raw SQL is not available.
             Serilog.Log.Warning(ex, "PersistRpeiCsoChangesAsync: Raw SQL bulk insert failed, falling back to EF. This will be slow for large batches. Count={Count}", changes.Count);
 
-            // Null out navigation properties to prevent EF graph traversal from discovering
-            // already-persisted entities (CSOs, attribute values, etc.).
-            foreach (var change in changes)
+            // Use Entry().State = Added instead of AddRange() to avoid graph traversal
+            // from discovering already-persisted entities (CSOs, attribute values, etc.).
+            try
             {
-                change.ActivityRunProfileExecutionItem = null;
-                change.ConnectedSystemObject = null;
+                foreach (var change in changes)
+                {
+                    change.ActivityRunProfileExecutionItem = null;
+                    change.ConnectedSystemObject = null;
+                    var entry = Repository.Database.Entry(change);
+                    if (entry.State == EntityState.Detached)
+                        entry.State = EntityState.Added;
+                }
+            }
+            catch (NullReferenceException)
+            {
+                // Mocked DbContext: Entry() unavailable, use AddRange.
+                foreach (var change in changes)
+                {
+                    change.ActivityRunProfileExecutionItem = null;
+                    change.ConnectedSystemObject = null;
+                }
+                Repository.Database.AddRange(changes);
             }
 
-            Repository.Database.AddRange(changes);
             await Repository.Database.SaveChangesAsync();
         }
     }

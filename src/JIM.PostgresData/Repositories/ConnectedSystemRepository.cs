@@ -1629,7 +1629,39 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // Log in production so we know the raw SQL path failed — EF fallback is orders of
             // magnitude slower and will cause the import to appear stuck.
             Serilog.Log.Warning(ex, "CreateConnectedSystemObjectsAsync: Raw SQL bulk insert failed, falling back to EF. This will be slow for large batches. Count={Count}", connectedSystemObjects.Count);
-            Repository.Database.ConnectedSystemObjects.AddRange(connectedSystemObjects);
+            try
+            {
+                // Use Entry().State instead of AddRange() to avoid graph traversal identity
+                // conflicts with already-tracked entities (in-memory provider / workflow tests).
+                foreach (var cso in connectedSystemObjects)
+                {
+                    var tracked = Repository.Database.ChangeTracker.Entries<ConnectedSystemObject>()
+                        .FirstOrDefault(e => e.Entity.Id == cso.Id);
+                    if (tracked == null)
+                    {
+                        var entry = Repository.Database.Entry(cso);
+                        if (entry.State == EntityState.Detached)
+                            entry.State = EntityState.Added;
+                    }
+
+                    foreach (var av in cso.AttributeValues)
+                    {
+                        var trackedAv = Repository.Database.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>()
+                            .FirstOrDefault(e => e.Entity.Id == av.Id);
+                        if (trackedAv == null)
+                        {
+                            var avEntry = Repository.Database.Entry(av);
+                            if (avEntry.State == EntityState.Detached)
+                                avEntry.State = EntityState.Added;
+                        }
+                    }
+                }
+            }
+            catch (NullReferenceException)
+            {
+                // Mocked DbContext: ChangeTracker/Entry() unavailable, use AddRange.
+                Repository.Database.ConnectedSystemObjects.AddRange(connectedSystemObjects);
+            }
             await Repository.Database.SaveChangesAsync();
         }
     }
@@ -1672,9 +1704,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }
         catch (Exception ex)
         {
-            // Fallback for unit tests with mocked DbContext where raw SQL is not available
+            // Fallback for unit tests with mocked DbContext where raw SQL is not available.
+            // Use per-entity Entry().State instead of UpdateRange() to avoid graph traversal
+            // that causes identity conflicts after ClearChangeTracker().
             Serilog.Log.Warning(ex, "UpdateConnectedSystemObjectsAsync: Raw SQL bulk update failed, falling back to EF. Count={Count}", connectedSystemObjects.Count);
-            Repository.Database.ConnectedSystemObjects.UpdateRange(connectedSystemObjects);
+            foreach (var cso in connectedSystemObjects)
+                Repository.UpdateDetachedSafe(cso);  // Already has NullReferenceException fallback
             await Repository.Database.SaveChangesAsync();
         }
     }
@@ -1692,7 +1727,20 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         catch
         {
             // Fallback for unit tests with mocked DbContext where raw SQL is not available.
-            Repository.Database.ConnectedSystemObjects.UpdateRange(connectedSystemObjects);
+            // Try Entry().State first to avoid graph traversal identity conflicts (in-memory provider).
+            // Fall back to UpdateRange for mocked DbContext where Entry() throws NullReferenceException.
+            try
+            {
+                foreach (var cso in connectedSystemObjects)
+                {
+                    var entry = Repository.Database.Entry(cso);
+                    entry.State = EntityState.Modified;
+                }
+            }
+            catch (NullReferenceException)
+            {
+                Repository.Database.ConnectedSystemObjects.UpdateRange(connectedSystemObjects);
+            }
             await Repository.Database.SaveChangesAsync();
         }
     }
@@ -1704,18 +1752,31 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     public async Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, List<ConnectedSystemObjectAttributeValue> newAttributeValues)
     {
-        // Explicitly mark new attribute values as Added so they are persisted
-        foreach (var attrValue in newAttributeValues)
+        // Explicitly mark new attribute values as Added so they are persisted.
+        // Use Entry().State instead of DbSet.Add() to avoid graph traversal that causes
+        // identity conflicts after ClearChangeTracker().
+        try
         {
-            Log.Verbose("UpdateConnectedSystemObjectWithNewAttributeValuesAsync: Adding new attribute value for CSO {CsoId}, AttributeId={AttrId}, GuidValue={GuidValue}, StringValue='{StringValue}'",
-                connectedSystemObject.Id, attrValue.AttributeId, attrValue.GuidValue, attrValue.StringValue);
-            Repository.Database.ConnectedSystemObjectAttributeValues.Add(attrValue);
+            foreach (var attrValue in newAttributeValues)
+            {
+                Log.Verbose("UpdateConnectedSystemObjectWithNewAttributeValuesAsync: Adding new attribute value for CSO {CsoId}, AttributeId={AttrId}, GuidValue={GuidValue}, StringValue='{StringValue}'",
+                    connectedSystemObject.Id, attrValue.AttributeId, attrValue.GuidValue, attrValue.StringValue);
+                var avEntry = Repository.Database.Entry(attrValue);
+                if (avEntry.State == EntityState.Detached)
+                    avEntry.State = EntityState.Added;
+            }
+        }
+        catch (NullReferenceException)
+        {
+            // Mocked DbContext: Entry() unavailable, use Add().
+            foreach (var attrValue in newAttributeValues)
+                Repository.Database.ConnectedSystemObjectAttributeValues.Add(attrValue);
         }
 
-        Repository.Database.ConnectedSystemObjects.Update(connectedSystemObject);
+        // Use Entry().State instead of DbSet.Update() to avoid graph traversal.
+        Repository.UpdateDetachedSafe(connectedSystemObject);  // Already has NullReferenceException fallback
         await Repository.Database.SaveChangesAsync();
 
-        // Verify the attribute values were saved
         Log.Verbose("UpdateConnectedSystemObjectWithNewAttributeValuesAsync: Saved {Count} new attribute values for CSO {CsoId}",
             newAttributeValues.Count, connectedSystemObject.Id);
     }
@@ -1759,39 +1820,90 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // Fallback for unit tests with mocked DbContext where raw SQL is not available
             Log.Warning(ex, "UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Raw SQL failed, falling back to EF");
 
-            foreach (var (cso, newAttributeValues) in updates)
+            try
             {
-                foreach (var attrValue in newAttributeValues)
+                // The in-memory provider requires saving through tracked entity instances.
+                // After ClearChangeTracker(), the CSO instances passed in are detached copies.
+                // We must: (1) add genuinely new attribute values, and (2) update existing
+                // attribute values that were modified on the detached CSO instances.
+                foreach (var (cso, newAttributeValues) in updates)
                 {
-                    Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Adding new attribute value for CSO {CsoId}, AttributeId={AttrId}, GuidValue={GuidValue}, StringValue='{StringValue}'",
-                        cso.Id, attrValue.AttributeId, attrValue.GuidValue, attrValue.StringValue);
-                    // Use Entry().State instead of Add() to avoid graph traversal —
-                    // Add() traverses navigation properties and throws identity conflicts
-                    // when related entities are already tracked under different instances
-                    // (e.g. after ClearChangeTracker and subsequent queries re-load them).
-                    var avEntry = Repository.Database.Entry(attrValue);
-                    if (avEntry.State == EntityState.Detached)
-                        avEntry.State = EntityState.Added;
+                    // Add genuinely new attribute values
+                    foreach (var attrValue in newAttributeValues)
+                    {
+                        Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Adding new attribute value for CSO {CsoId}, AttributeId={AttrId}, GuidValue={GuidValue}, StringValue='{StringValue}'",
+                            cso.Id, attrValue.AttributeId, attrValue.GuidValue, attrValue.StringValue);
+
+                        // Null out navigation properties to avoid graph traversal
+                        attrValue.ConnectedSystemObject = null!;
+
+                        var avEntry = Repository.Database.Entry(attrValue);
+                        if (avEntry.State == EntityState.Detached)
+                            avEntry.State = EntityState.Added;
+                    }
+
+                    // For existing attribute values that were modified on the detached CSO
+                    // (e.g., external ID values updated by BatchUpdateCsosAfterSuccessfulExportAsync),
+                    // find the tracked version and update it, or load from store via FindAsync.
+                    foreach (var av in cso.AttributeValues.Where(a => !newAttributeValues.Contains(a)))
+                    {
+                        var trackedAv = Repository.Database.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>()
+                            .FirstOrDefault(e => e.Entity.Id == av.Id);
+
+                        if (trackedAv != null)
+                        {
+                            // Update the already-tracked instance with new values
+                            trackedAv.Entity.StringValue = av.StringValue;
+                            trackedAv.Entity.GuidValue = av.GuidValue;
+                            trackedAv.Entity.IntValue = av.IntValue;
+                            trackedAv.Entity.LongValue = av.LongValue;
+                            trackedAv.Entity.BoolValue = av.BoolValue;
+                            trackedAv.Entity.DateTimeValue = av.DateTimeValue;
+                            trackedAv.Entity.ByteValue = av.ByteValue;
+                            trackedAv.Entity.ReferenceValueId = av.ReferenceValueId;
+                            trackedAv.Entity.UnresolvedReferenceValue = av.UnresolvedReferenceValue;
+                        }
+                        else
+                        {
+                            // Not tracked. Load from store so we get the persisted instance.
+                            var existingAv = await Repository.Database.Set<ConnectedSystemObjectAttributeValue>()
+                                .FindAsync(av.Id);
+                            if (existingAv != null)
+                            {
+                                existingAv.StringValue = av.StringValue;
+                                existingAv.GuidValue = av.GuidValue;
+                                existingAv.IntValue = av.IntValue;
+                                existingAv.LongValue = av.LongValue;
+                                existingAv.BoolValue = av.BoolValue;
+                                existingAv.DateTimeValue = av.DateTimeValue;
+                                existingAv.ByteValue = av.ByteValue;
+                                existingAv.ReferenceValueId = av.ReferenceValueId;
+                                existingAv.UnresolvedReferenceValue = av.UnresolvedReferenceValue;
+                            }
+                        }
+                    }
                 }
 
-                // Find the tracked instance if one exists (avoids identity conflicts
-                // and DbUpdateConcurrencyException from the in-memory provider).
-                // The CSO's attribute values handle the actual data updates — we just
-                // need to ensure the CSO entity is tracked and marked as modified.
-                var trackedCso = Repository.Database.ChangeTracker.Entries<ConnectedSystemObject>()
-                    .FirstOrDefault(e => e.Entity.Id == cso.Id);
-
-                if (trackedCso != null)
+                // Reset stale Deleted entries from prior operations (e.g., CSO attribute value
+                // deletions queued by ProcessConnectedSystemObjectAttributeValueChanges during
+                // import update). These were already handled by UpdateConnectedSystemObjectsAsync
+                // but remain in the change tracker. Without this, SaveChangesAsync throws
+                // DbUpdateConcurrencyException because the rows no longer exist in the store.
+                foreach (var e in Repository.Database.ChangeTracker.Entries()
+                    .Where(e => e.State == EntityState.Deleted))
                 {
-                    trackedCso.State = EntityState.Modified;
+                    e.State = EntityState.Detached;
                 }
-                else
+            }
+            catch (NullReferenceException)
+            {
+                // Mocked DbContext: ChangeTracker/Entry() unavailable.
+                // Fall back to AddRange for new values and Update for CSOs.
+                foreach (var (cso, newAttributeValues) in updates)
                 {
-                    var csoEntry = Repository.Database.Entry(cso);
-                    if (csoEntry.State == EntityState.Detached)
-                        csoEntry.State = EntityState.Modified;
-                    else if (csoEntry.State != EntityState.Added)
-                        csoEntry.State = EntityState.Modified;
+                    foreach (var attrValue in newAttributeValues)
+                        Repository.Database.ConnectedSystemObjectAttributeValues.Add(attrValue);
+                    Repository.Database.ConnectedSystemObjects.Update(cso);
                 }
             }
 
@@ -2455,8 +2567,28 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // and NullReferenceException (mocked DbContext). All other exceptions (SQL errors,
             // constraint violations) must propagate — falling back to AddRangeAsync in production
             // causes graph traversal identity conflicts with already-tracked entities.
-            Log.Warning(ex, "CreatePendingExportsAsync: Raw SQL path failed, falling back to EF AddRangeAsync (test environment)");
-            await Repository.Database.PendingExports.AddRangeAsync(pendingExportsList);
+            Log.Warning(ex, "CreatePendingExportsAsync: Raw SQL path failed, falling back to EF (test environment)");
+            try
+            {
+                foreach (var pe in pendingExportsList)
+                {
+                    var peEntry = Repository.Database.Entry(pe);
+                    if (peEntry.State == EntityState.Detached)
+                        peEntry.State = EntityState.Added;
+
+                    foreach (var avc in pe.AttributeValueChanges)
+                    {
+                        var avcEntry = Repository.Database.Entry(avc);
+                        if (avcEntry.State == EntityState.Detached)
+                            avcEntry.State = EntityState.Added;
+                    }
+                }
+            }
+            catch (NullReferenceException)
+            {
+                // Mocked DbContext: Entry() unavailable, use AddRangeAsync.
+                await Repository.Database.PendingExports.AddRangeAsync(pendingExportsList);
+            }
             await Repository.Database.SaveChangesAsync();
         }
     }
