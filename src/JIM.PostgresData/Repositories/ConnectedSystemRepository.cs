@@ -1730,6 +1730,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         try
         {
+            // Pre-generate IDs for all new attribute values (bypasses EF ValueGeneratedOnAdd).
+            // Without this, raw SQL inserts Guid.Empty for all rows, causing PK violations.
+            // Mirrors the pattern in CreateConnectedSystemObjectsAsync.
+            foreach (var (_, newAttributeValues) in updates)
+            {
+                foreach (var av in newAttributeValues)
+                {
+                    if (av.Id == Guid.Empty)
+                        av.Id = Guid.NewGuid();
+                }
+            }
+
             // Insert new attribute values via raw SQL (works with untracked entities from AsNoTracking)
             var allNewValues = updates
                 .SelectMany(u => u.newAttributeValues.Select(av => (u.cso.Id, av)))
@@ -3931,6 +3943,52 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             }
 
             sql.Append(@") AS v(""Id"", ""Status"", ""ErrorCount"", ""MaxRetries"", ""LastAttemptedAt"", ""NextRetryAt"", ""LastErrorMessage"", ""LastErrorStackTrace"", ""HasUnresolvedReferences"", ""ConnectedSystemObjectId"") WHERE t.""Id"" = v.""Id""");
+
+            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
+
+        // Also persist attribute value change statuses (Status, ExportAttemptCount, LastExportedAt, LastImportedValue).
+        // Without this, reconciliation during confirming import cannot find ExportedPendingConfirmation changes
+        // and the PE is never confirmed/deleted, causing stale Create exports on re-evaluation.
+        await BulkUpdatePendingExportAttributeValueChangesRawAsync(exports);
+    }
+
+    /// <summary>
+    /// Bulk updates PendingExportAttributeValueChange confirmation tracking columns via raw SQL.
+    /// Called after export to persist the ExportedPendingConfirmation status set by UpdateAttributeChangeStatusesAfterExport.
+    /// </summary>
+    private async Task BulkUpdatePendingExportAttributeValueChangesRawAsync(List<PendingExport> exports)
+    {
+        var allChanges = exports
+            .SelectMany(pe => pe.AttributeValueChanges)
+            .ToList();
+
+        if (allChanges.Count == 0)
+            return;
+
+        const int columnsPerRow = 4; // Id + 3 mutable columns
+        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+
+        foreach (var chunk in ChunkList(allChanges, chunkSize))
+        {
+            var sql = new System.Text.StringBuilder();
+            sql.Append(@"UPDATE ""PendingExportAttributeValueChanges"" AS t SET ""Status"" = v.""Status"", ""ExportAttemptCount"" = v.""ExportAttemptCount"", ""LastExportedAt"" = v.""LastExportedAt"" FROM (VALUES ");
+
+            var parameters = new List<object>();
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                if (i > 0) sql.Append(", ");
+                var offset = i * columnsPerRow;
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone)");
+
+                var avc = chunk[i];
+                parameters.Add(avc.Id);
+                parameters.Add((int)avc.Status);
+                parameters.Add(avc.ExportAttemptCount);
+                parameters.Add(NullableParam(avc.LastExportedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+            }
+
+            sql.Append(@") AS v(""Id"", ""Status"", ""ExportAttemptCount"", ""LastExportedAt"") WHERE t.""Id"" = v.""Id""");
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
