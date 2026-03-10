@@ -468,6 +468,7 @@ Decompose the worker into independent, horizontally scalable processing units co
    - Sync rule cache in Redis (loaded once, shared across workers)
    - Database remains source of truth; Redis is a performance optimisation only
    - Falls back to direct DB queries if Redis unavailable
+   - *CSO caching was considered but deferred* — unlike MVOs (single bounded set, read-heavy for join matching), CSOs scale per connected system (N systems x objects each), are primarily accessed during import as full-scan diffs where caching doesn't help, and their main cacheable use case (export target lookup) is not the bottleneck since connector I/O dominates export time. Revisit if export DB lookups prove costly at scale
 
 4. **Work coordination**
    - Scheduler publishes import-task messages (one per connected system per run profile)
