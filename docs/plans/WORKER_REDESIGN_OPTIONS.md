@@ -194,7 +194,7 @@ Keep the current architecture but surgically extract the sync processing logic i
 |     JIM.InMemoryData (Test Implementation)            |
 |                                                       |
 |  InMemorySyncDataAccess (new - implements             |
-|    ISyncDataAccess for unit/workflow tests)            |
+|   ISyncDataAccess for unit/workflow tests)            |
 |  Purpose-built, no EF Core quirks                     |
 |  References only JIM.Data + JIM.Models                |
 |  No database dependencies whatsoever                  |
@@ -414,7 +414,7 @@ Decompose the worker into independent, horizontally scalable processing units co
                                  |
                                  v (messages)
 +-------------------------------------------------------------------+
-|                     Message Bus                                   |
+|                          Message Bus                              |
 |  Option: Redis Streams (air-gap friendly, no cloud dependency)    |
 |  Queues: import-tasks, sync-batches, export-tasks                 |
 |  Consumer groups for competing consumers                          |
@@ -435,13 +435,13 @@ Decompose the worker into independent, horizontally scalable processing units co
              |                   |                    |
              v                   v                    v
 +-------------------------------------------------------------------+
-|           Shared Persistence Layer                                |
+|                     Shared Persistence Layer                      |
 |  PostgreSQL (bulk writes via Npgsql)                              |
 |  Redis (optional: shared MVO lookup cache for sync workers)       |
 +-------------------------------------------------------------------+
 
 +-------------------------------------------------------------------+
-|                    Telemetry + Health                             |
+|                       Telemetry + Health                          |
 |  OpenTelemetry (traces span across workers via message headers)   |
 |  Redis-backed health aggregation                                  |
 |  JIM Management UI: worker fleet status, queue depths, throughput |
@@ -455,6 +455,7 @@ Decompose the worker into independent, horizontally scalable processing units co
    - Three queues: `import-tasks`, `sync-batches`, `export-tasks`
    - Consumer groups enable competing consumers (horizontal scaling)
    - At-least-once delivery with acknowledgement (state-based model handles re-processing)
+   - *Note:* PostgreSQL `LISTEN/NOTIFY` was considered but rejected — it is fire-and-forget (no persistence), has no consumer group support, is limited to 8KB payloads, and provides no retry/dead-letter semantics. A PostgreSQL table queue with `SELECT ... FOR UPDATE SKIP LOCKED` would be more viable than `LISTEN/NOTIFY` if avoiding Redis, but lacks the push-based delivery and mature consumer group semantics of Redis Streams
 
 2. **Independent worker types**
    - **Import Workers**: Connect to source systems, diff against DB, produce CSO change batches
