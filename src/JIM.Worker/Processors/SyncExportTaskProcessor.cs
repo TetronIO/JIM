@@ -313,6 +313,11 @@ public class SyncExportTaskProcessor
                 if (rpei.Id == Guid.Empty)
                     rpei.Id = Guid.NewGuid();
 
+                // Fix up the scalar FK on the CSO change record to match the newly assigned RPEI ID.
+                // The change was created before the RPEI ID was assigned, so the FK is still Guid.Empty.
+                if (rpei.ConnectedSystemObjectChange != null)
+                    rpei.ConnectedSystemObjectChange.ActivityRunProfileExecutionItemId = rpei.Id;
+
                 // Snapshot CSO display fields for historical preservation (defence-in-depth)
                 if (rpei.ConnectedSystemObject != null)
                     rpei.SnapshotCsoDisplayFields(rpei.ConnectedSystemObject);

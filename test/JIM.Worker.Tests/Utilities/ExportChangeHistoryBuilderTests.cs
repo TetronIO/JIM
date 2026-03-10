@@ -105,6 +105,50 @@ public class ExportChangeHistoryBuilderTests
     }
 
     [Test]
+    public void BuildFromProcessedExportItem_WithEmptyRpeiId_FkMustBeUpdatedAfterIdAssignment()
+    {
+        // Regression test: ExportChangeHistoryBuilder sets ActivityRunProfileExecutionItemId
+        // from executionItem.Id at creation time. If the RPEI ID is Guid.Empty (not yet assigned),
+        // the FK will be Guid.Empty. Callers (ProcessExportResultAsync) must fix up the FK after
+        // assigning the RPEI ID — otherwise BulkInsertCsoChangesRawAsync hits a unique constraint
+        // violation because all CSO changes share the same Guid.Empty FK.
+        //
+        // This test documents the expected behaviour: the FK captures whatever ID the RPEI has
+        // at build time, and callers are responsible for fixing it up later.
+
+        // Arrange — RPEI with Guid.Empty ID (as created by ProcessExportResultAsync before ID assignment)
+        var exportItem = CreateExportItem(PendingExportChangeType.Update,
+            new PendingExportAttributeValueChange
+            {
+                Attribute = _textAttribute,
+                ChangeType = PendingExportAttributeChangeType.Add,
+                StringValue = "test"
+            });
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.Empty,
+            ActivityId = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.Exported
+        };
+
+        // Act — build with Guid.Empty RPEI ID, then simulate ProcessExportResultAsync fix-up
+        var change = ExportChangeHistoryBuilder.BuildFromProcessedExportItem(
+            exportItem, connectedSystemId: 1, rpei,
+            ActivityInitiatorType.System, null, null);
+
+        // Verify FK is initially Guid.Empty (the bug scenario)
+        Assert.That(change.ActivityRunProfileExecutionItemId, Is.EqualTo(Guid.Empty));
+
+        // Simulate the fix-up in ProcessExportResultAsync
+        rpei.Id = Guid.NewGuid();
+        change.ActivityRunProfileExecutionItemId = rpei.Id;
+
+        // Assert — FK now matches the assigned RPEI ID
+        Assert.That(change.ActivityRunProfileExecutionItemId, Is.EqualTo(rpei.Id));
+        Assert.That(change.ActivityRunProfileExecutionItemId, Is.Not.EqualTo(Guid.Empty));
+    }
+
+    [Test]
     public void BuildFromProcessedExportItem_MapsTextAttributeChange()
     {
         // Arrange
