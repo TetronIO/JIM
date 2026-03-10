@@ -149,6 +149,14 @@ $createdUsers = @()
 $usersWithExpiry = 0
 $usersOU = "OU=TestUsers,$domainDN"
 
+# Offset AD-seeded user indices to avoid sAMAccountName collisions with CSV-generated users.
+# sAMAccountName is unique domain-wide in Active Directory, so users in OU=TestUsers with
+# sAMAccountName "amelia.sullivan1" would collide with a JIM-provisioned user in OU=Corp
+# with the same sAMAccountName. The CSV generator (Generate-TestCSV.ps1) uses indices 1..N,
+# so we offset AD users by 500,000 to guarantee non-overlapping names at all template sizes
+# (XXLarge = 200K users).
+$adIndexOffset = 500000
+
 # Windows FILETIME epoch: January 1, 1601 00:00:00 UTC
 $fileTimeEpoch = [DateTime]::new(1601, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)
 
@@ -158,7 +166,7 @@ $totalAdded = 0
 $chunkIndex = 0
 
 for ($i = 1; $i -lt $scale.Users + 1; $i++) {
-    $user = New-TestUser -Index $i -Domain ($domain.ToLower() + ".local")
+    $user = New-TestUser -Index ($i + $adIndexOffset) -Domain ($domain.ToLower() + ".local")
 
     # Build DN directly in TestUsers OU (no need for create-then-move)
     $dn = "CN=$($user.DisplayName),$usersOU"
