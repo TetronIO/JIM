@@ -95,6 +95,8 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
    - No way to test sync logic without database (EF is deeply coupled throughout)
    - `TestUtilities.cs` is ~1,110 lines of setup helpers - indicating painful test setup
    - **New concern (#338):** Raw SQL bulk operations use try/catch fallback to EF in tests, meaning production hot paths are not exercised by unit tests at all
+   - **Two incompatible test mocking approaches require two-tier fallback code (March 2026):**
+     Unit tests use a mocked `DbContext` (Moq) where `Entry()`, `ChangeTracker`, and `TrackGraph()` are all null and throw `NullReferenceException` — these tests rely on `AddRange`/`UpdateRange` callbacks on mocked `DbSet<T>` instances. Workflow tests use EF Core's in-memory provider where `Entry()` and `ChangeTracker` work correctly, but `AddRange`/`UpdateRange` traverse navigation property graphs and cause identity conflicts when entities are tracked under multiple instances after `ClearChangeTracker()`. Production uses raw SQL with no EF tracking at all. The result is a **three-way code path divergence**: each EF fallback method now contains a try/catch that attempts `Entry().State` assignment first (for in-memory provider), catches `NullReferenceException` and falls back to `AddRange`/`UpdateRange` (for mocked DbContext), all inside an outer catch that handles the raw SQL failure (production path never exercises either fallback). This pattern exists across 7 repository methods in `ConnectedSystemRepository` and `ActivitiesRepository`. The `ISyncDataAccess` interface proposed in Option A with a purpose-built `InMemorySyncDataAccess` implementation would eliminate this entirely — both unit and workflow tests would use the same clean in-memory implementation with no EF Core quirks leaking through
 
 ---
 
@@ -172,7 +174,7 @@ Keep the current architecture but surgically extract the sync processing logic i
    - The ~3,330 lines of SyncTaskProcessorBase + SyncRuleMappingProcessor become the engine
 
 2. **Extract `ISyncDataAccess`** - Explicit data boundary for sync hot paths — **PARTIALLY DONE (#338)**
-   - `InMemorySyncDataAccess` for tests - purpose-built, not EF's leaky in-memory provider — **not done** (tests use EF fallback via try/catch)
+   - `InMemorySyncDataAccess` for tests - purpose-built, not EF's leaky in-memory provider — **not done** (tests use EF fallback via try/catch). This is the **single highest-value change for test reliability**: it eliminates the three-way code path divergence (raw SQL / in-memory EF provider / mocked DbContext) that currently requires two-tier try/catch fallback logic across 7 repository methods (see Pain Point 5)
    - `PostgresSyncDataAccess` for production - uses raw SQL, no change tracking — **done** for CSO creates/updates, pending export CRUD, and RPEI persistence; MVO operations still use EF
    - Batch-oriented API: `GetCsoBatch()`, `PersistSyncResults()`, `BulkUpsertCsos()` — **not formalised as an interface** (raw SQL is embedded in existing repository methods with EF fallback)
    - CSO lookup cache via `IMemoryCache` eliminates N+1 import queries — **done**
@@ -587,6 +589,8 @@ No database. No mocking. No flaky tests. Just logic.
 ### D2: Persistence Must Be Batch-Oriented
 
 > **Partially implemented by #338.** The flush mechanism now bypasses EF change tracking for most hot-path writes (see status annotations below). However, the operations are embedded in existing repository methods with try/catch EF fallback for tests, rather than formalised behind a dedicated `ISyncPersistence` interface. Formalising the interface remains a prerequisite for proper InMemory test implementations and the ISyncEngine extraction.
+>
+> **March 2026 update:** The lack of a formal interface is now causing concrete maintenance pain. Repository fallback paths require **two-tier try/catch** logic because unit tests (mocked `DbContext` where `Entry()`/`ChangeTracker` throw `NullReferenceException`) and workflow tests (EF in-memory provider where `AddRange`/`UpdateRange` cause identity conflicts via graph traversal) need fundamentally different EF Core call patterns. This affects 7 methods across `ConnectedSystemRepository` and `ActivitiesRepository`. A purpose-built `InMemorySyncDataAccess` would replace both approaches with a single, clean implementation that has no EF Core behaviour quirks.
 
 All options should use batch persistence. The current pattern of accumulating changes and flushing at page boundaries is correct. But the flush mechanism needs to bypass EF change tracking:
 
@@ -594,18 +598,18 @@ All options should use batch persistence. The current pattern of accumulating ch
 public interface ISyncPersistence
 {
     // Bulk operations - bypasses EF change tracking entirely
-    Task BulkCreateCsosAsync(IReadOnlyList<ConnectedSystemObject> csos);       // DONE (#338) - raw SQL
-    Task BulkUpdateCsosAsync(IReadOnlyList<ConnectedSystemObject> csos);       // DONE (#338) - raw SQL
-    Task BulkDeleteCsosAsync(IReadOnlyList<Guid> csoIds);                      // existing (ExecuteSqlRawAsync)
-    Task BulkCreateMvosAsync(IReadOnlyList<MetaverseObject> mvos);             // NOT DONE - still EF
+    Task BulkCreateCsosAsync(IReadOnlyList<ConnectedSystemObject> csos);                     // DONE (#338) - raw SQL
+    Task BulkUpdateCsosAsync(IReadOnlyList<ConnectedSystemObject> csos);                     // DONE (#338) - raw SQL
+    Task BulkDeleteCsosAsync(IReadOnlyList<Guid> csoIds);                                    // existing (ExecuteSqlRawAsync)
+    Task BulkCreateMvosAsync(IReadOnlyList<MetaverseObject> mvos);                           // NOT DONE - still EF
     Task BulkUpsertMvoAttributesAsync(IReadOnlyList<MetaverseObjectAttributeValue> values);  // NOT DONE - still EF
-    Task BulkCreatePendingExportsAsync(IReadOnlyList<PendingExport> exports);  // DONE (#338) - raw SQL
-    Task BulkDeletePendingExportsAsync(IReadOnlyList<Guid> exportIds);         // DONE (#338) - raw SQL
-    Task BulkInsertRpeisAsync(IReadOnlyList<RunProfileExecutionItem> rpeis);   // DONE (#338) - raw SQL (not in original spec)
+    Task BulkCreatePendingExportsAsync(IReadOnlyList<PendingExport> exports);                // DONE (#338) - raw SQL
+    Task BulkDeletePendingExportsAsync(IReadOnlyList<Guid> exportIds);                       // DONE (#338) - raw SQL
+    Task BulkInsertRpeisAsync(IReadOnlyList<RunProfileExecutionItem> rpeis);                 // DONE (#338) - raw SQL (not in original spec)
 
     // Reads - lightweight DTOs, no EF tracking
-    Task<CsoBatch> GetCsoBatchAsync(int connectedSystemId, int page, int pageSize);  // PARTIALLY DONE - AsSplitQuery removed, uses two-query transaction
-    Task<MvoLookup> GetMvoLookupForSyncAsync(int connectedSystemId);                  // DONE (#338) - lightweight ID-only matching with Take(2)
+    Task<CsoBatch> GetCsoBatchAsync(int connectedSystemId, int page, int pageSize);          // PARTIALLY DONE - AsSplitQuery removed, uses two-query transaction
+    Task<MvoLookup> GetMvoLookupForSyncAsync(int connectedSystemId);                         // DONE (#338) - lightweight ID-only matching with Take(2)
 }
 ```
 
@@ -669,7 +673,7 @@ A 5-phase surgical optimisation programme was completed in February 2026, replac
 **What was NOT delivered (remains for Phase 1b):**
 - ISyncEngine extraction (pure domain logic, no I/O)
 - Formal ISyncPersistence / ISyncDataAccess interface
-- InMemorySyncDataAccess for tests (currently using EF fallback)
+- InMemorySyncDataAccess for tests (currently using EF fallback via two-tier try/catch across 7 repository methods — see Pain Point 5)
 - DI introduction (still using manual `new` wiring)
 - Intra-phase parallelism
 - MVO create/update still uses EF (not yet converted to raw SQL)
