@@ -38,6 +38,9 @@ This single script handles everything:
 # Run with default settings (Scenario1, Nano template, all steps)
 ./test/integration/Run-IntegrationTests.ps1
 
+# Run ALL scenarios sequentially (full regression)
+./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Small
+
 # Run a specific scenario
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario1-HRToIdentityDirectory"   # HR CSV -> AD provisioning
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync"         # APAC AD -> EMEA AD sync

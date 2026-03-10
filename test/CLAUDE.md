@@ -108,6 +108,9 @@ cd /workspaces/JIM
 # Interactive menu - select scenario with arrow keys
 ./test/integration/Run-IntegrationTests.ps1
 
+# Run ALL scenarios sequentially (full regression)
+./test/integration/Run-IntegrationTests.ps1 -Scenario All -Template Small
+
 # Run a specific scenario directly
 ./test/integration/Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory
 
