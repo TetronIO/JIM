@@ -527,6 +527,12 @@ public class ExportExecutionServer
         // Batch-export resolved deferred exports
         if (resolvedExports.Count > 0)
         {
+            // Clear the change tracker before exporting deferred batches.
+            // The CSO lookup query above re-loaded entities into the tracker, which causes
+            // identity conflicts when the EF fallback paths (used in tests with in-memory DB)
+            // try to attach/update the original PE instances.
+            Application.Repository.ClearChangeTracker();
+
             var deferredBatches = resolvedExports
                 .Select((export, index) => new { export, index })
                 .GroupBy(x => x.index / options.BatchSize)
@@ -1404,6 +1410,12 @@ public class ExportExecutionServer
             else
             {
                 // Still unresolved - CSO doesn't exist yet in target system
+                Log.Debug("TryResolveReferencesFromLookup: Cannot resolve reference for PE {PeId}: " +
+                    "MVO {MvoId} has no CSO in target system. " +
+                    "Attribute: {AttrName}, UnresolvedValue: {UnresolvedValue}",
+                    pendingExport.Id, referencedMvoId,
+                    attrChange.Attribute?.Name ?? $"AttrId={attrChange.AttributeId}",
+                    attrChange.UnresolvedReferenceValue);
                 allResolved = false;
             }
         }

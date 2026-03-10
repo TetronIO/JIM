@@ -1765,10 +1765,34 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 {
                     Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Adding new attribute value for CSO {CsoId}, AttributeId={AttrId}, GuidValue={GuidValue}, StringValue='{StringValue}'",
                         cso.Id, attrValue.AttributeId, attrValue.GuidValue, attrValue.StringValue);
-                    Repository.Database.ConnectedSystemObjectAttributeValues.Add(attrValue);
+                    // Use Entry().State instead of Add() to avoid graph traversal —
+                    // Add() traverses navigation properties and throws identity conflicts
+                    // when related entities are already tracked under different instances
+                    // (e.g. after ClearChangeTracker and subsequent queries re-load them).
+                    var avEntry = Repository.Database.Entry(attrValue);
+                    if (avEntry.State == EntityState.Detached)
+                        avEntry.State = EntityState.Added;
                 }
 
-                Repository.Database.ConnectedSystemObjects.Update(cso);
+                // Find the tracked instance if one exists (avoids identity conflicts
+                // and DbUpdateConcurrencyException from the in-memory provider).
+                // The CSO's attribute values handle the actual data updates — we just
+                // need to ensure the CSO entity is tracked and marked as modified.
+                var trackedCso = Repository.Database.ChangeTracker.Entries<ConnectedSystemObject>()
+                    .FirstOrDefault(e => e.Entity.Id == cso.Id);
+
+                if (trackedCso != null)
+                {
+                    trackedCso.State = EntityState.Modified;
+                }
+                else
+                {
+                    var csoEntry = Repository.Database.Entry(cso);
+                    if (csoEntry.State == EntityState.Detached)
+                        csoEntry.State = EntityState.Modified;
+                    else if (csoEntry.State != EntityState.Added)
+                        csoEntry.State = EntityState.Modified;
+                }
             }
 
             await Repository.Database.SaveChangesAsync();
@@ -2298,8 +2322,32 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }
         catch
         {
-            // Fallback for unit tests with mocked DbContext where raw SQL is not available
-            Repository.Database.PendingExports.UpdateRange(exportList);
+            // Fallback for unit tests with in-memory DbContext where raw SQL is not available.
+            // After ClearChangeTracker, a subsequent query may re-load and auto-track a NEW
+            // PendingExport instance for the same ID. We must find and update that tracked
+            // instance rather than trying to attach our original (now-stale) copy.
+            foreach (var export in exportList)
+            {
+                var tracked = Repository.Database.ChangeTracker.Entries<PendingExport>()
+                    .FirstOrDefault(e => e.Entity.Id == export.Id);
+
+                if (tracked != null)
+                {
+                    // Update the already-tracked instance to match our in-memory entity
+                    tracked.Entity.Status = export.Status;
+                    tracked.Entity.HasUnresolvedReferences = export.HasUnresolvedReferences;
+                    tracked.Entity.LastAttemptedAt = export.LastAttemptedAt;
+                    tracked.Entity.ErrorCount = export.ErrorCount;
+                    tracked.State = EntityState.Modified;
+                }
+                else
+                {
+                    // Not tracked — safe to attach
+                    var entry = Repository.Database.Entry(export);
+                    if (entry.State == EntityState.Detached)
+                        entry.State = EntityState.Modified;
+                }
+            }
             await Repository.Database.SaveChangesAsync();
         }
     }
@@ -2323,8 +2371,30 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }
         catch
         {
-            // Fallback for unit tests with mocked DbContext where raw SQL is not available
-            Repository.Database.PendingExports.UpdateRange(pendingExports);
+            // Fallback for unit tests with in-memory DbContext where raw SQL is not available.
+            // After ClearChangeTracker, a subsequent query (e.g. CSO lookup) may re-load and
+            // auto-track a NEW PendingExport instance for the same ID. We must find and update
+            // that tracked instance rather than trying to attach our original (now-stale) copy.
+            foreach (var pe in pendingExports)
+            {
+                var tracked = Repository.Database.ChangeTracker.Entries<PendingExport>()
+                    .FirstOrDefault(e => e.Entity.Id == pe.Id);
+
+                if (tracked != null)
+                {
+                    // Update the already-tracked instance directly
+                    tracked.Entity.Status = PendingExportStatus.Executing;
+                    tracked.Entity.LastAttemptedAt = DateTime.UtcNow;
+                    tracked.State = EntityState.Modified;
+                }
+                else
+                {
+                    // Not tracked — safe to attach
+                    var entry = Repository.Database.Entry(pe);
+                    if (entry.State == EntityState.Detached)
+                        entry.State = EntityState.Modified;
+                }
+            }
             await Repository.Database.SaveChangesAsync();
         }
 
