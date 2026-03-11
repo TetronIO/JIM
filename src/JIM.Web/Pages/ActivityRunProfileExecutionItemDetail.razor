@@ -322,16 +322,16 @@
                                                         <MudText Class="mud-text-secondary">@group.AttributeName</MudText>
                                                     </td>
                                                     <td style="padding: 4px 0; border: none; vertical-align: top; word-break: break-word;">
-                                                        @if (group.DisplayValues.Count == 1)
+                                                        @if (group.Values.Count == 1)
                                                         {
-                                                            <MudText>@group.DisplayValues[0]</MudText>
+                                                            <CsoAttributeValue Value="group.Values[0]" />
                                                         }
                                                         else
                                                         {
                                                             <MudStack Spacing="0">
-                                                                @foreach (var value in group.DisplayValues)
+                                                                @foreach (var value in group.Values)
                                                                 {
-                                                                    <MudText>@value</MudText>
+                                                                    <CsoAttributeValue Value="value" />
                                                                 }
                                                                 @if (group.TotalValueCount > MaxMultiValuePreview)
                                                                 {
@@ -440,16 +440,16 @@
                                                         <MudText Class="mud-text-secondary">@group.AttributeName</MudText>
                                                     </td>
                                                     <td style="padding: 4px 0; border: none; vertical-align: top; word-break: break-word;">
-                                                        @if (group.DisplayValues.Count == 1)
+                                                        @if (group.Values.Count == 1)
                                                         {
-                                                            <MudText>@group.DisplayValues[0]</MudText>
+                                                            @RenderMvoAttributeValue(group.Values[0])
                                                         }
                                                         else
                                                         {
                                                             <MudStack Spacing="0">
-                                                                @foreach (var value in group.DisplayValues)
+                                                                @foreach (var value in group.Values)
                                                                 {
-                                                                    <MudText>@value</MudText>
+                                                                    @RenderMvoAttributeValue(value)
                                                                 }
                                                                 @if (group.TotalValueCount > MaxMultiValuePreview)
                                                                 {
@@ -888,9 +888,14 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     ConnectedSystemObject? ReferenceValue);
 
     /// <summary>
-    /// Helper record for grouped attribute display in projection details.
+    /// Helper record for grouped CSO attribute display with rich rendering support.
     /// </summary>
-    private record ProjectionAttributeGroup(string AttributeName, List<string> DisplayValues, int TotalValueCount);
+    private record CsoProjectionAttributeGroup(string AttributeName, List<ConnectedSystemObjectAttributeValue> Values, int TotalValueCount);
+
+    /// <summary>
+    /// Helper record for grouped MVO attribute display with rich rendering support.
+    /// </summary>
+    private record MvoProjectionAttributeGroup(string AttributeName, List<MetaverseObjectAttributeValue> Values, int TotalValueCount);
 
     /// <summary>
     /// Maximum number of distinct attributes to show per side in projection details.
@@ -1002,11 +1007,11 @@ new("Item Details", href: null, disabled: true)
     /// Gets grouped CSO attributes for projection display, excluding attributes already shown
     /// (External ID, Secondary ID, Display Name).
     /// </summary>
-    private List<ProjectionAttributeGroup> GetGroupedCsoAttributes()
+    private List<CsoProjectionAttributeGroup> GetGroupedCsoAttributes()
     {
         var cso = _activityRunProfileExecutionItem?.ConnectedSystemObject;
         if (cso == null)
-            return new List<ProjectionAttributeGroup>();
+            return new List<CsoProjectionAttributeGroup>();
 
         var excludedAttributeIds = new HashSet<int>();
         if (cso.ExternalIdAttributeId > 0)
@@ -1020,9 +1025,9 @@ new("Item Details", href: null, disabled: true)
         .GroupBy(av => av.Attribute.Name)
         .OrderBy(g => g.Key)
         .Take(MaxProjectionAttributes)
-        .Select(g => new ProjectionAttributeGroup(
+        .Select(g => new CsoProjectionAttributeGroup(
         g.Key,
-        g.Take(MaxMultiValuePreview).Select(av => FormatCsoAttributeValue(av)).ToList(),
+        g.Take(MaxMultiValuePreview).ToList(),
         g.Count()))
         .ToList();
     }
@@ -1051,19 +1056,19 @@ new("Item Details", href: null, disabled: true)
     /// <summary>
     /// Gets grouped MVO attributes for projection display, excluding Display Name (already shown above).
     /// </summary>
-    private List<ProjectionAttributeGroup> GetGroupedMvoAttributes()
+    private List<MvoProjectionAttributeGroup> GetGroupedMvoAttributes()
     {
         if (_metaverseObject == null)
-            return new List<ProjectionAttributeGroup>();
+            return new List<MvoProjectionAttributeGroup>();
 
         return _metaverseObject.AttributeValues
         .Where(av => !av.Attribute.Name.Equals(Constants.BuiltInAttributes.DisplayName, StringComparison.OrdinalIgnoreCase))
         .GroupBy(av => av.Attribute.Name)
         .OrderBy(g => g.Key)
         .Take(MaxProjectionAttributes)
-        .Select(g => new ProjectionAttributeGroup(
+        .Select(g => new MvoProjectionAttributeGroup(
         g.Key,
-        g.Take(MaxMultiValuePreview).Select(av => FormatAttributeValue(av)).ToList(),
+        g.Take(MaxMultiValuePreview).ToList(),
         g.Count()))
         .ToList();
     }
@@ -1082,13 +1087,32 @@ new("Item Details", href: null, disabled: true)
     }
 
     /// <summary>
-    /// Formats a CSO attribute value for display.
+    /// Renders a single MVO attribute value with rich formatting for reference types.
     /// </summary>
-    private static string FormatCsoAttributeValue(ConnectedSystemObjectAttributeValue attributeValue)
+    private RenderFragment RenderMvoAttributeValue(MetaverseObjectAttributeValue av) => __builder =>
     {
-        var result = attributeValue.ToStringNoName();
-        return string.IsNullOrEmpty(result) ? "-" : result;
-    }
+        if (av.ReferenceValue != null)
+        {
+            <span class="jim-attr-reference">
+                <MudChip T="string" Color="Color.Default" Class="mr-1">
+                    @av.ReferenceValue.Type.Name
+                </MudChip>
+                <MudLink Href="@Utilities.GetMetaverseObjectHref(av.ReferenceValue)">
+                    @(av.ReferenceValue.DisplayName ?? av.ReferenceValue.Id.ToString())
+                </MudLink>
+            </span>
+        }
+        else if (av.ReferenceValueId.HasValue)
+        {
+            @* Reference ID is set but navigation property not loaded - show ID as text *@
+            <MudText Class="jim-text-code">@av.ReferenceValueId.Value</MudText>
+        }
+        else
+        {
+            var display = FormatAttributeValue(av);
+            <MudText>@display</MudText>
+        }
+    };
 
     /// <summary>
     /// Formats an attribute value for preview display.
