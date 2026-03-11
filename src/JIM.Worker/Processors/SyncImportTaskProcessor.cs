@@ -2166,6 +2166,11 @@ public class SyncImportTaskProcessor
         Log.Debug("ResolveReferencesAsync: Matched an unresolved reference ({UnresolvedRef}) to CSO: {CsoIdentifier}",
             referenceAttributeValue.UnresolvedReferenceValue, csoIdentifier);
         referenceAttributeValue.ReferenceValue = referencedConnectedSystemObject;
+        // Also set the FK when the referenced CSO already has a real ID (existing/updated CSOs).
+        // For newly-created CSOs (Id == Guid.Empty), the FK is fixed up later in
+        // CreateConnectedSystemObjectsAsync after ID pre-generation.
+        if (referencedConnectedSystemObject.Id != Guid.Empty)
+            referenceAttributeValue.ReferenceValueId = referencedConnectedSystemObject.Id;
         return true;
     }
 

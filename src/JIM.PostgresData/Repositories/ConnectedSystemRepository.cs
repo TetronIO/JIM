@@ -1600,6 +1600,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 }
             }
 
+            // Fixup ReferenceValueId FKs from navigation properties. ResolveReferencesAsync sets
+            // ReferenceValue (navigation) but not ReferenceValueId (FK). EF change tracking would
+            // normally sync these, but raw SQL bulk insert bypasses change tracking entirely,
+            // so we must explicitly copy the ID from the navigation property to the FK column.
+            foreach (var cso in connectedSystemObjects)
+            {
+                foreach (var av in cso.AttributeValues)
+                {
+                    if (av.ReferenceValue != null && av.ReferenceValue.Id != Guid.Empty && !av.ReferenceValueId.HasValue)
+                        av.ReferenceValueId = av.ReferenceValue.Id;
+                }
+            }
+
             // Increase command timeout for large bulk inserts. At 100K+ objects with 20 attributes each,
             // individual SQL statements can take 30+ seconds under memory pressure or slower I/O.
             var previousTimeout = Repository.Database.Database.GetCommandTimeout();
@@ -1800,6 +1813,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 {
                     if (av.Id == Guid.Empty)
                         av.Id = Guid.NewGuid();
+
+                    // Fixup ReferenceValueId FK from navigation property (same reason as
+                    // CreateConnectedSystemObjectsAsync — raw SQL bypasses EF change tracking).
+                    if (av.ReferenceValue != null && av.ReferenceValue.Id != Guid.Empty && !av.ReferenceValueId.HasValue)
+                        av.ReferenceValueId = av.ReferenceValue.Id;
                 }
             }
 
@@ -2213,7 +2231,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
             .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.Type)
+            .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
             .Where(pe => pe.ConnectedSystemId == connectedSystemId)
             // Filter by eligible statuses
             .Where(pe => pe.Status == PendingExportStatus.Pending
@@ -2242,6 +2263,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(cso => cso!.Type)
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
             .OrderBy(pe => pe.CreatedAt)
             .Skip(skip)
             .Take(take)
