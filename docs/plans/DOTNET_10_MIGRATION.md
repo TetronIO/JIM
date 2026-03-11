@@ -308,7 +308,7 @@ Only one LINQ instance found (other left joins use raw SQL), but this establishe
 
 EF Core 10 automatically redacts inlined constant values from SQL logs by default. JIM currently controls sensitive data logging via the `JIM_DB_LOG_SENSITIVE_INFO` environment variable and keeps EF Core command logging at Warning level (`Program.cs` line 476, `appsettings.json` line 10). The automatic redaction adds a safety net — even if someone enables Debug logging, PII won't leak into SQL log output.
 
-**Directly relevant** for JIM's government, defence, and healthcare deployments where log data exfiltration is a compliance concern.
+**Directly relevant** for security-conscious customers where log data exfiltration is a compliance concern.
 
 ### Medium Value — Consider Post-Migration
 
@@ -342,9 +342,25 @@ Passkey support would primarily benefit **direct JIM authentication** if that's 
 
 New `ReconnectModal` component respects Content Security Policy headers. JIM deploys in security-conscious environments where CSP is enforced — this is a straightforward swap that improves compatibility.
 
-#### 11. UUIDv7 support (PostgreSQL 18) — Effort: Low
+#### 11. UUIDv7 support (PostgreSQL 18) — Effort: Low-Medium
 
-`Guid.CreateVersion7()` generates time-sortable GUIDs, which improve B-tree index performance compared to random UUIDv4. JIM creates many entities with GUID primary keys. Applicable to new tables and could be adopted gradually for new entity types.
+`Guid.CreateVersion7()` generates time-sortable GUIDs where the first 48 bits encode a millisecond timestamp. Unlike random UUIDv4 (`Guid.NewGuid()`), sequential UUIDs insert into B-tree indexes in order, avoiding page splits and index fragmentation.
+
+**Scale in JIM:** 28 entity types use GUID primary keys, all generated via `Guid.NewGuid()` (fully random). No sequential or COMB GUID patterns exist today.
+
+**Where this matters most — high-volume tables:**
+
+| Table | Volume | Why it matters |
+|-------|--------|---------------|
+| `ConnectedSystemObjectAttributeValues` | 10,000s+ per sync | Bulk-inserted during import; random GUIDs cause scattered index writes across pages |
+| `MetaverseObjectAttributeValues` | 10,000s+ per sync | Created during projection; same scattered write pattern |
+| `ActivityRunProfileExecutionItemSyncOutcomes` | 1,000s per sync | Bulk-inserted with tree structure in `ActivitiesRepository` |
+| `PendingExportAttributeValueChanges` | 100s–1,000s per export eval | Batch-created during export evaluation |
+| `MetaverseObjectChanges` / `ConnectedSystemObjectChanges` | 100s per sync | Audit trail entries written sequentially but indexed randomly |
+
+**Concrete benefit:** When JIM runs a full import of 50,000 objects with 20 attributes each, that's ~1,000,000 attribute value rows inserted. With random UUIDv4, each insert lands at a random position in the B-tree index, causing page splits and cache thrashing. With UUIDv7, inserts are append-mostly (new rows go to the end of the index), which is dramatically faster for bulk operations and reduces WAL (write-ahead log) volume.
+
+**Scope of change:** Replace `Guid.NewGuid()` with `Guid.CreateVersion7()` at GUID generation points — primarily in `ActivitiesRepository` (bulk inserts), `ExportEvaluationServer`, `DriftDetectionService`, and the EF Core `ValueGeneratedOnAdd` default. Existing data is unaffected (UUIDv4 and UUIDv7 coexist in the same column). Could be adopted incrementally, starting with the highest-volume tables.
 
 ### Low Value / Future
 
