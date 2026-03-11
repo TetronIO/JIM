@@ -460,16 +460,18 @@ public class ActivityRepository : IActivityRepository
                     .ThenInclude(av => av.Attribute)
             .Where(a => a.Activity.Id == activityId);
 
-        // Apply object type filter if specified
+        // Apply object type filter if specified (falls back to ObjectTypeSnapshot when CSO/Type is null)
         if (objectTypeFilter != null)
         {
             var objectTypes = objectTypeFilter.ToList();
             if (objectTypes.Count > 0)
             {
                 query = query.Where(a =>
-                    a.ConnectedSystemObject != null &&
-                    a.ConnectedSystemObject.Type != null &&
-                    objectTypes.Contains(a.ConnectedSystemObject.Type.Name));
+                    (a.ConnectedSystemObject != null &&
+                     a.ConnectedSystemObject.Type != null &&
+                     objectTypes.Contains(a.ConnectedSystemObject.Type.Name)) ||
+                    (a.ObjectTypeSnapshot != null &&
+                     objectTypes.Contains(a.ObjectTypeSnapshot)));
             }
         }
 
@@ -499,28 +501,31 @@ public class ActivityRepository : IActivityRepository
             }
         }
 
-        // Apply search filter - search on display name, external ID, or object type
-        // Search is case-insensitive for user convenience
+        // Apply search filter - search on display name and external ID (case-insensitive).
+        // Object type is excluded from search as it has a dedicated filter control.
+        // Falls back to snapshot fields when CSO navigation is null.
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
             var searchPattern = $"%{searchQuery}%";
             query = query.Where(item =>
-                // Search display name
+                // Search display name (live CSO attribute)
                 (item.ConnectedSystemObject != null &&
                  item.ConnectedSystemObject.AttributeValues.Any(av =>
                     EF.Functions.ILike(av.Attribute.Name, "displayname") &&
                     av.StringValue != null &&
                     EF.Functions.ILike(av.StringValue, searchPattern))) ||
-                // Search external ID
+                // Search display name (snapshot fallback)
+                (item.DisplayNameSnapshot != null &&
+                 EF.Functions.ILike(item.DisplayNameSnapshot, searchPattern)) ||
+                // Search external ID (live CSO attribute)
                 (item.ConnectedSystemObject != null &&
                  item.ConnectedSystemObject.AttributeValues.Any(av =>
                     av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId &&
                     av.StringValue != null &&
                     EF.Functions.ILike(av.StringValue, searchPattern))) ||
-                // Search object type name
-                (item.ConnectedSystemObject != null &&
-                 item.ConnectedSystemObject.Type != null &&
-                 EF.Functions.ILike(item.ConnectedSystemObject.Type.Name, searchPattern)));
+                // Search external ID (snapshot fallback)
+                (item.ExternalIdSnapshot != null &&
+                 EF.Functions.ILike(item.ExternalIdSnapshot, searchPattern)));
         }
 
         // Apply sorting
@@ -531,34 +536,34 @@ public class ActivityRepository : IActivityRepository
                     ? item.ConnectedSystemObject.AttributeValues
                         .Where(av => av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId)
                         .Select(av => av.StringValue)
-                        .FirstOrDefault()
-                    : null)
+                        .FirstOrDefault() ?? item.ExternalIdSnapshot
+                    : item.ExternalIdSnapshot)
                 : query.OrderBy(item => item.ConnectedSystemObject != null
                     ? item.ConnectedSystemObject.AttributeValues
                         .Where(av => av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId)
                         .Select(av => av.StringValue)
-                        .FirstOrDefault()
-                    : null),
+                        .FirstOrDefault() ?? item.ExternalIdSnapshot
+                    : item.ExternalIdSnapshot),
             "displayname" or "name" => sortDescending
                 ? query.OrderByDescending(item => item.ConnectedSystemObject != null
                     ? item.ConnectedSystemObject.AttributeValues
                         .Where(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
                         .Select(av => av.StringValue)
-                        .FirstOrDefault()
-                    : null)
+                        .FirstOrDefault() ?? item.DisplayNameSnapshot
+                    : item.DisplayNameSnapshot)
                 : query.OrderBy(item => item.ConnectedSystemObject != null
                     ? item.ConnectedSystemObject.AttributeValues
                         .Where(av => EF.Functions.ILike(av.Attribute.Name, "displayname"))
                         .Select(av => av.StringValue)
-                        .FirstOrDefault()
-                    : null),
+                        .FirstOrDefault() ?? item.DisplayNameSnapshot
+                    : item.DisplayNameSnapshot),
             "type" or "objecttype" => sortDescending
                 ? query.OrderByDescending(item => item.ConnectedSystemObject != null && item.ConnectedSystemObject.Type != null
                     ? item.ConnectedSystemObject.Type.Name
-                    : null)
+                    : item.ObjectTypeSnapshot)
                 : query.OrderBy(item => item.ConnectedSystemObject != null && item.ConnectedSystemObject.Type != null
                     ? item.ConnectedSystemObject.Type.Name
-                    : null),
+                    : item.ObjectTypeSnapshot),
             "errortype" => sortDescending
                 ? query.OrderByDescending(item => item.ErrorType)
                 : query.OrderBy(item => item.ErrorType),
@@ -643,10 +648,15 @@ public class ActivityRepository : IActivityRepository
             })
             .ToListAsync();
 
-        // Get object type counts with names (separate query as it needs GROUP BY on type name)
+        // Get object type counts with names (separate query as it needs GROUP BY on type name).
+        // Falls back to ObjectTypeSnapshot when the CSO/Type navigation is null (e.g. export RPEIs
+        // where the CSO was deleted, or the snapshot was populated but FK not retained).
         var objectTypeCounts = await rpeiQuery
-            .Where(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Type != null)
-            .GroupBy(q => q.ConnectedSystemObject!.Type!.Name)
+            .Select(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Type != null
+                ? q.ConnectedSystemObject.Type.Name
+                : q.ObjectTypeSnapshot)
+            .Where(name => name != null)
+            .GroupBy(name => name!)
             .Select(g => new { TypeName = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.TypeName, x => x.Count);
 
