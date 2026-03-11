@@ -82,14 +82,9 @@ All have 10.x releases available. Upgrade alongside the framework target change.
 
 ### Audit Decisions Needed
 
-1. **Swashbuckle vs built-in OpenAPI + Scalar** — ASP.NET Core 10 has native OpenAPI 3.1 document generation. Microsoft recommends `Microsoft.AspNetCore.OpenApi` + [Scalar](https://github.com/scalar/scalar) for the interactive UI. Swashbuckle 10.1.5 still works but is no longer the platform default. Options:
-   - **Option A:** Upgrade Swashbuckle to 10.1.5 (minimal effort, works fine)
-   - **Option B:** Migrate to built-in OpenAPI + Scalar (aligns with platform direction, removes a dependency)
+1. **Swashbuckle vs built-in OpenAPI + Scalar** — **Decision: migrate to `Microsoft.AspNetCore.OpenApi` + `Scalar.AspNetCore`.** Removes Swashbuckle from the dependency tree (supply chain reduction for government/defence deployments), aligns with Microsoft's platform direction (Swashbuckle removed from all .NET 9+ templates), and XML doc comment support is automatic in .NET 10 via a compile-time source generator. Scalar provides a modern API reference UI with native dark mode, full-text search, auto-generated code snippets, and OAuth2/PKCE/API key auth support. Both UIs can coexist during transition for zero-risk evaluation. Migration effort is small to moderate — mainly translating OAuth2 + API key security definitions from Swashbuckle's `AddSecurityDefinition`/`AddSecurityRequirement` to OpenAPI document transformers.
 
-2. **Asp.Versioning.Mvc** — only 10.0.0-preview.1 available. The current 8.1.1 (targeting net8.0) *may* work on .NET 10 but is not officially supported. Options:
-   - **Option A:** Use the preview package (risk: instability)
-   - **Option B:** Keep 8.1.1 and test compatibility (risk: unsupported)
-   - **Option C:** Wait for stable 10.x release before migrating (safest)
+2. **Asp.Versioning.Mvc** — **Decision: use 10.0.0-preview.1.** Accept the preview risk. This is a Microsoft-maintained package under `dotnet/aspnet-api-versioning` and a stable release is expected soon.
 
 3. **MudBlazor 8 to 9** — major version with breaking changes. Must review the MudBlazor 9 migration guide before upgrading.
 
@@ -133,7 +128,8 @@ Update all packages as per Phase 1 audit tables. Key upgrades:
 - Serilog.AspNetCore → 10.0.0
 - NUnit3TestAdapter → 6.1.0
 - coverlet.collector → 8.0.0
-- Swashbuckle.AspNetCore → 10.1.5 (or replace — see audit decision)
+- **Remove** Swashbuckle.AspNetCore; **add** Microsoft.AspNetCore.OpenApi + Scalar.AspNetCore
+- Asp.Versioning.Mvc / Asp.Versioning.Mvc.ApiExplorer → 10.0.0-preview.1
 
 ## Phase 4: Docker Infrastructure
 
@@ -203,8 +199,8 @@ Add a `global.json` to pin the SDK version:
 | **EF Core: parameterised collections use multiple params** | Sync operations use `.Contains()` with ID batches | May improve PostgreSQL query planning. Monitor performance. Can revert per-query with `EF.Parameter()`. |
 | **EF Core: Application Name injected into connection string** | Could affect connection pooling | Explicitly set `Application Name` in PostgreSQL connection strings. |
 | **System.Text.Json property name conflict checking** | Could surface hidden DTO serialisation bugs | Build and test — any conflicts surface as runtime exceptions. |
-| **WebHostBuilder/IWebHost marked obsolete** | Check if JIM uses these | Expect compiler warnings if so; migrate to `WebApplicationBuilder`. |
-| **Razor runtime compilation obsolete** | Check if JIM uses this | If used, plan removal. |
+| ~~**WebHostBuilder/IWebHost marked obsolete**~~ | **Not affected** — JIM already uses `WebApplication.CreateBuilder()` (Web) and `Host.CreateDefaultBuilder()` (Worker, Scheduler) | No action needed |
+| ~~**Razor runtime compilation obsolete**~~ | **Not affected** — JIM uses compile-time Razor compilation only; no `RuntimeCompilation` package or `AddRazorRuntimeCompilation()` calls | No action needed |
 
 ### Low — Informational
 
@@ -223,36 +219,102 @@ Add a `global.json` to pin the SDK version:
 
 ### High Value — Consider During Migration
 
-| Feature | Benefit for JIM | Effort |
-|---------|----------------|--------|
-| **`[PersistentState]` (Blazor)** | Eliminates manual state serialisation, fixes double-render, preserves state across circuit reconnection | Medium — refactor affected pages |
-| **Named query filters (EF Core 10)** | Multiple toggleable filters per entity — useful for soft-delete, scoping, admin bypass | Medium — design filter strategy |
-| **`ExecuteUpdateAsync` with regular lambdas** | Conditional batch updates in sync operations without expression trees | Low — simplify existing code |
-| **LeftJoin LINQ operator** | Replace verbose `GroupJoin`/`SelectMany`/`DefaultIfEmpty` patterns | Low — find and replace patterns |
-| **EF Core SQL log PII redaction** | Automatic — aligns with JIM's security requirements for government/defence deployments | None — automatic |
+#### 1. `[PersistentState]` attribute (Blazor) — Effort: Medium
+
+Eliminates the double-render problem across the Blazor UI. Currently, every page that loads data in `OnInitializedAsync` fetches that data twice during prerendering — once on the server, then again when the circuit connects.
+
+**Concrete impact in JIM:**
+- `ConnectedSystemList.razor` (line 102) — loads connected system headers; would avoid a redundant `GetConnectedSystemHeadersAsync()` call on every page load
+- `ActivityDetail.razor` (lines 576–597) — loads activity, connected system header, metaverse object header, and execution stats in sequence; all four queries currently run twice
+- `ConnectedSystemObjectList.razor` (lines 330–352) — loads connected system header + object types; double-fetched on navigation
+- `ConnectorList.razor` (line 56) — loads connector definitions; simple but still double-rendered
+- `UserPreferenceService.cs` — already has try-catch workarounds for "JS interop not available during prerendering" (12+ catch blocks); `[PersistentState]` would eliminate this entire pattern
+
+Also provides **circuit state persistence** — users can resume sessions after disconnection without losing work, which is valuable for long-running identity management operations.
+
+#### 2. Named query filters (EF Core 10) — Effort: Medium
+
+Multiple independently toggleable query filters per entity. JIM currently has **no `HasQueryFilter` calls** and relies on manually repeated WHERE clauses.
+
+**Concrete duplication in JIM today:**
+- `ConnectedSystemRepository.cs` (lines 2219 and 2264) — the **identical** three-way PendingExport status filter (`Pending || Exported || ExportNotConfirmed`) is duplicated verbatim
+- `TaskingRepository.cs` (lines 97 and 107) — `WorkerTaskStatus.Queued` filter duplicated across `GetNextWorkerTaskAsync` and `GetNextWorkerTasksToProcessAsync`
+- `TaskingRepository.cs` (lines 241, 251, 270, 280) — `WaitingForPreviousStep` status filter repeated four times
+- `ActivitiesRepository.cs` (lines 150 and 281) — activity status filtering duplicated
+
+Named query filters would centralise these in `OnModelCreating` and allow selective bypass (e.g., admin views that need to see all statuses).
+
+#### 3. `ExecuteUpdateAsync` with regular lambdas (EF Core 10) — Effort: Low
+
+EF Core 10 allows regular C# logic (if/else, loops) inside `ExecuteUpdateAsync` instead of expression trees. JIM has extensive batch update operations that would benefit.
+
+**Concrete impact in JIM:**
+- `TaskingRepository.cs` (lines 326–343) — `UpdateWorkerTasksAsProcessingAsync` currently loops through tasks one by one, fetching each from the database, updating properties, then saving. Could become a single `ExecuteUpdateAsync` call
+- `TaskingRepository.cs` (lines 242, 364) — already uses `ExecuteUpdateAsync` with fixed expressions; conditional logic would allow combining status transitions into one call
+- `ConnectedSystemRepository.cs` (lines 2414–2478) — complex PendingExport batch update with try/catch fallback between raw SQL and entity-by-entity EF tracking. Simplified lambdas could reduce the need for raw SQL fallback paths
+- The extensive raw SQL bulk operations (lines 3893–4214) with `BulkInsert*RawAsync` / `BulkUpdate*RawAsync` — while these are already optimal for performance, the simplified `ExecuteUpdateAsync` could replace the simpler raw SQL paths
+
+#### 4. LeftJoin LINQ operator (EF Core 10) — Effort: Low
+
+Replaces the verbose `join...into` + `DefaultIfEmpty()` pattern with a clean `LeftJoin` method.
+
+**Concrete impact in JIM:**
+- `ConnectedSystemRepository.cs` (lines 565–569) — the `GetConnectedSystemObjectsHeaderAsync` method uses the verbose pattern to left-join PendingExports with ConnectedSystemObjects. Would become a single `LeftJoin()` call
+
+Only one LINQ instance found (other left joins use raw SQL), but this establishes a cleaner pattern for future queries.
+
+#### 5. EF Core SQL log PII redaction — Effort: None (automatic)
+
+EF Core 10 automatically redacts inlined constant values from SQL logs by default. JIM currently controls sensitive data logging via the `JIM_DB_LOG_SENSITIVE_INFO` environment variable and keeps EF Core command logging at Warning level (`Program.cs` line 476, `appsettings.json` line 10). The automatic redaction adds a safety net — even if someone enables Debug logging, PII won't leak into SQL log output.
+
+**Directly relevant** for JIM's government, defence, and healthcare deployments where log data exfiltration is a compliance concern.
 
 ### Medium Value — Consider Post-Migration
 
-| Feature | Benefit for JIM | Effort |
-|---------|----------------|--------|
-| **`field` keyword (C# 14)** | Eliminate backing field boilerplate for validated properties in domain models | Low — gradual adoption |
-| **Extension members (C# 14)** | Extension properties for DTOs/models in API layer | Low — gradual adoption |
-| **Null-conditional assignment (C# 14)** | Reduce null-check boilerplate in sync operations | Low — gradual adoption |
-| **Complex types with value semantics (EF Core 10)** | Could eliminate the EF Core identity conflict issue documented in `CROSS_PAGE_REFERENCE_IDENTITY_CONFLICT.md` | High — requires data model changes |
-| **Built-in passkey/WebAuthn auth** | Phishing-resistant auth without third-party dependencies; aligns with air-gapped requirement | Medium — new auth feature |
-| **JSON column improvements (EF Core 10)** | Better support for complex types mapped to JSONB, including `ExecuteUpdateAsync` on JSON columns | Medium — evaluate for structured metadata |
-| **Circuit state persistence (Blazor)** | Users resume sessions after disconnection without losing work | Low — mostly automatic |
-| **CSP-compliant reconnection modal (Blazor)** | New `ReconnectModal` respecting Content Security Policy — important for secure deployments | Low |
-| **UUIDv7 support (PostgreSQL 18)** | Time-sortable GUIDs via `Guid.CreateVersion7()` — better index performance for new entities | Low — use for new tables |
+#### 6. Null-conditional assignment (C# 14) — Effort: Low, gradual
+
+C# 14 allows `x?.Property = value;` instead of `if (x != null) { x.Property = value; }`.
+
+**Concrete patterns in JIM:**
+- `TaskingServer.cs` (lines 399–405) — fetches a schedule execution, checks for null, then updates Status and CompletedAt. Repeated at lines 420–423 for CurrentStepIndex
+- `SeedingServer.cs` (lines 495–539) — the same `if (result != null) list.Add(result)` pattern is repeated ~15 times sequentially for built-in example data sets
+- `SearchServer.cs` (lines 28–29 and 40–41) — null-check-then-assign for predefined search post-processing
+- `AuditHelper.cs` (lines 20–24 and 57–62) — `SetCreated` and `SetUpdated` methods check `if (user != null)` before assigning audit properties
+
+#### 7. `field` keyword (C# 14) — Effort: Low, gradual
+
+Eliminates explicit backing field declarations for properties that need validation or notification in setters. JIM currently has a few instances (e.g., `PostgresDataRepository.cs` with `_disposed` backing field) but the main value is establishing the pattern for future domain model properties that need setter validation.
+
+#### 8. Complex types with value semantics (EF Core 10) — Effort: High
+
+EF Core 10's complex types use value semantics, avoiding the reference identity issues that plague owned entities. This directly relates to the **cross-page reference EF identity conflict** documented in `docs/notes/CROSS_PAGE_REFERENCE_IDENTITY_CONFLICT.md` — the bug where `Update`/`UpdateRange`/`TrackGraph` all traverse the object graph and hit shared entities after `ClearChangeTracker()`.
+
+Complex types with value semantics would eliminate this entire class of bugs. However, this requires significant data model changes and migration planning — a separate initiative rather than part of the .NET 10 migration itself.
+
+#### 9. Built-in passkey/WebAuthn auth — Effort: Medium, separate initiative
+
+JIM currently delegates all user authentication to the OIDC identity provider (including any MFA the IdP implements). API clients use JWT Bearer tokens or API keys. JIM has no built-in MFA.
+
+Passkey support would primarily benefit **direct JIM authentication** if that's ever needed (e.g., local admin accounts in air-gapped environments without an IdP). For now, this is a future consideration rather than a migration task.
+
+#### 10. CSP-compliant reconnection modal (Blazor) — Effort: Low
+
+New `ReconnectModal` component respects Content Security Policy headers. JIM deploys in security-conscious environments where CSP is enforced — this is a straightforward swap that improves compatibility.
+
+#### 11. UUIDv7 support (PostgreSQL 18) — Effort: Low
+
+`Guid.CreateVersion7()` generates time-sortable GUIDs, which improve B-tree index performance compared to random UUIDv4. JIM creates many entities with GUID primary keys. Applicable to new tables and could be adopted gradually for new entity types.
 
 ### Low Value / Future
 
 | Feature | Notes |
 |---------|-------|
+| Extension members (C# 14) | Extension properties for DTOs in `src/JIM.Web/Extensions/Api/` — useful but not urgent |
 | Server-Sent Events | Alternative to SignalR for simple streaming scenarios |
 | OpenAPI YAML output | `app.MapOpenApi("/openapi/{documentName}.yaml")` |
-| XML doc comments in OpenAPI | Automatic population of API descriptions from XML comments |
 | Virtual generated columns (PG 18) | Computed-on-read columns — useful for computed identity attributes |
+
+> **Note:** XML doc comments in OpenAPI are now **automatic** with `Microsoft.AspNetCore.OpenApi` in .NET 10 — the source generator processes `<summary>`, `<param>`, `<returns>`, `<response>` etc. at compile time with zero runtime overhead. JIM.Web already has `GenerateDocumentationFile` enabled.
 
 ---
 
@@ -260,7 +322,7 @@ Add a `global.json` to pin the SDK version:
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| Asp.Versioning.Mvc no stable 10.x release | Medium | High | Current 8.1.1 may work on .NET 10; preview available; wait for stable release |
+| Asp.Versioning.Mvc using preview package | Low | Low | Using 10.0.0-preview.1; Microsoft-maintained, stable release expected soon; can pin to stable when available |
 | MudBlazor 9 breaking changes extensive | Medium | High | Review migration guide thoroughly; budget time for UI fixes |
 | Humanizer.Core 3 namespace changes | Low | Low | Well-documented migration; limited use in JIM |
 | Docker apt package versions differ on Ubuntu | Medium | Medium | Test package availability on Noble; update pinned versions |
@@ -273,7 +335,7 @@ Add a `global.json` to pin the SDK version:
 
 - .NET 10 SDK available in devcontainer base image
 - .NET 10 Docker base images (Ubuntu Noble) published on MCR with SHA256 digests
-- Asp.Versioning.Mvc stable 10.x release (or confirmation that 8.1.1 works on .NET 10)
+- Asp.Versioning.Mvc 10.0.0-preview.1 (accepted; upgrade to stable when released)
 - MudBlazor 9 migration guide reviewed
 - Npgsql.EntityFrameworkCore.PostgreSQL patch for known `ObjectDisposedException` bug
 
