@@ -928,7 +928,11 @@ internal class LdapConnectorExport
             addRequest.Attributes.Add(new DirectoryAttribute("objectClass", objectClass));
         }
 
-        // Add all attributes from the pending export
+        // Consolidate attribute changes by name so multi-valued attributes (e.g. member with
+        // 50 values) are sent as a single DirectoryAttribute with all values, not 50 separate
+        // DirectoryAttribute entries. The LDAP AddRequest requires one entry per attribute name.
+        var attributeGroups = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var attrChange in pendingExport.AttributeValueChanges)
         {
             if (attrChange.Attribute == null)
@@ -947,8 +951,26 @@ internal class LdapConnectorExport
             var value = GetAttributeValue(attrChange);
             if (value != null)
             {
-                addRequest.Attributes.Add(new DirectoryAttribute(attrName, value));
+                if (!attributeGroups.TryGetValue(attrName, out var values))
+                {
+                    values = [];
+                    attributeGroups[attrName] = values;
+                }
+                values.Add(value);
             }
+        }
+
+        foreach (var (attrName, values) in attributeGroups)
+        {
+            var attr = new DirectoryAttribute(attrName);
+            foreach (var value in values)
+            {
+                if (value is byte[] bytes)
+                    attr.Add(bytes);
+                else
+                    attr.Add(value.ToString());
+            }
+            addRequest.Attributes.Add(attr);
         }
 
         return addRequest;
