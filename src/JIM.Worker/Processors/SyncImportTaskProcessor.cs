@@ -2453,7 +2453,9 @@ public class SyncImportTaskProcessor
                             // Add ExportFailed outcome for permanently failed exports
                             if (result.FailedChanges.Count > 0)
                             {
-                                var failedAttrNames = string.Join(", ", result.FailedChanges.Select(c => c.Attribute?.Name ?? "unknown"));
+                                var failedAttrNames = string.Join(", ", result.FailedChanges
+                                    .GroupBy(c => c.Attribute?.Name ?? "unknown")
+                                    .Select(g => g.Count() > 1 ? $"{g.Key} (x{g.Count()})" : g.Key));
 
                                 if (existingRpei != null)
                                 {
@@ -2500,7 +2502,9 @@ public class SyncImportTaskProcessor
                             // Add ExportFailed outcome for retry exports (temporary failures)
                             if (result.RetryChanges.Count > 0)
                             {
-                                var retryAttrNames = string.Join(", ", result.RetryChanges.Select(c => c.Attribute?.Name ?? "unknown"));
+                                var retryAttrNames = string.Join(", ", result.RetryChanges
+                                    .GroupBy(c => c.Attribute?.Name ?? "unknown")
+                                    .Select(g => g.Count() > 1 ? $"{g.Key} (x{g.Count()})" : g.Key));
 
                                 if (existingRpei != null)
                                 {

@@ -4285,29 +4285,32 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (allChanges.Count == 0)
             return;
 
-        const int columnsPerRow = 4; // Id + 3 mutable columns
+        const int columnsPerRow = 7; // Id + 6 mutable columns
         var chunkSize = MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in ChunkList(allChanges, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"UPDATE ""PendingExportAttributeValueChanges"" AS t SET ""Status"" = v.""Status"", ""ExportAttemptCount"" = v.""ExportAttemptCount"", ""LastExportedAt"" = v.""LastExportedAt"" FROM (VALUES ");
+            sql.Append(@"UPDATE ""PendingExportAttributeValueChanges"" AS t SET ""Status"" = v.""Status"", ""ExportAttemptCount"" = v.""ExportAttemptCount"", ""LastExportedAt"" = v.""LastExportedAt"", ""StringValue"" = v.""StringValue"", ""UnresolvedReferenceValue"" = v.""UnresolvedReferenceValue"", ""LastImportedValue"" = v.""LastImportedValue"" FROM (VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::text, {{{offset + 5}}}::text, {{{offset + 6}}}::text)");
 
                 var avc = chunk[i];
                 parameters.Add(avc.Id);
                 parameters.Add((int)avc.Status);
                 parameters.Add(avc.ExportAttemptCount);
                 parameters.Add(NullableParam(avc.LastExportedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(NullableParam(avc.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(NullableParam(avc.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(NullableParam(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
-            sql.Append(@") AS v(""Id"", ""Status"", ""ExportAttemptCount"", ""LastExportedAt"") WHERE t.""Id"" = v.""Id""");
+            sql.Append(@") AS v(""Id"", ""Status"", ""ExportAttemptCount"", ""LastExportedAt"", ""StringValue"", ""UnresolvedReferenceValue"", ""LastImportedValue"") WHERE t.""Id"" = v.""Id""");
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
