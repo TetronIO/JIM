@@ -99,6 +99,7 @@
             @foreach (var child in Outcome.Children.OrderBy(c => c.Ordinal))
             {
                 <OutcomeTreeNode Outcome="child"
+                                 ParentOutcomeType="Outcome.OutcomeType"
                                  AttributeChanges="AttributeChanges"
                                  MvoAttributeChanges="MvoAttributeChanges" />
             }
@@ -127,6 +128,13 @@
     /// <summary>
     /// When true, the attribute detail section starts expanded rather than collapsed.
     /// </summary>
+    /// <summary>
+    /// The outcome type of this node's parent, passed down from the parent OutcomeTreeNode.
+    /// Used to suppress redundant descriptions when nesting is already contextual.
+    /// </summary>
+    [Parameter]
+    public ActivityRunProfileExecutionItemSyncOutcomeType? ParentOutcomeType { get; set; }
+
     [Parameter]
     public bool InitiallyExpanded { get; set; }
 
@@ -171,12 +179,12 @@
         && !IsPendingExportChildOfProvisioned;
 
     /// <summary>
-    /// Whether this PendingExportCreated node is a child of a Provisioned node.
-    /// When nested, the CS name is already shown on the parent so we suppress the inline description.
+    /// Whether this PendingExportCreated node is a direct child of a Provisioned node.
+    /// In that case the CS name is already shown on the parent, so we suppress the inline description.
     /// </summary>
     private bool IsPendingExportChildOfProvisioned =>
         Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
-        && Outcome.ParentSyncOutcomeId.HasValue;
+        && ParentOutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned;
 
     /// <summary>
     /// Whether this outcome node has a connected system link available.

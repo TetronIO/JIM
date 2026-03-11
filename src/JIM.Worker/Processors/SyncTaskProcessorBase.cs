@@ -1291,19 +1291,23 @@ public abstract class SyncTaskProcessorBase
                     else if (exportParent != null)
                     {
                         // Update to existing CSO — attach under AttributeFlow or root
+                        csNameLookup.TryGetValue(peCsId, out var peCsName);
+                        peCsName ??= pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name;
                         peOutcome = SyncOutcomeBuilder.AddChildOutcome(originatingRpei, exportParent,
                             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
                             targetEntityId: pendingExport.Id,
-                            targetEntityDescription: pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name,
+                            targetEntityDescription: peCsName,
                             detailCount: pendingExport.AttributeValueChanges.Count,
                             detailMessage: peCsId.ToString());
                     }
                     else
                     {
+                        csNameLookup.TryGetValue(peCsId, out var peCsName);
+                        peCsName ??= pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name;
                         peOutcome = SyncOutcomeBuilder.AddRootOutcome(originatingRpei,
                             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
                             targetEntityId: pendingExport.Id,
-                            targetEntityDescription: pendingExport.ConnectedSystemObject?.ConnectedSystem?.Name,
+                            targetEntityDescription: peCsName,
                             detailCount: pendingExport.AttributeValueChanges.Count,
                             detailMessage: peCsId.ToString());
                     }

@@ -412,12 +412,10 @@ public class ExportExecutionServer
                         // all accumulated entities — 40K+ entities after 100 batches.
                         Application.Repository.ClearChangeTracker();
                     }
-                    else
-                    {
-                        // No immediate exports in this batch (all ineligible or deferred).
-                        // Break to avoid infinite loop since these exports won't change status.
-                        break;
-                    }
+                    // Note: no break when a batch has only ineligible/deferred exports — the outer
+                    // loop continues scanning forward since later batches (ordered by CreatedAt) may
+                    // contain eligible exports. The loop only exits when batch.Count == 0 (database
+                    // exhausted), handled above at line 352.
                 }
 
                 // Second pass: Exports with unresolved references (deferred)

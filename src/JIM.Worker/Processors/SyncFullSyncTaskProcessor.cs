@@ -320,11 +320,21 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             executionItem.ObjectChangeType = ObjectChangeType.PendingExport;
             executionItem.ConnectedSystemObject = pendingExport.ConnectedSystemObject;
             executionItem.ConnectedSystemObjectId = pendingExport.ConnectedSystemObjectId;
+            executionItem.PendingExportId = pendingExport.Id;
 
-            // Snapshot CSO display fields for historical reference
             if (pendingExport.ConnectedSystemObject != null)
             {
+                // Existing CSO (update/delete): snapshot directly from it
                 executionItem.SnapshotCsoDisplayFields(pendingExport.ConnectedSystemObject);
+            }
+            else
+            {
+                // Create-type PE: no CSO exists yet. Fall back to attribute value changes for
+                // display name, and to the source MVO ID as last resort for external ID.
+                executionItem.DisplayNameSnapshot = pendingExport.AttributeValueChanges
+                    .FirstOrDefault(avc => avc.Attribute?.Name?.Equals("displayname", StringComparison.OrdinalIgnoreCase) == true)
+                    ?.StringValue;
+                executionItem.ExternalIdSnapshot = pendingExport.SourceMetaverseObjectId?.ToString();
             }
 
             _activity.RunProfileExecutionItems.Add(executionItem);

@@ -746,25 +746,43 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                                 </MudExpansionPanels>
                             }
 
-                            @* Pending Export Details - shown for ExportNotConfirmed and ExportConfirmationFailed errors *@
+                            @* Pending Export Details - shown for PendingExport items and export-related errors *@
                             @if (_pendingExport != null)
                             {
                                 <MudText Typo="Typo.h6" Class="mb-3">Pending Export Details</MudText>
                                 <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
-                                    @if (_activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed)
+                                    @if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.PendingExport
+                                         && _activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
+                                    {
+                                        <text>The following attribute changes are staged and awaiting export to the connected system.</text>
+                                    }
+                                    else if (_activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed)
                                     {
                                         <text>The following attribute changes were exported but have not yet been confirmed. They will be retried on the
                                             next export run.</text>
-                                        }
-                                        else
-                                        {
-                                            <text>The following attribute changes failed to export after multiple attempts and may require manual
-                                                intervention.</text>
-                                        }
-                                        </MudText>
+                                    }
+                                    else
+                                    {
+                                        <text>The following attribute changes failed to export after multiple attempts and may require manual
+                                            intervention.</text>
+                                    }
+                                </MudText>
 
                                         <MudPaper Class="pa-4 mb-4" Outlined="true">
                                             <MudGrid Spacing="3">
+                                                <MudItem xs="12" sm="6" md="3">
+                                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Connected System</MudText>
+                                                    <MudText>
+                                                        @if (_pendingExport.ConnectedSystem != null)
+                                                        {
+                                                            <MudLink Href="@($"/admin/connected-systems/{_pendingExport.ConnectedSystemId}")">@_pendingExport.ConnectedSystem.Name</MudLink>
+                                                        }
+                                                        else
+                                                        {
+                                                            <text>-</text>
+                                                        }
+                                                    </MudText>
+                                                </MudItem>
                                                 <MudItem xs="12" sm="6" md="3">
                                                     <MudText Typo="Typo.button" Class="mud-text-secondary">Status</MudText><br />
                                                     <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportStatusColor(_pendingExport.Status)"
@@ -939,13 +957,24 @@ new("Item Details", href: null, disabled: true)
             ?? _activityRunProfileExecutionItem.ConnectedSystemObject?.MetaverseObject;
         }
 
-        // For export-related errors, load the associated pending export to show detailed attribute status
+        // Load associated pending export for:
+        // - Export-related errors (ExportNotConfirmed, ExportConfirmationFailed)
+        // - PendingExport items surfaced during sync (informational, no error)
         if (_activityRunProfileExecutionItem.ErrorType is ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed
-        or ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed
-        && _activityRunProfileExecutionItem.ConnectedSystemObjectId.HasValue)
+            or ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed
+            && _activityRunProfileExecutionItem.ConnectedSystemObjectId.HasValue)
         {
             _pendingExport = await Jim.ConnectedSystems.GetPendingExportForObjectAsync(
-            _activityRunProfileExecutionItem.ConnectedSystemObjectId.Value);
+                _activityRunProfileExecutionItem.ConnectedSystemObjectId.Value);
+        }
+        else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.PendingExport)
+        {
+            if (_activityRunProfileExecutionItem.ConnectedSystemObjectId.HasValue)
+                _pendingExport = await Jim.ConnectedSystems.GetPendingExportForObjectAsync(
+                    _activityRunProfileExecutionItem.ConnectedSystemObjectId.Value);
+            else if (_activityRunProfileExecutionItem.PendingExportId.HasValue)
+                _pendingExport = await Jim.ConnectedSystems.GetPendingExportAsync(
+                    _activityRunProfileExecutionItem.PendingExportId.Value);
         }
 
         // Resolve the MVO type for headings and deletion rule display

@@ -46,6 +46,12 @@ public class ActivityRunProfileExecutionItem
     public Guid? ConnectedSystemObjectId { get; set; }
 
     /// <summary>
+    /// The pending export associated with this execution item, when ObjectChangeType is PendingExport.
+    /// Enables the detail page to load the pending export for Create-type exports that have no CSO yet.
+    /// </summary>
+    public Guid? PendingExportId { get; set; }
+
+    /// <summary>
     /// Snapshot of the external ID value at the time the RPEI was created.
     /// This preserves the external ID even if the CSO is later deleted (e.g., due to obsolescence),
     /// which would otherwise null out the ConnectedSystemObjectId via FK cascade.
