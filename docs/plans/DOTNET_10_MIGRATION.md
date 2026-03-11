@@ -141,7 +141,48 @@ Microsoft dropped Debian-based images for .NET 10. All base images now use Ubunt
 - [ ] `src/JIM.Worker/Dockerfile` — `sdk:10.0-noble` + `runtime:10.0-noble` (with new SHA256 digests)
 - [ ] `src/JIM.Scheduler/Dockerfile` — `sdk:10.0-noble` + `runtime:10.0-noble` (with new SHA256 digests)
 - [ ] `.devcontainer/Dockerfile` — update to .NET 10 devcontainer base image
-- [ ] **Re-verify all pinned `apt` package versions** — package names and versions may differ between Debian Bookworm and Ubuntu Noble (especially `libldap` and `cifs-utils`)
+
+#### Pinned `apt` Package Changes (Debian Bookworm → Ubuntu Noble) ✅ Audited
+
+| Package (Bookworm) | Package (Noble) | Name Changed? | New Version |
+|---------------------|-----------------|---------------|-------------|
+| `libldap-common=2.5.13+dfsg-5` | `libldap-common` | No | `2.6.7+dfsg-1~exp1ubuntu8` |
+| `libldap-2.5-0=2.5.13+dfsg-5` | **`libldap2`** | **Yes — renamed** | `2.6.7+dfsg-1~exp1ubuntu8` |
+| `cifs-utils=2:7.0-2` | `cifs-utils` | No | `2:7.0-2build1` |
+| `iputils-ping` (unpinned) | `iputils-ping` | No | Available |
+| `curl` (unpinned) | `curl` | No | Available |
+
+**Key actions:**
+- **Rename** `libldap-2.5-0` → `libldap2` in Web and Worker Dockerfiles
+- **Update version pins** for all three functional packages to Noble versions
+- OpenLDAP moves from 2.5.x to 2.6.x — verify LDAP connector compatibility with the newer library
+
+#### Image Variant Selection ✅ Audited
+
+.NET 10 offers **chiseled** images — stripped-down Ubuntu images with no shell, no package manager, non-root by default (UID 1654), and ~50% smaller than full images. Ideal for security-sensitive deployments.
+
+| Variant | Size (aspnet) | Shell? | apt? | Non-root? | Globalisation? |
+|---------|--------------|--------|------|-----------|---------------|
+| `noble` (full) | ~220 MB | Yes | Yes | No | Yes |
+| `noble-chiseled` | ~110 MB | No | No | Yes | No |
+| `noble-chiseled-extra` | ~130 MB | No | No | Yes | Yes |
+
+**Constraint:** JIM.Web and JIM.Worker need `apt-get install` for `libldap` and `cifs-utils`. Chiseled images have no package manager, so they cannot be used for these services.
+
+**Recommended per-service:**
+
+| Service | Image Variant | Rationale |
+|---------|--------------|-----------|
+| **JIM.Web** | `aspnet:10.0-noble` + `USER app` | Needs libldap + cifs-utils via apt; add non-root user manually |
+| **JIM.Worker** | `runtime:10.0-noble` + `USER app` | Needs libldap via apt; add non-root user manually |
+| **JIM.Scheduler** | `runtime:10.0-noble-chiseled-extra` | No native dependencies; maximum security, non-root by default, ~50% smaller |
+
+**Security improvement over current state:**
+- All three services will run as non-root (currently they run as root)
+- Scheduler gets chiseled image — no shell, no package manager, dramatically reduced CVE surface
+- Web and Worker get non-root via explicit `USER app` directive
+
+**Known issue:** [dotnet/runtime#123676](https://github.com/dotnet/runtime/issues/123676) — `System.DirectoryServices.Protocols` fails to load `libldap-2.5.so.0` on Ubuntu Noble with .NET 10. Monitor for fix; may need symlink workaround (`libldap-2.5.so.0` → `libldap.so.2`).
 
 ## Phase 5: CI/CD Workflows
 
@@ -325,7 +366,8 @@ New `ReconnectModal` component respects Content Security Policy headers. JIM dep
 | Asp.Versioning.Mvc using preview package | Low | Low | Using 10.0.0-preview.1; Microsoft-maintained, stable release expected soon; can pin to stable when available |
 | MudBlazor 9 breaking changes extensive | Medium | High | Review migration guide thoroughly; budget time for UI fixes |
 | Humanizer.Core 3 namespace changes | Low | Low | Well-documented migration; limited use in JIM |
-| Docker apt package versions differ on Ubuntu | Medium | Medium | Test package availability on Noble; update pinned versions |
+| Docker apt package versions differ on Ubuntu | Medium | Medium | Audited — `libldap-2.5-0` renamed to `libldap2`, versions updated (see Phase 4) |
+| libldap loading failure on Noble ([#123676](https://github.com/dotnet/runtime/issues/123676)) | Medium | High | Monitor for fix; may need symlink `libldap-2.5.so.0` → `libldap.so.2` |
 | Npgsql `ObjectDisposedException` bug ([#3699](https://github.com/npgsql/efcore.pg/issues/3699)) | Medium | Medium | Monitor for fix in Npgsql 10.0.1+; workaround may exist |
 | LDAP strict parsing breaks with non-standard directories | Low | High | Thorough testing against all target directory types |
 | BackgroundService startup ordering changes | Low | Medium | Audit Worker/Scheduler `ExecuteAsync` implementations |
