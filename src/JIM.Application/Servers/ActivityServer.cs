@@ -152,6 +152,16 @@ public class ActivityServer
         await Application.Repository.Activity.UpdateActivityAsync(activity);
     }
 
+    public async Task CompleteActivityWithErrorAsync(Activity activity, string errorMessage)
+    {
+        var now = DateTime.UtcNow;
+        activity.ExecutionTime = now - activity.Executed;
+        activity.TotalActivityTime = now - activity.Created;
+        activity.ErrorMessage = errorMessage;
+        activity.Status = ActivityStatus.CompleteWithError;
+        await Application.Repository.Activity.UpdateActivityAsync(activity);
+    }
+
     public async Task FailActivityWithErrorAsync(Activity activity, string errorMessage)
     {
         var now = DateTime.UtcNow;
@@ -361,10 +371,10 @@ public class ActivityServer
 
     /// <summary>
     /// Queries the database for RPEI error counts for an activity. Returns the total number of
-    /// RPEIs with errors and the total number of RPEIs, enabling precise activity completion
-    /// status determination without loading RPEIs into memory.
+    /// RPEIs with errors, the total number of RPEIs, and the number of UnhandledError RPEIs,
+    /// enabling precise activity completion status determination without loading RPEIs into memory.
     /// </summary>
-    public async Task<(int TotalWithErrors, int TotalRpeis)> GetActivityRpeiErrorCountsAsync(Guid activityId)
+    public async Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
     {
         return await Application.Repository.Activity.GetActivityRpeiErrorCountsAsync(activityId);
     }

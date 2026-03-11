@@ -67,7 +67,7 @@ public class ActivityRepository : IActivityRepository
         await command.ExecuteNonQueryAsync();
     }
 
-    public async Task<(int TotalWithErrors, int TotalRpeis)> GetActivityRpeiErrorCountsAsync(Guid activityId)
+    public async Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
     {
         var counts = await Repository.Database.ActivityRunProfileExecutionItems
             .Where(r => r.Activity.Id == activityId)
@@ -75,13 +75,14 @@ public class ActivityRepository : IActivityRepository
             .Select(g => new
             {
                 TotalRpeis = g.Count(),
-                TotalWithErrors = g.Count(r => r.ErrorType != null && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+                TotalWithErrors = g.Count(r => r.ErrorType != null && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet),
+                TotalUnhandledErrors = g.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError)
             })
             .FirstOrDefaultAsync();
 
         return counts != null
-            ? (counts.TotalWithErrors, counts.TotalRpeis)
-            : (0, 0);
+            ? (counts.TotalWithErrors, counts.TotalRpeis, counts.TotalUnhandledErrors)
+            : (0, 0, 0);
     }
 
     public async Task DeleteActivityAsync(Activity activity)
