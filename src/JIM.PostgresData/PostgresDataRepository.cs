@@ -143,6 +143,11 @@ public class PostgresDataRepository : IRepository
     /// (MetaverseAttribute, MetaverseObjectType) and premature insertion of entities
     /// that should be persisted separately (RPEIs via raw SQL bulk insert).
     ///
+    /// Always marks the entity as Modified (unless it's Added, which already implies persistence).
+    /// This is necessary because callers invoke this method to persist changes, and when
+    /// AutoDetectChangesEnabled is false (e.g., during page flush sequences), EF Core won't
+    /// auto-detect property changes on Unchanged entities — causing SaveChangesAsync to skip them.
+    ///
     /// Falls back to Update() in unit test environments where Entry() is unavailable (mocked DbContext).
     /// </summary>
     internal void UpdateDetachedSafe<T>(T entity) where T : class
@@ -150,10 +155,14 @@ public class PostgresDataRepository : IRepository
         try
         {
             var entry = Database.Entry(entity);
-            if (entry.State == EntityState.Detached)
+            // Always mark as Modified unless the entity is Added (which already implies persistence).
+            // Previously this only marked Detached entities, leaving Unchanged entities as-is under
+            // the assumption that auto-detect would catch property changes. That assumption fails
+            // when AutoDetectChangesEnabled is false (sync page flush), causing SaveChangesAsync
+            // to generate no SQL for the entity — e.g., EvaluateMvoDeletionAsync's CSO FK null
+            // was silently lost, leaving a dangling FK that blocked MVO deletion.
+            if (entry.State != EntityState.Added)
                 entry.State = EntityState.Modified;
-            // If already tracked (e.g. Added, Modified, Unchanged), leave as-is —
-            // it's the same instance and EF will persist changes on SaveChanges.
         }
         catch (InvalidOperationException)
         {
