@@ -800,6 +800,18 @@ public class SyncImportTaskProcessor
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
         cso.LastUpdated = DateTime.UtcNow;
 
+        // Clean up any stale pending exports for this CSO. When a CSO's object is deleted from the
+        // target system, any Exported-status Delete PEs (awaiting confirmation) or other stale PEs
+        // are no longer relevant. Without this cleanup, stale PEs accumulate and can cause duplicate
+        // PE errors when subsequent operations create new PEs for other CSOs.
+        var deletedPeCount = await _jim.Repository.ConnectedSystems
+            .DeletePendingExportsByConnectedSystemObjectIdsAsync(new[] { cso.Id });
+        if (deletedPeCount > 0)
+        {
+            Log.Information("ObsoleteConnectedSystemObjectAsync: Cleaned up {Count} stale pending export(s) for obsolete CSO {CsoId}",
+                deletedPeCount, cso.Id);
+        }
+
         // add it to the list of objects to be updated. this will persist and create a change object in the activity tree.
         connectedSystemObjectsToBeUpdated.Add(cso);
     }

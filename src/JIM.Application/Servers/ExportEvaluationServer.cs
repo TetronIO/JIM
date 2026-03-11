@@ -579,6 +579,37 @@ public class ExportEvaluationServer
                 continue;
             }
 
+            // Check for an existing pending export for this CSO before creating a new one.
+            // This prevents duplicate PEs when EvaluateMvoDeletionAsync is called multiple times
+            // for the same MVO (e.g., via housekeeping retry after a failed deletion attempt),
+            // or when a Create PE exists from provisioning that was never exported.
+            var existingPe = await Application.Repository.ConnectedSystems
+                .GetPendingExportByConnectedSystemObjectIdAsync(cso.Id);
+
+            if (existingPe != null)
+            {
+                if (existingPe.ChangeType == PendingExportChangeType.Delete)
+                {
+                    // Delete PE already exists — skip creation to avoid duplicates
+                    Log.Information("EvaluateMvoDeletionAsync: Delete PendingExport {ExistingPeId} already exists for CSO {CsoId} (status: {Status}). Skipping duplicate creation.",
+                        existingPe.Id, cso.Id, existingPe.Status);
+                    pendingExports.Add(existingPe);
+
+                    // Still disconnect the CSO
+                    cso.MetaverseObjectId = null;
+                    cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
+                    cso.DateJoined = null;
+                    await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(cso);
+                    continue;
+                }
+
+                // A non-Delete PE exists (e.g., a stale Create or Update PE from provisioning).
+                // Delete it and replace with the Delete PE, since the MVO is being deleted.
+                Log.Information("EvaluateMvoDeletionAsync: Replacing existing {ChangeType} PendingExport {ExistingPeId} for CSO {CsoId} with Delete PE",
+                    existingPe.ChangeType, existingPe.Id, cso.Id);
+                await Application.Repository.ConnectedSystems.DeletePendingExportAsync(existingPe);
+            }
+
             // Only set the FK property (ConnectedSystemObjectId), NOT the navigation property (ConnectedSystemObject).
             // Setting both can cause EF Core change tracker conflicts where the FK gets overwritten.
             var pendingExport = new PendingExport

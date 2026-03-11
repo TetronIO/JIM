@@ -1463,11 +1463,15 @@ if ($SetupOnly) {
 
     # Docker Cleanup (prune unused images and build cache to prevent disk space accumulation)
     Write-Step "Pruning unused images and build cache (preserving snapshots)..."
-    $pruneOutput = docker image prune -af --filter "label!=jim.samba.snapshot-hash" 2>&1
-    $pruneOutput += docker builder prune -af 2>&1
-    $reclaimedMatch = $pruneOutput | Select-String "Total reclaimed space:\s*(.+)"
-    if ($reclaimedMatch) {
-        Write-Success "Reclaimed: $($reclaimedMatch.Matches[0].Groups[1].Value)"
+    $imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" 2>&1
+    $builderPrune = docker builder prune -af 2>&1
+    $imageReclaimed = $imagePrune | Select-String "Total reclaimed space:\s*(.+)"
+    $builderReclaimed = $builderPrune | Select-String "Total reclaimed space:\s*(.+)"
+    $parts = @()
+    if ($imageReclaimed) { $parts += "images: $($imageReclaimed.Matches[0].Groups[1].Value)" }
+    if ($builderReclaimed) { $parts += "build cache: $($builderReclaimed.Matches[0].Groups[1].Value)" }
+    if ($parts.Count -gt 0) {
+        Write-Success "Reclaimed ($($parts -join ', '))"
     }
 
     # Performance Summary
@@ -1856,11 +1860,15 @@ Write-Section "Step 7: Docker Cleanup"
 
 Write-Step "Pruning unused images and build cache (preserving snapshots)..."
 # Use --filter to exclude snapshot images from pruning (they take hours to build)
-$pruneOutput = docker image prune -af --filter "label!=jim.samba.snapshot-hash" 2>&1
-$pruneOutput += docker builder prune -af 2>&1
-$reclaimedMatch = $pruneOutput | Select-String "Total reclaimed space:\s*(.+)"
-if ($reclaimedMatch) {
-    Write-Success "Reclaimed: $($reclaimedMatch.Matches[0].Groups[1].Value)"
+$imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" 2>&1
+$builderPrune = docker builder prune -af 2>&1
+$imageReclaimed = $imagePrune | Select-String "Total reclaimed space:\s*(.+)"
+$builderReclaimed = $builderPrune | Select-String "Total reclaimed space:\s*(.+)"
+$parts = @()
+if ($imageReclaimed) { $parts += "images: $($imageReclaimed.Matches[0].Groups[1].Value)" }
+if ($builderReclaimed) { $parts += "build cache: $($builderReclaimed.Matches[0].Groups[1].Value)" }
+if ($parts.Count -gt 0) {
+    Write-Success "Reclaimed ($($parts -join ', '))"
 }
 else {
     Write-Success "Docker cleanup complete (nothing to reclaim)"
