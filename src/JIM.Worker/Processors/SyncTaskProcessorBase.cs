@@ -1559,11 +1559,8 @@ public abstract class SyncTaskProcessorBase
                             // Update the existing outcome tree to reflect merged reference attribute changes
                             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                             {
-                                // Update root outcome's DetailCount to match updated AttributeFlowCount
-                                var rootOutcome = existingChangeEntry.Rpei.SyncOutcomes.FirstOrDefault(o =>
-                                    o.ParentSyncOutcome == null && o.ParentSyncOutcomeId == null);
-                                if (rootOutcome != null)
-                                    rootOutcome.DetailCount = existingChangeEntry.Rpei.AttributeFlowCount;
+                                // Note: Do NOT set DetailCount on the root Projected/Joined outcome — the attribute
+                                // count is only meaningful on the AttributeFlow child node (Detailed mode below).
 
                                 // In Detailed mode, also update the AttributeFlow child node
                                 if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed)
