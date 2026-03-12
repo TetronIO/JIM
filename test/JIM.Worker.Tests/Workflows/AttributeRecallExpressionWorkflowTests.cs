@@ -439,6 +439,27 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
         Assert.That(disconnectedRpei, Is.Not.Null,
             "Delta Sync should produce a Disconnected RPEI when a joined CSO is obsoleted");
 
+        // Verify MVO change tracking records were created for the recalled attributes.
+        // This enables the RPEI detail page to show the attribute change table for recall scenarios.
+        var mvoChanges = await DbContext.Set<MetaverseObjectChange>()
+            .Include(c => c.AttributeChanges)
+            .ThenInclude(ac => ac.ValueChanges)
+            .Where(c => c.MetaverseObject!.Id == mvoId)
+            .OrderByDescending(c => c.ChangeTime)
+            .ToListAsync();
+
+        var recallChange = mvoChanges.FirstOrDefault(c => c.ChangeType == ObjectChangeType.Disconnected);
+        Assert.That(recallChange, Is.Not.Null,
+            "MVO change tracking should record a Disconnected change when attributes are recalled");
+        Assert.That(recallChange!.AttributeChanges, Has.Count.EqualTo(1),
+            "MVO change should record the recalled Description attribute");
+        var recalledAttrChange = recallChange.AttributeChanges.First();
+        Assert.That(recalledAttrChange.Attribute.Name, Is.EqualTo("Description"),
+            "Recalled attribute should be the Training-contributed Description");
+        Assert.That(recalledAttrChange.ValueChanges, Has.Count.EqualTo(1));
+        Assert.That(recalledAttrChange.ValueChanges.First().ValueChangeType, Is.EqualTo(ValueChangeType.Remove),
+            "Recalled attribute value change should be a Remove");
+
         // Verify aggregate stats for Training Delta Sync (guards against double-counting bugs)
         Assert.That(trainingDeltaSyncActivity.TotalDisconnected, Is.EqualTo(1), "Training Delta Sync: expected 1 disconnection.");
         Assert.That(trainingDeltaSyncActivity.TotalAttributeFlows, Is.EqualTo(1), "Training Delta Sync: expected 1 attribute flow (recalled Description).");
