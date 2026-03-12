@@ -378,6 +378,13 @@ public abstract class SyncTaskProcessorBase
                     {
                         existingRpei.AttributeFlowCount = changeResult.AttributeFlowCount;
                     }
+
+                    // Capture recalled attribute values for MVO change tracking (enables attribute change table in RPEI detail)
+                    if (changeResult.RecalledAttributeValues != null && changeResult.DisconnectedMvo != null)
+                    {
+                        _pendingMvoChanges.Add((changeResult.DisconnectedMvo, new List<MetaverseObjectAttributeValue>(),
+                            changeResult.RecalledAttributeValues, ObjectChangeType.DisconnectedOutOfScope, existingRpei));
+                    }
                 }
                 else
                 {
@@ -391,6 +398,13 @@ public abstract class SyncTaskProcessorBase
                     if (changeResult.AttributeFlowCount.HasValue)
                     {
                         runProfileExecutionItem.AttributeFlowCount = changeResult.AttributeFlowCount;
+                    }
+
+                    // Capture recalled attribute values for MVO change tracking (enables attribute change table in RPEI detail)
+                    if (changeResult.RecalledAttributeValues != null && changeResult.DisconnectedMvo != null)
+                    {
+                        _pendingMvoChanges.Add((changeResult.DisconnectedMvo, new List<MetaverseObjectAttributeValue>(),
+                            changeResult.RecalledAttributeValues, ObjectChangeType.DisconnectedOutOfScope, runProfileExecutionItem));
                     }
 
                     // Build sync outcome for RPEIs not already covered by ProcessMetaverseObjectChangesAsync
@@ -753,6 +767,11 @@ public abstract class SyncTaskProcessorBase
 
                 // Track attribute removals on the RPEI (these are part of the disconnection)
                 deletionExecutionItem.AttributeFlowCount = mvo.PendingAttributeValueRemovals.Count;
+
+                // Capture MVO changes for change tracking BEFORE applying (which clears the pending lists).
+                // This enables the RPEI detail page to show the recalled attribute values in the causality tree.
+                var removals = mvo.PendingAttributeValueRemovals.ToList();
+                _pendingMvoChanges.Add((mvo, new List<MetaverseObjectAttributeValue>(), removals, ObjectChangeType.Disconnected, deletionExecutionItem));
 
                 Log.Information("ProcessObsoleteConnectedSystemObjectAsync: Applying {Count} attribute removals to MVO {MvoId} and queueing for export evaluation",
                     changedAttributes.Count, mvo.Id);
@@ -2685,6 +2704,7 @@ public abstract class SyncTaskProcessorBase
                 // Check if we should remove contributed attributes based on the object type setting.
                 // Skip recall when a grace period is configured (see ProcessObsoleteConnectedSystemObjectAsync).
                 int attributeRemovalCount = 0;
+                List<MetaverseObjectAttributeValue>? recalledAttributeValues = null;
                 var hasGracePeriod = mvo.Type?.DeletionGracePeriod is { } gracePeriod && gracePeriod > TimeSpan.Zero;
                 if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !hasGracePeriod)
                 {
@@ -2700,6 +2720,14 @@ public abstract class SyncTaskProcessorBase
                     }
 
                     attributeRemovalCount = contributedAttributes.Count;
+
+                    // Capture recalled attribute values BEFORE applying (which clears the pending lists).
+                    // These are passed back in the result so the caller can add them to _pendingMvoChanges
+                    // for MVO change tracking, enabling the RPEI detail page to show recalled attribute values.
+                    if (mvo.PendingAttributeValueRemovals.Count > 0)
+                    {
+                        recalledAttributeValues = mvo.PendingAttributeValueRemovals.ToList();
+                    }
                 }
 
                 // Break the CSO-MVO join
@@ -2719,7 +2747,9 @@ public abstract class SyncTaskProcessorBase
 
                 return MetaverseObjectChangeResult.DisconnectedOutOfScope(
                     attributeFlowCount: attributeRemovalCount > 0 ? attributeRemovalCount : null,
-                    mvoDeletionFate: mvoDeletionFate);
+                    mvoDeletionFate: mvoDeletionFate,
+                    recalledAttributeValues: recalledAttributeValues,
+                    disconnectedMvo: recalledAttributeValues != null ? mvo : null);
         }
     }
 

@@ -516,18 +516,7 @@
                             <strong>The metaverse object was deleted.</strong>
                             @if (!string.IsNullOrEmpty(mvoDeletedOutcome.TargetEntityDescription))
                             {
-                                <text> The identity </text>
-                                @if (mvoDeletedOutcome.TargetEntityId.HasValue)
-                                {
-                                    <MudLink Href="@GetMvoHref(mvoDeletedOutcome.TargetEntityId.Value)">
-                                        @mvoDeletedOutcome.TargetEntityDescription
-                                    </MudLink>
-                                }
-                                else
-                                {
-                                    <strong>@mvoDeletedOutcome.TargetEntityDescription</strong>
-                                }
-                                <text> was removed from the metaverse immediately (no grace period).</text>
+                                <text> The identity <strong>@mvoDeletedOutcome.TargetEntityDescription</strong> was removed from the metaverse immediately (no grace period).</text>
                             }
                         </MudText>
                     </MudStack>

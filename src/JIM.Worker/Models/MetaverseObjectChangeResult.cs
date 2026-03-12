@@ -46,6 +46,22 @@ public readonly struct MetaverseObjectChangeResult
     public MvoDeletionFate MvoDeletionFate { get; init; }
 
     /// <summary>
+    /// MVO attribute values that were recalled (removed) during disconnection.
+    /// Captured before applying pending changes so the caller can add them to _pendingMvoChanges
+    /// for MVO change tracking. This enables the RPEI detail page to show recalled attribute
+    /// values in the causality tree's expandable attribute change table.
+    /// Only populated for DisconnectedOutOfScope when attribute recall occurred.
+    /// </summary>
+    public List<MetaverseObjectAttributeValue>? RecalledAttributeValues { get; init; }
+
+    /// <summary>
+    /// The MVO that was disconnected. Needed by the caller to create MVO change tracking records,
+    /// because the CSO→MVO join has already been broken by the time the result is returned.
+    /// Only populated for DisconnectedOutOfScope when attribute recall occurred.
+    /// </summary>
+    public MetaverseObject? DisconnectedMvo { get; init; }
+
+    /// <summary>
     /// Creates a result indicating no changes occurred.
     /// </summary>
     public static MetaverseObjectChangeResult NoChanges() => new() { HasChanges = false };
@@ -97,14 +113,19 @@ public readonly struct MetaverseObjectChangeResult
     /// </summary>
     /// <param name="attributeFlowCount">Optional count of attribute removals that occurred during disconnection.</param>
     /// <param name="mvoDeletionFate">The fate of the MVO after the disconnection.</param>
+    /// <param name="recalledAttributeValues">MVO attribute values that were recalled, for change tracking.</param>
     public static MetaverseObjectChangeResult DisconnectedOutOfScope(
         int? attributeFlowCount = null,
-        MvoDeletionFate mvoDeletionFate = MvoDeletionFate.NotDeleted) => new()
+        MvoDeletionFate mvoDeletionFate = MvoDeletionFate.NotDeleted,
+        List<MetaverseObjectAttributeValue>? recalledAttributeValues = null,
+        MetaverseObject? disconnectedMvo = null) => new()
     {
         HasChanges = true,
         ChangeType = ObjectChangeType.DisconnectedOutOfScope,
         AttributeFlowCount = attributeFlowCount,
-        MvoDeletionFate = mvoDeletionFate
+        MvoDeletionFate = mvoDeletionFate,
+        RecalledAttributeValues = recalledAttributeValues,
+        DisconnectedMvo = disconnectedMvo
     };
 
     /// <summary>

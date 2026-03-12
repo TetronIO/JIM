@@ -182,6 +182,8 @@
             or ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
             or ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected
             or ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope
+            or ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
+            or ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled
         && !IsPendingExportChildOfProvisioned;
 
     /// <summary>
@@ -204,9 +206,13 @@
 
     /// <summary>
     /// Whether this outcome has an MVO link (Guid target entity ID that isn't empty).
+    /// Excluded when the MVO no longer exists: MvoDeleted outcomes themselves, or parent
+    /// outcomes (e.g. Disconnected) that have an MvoDeleted child in their causality tree.
     /// </summary>
     private bool HasMvoLink =>
-        Outcome.TargetEntityId.HasValue && Outcome.TargetEntityId.Value != Guid.Empty;
+        Outcome.TargetEntityId.HasValue && Outcome.TargetEntityId.Value != Guid.Empty
+        && Outcome.OutcomeType != ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
+        && !Outcome.Children.Any(c => c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
 
     private string GetInlineSeparator() =>
         Outcome.OutcomeType switch
@@ -235,38 +241,22 @@
 
         return Outcome.OutcomeType switch
         {
-            // Projected, Joined, Provisioned, PendingExportCreated, and Disconnected types show their target inline on the title row
+            // Projected, Joined, Provisioned, PendingExportCreated, Disconnected, and MVO deletion types
+            // show their target inline on the title row
             ActivityRunProfileExecutionItemSyncOutcomeType.Projected => null,
             ActivityRunProfileExecutionItemSyncOutcomeType.Joined => null,
             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => null,
             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => null,
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => null,
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => null,
+            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => null,
+            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => null,
             // AttributeFlow child nodes don't need a separate MVO description line
             ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => null,
-            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
-                => RenderMvoDescription("MVO deleted: "),
-            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled
-                => RenderMvoDescription("MVO scheduled for deletion: "),
             // For connected system targets (pending exports, exports), just show the name
             _ => RenderPlainDescription()
         };
     }
-
-    private RenderFragment RenderMvoDescription(string prefix) => __builder =>
-    {
-        <MudText Typo="Typo.body1" Class="mud-text-secondary">
-            @prefix
-            @if (Outcome.TargetEntityId.HasValue && Outcome.TargetEntityId.Value != Guid.Empty)
-            {
-                <MudLink Href="@GetMvoHref(Outcome.TargetEntityId.Value)">@Outcome.TargetEntityDescription</MudLink>
-            }
-            else
-            {
-                @Outcome.TargetEntityDescription
-            }
-        </MudText>
-    };
 
     private RenderFragment RenderPlainDescription() => __builder =>
     {

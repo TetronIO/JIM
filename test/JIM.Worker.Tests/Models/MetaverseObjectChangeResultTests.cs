@@ -1,3 +1,4 @@
+using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Worker.Models;
 using JIM.Worker.Processors;
@@ -515,6 +516,69 @@ public class MetaverseObjectChangeResultTests
         var result = new MetaverseObjectChangeResult();
 
         Assert.That(result.MvoDeletionFate, Is.EqualTo(MvoDeletionFate.NotDeleted));
+    }
+
+    #endregion
+
+    #region RecalledAttributeValues Tests
+
+    [Test]
+    public void DisconnectedOutOfScope_WithNoRecalledAttributes_ReturnsNull()
+    {
+        var result = MetaverseObjectChangeResult.DisconnectedOutOfScope();
+
+        Assert.That(result.RecalledAttributeValues, Is.Null);
+    }
+
+    [Test]
+    public void DisconnectedOutOfScope_WithRecalledAttributes_ReturnsValues()
+    {
+        var attr = new MetaverseAttribute { Id = 1, Name = "DisplayName", Type = AttributeDataType.Text };
+        var attrValue = new MetaverseObjectAttributeValue { Attribute = attr, StringValue = "Test" };
+        var recalledValues = new List<MetaverseObjectAttributeValue> { attrValue };
+
+        var result = MetaverseObjectChangeResult.DisconnectedOutOfScope(
+            attributeFlowCount: 1,
+            recalledAttributeValues: recalledValues);
+
+        Assert.That(result.RecalledAttributeValues, Is.Not.Null);
+        Assert.That(result.RecalledAttributeValues, Has.Count.EqualTo(1));
+        Assert.That(result.RecalledAttributeValues![0].StringValue, Is.EqualTo("Test"));
+    }
+
+    [Test]
+    public void DisconnectedOutOfScope_WithDisconnectedMvo_ReturnsMvo()
+    {
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        var attr = new MetaverseAttribute { Id = 1, Name = "DisplayName", Type = AttributeDataType.Text };
+        var attrValue = new MetaverseObjectAttributeValue { Attribute = attr, StringValue = "Test" };
+        var recalledValues = new List<MetaverseObjectAttributeValue> { attrValue };
+
+        var result = MetaverseObjectChangeResult.DisconnectedOutOfScope(
+            attributeFlowCount: 1,
+            recalledAttributeValues: recalledValues,
+            disconnectedMvo: mvo);
+
+        Assert.That(result.DisconnectedMvo, Is.Not.Null);
+        Assert.That(result.DisconnectedMvo!.Id, Is.EqualTo(mvo.Id));
+    }
+
+    [Test]
+    public void DisconnectedOutOfScope_WithNoRecalledAttributes_HasNullDisconnectedMvo()
+    {
+        var result = MetaverseObjectChangeResult.DisconnectedOutOfScope(attributeFlowCount: 0);
+
+        Assert.That(result.RecalledAttributeValues, Is.Null);
+        Assert.That(result.DisconnectedMvo, Is.Null);
+    }
+
+    [Test]
+    public void DefaultStruct_HasNullRecalledAttributeValues()
+    {
+        var result = new MetaverseObjectChangeResult();
+
+        Assert.That(result.RecalledAttributeValues, Is.Null);
+        Assert.That(result.DisconnectedMvo, Is.Null);
     }
 
     #endregion
