@@ -579,6 +579,37 @@ public class ExportEvaluationServer
                 continue;
             }
 
+            // Check for an existing pending export for this CSO before creating a new one.
+            // This prevents duplicate PEs when EvaluateMvoDeletionAsync is called multiple times
+            // for the same MVO (e.g., via housekeeping retry after a failed deletion attempt),
+            // or when a Create PE exists from provisioning that was never exported.
+            var existingPe = await Application.Repository.ConnectedSystems
+                .GetPendingExportByConnectedSystemObjectIdAsync(cso.Id);
+
+            if (existingPe != null)
+            {
+                if (existingPe.ChangeType == PendingExportChangeType.Delete)
+                {
+                    // Delete PE already exists — skip creation to avoid duplicates
+                    Log.Information("EvaluateMvoDeletionAsync: Delete PendingExport {ExistingPeId} already exists for CSO {CsoId} (status: {Status}). Skipping duplicate creation.",
+                        existingPe.Id, cso.Id, existingPe.Status);
+                    pendingExports.Add(existingPe);
+
+                    // Still disconnect the CSO
+                    cso.MetaverseObjectId = null;
+                    cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
+                    cso.DateJoined = null;
+                    await Application.Repository.ConnectedSystems.UpdateConnectedSystemObjectAsync(cso);
+                    continue;
+                }
+
+                // A non-Delete PE exists (e.g., a stale Create or Update PE from provisioning).
+                // Delete it and replace with the Delete PE, since the MVO is being deleted.
+                Log.Information("EvaluateMvoDeletionAsync: Replacing existing {ChangeType} PendingExport {ExistingPeId} for CSO {CsoId} with Delete PE",
+                    existingPe.ChangeType, existingPe.Id, cso.Id);
+                await Application.Repository.ConnectedSystems.DeletePendingExportAsync(existingPe);
+            }
+
             // Only set the FK property (ConnectedSystemObjectId), NOT the navigation property (ConnectedSystemObject).
             // Setting both can cause EF Core change tracker conflicts where the FK gets overwritten.
             var pendingExport = new PendingExport
@@ -702,7 +733,21 @@ public class ExportEvaluationServer
                 csoForExport = await CreatePendingProvisioningCsoAsync(mvo, exportRule);
                 createdNewCso = true;
             }
-            // else: reuse existing PendingProvisioning CSO (already has secondary external ID)
+            else
+            {
+                // Reuse existing PendingProvisioning CSO (already has secondary external ID).
+                // A previous sync already created the Create PE with all mapped attributes.
+                // Only proceed if the current changedAttributes are relevant to this export rule —
+                // otherwise we'd replace the existing PE with an identical one and incorrectly
+                // attribute it to this sync in the causality tree.
+                if (!HasRelevantChangedAttributes(changedAttributes, exportRule))
+                {
+                    Log.Debug("CreateOrUpdatePendingExportAsync: Skipping PendingProvisioning CSO {CsoId} for rule {RuleName} — " +
+                        "none of the {ChangeCount} changed attributes map to this export rule's attribute flow rules",
+                        existingCso.Id, exportRule.Name, changedAttributes.Count);
+                    return null;
+                }
+            }
 
             changeType = PendingExportChangeType.Create;
         }
@@ -801,7 +846,21 @@ public class ExportEvaluationServer
                 // Update the cache with the newly created CSO so subsequent lookups find it
                 cache.CsoLookup[lookupKey] = csoForExport;
             }
-            // else: reuse existing PendingProvisioning CSO (already has secondary external ID)
+            else
+            {
+                // Reuse existing PendingProvisioning CSO (already has secondary external ID).
+                // A previous sync already created the Create PE with all mapped attributes.
+                // Only proceed if the current changedAttributes are relevant to this export rule —
+                // otherwise we'd replace the existing PE with an identical one and incorrectly
+                // attribute it to this sync in the causality tree.
+                if (!HasRelevantChangedAttributes(changedAttributes, exportRule))
+                {
+                    Log.Debug("CreateOrUpdatePendingExportAsync: Skipping PendingProvisioning CSO {CsoId} for rule {RuleName} — " +
+                        "none of the {ChangeCount} changed attributes map to this export rule's attribute flow rules",
+                        existingCso.Id, exportRule.Name, changedAttributes.Count);
+                    return null;
+                }
+            }
 
             changeType = PendingExportChangeType.Create;
         }
@@ -963,7 +1022,19 @@ public class ExportEvaluationServer
             }
             else
             {
-                // Reuse existing PendingProvisioning CSO (already has secondary external ID)
+                // Reuse existing PendingProvisioning CSO (already has secondary external ID).
+                // A previous sync already created the Create PE with all mapped attributes.
+                // Only proceed if the current changedAttributes are relevant to this export rule —
+                // otherwise we'd replace the existing PE with an identical one and incorrectly
+                // attribute it to this sync in the causality tree.
+                if (!HasRelevantChangedAttributes(changedAttributes, exportRule))
+                {
+                    Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: Skipping PendingProvisioning CSO {CsoId} for rule {RuleName} — " +
+                        "none of the {ChangeCount} changed attributes map to this export rule's attribute flow rules",
+                        existingCso.Id, exportRule.Name, changedAttributes.Count);
+                    return (null, null, 0);
+                }
+
                 changeType = PendingExportChangeType.Create;
             }
         }
@@ -1027,26 +1098,28 @@ public class ExportEvaluationServer
                 var mergedCount = 0;
                 var addedCount = 0;
 
-                // Build a lookup of existing drift changes by (AttributeId, value-identity) for deduplication
+                // Build a lookup of existing drift changes for deduplication.
+                // Uses merge keys: single-valued attributes key by attribute ID only (newest wins),
+                // multi-valued attributes key by attribute ID + value (each distinct value preserved).
                 var existingChangeKeys = new HashSet<string>();
                 foreach (var existing in existingPendingExport.AttributeValueChanges)
-                    existingChangeKeys.Add(GetAttributeChangeKey(existing));
+                    existingChangeKeys.Add(GetAttributeChangeMergeKey(existing));
 
                 foreach (var newChange in attributeChanges)
                 {
-                    var key = GetAttributeChangeKey(newChange);
+                    var key = GetAttributeChangeMergeKey(newChange);
                     if (existingChangeKeys.Contains(key))
                     {
-                        // Same attribute+value exists in drift PE — remove drift version(s) and add export eval version
-                        // (export eval has newer MVO state and may have a different ChangeType)
+                        // Same attribute (single-valued) or attribute+value (multi-valued) exists in drift PE —
+                        // remove drift version(s) and add export eval version (newer MVO state takes precedence)
                         var toRemove = existingPendingExport.AttributeValueChanges
-                            .Where(avc => GetAttributeChangeKey(avc) == key)
+                            .Where(avc => GetAttributeChangeMergeKey(avc) == key)
                             .ToList();
                         foreach (var r in toRemove)
                             existingPendingExport.AttributeValueChanges.Remove(r);
                         existingPendingExport.AttributeValueChanges.Add(newChange);
                         existingChangeKeys.Remove(key);
-                        existingChangeKeys.Add(GetAttributeChangeKey(newChange));
+                        existingChangeKeys.Add(GetAttributeChangeMergeKey(newChange));
                         mergedCount++;
                     }
                     else
@@ -1093,13 +1166,14 @@ public class ExportEvaluationServer
             {
                 // Build merged attribute changes: start with export eval changes (takes precedence),
                 // then add any drift-only changes not covered by export eval.
-                // For multi-valued attributes (e.g., member), both sources can have many changes
-                // for the same AttributeId, so we must merge at the individual value level.
+                // Uses merge keys: single-valued attributes key by attribute ID only (so the new
+                // export eval change always replaces the old value), multi-valued attributes key by
+                // attribute ID + value (each distinct value preserved).
                 // Clone drift-only changes with new IDs because DeletePendingExportAsync cascade-deletes
                 // child entities, making the tracked instances unusable for a new PE.
-                var exportEvalChangeKeys = attributeChanges.Select(GetAttributeChangeKey).ToHashSet();
+                var exportEvalChangeKeys = attributeChanges.Select(GetAttributeChangeMergeKey).ToHashSet();
                 var driftOnlyChanges = dbPendingExport.AttributeValueChanges
-                    .Where(avc => !exportEvalChangeKeys.Contains(GetAttributeChangeKey(avc)))
+                    .Where(avc => !exportEvalChangeKeys.Contains(GetAttributeChangeMergeKey(avc)))
                     .Select(avc => new PendingExportAttributeValueChange
                     {
                         Id = Guid.NewGuid(),
@@ -1222,7 +1296,7 @@ public class ExportEvaluationServer
             await Application.Repository.ConnectedSystems.CreateConnectedSystemObjectAsync(cso);
         }
 
-        Log.Information("CreatePendingProvisioningCsoAsync: Created PendingProvisioning CSO {CsoId} for MVO {MvoId} in system {SystemId} (deferSave={DeferSave})",
+        Log.Debug("CreatePendingProvisioningCsoAsync: Created PendingProvisioning CSO {CsoId} for MVO {MvoId} in system {SystemId} (deferSave={DeferSave})",
             cso.Id, mvo.Id, exportRule.ConnectedSystemId, deferSave);
 
         return cso;
@@ -1291,7 +1365,7 @@ public class ExportEvaluationServer
                 Application.ConnectedSystems.AddCsoToCache(cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryIdChange.StringValue, cso.Id);
         }
 
-        Log.Information("AddSecondaryExternalIdToCsoAsync: Added secondary external ID value '{SecondaryIdValue}' to CSO {CsoId} for confirming import matching (deferSave={DeferSave})",
+        Log.Debug("AddSecondaryExternalIdToCsoAsync: Added secondary external ID value '{SecondaryIdValue}' to CSO {CsoId} for confirming import matching (deferSave={DeferSave})",
             secondaryIdChange.StringValue ?? secondaryIdChange.IntValue?.ToString() ?? "unknown", cso.Id, deferSave);
     }
 
@@ -1827,6 +1901,40 @@ public class ExportEvaluationServer
     }
 
     /// <summary>
+    /// Checks whether any of the changed MVO attributes are relevant to the given export rule.
+    /// An attribute is relevant if it is a direct source for one of the rule's attribute flow mappings,
+    /// or if the rule has expression-based mappings (which may depend on any changed attribute).
+    /// Used to avoid replacing an existing Create PE on a PendingProvisioning CSO when the current
+    /// sync's changes are entirely unrelated to this export rule.
+    /// </summary>
+    internal static bool HasRelevantChangedAttributes(
+        List<MetaverseObjectAttributeValue> changedAttributes,
+        SyncRule exportRule)
+    {
+        if (changedAttributes.Count == 0)
+            return false;
+
+        var changedAttributeIds = new HashSet<int>(changedAttributes.Select(av => av.AttributeId));
+
+        foreach (var mapping in exportRule.AttributeFlowRules)
+        {
+            foreach (var source in mapping.Sources)
+            {
+                // Expression-based mappings may depend on any MVO attribute, so conservatively
+                // treat them as relevant when any attribute has changed.
+                if (!string.IsNullOrWhiteSpace(source.Expression))
+                    return true;
+
+                // Direct attribute mapping — check if the source MVO attribute is in the changed set
+                if (source.MetaverseAttribute != null && changedAttributeIds.Contains(source.MetaverseAttribute.Id))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Builds a dictionary of attribute values from a Metaverse Object for expression evaluation.
     /// The dictionary keys are attribute names, and values are the attribute values.
     /// </summary>
@@ -1893,6 +2001,25 @@ public class ExportEvaluationServer
             ?? string.Empty;
 
         return $"{change.AttributeId}:{valueId}";
+    }
+
+    /// <summary>
+    /// Returns a merge key for deduplicating attribute changes when combining pending exports.
+    /// For single-valued attributes, the key is just the attribute ID — the newest change always
+    /// wins regardless of value. For multi-valued attributes, the key includes the value so that
+    /// distinct values (e.g., different group members) are preserved during merge.
+    /// </summary>
+    internal static string GetAttributeChangeMergeKey(PendingExportAttributeValueChange change)
+    {
+        // Single-valued attributes: key by attribute ID only. When merging a stale PE with a new
+        // export evaluation, the old value and the new value will share the same key, so the new
+        // change replaces the old one. Without this, different values produce different keys and
+        // both survive, causing LDAP "SINGLE-VALUE attribute specified more than once" errors.
+        if (change.Attribute?.AttributePlurality != AttributePlurality.MultiValued)
+            return change.AttributeId.ToString();
+
+        // Multi-valued attributes: include value identity so each distinct value is preserved.
+        return GetAttributeChangeKey(change);
     }
 
     /// <summary>

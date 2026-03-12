@@ -143,6 +143,11 @@ public class PostgresDataRepository : IRepository
     /// (MetaverseAttribute, MetaverseObjectType) and premature insertion of entities
     /// that should be persisted separately (RPEIs via raw SQL bulk insert).
     ///
+    /// Always marks the entity as Modified (unless it's Added, which already implies persistence).
+    /// This is necessary because callers invoke this method to persist changes, and when
+    /// AutoDetectChangesEnabled is false (e.g., during page flush sequences), EF Core won't
+    /// auto-detect property changes on Unchanged entities — causing SaveChangesAsync to skip them.
+    ///
     /// Falls back to Update() in unit test environments where Entry() is unavailable (mocked DbContext).
     /// </summary>
     internal void UpdateDetachedSafe<T>(T entity) where T : class
@@ -150,7 +155,38 @@ public class PostgresDataRepository : IRepository
         try
         {
             var entry = Database.Entry(entity);
-            entry.State = EntityState.Modified;
+            // Always mark as Modified unless the entity is Added (which already implies persistence).
+            // Previously this only marked Detached entities, leaving Unchanged entities as-is under
+            // the assumption that auto-detect would catch property changes. That assumption fails
+            // when AutoDetectChangesEnabled is false (sync page flush), causing SaveChangesAsync
+            // to generate no SQL for the entity — e.g., EvaluateMvoDeletionAsync's CSO FK null
+            // was silently lost, leaving a dangling FK that blocked MVO deletion.
+            if (entry.State != EntityState.Added)
+                entry.State = EntityState.Modified;
+        }
+        catch (InvalidOperationException)
+        {
+            // Identity conflict: another instance with the same key is already tracked
+            // (e.g. after ClearChangeTracker, a query re-loaded the entity).
+            // Find the tracked instance and copy current values into it.
+            // We cannot call Database.Entry(entity) here as it would throw the same exception,
+            // so we extract key values via the EF model metadata and CLR property accessors.
+            var entityType = Database.Model.FindEntityType(typeof(T));
+            var keyProperties = entityType?.FindPrimaryKey()?.Properties;
+
+            if (keyProperties != null)
+            {
+                var trackedEntry = Database.ChangeTracker.Entries<T>()
+                    .FirstOrDefault(e => keyProperties.All(p =>
+                        Equals(e.Property(p.Name).CurrentValue,
+                               p.PropertyInfo?.GetValue(entity) ?? p.FieldInfo?.GetValue(entity))));
+
+                if (trackedEntry != null)
+                {
+                    trackedEntry.CurrentValues.SetValues(entity);
+                    trackedEntry.State = EntityState.Modified;
+                }
+            }
         }
         catch (NullReferenceException)
         {

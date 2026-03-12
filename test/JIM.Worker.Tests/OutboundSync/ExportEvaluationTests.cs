@@ -308,6 +308,126 @@ public class ExportEvaluationTests
     }
 
     /// <summary>
+    /// Tests that EvaluateMvoDeletionAsync skips creating a duplicate Delete PE when one already exists.
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionAsync_WhenDeletePeAlreadyExists_SkipsDuplicateCreationAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var provisionedCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned
+        };
+
+        ConnectedSystemObjectsData.Add(provisionedCso);
+
+        // Pre-populate with an existing Delete PE for this CSO
+        // Must set ConnectedSystemObject navigation property because mock DbSet doesn't auto-load it
+        var existingDeletePe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystemObjectId = provisionedCso.Id,
+            ConnectedSystemObject = provisionedCso,
+            ChangeType = PendingExportChangeType.Delete,
+            Status = PendingExportStatus.Exported,
+            SourceMetaverseObjectId = mvo.Id,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+        PendingExportsData.Add(existingDeletePe);
+
+        // Rebuild the mock DbSet so the query can find the existing PE
+        MockDbSetPendingExports = PendingExportsData.BuildMockDbSet();
+        MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
+
+        // Track any new PEs added
+        var newPesAdded = new List<PendingExport>();
+        MockDbSetPendingExports.Setup(set => set.AddAsync(It.IsAny<PendingExport>(), It.IsAny<CancellationToken>()))
+            .Callback((PendingExport entity, CancellationToken _) => { newPesAdded.Add(entity); })
+            .ReturnsAsync((PendingExport entity, CancellationToken _) => null!);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
+
+        // Assert — should return the existing PE, not create a new one
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Count, Is.EqualTo(1), "Should return exactly one PE");
+        Assert.That(result[0].Id, Is.EqualTo(existingDeletePe.Id), "Should return the existing Delete PE, not a new one");
+        Assert.That(newPesAdded.Count, Is.EqualTo(0), "Should NOT create a new PE when Delete PE already exists");
+    }
+
+    /// <summary>
+    /// Tests that EvaluateMvoDeletionAsync replaces an existing Create PE with a Delete PE.
+    /// This can happen when a CSO was provisioned but never exported before the MVO is deleted.
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionAsync_WhenCreatePeExists_ReplacesWithDeletePeAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var provisionedCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned
+        };
+
+        ConnectedSystemObjectsData.Add(provisionedCso);
+
+        // Pre-populate with an existing Create PE for this CSO (not yet exported)
+        // Must set ConnectedSystemObject navigation property because mock DbSet doesn't auto-load it
+        var existingCreatePe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystemObjectId = provisionedCso.Id,
+            ConnectedSystemObject = provisionedCso,
+            ChangeType = PendingExportChangeType.Create,
+            Status = PendingExportStatus.Pending,
+            SourceMetaverseObjectId = mvo.Id,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+        PendingExportsData.Add(existingCreatePe);
+
+        // Rebuild the mock DbSet
+        MockDbSetPendingExports = PendingExportsData.BuildMockDbSet();
+        MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
+
+        // Track PEs added and removed
+        var newPesAdded = new List<PendingExport>();
+        MockDbSetPendingExports.Setup(set => set.AddAsync(It.IsAny<PendingExport>(), It.IsAny<CancellationToken>()))
+            .Callback((PendingExport entity, CancellationToken _) => { newPesAdded.Add(entity); PendingExportsData.Add(entity); })
+            .ReturnsAsync((PendingExport entity, CancellationToken _) => null!);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
+
+        // Assert — should create a new Delete PE (replacing the Create PE)
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Count, Is.EqualTo(1), "Should return exactly one PE");
+        Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete), "Should be a Delete PE");
+        Assert.That(result[0].Id, Is.Not.EqualTo(existingCreatePe.Id), "Should be a new PE, not the old Create PE");
+        Assert.That(newPesAdded.Count, Is.EqualTo(1), "Should create exactly one new Delete PE");
+    }
+
+    /// <summary>
     /// Tests that MVOs without a type set are handled gracefully.
     /// </summary>
     [Test]

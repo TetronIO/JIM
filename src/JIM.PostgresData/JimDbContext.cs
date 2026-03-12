@@ -327,6 +327,15 @@ public class JimDbContext : DbContext
             .HasIndex(pe => new { pe.ConnectedSystemId, pe.Status })
             .HasDatabaseName("IX_PendingExports_ConnectedSystemId_Status");
 
+        // PendingExport: filtered unique index to prevent duplicate pending exports for the same CSO.
+        // Only one pending export should exist per CSO at any time. The filter excludes rows where
+        // ConnectedSystemObjectId is NULL (e.g., PEs for unresolved references not yet matched to a CSO).
+        modelBuilder.Entity<PendingExport>()
+            .HasIndex(pe => pe.ConnectedSystemObjectId)
+            .IsUnique()
+            .HasFilter(@"""ConnectedSystemObjectId"" IS NOT NULL")
+            .HasDatabaseName("IX_PendingExports_ConnectedSystemObjectId_Unique");
+
         // MetaverseObjectAttributeValue: index for attribute lookups by value
         modelBuilder.Entity<MetaverseObjectAttributeValue>()
             .HasIndex(moav => new { moav.AttributeId, moav.StringValue })

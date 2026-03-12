@@ -364,6 +364,155 @@ public class LdapConnectorExportConsolidationTests
 
     #endregion
 
+    #region BuildAddRequest multi-valued attribute consolidation tests
+
+    [Test]
+    public async Task ExecuteAsync_CreateGroupWithMultipleMembers_ConsolidatesIntoSingleAttributeAsync()
+    {
+        // Arrange: Create a group with 5 members — each member is a separate AttributeValueChange
+        var pendingExport = CreateGroupCreatePendingExport("CN=TestGroup,OU=Groups,DC=test,DC=local", memberCount: 5);
+
+        AddRequest? capturedAddRequest = null;
+        // Concurrency=1 falls back to sync Execute path, so mock SendRequest (not SendRequestAsync)
+        _mockExecutor.Setup(e => e.SendRequest(It.IsAny<AddRequest>()))
+            .Callback<DirectoryRequest>(req => capturedAddRequest = (AddRequest)req)
+            .Returns(CreateDirectoryResponse<AddResponse>(ResultCode.Success));
+
+        // Mock the objectGUID search that happens after successful create
+        _mockExecutor.Setup(e => e.SendRequest(It.IsAny<SearchRequest>()))
+            .Returns(CreateDirectoryResponse<SearchResponse>(ResultCode.Success));
+
+        var export = CreateExport(batchSize: 100, concurrency: 1);
+
+        // Act
+        var results = await export.ExecuteAsync(new List<PendingExport> { pendingExport }, CancellationToken.None);
+
+        // Assert
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].Success, Is.True);
+        Assert.That(capturedAddRequest, Is.Not.Null);
+
+        // The member attribute should be consolidated into a single DirectoryAttribute with 5 values
+        var memberAttrs = capturedAddRequest!.Attributes.Cast<DirectoryAttribute>()
+            .Where(a => a.Name == "member")
+            .ToList();
+        Assert.That(memberAttrs, Has.Count.EqualTo(1), "Expected single consolidated 'member' DirectoryAttribute, not one per value");
+        Assert.That(memberAttrs[0].Count, Is.EqualTo(5), "Expected 5 values in the consolidated 'member' attribute");
+    }
+
+    [Test]
+    public async Task ExecuteAsync_CreateGroupWithSingleMember_SingleAttributeEntryAsync()
+    {
+        var pendingExport = CreateGroupCreatePendingExport("CN=TestGroup,OU=Groups,DC=test,DC=local", memberCount: 1);
+
+        AddRequest? capturedAddRequest = null;
+        _mockExecutor.Setup(e => e.SendRequest(It.IsAny<AddRequest>()))
+            .Callback<DirectoryRequest>(req => capturedAddRequest = (AddRequest)req)
+            .Returns(CreateDirectoryResponse<AddResponse>(ResultCode.Success));
+
+        _mockExecutor.Setup(e => e.SendRequest(It.IsAny<SearchRequest>()))
+            .Returns(CreateDirectoryResponse<SearchResponse>(ResultCode.Success));
+
+        var export = CreateExport(batchSize: 100, concurrency: 1);
+        var results = await export.ExecuteAsync(new List<PendingExport> { pendingExport }, CancellationToken.None);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].Success, Is.True);
+
+        var memberAttrs = capturedAddRequest!.Attributes.Cast<DirectoryAttribute>()
+            .Where(a => a.Name == "member")
+            .ToList();
+        Assert.That(memberAttrs, Has.Count.EqualTo(1));
+        Assert.That(memberAttrs[0].Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task ExecuteAsync_CreateGroupWithMembersAndOtherAttributes_AllConsolidatedCorrectlyAsync()
+    {
+        // Arrange: Create with members + single-valued attributes (displayName, description)
+        var csoType = new ConnectedSystemObjectType { Name = "group" };
+        var memberAttr = new ConnectedSystemObjectTypeAttribute
+            { Id = 10, Name = "member", ConnectedSystemObjectType = csoType, AttributePlurality = AttributePlurality.MultiValued };
+        var displayNameAttr = new ConnectedSystemObjectTypeAttribute
+            { Id = 11, Name = "displayName", ConnectedSystemObjectType = csoType };
+        var descriptionAttr = new ConnectedSystemObjectTypeAttribute
+            { Id = 12, Name = "description", ConnectedSystemObjectType = csoType };
+        var dnAttr = new ConnectedSystemObjectTypeAttribute
+            { Id = 1, Name = "distinguishedName", ConnectedSystemObjectType = csoType };
+
+        var changes = new List<PendingExportAttributeValueChange>
+        {
+            new() { Attribute = dnAttr, ChangeType = PendingExportAttributeChangeType.Add, StringValue = "CN=TestGroup,OU=Groups,DC=test,DC=local" },
+            new() { Attribute = displayNameAttr, ChangeType = PendingExportAttributeChangeType.Add, StringValue = "Test Group" },
+            new() { Attribute = descriptionAttr, ChangeType = PendingExportAttributeChangeType.Add, StringValue = "A test group" },
+            new() { Attribute = memberAttr, ChangeType = PendingExportAttributeChangeType.Add, StringValue = "CN=User1,DC=test,DC=local" },
+            new() { Attribute = memberAttr, ChangeType = PendingExportAttributeChangeType.Add, StringValue = "CN=User2,DC=test,DC=local" },
+            new() { Attribute = memberAttr, ChangeType = PendingExportAttributeChangeType.Add, StringValue = "CN=User3,DC=test,DC=local" }
+        };
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportChangeType.Create,
+            ConnectedSystemObject = new ConnectedSystemObject { Id = Guid.NewGuid(), Type = csoType },
+            AttributeValueChanges = changes
+        };
+
+        AddRequest? capturedAddRequest = null;
+        _mockExecutor.Setup(e => e.SendRequest(It.IsAny<AddRequest>()))
+            .Callback<DirectoryRequest>(req => capturedAddRequest = (AddRequest)req)
+            .Returns(CreateDirectoryResponse<AddResponse>(ResultCode.Success));
+        _mockExecutor.Setup(e => e.SendRequest(It.IsAny<SearchRequest>()))
+            .Returns(CreateDirectoryResponse<SearchResponse>(ResultCode.Success));
+
+        var export = CreateExport(batchSize: 100, concurrency: 1);
+        var results = await export.ExecuteAsync(new List<PendingExport> { pendingExport }, CancellationToken.None);
+
+        Assert.That(results[0].Success, Is.True);
+
+        var allAttrs = capturedAddRequest!.Attributes.Cast<DirectoryAttribute>().ToList();
+
+        // objectClass + displayName + description + member = 4 entries (DN is skipped)
+        Assert.That(allAttrs, Has.Count.EqualTo(4));
+
+        // member should be consolidated into 1 entry with 3 values
+        var memberAttrs = allAttrs.Where(a => a.Name == "member").ToList();
+        Assert.That(memberAttrs, Has.Count.EqualTo(1));
+        Assert.That(memberAttrs[0].Count, Is.EqualTo(3));
+
+        // Single-valued attributes should have 1 value each
+        var displayNameAttrs = allAttrs.Where(a => a.Name == "displayName").ToList();
+        Assert.That(displayNameAttrs, Has.Count.EqualTo(1));
+        Assert.That(displayNameAttrs[0].Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task ExecuteAsync_CreateWithLargeMultiValuedAttribute_AllValuesConsolidatedAsync()
+    {
+        // 50 members (matching Scenario 8 group size)
+        var pendingExport = CreateGroupCreatePendingExport("CN=Project-Catalyst,OU=Entitlements,DC=test,DC=local", memberCount: 50);
+
+        AddRequest? capturedAddRequest = null;
+        _mockExecutor.Setup(e => e.SendRequest(It.IsAny<AddRequest>()))
+            .Callback<DirectoryRequest>(req => capturedAddRequest = (AddRequest)req)
+            .Returns(CreateDirectoryResponse<AddResponse>(ResultCode.Success));
+        _mockExecutor.Setup(e => e.SendRequest(It.IsAny<SearchRequest>()))
+            .Returns(CreateDirectoryResponse<SearchResponse>(ResultCode.Success));
+
+        var export = CreateExport(batchSize: 100, concurrency: 1);
+        var results = await export.ExecuteAsync(new List<PendingExport> { pendingExport }, CancellationToken.None);
+
+        Assert.That(results[0].Success, Is.True);
+
+        var memberAttrs = capturedAddRequest!.Attributes.Cast<DirectoryAttribute>()
+            .Where(a => a.Name == "member")
+            .ToList();
+        Assert.That(memberAttrs, Has.Count.EqualTo(1), "50 member values must be consolidated into a single DirectoryAttribute");
+        Assert.That(memberAttrs[0].Count, Is.EqualTo(50));
+    }
+
+    #endregion
+
     #region Batch size clamping tests
 
     [Test]
@@ -499,6 +648,38 @@ public class LdapConnectorExportConsolidationTests
                     StringValue = dn
                 }
             }
+        };
+    }
+
+    private static PendingExport CreateGroupCreatePendingExport(string groupDn, int memberCount)
+    {
+        var csoType = new ConnectedSystemObjectType { Name = "group" };
+        var dnAttr = new ConnectedSystemObjectTypeAttribute
+            { Id = 1, Name = "distinguishedName", ConnectedSystemObjectType = csoType };
+        var memberAttr = new ConnectedSystemObjectTypeAttribute
+            { Id = 10, Name = "member", ConnectedSystemObjectType = csoType, AttributePlurality = AttributePlurality.MultiValued };
+
+        var changes = new List<PendingExportAttributeValueChange>
+        {
+            new() { Attribute = dnAttr, ChangeType = PendingExportAttributeChangeType.Add, StringValue = groupDn }
+        };
+
+        for (var i = 0; i < memberCount; i++)
+        {
+            changes.Add(new PendingExportAttributeValueChange
+            {
+                Attribute = memberAttr,
+                ChangeType = PendingExportAttributeChangeType.Add,
+                StringValue = $"CN=User{i:D4},OU=Users,DC=test,DC=local"
+            });
+        }
+
+        return new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportChangeType.Create,
+            ConnectedSystemObject = new ConnectedSystemObject { Id = Guid.NewGuid(), Type = csoType },
+            AttributeValueChanges = changes
         };
     }
 

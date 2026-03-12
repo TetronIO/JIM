@@ -90,8 +90,8 @@ public class HelpersOutcomeSummaryTests
         var result = Helpers.ParseOutcomeSummary(
             "CsoAdded:1,CsoUpdated:2,CsoDeleted:3,ExportConfirmed:4,ExportFailed:5," +
             "Projected:6,Joined:7,AttributeFlow:8,Disconnected:9,DisconnectedOutOfScope:10," +
-            "MvoDeleted:11,Provisioned:12,PendingExportCreated:13,Exported:14,Deprovisioned:15");
-        Assert.That(result, Has.Count.EqualTo(15));
+            "MvoDeleted:11,MvoDeletionScheduled:12,Provisioned:13,PendingExportCreated:14,Exported:15,Deprovisioned:16");
+        Assert.That(result, Has.Count.EqualTo(16));
     }
 
     #endregion
@@ -156,6 +156,27 @@ public class HelpersOutcomeSummaryTests
     {
         var result = Helpers.GetOutcomeTypeMudBlazorColor(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
         Assert.That(result, Is.EqualTo(Color.Error));
+    }
+
+    [Test]
+    public void GetOutcomeTypeMudBlazorColor_MvoDeletionScheduled_ReturnsWarning()
+    {
+        var result = Helpers.GetOutcomeTypeMudBlazorColor(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled);
+        Assert.That(result, Is.EqualTo(Color.Warning));
+    }
+
+    [Test]
+    public void GetOutcomeTypeDisplayName_MvoDeletionScheduled_ReturnsMvoDeletionScheduled()
+    {
+        var result = Helpers.GetOutcomeTypeDisplayName(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled);
+        Assert.That(result, Is.EqualTo("MVO Deletion Scheduled"));
+    }
+
+    [Test]
+    public void GetOutcomeTypeIcon_MvoDeletionScheduled_ReturnsHourglassBottom()
+    {
+        var result = Helpers.GetOutcomeTypeIcon(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled);
+        Assert.That(result, Is.EqualTo(Icons.Material.Filled.HourglassBottom));
     }
 
     #endregion

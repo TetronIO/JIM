@@ -267,6 +267,70 @@ public class LdapConnectorExportAsyncTests
         _mockExecutor.Verify(e => e.SendRequestAsync(It.IsAny<DeleteRequest>()), Times.Once);
     }
 
+    [Test]
+    public async Task ExecuteAsync_HardDelete_NoSuchObjectResponse_TreatsAsIdempotentSuccessAsync()
+    {
+        var pendingExport = CreateDeletePendingExport("CN=AlreadyGone,DC=test,DC=local");
+
+        _mockExecutor.Setup(e => e.SendRequestAsync(It.IsAny<DeleteRequest>()))
+            .ReturnsAsync(CreateDirectoryResponse<DeleteResponse>(ResultCode.NoSuchObject));
+
+        var export = CreateExport(concurrency: 4);
+        var results = await export.ExecuteAsync(new List<PendingExport> { pendingExport }, CancellationToken.None);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].Success, Is.True);
+    }
+
+    [Test]
+    public async Task ExecuteAsync_HardDelete_SambaNoSuchObjectException_TreatsAsIdempotentSuccessAsync()
+    {
+        // Samba AD throws DirectoryOperationException with error code 0x2030 (ERROR_DS_NO_SUCH_OBJECT)
+        // instead of returning ResultCode.NoSuchObject in the response
+        var pendingExport = CreateDeletePendingExport("CN=AlreadyGone,DC=test,DC=local");
+
+        var exResponse = CreateDirectoryResponse<DeleteResponse>(ResultCode.Other, "0000208D: NameErr: DSID-0C090CE2, problem 2001 (NO_OBJECT), data 0, best match of: 'DC=test,DC=local' 00002030: ");
+        _mockExecutor.Setup(e => e.SendRequestAsync(It.IsAny<DeleteRequest>()))
+            .ThrowsAsync(new DirectoryOperationException(exResponse));
+
+        var export = CreateExport(concurrency: 4);
+        var results = await export.ExecuteAsync(new List<PendingExport> { pendingExport }, CancellationToken.None);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].Success, Is.True);
+    }
+
+    [Test]
+    public async Task ExecuteAsync_HardDelete_SyncPath_NoSuchObjectResponse_TreatsAsIdempotentSuccessAsync()
+    {
+        var pendingExport = CreateDeletePendingExport("CN=AlreadyGone,DC=test,DC=local");
+
+        _mockExecutor.Setup(e => e.SendRequest(It.IsAny<DeleteRequest>()))
+            .Returns(CreateDirectoryResponse<DeleteResponse>(ResultCode.NoSuchObject));
+
+        var export = CreateExport(concurrency: 1);
+        var results = await export.ExecuteAsync(new List<PendingExport> { pendingExport }, CancellationToken.None);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].Success, Is.True);
+    }
+
+    [Test]
+    public async Task ExecuteAsync_HardDelete_SyncPath_SambaNoSuchObjectException_TreatsAsIdempotentSuccessAsync()
+    {
+        var pendingExport = CreateDeletePendingExport("CN=AlreadyGone,DC=test,DC=local");
+
+        var exResponse = CreateDirectoryResponse<DeleteResponse>(ResultCode.Other, "00002030: NameErr: DSID-0C090CE2, problem 2001 (NO_OBJECT)");
+        _mockExecutor.Setup(e => e.SendRequest(It.IsAny<DeleteRequest>()))
+            .Throws(new DirectoryOperationException(exResponse));
+
+        var export = CreateExport(concurrency: 1);
+        var results = await export.ExecuteAsync(new List<PendingExport> { pendingExport }, CancellationToken.None);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].Success, Is.True);
+    }
+
     #endregion
 
     #region Mixed operation tests
@@ -614,13 +678,13 @@ public class LdapConnectorExportAsyncTests
     /// DirectoryResponse subclasses have an internal 5-parameter constructor:
     /// (string dn, DirectoryControl[] controls, ResultCode result, string message, Uri[] referral)
     /// </summary>
-    private static T CreateDirectoryResponse<T>(ResultCode resultCode) where T : DirectoryResponse
+    private static T CreateDirectoryResponse<T>(ResultCode resultCode, string? errorMessage = null) where T : DirectoryResponse
     {
         var response = (T)Activator.CreateInstance(
             typeof(T),
             BindingFlags.NonPublic | BindingFlags.Instance,
             binder: null,
-            args: new object?[] { "", Array.Empty<DirectoryControl>(), resultCode, "", Array.Empty<Uri>() },
+            args: new object?[] { "", Array.Empty<DirectoryControl>(), resultCode, errorMessage ?? "", Array.Empty<Uri>() },
             culture: null)!;
 
         return response;

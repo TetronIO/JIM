@@ -94,6 +94,23 @@ public interface IConnectedSystemRepository
     public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId);
 
     /// <summary>
+    /// Returns the count of pending exports that are ready for execution, using the same
+    /// database-level filtering as <see cref="GetExecutableExportsAsync"/>.
+    /// Used to set progress totals before batch-loading exports.
+    /// </summary>
+    public Task<int> GetExecutableExportCountAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Retrieves a single batch of pending exports that are ready for execution, using AsNoTracking
+    /// for minimal memory overhead. Uses the same database-level filtering as <see cref="GetExecutableExportsAsync"/>.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System to load exports for.</param>
+    /// <param name="skip">Number of rows to skip (for paging).</param>
+    /// <param name="take">Maximum number of rows to return.</param>
+    /// <returns>Untracked pending exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
+    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take);
+
+    /// <summary>
     /// Retrieves pending exports by their IDs with all necessary includes for export processing.
     /// Used by parallel batch processing where each batch re-loads its entities from its own DbContext.
     /// </summary>

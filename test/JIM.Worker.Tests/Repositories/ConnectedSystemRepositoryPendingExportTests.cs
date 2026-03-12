@@ -1,5 +1,4 @@
 using JIM.Models.Core;
-using JIM.Models.Exceptions;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
@@ -11,7 +10,7 @@ namespace JIM.Worker.Tests.Repositories;
 
 /// <summary>
 /// Tests for GetPendingExportsByConnectedSystemObjectIdsAsync in ConnectedSystemRepository.
-/// Validates that duplicate pending exports for the same CSO are detected as a data integrity violation.
+/// Validates that duplicate pending exports for the same CSO are self-healed (newest kept, older deleted).
 /// </summary>
 [TestFixture]
 public class ConnectedSystemRepositoryPendingExportTests
@@ -140,42 +139,44 @@ public class ConnectedSystemRepositoryPendingExportTests
     }
 
     [Test]
-    public void GetPendingExportsByConnectedSystemObjectIdsAsync_WithDuplicatePendingExportsForSameCso_ThrowsDuplicatePendingExportException()
+    public async Task GetPendingExportsByConnectedSystemObjectIdsAsync_WithDuplicatePendingExportsForSameCso_SelfHealsKeepingNewestAsync()
     {
-        // Arrange - TWO pending exports for the SAME CSO (data integrity violation)
-        var pe1 = CreatePendingExport(_cso1);
-        var pe2 = CreatePendingExport(_cso1); // Duplicate for same CSO
+        // Arrange - TWO pending exports for the SAME CSO (data integrity violation to self-heal)
+        var pe1 = CreatePendingExport(_cso1, createdAt: DateTime.UtcNow.AddMinutes(-10));
+        var pe2 = CreatePendingExport(_cso1, createdAt: DateTime.UtcNow.AddMinutes(-1)); // Newer duplicate
         _pendingExportsData.AddRange(new[] { pe1, pe2 });
         SetUpMockContext(); // Rebuild mock with updated data
 
         var csoIds = new[] { _cso1.Id };
 
-        // Act & Assert
-        var exception = Assert.ThrowsAsync<DuplicatePendingExportException>(async () =>
-            await _repository.ConnectedSystems.GetPendingExportsByConnectedSystemObjectIdsAsync(csoIds));
+        // Act — should self-heal by keeping newest and deleting older
+        var result = await _repository.ConnectedSystems.GetPendingExportsByConnectedSystemObjectIdsAsync(csoIds);
 
-        Assert.That(exception!.Message, Does.Contain(_cso1.Id.ToString()));
-        Assert.That(exception.Message, Does.Contain(pe1.Id.ToString()));
-        Assert.That(exception.Message, Does.Contain(pe2.Id.ToString()));
+        // Assert — should return only the newer PE
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result.ContainsKey(_cso1.Id), Is.True);
+        Assert.That(result[_cso1.Id].Id, Is.EqualTo(pe2.Id), "Should keep the newer PE");
     }
 
     [Test]
-    public void GetPendingExportsByConnectedSystemObjectIdsAsync_WithDuplicatesAmongMultipleCsos_ThrowsDuplicatePendingExportException()
+    public async Task GetPendingExportsByConnectedSystemObjectIdsAsync_WithDuplicatesAmongMultipleCsos_SelfHealsOnlyDuplicatesAsync()
     {
         // Arrange - CSO1 has duplicates, CSO2 is fine
-        var pe1 = CreatePendingExport(_cso1);
-        var pe2 = CreatePendingExport(_cso2); // Normal
-        var pe3 = CreatePendingExport(_cso1); // Duplicate for CSO1
+        var pe1 = CreatePendingExport(_cso1, createdAt: DateTime.UtcNow.AddMinutes(-10));
+        var pe2 = CreatePendingExport(_cso2, createdAt: DateTime.UtcNow.AddMinutes(-5)); // Normal
+        var pe3 = CreatePendingExport(_cso1, createdAt: DateTime.UtcNow.AddMinutes(-1)); // Newer duplicate for CSO1
         _pendingExportsData.AddRange(new[] { pe1, pe2, pe3 });
         SetUpMockContext(); // Rebuild mock with updated data
 
         var csoIds = new[] { _cso1.Id, _cso2.Id };
 
-        // Act & Assert - should throw even if only one CSO has duplicates
-        var exception = Assert.ThrowsAsync<DuplicatePendingExportException>(async () =>
-            await _repository.ConnectedSystems.GetPendingExportsByConnectedSystemObjectIdsAsync(csoIds));
+        // Act — should self-heal CSO1's duplicates while leaving CSO2 untouched
+        var result = await _repository.ConnectedSystems.GetPendingExportsByConnectedSystemObjectIdsAsync(csoIds);
 
-        Assert.That(exception!.Message, Does.Contain(_cso1.Id.ToString()));
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(2));
+        Assert.That(result[_cso1.Id].Id, Is.EqualTo(pe3.Id), "Should keep the newer PE for CSO1");
+        Assert.That(result[_cso2.Id].Id, Is.EqualTo(pe2.Id), "CSO2 should be unaffected");
     }
 
     [Test]
@@ -200,7 +201,7 @@ public class ConnectedSystemRepositoryPendingExportTests
 
     #region Helper Methods
 
-    private PendingExport CreatePendingExport(ConnectedSystemObject cso)
+    private PendingExport CreatePendingExport(ConnectedSystemObject cso, DateTime? createdAt = null)
     {
         return new PendingExport
         {
@@ -212,7 +213,8 @@ public class ConnectedSystemRepositoryPendingExportTests
             ChangeType = PendingExportChangeType.Update,
             Status = PendingExportStatus.Pending,
             AttributeValueChanges = new List<PendingExportAttributeValueChange>(),
-            SourceMetaverseObject = null
+            SourceMetaverseObject = null,
+            CreatedAt = createdAt ?? DateTime.UtcNow
         };
     }
 

@@ -229,7 +229,9 @@
                     {
                         TypeName = vc.ReferenceValue.Type?.Name ?? "Unknown",
                         DisplayName = vc.ReferenceValue.DisplayName ?? vc.ReferenceValue.Id.ToString(),
-                        Href = $"/identity/search/{vc.ReferenceValue.Id}"
+                        Href = vc.ReferenceValue.Type?.PluralName != null
+                            ? Utilities.GetMetaverseObjectHref(vc.ReferenceValue.Id, vc.ReferenceValue.Type.PluralName)
+                            : $"/identity/search/{vc.ReferenceValue.Id}"
                     } : null,
                     IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued,
                     AttributeType = ac.Attribute.Type

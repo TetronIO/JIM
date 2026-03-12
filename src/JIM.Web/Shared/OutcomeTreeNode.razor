@@ -99,8 +99,10 @@
             @foreach (var child in Outcome.Children.OrderBy(c => c.Ordinal))
             {
                 <OutcomeTreeNode Outcome="child"
+                                 ParentOutcomeType="Outcome.OutcomeType"
                                  AttributeChanges="AttributeChanges"
-                                 MvoAttributeChanges="MvoAttributeChanges" />
+                                 MvoAttributeChanges="MvoAttributeChanges"
+                                 MvoTypePluralName="@MvoTypePluralName" />
             }
         </div>
     }
@@ -125,8 +127,18 @@
     public List<MetaverseObjectChangeAttribute>? MvoAttributeChanges { get; set; }
 
     /// <summary>
-    /// When true, the attribute detail section starts expanded rather than collapsed.
+    /// Plural name of the MVO type (e.g., "people"), used to build correct MVO detail links.
     /// </summary>
+    [Parameter]
+    public string? MvoTypePluralName { get; set; }
+
+    /// <summary>
+    /// The outcome type of this node's parent, passed down from the parent OutcomeTreeNode.
+    /// Used to suppress redundant descriptions when nesting is already contextual.
+    /// </summary>
+    [Parameter]
+    public ActivityRunProfileExecutionItemSyncOutcomeType? ParentOutcomeType { get; set; }
+
     [Parameter]
     public bool InitiallyExpanded { get; set; }
 
@@ -168,15 +180,17 @@
             or ActivityRunProfileExecutionItemSyncOutcomeType.Joined
             or ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
             or ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
+            or ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected
+            or ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope
         && !IsPendingExportChildOfProvisioned;
 
     /// <summary>
-    /// Whether this PendingExportCreated node is a child of a Provisioned node.
-    /// When nested, the CS name is already shown on the parent so we suppress the inline description.
+    /// Whether this PendingExportCreated node is a direct child of a Provisioned node.
+    /// In that case the CS name is already shown on the parent, so we suppress the inline description.
     /// </summary>
     private bool IsPendingExportChildOfProvisioned =>
         Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
-        && Outcome.ParentSyncOutcomeId.HasValue;
+        && ParentOutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned;
 
     /// <summary>
     /// Whether this outcome node has a connected system link available.
@@ -195,9 +209,14 @@
         Outcome.TargetEntityId.HasValue && Outcome.TargetEntityId.Value != Guid.Empty;
 
     private string GetInlineSeparator() =>
-        Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined
-            ? "\u2014 to"
-            : "\u2014";
+        Outcome.OutcomeType switch
+        {
+            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => "\u2014 to",
+            ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected
+                or ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope
+                => "\u2014 from",
+            _ => "\u2014"
+        };
 
     private void ToggleExpand()
     {
@@ -216,17 +235,19 @@
 
         return Outcome.OutcomeType switch
         {
-            // Projected, Joined, Provisioned, and PendingExportCreated show their target inline on the title row
+            // Projected, Joined, Provisioned, PendingExportCreated, and Disconnected types show their target inline on the title row
             ActivityRunProfileExecutionItemSyncOutcomeType.Projected => null,
             ActivityRunProfileExecutionItemSyncOutcomeType.Joined => null,
             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => null,
             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => null,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => null,
+            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => null,
             // AttributeFlow child nodes don't need a separate MVO description line
             ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => null,
-            ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected
-                => RenderMvoDescription("from MVO: "),
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
                 => RenderMvoDescription("MVO deleted: "),
+            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled
+                => RenderMvoDescription("MVO scheduled for deletion: "),
             // For connected system targets (pending exports, exports), just show the name
             _ => RenderPlainDescription()
         };
@@ -254,11 +275,10 @@
         </MudText>
     };
 
-    /// <summary>
-    /// Builds the MVO href. Since we don't have the type plural name on the outcome,
-    /// we use a search-based redirect path.
-    /// </summary>
-    private static string GetMvoHref(Guid mvoId) => $"/identity/search/{mvoId}";
+    private string GetMvoHref(Guid mvoId) =>
+        !string.IsNullOrEmpty(MvoTypePluralName)
+            ? Utilities.GetMetaverseObjectHref(mvoId, MvoTypePluralName)
+            : $"/identity/search/{mvoId}";
 
     /// <summary>
     /// Builds the connected system href for Provisioned and PendingExportCreated outcomes.

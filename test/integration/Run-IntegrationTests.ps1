@@ -216,8 +216,14 @@ function Show-ScenarioMenu {
         exit 1
     }
 
-    # Build scenario list with descriptions
-    $scenarios = @()
+    # Build scenario list with descriptions — "All Scenarios" first
+    $scenarios = @(
+        @{
+            Name = "All"
+            Description = "Run every implemented scenario sequentially (full regression)"
+            Disabled = $false
+        }
+    )
     foreach ($file in $scenarioFiles) {
         $scenarioName = $file.BaseName -replace '^Invoke-', ''
 
@@ -321,6 +327,12 @@ function Show-ScenarioMenu {
                     Write-Host "${GRAY}  $($scenario.Description)${NC}"
                 }
                 Write-Host ""
+
+                # Separator after "All" option
+                if ($i -eq 0) {
+                    Write-Host "${GRAY}  $("-" * 60)${NC}"
+                    Write-Host ""
+                }
             }
 
             # Wait for key press
@@ -523,6 +535,108 @@ if (-not $Scenario) {
 # ---------------------------------------------------------------------------
 # Handle "-Scenario All": run every implemented scenario sequentially
 # ---------------------------------------------------------------------------
+
+# Lightweight reset: stop JIM containers, remove JIM DB volume, clean Samba AD
+# OUs, generate a new API key, and restart JIM — without rebuilding images.
+function Reset-JIMForNextScenario {
+    param(
+        [string]$RepoRoot,
+        [string]$ScriptRoot,
+        [int]$TimeoutSeconds = 180
+    )
+
+    Write-Host ""
+    Write-Host "${BLUE}--- Lightweight Reset ---${NC}"
+
+    # 1. Stop JIM containers (keep Samba AD running)
+    Write-Host "${GRAY}  Stopping JIM containers...${NC}"
+    docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db down -v 2>&1 | Out-Null
+
+    # 2. Remove JIM database volume (ensures clean schema + data)
+    Write-Host "${GRAY}  Removing JIM database volume...${NC}"
+    docker volume rm jim-db-volume 2>&1 | Out-Null
+
+    # 3. Clean Samba AD test data (delete OUs with --force-subtree-delete; much faster than container restart)
+    Write-Host "${GRAY}  Cleaning Samba AD test data...${NC}"
+
+    # Primary (subatomic.local) — used by Scenarios 1, 4, 5, 6
+    foreach ($ou in @("OU=Corp,DC=subatomic,DC=local", "OU=TestUsers,DC=subatomic,DC=local", "OU=TestGroups,DC=subatomic,DC=local")) {
+        docker exec samba-ad-primary samba-tool ou delete $ou --force-subtree-delete 2>&1 | Out-Null
+    }
+    # Legacy department OUs from Populate-SambaAD.ps1
+    foreach ($dept in @("Marketing", "Operations", "Finance", "Sales", "Human Resources", "Procurement", "Information Technology", "Research & Development", "Executive", "Legal", "Facilities", "Catering")) {
+        docker exec samba-ad-primary samba-tool ou delete "OU=$dept,DC=subatomic,DC=local" --force-subtree-delete 2>&1 | Out-Null
+    }
+
+    # Source (sourcedomain.local) — used by Scenarios 2, 8
+    $sourceRunning = docker ps --filter "name=samba-ad-source" --format '{{.Names}}' 2>$null
+    if ($sourceRunning) {
+        foreach ($ou in @("OU=TestUsers,DC=sourcedomain,DC=local", "OU=Corp,DC=sourcedomain,DC=local")) {
+            docker exec samba-ad-source samba-tool ou delete $ou --force-subtree-delete 2>&1 | Out-Null
+        }
+    }
+
+    # Target (targetdomain.local) — used by Scenarios 2, 8
+    $targetRunning = docker ps --filter "name=samba-ad-target" --format '{{.Names}}' 2>$null
+    if ($targetRunning) {
+        foreach ($ou in @("OU=TestUsers,DC=targetdomain,DC=local", "OU=CorpManaged,DC=targetdomain,DC=local")) {
+            docker exec samba-ad-target samba-tool ou delete $ou --force-subtree-delete 2>&1 | Out-Null
+        }
+    }
+
+    # 4. Generate new API key and update .env
+    Write-Host "${GRAY}  Generating new API key...${NC}"
+    $randomBytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $rng.GetBytes($randomBytes)
+    $randomString = [Convert]::ToBase64String($randomBytes).Replace("+", "").Replace("/", "").Replace("=", "")
+    $newApiKey = "jim_ak_$randomString"
+
+    $envFilePath = Join-Path $RepoRoot ".env"
+    $envContent = Get-Content $envFilePath -Raw
+    if ($null -eq $envContent) { $envContent = "" }
+    if ($envContent -match "JIM_INFRASTRUCTURE_API_KEY=") {
+        $envContent = $envContent -replace "JIM_INFRASTRUCTURE_API_KEY=.*", "JIM_INFRASTRUCTURE_API_KEY=$newApiKey"
+    } else {
+        $newLine = if ($envContent.EndsWith("`n")) { "" } else { "`n" }
+        $envContent = $envContent + $newLine + "JIM_INFRASTRUCTURE_API_KEY=$newApiKey`n"
+    }
+    $envContent | Set-Content $envFilePath -NoNewline
+
+    $keyFilePath = Join-Path $ScriptRoot ".api-key"
+    $newApiKey | Out-File -FilePath $keyFilePath -NoNewline -Encoding UTF8
+
+    # 5. Restart JIM containers
+    Write-Host "${GRAY}  Starting JIM containers...${NC}"
+    docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d 2>&1 | Out-Null
+
+    # 6. Wait for JIM API health check
+    Write-Host "${GRAY}  Waiting for JIM API...${NC}"
+    $jimApiReady = $false
+    $jimApiElapsed = 0
+    $jimApiUrl = "http://localhost:5200/api/v1/health"
+    while (-not $jimApiReady -and $jimApiElapsed -lt $TimeoutSeconds) {
+        try {
+            $healthResponse = Invoke-WebRequest -Uri $jimApiUrl -Method GET -TimeoutSec 5 -ErrorAction SilentlyContinue
+            if ($healthResponse.StatusCode -eq 200) { $jimApiReady = $true }
+        } catch { }
+        if (-not $jimApiReady) {
+            Start-Sleep -Seconds 3
+            $jimApiElapsed += 3
+        }
+    }
+
+    if (-not $jimApiReady) {
+        Write-Host "  ${RED}JIM API did not become ready within ${TimeoutSeconds}s${NC}"
+        $script:ResetSuccess = $false
+        return
+    }
+
+    Write-Host "  ${GREEN}Lightweight reset complete${NC}"
+    Write-Host ""
+    $script:ResetSuccess = $true
+}
+
 if ($Scenario -eq "All") {
 
     # Incompatible with -SetupOnly
@@ -552,16 +666,19 @@ if ($Scenario -eq "All") {
     # Display plan
     Write-Host ""
     Write-Host "${CYAN}$("=" * 65)${NC}"
-    Write-Host "${CYAN}  JIM Integration Test Runner — All Scenarios${NC}"
+    Write-Host "${CYAN}  JIM Integration Test Runner — Full Regression${NC}"
     Write-Host "${CYAN}$("=" * 65)${NC}"
+    Write-Host ""
+    Write-Host "${GRAY}Template: ${CYAN}$Template${NC}  ${GRAY}(used by template-relevant scenarios; others use Nano)${NC}"
     Write-Host ""
     Write-Host "${GRAY}Scenarios to run ($($implementedScenarios.Count)):${NC}"
     foreach ($s in $implementedScenarios) {
-        Write-Host "  ${CYAN}$s${NC}"
+        $templateNote = if (Test-TemplateRelevant -ScenarioName $s) { $Template } else { "Nano (fixed data)" }
+        Write-Host "  ${CYAN}$s${NC}  ${GRAY}[$templateNote]${NC}"
     }
     Write-Host ""
 
-    # Build common parameters as a hashtable for proper splatting
+    # Build common parameters — Template is overridden per-scenario inside Invoke-SingleScenario
     $commonParams = @{}
     if ($Template)   { $commonParams.Template = $Template }
     if ($Step)       { $commonParams.Step = $Step }
@@ -575,11 +692,31 @@ if ($Scenario -eq "All") {
     $allStart = Get-Date
     $selfScript = Join-Path $scriptRoot "Run-IntegrationTests.ps1"
     $anyFailed = $false
+    $regressionTimings = @{}
 
     for ($i = 0; $i -lt $implementedScenarios.Count; $i++) {
         $scenarioName = $implementedScenarios[$i]
-        $index = $i + 1
 
+        # First scenario: full build + reset. Subsequent scenarios: lightweight reset + skip build.
+        if ($i -gt 0) {
+            $resetStart = Get-Date
+            Reset-JIMForNextScenario -RepoRoot $repoRoot -ScriptRoot $scriptRoot -TimeoutSeconds $TimeoutSeconds
+            $regressionTimings["Reset before $scenarioName"] = ((Get-Date) - $resetStart).TotalSeconds
+            if (-not $script:ResetSuccess) {
+                Write-Host "${RED}Lightweight reset failed before $scenarioName — skipping${NC}"
+                $results += @{
+                    Name            = $scenarioName
+                    Success         = $false
+                    ExitCode        = 1
+                    Duration        = "00:00:00"
+                    DurationSeconds = 0
+                }
+                $anyFailed = $true
+                continue
+            }
+        }
+
+        $index = $i + 1
         Write-Host ""
         Write-Host "${CYAN}$("=" * 65)${NC}"
         Write-Host "${CYAN}  [$index/$($implementedScenarios.Count)] $scenarioName${NC}"
@@ -588,53 +725,86 @@ if ($Scenario -eq "All") {
 
         $scenarioStart = Get-Date
 
-        # First scenario: full build. Subsequent scenarios: skip build, but still reset.
+        # Build per-scenario params — override Template to Nano for template-irrelevant scenarios
         $scenarioParams = @{ Scenario = $scenarioName } + $commonParams
+        if (-not (Test-TemplateRelevant -ScenarioName $scenarioName)) {
+            $scenarioParams.Template = "Nano"
+        }
         if ($i -gt 0) {
             $scenarioParams.SkipBuild = $true
         }
 
         & $selfScript @scenarioParams
         $exitCode = $LASTEXITCODE
-
         $scenarioDuration = (Get-Date) - $scenarioStart
 
         $passed = ($exitCode -eq 0)
-        if (-not $passed) { $anyFailed = $true }
-
-        $results += @{
-            Name     = $scenarioName
-            Passed   = $passed
-            ExitCode = $exitCode
-            Duration = $scenarioDuration
-        }
-
         $status = if ($passed) { "${GREEN}PASSED${NC}" } else { "${RED}FAILED (exit code $exitCode)${NC}" }
         Write-Host ""
         Write-Host "  Result: $status  Duration: $($scenarioDuration.ToString('hh\:mm\:ss'))"
         Write-Host ""
+
+        $results += @{
+            Name            = $scenarioName
+            Success         = $passed
+            ExitCode        = $exitCode
+            Duration        = $scenarioDuration.ToString('hh\:mm\:ss')
+            DurationSeconds = $scenarioDuration.TotalSeconds
+        }
+        $regressionTimings[$scenarioName] = $scenarioDuration.TotalSeconds
+        if (-not $passed) { $anyFailed = $true }
+
     }
 
-    # Print summary
+    # Calculate totals
     $allDuration = (Get-Date) - $allStart
-    $passCount = ($results | Where-Object { $_.Passed }).Count
+    $passCount = ($results | Where-Object { $_.Success }).Count
     $failCount = $results.Count - $passCount
 
+    # Print summary
     Write-Host ""
     Write-Host "${CYAN}$("=" * 65)${NC}"
-    Write-Host "${CYAN}  All Scenarios — Summary${NC}"
+    Write-Host "${CYAN}  Full Regression — Summary${NC}"
     Write-Host "${CYAN}$("=" * 65)${NC}"
     Write-Host ""
 
     foreach ($r in $results) {
-        $icon   = if ($r.Passed) { "${GREEN}PASS${NC}" } else { "${RED}FAIL${NC}" }
-        $dur    = $r.Duration.ToString('hh\:mm\:ss')
-        Write-Host ("  [{0}]  {1,-50} {2}" -f $icon, $r.Name, $dur)
+        $icon = if ($r.Success) { "${GREEN}PASS${NC}" } else { "${RED}FAIL${NC}" }
+        Write-Host ("  [{0}]  {1,-50} {2}" -f $icon, $r.Name, $r.Duration)
     }
 
     Write-Host ""
     Write-Host "${CYAN}Total Duration: ${NC}$($allDuration.ToString('hh\:mm\:ss'))"
     Write-Host "${CYAN}Passed: ${NC}$passCount / $($results.Count)    ${CYAN}Failed: ${NC}$failCount / $($results.Count)"
+    Write-Host ""
+
+    # Write aggregated results JSON
+    $resultsDir = Join-Path $scriptRoot "results"
+    if (-not (Test-Path $resultsDir)) {
+        New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
+    }
+
+    $regressionResults = @{
+        Mode           = "FullRegression"
+        Template       = $Template
+        StartTime      = $allStart.ToString("yyyy-MM-dd HH:mm:ss")
+        Duration       = $allDuration.ToString('hh\:mm\:ss')
+        OverallSuccess = (-not $anyFailed)
+        Scenarios      = @($results | ForEach-Object {
+            @{
+                Name     = $_.Name
+                Success  = $_.Success
+                Duration = $_.Duration
+                ExitCode = $_.ExitCode
+            }
+        })
+        Timings        = $regressionTimings
+    }
+
+    $timestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
+    $resultsFile = Join-Path $resultsDir "full-regression-$timestamp.json"
+    $regressionResults | ConvertTo-Json -Depth 10 | Set-Content $resultsFile
+    Write-Host "${GRAY}Results saved to: $resultsFile${NC}"
     Write-Host ""
 
     if ($anyFailed) {
@@ -1293,11 +1463,15 @@ if ($SetupOnly) {
 
     # Docker Cleanup (prune unused images and build cache to prevent disk space accumulation)
     Write-Step "Pruning unused images and build cache (preserving snapshots)..."
-    $pruneOutput = docker image prune -af --filter "label!=jim.samba.snapshot-hash" 2>&1
-    $pruneOutput += docker builder prune -af 2>&1
-    $reclaimedMatch = $pruneOutput | Select-String "Total reclaimed space:\s*(.+)"
-    if ($reclaimedMatch) {
-        Write-Success "Reclaimed: $($reclaimedMatch.Matches[0].Groups[1].Value)"
+    $imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" 2>&1
+    $builderPrune = docker builder prune -af 2>&1
+    $imageReclaimed = $imagePrune | Select-String "Total reclaimed space:\s*(.+)"
+    $builderReclaimed = $builderPrune | Select-String "Total reclaimed space:\s*(.+)"
+    $parts = @()
+    if ($imageReclaimed) { $parts += "images: $($imageReclaimed.Matches[0].Groups[1].Value)" }
+    if ($builderReclaimed) { $parts += "build cache: $($builderReclaimed.Matches[0].Groups[1].Value)" }
+    if ($parts.Count -gt 0) {
+        Write-Success "Reclaimed ($($parts -join ', '))"
     }
 
     # Performance Summary
@@ -1686,11 +1860,15 @@ Write-Section "Step 7: Docker Cleanup"
 
 Write-Step "Pruning unused images and build cache (preserving snapshots)..."
 # Use --filter to exclude snapshot images from pruning (they take hours to build)
-$pruneOutput = docker image prune -af --filter "label!=jim.samba.snapshot-hash" 2>&1
-$pruneOutput += docker builder prune -af 2>&1
-$reclaimedMatch = $pruneOutput | Select-String "Total reclaimed space:\s*(.+)"
-if ($reclaimedMatch) {
-    Write-Success "Reclaimed: $($reclaimedMatch.Matches[0].Groups[1].Value)"
+$imagePrune = docker image prune -af --filter "label!=jim.samba.snapshot-hash" 2>&1
+$builderPrune = docker builder prune -af 2>&1
+$imageReclaimed = $imagePrune | Select-String "Total reclaimed space:\s*(.+)"
+$builderReclaimed = $builderPrune | Select-String "Total reclaimed space:\s*(.+)"
+$parts = @()
+if ($imageReclaimed) { $parts += "images: $($imageReclaimed.Matches[0].Groups[1].Value)" }
+if ($builderReclaimed) { $parts += "build cache: $($builderReclaimed.Matches[0].Groups[1].Value)" }
+if ($parts.Count -gt 0) {
+    Write-Success "Reclaimed ($($parts -join ', '))"
 }
 else {
     Write-Success "Docker cleanup complete (nothing to reclaim)"

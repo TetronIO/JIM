@@ -347,23 +347,30 @@ internal class LdapConnectorExport
     {
         _logger.Debug("LdapConnectorExport.ProcessHardDelete: Deleting object at DN '{Dn}'", dn);
 
-        var deleteRequest = new DeleteRequest(dn);
-        var response = (DeleteResponse)_executor.SendRequest(deleteRequest);
-
-        if (response.ResultCode == ResultCode.NoSuchObject)
+        try
         {
-            // Object already deleted - treat as idempotent success.
-            // The desired state (object gone) is already achieved.
+            var deleteRequest = new DeleteRequest(dn);
+            var response = (DeleteResponse)_executor.SendRequest(deleteRequest);
+
+            if (IsNoSuchObjectResult(response.ResultCode, response.ErrorMessage))
+            {
+                _logger.Information("LdapConnectorExport.ProcessHardDelete: Object at '{Dn}' does not exist (already deleted), treating as success", dn);
+                return;
+            }
+
+            if (response.ResultCode != ResultCode.Success)
+            {
+                throw new LdapException((int)response.ResultCode, response.ErrorMessage);
+            }
+
+            _logger.Information("LdapConnectorExport.ProcessHardDelete: Successfully deleted object at '{Dn}'", dn);
+        }
+        catch (DirectoryOperationException ex) when (IsNoSuchObjectResult(ex.Response?.ResultCode, ex.Message))
+        {
+            // Samba AD and some directory implementations throw DirectoryOperationException
+            // instead of returning the error code in the response. Treat as idempotent success.
             _logger.Information("LdapConnectorExport.ProcessHardDelete: Object at '{Dn}' does not exist (already deleted), treating as success", dn);
-            return;
         }
-
-        if (response.ResultCode != ResultCode.Success)
-        {
-            throw new LdapException((int)response.ResultCode, response.ErrorMessage);
-        }
-
-        _logger.Information("LdapConnectorExport.ProcessHardDelete: Successfully deleted object at '{Dn}'", dn);
     }
 
     private void ProcessDisable(PendingExport pendingExport, string dn)
@@ -758,21 +765,28 @@ internal class LdapConnectorExport
     {
         _logger.Debug("LdapConnectorExport.ProcessHardDeleteAsync: Deleting object at DN '{Dn}'", dn);
 
-        var deleteRequest = new DeleteRequest(dn);
-        var response = (DeleteResponse)await _executor.SendRequestAsync(deleteRequest);
+        try
+        {
+            var deleteRequest = new DeleteRequest(dn);
+            var response = (DeleteResponse)await _executor.SendRequestAsync(deleteRequest);
 
-        if (response.ResultCode == ResultCode.NoSuchObject)
+            if (IsNoSuchObjectResult(response.ResultCode, response.ErrorMessage))
+            {
+                _logger.Information("LdapConnectorExport.ProcessHardDeleteAsync: Object at '{Dn}' does not exist (already deleted), treating as success", dn);
+                return;
+            }
+
+            if (response.ResultCode != ResultCode.Success)
+            {
+                throw new LdapException((int)response.ResultCode, response.ErrorMessage);
+            }
+
+            _logger.Information("LdapConnectorExport.ProcessHardDeleteAsync: Successfully deleted object at '{Dn}'", dn);
+        }
+        catch (DirectoryOperationException ex) when (IsNoSuchObjectResult(ex.Response?.ResultCode, ex.Message))
         {
             _logger.Information("LdapConnectorExport.ProcessHardDeleteAsync: Object at '{Dn}' does not exist (already deleted), treating as success", dn);
-            return;
         }
-
-        if (response.ResultCode != ResultCode.Success)
-        {
-            throw new LdapException((int)response.ResultCode, response.ErrorMessage);
-        }
-
-        _logger.Information("LdapConnectorExport.ProcessHardDeleteAsync: Successfully deleted object at '{Dn}'", dn);
     }
 
     private async Task ProcessDisableAsync(PendingExport pendingExport, string dn)
@@ -928,7 +942,11 @@ internal class LdapConnectorExport
             addRequest.Attributes.Add(new DirectoryAttribute("objectClass", objectClass));
         }
 
-        // Add all attributes from the pending export
+        // Consolidate attribute changes by name so multi-valued attributes (e.g. member with
+        // 50 values) are sent as a single DirectoryAttribute with all values, not 50 separate
+        // DirectoryAttribute entries. The LDAP AddRequest requires one entry per attribute name.
+        var attributeGroups = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var attrChange in pendingExport.AttributeValueChanges)
         {
             if (attrChange.Attribute == null)
@@ -947,8 +965,26 @@ internal class LdapConnectorExport
             var value = GetAttributeValue(attrChange);
             if (value != null)
             {
-                addRequest.Attributes.Add(new DirectoryAttribute(attrName, value));
+                if (!attributeGroups.TryGetValue(attrName, out var values))
+                {
+                    values = [];
+                    attributeGroups[attrName] = values;
+                }
+                values.Add(value);
             }
+        }
+
+        foreach (var (attrName, values) in attributeGroups)
+        {
+            var attr = new DirectoryAttribute(attrName);
+            foreach (var value in values)
+            {
+                if (value is byte[] bytes)
+                    attr.Add(bytes);
+                else
+                    attr.Add(value.ToString());
+            }
+            addRequest.Attributes.Add(attr);
         }
 
         return addRequest;
@@ -1231,6 +1267,27 @@ internal class LdapConnectorExport
                attrName.Equals("cn", StringComparison.OrdinalIgnoreCase) ||
                attrName.Equals("ou", StringComparison.OrdinalIgnoreCase) ||
                attrName.Equals("dc", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Determines whether an LDAP result code or error message indicates the target object does not exist.
+    /// Handles both standard LDAP NoSuchObject (32) and Samba AD's Windows DS error code 0x2030 (8240),
+    /// which is ERROR_DS_NO_SUCH_OBJECT. Samba AD sometimes returns this as ResultCode.Other with the
+    /// Windows error code embedded in the error message rather than using the standard LDAP result code.
+    /// </summary>
+    internal static bool IsNoSuchObjectResult(ResultCode? resultCode, string? errorMessage)
+    {
+        if (resultCode == ResultCode.NoSuchObject)
+            return true;
+
+        // Samba AD returns ERROR_DS_NO_SUCH_OBJECT (0x2030 / 8240) embedded in the error message
+        // when the target object does not exist, often with ResultCode.Other instead of NoSuchObject.
+        if (!string.IsNullOrEmpty(errorMessage) &&
+            (errorMessage.Contains("00002030", StringComparison.OrdinalIgnoreCase) ||
+             errorMessage.Contains("DSID-0C090CE2", StringComparison.OrdinalIgnoreCase)))
+            return true;
+
+        return false;
     }
 
     /// <summary>

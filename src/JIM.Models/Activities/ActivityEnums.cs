@@ -53,7 +53,10 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
 
     // Export execution outcomes
     Exported,
-    Deprovisioned
+    Deprovisioned,
+
+    // Added after initial release — appended to preserve existing database ordinals
+    MvoDeletionScheduled
 }
 
 /// <summary>

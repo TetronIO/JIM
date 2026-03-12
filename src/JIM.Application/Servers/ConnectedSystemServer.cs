@@ -3090,7 +3090,7 @@ public class ConnectedSystemServer
             // create a change object we can track attribute changes with
             var change = new ConnectedSystemObjectChange
             {
-                ConnectedSystemId = connectedSystemObject.ConnectedSystem.Id,
+                ConnectedSystemId = connectedSystemObject.ConnectedSystemId,
                 ConnectedSystemObjectId = connectedSystemObject.Id,
                 ConnectedSystemObject = connectedSystemObject,
                 ChangeType = ObjectChangeType.Updated,

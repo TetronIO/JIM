@@ -466,8 +466,22 @@ function Invoke-DrainPendingExports {
     $stalePending = Get-PendingExportCount -ConnectedSystemId $Config.LDAPSystemId
     if ($stalePending -gt 0) {
         Write-Host "  Draining $stalePending stale pending export(s) from prior test..." -ForegroundColor Gray
+
+        # Step 1: Export any Pending-status PEs (executes them, transitions to Exported)
         $drainExport = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
         Start-Sleep -Seconds 2
+
+        # Step 2: Run confirming import to reconcile Exported-status PEs.
+        # Without this, Exported PEs (especially Delete PEs) remain in the database
+        # indefinitely because only import reconciliation can delete confirmed PEs.
+        $drainImport = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPFullImportProfileId -Wait -PassThru
+        Start-Sleep -Seconds 2
+
+        # Verify drain succeeded
+        $remaining = Get-PendingExportCount -ConnectedSystemId $Config.LDAPSystemId
+        if ($remaining -gt 0) {
+            Write-Host "  WARNING: $remaining pending export(s) remain after drain (may be resolved by next sync cycle)" -ForegroundColor Yellow
+        }
     }
 }
 
@@ -927,6 +941,14 @@ try {
             Write-Host "  Running LDAP export to deprovision orphaned AD user..." -ForegroundColor Gray
             $cleanupExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $cleanupExport.activityId -Name "LDAP Export (Test3 deprovisioning)"
+
+            # Run confirming import to reconcile the Exported Delete PE.
+            # Without this, the Delete PE remains in Exported status and accumulates
+            # as a stale PE that the drain mechanism cannot clear (only import reconciliation
+            # can delete confirmed PEs).
+            Start-Sleep -Seconds 3
+            $confirmImport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $confirmImport.activityId -Name "LDAP Import (Test3 confirm deprovisioning)"
 
             # Verify user is removed from AD
             Start-Sleep -Seconds 3

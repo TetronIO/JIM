@@ -830,8 +830,14 @@ function Assert-ActivitySuccess {
                     $errorDetails += "First error items:"
                     foreach ($item in $errorItems) {
                         $errorDetails += "  - Error: $($item.errorType)"
-                        if ($item.connectedSystemObjectExternalId) {
-                            $errorDetails += "    Object: $($item.connectedSystemObjectExternalId)"
+                        if ($item.errorMessage) {
+                            $errorDetails += "    Message: $($item.errorMessage)"
+                        }
+                        if ($item.snapshotDisplayName) {
+                            $errorDetails += "    Object: $($item.snapshotDisplayName)"
+                        }
+                        elseif ($item.connectedSystemObjectExternalId) {
+                            $errorDetails += "    ExtId: $($item.connectedSystemObjectExternalId)"
                         }
                     }
                 }

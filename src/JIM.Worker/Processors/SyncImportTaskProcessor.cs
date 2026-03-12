@@ -32,6 +32,12 @@ public class SyncImportTaskProcessor
     private readonly CancellationTokenSource _cancellationTokenSource;
 
     /// <summary>
+    /// Batch size for create and update phases of full import. Limits EF change tracker pressure
+    /// and enables per-batch progress reporting. Chosen to balance throughput vs memory usage.
+    /// </summary>
+    private const int ImportBatchSize = 2000;
+
+    /// <summary>
     /// When true, the connected system has no existing CSOs, so all imported objects are known to be new.
     /// This eliminates N unnecessary DB round-trips during first-ever imports.
     /// </summary>
@@ -316,13 +322,12 @@ public class SyncImportTaskProcessor
             // Batching ensures change objects are persisted and released per batch via FlushImportRpeisAsync.
             // We consume from the front of the list so processed CSOs and their attribute values
             // (~400MB at 100K objects) become GC-eligible immediately.
-            const int createBatchSize = 2000;
             var totalCreatedSoFar = 0;
             var totalToCreate = connectedSystemObjectsToBeCreated.Count;
 
             while (connectedSystemObjectsToBeCreated.Count > 0)
             {
-                var batchSize = Math.Min(createBatchSize, connectedSystemObjectsToBeCreated.Count);
+                var batchSize = Math.Min(ImportBatchSize, connectedSystemObjectsToBeCreated.Count);
                 Log.Information("PerformFullImportAsync: Starting batch {BatchStart}-{BatchEnd} of {Total}",
                     totalCreatedSoFar, totalCreatedSoFar + batchSize, totalToCreate);
                 var csoBatch = connectedSystemObjectsToBeCreated.GetRange(0, batchSize);
@@ -334,7 +339,10 @@ public class SyncImportTaskProcessor
                     .Where(r => r.ConnectedSystemObject != null && batchCsoSet.Contains(r.ConnectedSystemObject))
                     .ToList();
 
+                var batchSw = System.Diagnostics.Stopwatch.StartNew();
                 await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
+                Log.Debug("PerformFullImportAsync: CreateConnectedSystemObjectsAsync took {ElapsedMs}ms for {Count} CSOs",
+                    batchSw.ElapsedMilliseconds, batchSize);
 
                 // Now that CSOs have real IDs (assigned by EF), sync the FK on RPEIs
                 foreach (var rpei in batchRpeis)
@@ -359,7 +367,11 @@ public class SyncImportTaskProcessor
 
                 // Remove batch RPEIs from the main list and flush them
                 _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObject != null && batchCsoSet.Contains(r.ConnectedSystemObject));
+                var batchRpeiCount = batchRpeis.Count;
+                batchSw.Restart();
                 await FlushImportRpeisAsync(batchRpeis);
+                Log.Debug("PerformFullImportAsync: FlushImportRpeisAsync took {ElapsedMs}ms for {Count} RPEIs",
+                    batchSw.ElapsedMilliseconds, batchRpeiCount);
 
                 // Remove processed CSOs from the front of the list so their attribute values
                 // (~20 per CSO × ~200 bytes = ~4KB per CSO) become GC-eligible immediately.
@@ -374,89 +386,116 @@ public class SyncImportTaskProcessor
                 await _jim.Activities.UpdateActivityProgressOutOfBandAsync(_activity);
             }
 
+            // Process CSO updates in batches to reduce EF change tracker pressure and report progress.
+            // UpdateConnectedSystemObjectsAsync builds ConnectedSystemObjectChange graphs and EF tracks
+            // child entity changes (attribute value adds/deletes). At 100K CSOs this creates millions of
+            // tracked entities consuming GBs if done at once. Batching ensures SaveChangesAsync processes
+            // only ~2K entities at a time and progress is reported after each batch.
+            // Note: unlike the create phase, we don't RemoveRange here because the reconciliation phase
+            // (ReconcilePendingExportsAsync) needs the full CSO list with updated attribute values.
+            var totalToUpdate = connectedSystemObjectsToBeUpdated.Count;
+
             _activity.ObjectsProcessed = createdCount;
             await _jim.Activities.UpdateActivityAsync(_activity);
 
-            // Capture old external ID values BEFORE the update mutates AttributeValues,
-            // so we can evict stale cache entries if external IDs changed during import.
-            var oldExternalIds = new Dictionary<Guid, (string? primaryIdValue, string? secondaryIdValue)>();
-            foreach (var cso in connectedSystemObjectsToBeUpdated)
+            for (var batchStart = 0; batchStart < totalToUpdate; batchStart += ImportBatchSize)
             {
-                var oldPrimaryValue = cso.ExternalIdAttributeValue;
-                var oldPrimaryId = oldPrimaryValue?.StringValue
-                    ?? oldPrimaryValue?.IntValue?.ToString()
-                    ?? oldPrimaryValue?.LongValue?.ToString()
-                    ?? oldPrimaryValue?.GuidValue?.ToString();
+                var batchSize = Math.Min(ImportBatchSize, totalToUpdate - batchStart);
+                Log.Information("PerformFullImportAsync: Starting update batch {BatchStart}-{BatchEnd} of {Total}",
+                    batchStart, batchStart + batchSize, totalToUpdate);
+                var csoBatch = connectedSystemObjectsToBeUpdated.GetRange(batchStart, batchSize);
 
-                string? oldSecondaryId = null;
-                if (cso.SecondaryExternalIdAttributeId.HasValue)
+                // Capture old external ID values BEFORE the update mutates AttributeValues,
+                // so we can evict stale cache entries if external IDs changed during import.
+                var oldExternalIds = new Dictionary<Guid, (string? primaryIdValue, string? secondaryIdValue)>();
+                foreach (var cso in csoBatch)
                 {
-                    var oldSecondaryValue = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
-                    oldSecondaryId = oldSecondaryValue?.StringValue;
+                    var oldPrimaryValue = cso.ExternalIdAttributeValue;
+                    var oldPrimaryId = oldPrimaryValue?.StringValue
+                        ?? oldPrimaryValue?.IntValue?.ToString()
+                        ?? oldPrimaryValue?.LongValue?.ToString()
+                        ?? oldPrimaryValue?.GuidValue?.ToString();
+
+                    string? oldSecondaryId = null;
+                    if (cso.SecondaryExternalIdAttributeId.HasValue)
+                    {
+                        var oldSecondaryValue = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
+                        oldSecondaryId = oldSecondaryValue?.StringValue;
+                    }
+
+                    oldExternalIds[cso.Id] = (oldPrimaryId, oldSecondaryId);
                 }
 
-                oldExternalIds[cso.Id] = (oldPrimaryId, oldSecondaryId);
-            }
+                // Extract just the RPEIs for this batch of CSOs.
+                // Update-phase CSOs already have real IDs, so we match by ConnectedSystemObjectId.
+                var batchCsoIds = new HashSet<Guid>(csoBatch.Select(c => c.Id));
+                var batchRpeis = _activityRunProfileExecutionItems
+                    .Where(r => r.ConnectedSystemObjectId.HasValue && batchCsoIds.Contains(r.ConnectedSystemObjectId.Value))
+                    .ToList();
 
-            await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(connectedSystemObjectsToBeUpdated, _activityRunProfileExecutionItems);
+                await _jim.ConnectedSystems.UpdateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
 
-            // Populate the reconciliation RPEI lookup before flushing.
-            // Only update-phase RPEIs are needed — created CSOs can't have pending exports.
-            // This retains only the RPEI references needed for reconciliation, not the entire list.
-            foreach (var rpei in _activityRunProfileExecutionItems)
-            {
-                if (rpei.ConnectedSystemObjectId.HasValue)
-                    _reconciliationRpeiLookup.TryAdd(rpei.ConnectedSystemObjectId.Value, rpei);
-            }
-
-            // Flush update-RPEIs now that UpdateConnectedSystemObjectsAsync has processed them.
-            // Create-RPEIs were already flushed above after CSO creation.
-            await FlushImportRpeisAsync();
-
-            // Update cache for CSOs that were updated during import.
-            // For PendingProvisioning → Normal transitions: the confirming import has assigned a primary
-            // external ID, so evict the old secondary-keyed cache entry and add a primary-keyed one.
-            // For Normal CSOs: refresh the cache with the current primary external ID.
-            // If any external ID changed (e.g. DN rename), evict the stale cache entry.
-            foreach (var updatedCso in connectedSystemObjectsToBeUpdated)
-            {
-                var extIdValue = updatedCso.ExternalIdAttributeValue;
-                if (extIdValue == null)
-                    continue;
-
-                var newPrimaryId = extIdValue.StringValue
-                    ?? extIdValue.IntValue?.ToString()
-                    ?? extIdValue.LongValue?.ToString()
-                    ?? extIdValue.GuidValue?.ToString();
-
-                oldExternalIds.TryGetValue(updatedCso.Id, out var oldIds);
-
-                // Evict old primary cache entry if primary external ID changed
-                if (oldIds.primaryIdValue != null && newPrimaryId != null
-                    && !oldIds.primaryIdValue.Equals(newPrimaryId, StringComparison.OrdinalIgnoreCase))
+                // Populate the reconciliation RPEI lookup before flushing.
+                // Only update-phase RPEIs are needed — created CSOs can't have pending exports.
+                foreach (var rpei in batchRpeis)
                 {
-                    _jim.ConnectedSystems.EvictCsoFromCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, oldIds.primaryIdValue);
+                    if (rpei.ConnectedSystemObjectId.HasValue)
+                        _reconciliationRpeiLookup.TryAdd(rpei.ConnectedSystemObjectId.Value, rpei);
                 }
 
-                // Evict old secondary cache entry if this CSO has a secondary external ID
-                if (updatedCso.SecondaryExternalIdAttributeId.HasValue && oldIds.secondaryIdValue != null)
+                // Remove batch RPEIs from the main list and flush them
+                _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObjectId.HasValue && batchCsoIds.Contains(r.ConnectedSystemObjectId.Value));
+                await FlushImportRpeisAsync(batchRpeis);
+
+                // Update cache for CSOs that were updated during import.
+                // For PendingProvisioning → Normal transitions: the confirming import has assigned a primary
+                // external ID, so evict the old secondary-keyed cache entry and add a primary-keyed one.
+                // For Normal CSOs: refresh the cache with the current primary external ID.
+                // If any external ID changed (e.g. DN rename), evict the stale cache entry.
+                foreach (var updatedCso in csoBatch)
                 {
-                    _jim.ConnectedSystems.EvictCsoFromCache(_connectedSystem.Id, updatedCso.SecondaryExternalIdAttributeId.Value, oldIds.secondaryIdValue);
+                    var extIdValue = updatedCso.ExternalIdAttributeValue;
+                    if (extIdValue == null)
+                        continue;
+
+                    var newPrimaryId = extIdValue.StringValue
+                        ?? extIdValue.IntValue?.ToString()
+                        ?? extIdValue.LongValue?.ToString()
+                        ?? extIdValue.GuidValue?.ToString();
+
+                    oldExternalIds.TryGetValue(updatedCso.Id, out var oldIds);
+
+                    // Evict old primary cache entry if primary external ID changed
+                    if (oldIds.primaryIdValue != null && newPrimaryId != null
+                        && !oldIds.primaryIdValue.Equals(newPrimaryId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _jim.ConnectedSystems.EvictCsoFromCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, oldIds.primaryIdValue);
+                    }
+
+                    // Evict old secondary cache entry if this CSO has a secondary external ID
+                    if (updatedCso.SecondaryExternalIdAttributeId.HasValue && oldIds.secondaryIdValue != null)
+                    {
+                        _jim.ConnectedSystems.EvictCsoFromCache(_connectedSystem.Id, updatedCso.SecondaryExternalIdAttributeId.Value, oldIds.secondaryIdValue);
+                    }
+
+                    // Add/refresh primary external ID cache entry
+                    if (extIdValue.StringValue != null)
+                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.StringValue, updatedCso.Id);
+                    else if (extIdValue.IntValue != null)
+                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), updatedCso.Id);
+                    else if (extIdValue.LongValue != null)
+                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), updatedCso.Id);
+                    else if (extIdValue.GuidValue != null)
+                        _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), updatedCso.Id);
                 }
 
-                // Add/refresh primary external ID cache entry
-                if (extIdValue.StringValue != null)
-                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.StringValue, updatedCso.Id);
-                else if (extIdValue.IntValue != null)
-                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), updatedCso.Id);
-                else if (extIdValue.LongValue != null)
-                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), updatedCso.Id);
-                else if (extIdValue.GuidValue != null)
-                    _jim.ConnectedSystems.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), updatedCso.Id);
+                _activity.ObjectsProcessed = createdCount + batchStart + batchSize;
+                Log.Information("PerformFullImportAsync: Update batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
+                    batchStart + batchSize, totalToUpdate,
+                    GC.GetTotalMemory(false) / 1024 / 1024,
+                    System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
+                await _jim.Activities.UpdateActivityProgressOutOfBandAsync(_activity);
             }
-
-            _activity.ObjectsProcessed = totalChanges;
-            await _jim.Activities.UpdateActivityAsync(_activity);
         }
 
         // CSO → RPEI lookup for reconciliation was populated during the update-phase flush.
@@ -760,6 +799,18 @@ public class SyncImportTaskProcessor
         // Note: The RPEI uses DeletionDetected (user-facing), but the CSO status uses Obsolete (internal state)
         cso.Status = ConnectedSystemObjectStatus.Obsolete;
         cso.LastUpdated = DateTime.UtcNow;
+
+        // Clean up any stale pending exports for this CSO. When a CSO's object is deleted from the
+        // target system, any Exported-status Delete PEs (awaiting confirmation) or other stale PEs
+        // are no longer relevant. Without this cleanup, stale PEs accumulate and can cause duplicate
+        // PE errors when subsequent operations create new PEs for other CSOs.
+        var deletedPeCount = await _jim.Repository.ConnectedSystems
+            .DeletePendingExportsByConnectedSystemObjectIdsAsync(new[] { cso.Id });
+        if (deletedPeCount > 0)
+        {
+            Log.Information("ObsoleteConnectedSystemObjectAsync: Cleaned up {Count} stale pending export(s) for obsolete CSO {CsoId}",
+                deletedPeCount, cso.Id);
+        }
 
         // add it to the list of objects to be updated. this will persist and create a change object in the activity tree.
         connectedSystemObjectsToBeUpdated.Add(cso);
@@ -1894,41 +1945,43 @@ public class SyncImportTaskProcessor
             .Where(cso => cso.PendingAttributeValueAdditions.Any(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
             .ToList();
 
-        Parallel.ForEach(createdCsosWithRefs, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, csoToProcess =>
+        // Process created CSOs in batches with progress reporting.
+        // Each batch uses Parallel.ForEach for CPU-bound dictionary lookups, then reports progress.
+        var allCsosWithRefs = createdCsosWithRefs
+            .Select(cso => (Cso: cso, IsCreated: true))
+            .Concat(updatedCsosWithRefs.Select(cso => (Cso: cso, IsCreated: false)))
+            .ToList();
+
+        var totalToResolve = allCsosWithRefs.Count;
+        for (var batchStart = 0; batchStart < totalToResolve; batchStart += ImportBatchSize)
         {
-            var externalIdAttribute = csoToProcess.Type.Attributes.Single(a => a.IsExternalId);
-            var secondaryExternalIdAttribute = csoToProcess.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
-            var externalIdAttributeToUse = secondaryExternalIdAttribute ?? externalIdAttribute;
+            var batchSize = Math.Min(ImportBatchSize, totalToResolve - batchStart);
+            var batch = allCsosWithRefs.GetRange(batchStart, batchSize);
 
-            foreach (var referenceAttributeValue in csoToProcess.AttributeValues.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
+            Parallel.ForEach(batch, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, item =>
             {
-                var resolved = ResolveAttributeValueFromLookups(referenceAttributeValue, externalIdAttributeToUse, externalIdLookups);
-                if (!resolved)
-                    unresolvedItems.Add((csoToProcess, referenceAttributeValue, externalIdAttributeToUse));
-            }
+                var csoToProcess = item.Cso;
+                var externalIdAttribute = csoToProcess.Type.Attributes.Single(a => a.IsExternalId);
+                var secondaryExternalIdAttribute = csoToProcess.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
+                var externalIdAttributeToUse = secondaryExternalIdAttribute ?? externalIdAttribute;
 
-            Interlocked.Increment(ref processedCount);
-        });
+                var attributeValues = item.IsCreated
+                    ? csoToProcess.AttributeValues.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue))
+                    : csoToProcess.PendingAttributeValueAdditions.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue));
 
-        Parallel.ForEach(updatedCsosWithRefs, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, csoToProcess =>
-        {
-            var externalIdAttribute = csoToProcess.Type.Attributes.Single(a => a.IsExternalId);
-            var secondaryExternalIdAttribute = csoToProcess.Type.Attributes.SingleOrDefault(a => a.IsSecondaryExternalId);
-            var externalIdAttributeToUse = secondaryExternalIdAttribute ?? externalIdAttribute;
+                foreach (var referenceAttributeValue in attributeValues)
+                {
+                    var resolved = ResolveAttributeValueFromLookups(referenceAttributeValue, externalIdAttributeToUse, externalIdLookups);
+                    if (!resolved)
+                        unresolvedItems.Add((csoToProcess, referenceAttributeValue, externalIdAttributeToUse));
+                }
 
-            foreach (var referenceAttributeValue in csoToProcess.PendingAttributeValueAdditions.Where(av => !string.IsNullOrEmpty(av.UnresolvedReferenceValue)))
-            {
-                var resolved = ResolveAttributeValueFromLookups(referenceAttributeValue, externalIdAttributeToUse, externalIdLookups);
-                if (!resolved)
-                    unresolvedItems.Add((csoToProcess, referenceAttributeValue, externalIdAttributeToUse));
-            }
+                Interlocked.Increment(ref processedCount);
+            });
 
-            Interlocked.Increment(ref processedCount);
-        });
-
-        // Update progress after parallel processing completes
-        _activity.ObjectsProcessed = processedCount;
-        await _jim.Activities.UpdateActivityAsync(_activity);
+            _activity.ObjectsProcessed = processedCount;
+            await _jim.Activities.UpdateActivityProgressOutOfBandAsync(_activity);
+        }
 
         // Phase 2: Batch DB query for remaining unresolved references (eliminates N+1 individual queries)
         if (unresolvedItems.Count > 0)
@@ -2113,6 +2166,11 @@ public class SyncImportTaskProcessor
         Log.Debug("ResolveReferencesAsync: Matched an unresolved reference ({UnresolvedRef}) to CSO: {CsoIdentifier}",
             referenceAttributeValue.UnresolvedReferenceValue, csoIdentifier);
         referenceAttributeValue.ReferenceValue = referencedConnectedSystemObject;
+        // Also set the FK when the referenced CSO already has a real ID (existing/updated CSOs).
+        // For newly-created CSOs (Id == Guid.Empty), the FK is fixed up later in
+        // CreateConnectedSystemObjectsAsync after ID pre-generation.
+        if (referencedConnectedSystemObject.Id != Guid.Empty)
+            referenceAttributeValue.ReferenceValueId = referencedConnectedSystemObject.Id;
         return true;
     }
 
@@ -2395,7 +2453,9 @@ public class SyncImportTaskProcessor
                             // Add ExportFailed outcome for permanently failed exports
                             if (result.FailedChanges.Count > 0)
                             {
-                                var failedAttrNames = string.Join(", ", result.FailedChanges.Select(c => c.Attribute?.Name ?? "unknown"));
+                                var failedAttrNames = string.Join(", ", result.FailedChanges
+                                    .GroupBy(c => c.Attribute?.Name ?? "unknown")
+                                    .Select(g => g.Count() > 1 ? $"{g.Key} (x{g.Count()})" : g.Key));
 
                                 if (existingRpei != null)
                                 {
@@ -2442,7 +2502,9 @@ public class SyncImportTaskProcessor
                             // Add ExportFailed outcome for retry exports (temporary failures)
                             if (result.RetryChanges.Count > 0)
                             {
-                                var retryAttrNames = string.Join(", ", result.RetryChanges.Select(c => c.Attribute?.Name ?? "unknown"));
+                                var retryAttrNames = string.Join(", ", result.RetryChanges
+                                    .GroupBy(c => c.Attribute?.Name ?? "unknown")
+                                    .Select(g => g.Count() > 1 ? $"{g.Key} (x{g.Count()})" : g.Key));
 
                                 if (existingRpei != null)
                                 {

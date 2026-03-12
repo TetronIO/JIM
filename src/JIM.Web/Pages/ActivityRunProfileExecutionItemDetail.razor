@@ -241,6 +241,7 @@
                              CsoObjectTypeName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.Type?.Name ?? _activityRunProfileExecutionItem.ObjectTypeSnapshot)"
                              CsoId="@_activityRunProfileExecutionItem.ConnectedSystemObjectId"
                              CsoConnectedSystemId="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.ConnectedSystemId ?? _connectedSystemHeader?.Id)"
+                             MvoTypePluralName="@_metaverseObjectType?.PluralName"
                              InitiallyExpanded="true" />
             </MudPaper>
         }
@@ -322,16 +323,16 @@
                                                         <MudText Class="mud-text-secondary">@group.AttributeName</MudText>
                                                     </td>
                                                     <td style="padding: 4px 0; border: none; vertical-align: top; word-break: break-word;">
-                                                        @if (group.DisplayValues.Count == 1)
+                                                        @if (group.Values.Count == 1)
                                                         {
-                                                            <MudText>@group.DisplayValues[0]</MudText>
+                                                            <CsoAttributeValue Value="group.Values[0]" />
                                                         }
                                                         else
                                                         {
                                                             <MudStack Spacing="0">
-                                                                @foreach (var value in group.DisplayValues)
+                                                                @foreach (var value in group.Values)
                                                                 {
-                                                                    <MudText>@value</MudText>
+                                                                    <CsoAttributeValue Value="value" />
                                                                 }
                                                                 @if (group.TotalValueCount > MaxMultiValuePreview)
                                                                 {
@@ -440,16 +441,16 @@
                                                         <MudText Class="mud-text-secondary">@group.AttributeName</MudText>
                                                     </td>
                                                     <td style="padding: 4px 0; border: none; vertical-align: top; word-break: break-word;">
-                                                        @if (group.DisplayValues.Count == 1)
+                                                        @if (group.Values.Count == 1)
                                                         {
-                                                            <MudText>@group.DisplayValues[0]</MudText>
+                                                            @RenderMvoAttributeValue(group.Values[0])
                                                         }
                                                         else
                                                         {
                                                             <MudStack Spacing="0">
-                                                                @foreach (var value in group.DisplayValues)
+                                                                @foreach (var value in group.Values)
                                                                 {
-                                                                    <MudText>@value</MudText>
+                                                                    @RenderMvoAttributeValue(value)
                                                                 }
                                                                 @if (group.TotalValueCount > MaxMultiValuePreview)
                                                                 {
@@ -499,6 +500,103 @@
         @if (_activityRunProfileExecutionItem.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected)
         {
             <MudText Typo="Typo.h6" Class="mb-3">Metaverse Impact</MudText>
+
+            @* Show actual MVO fate from causality tree outcomes (when available) *@
+            var mvoDeletedOutcome = _activityRunProfileExecutionItem.SyncOutcomes
+                .FirstOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+            var mvoDeletionScheduledOutcome = _activityRunProfileExecutionItem.SyncOutcomes
+                .FirstOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled);
+
+            @if (mvoDeletedOutcome != null)
+            {
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.PersonRemove" />
+                        <MudText Typo="Typo.body1">
+                            <strong>The metaverse object was deleted.</strong>
+                            @if (!string.IsNullOrEmpty(mvoDeletedOutcome.TargetEntityDescription))
+                            {
+                                <text> The identity </text>
+                                @if (mvoDeletedOutcome.TargetEntityId.HasValue)
+                                {
+                                    <MudLink Href="@GetMvoHref(mvoDeletedOutcome.TargetEntityId.Value)">
+                                        @mvoDeletedOutcome.TargetEntityDescription
+                                    </MudLink>
+                                }
+                                else
+                                {
+                                    <strong>@mvoDeletedOutcome.TargetEntityDescription</strong>
+                                }
+                                <text> was removed from the metaverse immediately (no grace period).</text>
+                            }
+                        </MudText>
+                    </MudStack>
+                </MudAlert>
+            }
+            else if (mvoDeletionScheduledOutcome != null)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-3">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.HourglassBottom" />
+                        <MudText Typo="Typo.body1">
+                            <strong>The metaverse object is scheduled for deletion.</strong>
+                            @if (!string.IsNullOrEmpty(mvoDeletionScheduledOutcome.TargetEntityDescription))
+                            {
+                                <text> The identity </text>
+                                @if (mvoDeletionScheduledOutcome.TargetEntityId.HasValue)
+                                {
+                                    <MudLink Href="@GetMvoHref(mvoDeletionScheduledOutcome.TargetEntityId.Value)">
+                                        @mvoDeletionScheduledOutcome.TargetEntityDescription
+                                    </MudLink>
+                                }
+                                else
+                                {
+                                    <strong>@mvoDeletionScheduledOutcome.TargetEntityDescription</strong>
+                                }
+                                <text> will be deleted after the grace period expires</text>
+                                @if (!string.IsNullOrEmpty(mvoDeletionScheduledOutcome.DetailMessage))
+                                {
+                                    <text> (@mvoDeletionScheduledOutcome.DetailMessage.ToLowerInvariant())</text>
+                                }
+                                <text>, unless a new connector is established before then.</text>
+                            }
+                        </MudText>
+                    </MudStack>
+                </MudAlert>
+            }
+            else if (IsSyncContext() && _activityRunProfileExecutionItem.SyncOutcomes.Count > 0
+                     && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Disconnected)
+            {
+                @* Sync context with outcomes but no MVO deletion — the MVO survived *@
+                <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="mb-3">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" />
+                        <MudText Typo="Typo.body1">
+                            <strong>The metaverse object was not deleted.</strong>
+                            @switch (_metaverseObjectType?.DeletionRule)
+                            {
+                                case MetaverseObjectDeletionRule.Manual:
+                                    <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects is set to <strong>manual deletion only</strong> — automatic deletion is disabled.</text>
+                                    break;
+                                case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
+                                    <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects requires <strong>all connectors</strong> to be disconnected. Other connected systems still have active connectors to this metaverse object.</text>
+                                    break;
+                                case MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected:
+                                    <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects requires an <strong>authoritative source</strong> to disconnect.</text>
+                                    @if (_connectedSystemHeader != null && _deletionTriggerSystems != null
+                                         && !_deletionTriggerSystems.Any(cs => cs.Id == _connectedSystemHeader.Id))
+                                    {
+                                        <text> <strong>@_connectedSystemHeader.Name</strong> is not configured as an authoritative source.</text>
+                                    }
+                                    break;
+                                default:
+                                    <text>The deletion rule did not apply for this disconnection.</text>
+                                    break;
+                            }
+                        </MudText>
+                    </MudStack>
+                </MudAlert>
+            }
 
             @if (_metaverseObjectType != null)
             {
@@ -746,25 +844,43 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                                 </MudExpansionPanels>
                             }
 
-                            @* Pending Export Details - shown for ExportNotConfirmed and ExportConfirmationFailed errors *@
+                            @* Pending Export Details - shown for PendingExport items and export-related errors *@
                             @if (_pendingExport != null)
                             {
                                 <MudText Typo="Typo.h6" Class="mb-3">Pending Export Details</MudText>
                                 <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
-                                    @if (_activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed)
+                                    @if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.PendingExport
+                                         && _activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
+                                    {
+                                        <text>The following attribute changes are staged and awaiting export to the connected system.</text>
+                                    }
+                                    else if (_activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed)
                                     {
                                         <text>The following attribute changes were exported but have not yet been confirmed. They will be retried on the
                                             next export run.</text>
-                                        }
-                                        else
-                                        {
-                                            <text>The following attribute changes failed to export after multiple attempts and may require manual
-                                                intervention.</text>
-                                        }
-                                        </MudText>
+                                    }
+                                    else
+                                    {
+                                        <text>The following attribute changes failed to export after multiple attempts and may require manual
+                                            intervention.</text>
+                                    }
+                                </MudText>
 
                                         <MudPaper Class="pa-4 mb-4" Outlined="true">
                                             <MudGrid Spacing="3">
+                                                <MudItem xs="12" sm="6" md="3">
+                                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Connected System</MudText>
+                                                    <MudText>
+                                                        @if (_pendingExport.ConnectedSystem != null)
+                                                        {
+                                                            <MudLink Href="@($"/admin/connected-systems/{_pendingExport.ConnectedSystemId}")">@_pendingExport.ConnectedSystem.Name</MudLink>
+                                                        }
+                                                        else
+                                                        {
+                                                            <text>-</text>
+                                                        }
+                                                    </MudText>
+                                                </MudItem>
                                                 <MudItem xs="12" sm="6" md="3">
                                                     <MudText Typo="Typo.button" Class="mud-text-secondary">Status</MudText><br />
                                                     <MudChip T="string" Variant="Variant.Text" Color="GetPendingExportStatusColor(_pendingExport.Status)"
@@ -869,6 +985,11 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private List<ConnectedSystemHeader>? _deletionTriggerSystems;
 
 
+    private string GetMvoHref(Guid mvoId) =>
+        _metaverseObjectType != null
+            ? Utilities.GetMetaverseObjectHref(mvoId, _metaverseObjectType.PluralName)
+            : $"/identity/search/{mvoId}";
+
     private static string FormatGracePeriod(TimeSpan period)
     {
         var parts = new List<string>();
@@ -888,9 +1009,14 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     ConnectedSystemObject? ReferenceValue);
 
     /// <summary>
-    /// Helper record for grouped attribute display in projection details.
+    /// Helper record for grouped CSO attribute display with rich rendering support.
     /// </summary>
-    private record ProjectionAttributeGroup(string AttributeName, List<string> DisplayValues, int TotalValueCount);
+    private record CsoProjectionAttributeGroup(string AttributeName, List<ConnectedSystemObjectAttributeValue> Values, int TotalValueCount);
+
+    /// <summary>
+    /// Helper record for grouped MVO attribute display with rich rendering support.
+    /// </summary>
+    private record MvoProjectionAttributeGroup(string AttributeName, List<MetaverseObjectAttributeValue> Values, int TotalValueCount);
 
     /// <summary>
     /// Maximum number of distinct attributes to show per side in projection details.
@@ -934,13 +1060,24 @@ new("Item Details", href: null, disabled: true)
             ?? _activityRunProfileExecutionItem.ConnectedSystemObject?.MetaverseObject;
         }
 
-        // For export-related errors, load the associated pending export to show detailed attribute status
+        // Load associated pending export for:
+        // - Export-related errors (ExportNotConfirmed, ExportConfirmationFailed)
+        // - PendingExport items surfaced during sync (informational, no error)
         if (_activityRunProfileExecutionItem.ErrorType is ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed
-        or ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed
-        && _activityRunProfileExecutionItem.ConnectedSystemObjectId.HasValue)
+            or ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed
+            && _activityRunProfileExecutionItem.ConnectedSystemObjectId.HasValue)
         {
             _pendingExport = await Jim.ConnectedSystems.GetPendingExportForObjectAsync(
-            _activityRunProfileExecutionItem.ConnectedSystemObjectId.Value);
+                _activityRunProfileExecutionItem.ConnectedSystemObjectId.Value);
+        }
+        else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.PendingExport)
+        {
+            if (_activityRunProfileExecutionItem.ConnectedSystemObjectId.HasValue)
+                _pendingExport = await Jim.ConnectedSystems.GetPendingExportForObjectAsync(
+                    _activityRunProfileExecutionItem.ConnectedSystemObjectId.Value);
+            else if (_activityRunProfileExecutionItem.PendingExportId.HasValue)
+                _pendingExport = await Jim.ConnectedSystems.GetPendingExportAsync(
+                    _activityRunProfileExecutionItem.PendingExportId.Value);
         }
 
         // Resolve the MVO type for headings and deletion rule display
@@ -966,7 +1103,23 @@ new("Item Details", href: null, disabled: true)
                 csoTypeId = _activityRunProfileExecutionItem.ConnectedSystemObjectChange.DeletedObjectType.Id;
             }
 
-            // If we don't have MVO type yet but have CSO type, look up via sync rules
+            // Third try: for disconnected RPEIs, the MVO ID is stored on the sync outcome's TargetEntityId
+            // (the CSO-MVO join is broken after disconnection, so the first try won't work)
+            if (!mvoTypeId.HasValue
+                && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Disconnected)
+            {
+                var disconnectedOutcome = _activityRunProfileExecutionItem.SyncOutcomes
+                    .FirstOrDefault(o => o.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected
+                        or ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope);
+                if (disconnectedOutcome?.TargetEntityId.HasValue == true)
+                {
+                    var mvo = await Jim.Metaverse.GetMetaverseObjectAsync(disconnectedOutcome.TargetEntityId.Value);
+                    if (mvo?.Type != null)
+                        mvoTypeId = mvo.Type.Id;
+                }
+            }
+
+            // Fourth try: if we don't have MVO type yet but have CSO type, look up via sync rules
             if (!mvoTypeId.HasValue && csoTypeId.HasValue)
             {
                 var syncRules = await Jim.ConnectedSystems.GetSyncRulesAsync();
@@ -1002,11 +1155,11 @@ new("Item Details", href: null, disabled: true)
     /// Gets grouped CSO attributes for projection display, excluding attributes already shown
     /// (External ID, Secondary ID, Display Name).
     /// </summary>
-    private List<ProjectionAttributeGroup> GetGroupedCsoAttributes()
+    private List<CsoProjectionAttributeGroup> GetGroupedCsoAttributes()
     {
         var cso = _activityRunProfileExecutionItem?.ConnectedSystemObject;
         if (cso == null)
-            return new List<ProjectionAttributeGroup>();
+            return new List<CsoProjectionAttributeGroup>();
 
         var excludedAttributeIds = new HashSet<int>();
         if (cso.ExternalIdAttributeId > 0)
@@ -1020,9 +1173,9 @@ new("Item Details", href: null, disabled: true)
         .GroupBy(av => av.Attribute.Name)
         .OrderBy(g => g.Key)
         .Take(MaxProjectionAttributes)
-        .Select(g => new ProjectionAttributeGroup(
+        .Select(g => new CsoProjectionAttributeGroup(
         g.Key,
-        g.Take(MaxMultiValuePreview).Select(av => FormatCsoAttributeValue(av)).ToList(),
+        g.Take(MaxMultiValuePreview).ToList(),
         g.Count()))
         .ToList();
     }
@@ -1051,19 +1204,19 @@ new("Item Details", href: null, disabled: true)
     /// <summary>
     /// Gets grouped MVO attributes for projection display, excluding Display Name (already shown above).
     /// </summary>
-    private List<ProjectionAttributeGroup> GetGroupedMvoAttributes()
+    private List<MvoProjectionAttributeGroup> GetGroupedMvoAttributes()
     {
         if (_metaverseObject == null)
-            return new List<ProjectionAttributeGroup>();
+            return new List<MvoProjectionAttributeGroup>();
 
         return _metaverseObject.AttributeValues
         .Where(av => !av.Attribute.Name.Equals(Constants.BuiltInAttributes.DisplayName, StringComparison.OrdinalIgnoreCase))
         .GroupBy(av => av.Attribute.Name)
         .OrderBy(g => g.Key)
         .Take(MaxProjectionAttributes)
-        .Select(g => new ProjectionAttributeGroup(
+        .Select(g => new MvoProjectionAttributeGroup(
         g.Key,
-        g.Take(MaxMultiValuePreview).Select(av => FormatAttributeValue(av)).ToList(),
+        g.Take(MaxMultiValuePreview).ToList(),
         g.Count()))
         .ToList();
     }
@@ -1082,13 +1235,32 @@ new("Item Details", href: null, disabled: true)
     }
 
     /// <summary>
-    /// Formats a CSO attribute value for display.
+    /// Renders a single MVO attribute value with rich formatting for reference types.
     /// </summary>
-    private static string FormatCsoAttributeValue(ConnectedSystemObjectAttributeValue attributeValue)
+    private RenderFragment RenderMvoAttributeValue(MetaverseObjectAttributeValue av) => __builder =>
     {
-        var result = attributeValue.ToStringNoName();
-        return string.IsNullOrEmpty(result) ? "-" : result;
-    }
+        if (av.ReferenceValue != null)
+        {
+            <span class="jim-attr-reference">
+                <MudChip T="string" Color="Color.Default" Class="mr-1">
+                    @av.ReferenceValue.Type.Name
+                </MudChip>
+                <MudLink Href="@Utilities.GetMetaverseObjectHref(av.ReferenceValue)">
+                    @(av.ReferenceValue.DisplayName ?? av.ReferenceValue.Id.ToString())
+                </MudLink>
+            </span>
+        }
+        else if (av.ReferenceValueId.HasValue)
+        {
+            @* Reference ID is set but navigation property not loaded - show ID as text *@
+            <MudText Class="jim-text-code">@av.ReferenceValueId.Value</MudText>
+        }
+        else
+        {
+            var display = FormatAttributeValue(av);
+            <MudText>@display</MudText>
+        }
+    };
 
     /// <summary>
     /// Formats an attribute value for preview display.

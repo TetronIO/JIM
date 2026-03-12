@@ -1,6 +1,6 @@
 # Integration Test Full Regression Runner
 
-- **Status:** Planned
+- **Status:** Done
 - **Milestone:** v0.9-STABILISATION
 - **Created:** 2026-03-04
 - **Issue:** #372

@@ -89,6 +89,7 @@ else
                                 <OutcomeTreeNode Outcome="rootOutcome"
                                                  AttributeChanges="AttributeChanges"
                                                  MvoAttributeChanges="MvoAttributeChanges"
+                                                 MvoTypePluralName="@MvoTypePluralName"
                                                  InitiallyExpanded="InitiallyExpanded" />
                             }
                         </div>
@@ -103,6 +104,7 @@ else
             {
                 <OutcomeTreeNode Outcome="rootOutcome"
                                  AttributeChanges="AttributeChanges"
+                                 MvoTypePluralName="@MvoTypePluralName"
                                  InitiallyExpanded="InitiallyExpanded" />
             }
         }
@@ -175,6 +177,12 @@ else
     /// </summary>
     [Parameter]
     public int? CsoConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// Plural name of the MVO type (e.g., "people"), used to build correct MVO detail links.
+    /// </summary>
+    [Parameter]
+    public string? MvoTypePluralName { get; set; }
 
     /// <summary>
     /// When true, root outcome nodes start with their attribute detail expanded.

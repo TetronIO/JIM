@@ -1,5 +1,6 @@
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Worker.Processors;
 
 namespace JIM.Worker.Models;
 
@@ -36,6 +37,13 @@ public readonly struct MetaverseObjectChangeResult
     /// Only populated when the primary ChangeType is not AttributeFlow itself.
     /// </summary>
     public int? AttributeFlowCount { get; init; }
+
+    /// <summary>
+    /// The fate of the MVO after disconnection — whether it was deleted, scheduled for deletion,
+    /// or left intact. Used to build the appropriate causality tree outcome.
+    /// Only populated for Disconnected and DisconnectedOutOfScope change types.
+    /// </summary>
+    public MvoDeletionFate MvoDeletionFate { get; init; }
 
     /// <summary>
     /// Creates a result indicating no changes occurred.
@@ -88,11 +96,15 @@ public readonly struct MetaverseObjectChangeResult
     /// of import sync rule scoping criteria.
     /// </summary>
     /// <param name="attributeFlowCount">Optional count of attribute removals that occurred during disconnection.</param>
-    public static MetaverseObjectChangeResult DisconnectedOutOfScope(int? attributeFlowCount = null) => new()
+    /// <param name="mvoDeletionFate">The fate of the MVO after the disconnection.</param>
+    public static MetaverseObjectChangeResult DisconnectedOutOfScope(
+        int? attributeFlowCount = null,
+        MvoDeletionFate mvoDeletionFate = MvoDeletionFate.NotDeleted) => new()
     {
         HasChanges = true,
         ChangeType = ObjectChangeType.DisconnectedOutOfScope,
-        AttributeFlowCount = attributeFlowCount
+        AttributeFlowCount = attributeFlowCount,
+        MvoDeletionFate = mvoDeletionFate
     };
 
     /// <summary>

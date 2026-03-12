@@ -108,10 +108,12 @@ public interface IActivityRepository
 
     /// <summary>
     /// Queries the database for RPEI error counts for an activity, returning the total number of
-    /// RPEIs with errors and the total number of RPEIs. Used by the worker to determine activity
-    /// completion status (success/warning/failure) without loading RPEIs into memory.
+    /// RPEIs with errors, the total number of RPEIs, and the number of UnhandledError RPEIs.
+    /// Used by the worker to determine activity completion status (success/warning/failure)
+    /// without loading RPEIs into memory. UnhandledError RPEIs indicate code/logic bugs and
+    /// escalate the activity status to CompleteWithError rather than CompleteWithWarning.
     /// </summary>
-    public Task<(int TotalWithErrors, int TotalRpeis)> GetActivityRpeiErrorCountsAsync(Guid activityId);
+    public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId);
 
     /// <summary>
     /// Persists ConnectedSystemObjectChange records that are attached to RPEIs.

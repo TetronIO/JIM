@@ -670,16 +670,24 @@ public class Worker : BackgroundService
             // Query the database for precise RPEI error counts.
             // This avoids loading RPEIs into memory (which causes OOM at scale) and provides
             // precise has-errors/all-errors detection for all processor types uniformly.
-            var (totalWithErrors, totalRpeis) = await jim.Activities.GetActivityRpeiErrorCountsAsync(activity.Id);
+            var (totalWithErrors, totalRpeis, totalUnhandledErrors) = await jim.Activities.GetActivityRpeiErrorCountsAsync(activity.Id);
 
             var hasItems = totalRpeis > 0;
             var hasErrors = totalWithErrors > 0;
+            var hasUnhandledErrors = totalUnhandledErrors > 0;
             var allErrors = hasItems && totalWithErrors == totalRpeis;
 
             if (allErrors)
             {
                 await jim.Activities.FailActivityWithErrorAsync(activity, "All run profile execution items experienced an error. Review the items for more information.");
                 Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} failed - all items had errors", activity.Id);
+            }
+            else if (hasUnhandledErrors)
+            {
+                // UnhandledError RPEIs indicate code/logic bugs, not data issues.
+                // These must escalate to CompleteWithError to ensure visibility and investigation.
+                await jim.Activities.CompleteActivityWithErrorAsync(activity, $"{totalUnhandledErrors} unhandled error(s) occurred during processing. Review the items for more information.");
+                Log.Warning("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with error - {UnhandledErrorCount} unhandled error(s) detected", activity.Id, totalUnhandledErrors);
             }
             else if (hasErrors)
             {

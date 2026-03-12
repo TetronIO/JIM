@@ -95,6 +95,8 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
    - No way to test sync logic without database (EF is deeply coupled throughout)
    - `TestUtilities.cs` is ~1,110 lines of setup helpers - indicating painful test setup
    - **New concern (#338):** Raw SQL bulk operations use try/catch fallback to EF in tests, meaning production hot paths are not exercised by unit tests at all
+   - **Two incompatible test mocking approaches require two-tier fallback code (March 2026):**
+     Unit tests use a mocked `DbContext` (Moq) where `Entry()`, `ChangeTracker`, and `TrackGraph()` are all null and throw `NullReferenceException` — these tests rely on `AddRange`/`UpdateRange` callbacks on mocked `DbSet<T>` instances. Workflow tests use EF Core's in-memory provider where `Entry()` and `ChangeTracker` work correctly, but `AddRange`/`UpdateRange` traverse navigation property graphs and cause identity conflicts when entities are tracked under multiple instances after `ClearChangeTracker()`. Production uses raw SQL with no EF tracking at all. The result is a **three-way code path divergence**: each EF fallback method now contains a try/catch that attempts `Entry().State` assignment first (for in-memory provider), catches `NullReferenceException` and falls back to `AddRange`/`UpdateRange` (for mocked DbContext), all inside an outer catch that handles the raw SQL failure (production path never exercises either fallback). This pattern exists across 7 repository methods in `ConnectedSystemRepository` and `ActivitiesRepository`. The `ISyncDataAccess` interface proposed in Option A with a purpose-built `InMemorySyncDataAccess` implementation would eliminate this entirely — both unit and workflow tests would use the same clean in-memory implementation with no EF Core quirks leaking through
 
 ---
 
@@ -122,64 +124,115 @@ Keep the current architecture but surgically extract the sync processing logic i
 
 ```
 +-------------------------------------------------------+
-|                JIM.Worker (Host)                      |
+|          JIM.Worker (Host + Orchestration)            |
+|                                                       |
 |  BackgroundService + .NET Generic Host DI             |
 |  IHostedService with IServiceScopeFactory             |
+|                                                       |
+|  Sync Orchestrator (new)                              |
+|    Coordinates phases: Import -> Sync -> Export       |
+|    Manages parallelism per phase                      |
+|    Injected via DI, owns cancellation/progress        |
+|                                                       |
+|  Task Processors (existing, refactored)               |
+|    SyncImportTaskProcessor                            |
+|    SyncFullSyncTaskProcessor / SyncDeltaSyncTask...   |
+|    SyncExportTaskProcessor                            |
+|    Consume ISyncEngine + ISyncDataAccess via DI       |
 +-------------------------------------------------------+
                           |
                           v
 +-------------------------------------------------------+
-|            Sync Orchestrator (new)                    |
-|  Coordinates phases: Import -> Sync -> Export         |
-|  Manages parallelism per phase                        |
-|  Injected via DI, owns cancellation/progress          |
-+-------------------------------------------------------+
-                          |
-                          v
-+-------------------------------------------------------+
-|         Sync Domain Engine (new - pure logic)         |
-|  ISyncEngine interface                                |
-|  ProcessCso() -> SyncDecision (join/project/flow)     |
-|  EvaluateExport() -> ExportDecision                   |
-|  NO database calls - operates on in-memory models     |
-|  100% unit testable with plain C# objects             |
+|          JIM.Application (Business Logic)             |
+|                                                       |
+|  ISyncEngine interface (new - defined here)           |
+|    ProcessCso() -> SyncDecision                       |
+|    EvaluateExport() -> ExportDecision                 |
+|    Pure domain logic - NO I/O dependencies            |
+|    100% unit testable with plain C# objects           |
+|                                                       |
+|  SyncEngine implementation (new - lives here)         |
+|    Extracted from SyncTaskProcessorBase +             |
+|    SyncRuleMappingProcessor (~3,330 LOC)              |
+|                                                       |
+|  JimApplication facade (existing, unchanged)          |
+|    Used by JIM.Web for admin/config operations        |
 +-------------------------------------------------------+
                           |  produces decisions
                           v
 +-------------------------------------------------------+
-|       ISyncDataAccess (new - explicit boundary)       |
-|  GetCsoBatch() -> CsoBatchDto                         |
-|  PersistSyncResults(decisions) -> void                |
-|  BulkCreateCsos() / BulkUpdateCsos()                  |
-|  Two implementations:                                 |
-|    - PostgresSyncDataAccess (Npgsql bulk + raw SQL)   |
-|    - InMemorySyncDataAccess (for unit/workflow tests) |
+|         JIM.Data (Repository Interfaces)              |
+|                                                       |
+|  ISyncDataAccess interface (new - defined here)       |
+|    GetCsoBatch() -> CsoBatchDto                       |
+|    PersistSyncResults(decisions) -> void              |
+|    BulkCreateCsos() / BulkUpdateCsos()                |
+|                                                       |
+|  Existing repository interfaces (unchanged)           |
+|    IConnectedSystemRepository, IMetaverseRepository   |
 +-------------------------------------------------------+
                           |
                           v
 +-------------------------------------------------------+
-|  PostgreSQL (hot paths: Npgsql COPY/raw SQL)          |
-|  EF Core retained for admin/config operations         |
+|      JIM.PostgresData (EF Core Implementations)       |
+|                                                       |
+|  PostgresSyncDataAccess (new - implements             |
+|    ISyncDataAccess using Npgsql bulk + raw SQL)       |
+|                                                       |
+|  Existing repositories (unchanged)                    |
+|    EF Core retained for admin/config operations       |
++-------------------------------------------------------+
+                          |
+                          v
++-------------------------------------------------------+
+|                    PostgreSQL                         |
+|  Hot paths: Npgsql COPY / raw SQL                     |
+|  Admin/config: EF Core                                |
++-------------------------------------------------------+
+
++-------------------------------------------------------+
+|     JIM.InMemoryData (Test Implementation)            |
+|                                                       |
+|  InMemorySyncDataAccess (new - implements             |
+|   ISyncDataAccess for unit/workflow tests)            |
+|  Purpose-built, no EF Core quirks                     |
+|  References only JIM.Data + JIM.Models                |
+|  No database dependencies whatsoever                  |
 +-------------------------------------------------------+
 ```
 
+**Tier placement summary:**
+
+| Component | Tier | Rationale |
+|-----------|------|-----------|
+| Sync Orchestrator | JIM.Worker | Orchestration is a worker concern — coordinates phases, manages parallelism |
+| Task Processors | JIM.Worker | Existing processors remain here, refactored to consume injected interfaces |
+| ISyncEngine (interface) | JIM.Application | Domain logic interface belongs in the business logic layer |
+| SyncEngine (implementation) | JIM.Application | Pure domain logic — join/project/flow decisions are business rules |
+| ISyncDataAccess (interface) | JIM.Data | Data access interface, follows the same pattern as existing repository interfaces |
+| PostgresSyncDataAccess | JIM.PostgresData | Production implementation using raw SQL/Npgsql — same tier as all other repository implementations |
+| InMemorySyncDataAccess | JIM.InMemoryData (new project) | Test implementation — references only JIM.Data + JIM.Models, no database dependencies. Follows the same pattern as JIM.PostgresData: a standalone project that implements JIM.Data interfaces |
+
 ### Key Changes
 
-1. **Extract `ISyncEngine`** - Pure domain logic, no I/O dependencies — **NOT STARTED**
+1. **Extract `ISyncEngine`** (JIM.Application) - Pure domain logic, no I/O dependencies — **NOT STARTED**
+   - Interface defined in JIM.Application; implementation lives alongside existing Servers
    - Takes in-memory objects (CSO batch, sync rules, MVO candidates)
    - Returns decisions/commands (JoinDecision, ProjectDecision, FlowDecision, ExportDecision)
    - Fully unit testable with plain objects - no mocking needed
    - The ~3,330 lines of SyncTaskProcessorBase + SyncRuleMappingProcessor become the engine
 
-2. **Extract `ISyncDataAccess`** - Explicit data boundary for sync hot paths — **PARTIALLY DONE (#338)**
-   - `InMemorySyncDataAccess` for tests - purpose-built, not EF's leaky in-memory provider — **not done** (tests use EF fallback via try/catch)
-   - `PostgresSyncDataAccess` for production - uses raw SQL, no change tracking — **done** for CSO creates/updates, pending export CRUD, and RPEI persistence; MVO operations still use EF
+2. **Extract `ISyncDataAccess`** (JIM.Data / JIM.PostgresData) - Explicit data boundary for sync hot paths — **PARTIALLY DONE (#338)**
+   - Interface defined in JIM.Data alongside existing repository interfaces (e.g., `IConnectedSystemRepository`)
+   - `PostgresSyncDataAccess` in JIM.PostgresData for production - uses raw SQL, no change tracking — **done** for CSO creates/updates, pending export CRUD, and RPEI persistence; MVO operations still use EF
+   - `InMemorySyncDataAccess` in a new JIM.InMemoryData project for tests - purpose-built, not EF's leaky in-memory provider, references only JIM.Data + JIM.Models with no database dependencies — **not done** (tests use EF fallback via try/catch). This is the **single highest-value change for test reliability**: it eliminates the three-way code path divergence (raw SQL / in-memory EF provider / mocked DbContext) that currently requires two-tier try/catch fallback logic across 7 repository methods (see Pain Point 5)
    - Batch-oriented API: `GetCsoBatch()`, `PersistSyncResults()`, `BulkUpsertCsos()` — **not formalised as an interface** (raw SQL is embedded in existing repository methods with EF fallback)
    - CSO lookup cache via `IMemoryCache` eliminates N+1 import queries — **done**
    - Lightweight ID-only MVO matching with `Take(2)` — **done**
 
-3. **Introduce DI throughout the worker** — **NOT STARTED**
+3. **Introduce DI throughout the worker** (JIM.Worker) — **NOT STARTED**
    - Replace `new JimApplication(new PostgresDataRepository(new JimDbContext()))` with `IServiceScopeFactory`
+   - Task processors receive `ISyncEngine` and `ISyncDataAccess` via constructor injection
    - Each task gets a DI scope with properly scoped `DbContext`
    - Enables clean testing via service substitution
 
@@ -361,7 +414,7 @@ Decompose the worker into independent, horizontally scalable processing units co
                                  |
                                  v (messages)
 +-------------------------------------------------------------------+
-|                     Message Bus                                   |
+|                          Message Bus                              |
 |  Option: Redis Streams (air-gap friendly, no cloud dependency)    |
 |  Queues: import-tasks, sync-batches, export-tasks                 |
 |  Consumer groups for competing consumers                          |
@@ -382,13 +435,13 @@ Decompose the worker into independent, horizontally scalable processing units co
              |                   |                    |
              v                   v                    v
 +-------------------------------------------------------------------+
-|           Shared Persistence Layer                                |
+|                     Shared Persistence Layer                      |
 |  PostgreSQL (bulk writes via Npgsql)                              |
 |  Redis (optional: shared MVO lookup cache for sync workers)       |
 +-------------------------------------------------------------------+
 
 +-------------------------------------------------------------------+
-|                    Telemetry + Health                             |
+|                       Telemetry + Health                          |
 |  OpenTelemetry (traces span across workers via message headers)   |
 |  Redis-backed health aggregation                                  |
 |  JIM Management UI: worker fleet status, queue depths, throughput |
@@ -402,6 +455,7 @@ Decompose the worker into independent, horizontally scalable processing units co
    - Three queues: `import-tasks`, `sync-batches`, `export-tasks`
    - Consumer groups enable competing consumers (horizontal scaling)
    - At-least-once delivery with acknowledgement (state-based model handles re-processing)
+   - *Note:* PostgreSQL `LISTEN/NOTIFY` was considered but rejected — it is fire-and-forget (no persistence), has no consumer group support, is limited to 8KB payloads, and provides no retry/dead-letter semantics. A PostgreSQL table queue with `SELECT ... FOR UPDATE SKIP LOCKED` would be more viable than `LISTEN/NOTIFY` if avoiding Redis, but lacks the push-based delivery and mature consumer group semantics of Redis Streams
 
 2. **Independent worker types**
    - **Import Workers**: Connect to source systems, diff against DB, produce CSO change batches
@@ -414,6 +468,7 @@ Decompose the worker into independent, horizontally scalable processing units co
    - Sync rule cache in Redis (loaded once, shared across workers)
    - Database remains source of truth; Redis is a performance optimisation only
    - Falls back to direct DB queries if Redis unavailable
+   - *CSO caching was considered but deferred* — unlike MVOs (single bounded set, read-heavy for join matching), CSOs scale per connected system (N systems x objects each), are primarily accessed during import as full-scan diffs where caching doesn't help, and their main cacheable use case (export target lookup) is not the bottleneck since connector I/O dominates export time. Revisit if export DB lookups prove costly at scale
 
 4. **Work coordination**
    - Scheduler publishes import-task messages (one per connected system per run profile)
@@ -587,6 +642,8 @@ No database. No mocking. No flaky tests. Just logic.
 ### D2: Persistence Must Be Batch-Oriented
 
 > **Partially implemented by #338.** The flush mechanism now bypasses EF change tracking for most hot-path writes (see status annotations below). However, the operations are embedded in existing repository methods with try/catch EF fallback for tests, rather than formalised behind a dedicated `ISyncPersistence` interface. Formalising the interface remains a prerequisite for proper InMemory test implementations and the ISyncEngine extraction.
+>
+> **March 2026 update:** The lack of a formal interface is now causing concrete maintenance pain. Repository fallback paths require **two-tier try/catch** logic because unit tests (mocked `DbContext` where `Entry()`/`ChangeTracker` throw `NullReferenceException`) and workflow tests (EF in-memory provider where `AddRange`/`UpdateRange` cause identity conflicts via graph traversal) need fundamentally different EF Core call patterns. This affects 7 methods across `ConnectedSystemRepository` and `ActivitiesRepository`. A purpose-built `InMemorySyncDataAccess` would replace both approaches with a single, clean implementation that has no EF Core behaviour quirks.
 
 All options should use batch persistence. The current pattern of accumulating changes and flushing at page boundaries is correct. But the flush mechanism needs to bypass EF change tracking:
 
@@ -594,18 +651,18 @@ All options should use batch persistence. The current pattern of accumulating ch
 public interface ISyncPersistence
 {
     // Bulk operations - bypasses EF change tracking entirely
-    Task BulkCreateCsosAsync(IReadOnlyList<ConnectedSystemObject> csos);       // DONE (#338) - raw SQL
-    Task BulkUpdateCsosAsync(IReadOnlyList<ConnectedSystemObject> csos);       // DONE (#338) - raw SQL
-    Task BulkDeleteCsosAsync(IReadOnlyList<Guid> csoIds);                      // existing (ExecuteSqlRawAsync)
-    Task BulkCreateMvosAsync(IReadOnlyList<MetaverseObject> mvos);             // NOT DONE - still EF
+    Task BulkCreateCsosAsync(IReadOnlyList<ConnectedSystemObject> csos);                     // DONE (#338) - raw SQL
+    Task BulkUpdateCsosAsync(IReadOnlyList<ConnectedSystemObject> csos);                     // DONE (#338) - raw SQL
+    Task BulkDeleteCsosAsync(IReadOnlyList<Guid> csoIds);                                    // existing (ExecuteSqlRawAsync)
+    Task BulkCreateMvosAsync(IReadOnlyList<MetaverseObject> mvos);                           // NOT DONE - still EF
     Task BulkUpsertMvoAttributesAsync(IReadOnlyList<MetaverseObjectAttributeValue> values);  // NOT DONE - still EF
-    Task BulkCreatePendingExportsAsync(IReadOnlyList<PendingExport> exports);  // DONE (#338) - raw SQL
-    Task BulkDeletePendingExportsAsync(IReadOnlyList<Guid> exportIds);         // DONE (#338) - raw SQL
-    Task BulkInsertRpeisAsync(IReadOnlyList<RunProfileExecutionItem> rpeis);   // DONE (#338) - raw SQL (not in original spec)
+    Task BulkCreatePendingExportsAsync(IReadOnlyList<PendingExport> exports);                // DONE (#338) - raw SQL
+    Task BulkDeletePendingExportsAsync(IReadOnlyList<Guid> exportIds);                       // DONE (#338) - raw SQL
+    Task BulkInsertRpeisAsync(IReadOnlyList<RunProfileExecutionItem> rpeis);                 // DONE (#338) - raw SQL (not in original spec)
 
     // Reads - lightweight DTOs, no EF tracking
-    Task<CsoBatch> GetCsoBatchAsync(int connectedSystemId, int page, int pageSize);  // PARTIALLY DONE - AsSplitQuery removed, uses two-query transaction
-    Task<MvoLookup> GetMvoLookupForSyncAsync(int connectedSystemId);                  // DONE (#338) - lightweight ID-only matching with Take(2)
+    Task<CsoBatch> GetCsoBatchAsync(int connectedSystemId, int page, int pageSize);          // PARTIALLY DONE - AsSplitQuery removed, uses two-query transaction
+    Task<MvoLookup> GetMvoLookupForSyncAsync(int connectedSystemId);                         // DONE (#338) - lightweight ID-only matching with Take(2)
 }
 ```
 
@@ -669,7 +726,7 @@ A 5-phase surgical optimisation programme was completed in February 2026, replac
 **What was NOT delivered (remains for Phase 1b):**
 - ISyncEngine extraction (pure domain logic, no I/O)
 - Formal ISyncPersistence / ISyncDataAccess interface
-- InMemorySyncDataAccess for tests (currently using EF fallback)
+- InMemorySyncDataAccess for tests (currently using EF fallback via two-tier try/catch across 7 repository methods — see Pain Point 5)
 - DI introduction (still using manual `new` wiring)
 - Intra-phase parallelism
 - MVO create/update still uses EF (not yet converted to raw SQL)

@@ -236,6 +236,13 @@ public class SyncExportTaskProcessor
                 executionItem.SnapshotCsoDisplayFields(exportItem.ConnectedSystemObject);
             }
 
+            // If DisplayNameSnapshot is still null (e.g. Create-type export where the CSO is a
+            // stub with no displayname attribute), fall back to the pending export's attribute
+            // value changes which carry the full set of outbound attribute values.
+            executionItem.DisplayNameSnapshot ??= exportItem.AttributeValueChanges
+                .FirstOrDefault(avc => avc.Attribute?.Name?.Equals("displayname", StringComparison.OrdinalIgnoreCase) == true)
+                ?.StringValue;
+
             // Set error information if the export failed
             if (!exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))
             {
@@ -312,6 +319,11 @@ public class SyncExportTaskProcessor
                 rpei.ActivityId = _activity.Id;
                 if (rpei.Id == Guid.Empty)
                     rpei.Id = Guid.NewGuid();
+
+                // Fix up the scalar FK on the CSO change record to match the newly assigned RPEI ID.
+                // The change was created before the RPEI ID was assigned, so the FK is still Guid.Empty.
+                if (rpei.ConnectedSystemObjectChange != null)
+                    rpei.ConnectedSystemObjectChange.ActivityRunProfileExecutionItemId = rpei.Id;
 
                 // Snapshot CSO display fields for historical preservation (defence-in-depth)
                 if (rpei.ConnectedSystemObject != null)
