@@ -465,3 +465,6 @@ test-data/
 # Structurizr Lite working files
 docs/diagrams/structurizr/.structurizr/
 docs/diagrams/structurizr/workspace.json
+
+# Dev notes
+dev.txt
