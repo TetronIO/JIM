@@ -733,7 +733,21 @@ public class ExportEvaluationServer
                 csoForExport = await CreatePendingProvisioningCsoAsync(mvo, exportRule);
                 createdNewCso = true;
             }
-            // else: reuse existing PendingProvisioning CSO (already has secondary external ID)
+            else
+            {
+                // Reuse existing PendingProvisioning CSO (already has secondary external ID).
+                // A previous sync already created the Create PE with all mapped attributes.
+                // Only proceed if the current changedAttributes are relevant to this export rule —
+                // otherwise we'd replace the existing PE with an identical one and incorrectly
+                // attribute it to this sync in the causality tree.
+                if (!HasRelevantChangedAttributes(changedAttributes, exportRule))
+                {
+                    Log.Debug("CreateOrUpdatePendingExportAsync: Skipping PendingProvisioning CSO {CsoId} for rule {RuleName} — " +
+                        "none of the {ChangeCount} changed attributes map to this export rule's attribute flow rules",
+                        existingCso.Id, exportRule.Name, changedAttributes.Count);
+                    return null;
+                }
+            }
 
             changeType = PendingExportChangeType.Create;
         }
@@ -832,7 +846,21 @@ public class ExportEvaluationServer
                 // Update the cache with the newly created CSO so subsequent lookups find it
                 cache.CsoLookup[lookupKey] = csoForExport;
             }
-            // else: reuse existing PendingProvisioning CSO (already has secondary external ID)
+            else
+            {
+                // Reuse existing PendingProvisioning CSO (already has secondary external ID).
+                // A previous sync already created the Create PE with all mapped attributes.
+                // Only proceed if the current changedAttributes are relevant to this export rule —
+                // otherwise we'd replace the existing PE with an identical one and incorrectly
+                // attribute it to this sync in the causality tree.
+                if (!HasRelevantChangedAttributes(changedAttributes, exportRule))
+                {
+                    Log.Debug("CreateOrUpdatePendingExportAsync: Skipping PendingProvisioning CSO {CsoId} for rule {RuleName} — " +
+                        "none of the {ChangeCount} changed attributes map to this export rule's attribute flow rules",
+                        existingCso.Id, exportRule.Name, changedAttributes.Count);
+                    return null;
+                }
+            }
 
             changeType = PendingExportChangeType.Create;
         }
@@ -994,7 +1022,19 @@ public class ExportEvaluationServer
             }
             else
             {
-                // Reuse existing PendingProvisioning CSO (already has secondary external ID)
+                // Reuse existing PendingProvisioning CSO (already has secondary external ID).
+                // A previous sync already created the Create PE with all mapped attributes.
+                // Only proceed if the current changedAttributes are relevant to this export rule —
+                // otherwise we'd replace the existing PE with an identical one and incorrectly
+                // attribute it to this sync in the causality tree.
+                if (!HasRelevantChangedAttributes(changedAttributes, exportRule))
+                {
+                    Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: Skipping PendingProvisioning CSO {CsoId} for rule {RuleName} — " +
+                        "none of the {ChangeCount} changed attributes map to this export rule's attribute flow rules",
+                        existingCso.Id, exportRule.Name, changedAttributes.Count);
+                    return (null, null, 0);
+                }
+
                 changeType = PendingExportChangeType.Create;
             }
         }
@@ -1858,6 +1898,40 @@ public class ExportEvaluationServer
                !change.DateTimeValue.HasValue &&
                change.ByteValue == null &&
                change.UnresolvedReferenceValue == null;
+    }
+
+    /// <summary>
+    /// Checks whether any of the changed MVO attributes are relevant to the given export rule.
+    /// An attribute is relevant if it is a direct source for one of the rule's attribute flow mappings,
+    /// or if the rule has expression-based mappings (which may depend on any changed attribute).
+    /// Used to avoid replacing an existing Create PE on a PendingProvisioning CSO when the current
+    /// sync's changes are entirely unrelated to this export rule.
+    /// </summary>
+    internal static bool HasRelevantChangedAttributes(
+        List<MetaverseObjectAttributeValue> changedAttributes,
+        SyncRule exportRule)
+    {
+        if (changedAttributes.Count == 0)
+            return false;
+
+        var changedAttributeIds = new HashSet<int>(changedAttributes.Select(av => av.AttributeId));
+
+        foreach (var mapping in exportRule.AttributeFlowRules)
+        {
+            foreach (var source in mapping.Sources)
+            {
+                // Expression-based mappings may depend on any MVO attribute, so conservatively
+                // treat them as relevant when any attribute has changed.
+                if (!string.IsNullOrWhiteSpace(source.Expression))
+                    return true;
+
+                // Direct attribute mapping — check if the source MVO attribute is in the changed set
+                if (source.MetaverseAttribute != null && changedAttributeIds.Contains(source.MetaverseAttribute.Id))
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
