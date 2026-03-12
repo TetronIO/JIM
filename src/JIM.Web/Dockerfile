@@ -3,7 +3,7 @@
 
 ARG VERSION=dev
 
-FROM mcr.microsoft.com/dotnet/aspnet:9.0@sha256:302f77633b8d9a944bd98ff249079c8a353506b83084579216b46a264992025f AS base
+FROM mcr.microsoft.com/dotnet/aspnet:9.0@sha256:cec7519c080fff418bcce2e07c44141e4eba866f9801e2b35ef7567f487b207b AS base
 ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Web"
@@ -28,7 +28,7 @@ RUN apt-get update \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
-FROM mcr.microsoft.com/dotnet/sdk:9.0@sha256:03a7d87512a743b3d53416adae79eb89d2a7163de78bb58e7bc7b7e262e25750 AS build
+FROM mcr.microsoft.com/dotnet/sdk:9.0@sha256:0cbece2e210d064199e7ab3bb9ac695c5ed8bfb35b31eee8d80e051abfbef22b AS build
 WORKDIR /src
 COPY ["Directory.Build.props", "./"]
 COPY ["VERSION", "./"]
