@@ -329,13 +329,16 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             }
             else
             {
-                // Create-type PE: no CSO exists yet. Fall back to attribute value changes for
-                // display name, and to the source MVO ID as last resort for external ID.
-                executionItem.DisplayNameSnapshot = pendingExport.AttributeValueChanges
-                    .FirstOrDefault(avc => avc.Attribute?.Name?.Equals("displayname", StringComparison.OrdinalIgnoreCase) == true)
-                    ?.StringValue;
+                // No CSO at all: use source MVO ID as external ID fallback
                 executionItem.ExternalIdSnapshot = pendingExport.SourceMetaverseObjectId?.ToString();
             }
+
+            // If DisplayNameSnapshot is still null (e.g. Create-type export where the CSO is a
+            // stub with no displayname attribute, or no CSO at all), fall back to the pending
+            // export's attribute value changes which carry the full set of outbound attribute values.
+            executionItem.DisplayNameSnapshot ??= pendingExport.AttributeValueChanges
+                .FirstOrDefault(avc => avc.Attribute?.Name?.Equals("displayname", StringComparison.OrdinalIgnoreCase) == true)
+                ?.StringValue;
 
             _activity.RunProfileExecutionItems.Add(executionItem);
         }

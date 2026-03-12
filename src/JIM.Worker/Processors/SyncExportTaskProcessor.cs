@@ -235,14 +235,13 @@ public class SyncExportTaskProcessor
                 // display data even if the CSO is later deleted via FK cascade
                 executionItem.SnapshotCsoDisplayFields(exportItem.ConnectedSystemObject);
             }
-            else
-            {
-                // Create-type export: no CSO exists yet. Fall back to attribute value changes for
-                // display name snapshot, so the activity detail page shows a name after the CSO is later deleted.
-                executionItem.DisplayNameSnapshot = exportItem.AttributeValueChanges
-                    .FirstOrDefault(avc => avc.Attribute?.Name?.Equals("displayname", StringComparison.OrdinalIgnoreCase) == true)
-                    ?.StringValue;
-            }
+
+            // If DisplayNameSnapshot is still null (e.g. Create-type export where the CSO is a
+            // stub with no displayname attribute), fall back to the pending export's attribute
+            // value changes which carry the full set of outbound attribute values.
+            executionItem.DisplayNameSnapshot ??= exportItem.AttributeValueChanges
+                .FirstOrDefault(avc => avc.Attribute?.Name?.Equals("displayname", StringComparison.OrdinalIgnoreCase) == true)
+                ?.StringValue;
 
             // Set error information if the export failed
             if (!exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))
