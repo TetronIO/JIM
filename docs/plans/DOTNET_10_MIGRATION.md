@@ -186,7 +186,7 @@ Microsoft dropped Debian-based images for .NET 10. All base images now use Ubunt
 
 ## Phase 5: CI/CD Workflows
 
-- [ ] `.github/workflows/dotnet-build-and-test.yml` — `dotnet-version: 10.0.x`
+- [ ] `.github/workflows/ci.yml` — `dotnet-version: 10.0.x`
 - [ ] `.github/workflows/release.yml` — `dotnet-version: 10.0.x`
 
 ## Phase 6: Add `global.json`

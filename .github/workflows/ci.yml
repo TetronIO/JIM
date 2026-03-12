@@ -1,0 +1,97 @@
+# CI workflow - builds, tests, and scans for vulnerabilities
+# Runs on pushes to main and all pull requests
+
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:  # This will run on ALL pull requests regardless of source/target branch
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+    - name: Restore dependencies
+      run: dotnet restore JIM.sln
+    - name: Build
+      run: dotnet build JIM.sln --no-restore
+    - name: Test .NET
+      run: dotnet test JIM.sln --no-build --verbosity normal
+
+    # PowerShell Pester Tests for the JIM PowerShell module
+    - name: Install Pester
+      shell: pwsh
+      run: |
+        Set-PSRepository PSGallery -InstallationPolicy Trusted
+        Install-Module -Name Pester -MinimumVersion 5.0 -Force -Scope CurrentUser
+    - name: Run Pester Tests
+      shell: pwsh
+      run: |
+        $config = New-PesterConfiguration
+        $config.Run.Path = "./src/JIM.PowerShell/Tests"
+        $config.Run.Exit = $true
+        $config.Output.Verbosity = "Detailed"
+        $config.TestResult.Enabled = $true
+        $config.TestResult.OutputPath = "./TestResults/pester-results.xml"
+        $config.TestResult.OutputFormat = "NUnitXml"
+        Invoke-Pester -Configuration $config
+    - name: Upload Pester Test Results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: pester-test-results
+        path: ./TestResults/pester-results.xml
+
+  scan-base-images:
+    # Scan pinned Docker base images for CRITICAL/HIGH CVEs
+    # This catches vulnerabilities early, before a release tag is created
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: aspnet
+            dockerfile: src/JIM.Web/Dockerfile
+          - name: runtime
+            dockerfile: src/JIM.Worker/Dockerfile
+          - name: sdk
+            dockerfile: src/JIM.Worker/Dockerfile
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Extract base image reference
+      id: base-image
+      run: |
+        if [ "${{ matrix.name }}" = "sdk" ]; then
+          # Extract the SDK (build stage) FROM line
+          IMAGE_REF=$(grep -E '^FROM.*sdk:.*@sha256:' "${{ matrix.dockerfile }}" | head -1 | awk '{print $2}')
+        else
+          # Extract the first (runtime/aspnet) FROM line
+          IMAGE_REF=$(grep -E '^FROM.*(aspnet|runtime):.*@sha256:' "${{ matrix.dockerfile }}" | head -1 | awk '{print $2}')
+        fi
+        # Strip " AS <alias>" suffix if present
+        IMAGE_REF=$(echo "$IMAGE_REF" | sed 's/ AS .*//')
+        echo "ref=$IMAGE_REF" >> "$GITHUB_OUTPUT"
+        echo "Scanning: $IMAGE_REF"
+
+    - name: Scan ${{ matrix.name }} base image for vulnerabilities
+      uses: aquasecurity/trivy-action@0.35.0
+      with:
+        image-ref: ${{ steps.base-image.outputs.ref }}
+        format: 'table'
+        exit-code: '1'
+        severity: 'CRITICAL,HIGH'
+        ignore-unfixed: true

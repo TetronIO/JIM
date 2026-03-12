@@ -4,7 +4,7 @@
   <img src="https://tetron.io/images/jim/jim-logo.png" alt="JIM"/>
 </p>
 
-[![.NET Build & Test](https://github.com/TetronIO/JIM/actions/workflows/dotnet-build-and-test.yml/badge.svg?branch=main)](https://github.com/TetronIO/JIM/actions/workflows/dotnet-build-and-test.yml)
+[![CI](https://github.com/TetronIO/JIM/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TetronIO/JIM/actions/workflows/ci.yml)
 &nbsp;
 [![.NET 9.0](https://img.shields.io/badge/.NET-9.0-512BD4)](https://dotnet.microsoft.com/)
 &nbsp;
