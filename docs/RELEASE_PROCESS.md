@@ -16,6 +16,7 @@ JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the Git
 
 | Version | Date | Notes |
 |---------|------|-------|
+| `0.6.0` | 2026-03-12 | Disconnection causality tracking, activity list filters, CSO large MVA pagination, 13 sync engine bug fixes, large-scale import memory optimisation for 100K+ objects. |
 | `0.5.0` | 2026-03-08 | Self-contained object matching rules for import and export, matching rule CRUD API, matching mode switching, sortable sync rule columns, Docker Desktop setup fix. |
 | `0.4.0` | 2026-03-05 | Sync Outcome Graph with full causal tracing, export change history, one-command deployment installer, sync rule UX redesign, pronouns support, hardened release pipeline, 37% sync performance improvement. |
 | `0.3.0` | 2026-02-25 | First stable release. Scheduler service, change history, progress indication, dashboard redesign, major sync engine performance optimisations, 75 PowerShell cmdlets. First tag-based release via GitHub Actions. |

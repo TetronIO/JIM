@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-03-12
+
+### Added
+
+- ✨ Disconnection causality tracking — causality tree now traces MVO attribute changes and deletion fate during disconnection and recall, showing exactly what happened and why (#392)
+- ✨ Reference attributes rendered as clickable links on RPEI detail page for easy navigation to related objects
+- 🖥️ Filter controls on the Activities list page for quick searching by status, connector, and profile
+- 🖥️ Initiated-by name now included in activity search results
+
 ### Fixed
 
 - 🐛 Export activity detail page now shows display name for Create-type exports even after the target CSO is later deleted — display name is now snapshotted from the pending export's attribute changes at export time
@@ -15,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Activity detail page now shows display name and object context for Create-type pending exports surfaced during sync (previously showed dashes as no CSO exists yet)
 - 🐛 RPEI detail page now shows pending export attribute changes for staged (informational) pending exports, not only for error states
 - 🐛 Causality tree no longer shows unrelated pending exports when a secondary import connector syncs while a previous connector's Create exports are still queued — only exports caused by the current sync's attribute changes are shown
+- 🐛 Group membership exports no longer arrive empty — resolved reference foreign keys are now persisted during import
+- 🐛 Resolved reference values now correctly persisted after export, preventing data loss on subsequent sync runs
+- 🐛 Duplicate pending exports no longer accumulate — stale entries are automatically self-healed
+- 🐛 Activities with unhandled errors now correctly marked as completed with error instead of appearing successful
+- 🐛 Multi-valued attributes in LDAP group member exports are now consolidated into a single AddRequest, fixing partial membership writes
+- 🐛 Export batch queries now include CSO object type, resolving objectClass errors in LDAP targets
+- 🐛 Single-valued attribute duplicates no longer occur during pending export merges
 
 ### Performance
 
@@ -23,6 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ New paginated attribute values API endpoint (`GET /api/connected-systems/{csId}/objects/{csoId}/attributes/{attributeName}/values`) with server-side search and pagination
 - 🖥️ MVA dialog now fetches data on demand with server-side search and pagination — no longer holds the full value set in Blazor circuit memory
 - ✨ API responses include per-attribute value summaries showing total count, returned count, and whether more values are available
+
+#### Large-Scale Import Optimisation
+- ⚡ Full import operations now handle 100K+ objects without out-of-memory failures through batch processing, raw SQL persistence, and incremental memory release
+- ⚡ Export operations at scale now batch-load to eliminate EF change tracker overhead
+- ⚡ Real-time batch progress reporting during large CSO persistence operations
 
 ## [0.5.0] - 2026-03-08
 
@@ -284,7 +305,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/TetronIO/JIM/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/TetronIO/JIM/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/TetronIO/JIM/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/TetronIO/JIM/compare/v0.2.0-alpha...v0.3.0

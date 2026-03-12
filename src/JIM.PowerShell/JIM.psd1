@@ -3,7 +3,7 @@
     RootModule = 'JIM.psm1'
 
     # Version number of this module.
-    ModuleVersion = '0.5.0'
+    ModuleVersion = '0.6.0'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Core', 'Desktop')
@@ -164,16 +164,21 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
-## 0.5.0
+## 0.6.0
 
 ### New Features
-- Self-contained object matching rules — sync rules carry their own matching logic for import and export
-- CRUD API endpoints for sync rule object matching rules
-- Matching mode switching API — toggle between simple and advanced object matching per connected system
-- Sortable Object Mapping and Capabilities columns on the Sync Rules page
+- Disconnection causality tracking — trace MVO attribute changes and deletion fate during disconnection and recall
+- Reference attributes rendered as clickable links on RPEI detail page
+- Filter controls on the Activities list page
+- Initiated-by name in activity search results
+- CSO large MVA pagination with server-side search for 10K+ attribute values
 
 ### Fixed
-- Setup script now correctly detects Docker Desktop alongside Docker Engine
+- 13 bug fixes covering export reliability, causality tree accuracy, pending export handling, and LDAP group membership exports
+
+### Performance
+- Large-scale import operations now handle 100K+ objects without out-of-memory failures
+- Export batch-loading eliminates EF change tracker overhead at scale
 
 For full changelog, see: https://github.com/TetronIO/JIM/blob/main/CHANGELOG.md
 '@
