@@ -463,6 +463,7 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => Color.Warning,
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => Color.Warning,
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => Color.Error,
+            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => Color.Warning,
             ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection => Color.Warning,
 
             // Sync outcomes — outbound
@@ -496,6 +497,7 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => "CSO Disconnected",
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => "Out of Scope",
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => "MVO Deleted",
+            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => "MVO Deletion Scheduled",
             ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection => "CSO Drift Corrected",
             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => "CSO Provisioned",
             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => "CSO Pending Export",
@@ -527,6 +529,7 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => Icons.Material.Filled.LinkOff,
             ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => Icons.Material.Filled.FilterAltOff,
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => Icons.Material.Filled.PersonRemove,
+            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => Icons.Material.Filled.HourglassBottom,
             ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection => Icons.Material.Filled.CompareArrows,
 
             // Sync outcomes — outbound

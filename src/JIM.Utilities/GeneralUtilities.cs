@@ -63,6 +63,11 @@ public static class Utilities
         return metaverseObject.GetAttributeValue(Constants.BuiltInAttributes.DisplayName)?.StringValue;
     }
 
+    public static string GetMetaverseObjectHref(Guid mvoId, string typePluralName)
+    {
+        return $"/t/{typePluralName.ToLower()}/v/{mvoId}";
+    }
+
     public static string GetMetaverseObjectHref(MetaverseObjectHeader metaverseObjectHeader)
     {
         return $"/t/{metaverseObjectHeader.TypePluralName.ToLower()}/v/{metaverseObjectHeader.Id}";

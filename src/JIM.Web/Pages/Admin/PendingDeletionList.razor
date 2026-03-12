@@ -325,7 +325,7 @@
 
     private string GetMvoDetailHref(PendingDeletionItem item)
     {
-        return $"/t/{item.TypePluralName.ToLower()}/v/{item.Id}";
+        return Utilities.GetMetaverseObjectHref(item.Id, item.TypePluralName);
     }
 
     // Local display model

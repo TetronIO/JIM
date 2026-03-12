@@ -241,6 +241,7 @@
                              CsoObjectTypeName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.Type?.Name ?? _activityRunProfileExecutionItem.ObjectTypeSnapshot)"
                              CsoId="@_activityRunProfileExecutionItem.ConnectedSystemObjectId"
                              CsoConnectedSystemId="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.ConnectedSystemId ?? _connectedSystemHeader?.Id)"
+                             MvoTypePluralName="@_metaverseObjectType?.PluralName"
                              InitiallyExpanded="true" />
             </MudPaper>
         }
@@ -499,6 +500,103 @@
         @if (_activityRunProfileExecutionItem.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected)
         {
             <MudText Typo="Typo.h6" Class="mb-3">Metaverse Impact</MudText>
+
+            @* Show actual MVO fate from causality tree outcomes (when available) *@
+            var mvoDeletedOutcome = _activityRunProfileExecutionItem.SyncOutcomes
+                .FirstOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+            var mvoDeletionScheduledOutcome = _activityRunProfileExecutionItem.SyncOutcomes
+                .FirstOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled);
+
+            @if (mvoDeletedOutcome != null)
+            {
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.PersonRemove" />
+                        <MudText Typo="Typo.body1">
+                            <strong>The metaverse object was deleted.</strong>
+                            @if (!string.IsNullOrEmpty(mvoDeletedOutcome.TargetEntityDescription))
+                            {
+                                <text> The identity </text>
+                                @if (mvoDeletedOutcome.TargetEntityId.HasValue)
+                                {
+                                    <MudLink Href="@GetMvoHref(mvoDeletedOutcome.TargetEntityId.Value)">
+                                        @mvoDeletedOutcome.TargetEntityDescription
+                                    </MudLink>
+                                }
+                                else
+                                {
+                                    <strong>@mvoDeletedOutcome.TargetEntityDescription</strong>
+                                }
+                                <text> was removed from the metaverse immediately (no grace period).</text>
+                            }
+                        </MudText>
+                    </MudStack>
+                </MudAlert>
+            }
+            else if (mvoDeletionScheduledOutcome != null)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-3">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.HourglassBottom" />
+                        <MudText Typo="Typo.body1">
+                            <strong>The metaverse object is scheduled for deletion.</strong>
+                            @if (!string.IsNullOrEmpty(mvoDeletionScheduledOutcome.TargetEntityDescription))
+                            {
+                                <text> The identity </text>
+                                @if (mvoDeletionScheduledOutcome.TargetEntityId.HasValue)
+                                {
+                                    <MudLink Href="@GetMvoHref(mvoDeletionScheduledOutcome.TargetEntityId.Value)">
+                                        @mvoDeletionScheduledOutcome.TargetEntityDescription
+                                    </MudLink>
+                                }
+                                else
+                                {
+                                    <strong>@mvoDeletionScheduledOutcome.TargetEntityDescription</strong>
+                                }
+                                <text> will be deleted after the grace period expires</text>
+                                @if (!string.IsNullOrEmpty(mvoDeletionScheduledOutcome.DetailMessage))
+                                {
+                                    <text> (@mvoDeletionScheduledOutcome.DetailMessage.ToLowerInvariant())</text>
+                                }
+                                <text>, unless a new connector is established before then.</text>
+                            }
+                        </MudText>
+                    </MudStack>
+                </MudAlert>
+            }
+            else if (IsSyncContext() && _activityRunProfileExecutionItem.SyncOutcomes.Count > 0
+                     && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Disconnected)
+            {
+                @* Sync context with outcomes but no MVO deletion — the MVO survived *@
+                <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="mb-3">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" />
+                        <MudText Typo="Typo.body1">
+                            <strong>The metaverse object was not deleted.</strong>
+                            @switch (_metaverseObjectType?.DeletionRule)
+                            {
+                                case MetaverseObjectDeletionRule.Manual:
+                                    <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects is set to <strong>manual deletion only</strong> — automatic deletion is disabled.</text>
+                                    break;
+                                case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
+                                    <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects requires <strong>all connectors</strong> to be disconnected. Other connected systems still have active connectors to this metaverse object.</text>
+                                    break;
+                                case MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected:
+                                    <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects requires an <strong>authoritative source</strong> to disconnect.</text>
+                                    @if (_connectedSystemHeader != null && _deletionTriggerSystems != null
+                                         && !_deletionTriggerSystems.Any(cs => cs.Id == _connectedSystemHeader.Id))
+                                    {
+                                        <text> <strong>@_connectedSystemHeader.Name</strong> is not configured as an authoritative source.</text>
+                                    }
+                                    break;
+                                default:
+                                    <text>The deletion rule did not apply for this disconnection.</text>
+                                    break;
+                            }
+                        </MudText>
+                    </MudStack>
+                </MudAlert>
+            }
 
             @if (_metaverseObjectType != null)
             {
@@ -887,6 +985,11 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private List<ConnectedSystemHeader>? _deletionTriggerSystems;
 
 
+    private string GetMvoHref(Guid mvoId) =>
+        _metaverseObjectType != null
+            ? Utilities.GetMetaverseObjectHref(mvoId, _metaverseObjectType.PluralName)
+            : $"/identity/search/{mvoId}";
+
     private static string FormatGracePeriod(TimeSpan period)
     {
         var parts = new List<string>();
@@ -1000,7 +1103,23 @@ new("Item Details", href: null, disabled: true)
                 csoTypeId = _activityRunProfileExecutionItem.ConnectedSystemObjectChange.DeletedObjectType.Id;
             }
 
-            // If we don't have MVO type yet but have CSO type, look up via sync rules
+            // Third try: for disconnected RPEIs, the MVO ID is stored on the sync outcome's TargetEntityId
+            // (the CSO-MVO join is broken after disconnection, so the first try won't work)
+            if (!mvoTypeId.HasValue
+                && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Disconnected)
+            {
+                var disconnectedOutcome = _activityRunProfileExecutionItem.SyncOutcomes
+                    .FirstOrDefault(o => o.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected
+                        or ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope);
+                if (disconnectedOutcome?.TargetEntityId.HasValue == true)
+                {
+                    var mvo = await Jim.Metaverse.GetMetaverseObjectAsync(disconnectedOutcome.TargetEntityId.Value);
+                    if (mvo?.Type != null)
+                        mvoTypeId = mvo.Type.Id;
+                }
+            }
+
+            // Fourth try: if we don't have MVO type yet but have CSO type, look up via sync rules
             if (!mvoTypeId.HasValue && csoTypeId.HasValue)
             {
                 var syncRules = await Jim.ConnectedSystems.GetSyncRulesAsync();

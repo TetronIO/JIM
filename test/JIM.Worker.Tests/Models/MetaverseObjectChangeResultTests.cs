@@ -1,5 +1,6 @@
 using JIM.Models.Enums;
 using JIM.Worker.Models;
+using JIM.Worker.Processors;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Models;
@@ -465,6 +466,55 @@ public class MetaverseObjectChangeResultTests
         // Only DisconnectedOutOfScope supports it
         var disconnectedOutOfScope = MetaverseObjectChangeResult.DisconnectedOutOfScope(attributeFlowCount: 5);
         Assert.That(disconnectedOutOfScope.AttributeFlowCount, Is.EqualTo(5), "DisconnectedOutOfScope should support AttributeFlowCount");
+    }
+
+    #endregion
+
+    #region MvoDeletionFate Tests
+
+    [Test]
+    public void DisconnectedOutOfScope_WithNoMvoDeletionFate_DefaultsToNotDeleted()
+    {
+        var result = MetaverseObjectChangeResult.DisconnectedOutOfScope();
+
+        Assert.That(result.MvoDeletionFate, Is.EqualTo(MvoDeletionFate.NotDeleted));
+    }
+
+    [Test]
+    public void DisconnectedOutOfScope_WithDeletedImmediately_ReturnsFate()
+    {
+        var result = MetaverseObjectChangeResult.DisconnectedOutOfScope(
+            mvoDeletionFate: MvoDeletionFate.DeletedImmediately);
+
+        Assert.That(result.MvoDeletionFate, Is.EqualTo(MvoDeletionFate.DeletedImmediately));
+    }
+
+    [Test]
+    public void DisconnectedOutOfScope_WithDeletionScheduled_ReturnsFate()
+    {
+        var result = MetaverseObjectChangeResult.DisconnectedOutOfScope(
+            mvoDeletionFate: MvoDeletionFate.DeletionScheduled);
+
+        Assert.That(result.MvoDeletionFate, Is.EqualTo(MvoDeletionFate.DeletionScheduled));
+    }
+
+    [Test]
+    public void DisconnectedOutOfScope_WithFateAndAttributeFlowCount_ReturnsBoth()
+    {
+        var result = MetaverseObjectChangeResult.DisconnectedOutOfScope(
+            attributeFlowCount: 3,
+            mvoDeletionFate: MvoDeletionFate.DeletedImmediately);
+
+        Assert.That(result.AttributeFlowCount, Is.EqualTo(3));
+        Assert.That(result.MvoDeletionFate, Is.EqualTo(MvoDeletionFate.DeletedImmediately));
+    }
+
+    [Test]
+    public void DefaultStruct_HasNotDeletedMvoDeletionFate()
+    {
+        var result = new MetaverseObjectChangeResult();
+
+        Assert.That(result.MvoDeletionFate, Is.EqualTo(MvoDeletionFate.NotDeleted));
     }
 
     #endregion
