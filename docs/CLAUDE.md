@@ -152,6 +152,13 @@ JIM has context documents for use with AI assistant platforms (Claude Desktop, C
 - `docs/JIM_AI_ASSISTANT_INSTRUCTIONS.md` - System prompt/instructions to copy
 - `docs/JIM_AI_ASSISTANT_CONTEXT.md` - Comprehensive context document to upload
 
+**Document Versioning:**
+Both documents include a `Document Version` field in their header. This version tracks the document content independently from the JIM product version and makes it easy to verify whether the latest version is deployed to external AI assistant platforms.
+
+- Increment the version (e.g., `1.1` → `1.2`) whenever the document content is updated
+- Update the `Last Updated` date at the same time
+- The version allows quick comparison between the repository copy and deployed copies
+
 **Keep these updated when:**
 - Project status changes significantly (update Section 8 - Current Status)
 - New connectors are added (update Section 4 - Connectors)
