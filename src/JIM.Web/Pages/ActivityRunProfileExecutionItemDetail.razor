@@ -30,8 +30,8 @@
         <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
             @GetStatusDescription()
         </MudText>
-        <MudPaper Class="pa-5 mb-5" Outlined="true">
-            <MudGrid Spacing="3">
+        <MudPaper Class="pa-4 mb-5" Outlined="true">
+            <MudGrid Spacing="4">
                 @* Connected System *@
                 @if (_connectedSystemHeader != null)
                 {
@@ -69,7 +69,7 @@
                 }
 
                 @* Initiated By *@
-                <MudItem xs="12" sm="6" md="4" Class="mt-3">
+                <MudItem xs="12" sm="6" md="4">
                     <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By</MudText>
                     @if (_activity is { InitiatedByType: ActivityInitiatorType.User })
                     {
@@ -130,7 +130,7 @@
                 @if (!(_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.NotSet &&
                         _activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet))
                 {
-                    <MudItem xs="12" sm="6" md="4" Class="mt-3">
+                    <MudItem xs="12" sm="6" md="4">
                         <MudText Typo="Typo.button" Class="mud-text-secondary">Operation</MudText><br />
                         <MudTooltip Text="@Helpers.GetOperationDescription(_activityRunProfileExecutionItem.ObjectChangeType, IsSyncContext())"
                                     Arrow="true" Placement="Placement.Top">
@@ -144,7 +144,7 @@
                 }
 
                 @* Connected System Object / External ID - label changes based on context *@
-                <MudItem xs="12" sm="6" md="4" Class="mt-3">
+                <MudItem xs="12" sm="6" md="4">
                     <MudText Typo="Typo.button" Class="mud-text-secondary">@GetObjectFieldLabel()</MudText>
                     @if (_activityRunProfileExecutionItem.ConnectedSystemObject != null)
                     {

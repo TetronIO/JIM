@@ -19,8 +19,8 @@
 @if (_connector != null)
 {
     <MudText Typo="Typo.h5" Class="mt-3">Details</MudText>
-    <MudPaper Class="pa-5 mt-3" Outlined="true">
-        <MudGrid>
+    <MudPaper Class="pa-4 mt-3" Outlined="true">
+        <MudGrid Spacing="4">
             <MudItem xs="12" sm="6" md="4">
                 <MudField Label="Description" Variant="Variant.Outlined">@_connector.Description</MudField>
             </MudItem>
@@ -34,7 +34,7 @@
     </MudPaper>
 
     <MudText Typo="Typo.h5" Class="mt-5">Capabilities</MudText>
-    <MudPaper Class="pa-5 mt-5" Outlined="true">
+    <MudPaper Class="pa-4 mt-3" Outlined="true">
         <MudCheckBox @bind-Value="@_connector.SupportsFullImport" Disabled="true">Supports full import?</MudCheckBox>
         <MudCheckBox @bind-Value="@_connector.SupportsDeltaImport" Disabled="true">Supports delta import?</MudCheckBox>
         <MudCheckBox @bind-Value="@_connector.SupportsExport" Disabled="true">Supports export?</MudCheckBox>
