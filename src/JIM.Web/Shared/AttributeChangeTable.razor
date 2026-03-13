@@ -126,7 +126,7 @@
                     <MudTooltip Text="Unresolved reference — the referenced object could not be found. Check container scope.">
                         <MudIcon Icon="@Icons.Material.Filled.LinkOff" Color="Color.Warning" Size="Size.Small" />
                     </MudTooltip>
-                    <MudText Class="mud-text-secondary">@context.DisplayValue</MudText>
+                    <MudText Class="mud-text-secondary">@(string.IsNullOrEmpty(context.DisplayValue) ? "(identifier not recorded)" : context.DisplayValue)</MudText>
                 </MudStack>
             }
             else
@@ -222,7 +222,7 @@
                     } : null,
                     IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued,
                     AttributeType = ac.Attribute.Type,
-                    IsUnresolvedReference = ac.Attribute.Type == AttributeDataType.Reference && vc.ReferenceValue == null && !string.IsNullOrEmpty(vc.StringValue)
+                    IsUnresolvedReference = ac.Attribute.Type == AttributeDataType.Reference && vc.ReferenceValue == null
                 })));
         }
 

@@ -1575,14 +1575,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     public async Task<int> GetUnresolvedReferenceCountAsync(int connectedSystemId)
     {
-        var csoIds = Repository.Database.ConnectedSystemObjects
-            .Where(cso => cso.ConnectedSystemId == connectedSystemId)
-            .Select(cso => cso.Id);
-
-        return await Repository.Database.ConnectedSystemObjectAttributeValues.CountAsync(av =>
-            csoIds.Contains(EF.Property<Guid>(av, "ConnectedSystemObjectId")) &&
-            av.UnresolvedReferenceValue != null &&
-            av.ReferenceValueId == null);
+        // Use raw SQL with a JOIN for performance — the EF subquery approach times out on large datasets
+        // because IN (SELECT ...) on 100k+ rows is not efficiently optimised by PostgreSQL in all plans.
+        // A JOIN on the indexed ConnectedSystemObjectId/ConnectedSystemId columns is consistently fast.
+        var result = await Repository.Database.Database
+            .SqlQueryRaw<int>(
+                """
+                SELECT COUNT(*)::int
+                FROM "ConnectedSystemObjectAttributeValues" av
+                JOIN "ConnectedSystemObjects" cso ON cso."Id" = av."ConnectedSystemObjectId"
+                WHERE cso."ConnectedSystemId" = {0}
+                  AND av."UnresolvedReferenceValue" IS NOT NULL
+                  AND av."ReferenceValueId" IS NULL
+                """,
+                connectedSystemId)
+            .FirstAsync();
+        return result;
     }
 
     public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
