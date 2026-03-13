@@ -1585,22 +1585,31 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // UnresolvedReferenceValue against the secondary external ID attribute values of existing CSOs.
         try
         {
-            return await Repository.Database.Database.ExecuteSqlRawAsync(
-                """
-                UPDATE "ConnectedSystemObjectAttributeValues" av
-                SET "ReferenceValueId" = target_cso."Id"
-                FROM "ConnectedSystemObjects" owner_cso
-                JOIN "ConnectedSystemObjects" target_cso ON target_cso."ConnectedSystemId" = {0}
-                JOIN "ConnectedSystemObjectAttributeValues" target_av ON target_av."ConnectedSystemObjectId" = target_cso."Id"
-                JOIN "ConnectedSystemAttributes" target_attr ON target_attr."Id" = target_av."AttributeId"
-                    AND target_attr."IsSecondaryExternalId" = true
-                WHERE owner_cso."ConnectedSystemId" = {0}
-                  AND av."ConnectedSystemObjectId" = owner_cso."Id"
-                  AND av."UnresolvedReferenceValue" IS NOT NULL
-                  AND av."ReferenceValueId" IS NULL
-                  AND av."UnresolvedReferenceValue" = target_av."StringValue"
-                """,
-                connectedSystemId);
+            var previousTimeout = Repository.Database.Database.GetCommandTimeout();
+            Repository.Database.Database.SetCommandTimeout(300);
+            try
+            {
+                return await Repository.Database.Database.ExecuteSqlRawAsync(
+                    """
+                    UPDATE "ConnectedSystemObjectAttributeValues" av
+                    SET "ReferenceValueId" = target_cso."Id"
+                    FROM "ConnectedSystemObjects" owner_cso
+                    JOIN "ConnectedSystemObjects" target_cso ON target_cso."ConnectedSystemId" = {0}
+                    JOIN "ConnectedSystemObjectAttributeValues" target_av ON target_av."ConnectedSystemObjectId" = target_cso."Id"
+                    JOIN "ConnectedSystemAttributes" target_attr ON target_attr."Id" = target_av."AttributeId"
+                        AND target_attr."IsSecondaryExternalId" = true
+                    WHERE owner_cso."ConnectedSystemId" = {0}
+                      AND av."ConnectedSystemObjectId" = owner_cso."Id"
+                      AND av."UnresolvedReferenceValue" IS NOT NULL
+                      AND av."ReferenceValueId" IS NULL
+                      AND av."UnresolvedReferenceValue" = target_av."StringValue"
+                    """,
+                    connectedSystemId);
+            }
+            finally
+            {
+                Repository.Database.Database.SetCommandTimeout(previousTimeout);
+            }
         }
         catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException)
         {
@@ -1619,7 +1628,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var result = await Repository.Database.Database
             .SqlQueryRaw<int>(
                 """
-                SELECT COUNT(*)::int
+                SELECT COUNT(*)::int AS "Value"
                 FROM "ConnectedSystemObjectAttributeValues" av
                 JOIN "ConnectedSystemObjects" cso ON cso."Id" = av."ConnectedSystemObjectId"
                 WHERE cso."ConnectedSystemId" = {0}
