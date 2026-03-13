@@ -21,8 +21,8 @@
 @if (_activity != null)
 {
     <MudText Typo="Typo.h5" Class="mt-5">Summary</MudText>
-    <MudPaper Class="pa-5 mt-5" Outlined="true">
-        <MudGrid>
+    <MudPaper Class="pa-4 mt-3" Outlined="true">
+        <MudGrid Spacing="4">
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">ID:</MudText>
                 <MudText Class="jim-text-code">@_activity.Id</MudText>
@@ -71,7 +71,7 @@
                 <MudText Typo="Typo.button" Class="mud-text-secondary">When:</MudText>
                 <MudText title="@_activity.Created.ToLocalTime().ToFriendlyDate()">@_activity.Created.ToLocalTime().ToRelativeTime()</MudText>
             </MudItem>
-            <MudItem xs="12" sm="6" md="4" Class="mt-3">
+            <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By:</MudText>
                 @{
                     if (_activity.InitiatedByType == ActivityInitiatorType.User)
@@ -115,22 +115,22 @@
                     }
                 }
             </MudItem>
-            <MudItem xs="12" sm="6" md="4" Class="mt-3">
+            <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Status:</MudText><br />
                 <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(_activity.Status)" Class="ml-0">@_activity.Status.ToString().SplitOnCapitalLetters()</MudChip>
             </MudItem>
-            <MudItem xs="12" sm="6" md="4" Class="mt-3">
+            <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Execution Time:</MudText>
                 <MudText>@(_activity.ExecutionTime?.ToAbbreviatedString() ?? "-")</MudText>
             </MudItem>
-            <MudItem xs="12" sm="6" md="4" Class="mt-3">
+            <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Total Activity Time:</MudText>
                 <MudText>@(_activity.TotalActivityTime?.ToAbbreviatedString() ?? "-")</MudText>
             </MudItem>
 
             @if (_activity.ParentActivityId.HasValue)
             {
-                <MudItem xs="12" Class="mt-3">
+                <MudItem xs="12" sm="6" md="4">
                     <MudText Typo="Typo.button" Class="mud-text-secondary">Parent Activity:</MudText>
                     <MudText>
                         <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-1" Style="vertical-align: middle;" />
@@ -141,7 +141,7 @@
 
             @if (!string.IsNullOrEmpty(_activity.Message))
             {
-                <MudItem xs="12" Class="mt-3">
+                <MudItem xs="12" sm="6" md="4">
                     <MudText Typo="Typo.button" Class="mud-text-secondary">Message:</MudText>
                     <MudText>@_activity.Message</MudText>
                 </MudItem>
