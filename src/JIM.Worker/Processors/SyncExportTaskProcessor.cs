@@ -159,14 +159,12 @@ public class SyncExportTaskProcessor
                 await ProcessExportResultAsync(result);
             }
 
-            // Auto-select any containers created during export
+            // Auto-select any containers created during export.
+            // This creates a child activity with its own message — do not update the parent's message.
             if (result.CreatedContainerExternalIds.Count > 0)
             {
                 Log.Information("PerformExportAsync: Export created {Count} new container(s), triggering auto-selection",
                     result.CreatedContainerExternalIds.Count);
-
-                await _jim.Activities.UpdateActivityMessageAsync(_activity,
-                    $"Auto-selecting {result.CreatedContainerExternalIds.Count} container(s) created during export");
 
                 using (Diagnostics.Sync.StartSpan("AutoSelectContainers").SetTag("containerCount", result.CreatedContainerExternalIds.Count))
                 {
@@ -179,10 +177,6 @@ public class SyncExportTaskProcessor
                         _initiatedByName,
                         _activity);
                 }
-
-                // Update completion message to include container count
-                var updatedMessage = $"{_activity.Message} | {result.CreatedContainerExternalIds.Count} container(s) auto-selected";
-                await _jim.Activities.UpdateActivityMessageAsync(_activity, updatedMessage);
             }
 
             exportSpan.SetSuccess();

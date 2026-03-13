@@ -563,9 +563,9 @@
     @if (_childActivities.Count > 0)
     {
         <MudText Typo="Typo.h5" Class="mt-5">Child Activities</MudText>
-        <MudTable T="Activity" Items="_childActivities" Hover="true" Class="mt-3" Outlined="true" Elevation="0"
-                  OnRowClick="HandleChildActivityRowClick" RowClass="cursor-pointer">
+        <MudTable T="Activity" Items="_childActivities" Hover="true" Class="mt-3" Outlined="true" Elevation="0">
             <HeaderContent>
+                <MudTh></MudTh>
                 <MudTh>Type</MudTh>
                 <MudTh>Target</MudTh>
                 <MudTh>Message</MudTh>
@@ -574,6 +574,12 @@
                 <MudTh>Duration</MudTh>
             </HeaderContent>
             <RowTemplate>
+                <MudTd>
+                    <MudButton Variant="Variant.Outlined"
+                               Size="Size.Small"
+                               Color="Color.Primary"
+                               Href="@($"/activity/{context.Id}")">View</MudButton>
+                </MudTd>
                 <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
                 <MudTd DataLabel="Target">
                     @if (!string.IsNullOrEmpty(context.TargetContext) && !string.IsNullOrEmpty(context.TargetName))
@@ -748,13 +754,6 @@
             _loading = false;
             StateHasChanged();
         }
-    }
-
-    private void HandleChildActivityRowClick(TableRowClickEventArgs<Activity> args)
-    {
-        if (args.Item == null)
-            return;
-        NavManager.NavigateTo($"/activity/{args.Item.Id}");
     }
 
     private void OnSearch(string text)
