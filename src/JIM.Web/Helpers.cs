@@ -289,6 +289,59 @@ public static class Helpers
         };
     }
 
+    /// <summary>
+    /// Returns the canonical Material icon for an operation type (ObjectChangeType).
+    /// Use this everywhere an operation icon is needed to ensure consistency across the UI.
+    /// </summary>
+    public static string GetOperationIcon(ObjectChangeType objectChangeType)
+    {
+        return objectChangeType switch
+        {
+            // Import operations
+            ObjectChangeType.Added => Icons.Material.Filled.Add,
+            ObjectChangeType.Updated => Icons.Material.Filled.Edit,
+            ObjectChangeType.Deleted => Icons.Material.Filled.Delete,
+
+            // Sync operations
+            ObjectChangeType.Projected => Icons.Material.Filled.AirlineStops,
+            ObjectChangeType.Joined => Icons.Material.Filled.Link,
+            ObjectChangeType.AttributeFlow => Icons.Material.Filled.SyncAlt,
+            ObjectChangeType.Disconnected => Icons.Material.Filled.LinkOff,
+            ObjectChangeType.DisconnectedOutOfScope => Icons.Material.Filled.FilterAltOff,
+            ObjectChangeType.OutOfScopeRetainJoin => Icons.Material.Filled.FilterAlt,
+            ObjectChangeType.DriftCorrection => Icons.Material.Filled.CompareArrows,
+
+            // Export operations
+            ObjectChangeType.Exported => Icons.Material.Filled.CloudDone,
+            ObjectChangeType.Deprovisioned => Icons.Material.Filled.CloudOff,
+
+            // Pending export visibility
+            ObjectChangeType.PendingExport => Icons.Material.Filled.Schedule,
+            ObjectChangeType.PendingExportConfirmed => Icons.Material.Filled.CheckCircle,
+
+            // Direct creation
+            ObjectChangeType.Created => Icons.Material.Filled.AddCircleOutline,
+
+            // Other
+            ObjectChangeType.NoChange => Icons.Material.Filled.CheckCircle,
+            _ => Icons.Material.Filled.Info
+        };
+    }
+
+    /// <summary>
+    /// Returns the canonical Material icon for an External ID status chip.
+    /// </summary>
+    public static string GetExternalIdStatusIcon(ExternalIdStatus status)
+    {
+        return status switch
+        {
+            ExternalIdStatus.Rejected => Icons.Material.Filled.Block,
+            ExternalIdStatus.PendingRemoval => Icons.Material.Filled.Schedule,
+            ExternalIdStatus.Deleted => Icons.Material.Filled.Delete,
+            _ => Icons.Material.Filled.Info
+        };
+    }
+
     public static Color GetMudBlazorColorForValueChangeType(ValueChangeType valueChangeType)
     {
         return valueChangeType switch
@@ -603,37 +656,43 @@ public static class Helpers
     }
 
     /// <summary>
-    /// Gets a Material icon string for a sync outcome type.
+    /// Gets a Material icon string for a sync outcome type. Delegates to
+    /// <see cref="GetOperationIcon"/> where an outcome maps directly to an
+    /// ObjectChangeType so the two stay in sync automatically.
     /// </summary>
     public static string GetOutcomeTypeIcon(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType)
     {
         return outcomeType switch
         {
-            // Import outcomes
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded => Icons.Material.Filled.AddCircle,
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated => Icons.Material.Filled.Edit,
-            ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => Icons.Material.Filled.Delete,
+            // Import outcomes — delegate to GetOperationIcon for consistency
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded => GetOperationIcon(ObjectChangeType.Added),
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated => GetOperationIcon(ObjectChangeType.Updated),
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted => GetOperationIcon(ObjectChangeType.Deleted),
+
+            // Import outcomes — outcome-only (no ObjectChangeType equivalent)
             ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected => Icons.Material.Filled.RemoveCircle,
-            ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => Icons.Material.Filled.CheckCircle,
+            ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed => GetOperationIcon(ObjectChangeType.PendingExportConfirmed),
             ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => Icons.Material.Filled.Cancel,
 
-            // Sync outcomes — inbound
-            ActivityRunProfileExecutionItemSyncOutcomeType.Projected => Icons.Material.Filled.AirlineStops,
-            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => Icons.Material.Filled.Link,
-            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => Icons.Material.Filled.SyncAlt,
-            ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => Icons.Material.Filled.LinkOff,
-            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => Icons.Material.Filled.FilterAltOff,
+            // Sync outcomes — delegate to GetOperationIcon for consistency
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected => GetOperationIcon(ObjectChangeType.Projected),
+            ActivityRunProfileExecutionItemSyncOutcomeType.Joined => GetOperationIcon(ObjectChangeType.Joined),
+            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => GetOperationIcon(ObjectChangeType.AttributeFlow),
+            ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => GetOperationIcon(ObjectChangeType.Disconnected),
+            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope => GetOperationIcon(ObjectChangeType.DisconnectedOutOfScope),
+            ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection => GetOperationIcon(ObjectChangeType.DriftCorrection),
+
+            // Sync outcomes — outcome-only (no ObjectChangeType equivalent)
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => Icons.Material.Filled.PersonRemove,
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => Icons.Material.Filled.HourglassBottom,
-            ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection => Icons.Material.Filled.CompareArrows,
 
-            // Sync outcomes — outbound
-            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => Icons.Material.Filled.CloudUpload,
-            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => Icons.Material.Filled.Schedule,
+            // Outbound sync outcomes
+            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => Icons.Material.Filled.Nat,
+            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => GetOperationIcon(ObjectChangeType.PendingExport),
 
-            // Export outcomes
-            ActivityRunProfileExecutionItemSyncOutcomeType.Exported => Icons.Material.Filled.CloudDone,
-            ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => Icons.Material.Filled.CloudOff,
+            // Export outcomes — delegate to GetOperationIcon for consistency
+            ActivityRunProfileExecutionItemSyncOutcomeType.Exported => GetOperationIcon(ObjectChangeType.Exported),
+            ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => GetOperationIcon(ObjectChangeType.Deprovisioned),
 
             _ => Icons.Material.Filled.Circle,
         };

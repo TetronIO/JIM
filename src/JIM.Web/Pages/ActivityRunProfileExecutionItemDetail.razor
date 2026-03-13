@@ -178,7 +178,7 @@
                                 <MudTooltip
                                     Text="@Helpers.GetExternalIdStatusDescription(ExternalIdStatus.Rejected)"
                                     Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Error" Icon="@Icons.Material.Filled.Block">
+                                    <MudChip T="string" Color="Color.Error" Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.Rejected)">
                                         Rejected
                                     </MudChip>
                                 </MudTooltip>
@@ -192,7 +192,7 @@
                                 <MudTooltip
                                     Text="@Helpers.GetExternalIdStatusDescription(ExternalIdStatus.PendingRemoval)"
                                     Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Warning" Icon="@Icons.Material.Filled.Schedule">
+                                    <MudChip T="string" Color="Color.Warning" Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.PendingRemoval)">
                                         Pending Removal
                                     </MudChip>
                                 </MudTooltip>
@@ -206,7 +206,7 @@
                                 <MudTooltip
                                     Text="@Helpers.GetExternalIdStatusDescription(ExternalIdStatus.Deleted)"
                                     Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Warning" Icon="@Icons.Material.Filled.History">
+                                    <MudChip T="string" Color="Color.Warning" Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.Deleted)">
                                         Deleted
                                     </MudChip>
                                 </MudTooltip>
@@ -1302,24 +1302,8 @@ new("Item Details", href: null, disabled: true)
         if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
             return Icons.Material.Filled.Error;
 
-        return _activityRunProfileExecutionItem?.ObjectChangeType switch
-        {
-            // Import operations
-            ObjectChangeType.Added => Icons.Material.Filled.Add,
-            ObjectChangeType.Updated => Icons.Material.Filled.Edit,
-            ObjectChangeType.Deleted => Icons.Material.Filled.Delete,
-            // Sync operations
-            ObjectChangeType.Projected => Icons.Material.Filled.AirlineStops,
-            ObjectChangeType.Joined => Icons.Material.Filled.Link,
-            ObjectChangeType.AttributeFlow => Icons.Material.Filled.SwapHoriz,
-            ObjectChangeType.Disconnected => Icons.Material.Filled.LinkOff,
-            // Export operations
-            ObjectChangeType.Exported => Icons.Material.Filled.Publish,
-            ObjectChangeType.Deprovisioned => Icons.Material.Filled.Delete,
-            // Other
-            ObjectChangeType.NoChange => Icons.Material.Filled.CheckCircle,
-            _ => Icons.Material.Filled.Info
-        };
+        return Helpers.GetOperationIcon(
+            _activityRunProfileExecutionItem?.ObjectChangeType ?? ObjectChangeType.NotSet);
     }
 
     private string GetStatusTitle()

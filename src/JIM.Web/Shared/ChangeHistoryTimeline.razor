@@ -1296,26 +1296,8 @@ else
         };
     }
 
-    private string GetChangeTypeIcon(ObjectChangeType changeType)
-    {
-        return changeType switch
-        {
-            // CSO Import operations
-            ObjectChangeType.Added => Icons.Material.Filled.Add,
-            ObjectChangeType.Updated => Icons.Material.Filled.Edit,
-            ObjectChangeType.Deleted => Icons.Material.Filled.Delete,
-
-            // MVO Sync operations
-            ObjectChangeType.Projected => Icons.Material.Filled.AddCircle, // New MVO created
-            ObjectChangeType.Joined => Icons.Material.Filled.Link, // CSO joined to existing MVO
-            ObjectChangeType.AttributeFlow => Icons.Material.Filled.SyncAlt, // Attributes flowed to MVO
-
-            // Direct creation
-            ObjectChangeType.Created => Icons.Material.Filled.AddCircleOutline,
-
-            _ => Icons.Material.Filled.Info
-        };
-    }
+    private string GetChangeTypeIcon(ObjectChangeType changeType) =>
+        Helpers.GetOperationIcon(changeType);
 
     private Color GetChangeTypeColor(ObjectChangeType changeType)
     {
