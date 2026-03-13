@@ -575,6 +575,15 @@ public interface IConnectedSystemRepository
     /// </summary>
     public Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId);
 
+    /// <summary>
+    /// Returns the count of attribute values across all CSOs in a connected system that have an
+    /// unresolved reference (UnresolvedReferenceValue is not null and ReferenceValueId is null).
+    /// A non-zero count indicates that some group member references (or other reference attributes)
+    /// could not be resolved during the last import run.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    public Task<int> GetUnresolvedReferenceCountAsync(int connectedSystemId);
+
     public int GetConnectedSystemCount();
     public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId);
     public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId);

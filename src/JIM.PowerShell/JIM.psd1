@@ -46,6 +46,7 @@
         'Get-JIMConnectedSystemPartition',
         'Set-JIMConnectedSystemPartition',
         'Set-JIMConnectedSystemContainer',
+        'Get-JIMConnectedSystemUnresolvedReferenceCount',
 
         # Sync Rules
         'Get-JIMSyncRule',

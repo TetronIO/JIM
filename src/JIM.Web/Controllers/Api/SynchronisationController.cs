@@ -455,6 +455,28 @@ public class SynchronisationController(
         return Ok(preview);
     }
 
+    /// <summary>
+    /// Gets the count of unresolved reference attribute values across all objects in a connected system.
+    /// </summary>
+    /// <remarks>
+    /// An unresolved reference occurs when a reference attribute (e.g. group 'member') contains a value
+    /// that could not be matched to another Connected System Object during the last import run.
+    /// This typically happens when the referenced object is outside the configured container scope
+    /// or has not been imported yet.
+    /// A non-zero count indicates data integrity issues that should be investigated.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    /// <returns>The count of unresolved reference attribute values.</returns>
+    [HttpGet("connected-systems/{connectedSystemId:int}/objects/unresolved-references/count", Name = "GetUnresolvedReferenceCount")]
+    [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetUnresolvedReferenceCountAsync(int connectedSystemId)
+    {
+        _logger.LogTrace("Requested unresolved reference count for connected system: {ConnectedSystemId}", connectedSystemId);
+        var count = await _application.ConnectedSystems.GetUnresolvedReferenceCountAsync(connectedSystemId);
+        return Ok(count);
+    }
+
     #region Partitions and Containers
     /// <summary>
     /// Gets all partitions for a Connected System.

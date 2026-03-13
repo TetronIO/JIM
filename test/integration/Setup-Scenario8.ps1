@@ -426,24 +426,8 @@ Set-JIMConnectedSystemObjectType -ConnectedSystemId $targetSystem.id -ObjectType
 Set-JIMConnectedSystemObjectType -ConnectedSystemId $targetSystem.id -ObjectTypeId $targetGroupType.id -Selected $true | Out-Null
 Write-Host "  ✓ Selected user and group object types" -ForegroundColor Green
 
-# Set objectGUID as External ID for all object types
-$sourceUserAnchor = $sourceUserType.attributes | Where-Object { $_.name -eq 'objectGUID' }
-$sourceGroupAnchor = $sourceGroupType.attributes | Where-Object { $_.name -eq 'objectGUID' }
-$targetUserAnchor = $targetUserType.attributes | Where-Object { $_.name -eq 'objectGUID' }
-$targetGroupAnchor = $targetGroupType.attributes | Where-Object { $_.name -eq 'objectGUID' }
-
-if ($sourceUserAnchor) {
-    Set-JIMConnectedSystemAttribute -ConnectedSystemId $sourceSystem.id -ObjectTypeId $sourceUserType.id -AttributeId $sourceUserAnchor.id -IsExternalId $true | Out-Null
-}
-if ($sourceGroupAnchor) {
-    Set-JIMConnectedSystemAttribute -ConnectedSystemId $sourceSystem.id -ObjectTypeId $sourceGroupType.id -AttributeId $sourceGroupAnchor.id -IsExternalId $true | Out-Null
-}
-if ($targetUserAnchor) {
-    Set-JIMConnectedSystemAttribute -ConnectedSystemId $targetSystem.id -ObjectTypeId $targetUserType.id -AttributeId $targetUserAnchor.id -IsExternalId $true | Out-Null
-}
-if ($targetGroupAnchor) {
-    Set-JIMConnectedSystemAttribute -ConnectedSystemId $targetSystem.id -ObjectTypeId $targetGroupType.id -AttributeId $targetGroupAnchor.id -IsExternalId $true | Out-Null
-}
+# Note: objectGUID is automatically set as the External ID by the LDAP connector schema import
+# (the connector marks it as IsExternalId = true during schema import). No manual override needed.
 Write-Host "  ✓ Set objectGUID as External ID for all object types" -ForegroundColor Green
 
 # Select required LDAP attributes for users

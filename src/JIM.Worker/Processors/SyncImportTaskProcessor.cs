@@ -2046,6 +2046,10 @@ public class SyncImportTaskProcessor
                     Log.Debug("ResolveReferencesAsync: Matched an unresolved reference ({UnresolvedRef}) to CSO: {CsoId} (from database batch query)",
                         attrValue.UnresolvedReferenceValue, referencedCso.Id);
                     attrValue.ReferenceValue = referencedCso;
+                    // Also set the FK explicitly — the referencedCso was loaded from a separate DB query context
+                    // and may not be tracked by the same DbContext instance that will save this attribute value,
+                    // so EF Core cannot auto-resolve the FK from the navigation property alone.
+                    attrValue.ReferenceValueId = referencedCso.Id;
                 }
                 else
                 {

@@ -107,7 +107,7 @@
             }
             else if (context.ReferenceValue != null)
             {
-                @* MVA reference Add/Remove *@
+                @* MVA reference Add/Remove - resolved *@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                     <MudChip T="string" Color="Color.Default">@context.ReferenceValue.TypeName</MudChip>
                     <MudLink Href="@context.ReferenceValue.Href">
@@ -117,6 +117,16 @@
                     {
                         <MudText Class="mud-text-secondary">(@context.ReferenceValue.SecondaryId)</MudText>
                     }
+                </MudStack>
+            }
+            else if (context.IsUnresolvedReference)
+            {
+                @* Unresolved reference - show raw identifier with broken-link indicator *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudTooltip Text="Unresolved reference — the referenced object could not be found. Check container scope.">
+                        <MudIcon Icon="@Icons.Material.Filled.LinkOff" Color="Color.Warning" Size="Size.Small" />
+                    </MudTooltip>
+                    <MudText Class="mud-text-secondary">@context.DisplayValue</MudText>
                 </MudStack>
             }
             else
@@ -211,7 +221,8 @@
                         Href = Utilities.GetConnectedSystemObjectHref(vc.ReferenceValue)
                     } : null,
                     IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued,
-                    AttributeType = ac.Attribute.Type
+                    AttributeType = ac.Attribute.Type,
+                    IsUnresolvedReference = ac.Attribute.Type == AttributeDataType.Reference && vc.ReferenceValue == null && !string.IsNullOrEmpty(vc.StringValue)
                 })));
         }
 
@@ -297,7 +308,8 @@
                             DisplayChangeType = displayType,
                             IsUpdate = false,
                             DisplayValue = change.Value,
-                            ReferenceValue = change.ReferenceValue
+                            ReferenceValue = change.ReferenceValue,
+                            IsUnresolvedReference = change.IsUnresolvedReference
                         });
                     }
                 }
@@ -315,7 +327,8 @@
                         DisplayChangeType = change.ChangeType.ToString(),
                         IsUpdate = false,
                         DisplayValue = change.Value,
-                        ReferenceValue = change.ReferenceValue
+                        ReferenceValue = change.ReferenceValue,
+                        IsUnresolvedReference = change.IsUnresolvedReference
                     });
                 }
             }
@@ -347,6 +360,8 @@
         public ReferenceValueInfo? ReferenceValue { get; set; }
         public bool IsMultiValued { get; set; }
         public AttributeDataType AttributeType { get; set; }
+        /// <summary>True when the attribute is a Reference type but the reference could not be resolved to a CSO.</summary>
+        public bool IsUnresolvedReference { get; set; }
     }
 
     private class AttributeChangeDisplay
@@ -362,6 +377,8 @@
         public bool IsUpdate { get; set; }
         public string? OldValue { get; set; }
         public string? NewValue { get; set; }
+        /// <summary>True when the attribute is a Reference type but the reference could not be resolved to a CSO.</summary>
+        public bool IsUnresolvedReference { get; set; }
     }
 
     private class ReferenceValueInfo

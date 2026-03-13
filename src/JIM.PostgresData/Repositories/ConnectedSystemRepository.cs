@@ -1569,6 +1569,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             cso.MetaverseObjectId == metaverseObjectId);
     }
 
+    /// <summary>
+    /// Returns the count of attribute values across all CSOs in a connected system that have an
+    /// unresolved reference (UnresolvedReferenceValue is not null and ReferenceValueId is null).
+    /// </summary>
+    public async Task<int> GetUnresolvedReferenceCountAsync(int connectedSystemId)
+    {
+        var csoIds = Repository.Database.ConnectedSystemObjects
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId)
+            .Select(cso => cso.Id);
+
+        return await Repository.Database.ConnectedSystemObjectAttributeValues.CountAsync(av =>
+            csoIds.Contains(EF.Property<Guid>(av, "ConnectedSystemObjectId")) &&
+            av.UnresolvedReferenceValue != null &&
+            av.ReferenceValueId == null);
+    }
+
     public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
     {
         Repository.Database.ConnectedSystemObjects.Add(connectedSystemObject);

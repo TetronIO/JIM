@@ -2936,6 +2936,17 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Returns the count of reference attribute values across all CSOs in a connected system that are unresolved
+    /// (i.e. the referenced object could not be found during the last import run).
+    /// A non-zero result indicates that group member references or other reference attributes are broken.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    public async Task<int> GetUnresolvedReferenceCountAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetUnresolvedReferenceCountAsync(connectedSystemId);
+    }
+
+    /// <summary>
     /// Bulk persists Connected System Objects without activity tracking.
     /// Use this for provisioning CSOs created during sync where activity execution items are not needed.
     /// </summary>
@@ -3250,7 +3261,9 @@ public class ConnectedSystemServer
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.ReferenceValue));
                 break;
             case AttributeDataType.Reference when connectedSystemObjectAttributeValue.UnresolvedReferenceValue != null:
-                // we do not log changes for unresolved references. only resolved references get change tracked.
+                // Store the raw DN/identifier so the change is visible in the UI even when the reference couldn't be resolved.
+                // The change history table renders this as an unresolved reference (no clickable link).
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.UnresolvedReferenceValue));
                 break;
             case AttributeDataType.NotSet:
             default:
