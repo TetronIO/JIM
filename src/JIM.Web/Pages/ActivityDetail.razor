@@ -14,8 +14,8 @@
 @inject NavigationManager NavManager
 @inject IUserPreferenceService PreferenceService
 
-<PageTitle>Activity: @_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters()@(ShowTargetInTitle() ? $": {GetTargetDisplayText()}" : "")</PageTitle>
-<MudText Typo="Typo.h4"><span class="jim-title-segment mud-primary-text">Activity:</span> <span class="jim-title-segment">@_activity?.TargetOperationType @_activity?.TargetType.ToString().SplitOnCapitalLetters()</span>@if (ShowTargetInTitle()) {<span class="jim-title-segment">: <span class="jim-title-accent">@GetTargetDisplayText()</span></span>}</MudText>
+<PageTitle>Activity: @_activity?.TargetOperationType.ToString().SplitOnCapitalLetters() @_activity?.TargetType.ToString().SplitOnCapitalLetters()@(ShowTargetInTitle() ? $": {GetTargetDisplayText()}" : "")</PageTitle>
+<MudText Typo="Typo.h4"><span class="jim-title-segment mud-primary-text">Activity:</span> <span class="jim-title-segment">@_activity?.TargetOperationType.ToString().SplitOnCapitalLetters() @_activity?.TargetType.ToString().SplitOnCapitalLetters()</span>@if (ShowTargetInTitle()) {<span class="jim-title-segment">: <span class="jim-title-accent">@GetTargetDisplayText()</span></span>}</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @if (_activity != null)
@@ -127,6 +127,25 @@
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Total Activity Time:</MudText>
                 <MudText>@(_activity.TotalActivityTime?.ToAbbreviatedString() ?? "-")</MudText>
             </MudItem>
+
+            @if (_activity.ParentActivityId.HasValue)
+            {
+                <MudItem xs="12" Class="mt-3">
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Parent Activity:</MudText>
+                    <MudText>
+                        <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-1" Style="vertical-align: middle;" />
+                        <MudLink Href="@($"/activity/{_activity.ParentActivityId.Value}")">View parent activity</MudLink>
+                    </MudText>
+                </MudItem>
+            }
+
+            @if (!string.IsNullOrEmpty(_activity.Message))
+            {
+                <MudItem xs="12" Class="mt-3">
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Message:</MudText>
+                    <MudText>@_activity.Message</MudText>
+                </MudItem>
+            }
         </MudGrid>
     </MudPaper>
 
@@ -540,6 +559,70 @@
             </PagerContent>
         </MudTable>
     }
+
+    @if (_childActivities.Count > 0)
+    {
+        <MudText Typo="Typo.h5" Class="mt-5">Child Activities</MudText>
+        <MudTable T="Activity" Items="_childActivities" Hover="true" Class="mt-3" Outlined="true" Elevation="0"
+                  OnRowClick="HandleChildActivityRowClick" RowClass="cursor-pointer">
+            <HeaderContent>
+                <MudTh>Type</MudTh>
+                <MudTh>Target</MudTh>
+                <MudTh>Message</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Started</MudTh>
+                <MudTh>Duration</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Type">@context.TargetType.ToString().SplitOnCapitalLetters()</MudTd>
+                <MudTd DataLabel="Target">
+                    @if (!string.IsNullOrEmpty(context.TargetContext) && !string.IsNullOrEmpty(context.TargetName))
+                    {
+                        <span><strong>@context.TargetContext</strong> → @context.TargetName</span>
+                    }
+                    else if (!string.IsNullOrEmpty(context.TargetContext))
+                    {
+                        <span><strong>@context.TargetContext</strong></span>
+                    }
+                    else if (!string.IsNullOrEmpty(context.TargetName))
+                    {
+                        <span>@context.TargetName</span>
+                    }
+                    else
+                    {
+                        <span class="mud-text-disabled">-</span>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Message">
+                    @if (!string.IsNullOrEmpty(context.Message))
+                    {
+                        <span>@context.Message</span>
+                    }
+                    else
+                    {
+                        <span class="mud-text-disabled">-</span>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(context.Status)" Class="ml-0">@context.Status.ToString().SplitOnCapitalLetters()</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Started">
+                    @if (context.Executed != default)
+                    {
+                        <span title="@context.Executed.ToLocalTime().ToFriendlyDate()">@context.Executed.ToLocalTime().ToRelativeTime()</span>
+                    }
+                    else
+                    {
+                        <span class="mud-text-disabled">-</span>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Duration">@(context.ExecutionTime?.ToAbbreviatedString() ?? "-")</MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText>No child activities found.</MudText>
+            </NoRecordsContent>
+        </MudTable>
+    }
 }
 
 @code {
@@ -548,6 +631,7 @@
 
     private MudTable<ActivityRunProfileExecutionItemHeader>? _table;
     private Activity? _activity;
+    private List<Activity> _childActivities = new();
     private ConnectedSystemHeader? _connectedSystemHeader;
     private MetaverseObjectHeader? _metaverseObjectHeader;
     private ActivityRunProfileExecutionStats? _activityRunProfileExecutionStats;
@@ -592,6 +676,8 @@
 
         if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute)
             _activityRunProfileExecutionStats = await Jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
+
+        _childActivities = await Jim.Activities.GetChildActivitiesAsync(_activity.Id);
 
         _initialisationComplete = true;
     }
@@ -662,6 +748,13 @@
             _loading = false;
             StateHasChanged();
         }
+    }
+
+    private void HandleChildActivityRowClick(TableRowClickEventArgs<Activity> args)
+    {
+        if (args.Item == null)
+            return;
+        NavManager.NavigateTo($"/activity/{args.Item.Id}");
     }
 
     private void OnSearch(string text)

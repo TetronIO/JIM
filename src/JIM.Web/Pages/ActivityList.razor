@@ -141,6 +141,7 @@
                 <MudText Typo="Typo.button">Created</MudText>
             </MudTableSortLabel>
         </MudTh>
+        <MudTh></MudTh>
     </HeaderContent>
     <RowTemplate Context="context">
         <MudTd DataLabel="Operation">
@@ -426,6 +427,14 @@
                 @context.Created.ToLocalTime().ToRelativeTime()
             </MudTooltip>
         </MudTd>
+        <MudTd>
+            @if (_childActivityCounts.TryGetValue(context.Id, out var childCount) && childCount > 0)
+            {
+                <MudTooltip Text="@($"{childCount} child {(childCount == 1 ? "activity" : "activities")}")" Arrow="true" Placement="Placement.Top">
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.AccountTree" Class="px-2">@childCount</MudChip>
+                </MudTooltip>
+            }
+        </MudTd>
     </RowTemplate>
     <NoRecordsContent>
         There is no activity to show yet.
@@ -441,6 +450,7 @@
     private string _searchString = "";
     private bool _loading;
     private bool _isMyActivity;
+    private Dictionary<Guid, int> _childActivityCounts = new();
     private Guid? _currentUserId;
     private string _pageTitle = "Activity";
     private string _pageDescription = "Monitor all activity across the system. View operations initiated by users or automated processes, including synchronisations, configuration changes, and system events.";
@@ -590,6 +600,8 @@
                 outcomes,
                 types,
                 statuses);
+
+            _childActivityCounts = await Jim.Activities.GetChildActivityCountsAsync(result.Results.Select(a => a.Id));
 
             return new TableData<Activity>
             {

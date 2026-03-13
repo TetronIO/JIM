@@ -203,7 +203,7 @@ public class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy, Activity? parentActivity = null)
+    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -213,7 +213,6 @@ public class ConnectedSystemServer
 
         Log.Verbose($"UpdateConnectedSystemAsync() called for {connectedSystem}");
 
-        // are the settings valid?
         var validationResults = ValidateConnectedSystemSettings(connectedSystem);
         connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
 
@@ -225,7 +224,6 @@ public class ConnectedSystemServer
             TargetName = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
-            ParentActivityId = parentActivity?.Id,
             ConnectedSystemId = connectedSystem.Id
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
@@ -239,7 +237,7 @@ public class ConnectedSystemServer
     /// <summary>
     /// Updates an existing Connected System (initiated by API key).
     /// </summary>
-    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey, Activity? parentActivity = null)
+    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -249,7 +247,6 @@ public class ConnectedSystemServer
 
         Log.Verbose($"UpdateConnectedSystemAsync() called for {connectedSystem} (API key initiated)");
 
-        // are the settings valid?
         var validationResults = ValidateConnectedSystemSettings(connectedSystem);
         connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
 
@@ -261,7 +258,6 @@ public class ConnectedSystemServer
             TargetName = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
-            ParentActivityId = parentActivity?.Id,
             ConnectedSystemId = connectedSystem.Id
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
@@ -273,14 +269,55 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Validates, sanitises, and persists a Connected System update without creating an Activity record.
+    /// Used internally by operations that already have their own parent activity (ImportSchema, ImportHierarchy,
+    /// RefreshAndAutoSelectContainers), where creating a child Update activity would be noise.
+    /// </summary>
+    private async Task PersistConnectedSystemUpdateAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
+    {
+        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
+        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        AuditHelper.SetUpdated(connectedSystem, initiatedBy);
+        SanitiseConnectedSystemUserInput(connectedSystem);
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+    }
+
+    /// <summary>
+    /// Validates, sanitises, and persists a Connected System update without creating an Activity record.
+    /// Used internally by operations that already have their own parent activity (ImportSchema, ImportHierarchy,
+    /// RefreshAndAutoSelectContainers), where creating a child Update activity would be noise.
+    /// </summary>
+    private async Task PersistConnectedSystemUpdateAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
+    {
+        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
+        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
+        SanitiseConnectedSystemUserInput(connectedSystem);
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+    }
+
+    /// <summary>
+    /// Validates, sanitises, and persists a Connected System update without creating an Activity record.
+    /// Used internally by operations that already have their own parent activity (ImportSchema, ImportHierarchy,
+    /// RefreshAndAutoSelectContainers), where creating a child Update activity would be noise.
+    /// </summary>
+    private async Task PersistConnectedSystemUpdateAsync(ConnectedSystem connectedSystem, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName)
+    {
+        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
+        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
+        AuditHelper.SetUpdated(connectedSystem, initiatorType, initiatorId, initiatorName);
+        SanitiseConnectedSystemUserInput(connectedSystem);
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+    }
+
+    /// <summary>
     /// Updates an existing Connected System using initiator triad (for use from worker processors).
     /// </summary>
     public async Task UpdateConnectedSystemWithTriadAsync(
         ConnectedSystem connectedSystem,
         ActivityInitiatorType initiatorType,
         Guid? initiatorId,
-        string? initiatorName,
-        Activity? parentActivity = null)
+        string? initiatorName)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -290,7 +327,6 @@ public class ConnectedSystemServer
 
         Log.Verbose($"UpdateConnectedSystemWithTriadAsync() called for {connectedSystem}");
 
-        // are the settings valid?
         var validationResults = ValidateConnectedSystemSettings(connectedSystem);
         connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
 
@@ -302,7 +338,6 @@ public class ConnectedSystemServer
             TargetName = connectedSystem.Name,
             TargetType = ActivityTargetType.ConnectedSystem,
             TargetOperationType = ActivityTargetOperationType.Update,
-            ParentActivityId = parentActivity?.Id,
             ConnectedSystemId = connectedSystem.Id
         };
         await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
@@ -1114,7 +1149,7 @@ public class ConnectedSystemServer
         result.TotalObjectTypes = connectedSystem.ObjectTypes.Count;
         result.TotalAttributes = connectedSystem.ObjectTypes.Sum(ot => ot.Attributes?.Count ?? 0);
 
-        await UpdateConnectedSystemAsync(connectedSystem, initiatedBy, activity);
+        await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedBy);
 
         // finish the activity
         await Application.Activities.CompleteActivityAsync(activity);
@@ -1268,7 +1303,7 @@ public class ConnectedSystemServer
         result.TotalObjectTypes = connectedSystem.ObjectTypes.Count;
         result.TotalAttributes = connectedSystem.ObjectTypes.Sum(ot => ot.Attributes?.Count ?? 0);
 
-        await UpdateConnectedSystemAsync(connectedSystem, initiatedByApiKey, activity);
+        await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedByApiKey);
 
         await Application.Activities.CompleteActivityAsync(activity);
 
@@ -1333,7 +1368,7 @@ public class ConnectedSystemServer
         }
 
         // Persist the changes
-        await UpdateConnectedSystemAsync(connectedSystem, initiatedBy, activity);
+        await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedBy);
 
         // finish the activity
         await Application.Activities.CompleteActivityAsync(activity);
@@ -1394,7 +1429,7 @@ public class ConnectedSystemServer
         }
 
         // Persist the changes
-        await UpdateConnectedSystemAsync(connectedSystem, initiatedByApiKey, activity);
+        await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedByApiKey);
 
         // finish the activity
         await Application.Activities.CompleteActivityAsync(activity);
@@ -1534,9 +1569,9 @@ public class ConnectedSystemServer
         {
             // Persist the changes
             if (initiatedByApiKey != null)
-                await UpdateConnectedSystemAsync(connectedSystem, initiatedByApiKey, activity);
+                await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedByApiKey);
             else
-                await UpdateConnectedSystemAsync(connectedSystem, initiatedByUser, activity);
+                await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedByUser);
 
             activity.Message = $"Auto-selected {containersAdded} container(s) created during export";
         }
@@ -1655,7 +1690,7 @@ public class ConnectedSystemServer
 
         if (containersAdded > 0)
         {
-            await UpdateConnectedSystemWithTriadAsync(connectedSystem, initiatorType, initiatorId, initiatorName, activity);
+            await PersistConnectedSystemUpdateAsync(connectedSystem, initiatorType, initiatorId, initiatorName);
             activity.Message = $"Auto-selected {containersAdded} container(s) created during export";
         }
 

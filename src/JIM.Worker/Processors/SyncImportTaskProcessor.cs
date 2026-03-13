@@ -2655,7 +2655,6 @@ public class SyncImportTaskProcessor
             _connectedSystem,
             _initiatedByType,
             _initiatedById,
-            _initiatedByName,
-            _activity);
+            _initiatedByName);
     }
 }

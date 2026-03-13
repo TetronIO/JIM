@@ -187,6 +187,12 @@ public class ActivityHeader
     #endregion
 
     /// <summary>
+    /// The number of direct child activities linked to this activity.
+    /// Zero for activities with no children.
+    /// </summary>
+    public int ChildActivityCount { get; set; }
+
+    /// <summary>
     /// Creates a header DTO from an Activity entity.
     /// </summary>
     public static ActivityHeader FromEntity(Activity activity)
@@ -239,6 +245,16 @@ public class ActivityHeader
             // Shared
             TotalErrors = activity.TotalErrors
         };
+    }
+
+    /// <summary>
+    /// Creates a header DTO from an Activity entity with a known child activity count.
+    /// </summary>
+    public static ActivityHeader FromEntity(Activity activity, int childActivityCount)
+    {
+        var header = FromEntity(activity);
+        header.ChildActivityCount = childActivityCount;
+        return header;
     }
 }
 

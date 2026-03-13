@@ -281,6 +281,23 @@ public class ActivityServer
     }
 
     /// <summary>
+    /// Gets all direct child activities for a given parent activity.
+    /// </summary>
+    public async Task<List<Activity>> GetChildActivitiesAsync(Guid parentActivityId)
+    {
+        return await Application.Repository.Activity.GetChildActivitiesAsync(parentActivityId);
+    }
+
+    /// <summary>
+    /// Returns a dictionary mapping each activity ID to its direct child activity count.
+    /// IDs with no children are omitted from the result.
+    /// </summary>
+    public async Task<Dictionary<Guid, int>> GetChildActivityCountsAsync(IEnumerable<Guid> activityIds)
+    {
+        return await Application.Repository.Activity.GetChildActivityCountsAsync(activityIds);
+    }
+
+    /// <summary>
     /// Retrieves a page's worth of top-level activities, i.e. those that do not have a parent activity.
     /// </summary>
     /// <param name="page">The page number (1-based).</param>

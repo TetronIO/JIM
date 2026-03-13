@@ -242,6 +242,26 @@ public class ActivityRepository : IActivityRepository
             .SingleOrDefaultAsync(a => a.Id == id);
     }
 
+    public async Task<List<Activity>> GetChildActivitiesAsync(Guid parentActivityId)
+    {
+        return await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ParentActivityId == parentActivityId)
+            .OrderBy(a => a.Created)
+            .ToListAsync();
+    }
+
+    public async Task<Dictionary<Guid, int>> GetChildActivityCountsAsync(IEnumerable<Guid> activityIds)
+    {
+        var ids = activityIds.ToList();
+        return await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ParentActivityId != null && ids.Contains(a.ParentActivityId.Value))
+            .GroupBy(a => a.ParentActivityId!.Value)
+            .Select(g => new { ParentId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.ParentId, x => x.Count);
+    }
+
     /// <summary>
     /// Retrieves a page's worth of worker task activities - operations executed by the worker service
     /// such as run profile executions, data generation, and connected system operations.
