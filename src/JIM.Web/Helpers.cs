@@ -687,7 +687,7 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled => Icons.Material.Filled.HourglassBottom,
 
             // Outbound sync outcomes
-            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => Icons.Material.Filled.Nat,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned => Icons.Material.Filled.NextPlan,
             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => GetOperationIcon(ObjectChangeType.PendingExport),
 
             // Export outcomes — delegate to GetOperationIcon for consistency
