@@ -4,10 +4,10 @@
 @using JIM.Utilities
 
 <div class="outcome-node">
-    <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
         <MudIcon Icon="@Helpers.GetOutcomeTypeIcon(Outcome.OutcomeType)"
                  Color="@Helpers.GetOutcomeTypeMudBlazorColor(Outcome.OutcomeType)"
-                 Size="Size.Medium" Style="margin-top: 2px;" />
+                 Size="Size.Medium" />
         <div style="flex: 1; min-width: 0;">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
                 <MudText Typo="Typo.body1" Class="jim-text-emphasis">
@@ -60,22 +60,25 @@
                     </MudTooltip>
                 }
             </MudStack>
-            @{
-                var description = GetDescription();
-            }
-            @if (description != null)
-            {
-                @description
-            }
-            @if (!string.IsNullOrEmpty(Outcome.DetailMessage) && !HasCsLink)
-            {
-                <MudText Typo="Typo.body1" Class="mud-text-secondary">
-                    @Outcome.DetailMessage
-                </MudText>
-            }
-
         </div>
     </MudStack>
+    @{
+        var description = GetDescription();
+    }
+    @if (description != null)
+    {
+        <div style="margin-left: 40px;">
+            @description
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(Outcome.DetailMessage) && !HasCsLink)
+    {
+        <div style="margin-left: 40px;">
+            <MudText Typo="Typo.body1" Class="mud-text-secondary">
+                @Outcome.DetailMessage
+            </MudText>
+        </div>
+    }
 
     @* Expandable attribute change detail for CsoAdded, CsoUpdated, and AttributeFlow nodes *@
     @if (_expanded && IsAttributeFlowWithChanges)
