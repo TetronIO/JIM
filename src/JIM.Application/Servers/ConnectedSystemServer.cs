@@ -2946,6 +2946,11 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetUnresolvedReferenceCountAsync(connectedSystemId);
     }
 
+    public async Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.FixupCrossBatchReferenceIdsAsync(connectedSystemId);
+    }
+
     /// <summary>
     /// Bulk persists Connected System Objects without activity tracking.
     /// Use this for provisioning CSOs created during sync where activity execution items are not needed.

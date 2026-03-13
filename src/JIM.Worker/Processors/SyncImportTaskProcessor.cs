@@ -386,6 +386,14 @@ public class SyncImportTaskProcessor
                 await _jim.Activities.UpdateActivityProgressOutOfBandAsync(_activity);
             }
 
+            // After all create batches complete, fix up any ReferenceValueId FKs that could not be set
+            // during batch saves. This happens when an object (e.g. a group) is in an earlier batch than
+            // the objects it references (e.g. users), which means the referenced CSOs had Id==Guid.Empty
+            // at the time the group's batch was saved. Now that all CSOs have real IDs, we can resolve them.
+            var crossBatchFixed = await _jim.ConnectedSystems.FixupCrossBatchReferenceIdsAsync(_connectedSystem.Id);
+            if (crossBatchFixed > 0)
+                Log.Information("PerformFullImportAsync: Fixed up {Count} cross-batch reference FKs after all create batches completed.", crossBatchFixed);
+
             // Process CSO updates in batches to reduce EF change tracker pressure and report progress.
             // UpdateConnectedSystemObjectsAsync builds ConnectedSystemObjectChange graphs and EF tracks
             // child entity changes (attribute value adds/deletes). At 100K CSOs this creates millions of
