@@ -4,7 +4,9 @@
 >
 > **Repository**: https://github.com/TetronIO/JIM
 >
-> **Last Updated**: 2026-03-01
+> **Document Version**: 1.1
+>
+> **Last Updated**: 2026-03-13
 >
 > **Note**: This is a snapshot. For current implementation details, check the repository or ask the user to provide updated code/docs.
 
@@ -271,7 +273,7 @@ FormatDateTime(hireDate, "yyyy-MM-dd")
 
 ### Key Endpoints (v1)
 
-14 API controllers with 112 endpoints. Key examples:
+14 API controllers with 120 endpoints. Key examples:
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -286,12 +288,13 @@ FormatDateTime(hireDate, "yyyy-MM-dd")
 | `GET /api/v1/certificates` | Manage trusted certificates |
 | `GET /api/v1/history/deleted-objects/mvo` | View deleted objects |
 | `GET /api/v1/logs` | Unified log viewer (app + PostgreSQL) |
+| `GET /api/v1/synchronisation/sync-rules/{id}/matching-rules` | Manage object matching rules |
 
 Full Swagger documentation available at `/api/swagger`.
 
 ### PowerShell Module
 
-75 cmdlets for automation:
+78 cmdlets for automation:
 
 ```powershell
 # Connect interactively (opens browser for SSO)
@@ -351,8 +354,8 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ Scheduler service with cron/interval triggers and multi-step execution
 - ✅ Admin UI (operations, config, monitoring)
 - ✅ Dashboard home page with system overview
-- ✅ API with JWT and API key auth (14 controllers, 112 endpoints)
-- ✅ PowerShell module (75 cmdlets)
+- ✅ API with JWT and API key auth (14 controllers, 120 endpoints)
+- ✅ PowerShell module (78 cmdlets)
 - ✅ Docker deployment with air-gapped bundles
 - ✅ Integration testing framework (7 scenarios)
 - ✅ Credential encryption
@@ -362,25 +365,26 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 
 ### Recent Enhancements
 
-- ✅ **Worker Database Performance Optimisation** (#338) - Raw SQL bulk INSERT for RPEIs, service-lifetime CSO lookup index, lightweight ID-only MVO join lookups, skip CSO lookups on empty systems, raw SQL for import/export bulk writes (~34% faster FullSync, ~37% faster ProcessConnectedSystemObjects)
+- ✅ **Disconnection Causality Tracking** (#392) - Causality tree traces MVO attribute changes and deletion fate during disconnection and recall
+- ✅ **Self-Contained Object Matching Rules** (#386) - Sync rules carry their own matching logic for import and export, enabling portable rule definitions
+- ✅ **One-Command Deployment** - Interactive installer auto-detects latest release, configures SSO and database, and starts JIM in minutes
+- ✅ **Sync Outcome Graph** (#363) - Full causal tracing of every change during synchronisation with configurable tracking levels (None/Standard/Detailed)
+- ✅ **CSO Large MVA Pagination** (#320) - Paginated attribute values with server-side search for objects with 10K+ multi-valued attributes
+- ✅ **Large-Scale Import Optimisation** - 100K+ object imports without out-of-memory through batch processing and raw SQL persistence
+- ✅ **Worker Database Performance Optimisation** (#338) - Raw SQL bulk operations, service-lifetime CSO lookup index, lightweight ID-only MVO join lookups (~34% faster FullSync, ~37% faster ProcessConnectedSystemObjects)
 - ✅ **Export Performance Optimisation** - Batch DB operations, LDAP async pipelining (Export Concurrency 1-16), parallel batch export (MaxExportParallelism), parallel schedule step execution
-- ✅ **Granular Activity Stats** (#332) - 16 per-change-type stat fields, run-type-aware display, scheduler step failure detection, OperationalException hierarchy
-- ✅ **CSO List Filtering** - Filter controls on Connected System Objects list page
-- ✅ **ObjectChangeType Consolidation** - `Provisioned` merged into `Exported` for cleaner export-phase semantics
-- ✅ **Attribute Type Compatibility Validation** (#308) - Application-layer validation for sync rule attribute flow mappings
+- ✅ **Granular Activity Stats** (#332) - 16 per-change-type stat fields, run-type-aware display, scheduler step failure detection
+- ✅ **Export Change History** - Drill into exactly which attributes changed on each exported object with before/after values
+- ✅ **Hardened Release Pipeline** - Container scanning, SBOM attestation, and build validation
 - ✅ **Interactive PowerShell Auth** (#296) - Browser-based SSO authentication for PowerShell module
 - ✅ **Security Compliance Documentation** - NCSC, CISA, OWASP ASVS compliance mapping
 
-### In Progress
-
-- 🔧 **RPEI Outcome Graph** (#363) - Structured sync outcome tracking on ActivityRunProfileExecutionItem entities
-
 ### Roadmap
 
+- SCIM server connector
 - Unique value generation (#242)
 - Full RBAC (#21)
 - Sync preview / what-if analysis (#288)
-- SCIM server connector
 
 ---
 
@@ -497,4 +501,4 @@ JIM/
 
 ---
 
-*This document is designed to be uploaded to AI assistant projects. Update periodically as JIM evolves.*
+*This document is designed to be uploaded to AI assistant projects. Update periodically as JIM evolves. Check the Document Version in the header to verify you have the latest version deployed.*
