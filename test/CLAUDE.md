@@ -2,6 +2,23 @@
 
 > Detailed testing patterns for JIM. See root `CLAUDE.md` for build/test requirements.
 
+## Test-Driven Development (TDD)
+
+JIM requires TDD. The workflow is **Red → Green → Refactor**:
+
+1. **Write the test first** — before any implementation
+2. **Run it — confirm it fails (Red)** — a test that cannot fail is not a useful test
+3. **Implement the minimum code to pass (Green)**
+4. **Run again — confirm it passes**
+5. **Refactor** — clean up without breaking the test
+
+**For bug fixes:**
+- Write a test that reproduces the bug → it must fail before your fix
+- Implement the fix → run the test → it must now pass
+- This proves correctness and prevents regression
+
+**NEVER** write the implementation first and then write a test to match it. The test must fail before the fix to be meaningful.
+
 ## Test Structure
 
 - Use NUnit with `[Test]` attribute
