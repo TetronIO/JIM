@@ -104,7 +104,8 @@ public class ActivityRepository : IActivityRepository
         IEnumerable<ActivityTargetOperationType>? operationFilter = null,
         IEnumerable<ActivityOutcomeType>? outcomeFilter = null,
         IEnumerable<ActivityTargetType>? typeFilter = null,
-        IEnumerable<ActivityStatus>? statusFilter = null)
+        IEnumerable<ActivityStatus>? statusFilter = null,
+        bool? hasChildActivities = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -185,6 +186,16 @@ public class ActivityRepository : IActivityRepository
                 (a.InitiatedByName != null && a.InitiatedByName.ToLower().Contains(searchLower)));
         }
 
+        // Apply child activities filter
+        if (hasChildActivities == true)
+        {
+            query = query.Where(a => Repository.Database.Activities.Any(c => c.ParentActivityId == a.Id));
+        }
+        else if (hasChildActivities == false)
+        {
+            query = query.Where(a => !Repository.Database.Activities.Any(c => c.ParentActivityId == a.Id));
+        }
+
         // Apply sorting
         query = sortBy?.ToLower() switch
         {
@@ -242,6 +253,26 @@ public class ActivityRepository : IActivityRepository
             .SingleOrDefaultAsync(a => a.Id == id);
     }
 
+    public async Task<List<Activity>> GetChildActivitiesAsync(Guid parentActivityId)
+    {
+        return await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ParentActivityId == parentActivityId)
+            .OrderBy(a => a.Created)
+            .ToListAsync();
+    }
+
+    public async Task<Dictionary<Guid, int>> GetChildActivityCountsAsync(IEnumerable<Guid> activityIds)
+    {
+        var ids = activityIds.ToList();
+        return await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ParentActivityId != null && ids.Contains(a.ParentActivityId.Value))
+            .GroupBy(a => a.ParentActivityId!.Value)
+            .Select(g => new { ParentId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.ParentId, x => x.Count);
+    }
+
     /// <summary>
     /// Retrieves a page's worth of worker task activities - operations executed by the worker service
     /// such as run profile executions, data generation, and connected system operations.
@@ -254,7 +285,8 @@ public class ActivityRepository : IActivityRepository
         IEnumerable<ActivityStatus>? statusFilter = null,
         string? initiatedByFilter = null,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        bool? hasChildActivities = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -285,6 +317,16 @@ public class ActivityRepository : IActivityRepository
         {
             var filterLower = initiatedByFilter.ToLower();
             query = query.Where(a => a.InitiatedByName != null && a.InitiatedByName.ToLower().Contains(filterLower));
+        }
+
+        // Apply child activities filter
+        if (hasChildActivities == true)
+        {
+            query = query.Where(a => Repository.Database.Activities.Any(c => c.ParentActivityId == a.Id));
+        }
+        else if (hasChildActivities == false)
+        {
+            query = query.Where(a => !Repository.Database.Activities.Any(c => c.ParentActivityId == a.Id));
         }
 
         // Apply sorting

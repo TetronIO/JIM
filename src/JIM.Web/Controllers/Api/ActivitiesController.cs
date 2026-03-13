@@ -55,7 +55,7 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
             sortBy: sortBy,
             sortDescending: sortDescending);
 
-        var headers = result.Results.Select(ActivityHeader.FromEntity);
+        var headers = result.Results.Select(a => ActivityHeader.FromEntity(a));
 
         var response = new PaginatedResponse<ActivityHeader>
         {
@@ -178,6 +178,30 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
         };
 
         return Ok(response);
+    }
+
+    /// <summary>
+    /// Gets the direct child activities for a given activity.
+    /// </summary>
+    /// <param name="id">The unique identifier (GUID) of the parent activity.</param>
+    /// <returns>A list of child activity headers, ordered by creation date ascending.</returns>
+    /// <response code="200">Returns the child activities (empty list if none).</response>
+    /// <response code="404">If the parent activity is not found.</response>
+    /// <response code="401">If the user is not authenticated.</response>
+    [HttpGet("{id:guid}/children", Name = "GetChildActivities")]
+    [ProducesResponseType(typeof(IEnumerable<ActivityHeader>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetChildActivitiesAsync(Guid id)
+    {
+        _logger.LogDebug("Getting child activities for parent: {Id}", id);
+
+        var parent = await _application.Activities.GetActivityAsync(id);
+        if (parent == null)
+            return NotFound(ApiErrorResponse.NotFound($"Activity with ID {id} not found."));
+
+        var children = await _application.Activities.GetChildActivitiesAsync(id);
+        return Ok(children.Select(a => ActivityHeader.FromEntity(a)));
     }
 
     /// <summary>

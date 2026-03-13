@@ -281,6 +281,23 @@ public class ActivityServer
     }
 
     /// <summary>
+    /// Gets all direct child activities for a given parent activity.
+    /// </summary>
+    public async Task<List<Activity>> GetChildActivitiesAsync(Guid parentActivityId)
+    {
+        return await Application.Repository.Activity.GetChildActivitiesAsync(parentActivityId);
+    }
+
+    /// <summary>
+    /// Returns a dictionary mapping each activity ID to its direct child activity count.
+    /// IDs with no children are omitted from the result.
+    /// </summary>
+    public async Task<Dictionary<Guid, int>> GetChildActivityCountsAsync(IEnumerable<Guid> activityIds)
+    {
+        return await Application.Repository.Activity.GetChildActivityCountsAsync(activityIds);
+    }
+
+    /// <summary>
     /// Retrieves a page's worth of top-level activities, i.e. those that do not have a parent activity.
     /// </summary>
     /// <param name="page">The page number (1-based).</param>
@@ -293,6 +310,7 @@ public class ActivityServer
     /// <param name="outcomeFilter">Optional filter for outcome stat types (additive/OR within filter).</param>
     /// <param name="typeFilter">Optional filter for target types (additive/OR within filter).</param>
     /// <param name="statusFilter">Optional filter for activity statuses (additive/OR within filter).</param>
+    /// <param name="hasChildActivities">Optional filter: true = only activities with children, false = only without, null = all.</param>
     public async Task<PagedResultSet<Activity>> GetActivitiesAsync(
         int page = 1,
         int pageSize = 20,
@@ -303,11 +321,12 @@ public class ActivityServer
         IEnumerable<ActivityTargetOperationType>? operationFilter = null,
         IEnumerable<ActivityOutcomeType>? outcomeFilter = null,
         IEnumerable<ActivityTargetType>? typeFilter = null,
-        IEnumerable<ActivityStatus>? statusFilter = null)
+        IEnumerable<ActivityStatus>? statusFilter = null,
+        bool? hasChildActivities = null)
     {
         return await Application.Repository.Activity.GetActivitiesAsync(
             page, pageSize, searchQuery, sortBy, sortDescending, initiatedById,
-            operationFilter, outcomeFilter, typeFilter, statusFilter);
+            operationFilter, outcomeFilter, typeFilter, statusFilter, hasChildActivities);
     }
 
     /// <summary>
@@ -330,10 +349,11 @@ public class ActivityServer
         IEnumerable<ActivityStatus>? statusFilter = null,
         string? initiatedByFilter = null,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        bool? hasChildActivities = null)
     {
         return await Application.Repository.Activity.GetWorkerTaskActivitiesAsync(
-            page, pageSize, connectedSystemFilter, runProfileFilter, statusFilter, initiatedByFilter, sortBy, sortDescending);
+            page, pageSize, connectedSystemFilter, runProfileFilter, statusFilter, initiatedByFilter, sortBy, sortDescending, hasChildActivities);
     }
 
     /// <summary>

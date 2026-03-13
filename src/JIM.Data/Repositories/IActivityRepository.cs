@@ -24,6 +24,18 @@ public interface IActivityRepository
 
     public Task<Activity?> GetActivityAsync(Guid id);
 
+    /// <summary>
+    /// Gets all direct child activities for a given parent activity ID.
+    /// Returns a flat list ordered by creation date ascending.
+    /// </summary>
+    public Task<List<Activity>> GetChildActivitiesAsync(Guid parentActivityId);
+
+    /// <summary>
+    /// Returns a dictionary mapping each activity ID (from the provided set) to its direct child activity count.
+    /// IDs with no children are omitted from the result.
+    /// </summary>
+    public Task<Dictionary<Guid, int>> GetChildActivityCountsAsync(IEnumerable<Guid> activityIds);
+
     public Task<PagedResultSet<Activity>> GetActivitiesAsync(
         int page,
         int pageSize,
@@ -34,7 +46,8 @@ public interface IActivityRepository
         IEnumerable<ActivityTargetOperationType>? operationFilter = null,
         IEnumerable<ActivityOutcomeType>? outcomeFilter = null,
         IEnumerable<ActivityTargetType>? typeFilter = null,
-        IEnumerable<ActivityStatus>? statusFilter = null);
+        IEnumerable<ActivityStatus>? statusFilter = null,
+        bool? hasChildActivities = null);
 
     public Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
         int page,
@@ -44,7 +57,8 @@ public interface IActivityRepository
         IEnumerable<ActivityStatus>? statusFilter = null,
         string? initiatedByFilter = null,
         string? sortBy = null,
-        bool sortDescending = true);
+        bool sortDescending = true,
+        bool? hasChildActivities = null);
 
     public Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync();
 
