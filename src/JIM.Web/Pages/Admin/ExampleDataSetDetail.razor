@@ -6,7 +6,7 @@
 @inject NavigationManager NavManager
 
 <PageTitle>Example Data Set: @_exampleDataSet?.Name</PageTitle>
-<MudText Typo="Typo.h4"><span class="mud-primary-text">Example Data Sets:</span> @_exampleDataSet?.Name</MudText>
+<MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Science" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span class="mud-primary-text">Example Data Sets:</span> @_exampleDataSet?.Name</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 @if (_exampleDataSet != null)
