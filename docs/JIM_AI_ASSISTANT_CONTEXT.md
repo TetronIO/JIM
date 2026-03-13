@@ -4,7 +4,7 @@
 >
 > **Repository**: https://github.com/TetronIO/JIM
 >
-> **Document Version**: 1.1
+> **Document Version**: 1.2
 >
 > **Last Updated**: 2026-03-13
 >
@@ -24,7 +24,7 @@
 | **Auth** | OpenID Connect (OIDC) with PKCE |
 | **Deployment** | Docker containers, air-gapped capable |
 | **License** | Source-available (free non-production, commercial for production) |
-| **Status** | Post-MVP — active development |
+| **Status** | Active development — approaching v0.9 stabilisation |
 | **Language** | British English (en-GB) for all text |
 
 ---
@@ -381,10 +381,14 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 
 ### Roadmap
 
-- SCIM server connector
-- Unique value generation (#242)
-- Full RBAC (#21)
-- Sync preview / what-if analysis (#288)
+Development follows sequenced milestones (see [GitHub Milestones](https://github.com/TetronIO/JIM/milestones)):
+
+| Milestone | Focus |
+|-----------|-------|
+| **v0.9-STABILISATION** | Configuration controls, identity fusing, lifecycle state management (JML triggers), sync engine refinement, architectural foundation for extensibility |
+| **v1.0-ILM-COMPLETE** | First production-ready release — robust sync rules, lifecycle automation, scheduling, error handling, operational monitoring |
+| **v1.x-CONNECTORS** | Expanding connector coverage — broader LDAP support, SQL databases, SCIM endpoints, HR systems, connector framework improvements |
+| **v2.0-IGA-FOUNDATION** | Step-change into identity governance — entitlement visibility, access request workflows, attestation capabilities |
 
 ---
 

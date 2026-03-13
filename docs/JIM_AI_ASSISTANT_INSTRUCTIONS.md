@@ -2,7 +2,7 @@
 
 > Copy the content below into the "Instructions" or "System Prompt" field when creating an AI assistant project for JIM.
 >
-> **Document Version**: 1.1
+> **Document Version**: 1.2
 >
 > **Last Updated**: 2026-03-13
 
@@ -66,7 +66,7 @@ I've uploaded a context document with detailed architecture, concepts, and curre
 
 ## Current Status
 
-JIM's core platform is complete and in active post-MVP development. Core sync (import, sync, export), scheduling, change history, dashboard, and admin UI are all functional. Recent enhancements include sync outcome graph with full causal tracing (#363), disconnection causality tracking (#392), self-contained object matching rules (#386), one-command deployment, large-scale import optimisation (100K+ objects), CSO large MVA pagination (#320), hardened release pipeline with SBOM attestation, and export change history with before/after values.
+JIM's core platform is complete and in active development approaching v0.9 stabilisation. Core sync (import, sync, export), scheduling, change history, dashboard, and admin UI are all functional. Recent enhancements include sync outcome graph with full causal tracing (#363), disconnection causality tracking (#392), self-contained object matching rules (#386), one-command deployment, large-scale import optimisation (100K+ objects), CSO large MVA pagination (#320), hardened release pipeline with SBOM attestation, and export change history with before/after values. The roadmap progresses through v0.9-STABILISATION, v1.0-ILM-COMPLETE, v1.x-CONNECTORS, and v2.0-IGA-FOUNDATION milestones — see GitHub milestones for details.
 ```
 
 ---
