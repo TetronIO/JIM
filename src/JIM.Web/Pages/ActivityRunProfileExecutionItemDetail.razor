@@ -132,11 +132,14 @@
                 {
                     <MudItem xs="12" sm="6" md="4" Class="mt-3">
                         <MudText Typo="Typo.button" Class="mud-text-secondary">Operation</MudText><br />
-                        <MudChip T="string"
-                                 Color="@Helpers.GetRunItemMudBlazorColorForType(_activityRunProfileExecutionItem.ObjectChangeType)"
-                                 Variant="Variant.Filled" Size="Size.Medium" Icon="@GetStatusIcon()" Class="ml-0 mt-1">
-                            @GetOperationDisplayText()
-                        </MudChip>
+                        <MudTooltip Text="@Helpers.GetOperationDescription(_activityRunProfileExecutionItem.ObjectChangeType, IsSyncContext())"
+                                    Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string"
+                                     Color="@Helpers.GetRunItemMudBlazorColorForType(_activityRunProfileExecutionItem.ObjectChangeType)"
+                                     Variant="Variant.Filled" Size="Size.Medium" Icon="@GetStatusIcon()" Class="ml-0 mt-1">
+                                @GetOperationDisplayText()
+                            </MudChip>
+                        </MudTooltip>
                     </MudItem>
                 }
 
@@ -173,7 +176,7 @@
                         {
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                 <MudTooltip
-                                    Text="This object was not created due to an import error. The external ID shown is from the source data."
+                                    Text="@Helpers.GetExternalIdStatusDescription(ExternalIdStatus.Rejected)"
                                     Arrow="true" Placement="Placement.Top">
                                     <MudChip T="string" Color="Color.Error" Icon="@Icons.Material.Filled.Block">
                                         Rejected
@@ -187,7 +190,7 @@
                             @* Import context: CSO detected as deleted but not yet removed *@
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                 <MudTooltip
-                                    Text="This object has been detected as deleted from the source system and is pending removal during the next synchronisation."
+                                    Text="@Helpers.GetExternalIdStatusDescription(ExternalIdStatus.PendingRemoval)"
                                     Arrow="true" Placement="Placement.Top">
                                     <MudChip T="string" Color="Color.Warning" Icon="@Icons.Material.Filled.Schedule">
                                         Pending Removal
@@ -201,7 +204,7 @@
                             @* Sync context or disconnected: CSO has been deleted *@
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                 <MudTooltip
-                                    Text="This object has been deleted. The external ID shown is preserved from when this operation was recorded."
+                                    Text="@Helpers.GetExternalIdStatusDescription(ExternalIdStatus.Deleted)"
                                     Arrow="true" Placement="Placement.Top">
                                     <MudChip T="string" Color="Color.Warning" Icon="@Icons.Material.Filled.History">
                                         Deleted
@@ -213,8 +216,8 @@
                     }
                     else
                     {
-                        @* No CSO and no external ID snapshot - object was deleted or never existed *@
-                        <MudText>No longer available</MudText>
+                        @* No CSO and no external ID snapshot - the object has been deleted *@
+                        <MudText Class="mud-text-secondary">The connected system object has been deleted.</MudText>
                     }
                 </MudItem>
             </MudGrid>
@@ -368,7 +371,9 @@
                             }
                             else
                             {
-                                <MudText Class="mud-text-secondary">Source object data not available</MudText>
+                                <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true" Class="mt-2">
+                                    The Connected System Object has been deleted.
+                                </MudAlert>
                             }
                         </MudStack>
                     </MudPaper>
@@ -487,7 +492,7 @@
                             else
                             {
                                 <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true" Class="mt-2">
-                                    The projected metaverse object may have been deleted.
+                                    The Metaverse Object has been deleted.
                                 </MudAlert>
                             }
                         </MudStack>

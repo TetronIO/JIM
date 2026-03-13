@@ -12,6 +12,20 @@ using Microsoft.AspNetCore.Components.Authorization;
 using MudBlazor;
 namespace JIM.Web;
 
+/// <summary>
+/// Represents the display status of an External ID when the CSO no longer exists
+/// but an external ID snapshot is available.
+/// </summary>
+public enum ExternalIdStatus
+{
+    /// <summary>The object was rejected during import due to an error.</summary>
+    Rejected,
+    /// <summary>The object was detected as deleted and is pending removal during the next synchronisation.</summary>
+    PendingRemoval,
+    /// <summary>The object has been deleted.</summary>
+    Deleted
+}
+
 public static class Helpers
 {
     /// <summary>
@@ -178,6 +192,8 @@ public static class Helpers
             ObjectChangeType.Joined => Color.Secondary,
             ObjectChangeType.AttributeFlow => Color.Tertiary,
             ObjectChangeType.Disconnected => Color.Warning,
+            ObjectChangeType.DisconnectedOutOfScope => Color.Warning,
+            ObjectChangeType.OutOfScopeRetainJoin => Color.Info,
             ObjectChangeType.DriftCorrection => Color.Warning,
 
             // Export
@@ -188,9 +204,88 @@ public static class Helpers
             ObjectChangeType.PendingExport => Color.Warning,
             ObjectChangeType.PendingExportConfirmed => Color.Success,
 
+            // Direct creation
+            ObjectChangeType.Created => Color.Success,
+
             // Other
             ObjectChangeType.NoChange => Color.Default,
             _ => Color.Default,
+        };
+    }
+
+    /// <summary>
+    /// Returns a human-readable tooltip description for an External ID status chip.
+    /// These statuses appear when the CSO no longer exists but an external ID snapshot is available.
+    /// </summary>
+    public static string GetExternalIdStatusDescription(ExternalIdStatus status)
+    {
+        return status switch
+        {
+            ExternalIdStatus.Rejected =>
+                "This object was not created due to an import error. The external ID shown is from the source data.",
+            ExternalIdStatus.PendingRemoval =>
+                "This object has been detected as deleted from the source system and is pending removal during the next synchronisation.",
+            ExternalIdStatus.Deleted =>
+                "This object has been deleted. The external ID shown is preserved from when this operation was recorded.",
+            _ => "The external ID shown is preserved from when this operation was recorded."
+        };
+    }
+
+    /// <summary>
+    /// Returns a human-readable tooltip description for an operation type, explaining what
+    /// the operation means in context. The <paramref name="isSyncContext"/> parameter is used
+    /// to disambiguate operations that have different meanings during import vs synchronisation.
+    /// </summary>
+    public static string GetOperationDescription(ObjectChangeType objectChangeType, bool isSyncContext = false)
+    {
+        return objectChangeType switch
+        {
+            // Import operations
+            ObjectChangeType.Added =>
+                "A new connected system object (CSO) was discovered in the source system and added to the staging area.",
+            ObjectChangeType.Updated =>
+                "An existing connected system object (CSO) was updated with changed attribute values from the source system.",
+            ObjectChangeType.Deleted when !isSyncContext =>
+                "The object was detected as deleted from the source system. It is now pending removal during the next synchronisation.",
+            ObjectChangeType.Deleted when isSyncContext =>
+                "The deletion of this object has been processed during synchronisation. Associated metaverse links and data have been updated.",
+
+            // Sync operations
+            ObjectChangeType.Projected =>
+                "A new metaverse object (MVO) was created because no existing match was found. The CSO's attributes were projected into the metaverse.",
+            ObjectChangeType.Joined =>
+                "The connected system object (CSO) was matched to an existing metaverse object (MVO) using the configured join rules.",
+            ObjectChangeType.AttributeFlow =>
+                "Attribute values were flowed from the connected system object to the metaverse object according to the sync rule mappings.",
+            ObjectChangeType.Disconnected =>
+                "The connected system object (CSO) was disconnected from its metaverse object (MVO). Attribute flow has stopped.",
+            ObjectChangeType.DisconnectedOutOfScope =>
+                "The object fell out of scope of the import sync rule scoping criteria and was disconnected from the metaverse.",
+            ObjectChangeType.OutOfScopeRetainJoin =>
+                "The object fell out of scope but the join was retained. Attribute flow has stopped, but the link is preserved for future re-scoping.",
+            ObjectChangeType.DriftCorrection =>
+                "Drift was detected: the target system's values differed from the expected metaverse values. A corrective pending export was created to restore the expected state.",
+
+            // Export operations
+            ObjectChangeType.Exported =>
+                "The pending attribute changes were successfully exported to the target connected system.",
+            ObjectChangeType.Deprovisioned =>
+                "The object was deleted from the target connected system as part of deprovisioning.",
+
+            // Pending Export visibility
+            ObjectChangeType.PendingExport =>
+                "A pending export is staged and waiting for the next export run to apply changes to the target system.",
+            ObjectChangeType.PendingExportConfirmed =>
+                "The pending export was confirmed during the confirming import. The exported values matched the imported values.",
+
+            // Direct creation
+            ObjectChangeType.Created =>
+                "The metaverse object was created directly (e.g. via data generation or the admin interface) rather than through synchronisation.",
+
+            // Other
+            ObjectChangeType.NoChange =>
+                "The object was evaluated but no changes were necessary. The existing values already match the expected state.",
+            _ => "An operation was performed on this object."
         };
     }
 
@@ -523,7 +618,7 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => Icons.Material.Filled.Cancel,
 
             // Sync outcomes — inbound
-            ActivityRunProfileExecutionItemSyncOutcomeType.Projected => Icons.Material.Filled.PersonAdd,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected => Icons.Material.Filled.AirlineStops,
             ActivityRunProfileExecutionItemSyncOutcomeType.Joined => Icons.Material.Filled.Link,
             ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow => Icons.Material.Filled.SyncAlt,
             ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected => Icons.Material.Filled.LinkOff,
