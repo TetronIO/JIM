@@ -57,7 +57,8 @@ public interface IActivityRepository
         IEnumerable<ActivityStatus>? statusFilter = null,
         string? initiatedByFilter = null,
         string? sortBy = null,
-        bool sortDescending = true);
+        bool sortDescending = true,
+        bool? hasChildActivities = null);
 
     public Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync();
 

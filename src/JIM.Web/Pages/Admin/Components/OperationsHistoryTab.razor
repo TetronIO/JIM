@@ -11,12 +11,11 @@
 
 @if (_preferencesLoaded)
 {
-    <MudPaper Elevation="0" Outlined="true" Class="pa-4 mb-4">
-        <MudText Typo="Typo.h6" Class="mb-3">Execution History</MudText>
+    <MudText Typo="Typo.h6" Class="mb-3">Execution History</MudText>
 
-        @* Filter Controls *@
-        <MudGrid>
-            <MudItem xs="12" sm="6" md="3">
+    @* Filter Controls *@
+    <MudStack Row="true" Spacing="3" AlignItems="AlignItems.End" Class="flex-wrap mb-4">
+            <MudItem Class="flex-grow-1">
                 <MudSelect T="string" Label="Connected System" Variant="Variant.Outlined"
                            Dense="true" Clearable="true" MultiSelection="true"
                            SelectedValues="_filterConnectedSystems"
@@ -31,7 +30,7 @@
                     }
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12" sm="6" md="3">
+            <MudItem Class="flex-grow-1">
                 <MudSelect T="string" Label="Run Profile" Variant="Variant.Outlined"
                            Dense="true" Clearable="true" MultiSelection="true"
                            SelectedValues="_filterRunProfiles"
@@ -46,7 +45,7 @@
                     }
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12" sm="6" md="3">
+            <MudItem Class="flex-grow-1">
                 <MudSelect T="ActivityStatus" Label="Status" Variant="Variant.Outlined"
                            Dense="true" Clearable="true" MultiSelection="true"
                            SelectedValues="_filterStatuses"
@@ -60,15 +59,18 @@
                     <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Cancelled">Cancelled</MudSelectItem>
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12" sm="6" md="3">
+            <MudItem Class="flex-grow-1">
                 <MudTextField T="string" @bind-Value="_filterInitiatedBy" Label="Initiated By"
                               Variant="Variant.Outlined" Clearable="true" Placeholder="Search by name..."
                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                               Immediate="true" DebounceInterval="500"
                               OnDebounceIntervalElapsed="OnInitiatedByFilterChanged" />
             </MudItem>
-        </MudGrid>
-    </MudPaper>
+            <MudItem Class="d-flex align-end">
+                <MudCheckBox T="bool" Value="_filterHasChildren" ValueChanged="OnHasChildrenFilterChanged"
+                             Label="Has child activities" Dense="true" Class="mb-1 mud-typography-nowrap" />
+            </MudItem>
+    </MudStack>
 
     <MudTable @ref="_table" T="Activity" ServerData="ServerReload" @bind-CurrentPage="_currentPage"
               RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged"
@@ -555,6 +557,7 @@
     private IEnumerable<string> _filterRunProfiles = [];
     private IEnumerable<ActivityStatus> _filterStatuses = [];
     private string? _filterInitiatedBy;
+    private bool _filterHasChildren;
 
     protected override async Task OnInitializedAsync()
     {
@@ -582,7 +585,8 @@
                     var initiatedBy = string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy;
 
                     var result = await Jim.Activities.GetWorkerTaskActivitiesAsync(
-                        1, _rowsPerPage, connectedSystems, runProfiles, statuses, initiatedBy, "created", true);
+                        1, _rowsPerPage, connectedSystems, runProfiles, statuses, initiatedBy, "created", true,
+                        _filterHasChildren ? true : null);
 
                     var fingerprint = BuildFingerprint(result.Results);
                     if (fingerprint != _lastDataFingerprint)
@@ -650,7 +654,8 @@
             statuses,
             initiatedBy,
             state.SortLabel,
-            sortDescending);
+            sortDescending,
+            _filterHasChildren ? true : null);
 
         _lastDataFingerprint = BuildFingerprint(result.Results);
 
@@ -693,6 +698,12 @@
     private void OnInitiatedByFilterChanged(string text)
     {
         _filterInitiatedBy = text;
+        _table?.ReloadServerData();
+    }
+
+    private void OnHasChildrenFilterChanged(bool value)
+    {
+        _filterHasChildren = value;
         _table?.ReloadServerData();
     }
 

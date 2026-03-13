@@ -349,10 +349,11 @@ public class ActivityServer
         IEnumerable<ActivityStatus>? statusFilter = null,
         string? initiatedByFilter = null,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        bool? hasChildActivities = null)
     {
         return await Application.Repository.Activity.GetWorkerTaskActivitiesAsync(
-            page, pageSize, connectedSystemFilter, runProfileFilter, statusFilter, initiatedByFilter, sortBy, sortDescending);
+            page, pageSize, connectedSystemFilter, runProfileFilter, statusFilter, initiatedByFilter, sortBy, sortDescending, hasChildActivities);
     }
 
     /// <summary>

@@ -285,7 +285,8 @@ public class ActivityRepository : IActivityRepository
         IEnumerable<ActivityStatus>? statusFilter = null,
         string? initiatedByFilter = null,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        bool? hasChildActivities = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -316,6 +317,16 @@ public class ActivityRepository : IActivityRepository
         {
             var filterLower = initiatedByFilter.ToLower();
             query = query.Where(a => a.InitiatedByName != null && a.InitiatedByName.ToLower().Contains(filterLower));
+        }
+
+        // Apply child activities filter
+        if (hasChildActivities == true)
+        {
+            query = query.Where(a => Repository.Database.Activities.Any(c => c.ParentActivityId == a.Id));
+        }
+        else if (hasChildActivities == false)
+        {
+            query = query.Where(a => !Repository.Database.Activities.Any(c => c.ParentActivityId == a.Id));
         }
 
         // Apply sorting
