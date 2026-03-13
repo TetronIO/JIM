@@ -12,44 +12,42 @@
 @inject IWebHostEnvironment Environment
 @implements IDisposable
 
-<MudPaper Outlined="true" Class="pa-4">
-    <MudText Typo="Typo.h6">Execute a Run Profile</MudText>
-    <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Add a Synchronisation Run to the queue. If it's empty, it'll run immediately, if not, it'll run when all other queued tasks are complete.</MudText>
+<MudText Typo="Typo.h6" Class="mb-1">Execute a Run Profile</MudText>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">Add a Synchronisation Run to the queue. If it's empty, it'll run immediately, if not, it'll run when all other queued tasks are complete.</MudText>
 
-    @if (_connectedSystemHeaders is { Count: > 0 })
-    {
-        <MudForm>
-            <MudGrid>
-                <MudItem xs="12" sm="5">
-                    <MudSelect T="ConnectedSystemHeader" ValueChanged="HandleConnectedSystemHeaderChangedAsync" Label="Connected System" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true" RequiredError="Please select a Connected System">
-                        @foreach (var connectedSystem in _connectedSystemHeaders)
+@if (_connectedSystemHeaders is { Count: > 0 })
+{
+    <MudForm>
+        <MudGrid>
+            <MudItem xs="12" sm="5">
+                <MudSelect T="ConnectedSystemHeader" ValueChanged="HandleConnectedSystemHeaderChangedAsync" Label="Connected System" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true" RequiredError="Please select a Connected System">
+                    @foreach (var connectedSystem in _connectedSystemHeaders)
+                    {
+                        <MudSelectItem Value="@connectedSystem" />
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="5">
+                <MudSelect T="ConnectedSystemRunProfile" @bind-Value="_selectedConnectedSystemRunProfile" Label="Run Profile" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true" RequiredError="A run profile is required" Disabled="@(_connectedSystemRunProfiles == null)">
+                    @if (_connectedSystemRunProfiles != null)
+                    {
+                        @foreach (var runProfile in _connectedSystemRunProfiles)
                         {
-                            <MudSelectItem Value="@connectedSystem" />
+                            <MudSelectItem Value="@runProfile" />
                         }
-                    </MudSelect>
-                </MudItem>
-                <MudItem xs="12" sm="5">
-                    <MudSelect T="ConnectedSystemRunProfile" @bind-Value="_selectedConnectedSystemRunProfile" Label="Run Profile" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Required="true" RequiredError="A run profile is required" Disabled="@(_connectedSystemRunProfiles == null)">
-                        @if (_connectedSystemRunProfiles != null)
-                        {
-                            @foreach (var runProfile in _connectedSystemRunProfiles)
-                            {
-                                <MudSelectItem Value="@runProfile" />
-                            }
-                        }
-                    </MudSelect>
-                </MudItem>
-                <MudItem xs="12" sm="2" Class="d-flex align-end pb-2">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleExecuteRunProfileSubmitAsync" DropShadow="false" FullWidth="true" Style="height: 50px;">Execute</MudButton>
-                </MudItem>
-            </MudGrid>
-        </MudForm>
-    }
-    else
-    {
-        <MudAlert Class="mt-5" Severity="Severity.Warning">Please create a <MudLink Href="/admin/connected-systems/">Connected System</MudLink> first.</MudAlert>
-    }
-</MudPaper>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="2" Class="d-flex align-end pb-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleExecuteRunProfileSubmitAsync" DropShadow="false" FullWidth="true" Style="height: 50px;">Execute</MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudForm>
+}
+else
+{
+    <MudAlert Class="mt-5" Severity="Severity.Warning">Please create a <MudLink Href="/admin/connected-systems/">Connected System</MudLink> first.</MudAlert>
+}
 
 @if (_workerTaskHeaders.Count == 0)
 {
@@ -59,18 +57,13 @@
 }
 else
 {
-    <div class="d-flex align-center gap-1 mt-5 mb-3">
-        <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small" Class="mud-text-secondary" />
-        <MudText Typo="Typo.caption" Class="mud-text-secondary">Queue processes from top to bottom</MudText>
-    </div>
-
     @if (_hasProcessingTasks)
     {
-        <div class="jim-worker-activity-bar">
+        <div class="jim-worker-activity-bar mt-5">
             <div class="jim-worker-activity-shimmer"></div>
             <div class="jim-worker-activity-text">
                 <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Small" />
-                <span>Worker processing</span>
+                <span>Worker processing (from top to bottom)</span>
             </div>
         </div>
     }
