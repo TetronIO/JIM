@@ -4,10 +4,10 @@
 @using JIM.Utilities
 
 <div class="outcome-node">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+    <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="2">
         <MudIcon Icon="@Helpers.GetOutcomeTypeIcon(Outcome.OutcomeType)"
                  Color="@Helpers.GetOutcomeTypeMudBlazorColor(Outcome.OutcomeType)"
-                 Size="Size.Medium" />
+                 Size="Size.Medium" Style="margin-top: 2px;" />
         <div style="flex: 1; min-width: 0;">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
                 <MudText Typo="Typo.body1" Class="jim-text-emphasis">
@@ -37,7 +37,8 @@
                         </MudText>
                     }
                 }
-                @if (Outcome.DetailCount.HasValue)
+                @if (Outcome.DetailCount.HasValue
+                     && Outcome.OutcomeType != ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned)
                 {
                     <MudChip T="string" Color="@Helpers.GetOutcomeTypeMudBlazorColor(Outcome.OutcomeType)"
                              Variant="Variant.Text" Size="Size.Medium">
@@ -158,8 +159,7 @@
         (Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
          || Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded
          || Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated
-         || Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported
-         || Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned)
+         || Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported)
         && ((AttributeChanges != null && AttributeChanges.Count > 0)
             || (MvoAttributeChanges != null && MvoAttributeChanges.Count > 0));
 
@@ -236,6 +236,11 @@
     /// </summary>
     private RenderFragment? GetDescription()
     {
+        // Deprovisioned outcomes show attribute values as identifiers (e.g., DN) rather than
+        // as an attribute change table, since the entire object was deleted — not individual attributes.
+        if (Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned)
+            return GetDeprovisionedDescription();
+
         if (string.IsNullOrEmpty(Outcome.TargetEntityDescription))
             return null;
 
@@ -264,6 +269,40 @@
             @Outcome.TargetEntityDescription
         </MudText>
     };
+
+    /// <summary>
+    /// For Deprovisioned outcomes, extracts attribute values from the CSO attribute changes
+    /// and renders them as identifier lines. The entire object was deleted from the target system,
+    /// so showing an attribute change table is misleading — instead we show the values as context.
+    /// </summary>
+    private RenderFragment? GetDeprovisionedDescription()
+    {
+        if (AttributeChanges == null || AttributeChanges.Count == 0)
+            return null;
+
+        // Extract attribute name/value pairs from the change data
+        var identifiers = AttributeChanges
+            .Select(ac => new
+            {
+                Name = ac.Attribute.Name,
+                Value = ac.ValueChanges.FirstOrDefault()?.ToString()
+            })
+            .Where(x => !string.IsNullOrEmpty(x.Value))
+            .ToList();
+
+        if (identifiers.Count == 0)
+            return null;
+
+        return __builder =>
+        {
+            foreach (var id in identifiers)
+            {
+                <MudText Typo="Typo.body1" Class="mud-text-secondary">
+                    @id.Name: @id.Value
+                </MudText>
+            }
+        };
+    }
 
     private string GetMvoHref(Guid mvoId) =>
         !string.IsNullOrEmpty(MvoTypePluralName)
