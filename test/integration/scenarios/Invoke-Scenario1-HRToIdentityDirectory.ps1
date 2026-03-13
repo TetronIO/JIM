@@ -782,19 +782,19 @@ try {
         $disableUser = New-TestUser -Index 2
         $disableSamAccountName = $disableUser.SamAccountName
 
-        Write-Host "Setting user status to Inactive in CSV (triggers AD account disable)..." -ForegroundColor Gray
+        Write-Host "Setting user status to Archived in CSV (triggers AD account disable)..." -ForegroundColor Gray
 
-        # Update the status field to "Inactive" - this will change userAccountControl from 512 to 514
-        # The expression is: IIF(mv["Employee Status"] == "Active", 512, 514)
+        # Update the status field to "Archived" - this will set the ACCOUNTDISABLE bit via DisableUser()
+        # The expression is: IIF(Eq(mv["Status"], "Archived"), DisableUser(cs["userAccountControl"]), EnableUser(cs["userAccountControl"]))
         $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
 
         $csv = Import-Csv $csvPath
         $targetUser = $csv | Where-Object { $_.samAccountName -eq $disableSamAccountName }
         if ($targetUser) {
-            $targetUser.status = "Inactive"
+            $targetUser.status = "Archived"
         }
         $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
-        Write-Host "  ✓ Changed $disableSamAccountName status to 'Inactive'" -ForegroundColor Green
+        Write-Host "  ✓ Changed $disableSamAccountName status to 'Archived'" -ForegroundColor Green
 
         # Copy updated CSV
         docker cp $csvPath samba-ad-primary:/connector-files/hr-users.csv

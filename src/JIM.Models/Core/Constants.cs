@@ -83,7 +83,6 @@ public static class Constants
         public static string EmployeeId => "Employee ID";
         public static string EmployeeNumber => "Employee Number";
         public static string EmployeeType => "Employee Type";
-        public static string EmployeeStatus => "Employee Status";
         public static string EmployeeStartDate => "Employee Start Date";
         public static string EmployeeEndDate => "Employee End Date";
         public static string FacsimileTelephoneNumber => "Facsimile Telephone Number";

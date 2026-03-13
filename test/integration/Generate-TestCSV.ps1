@@ -64,6 +64,20 @@ for ($i = 1; $i -lt $scale.Users + 1; $i++) {
         ""
     }
 
+    # Status distribution: Active (85%), Archived (10%), Established (5%)
+    # For small datasets, ensure at least one of each value:
+    #   - i=1 → Established (first slot reserved)
+    #   - i=2 → Archived (second slot reserved)
+    #   - All others: deterministic distribution based on index
+    $status = if ($i -eq 1) {
+        "Established"
+    } elseif ($i -eq 2) {
+        "Archived"
+    } else {
+        $bucket = $i % 20  # 20-slot repeating cycle: 17 Active, 2 Archived, 1 Established
+        if ($bucket -lt 17) { "Active" } elseif ($bucket -lt 19) { "Archived" } else { "Established" }
+    }
+
     $users += [PSCustomObject]@{
         employeeId = $user.EmployeeId
         firstName = $user.FirstName
@@ -75,7 +89,7 @@ for ($i = 1; $i -lt $scale.Users + 1; $i++) {
         pronouns = if ($null -ne $user.Pronouns) { $user.Pronouns } else { "" }
         samAccountName = $user.SamAccountName
         displayName = $user.DisplayName
-        status = "Active"
+        status = $status
         userPrincipalName = $upn
         employeeType = $user.EmployeeType
         employeeEndDate = $employeeEndDateValue

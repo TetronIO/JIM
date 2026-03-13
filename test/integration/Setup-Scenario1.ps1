@@ -834,7 +834,7 @@ try {
             @{ CsAttr = "samAccountName";    MvAttr = "Account Name" }
             @{ CsAttr = "employeeType";      MvAttr = "Employee Type" }
             @{ CsAttr = "employeeEndDate";   MvAttr = "Employee End Date" }  # DateTime - HR end date → MV, then exported to AD accountExpires via ToFileTime
-            @{ CsAttr = "status";            MvAttr = "Employee Status" }     # Active/Inactive - controls userAccountControl in AD
+            @{ CsAttr = "status";            MvAttr = "Status" }               # Established/Active/Archived - controls userAccountControl in AD
         )
 
         $exportMappings = @(
@@ -867,17 +867,19 @@ try {
                 Expression = '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=" + mv["Department"] + ",OU=Users,OU=Corp,DC=subatomic,DC=local"'
             }
             @{
-                # userAccountControl: Conditional expression based on Employee Status
-                # - "Active" → 512 (ADS_UF_NORMAL_ACCOUNT - enabled)
-                # - "Inactive" or null → 514 (ADS_UF_NORMAL_ACCOUNT + ADS_UF_ACCOUNTDISABLE - disabled)
+                # userAccountControl: Conditional expression based on Status
+                # - "Archived" → DisableUser() sets the ACCOUNTDISABLE bit (bit 2) on the existing value
+                # - All other statuses → EnableUser() clears the ACCOUNTDISABLE bit on the existing value
+                # Using EnableUser/DisableUser preserves other UAC flags (e.g. DONT_EXPIRE_PASSWORD)
+                # rather than hardcoding 512/514, which would clobber those flags.
                 # This tests:
                 #   1. Integer data type export to AD
-                #   2. Conditional expressions with IIF
+                #   2. Conditional expressions with IIF + bitwise UAC helpers
                 #   3. Protected attribute substitution when expression returns null
                 # Note: Use Eq() for string comparison, NOT ==, because AttributeAccessor returns object?
                 # and the == operator uses reference equality for object comparisons
                 LdapAttr = "userAccountControl"
-                Expression = 'IIF(Eq(mv["Employee Status"], "Active"), 512, 514)'
+                Expression = 'IIF(Eq(mv["Status"], "Archived"), DisableUser(cs["userAccountControl"]), EnableUser(cs["userAccountControl"]))'
             }
             @{
                 LdapAttr = "accountExpires"

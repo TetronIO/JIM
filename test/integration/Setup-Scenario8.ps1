@@ -450,7 +450,8 @@ Write-Host "  ✓ Set objectGUID as External ID for all object types" -Foregroun
 $requiredUserAttributes = @(
     'objectGUID', 'sAMAccountName', 'givenName', 'sn', 'displayName', 'cn',
     'mail', 'userPrincipalName', 'title', 'department', 'company', 'distinguishedName',
-    'extensionAttribute1'  # Pronouns - AD has no native attribute, uses Exchange extension attribute
+    'extensionAttribute1',  # Pronouns - AD has no native attribute, uses Exchange extension attribute
+    'userAccountControl'    # Account enabled/disabled state - mapped to Status via expression
 )
 
 # Select required LDAP attributes for groups
@@ -664,6 +665,29 @@ foreach ($mapping in $userImportMappings) {
     }
 }
 Write-Host "    ✓ Source user import mappings ($userImportMappingsCreated new)" -ForegroundColor Green
+
+# Add expression mapping for userAccountControl → Status on source user import rule
+# HasBit(uac, 2) checks the ACCOUNTDISABLE flag (bit 2 = 0x0002) regardless of other UAC flags.
+# This is more robust than comparing to fixed values like 512/514, which would fail for accounts
+# with additional flags set (e.g. DONT_EXPIRE_PASSWORD turns 512 into 66048).
+$statusAttr = $mvAttributes | Where-Object { $_.name -eq "Status" }
+$uacAttr = $sourceUserType.attributes | Where-Object { $_.name -eq "userAccountControl" }
+if ($statusAttr -and $uacAttr) {
+    $existingStatusMapping = $existingSourceUserImportMappings | Where-Object {
+        $_.targetMetaverseAttributeId -eq $statusAttr.id
+    }
+    if (-not $existingStatusMapping) {
+        try {
+            New-JIMSyncRuleMapping -SyncRuleId $sourceUserImportRule.id `
+                -TargetMetaverseAttributeId $statusAttr.id `
+                -Expression 'IIF(HasBit(cs["userAccountControl"], 2), "Archived", "Active")' | Out-Null
+            Write-Host "    ✓ Source user import userAccountControl→Status expression mapping configured" -ForegroundColor Green
+        }
+        catch {
+            Write-Host "    ⚠ Could not create Status expression mapping: $_" -ForegroundColor Yellow
+        }
+    }
+}
 
 # Add constant expression mapping for Type = PersonEntity on source user import rule
 $typeAttr = $mvAttributes | Where-Object { $_.name -eq "Type" }
