@@ -114,6 +114,8 @@ JIM.Worker is the synchronisation engine - the beating heart of JIM. It processe
 
 ## Option A: "Surgical Refactor" - Extract Pure Domain Engine + Optimised Data Access
 
+- **GitHub Issue:** [#394](https://github.com/TetronIO/JIM/issues/394)
+
 > **Status: Partially completed.** The bulk SQL operations described by the proposed `ISyncPersistence` interface have been largely delivered by #338, but the interface itself has **not** been formalised — raw SQL is embedded in existing repository methods with try/catch EF fallback. The domain engine half (ISyncEngine extraction) has **not** been started. See [Progress Since Original Analysis](#progress-since-original-analysis).
 
 ### Philosophy
