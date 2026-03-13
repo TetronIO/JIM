@@ -347,6 +347,22 @@ public class JimDbContext : DbContext
             .HasIndex("ConnectedSystemObjectId", "AttributeId")
             .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId");
 
+        // Partial index on UnresolvedReferenceValue — only indexes rows where the value is set.
+        // Keeps the index small and allows the cross-batch reference fixup UPDATE to locate
+        // unresolved rows efficiently without scanning the entire table.
+        modelBuilder.Entity<ConnectedSystemObjectAttributeValue>()
+            .HasIndex(av => av.UnresolvedReferenceValue)
+            .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_UnresolvedReferenceValue")
+            .HasFilter("\"UnresolvedReferenceValue\" IS NOT NULL");
+
+        // Composite index on (AttributeId, StringValue) — speeds up the target-side join in the
+        // fixup query where UnresolvedReferenceValue is matched against the secondary external ID
+        // attribute value (StringValue) for a known AttributeId.
+        modelBuilder.Entity<ConnectedSystemObjectAttributeValue>()
+            .HasIndex(av => new { av.AttributeId, av.StringValue })
+            .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_StringValue")
+            .HasFilter("\"StringValue\" IS NOT NULL");
+
         // Delta sync performance: composite index for timestamp-based queries
         // These enable efficient filtering by ConnectedSystemId + LastUpdated/Created
         // which is used in GetConnectedSystemObjectsModifiedSinceAsync
