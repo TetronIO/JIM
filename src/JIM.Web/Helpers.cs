@@ -312,7 +312,7 @@ public static class Helpers
             ObjectChangeType.DriftCorrection => Icons.Material.Filled.CompareArrows,
 
             // Export operations
-            ObjectChangeType.Exported => Icons.Material.Filled.CloudDone,
+            ObjectChangeType.Exported => Icons.Material.Filled.Output,
             ObjectChangeType.Deprovisioned => Icons.Material.Filled.CloudOff,
 
             // Pending export visibility
