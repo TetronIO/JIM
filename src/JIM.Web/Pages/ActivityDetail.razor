@@ -635,6 +635,7 @@
     [Parameter]
     public Guid Id { get; set; }
 
+    private Guid _loadedId;
     private MudTable<ActivityRunProfileExecutionItemHeader>? _table;
     private Activity? _activity;
     private List<Activity> _childActivities = new();
@@ -663,8 +664,22 @@
         new("Activity Detail", href: null, disabled: true)
     };
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
+        if (_loadedId == Id)
+            return;
+
+        // Reset state when navigating to a different activity (e.g. parent -> child)
+        _initialisationComplete = false;
+        _connectedSystemHeader = null;
+        _metaverseObjectHeader = null;
+        _activityRunProfileExecutionStats = null;
+        _childActivities = new();
+        _searchString = "";
+        _selectedObjectTypes = new List<string>();
+        _selectedErrorTypes = new List<ActivityRunProfileExecutionItemErrorType>();
+        _selectedOutcomeTypes = new List<ActivityRunProfileExecutionItemSyncOutcomeType>();
+
         _activity = await Jim.Activities.GetActivityAsync(Id);
         if (_activity == null)
         {
@@ -685,6 +700,7 @@
 
         _childActivities = await Jim.Activities.GetChildActivitiesAsync(_activity.Id);
 
+        _loadedId = Id;
         _initialisationComplete = true;
     }
 
