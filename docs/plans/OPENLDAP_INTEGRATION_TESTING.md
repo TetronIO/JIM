@@ -227,7 +227,7 @@ member: uid=john.smith,ou=People,dc=openldap,dc=local
 
 ### Performance Considerations
 
-Population at scale is extremely slow. For reference, populating the Samba AD XLarge image (100K users + groups + memberships) via `ldbadd` (direct backend write bypassing the LDAP protocol) takes nearly **two days**. OpenLDAP's `ldapadd` goes through the full LDAP protocol stack and will be at least as slow, potentially slower.
+Population at scale is extremely slow. For reference, populating the Samba AD XLarge image (100K users + 50 groups with varied memberships) via `ldbadd` (direct backend write bypassing the LDAP protocol) takes several hours. Group counts were capped from the original 2,000 to 50 to keep total memberships under ~500K (samba-tool holds an LDB write lock per call, making millions of membership writes impractical). OpenLDAP's `ldapadd` goes through the full LDAP protocol stack and will be at least as slow, potentially slower.
 
 **Pre-populated snapshot images are essential for Medium and above.** The same approach used for Samba AD (`Build-SambaSnapshots.ps1` / `docker commit`) must be used for OpenLDAP:
 

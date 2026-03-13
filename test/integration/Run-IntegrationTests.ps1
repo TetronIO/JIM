@@ -415,14 +415,14 @@ function Show-TemplateMenu {
         @{
             Name = "XLarge"
             Users = 100000
-            Groups = 2000
+            Groups = 50
             Description = "Very large enterprise"
             Time = "~1 hour"
         }
         @{
             Name = "XXLarge"
             Users = 1000000
-            Groups = 10000
+            Groups = 70
             Description = "Stress testing"
             Time = "~4 hours"
         }
