@@ -310,6 +310,7 @@ public class ActivityServer
     /// <param name="outcomeFilter">Optional filter for outcome stat types (additive/OR within filter).</param>
     /// <param name="typeFilter">Optional filter for target types (additive/OR within filter).</param>
     /// <param name="statusFilter">Optional filter for activity statuses (additive/OR within filter).</param>
+    /// <param name="hasChildActivities">Optional filter: true = only activities with children, false = only without, null = all.</param>
     public async Task<PagedResultSet<Activity>> GetActivitiesAsync(
         int page = 1,
         int pageSize = 20,
@@ -320,11 +321,12 @@ public class ActivityServer
         IEnumerable<ActivityTargetOperationType>? operationFilter = null,
         IEnumerable<ActivityOutcomeType>? outcomeFilter = null,
         IEnumerable<ActivityTargetType>? typeFilter = null,
-        IEnumerable<ActivityStatus>? statusFilter = null)
+        IEnumerable<ActivityStatus>? statusFilter = null,
+        bool? hasChildActivities = null)
     {
         return await Application.Repository.Activity.GetActivitiesAsync(
             page, pageSize, searchQuery, sortBy, sortDescending, initiatedById,
-            operationFilter, outcomeFilter, typeFilter, statusFilter);
+            operationFilter, outcomeFilter, typeFilter, statusFilter, hasChildActivities);
     }
 
     /// <summary>

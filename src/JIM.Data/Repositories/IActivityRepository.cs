@@ -46,7 +46,8 @@ public interface IActivityRepository
         IEnumerable<ActivityTargetOperationType>? operationFilter = null,
         IEnumerable<ActivityOutcomeType>? outcomeFilter = null,
         IEnumerable<ActivityTargetType>? typeFilter = null,
-        IEnumerable<ActivityStatus>? statusFilter = null);
+        IEnumerable<ActivityStatus>? statusFilter = null,
+        bool? hasChildActivities = null);
 
     public Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
         int page,

@@ -53,7 +53,7 @@ public class ActivitiesControllerTests
         _mockActivityRepo.Setup(r => r.GetActivitiesAsync(
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<Guid?>(),
                 It.IsAny<IEnumerable<ActivityTargetOperationType>?>(), It.IsAny<IEnumerable<ActivityOutcomeType>?>(),
-                It.IsAny<IEnumerable<ActivityTargetType>?>(), It.IsAny<IEnumerable<ActivityStatus>?>()))
+                It.IsAny<IEnumerable<ActivityTargetType>?>(), It.IsAny<IEnumerable<ActivityStatus>?>(), It.IsAny<bool?>()))
             .ReturnsAsync(pagedResult);
 
         var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
@@ -83,7 +83,7 @@ public class ActivitiesControllerTests
         _mockActivityRepo.Setup(r => r.GetActivitiesAsync(
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<Guid?>(),
                 It.IsAny<IEnumerable<ActivityTargetOperationType>?>(), It.IsAny<IEnumerable<ActivityOutcomeType>?>(),
-                It.IsAny<IEnumerable<ActivityTargetType>?>(), It.IsAny<IEnumerable<ActivityStatus>?>()))
+                It.IsAny<IEnumerable<ActivityTargetType>?>(), It.IsAny<IEnumerable<ActivityStatus>?>(), It.IsAny<bool?>()))
             .ReturnsAsync(pagedResult);
 
         var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
@@ -108,7 +108,7 @@ public class ActivitiesControllerTests
         _mockActivityRepo.Setup(r => r.GetActivitiesAsync(
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<Guid?>(),
                 It.IsAny<IEnumerable<ActivityTargetOperationType>?>(), It.IsAny<IEnumerable<ActivityOutcomeType>?>(),
-                It.IsAny<IEnumerable<ActivityTargetType>?>(), It.IsAny<IEnumerable<ActivityStatus>?>()))
+                It.IsAny<IEnumerable<ActivityTargetType>?>(), It.IsAny<IEnumerable<ActivityStatus>?>(), It.IsAny<bool?>()))
             .ReturnsAsync(pagedResult);
 
         var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
@@ -116,7 +116,7 @@ public class ActivitiesControllerTests
 
         _mockActivityRepo.Verify(r => r.GetActivitiesAsync(1, 20, "test search", It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<Guid?>(),
                 It.IsAny<IEnumerable<ActivityTargetOperationType>?>(), It.IsAny<IEnumerable<ActivityOutcomeType>?>(),
-                It.IsAny<IEnumerable<ActivityTargetType>?>(), It.IsAny<IEnumerable<ActivityStatus>?>()), Times.Once);
+                It.IsAny<IEnumerable<ActivityTargetType>?>(), It.IsAny<IEnumerable<ActivityStatus>?>(), It.IsAny<bool?>()), Times.Once);
     }
 
     [Test]
@@ -132,7 +132,7 @@ public class ActivitiesControllerTests
         _mockActivityRepo.Setup(r => r.GetActivitiesAsync(
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<Guid?>(),
                 It.IsAny<IEnumerable<ActivityTargetOperationType>?>(), It.IsAny<IEnumerable<ActivityOutcomeType>?>(),
-                It.IsAny<IEnumerable<ActivityTargetType>?>(), It.IsAny<IEnumerable<ActivityStatus>?>()))
+                It.IsAny<IEnumerable<ActivityTargetType>?>(), It.IsAny<IEnumerable<ActivityStatus>?>(), It.IsAny<bool?>()))
             .ReturnsAsync(pagedResult);
 
         var pagination = new PaginationRequest { Page = 2, PageSize = 10 };

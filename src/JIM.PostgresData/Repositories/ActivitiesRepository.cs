@@ -104,7 +104,8 @@ public class ActivityRepository : IActivityRepository
         IEnumerable<ActivityTargetOperationType>? operationFilter = null,
         IEnumerable<ActivityOutcomeType>? outcomeFilter = null,
         IEnumerable<ActivityTargetType>? typeFilter = null,
-        IEnumerable<ActivityStatus>? statusFilter = null)
+        IEnumerable<ActivityStatus>? statusFilter = null,
+        bool? hasChildActivities = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -183,6 +184,16 @@ public class ActivityRepository : IActivityRepository
                 (a.TargetName != null && a.TargetName.ToLower().Contains(searchLower)) ||
                 (a.TargetContext != null && a.TargetContext.ToLower().Contains(searchLower)) ||
                 (a.InitiatedByName != null && a.InitiatedByName.ToLower().Contains(searchLower)));
+        }
+
+        // Apply child activities filter
+        if (hasChildActivities == true)
+        {
+            query = query.Where(a => Repository.Database.Activities.Any(c => c.ParentActivityId == a.Id));
+        }
+        else if (hasChildActivities == false)
+        {
+            query = query.Where(a => !Repository.Database.Activities.Any(c => c.ParentActivityId == a.Id));
         }
 
         // Apply sorting
