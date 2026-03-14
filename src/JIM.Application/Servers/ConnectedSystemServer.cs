@@ -3262,12 +3262,16 @@ public class ConnectedSystemServer
             case AttributeDataType.Binary when connectedSystemObjectAttributeValue.ByteValue != null:
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, true, connectedSystemObjectAttributeValue.ByteValue.Length));
                 break;
-            case AttributeDataType.Reference when connectedSystemObjectAttributeValue.ReferenceValue != null:
+            case AttributeDataType.Reference when connectedSystemObjectAttributeValue.ReferenceValue != null && connectedSystemObjectAttributeValue.ReferenceValue.Id != Guid.Empty:
+                // Reference resolved to a persisted CSO — store the FK relationship for a clickable link in the UI.
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.ReferenceValue));
                 break;
             case AttributeDataType.Reference when connectedSystemObjectAttributeValue.UnresolvedReferenceValue != null:
-                // Store the raw DN/identifier so the change is visible in the UI even when the reference couldn't be resolved.
-                // The change history table renders this as an unresolved reference (no clickable link).
+                // Store the raw DN/identifier for display in the UI. This covers two scenarios:
+                // 1. Reference could not be resolved (referenced object out of container scope).
+                // 2. Reference was resolved in-memory to a CSO that has not yet been persisted (Guid.Empty
+                //    Id due to batch ordering — group processed before its member users). In this case
+                //    UnresolvedReferenceValue still holds the original DN since resolution does not clear it.
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.UnresolvedReferenceValue));
                 break;
             case AttributeDataType.NotSet:
