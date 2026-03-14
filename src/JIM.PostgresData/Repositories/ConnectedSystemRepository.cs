@@ -1585,6 +1585,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // UnresolvedReferenceValue against the secondary external ID attribute values of existing CSOs.
         try
         {
+            // Fast early exit: skip the expensive multi-table JOIN UPDATE when there are no
+            // unresolved references. This is the common case for CSV imports, training imports,
+            // and confirming imports — only LDAP imports with out-of-order batched groups need fixup.
+            var unresolvedCount = await GetUnresolvedReferenceCountAsync(connectedSystemId);
+            if (unresolvedCount == 0)
+                return 0;
+
             var previousTimeout = Repository.Database.Database.GetCommandTimeout();
             Repository.Database.Database.SetCommandTimeout(300);
             try
