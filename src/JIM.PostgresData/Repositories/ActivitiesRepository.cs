@@ -1389,43 +1389,85 @@ public class ActivityRepository : IActivityRepository
 
     /// <summary>
     /// Bulk updates OutcomeSummary, error fields, and AttributeFlowCount on already-persisted RPEIs
-    /// using parameterised UPDATE statements.
+    /// using a temporary table with COPY binary import for efficient bulk transfer, then a single
+    /// UPDATE ... FROM join. Chunks into batches of 10,000 rows to bound temp table memory usage.
     /// </summary>
     private async Task BulkUpdateRpeiFieldsRawAsync(List<ActivityRunProfileExecutionItem> rpeis)
     {
-        const int columnsPerRow = 5; // Id (WHERE) + OutcomeSummary, ErrorType, ErrorMessage, AttributeFlowCount
-        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+        const int copyChunkSize = 10_000;
+        var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        if (npgsqlConn.State != System.Data.ConnectionState.Open)
+            await npgsqlConn.OpenAsync();
 
-        foreach (var chunk in ChunkList(rpeis, chunkSize))
+        // Get the current EF-managed transaction (if any) so raw commands participate in it
+        var npgsqlTx = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+        foreach (var chunk in ChunkList(rpeis, copyChunkSize))
         {
-            // Use individual UPDATE statements per RPEI within a single round-trip
-            var sql = new System.Text.StringBuilder();
-            var parameters = new List<NpgsqlParameter>();
-
-            for (var i = 0; i < chunk.Count; i++)
+            // Create a temp table (IF NOT EXISTS handles subsequent chunks within the same transaction)
+            await using (var createCmd = new NpgsqlCommand { Connection = npgsqlConn, Transaction = npgsqlTx })
             {
-                var offset = i * columnsPerRow;
-                sql.Append(@"UPDATE ""ActivityRunProfileExecutionItems"" SET ""OutcomeSummary"" = @p");
-                sql.Append(offset);
-                sql.Append(@", ""ErrorType"" = @p");
-                sql.Append(offset + 1);
-                sql.Append(@", ""ErrorMessage"" = @p");
-                sql.Append(offset + 2);
-                sql.Append(@", ""AttributeFlowCount"" = @p");
-                sql.Append(offset + 3);
-                sql.Append(@" WHERE ""Id"" = @p");
-                sql.Append(offset + 4);
-                sql.Append("; ");
-
-                var rpei = chunk[i];
-                parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.OutcomeSummary ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 1}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = rpei.ErrorType.HasValue ? (object)(int)rpei.ErrorType.Value : DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 2}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ErrorMessage ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 3}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = rpei.AttributeFlowCount.HasValue ? (object)rpei.AttributeFlowCount.Value : DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 4}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = rpei.Id });
+                createCmd.CommandText = """
+                    CREATE TEMP TABLE IF NOT EXISTS _rpei_bulk_update (
+                        "Id" uuid NOT NULL,
+                        "OutcomeSummary" text,
+                        "ErrorType" int,
+                        "ErrorMessage" text,
+                        "AttributeFlowCount" int
+                    ) ON COMMIT DROP
+                    """;
+                await createCmd.ExecuteNonQueryAsync();
             }
 
-            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+            // Truncate between chunks (temp table persists within transaction due to ON COMMIT DROP)
+            await using (var truncateCmd = new NpgsqlCommand { Connection = npgsqlConn, Transaction = npgsqlTx })
+            {
+                truncateCmd.CommandText = @"TRUNCATE _rpei_bulk_update";
+                await truncateCmd.ExecuteNonQueryAsync();
+            }
+
+            // COPY binary import — streams rows without SQL parsing or parameter limits
+            await using (var writer = await npgsqlConn.BeginBinaryImportAsync(
+                @"COPY _rpei_bulk_update (""Id"", ""OutcomeSummary"", ""ErrorType"", ""ErrorMessage"", ""AttributeFlowCount"") FROM STDIN (FORMAT binary)"))
+            {
+                foreach (var rpei in chunk)
+                {
+                    await writer.StartRowAsync();
+                    await writer.WriteAsync(rpei.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
+                    if (rpei.OutcomeSummary is not null)
+                        await writer.WriteAsync(rpei.OutcomeSummary, NpgsqlTypes.NpgsqlDbType.Text);
+                    else
+                        await writer.WriteNullAsync();
+                    if (rpei.ErrorType.HasValue)
+                        await writer.WriteAsync((int)rpei.ErrorType.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+                    else
+                        await writer.WriteNullAsync();
+                    if (rpei.ErrorMessage is not null)
+                        await writer.WriteAsync(rpei.ErrorMessage, NpgsqlTypes.NpgsqlDbType.Text);
+                    else
+                        await writer.WriteNullAsync();
+                    if (rpei.AttributeFlowCount.HasValue)
+                        await writer.WriteAsync(rpei.AttributeFlowCount.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+                    else
+                        await writer.WriteNullAsync();
+                }
+                await writer.CompleteAsync();
+            }
+
+            // Single UPDATE join — PostgreSQL uses the primary key index on ActivityRunProfileExecutionItems
+            await using (var updateCmd = new NpgsqlCommand { Connection = npgsqlConn, Transaction = npgsqlTx })
+            {
+                updateCmd.CommandText = """
+                    UPDATE "ActivityRunProfileExecutionItems" t
+                    SET "OutcomeSummary" = v."OutcomeSummary",
+                        "ErrorType" = v."ErrorType",
+                        "ErrorMessage" = v."ErrorMessage",
+                        "AttributeFlowCount" = v."AttributeFlowCount"
+                    FROM _rpei_bulk_update v
+                    WHERE t."Id" = v."Id"
+                    """;
+                await updateCmd.ExecuteNonQueryAsync();
+            }
         }
     }
 
