@@ -872,14 +872,16 @@ try {
                 # - All other statuses → EnableUser() clears the ACCOUNTDISABLE bit on the existing value
                 # Using EnableUser/DisableUser preserves other UAC flags (e.g. DONT_EXPIRE_PASSWORD)
                 # rather than hardcoding 512/514, which would clobber those flags.
+                # Coalesce defaults to 512 (NORMAL_ACCOUNT) for Create exports where cs["userAccountControl"]
+                # is null because the CSO doesn't yet exist in the directory.
                 # This tests:
                 #   1. Integer data type export to AD
                 #   2. Conditional expressions with IIF + bitwise UAC helpers
-                #   3. Protected attribute substitution when expression returns null
+                #   3. Coalesce for null-safe Create export handling
                 # Note: Use Eq() for string comparison, NOT ==, because AttributeAccessor returns object?
                 # and the == operator uses reference equality for object comparisons
                 LdapAttr = "userAccountControl"
-                Expression = 'IIF(Eq(mv["Status"], "Archived"), DisableUser(cs["userAccountControl"]), EnableUser(cs["userAccountControl"]))'
+                Expression = 'IIF(Eq(mv["Status"], "Archived"), DisableUser(Coalesce(cs["userAccountControl"], 512)), EnableUser(Coalesce(cs["userAccountControl"], 512)))'
             }
             @{
                 LdapAttr = "accountExpires"
