@@ -1143,10 +1143,8 @@ public class ActivityRepository : IActivityRepository
 
         try
         {
-            // Increase command timeout for large batches
-            var previousTimeout = Repository.Database.Database.GetCommandTimeout();
-            Repository.Database.Database.SetCommandTimeout(300); // 5 minutes
-
+            // Use an EF transaction for atomicity — COPY binary imports on the underlying
+            // NpgsqlConnection participate in the active transaction automatically.
             await using var transaction = await Repository.Database.Database.BeginTransactionAsync();
 
             // Step 1: INSERT parent ConnectedSystemObjectChange rows
@@ -1170,9 +1168,6 @@ public class ActivityRepository : IActivityRepository
                 await BulkInsertCsoChangeAttributeValuesRawAsync(allValueChanges);
 
             await transaction.CommitAsync();
-
-            // Restore previous timeout
-            Repository.Database.Database.SetCommandTimeout(previousTimeout);
         }
         catch (Exception ex)
         {
@@ -1208,114 +1203,156 @@ public class ActivityRepository : IActivityRepository
     }
 
     /// <summary>
-    /// Bulk inserts ConnectedSystemObjectChange rows using parameterised multi-row INSERT.
+    /// Bulk inserts ConnectedSystemObjectChange rows using COPY binary import.
     /// </summary>
     private async Task BulkInsertCsoChangesRawAsync(List<ConnectedSystemObjectChange> changes)
     {
-        const int columnsPerRow = 13;
-        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+        var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        if (npgsqlConn.State != System.Data.ConnectionState.Open)
+            await npgsqlConn.OpenAsync();
 
-        foreach (var chunk in ChunkList(changes, chunkSize))
+        await using var writer = await npgsqlConn.BeginBinaryImportAsync(
+            """
+            COPY "ConnectedSystemObjectChanges" (
+                "Id", "ActivityRunProfileExecutionItemId", "ConnectedSystemId", "ConnectedSystemObjectId",
+                "ChangeTime", "ChangeType", "InitiatedByType", "InitiatedById", "InitiatedByName",
+                "DeletedObjectTypeId", "DeletedObjectExternalIdAttributeValueId", "DeletedObjectExternalId", "DeletedObjectDisplayName"
+            ) FROM STDIN (FORMAT binary)
+            """);
+
+        foreach (var c in changes)
         {
-            var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""ConnectedSystemObjectChanges"" (""Id"", ""ActivityRunProfileExecutionItemId"", ""ConnectedSystemId"", ""ConnectedSystemObjectId"", ""ChangeTime"", ""ChangeType"", ""InitiatedByType"", ""InitiatedById"", ""InitiatedByName"", ""DeletedObjectTypeId"", ""DeletedObjectExternalIdAttributeValueId"", ""DeletedObjectExternalId"", ""DeletedObjectDisplayName"") VALUES ");
-
-            var parameters = new List<object>();
-            for (var i = 0; i < chunk.Count; i++)
-            {
-                if (i > 0) sql.Append(", ");
-                var offset = i * 13;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}}, {{{offset + 11}}}, {{{offset + 12}}})");
-
-                var c = chunk[i];
-                parameters.Add(c.Id);
-                parameters.Add(NullableParam(c.ActivityRunProfileExecutionItemId, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add(c.ConnectedSystemId);
-                parameters.Add(NullableParam(c.ConnectedSystemObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add(c.ChangeTime);
-                parameters.Add((int)c.ChangeType);
-                parameters.Add((int)c.InitiatedByType);
-                parameters.Add(NullableParam(c.InitiatedById, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add(NullableParam(c.InitiatedByName, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(NullableParam(c.DeletedObjectType?.Id, NpgsqlTypes.NpgsqlDbType.Integer));
-                parameters.Add(NullableParam(c.DeletedObjectExternalIdAttributeValue?.Id, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add(NullableParam(c.DeletedObjectExternalId, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(NullableParam(c.DeletedObjectDisplayName, NpgsqlTypes.NpgsqlDbType.Text));
-            }
-
-            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+            await writer.StartRowAsync();
+            await writer.WriteAsync(c.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
+            if (c.ActivityRunProfileExecutionItemId.HasValue)
+                await writer.WriteAsync(c.ActivityRunProfileExecutionItemId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            await writer.WriteAsync(c.ConnectedSystemId, NpgsqlTypes.NpgsqlDbType.Integer);
+            if (c.ConnectedSystemObjectId.HasValue)
+                await writer.WriteAsync(c.ConnectedSystemObjectId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            await writer.WriteAsync(c.ChangeTime, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+            await writer.WriteAsync((int)c.ChangeType, NpgsqlTypes.NpgsqlDbType.Integer);
+            await writer.WriteAsync((int)c.InitiatedByType, NpgsqlTypes.NpgsqlDbType.Integer);
+            if (c.InitiatedById.HasValue)
+                await writer.WriteAsync(c.InitiatedById.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            if (c.InitiatedByName is not null)
+                await writer.WriteAsync(c.InitiatedByName, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (c.DeletedObjectType?.Id is { } deletedTypeId)
+                await writer.WriteAsync(deletedTypeId, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (c.DeletedObjectExternalIdAttributeValue?.Id is { } deletedExtIdAvId)
+                await writer.WriteAsync(deletedExtIdAvId, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            if (c.DeletedObjectExternalId is not null)
+                await writer.WriteAsync(c.DeletedObjectExternalId, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (c.DeletedObjectDisplayName is not null)
+                await writer.WriteAsync(c.DeletedObjectDisplayName, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
         }
+
+        await writer.CompleteAsync();
     }
 
     /// <summary>
-    /// Bulk inserts ConnectedSystemObjectChangeAttribute rows using parameterised multi-row INSERT.
+    /// Bulk inserts ConnectedSystemObjectChangeAttribute rows using COPY binary import.
     /// </summary>
     private async Task BulkInsertCsoChangeAttributesRawAsync(List<(Guid ChangeId, int AttributeId, ConnectedSystemObjectChangeAttribute AttrChange)> attrChanges)
     {
-        const int columnsPerRow = 3;
-        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+        var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        if (npgsqlConn.State != System.Data.ConnectionState.Open)
+            await npgsqlConn.OpenAsync();
 
-        foreach (var chunk in ChunkList(attrChanges, chunkSize))
+        await using var writer = await npgsqlConn.BeginBinaryImportAsync(
+            """
+            COPY "ConnectedSystemObjectChangeAttributes" ("Id", "ConnectedSystemChangeId", "AttributeId")
+            FROM STDIN (FORMAT binary)
+            """);
+
+        foreach (var (changeId, attributeId, attrChange) in attrChanges)
         {
-            var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""ConnectedSystemObjectChangeAttributes"" (""Id"", ""ConnectedSystemChangeId"", ""AttributeId"") VALUES ");
-
-            var parameters = new List<object>();
-            for (var i = 0; i < chunk.Count; i++)
-            {
-                if (i > 0) sql.Append(", ");
-                var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}})");
-
-                var (changeId, attributeId, attrChange) = chunk[i];
-                parameters.Add(attrChange.Id);
-                parameters.Add(changeId);
-                parameters.Add(attributeId);
-            }
-
-            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+            await writer.StartRowAsync();
+            await writer.WriteAsync(attrChange.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync(changeId, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync(attributeId, NpgsqlTypes.NpgsqlDbType.Integer);
         }
+
+        await writer.CompleteAsync();
     }
 
     /// <summary>
-    /// Bulk inserts ConnectedSystemObjectChangeAttributeValue rows using parameterised multi-row INSERT.
+    /// Bulk inserts ConnectedSystemObjectChangeAttributeValue rows using COPY binary import.
     /// </summary>
     private async Task BulkInsertCsoChangeAttributeValuesRawAsync(List<(Guid AttrChangeId, ConnectedSystemObjectChangeAttributeValue Value)> valueChanges)
     {
-        const int columnsPerRow = 11;
-        var chunkSize = MaxParametersPerStatement / columnsPerRow;
+        var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        if (npgsqlConn.State != System.Data.ConnectionState.Open)
+            await npgsqlConn.OpenAsync();
 
-        foreach (var chunk in ChunkList(valueChanges, chunkSize))
+        await using var writer = await npgsqlConn.BeginBinaryImportAsync(
+            """
+            COPY "ConnectedSystemObjectChangeAttributeValues" (
+                "Id", "ConnectedSystemObjectChangeAttributeId", "ValueChangeType",
+                "StringValue", "DateTimeValue", "IntValue", "LongValue",
+                "ByteValueLength", "GuidValue", "BoolValue", "ReferenceValueId"
+            ) FROM STDIN (FORMAT binary)
+            """);
+
+        foreach (var (attrChangeId, v) in valueChanges)
         {
-            var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""ConnectedSystemObjectChangeAttributeValues"" (""Id"", ""ConnectedSystemObjectChangeAttributeId"", ""ValueChangeType"", ""StringValue"", ""DateTimeValue"", ""IntValue"", ""LongValue"", ""ByteValueLength"", ""GuidValue"", ""BoolValue"", ""ReferenceValueId"") VALUES ");
-
-            var parameters = new List<object>();
-            for (var i = 0; i < chunk.Count; i++)
-            {
-                if (i > 0) sql.Append(", ");
-                var offset = i * 11;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}})");
-
-                var (attrChangeId, v) = chunk[i];
-                parameters.Add(v.Id);
-                parameters.Add(attrChangeId);
-                parameters.Add((int)v.ValueChangeType);
-                parameters.Add(NullableParam(v.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(NullableParam(v.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(NullableParam(v.IntValue, NpgsqlTypes.NpgsqlDbType.Integer));
-                parameters.Add(NullableParam(v.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint));
-                parameters.Add(NullableParam(v.ByteValueLength, NpgsqlTypes.NpgsqlDbType.Integer));
-                parameters.Add(NullableParam(v.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add(NullableParam(v.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean));
-                // ReferenceValue?.Id can be Guid.Empty if the referenced CSO hasn't been persisted yet.
-                // Treat Guid.Empty as null to avoid FK violations against ConnectedSystemObjects.
-                var refId = v.ReferenceValue?.Id;
-                parameters.Add(NullableParam(refId == Guid.Empty ? null : refId, NpgsqlTypes.NpgsqlDbType.Uuid));
-            }
-
-            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+            await writer.StartRowAsync();
+            await writer.WriteAsync(v.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync(attrChangeId, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync((int)v.ValueChangeType, NpgsqlTypes.NpgsqlDbType.Integer);
+            if (v.StringValue is not null)
+                await writer.WriteAsync(v.StringValue, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (v.DateTimeValue.HasValue)
+                await writer.WriteAsync(v.DateTimeValue.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+            else
+                await writer.WriteNullAsync();
+            if (v.IntValue.HasValue)
+                await writer.WriteAsync(v.IntValue.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (v.LongValue.HasValue)
+                await writer.WriteAsync(v.LongValue.Value, NpgsqlTypes.NpgsqlDbType.Bigint);
+            else
+                await writer.WriteNullAsync();
+            if (v.ByteValueLength.HasValue)
+                await writer.WriteAsync(v.ByteValueLength.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (v.GuidValue.HasValue)
+                await writer.WriteAsync(v.GuidValue.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            if (v.BoolValue.HasValue)
+                await writer.WriteAsync(v.BoolValue.Value, NpgsqlTypes.NpgsqlDbType.Boolean);
+            else
+                await writer.WriteNullAsync();
+            // ReferenceValue?.Id can be Guid.Empty if the referenced CSO hasn't been persisted yet.
+            // Treat Guid.Empty as null to avoid FK violations against ConnectedSystemObjects.
+            var refId = v.ReferenceValue?.Id;
+            if (refId.HasValue && refId.Value != Guid.Empty)
+                await writer.WriteAsync(refId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
         }
+
+        await writer.CompleteAsync();
     }
 
     private static NpgsqlParameter NullableParam(object? value, NpgsqlTypes.NpgsqlDbType dbType)
