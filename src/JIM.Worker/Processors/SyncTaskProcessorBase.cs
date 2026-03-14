@@ -1735,6 +1735,19 @@ public abstract class SyncTaskProcessorBase
         await _jim.Activities.UpdateActivityMessageAsync(_activity,
             $"Resolving cross-page references (0 / {totalCrossPagesToResolve})");
 
+        // Build a lookup of CSO ID → existing RPEI for CSOs that need cross-page resolution.
+        // These RPEIs were created during initial page processing (e.g., Projected, Joined) and have
+        // already been persisted to the database. We save references BEFORE clearing the in-memory
+        // collection so that cross-page resolution can merge reference attribute flows into the
+        // existing RPEIs rather than creating duplicates.
+        var unresolvedCsoIds = _unresolvedCrossPageReferences.Select(x => x.CsoId).ToHashSet();
+        var existingRpeisByCsoId = new Dictionary<Guid, ActivityRunProfileExecutionItem>();
+        foreach (var rpei in _activity.RunProfileExecutionItems)
+        {
+            if (rpei.ConnectedSystemObjectId.HasValue && unresolvedCsoIds.Contains(rpei.ConnectedSystemObjectId.Value))
+                existingRpeisByCsoId[rpei.ConnectedSystemObjectId.Value] = rpei;
+        }
+
         // Clear the change tracker to prevent performance degradation.
         // After processing all pages, the change tracker accumulates thousands of tracked entities
         // (MVOs, CSOs, attribute values, etc.). This causes EF Core's identity resolution to become
@@ -1768,6 +1781,7 @@ public abstract class SyncTaskProcessorBase
         var totalBatches = (int)Math.Ceiling((double)totalItems / pageSize);
 
         var resolvedCount = 0;
+        var updatedExistingRpeis = new List<ActivityRunProfileExecutionItem>();
 
         for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
         {
@@ -1832,22 +1846,81 @@ public abstract class SyncTaskProcessorBase
                         ? refRemovedAttributesList.ToHashSet()
                         : (HashSet<MetaverseObjectAttributeValue>?)null;
 
-                    // Create RPEI for cross-page reference resolution
-                    var rpei = _activity.PrepareRunProfileExecutionItem();
-                    rpei.ConnectedSystemObject = cso;
-                    rpei.ConnectedSystemObjectId = cso.Id;
-                    rpei.ObjectChangeType = ObjectChangeType.AttributeFlow;
-                    rpei.AttributeFlowCount = additionsCount + removalsCount;
-                    _activity.RunProfileExecutionItems.Add(rpei);
-
-                    // Build outcome for cross-page reference resolution RPEI
-                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                    // Merge into existing RPEI if one was created during initial page processing
+                    // (e.g., Projected or Joined). This prevents duplicate RPEIs for the same CSO
+                    // which would inflate TotalAttributeFlows counts and show duplicate rows in the UI.
+                    ActivityRunProfileExecutionItem rpei;
+                    if (existingRpeisByCsoId.TryGetValue(csoId, out var existingRpei))
                     {
-                        SyncOutcomeBuilder.AddRootOutcome(rpei,
-                            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
-                            detailCount: additionsCount + removalsCount);
+                        rpei = existingRpei;
+                        rpei.AttributeFlowCount = (rpei.AttributeFlowCount ?? 0) + additionsCount + removalsCount;
 
-                        _mvoIdToRpei[mvo.Id] = rpei;
+                        // Update outcome tree: add or update the AttributeFlow child node
+                        if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
+                            && rpei.ObjectChangeType is ObjectChangeType.Projected or ObjectChangeType.Joined)
+                        {
+                            var attrFlowChild = rpei.SyncOutcomes.FirstOrDefault(o =>
+                                o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
+                                && o.ParentSyncOutcome != null);
+                            if (attrFlowChild != null)
+                                attrFlowChild.DetailCount = rpei.AttributeFlowCount;
+                            else
+                            {
+                                // No child yet (e.g., initial projection had no scalar attribute changes).
+                                // Add an AttributeFlow child under the root Projected/Joined outcome.
+                                var rootOutcome = rpei.SyncOutcomes.FirstOrDefault(o => o.ParentSyncOutcome == null);
+                                if (rootOutcome != null)
+                                {
+                                    SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
+                                        ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+                                        targetEntityDescription: mvo.DisplayName,
+                                        detailCount: rpei.AttributeFlowCount);
+                                }
+                            }
+                        }
+
+                        // Rebuild OutcomeSummary to reflect the updated attribute flow count
+                        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                        {
+                            SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
+                            _mvoIdToRpei[mvo.Id] = rpei;
+                        }
+
+                        // Track for batch database update (already persisted, needs AttributeFlowCount
+                        // and OutcomeSummary updated). Do NOT re-add to _activity.RunProfileExecutionItems
+                        // as that would cause FlushRpeisAsync to INSERT a duplicate row.
+                        updatedExistingRpeis.Add(rpei);
+
+                        // Re-add to the activity's in-memory collection for test environments where
+                        // RPEIs are not persisted to a real database (EF fallback path keeps RPEIs
+                        // in memory for assertions). In production, FlushRpeisAsync will skip these
+                        // because they are handled by the separate bulk update below.
+                        if (!_hasRawSqlSupport)
+                            _activity.RunProfileExecutionItems.Add(rpei);
+
+                        Log.Debug("ResolveCrossPageReferences: Merged reference attribute flow into existing {ChangeType} RPEI for CSO {CsoId}",
+                            rpei.ObjectChangeType, csoId);
+                    }
+                    else
+                    {
+                        // No existing RPEI (uncommon — only if the CSO had no scalar attribute changes
+                        // during initial page processing). Create a new reference-only RPEI.
+                        rpei = _activity.PrepareRunProfileExecutionItem();
+                        rpei.ConnectedSystemObject = cso;
+                        rpei.ConnectedSystemObjectId = cso.Id;
+                        rpei.ObjectChangeType = ObjectChangeType.AttributeFlow;
+                        rpei.AttributeFlowCount = additionsCount + removalsCount;
+                        _activity.RunProfileExecutionItems.Add(rpei);
+
+                        // Build outcome for the new reference-only RPEI
+                        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                        {
+                            SyncOutcomeBuilder.AddRootOutcome(rpei,
+                                ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+                                detailCount: additionsCount + removalsCount);
+
+                            _mvoIdToRpei[mvo.Id] = rpei;
+                        }
                     }
 
                     // Track MVO changes for change tracking
@@ -1932,7 +2005,42 @@ public abstract class SyncTaskProcessorBase
 
                 // Flush RPEIs FIRST to prevent DetectChanges() from discovering them during
                 // subsequent SaveChangesAsync calls (same pattern as per-page processing).
+                // NOTE: This only inserts NEW RPEIs. Existing RPEIs (merged from initial page
+                // processing) are updated separately below.
                 await FlushRpeisAsync();
+
+                // Batch-update existing RPEIs whose AttributeFlowCount and OutcomeSummary changed
+                // due to cross-page reference resolution merging. These RPEIs were already persisted
+                // during initial page processing; we update them in-place rather than inserting duplicates.
+                if (updatedExistingRpeis.Count > 0)
+                {
+                    // Collect any new sync outcome nodes added during merge (e.g., AttributeFlow child)
+                    var newOutcomes = updatedExistingRpeis
+                        .SelectMany(r => r.SyncOutcomes)
+                        .Where(o => o.Id == Guid.Empty)
+                        .ToList();
+                    foreach (var outcome in newOutcomes)
+                    {
+                        if (outcome.Id == Guid.Empty)
+                            outcome.Id = Guid.NewGuid();
+                    }
+
+                    await _jim.Activities.BulkUpdateRpeiOutcomesAsync(updatedExistingRpeis, newOutcomes);
+
+                    // Accumulate stats ONLY for newly added outcome nodes (not the full RPEIs, which
+                    // were already counted during initial page flush). New outcomes can occur when the
+                    // initial RPEI had no AttributeFlow child (Detailed mode) and cross-page resolution
+                    // adds one. In the common case, no new outcomes are added (just DetailCount updated).
+                    if (_hasRawSqlSupport && newOutcomes.Count > 0)
+                    {
+                        _activity.TotalAttributeFlows += newOutcomes.Count(o =>
+                            o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
+                    }
+
+                    Log.Debug("ResolveCrossPageReferences: Updated {Count} existing RPEIs with merged reference attribute flows",
+                        updatedExistingRpeis.Count);
+                    updatedExistingRpeis.Clear();
+                }
 
                 // Flush this batch (same sequence as per-page processing)
                 await PersistPendingMetaverseObjectsAsync();

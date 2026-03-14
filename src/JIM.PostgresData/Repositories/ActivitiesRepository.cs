@@ -1369,6 +1369,7 @@ public class ActivityRepository : IActivityRepository
                     entry.Property(r => r.OutcomeSummary).IsModified = true;
                     entry.Property(r => r.ErrorType).IsModified = true;
                     entry.Property(r => r.ErrorMessage).IsModified = true;
+                    entry.Property(r => r.AttributeFlowCount).IsModified = true;
                 }
                 catch (NullReferenceException)
                 {
@@ -1387,11 +1388,12 @@ public class ActivityRepository : IActivityRepository
     }
 
     /// <summary>
-    /// Bulk updates OutcomeSummary and error fields on already-persisted RPEIs using parameterised UPDATE statements.
+    /// Bulk updates OutcomeSummary, error fields, and AttributeFlowCount on already-persisted RPEIs
+    /// using parameterised UPDATE statements.
     /// </summary>
     private async Task BulkUpdateRpeiFieldsRawAsync(List<ActivityRunProfileExecutionItem> rpeis)
     {
-        const int columnsPerRow = 4; // Id (WHERE) + OutcomeSummary, ErrorType, ErrorMessage
+        const int columnsPerRow = 5; // Id (WHERE) + OutcomeSummary, ErrorType, ErrorMessage, AttributeFlowCount
         var chunkSize = MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in ChunkList(rpeis, chunkSize))
@@ -1409,15 +1411,18 @@ public class ActivityRepository : IActivityRepository
                 sql.Append(offset + 1);
                 sql.Append(@", ""ErrorMessage"" = @p");
                 sql.Append(offset + 2);
-                sql.Append(@" WHERE ""Id"" = @p");
+                sql.Append(@", ""AttributeFlowCount"" = @p");
                 sql.Append(offset + 3);
+                sql.Append(@" WHERE ""Id"" = @p");
+                sql.Append(offset + 4);
                 sql.Append("; ");
 
                 var rpei = chunk[i];
                 parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.OutcomeSummary ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 1}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = rpei.ErrorType.HasValue ? (object)(int)rpei.ErrorType.Value : DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 2}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ErrorMessage ?? DBNull.Value });
-                parameters.Add(new NpgsqlParameter($"p{offset + 3}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = rpei.Id });
+                parameters.Add(new NpgsqlParameter($"p{offset + 3}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = rpei.AttributeFlowCount.HasValue ? (object)rpei.AttributeFlowCount.Value : DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 4}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = rpei.Id });
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
