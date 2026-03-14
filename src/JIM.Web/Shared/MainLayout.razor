@@ -1,7 +1,9 @@
 ﻿@inherits LayoutComponentBase
+@implements IDisposable
 @inject IJSRuntime JSRuntime
 @inject IUserPreferenceService PreferenceService
 @inject JIM.Web.Models.ThemeSettings ThemeSettings
+@inject NavigationManager NavigationManager
 <MudThemeProvider @bind-IsDarkMode="@IsDarkMode" Theme="_theme" @ref="@_mudThemeProvider" />
 <MudPopoverProvider />
 <MudDialogProvider />
@@ -49,7 +51,27 @@
         <MudMainContent>
             <CascadingValue Value="this" IsFixed="true">
                 <MudContainer MaxWidth="@_contentMaxWidth" Class="pt-5 pb-5">
-                    @Body
+                    <LoggingErrorBoundary @ref="_errorBoundary">
+                        <ChildContent>
+                            @Body
+                        </ChildContent>
+                        <ErrorContent Context="exception">
+                            <MudAlert Severity="Severity.Error" Class="my-4" Variant="Variant.Outlined">
+                                <MudText Typo="Typo.h6" Class="mb-2">Something went wrong</MudText>
+                                <MudText Typo="Typo.body1" Class="mb-3">
+                                    An unexpected error occurred while rendering this page. You can try recovering or navigate to another page.
+                                </MudText>
+                                <MudStack Row="true" Spacing="2">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.Refresh"
+                                               OnClick="RecoverFromError">Try Again</MudButton>
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                                               StartIcon="@Icons.Material.Filled.Home"
+                                               Href="/">Go to Dashboard</MudButton>
+                                </MudStack>
+                            </MudAlert>
+                        </ErrorContent>
+                    </LoggingErrorBoundary>
 
                     <div class="jim-page-footer">
                         <MudText Align="Align.Center" Typo="Typo.body2" Class="mt-5 mud-text-secondary">
@@ -105,6 +127,7 @@
         return plusIndex >= 0 ? version[..plusIndex] : version;
     }
 
+    private LoggingErrorBoundary? _errorBoundary;
     private MudThemeProvider? _mudThemeProvider;
     private const string LightModeText = "Switch to light mode";
     private const string DarkModeText = "Switch to dark mode";
@@ -201,6 +224,21 @@
         }
     }
 
+    protected override void OnInitialized()
+    {
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        _errorBoundary?.Recover();
+    }
+
+    private void RecoverFromError()
+    {
+        _errorBoundary?.Recover();
+    }
+
     private string LightThemePath => ThemeSettings.LightThemePath;
     private string DarkThemePath => ThemeSettings.DarkThemePath;
 
@@ -253,5 +291,10 @@
         {
             IsDrawerOpen = false;
         }
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
     }
 }
