@@ -300,7 +300,7 @@ var result = await metaVerseObjects.ToListAsync();
 - `src/JIM.Worker/Processors/SyncRuleMappingProcessor.cs` — comment cleanup
 - `test/JIM.Worker.Tests/OutboundSync/DriftDetectionTests.cs` — test comment update
 
-**Design notes**: See `docs/notes/PHASE4_SYNC_PAGE_LOADING_OPTIMISATION.md` for the full rationale and implementation details
+**Design notes**: See `docs/notes/done/PHASE4_SYNC_PAGE_LOADING_OPTIMISATION.md` for the full rationale and implementation details
 
 ---
 
