@@ -651,6 +651,14 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 1. **Local Debugging** (Recommended): Use `jim-db` to start database, then F5 to debug services locally
 2. **Full Stack**: Use `jim-stack` to run all services in containers
 
+**Development URLs** (Docker stack):
+
+| URL | Description |
+|-----|-------------|
+| `http://localhost:5200` | JIM Web UI |
+| `http://localhost:5200/api/swagger` | Swagger API documentation |
+| `http://localhost:5200/dev/error-pages` | Error page preview (Development only) |
+
 **Git Configuration**:
 
 VS Code automatically copies your host machine's `~/.gitconfig` into devcontainers (controlled by the `dev.containers.copyGitConfig` setting, enabled by default). This means you should configure Git on your **host machine** and it will be available in all devcontainers automatically.
