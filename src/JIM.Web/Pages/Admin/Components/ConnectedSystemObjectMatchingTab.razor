@@ -369,91 +369,7 @@ else
         _currentMatchingRuleObjectType = objectType;
 
         <MudPaper Outlined="true" Class="pa-4 mb-4">
-            <MudText Typo="Typo.h6" Class="mb-3">Matching Rules for @objectType.Name</MudText>
-
-            @if (objectType.ObjectMatchingRules.Count == 0)
-            {
-                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
-                    No matching rules configured. Objects will only match if explicitly joined.
-                </MudAlert>
-            }
-            else
-            {
-                <MudTable Items="@objectType.ObjectMatchingRules.OrderBy(r => r.Order)"
-                          Hover="true"
-                          Outlined="true"
-                          Elevation="0"
-                          Class="mb-4">
-                    <HeaderContent>
-                        <MudTh><MudText Typo="Typo.button">Connected System Attribute</MudText></MudTh>
-                        <MudTh><MudText Typo="Typo.button">Operator</MudText></MudTh>
-                        <MudTh><MudText Typo="Typo.button">Metaverse Attribute</MudText></MudTh>
-                        <MudTh><MudText Typo="Typo.button">Case Sensitive</MudText></MudTh>
-                        <MudTh><MudText Typo="Typo.button">Actions</MudText></MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="Source">
-                            @if (context.Sources.Count > 0)
-                            {
-                                var source = context.Sources.First();
-                                @if (source.ConnectedSystemAttribute != null)
-                                {
-                                    <text>@source.ConnectedSystemAttribute.Name</text>
-                                }
-                                else if (source.MetaverseAttribute != null)
-                                {
-                                    <text>@source.MetaverseAttribute.Name (MV)</text>
-                                }
-                                else
-                                {
-                                    <text>-</text>
-                                }
-                            }
-                            else
-                            {
-                                <text>-</text>
-                            }
-                        </MudTd>
-                        <MudTd DataLabel="Operator">=</MudTd>
-                        <MudTd DataLabel="Target">@(context.TargetMetaverseAttribute?.Name ?? "-")</MudTd>
-                        <MudTd DataLabel="Case Sensitive">
-                            <MudSwitch T="bool" Value="@context.CaseSensitive"
-                                       ValueChanged="@(value => HandleToggleMatchingRuleCaseSensitiveAsync(context, value))"
-                                       Color="Color.Primary"
-                                       />
-                        </MudTd>
-                        <MudTd>
-                            <MudTooltip Text="Move up" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
-                                               Variant="Variant.Filled"
-                                                Size="Size.Small"
-                                               Color="Color.Default"
-                                               Disabled="@(context.Order == 0)"
-                                               OnClick="() => HandleMoveMatchingRuleUpAsync(context, objectType)" />
-                            </MudTooltip>
-                            <MudTooltip Text="Move down" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
-                                               Variant="Variant.Filled"
-                                                Size="Size.Small"
-                                               Color="Color.Default"
-                                               Disabled="@(context.Order == objectType.ObjectMatchingRules.Max(r => r.Order))"
-                                               OnClick="() => HandleMoveMatchingRuleDownAsync(context, objectType)" />
-                            </MudTooltip>
-                            <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
-                                <MudIconButton
-                                    Icon="@Icons.Material.Filled.Delete"
-                                    Variant="Variant.Filled"
-                                    Size="Size.Small"
-                                    Color="Color.Error"
-                                    OnClick="() => HandleDeleteMatchingRuleAsync(context, objectType)" />
-                            </MudTooltip>
-                        </MudTd>
-                    </RowTemplate>
-                </MudTable>
-            }
-
-            <MudDivider Class="my-4" />
-            <MudText Typo="Typo.subtitle1" Class="mb-3">Add New Matching Rule</MudText>
+            <MudText Typo="Typo.h6" Class="mb-3">Add Matching Rule</MudText>
 
             <MudGrid>
                 <MudItem xs="12" md="5">
@@ -486,25 +402,108 @@ else
                         }
                     </MudSelect>
                 </MudItem>
-                <MudItem xs="12">
-                    <MudCheckBox T="bool" @bind-Value="_newMatchingRuleCaseSensitive"
-                                 Label="Case sensitive"
-                                 Color="Color.Primary" />
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                        When enabled (default), attribute values must match exactly including case. When disabled, "John" matches "JOHN".
-                    </MudText>
-                </MudItem>
             </MudGrid>
 
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       Class="mt-4"
-                       DropShadow="false"
-                       Disabled="@(_newMatchingRuleSourceAttribute == null || _newMatchingRuleTargetAttribute == null)"
-                       OnClick="() => HandleAddMatchingRuleAsync(objectType)">
-                Add Matching Rule
-            </MudButton>
+            <MudCheckBox T="bool" @bind-Value="_newMatchingRuleCaseSensitive"
+                         Label="Case sensitive"
+                         Color="Color.Primary"
+                         Class="mt-3" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
+                When enabled (default), attribute values must match exactly including case. When disabled, "John" matches "JOHN".
+            </MudText>
+
+            <div class="mt-3">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           DropShadow="false"
+                           Disabled="@(_newMatchingRuleSourceAttribute == null || _newMatchingRuleTargetAttribute == null)"
+                           OnClick="() => HandleAddMatchingRuleAsync(objectType)">
+                    Add Matching Rule
+                </MudButton>
+            </div>
         </MudPaper>
+
+        <MudText Typo="Typo.h6" Class="mb-3">Matching Rules for @objectType.Name</MudText>
+
+        @if (objectType.ObjectMatchingRules.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                No matching rules configured. Objects will only match if explicitly joined.
+            </MudAlert>
+        }
+        else
+        {
+            <MudTable Items="@objectType.ObjectMatchingRules.OrderBy(r => r.Order)"
+                      Hover="true"
+                      Outlined="true"
+                      Elevation="0">
+                <HeaderContent>
+                    <MudTh><MudText Typo="Typo.button">Connected System Attribute</MudText></MudTh>
+                    <MudTh><MudText Typo="Typo.button">Operator</MudText></MudTh>
+                    <MudTh><MudText Typo="Typo.button">Metaverse Attribute</MudText></MudTh>
+                    <MudTh><MudText Typo="Typo.button">Case Sensitive</MudText></MudTh>
+                    <MudTh><MudText Typo="Typo.button">Actions</MudText></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Source">
+                        @if (context.Sources.Count > 0)
+                        {
+                            var source = context.Sources.First();
+                            @if (source.ConnectedSystemAttribute != null)
+                            {
+                                <text>@source.ConnectedSystemAttribute.Name</text>
+                            }
+                            else if (source.MetaverseAttribute != null)
+                            {
+                                <text>@source.MetaverseAttribute.Name (MV)</text>
+                            }
+                            else
+                            {
+                                <text>-</text>
+                            }
+                        }
+                        else
+                        {
+                            <text>-</text>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Operator">=</MudTd>
+                    <MudTd DataLabel="Target">@(context.TargetMetaverseAttribute?.Name ?? "-")</MudTd>
+                    <MudTd DataLabel="Case Sensitive">
+                        <MudSwitch T="bool" Value="@context.CaseSensitive"
+                                   ValueChanged="@(value => HandleToggleMatchingRuleCaseSensitiveAsync(context, value))"
+                                   Color="Color.Primary"
+                                   />
+                    </MudTd>
+                    <MudTd>
+                        <MudTooltip Text="Move up" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
+                                           Variant="Variant.Filled"
+                                            Size="Size.Small"
+                                           Color="Color.Default"
+                                           Disabled="@(context.Order == 0)"
+                                           OnClick="() => HandleMoveMatchingRuleUpAsync(context, objectType)" />
+                        </MudTooltip>
+                        <MudTooltip Text="Move down" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
+                                           Variant="Variant.Filled"
+                                            Size="Size.Small"
+                                           Color="Color.Default"
+                                           Disabled="@(context.Order == objectType.ObjectMatchingRules.Max(r => r.Order))"
+                                           OnClick="() => HandleMoveMatchingRuleDownAsync(context, objectType)" />
+                        </MudTooltip>
+                        <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton
+                                Icon="@Icons.Material.Filled.Delete"
+                                Variant="Variant.Filled"
+                                Size="Size.Small"
+                                Color="Color.Error"
+                                OnClick="() => HandleDeleteMatchingRuleAsync(context, objectType)" />
+                        </MudTooltip>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
     };
     #endregion
 }
