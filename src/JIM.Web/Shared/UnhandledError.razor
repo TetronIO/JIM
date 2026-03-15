@@ -1,0 +1,322 @@
+@*
+    Friendly error page shown when an unhandled exception is caught by the error boundary.
+    Design matches UserNotAuthorised.razor — animated SVG illustration with recovery actions.
+*@
+
+<div class="unhandled-error-container">
+    <div class="unhandled-error-illustration">
+        <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" class="unhandled-error-svg">
+            <!-- Background floating shapes -->
+            <circle class="ue-float-shape ue-shape-1" cx="55" cy="45" r="7" fill="var(--ue-shape-tertiary)" opacity="0.6"/>
+            <circle class="ue-float-shape ue-shape-2" cx="345" cy="75" r="11" fill="var(--ue-shape-secondary)" opacity="0.5"/>
+            <circle class="ue-float-shape ue-shape-3" cx="75" cy="230" r="6" fill="var(--ue-shape-primary)" opacity="0.4"/>
+            <circle class="ue-float-shape ue-shape-4" cx="330" cy="255" r="9" fill="var(--ue-shape-tertiary)" opacity="0.5"/>
+
+            <!-- Floating geometric shapes -->
+            <rect class="ue-float-shape ue-shape-5" x="25" y="140" width="14" height="14" rx="3" fill="var(--ue-shape-secondary)" opacity="0.4" transform="rotate(45 32 147)"/>
+            <rect class="ue-float-shape ue-shape-6" x="365" y="170" width="12" height="12" rx="2" fill="var(--ue-shape-primary)" opacity="0.5" transform="rotate(30 371 176)"/>
+
+            <!-- Decorative triangles -->
+            <polygon class="ue-float-shape ue-shape-7" points="65,275 75,260 85,275" fill="var(--ue-shape-tertiary)" opacity="0.4"/>
+            <polygon class="ue-float-shape ue-shape-8" points="340,35 350,20 360,35" fill="var(--ue-shape-secondary)" opacity="0.5"/>
+
+            <!-- Main gear (large, cracked) -->
+            <g class="ue-gear-group">
+                <!-- Gear teeth (12 teeth around the perimeter) -->
+                <g fill="var(--ue-gear-color)">
+                    <rect x="188" y="68" width="24" height="18" rx="3"/>
+                    <rect x="188" y="214" width="24" height="18" rx="3"/>
+                    <rect x="118" y="138" width="18" height="24" rx="3"/>
+                    <rect x="264" y="138" width="18" height="24" rx="3"/>
+
+                    <rect x="240" y="78" width="22" height="16" rx="3" transform="rotate(30 251 86)"/>
+                    <rect x="256" y="108" width="22" height="16" rx="3" transform="rotate(60 267 116)"/>
+                    <rect x="256" y="176" width="22" height="16" rx="3" transform="rotate(-60 267 184)"/>
+                    <rect x="240" y="206" width="22" height="16" rx="3" transform="rotate(-30 251 214)"/>
+
+                    <rect x="138" y="78" width="22" height="16" rx="3" transform="rotate(-30 149 86)"/>
+                    <rect x="122" y="108" width="22" height="16" rx="3" transform="rotate(-60 133 116)"/>
+                    <rect x="122" y="176" width="22" height="16" rx="3" transform="rotate(60 133 184)"/>
+                    <rect x="138" y="206" width="22" height="16" rx="3" transform="rotate(30 149 214)"/>
+                </g>
+
+                <!-- Gear body -->
+                <circle cx="200" cy="150" r="62" fill="var(--ue-gear-color)"/>
+
+                <!-- Gear inner ring highlight -->
+                <circle cx="200" cy="150" r="52" fill="none" stroke="var(--ue-gear-highlight)" stroke-width="2" opacity="0.3"/>
+
+                <!-- Gear centre hole -->
+                <circle cx="200" cy="150" r="22" fill="var(--ue-gear-hole)"/>
+                <circle cx="200" cy="150" r="18" fill="none" stroke="var(--ue-gear-color)" stroke-width="3" opacity="0.4"/>
+
+                <!-- Crack lines across the gear -->
+                <path class="ue-crack" d="M200 88 L196 110 L203 120 L195 135 L200 150"
+                      stroke="var(--ue-crack-color)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                <path class="ue-crack" d="M200 150 L208 165 L202 178 L210 195 L205 212"
+                      stroke="var(--ue-crack-color)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                <path class="ue-crack" d="M195 135 L178 140 L168 138"
+                      stroke="var(--ue-crack-color)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                <path class="ue-crack" d="M208 165 L222 162 L232 166"
+                      stroke="var(--ue-crack-color)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            </g>
+
+            <!-- Small floating gear (top-right) -->
+            <g class="ue-mini-gear-1">
+                <circle cx="310" cy="70" r="18" fill="var(--ue-shape-secondary)" opacity="0.7"/>
+                <circle cx="310" cy="70" r="8" fill="var(--ue-gear-hole)" opacity="0.7"/>
+                <rect x="304" y="48" width="12" height="8" rx="2" fill="var(--ue-shape-secondary)" opacity="0.7"/>
+                <rect x="304" y="84" width="12" height="8" rx="2" fill="var(--ue-shape-secondary)" opacity="0.7"/>
+                <rect x="288" y="64" width="8" height="12" rx="2" fill="var(--ue-shape-secondary)" opacity="0.7"/>
+                <rect x="324" y="64" width="8" height="12" rx="2" fill="var(--ue-shape-secondary)" opacity="0.7"/>
+            </g>
+
+            <!-- Small floating gear (bottom-left) -->
+            <g class="ue-mini-gear-2">
+                <circle cx="100" cy="200" r="14" fill="var(--ue-shape-primary)" opacity="0.6"/>
+                <circle cx="100" cy="200" r="6" fill="var(--ue-gear-hole)" opacity="0.6"/>
+                <rect x="95" y="183" width="10" height="6" rx="2" fill="var(--ue-shape-primary)" opacity="0.6"/>
+                <rect x="95" y="211" width="10" height="6" rx="2" fill="var(--ue-shape-primary)" opacity="0.6"/>
+                <rect x="83" y="195" width="6" height="10" rx="2" fill="var(--ue-shape-primary)" opacity="0.6"/>
+                <rect x="111" y="195" width="6" height="10" rx="2" fill="var(--ue-shape-primary)" opacity="0.6"/>
+            </g>
+
+            <!-- Sparkles/stars -->
+            <g class="ue-sparkle ue-sparkle-1">
+                <path d="M280 120 L283 126 L290 126 L285 131 L287 138 L280 134 L273 138 L275 131 L270 126 L277 126 Z" fill="var(--ue-sparkle-color)"/>
+            </g>
+            <g class="ue-sparkle ue-sparkle-2">
+                <path d="M125 125 L127 129 L132 129 L128 132 L130 137 L125 134 L120 137 L122 132 L118 129 L123 129 Z" fill="var(--ue-sparkle-color)" opacity="0.7"/>
+            </g>
+            <g class="ue-sparkle ue-sparkle-3">
+                <path d="M320 200 L322 204 L327 204 L323 207 L325 212 L320 209 L315 212 L317 207 L313 204 L318 204 Z" fill="var(--ue-sparkle-color)" opacity="0.8"/>
+            </g>
+
+            <!-- Exclamation mark (floating) -->
+            <g class="ue-exclamation">
+                <circle cx="290" cy="180" r="20" fill="var(--ue-warning-bg)" opacity="0.9"/>
+                <rect x="287" y="165" width="6" height="18" rx="3" fill="var(--ue-warning-color)"/>
+                <circle cx="290" cy="190" r="3" fill="var(--ue-warning-color)"/>
+            </g>
+        </svg>
+    </div>
+
+    <div class="unhandled-error-content">
+        <MudText Typo="Typo.h3" Class="unhandled-error-title">Something Went Wrong</MudText>
+        <MudText Typo="Typo.h6" Color="Color.Secondary" Class="unhandled-error-subtitle">
+            Well, that wasn't supposed to happen. A cog has slipped!
+        </MudText>
+
+        @if (Exception != null)
+        {
+            <MudExpansionPanels Class="mt-4" Elevation="0">
+                <MudExpansionPanel Text="Technical Details" MaxHeight="500">
+                    <MudSimpleTable Hover="true" Dense="true" Class="mt-2">
+                        <tbody>
+                            <tr>
+                                <td><strong>Error</strong></td>
+                                <td><code>@Exception.GetType().Name</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Message</strong></td>
+                                <td><code>@Exception.Message</code></td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        }
+
+        <div class="unhandled-error-actions mt-5">
+            @if (OnRecover.HasDelegate)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="OnRecover">Try Again</MudButton>
+            }
+            <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.Home"
+                       Href="/">Go to Dashboard</MudButton>
+        </div>
+    </div>
+</div>
+
+<style>
+    :root {
+        --ue-shape-primary: #e65100;
+        --ue-shape-secondary: #ff8f00;
+        --ue-shape-tertiary: #00bcd4;
+        --ue-gear-color: #e65100;
+        --ue-gear-highlight: #ffffff;
+        --ue-gear-hole: #1a0a00;
+        --ue-crack-color: #ffcc02;
+        --ue-sparkle-color: #ffd54f;
+        --ue-warning-bg: #ff6d00;
+        --ue-warning-color: #ffffff;
+    }
+
+    .jim-dark-mode {
+        --ue-shape-primary: #ff8a50;
+        --ue-shape-secondary: #ffb74d;
+        --ue-shape-tertiary: #4dd0e1;
+        --ue-gear-color: #ff8a50;
+        --ue-gear-highlight: #ffffff;
+        --ue-gear-hole: #1a1a2e;
+        --ue-crack-color: #ffe082;
+        --ue-sparkle-color: #ffe082;
+        --ue-warning-bg: #ff9100;
+        --ue-warning-color: #ffffff;
+    }
+
+    .unhandled-error-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 2rem;
+        min-height: 60vh;
+    }
+
+    .unhandled-error-illustration {
+        width: 100%;
+        max-width: 400px;
+        margin-bottom: 2rem;
+    }
+
+    .unhandled-error-svg {
+        width: 100%;
+        height: auto;
+    }
+
+    .unhandled-error-content {
+        max-width: 600px;
+    }
+
+    .unhandled-error-title {
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+    }
+
+    .unhandled-error-subtitle {
+        margin-bottom: 1rem;
+    }
+
+    .unhandled-error-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    /* Floating animation for shapes */
+    .ue-float-shape {
+        animation: ue-float 6s ease-in-out infinite;
+    }
+
+    .ue-shape-1 { animation-delay: 0s; }
+    .ue-shape-2 { animation-delay: 0.5s; }
+    .ue-shape-3 { animation-delay: 1s; }
+    .ue-shape-4 { animation-delay: 1.5s; }
+    .ue-shape-5 { animation-delay: 2s; }
+    .ue-shape-6 { animation-delay: 2.5s; }
+    .ue-shape-7 { animation-delay: 3s; }
+    .ue-shape-8 { animation-delay: 3.5s; }
+
+    @@keyframes ue-float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+    }
+
+    /* Main gear wobble — slightly broken/stuttering feel */
+    .ue-gear-group {
+        animation: ue-gear-wobble 4s ease-in-out infinite;
+        transform-origin: 200px 150px;
+    }
+
+    @@keyframes ue-gear-wobble {
+        0%, 100% { transform: rotate(0deg); }
+        15% { transform: rotate(8deg); }
+        25% { transform: rotate(6deg); }
+        35% { transform: rotate(10deg); }
+        50% { transform: rotate(5deg); }
+        65% { transform: rotate(-3deg); }
+        80% { transform: rotate(2deg); }
+    }
+
+    /* Mini gears spinning (opposite directions) */
+    .ue-mini-gear-1 {
+        animation: ue-mini-spin 8s linear infinite;
+        transform-origin: 310px 70px;
+    }
+
+    .ue-mini-gear-2 {
+        animation: ue-mini-spin-reverse 10s linear infinite;
+        transform-origin: 100px 200px;
+    }
+
+    @@keyframes ue-mini-spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    @@keyframes ue-mini-spin-reverse {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(-360deg); }
+    }
+
+    /* Crack glow pulse */
+    .ue-crack {
+        animation: ue-crack-glow 2s ease-in-out infinite;
+    }
+
+    @@keyframes ue-crack-glow {
+        0%, 100% { opacity: 0.6; }
+        50% { opacity: 1; }
+    }
+
+    /* Sparkle animation */
+    .ue-sparkle {
+        animation: ue-sparkle-pulse 2s ease-in-out infinite;
+    }
+
+    .ue-sparkle-1 { animation-delay: 0s; }
+    .ue-sparkle-2 { animation-delay: 0.7s; }
+    .ue-sparkle-3 { animation-delay: 1.4s; }
+
+    @@keyframes ue-sparkle-pulse {
+        0%, 100% { opacity: 0.3; transform: scale(0.8); }
+        50% { opacity: 1; transform: scale(1.2); }
+    }
+
+    /* Exclamation mark bounce */
+    .ue-exclamation {
+        animation: ue-exclamation-bounce 3s ease-in-out infinite;
+    }
+
+    @@keyframes ue-exclamation-bounce {
+        0%, 100% { transform: translate(0, 0); }
+        25% { transform: translate(0, -6px); }
+        50% { transform: translate(0, 0); }
+        75% { transform: translate(0, -3px); }
+    }
+
+    /* Responsive adjustments */
+    @@media (max-width: 600px) {
+        .unhandled-error-container {
+            padding: 1rem;
+        }
+
+        .unhandled-error-illustration {
+            max-width: 280px;
+        }
+    }
+</style>
+
+@code {
+    [Parameter]
+    public Exception? Exception { get; set; }
+
+    [Parameter]
+    public EventCallback OnRecover { get; set; }
+}
