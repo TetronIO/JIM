@@ -391,6 +391,29 @@ See [GitHub Issue #212](https://github.com/TetronIO/JIM/issues/212) for .NET Asp
 
 ## Testing Expectations
 
+### Test-Driven Development (TDD)
+
+JIM follows TDD as the standard development practice. Tests are written **before** the implementation they cover — not after.
+
+**The Red → Green → Refactor cycle:**
+
+1. **Red** — Write a failing test that describes the expected behaviour. Run it and confirm it fails (not just fails to compile — it must execute and fail the assertion).
+2. **Green** — Write the minimum production code needed to make the test pass. Run the test and confirm it is green.
+3. **Refactor** — Clean up the implementation and tests without breaking anything.
+
+**Bug fix workflow:**
+1. Write a test that **reproduces the bug** — it must fail before any fix is applied
+2. Implement the fix
+3. Run the test — it must now pass
+4. Commit both the test and the fix together
+
+This workflow is enforced because a test written after a fix cannot prove the fix was necessary — it could pass even on the broken code. The failing test is the evidence that the fix works.
+
+**What this means in practice:**
+- When investigating a bug, write the test as soon as you understand the failure condition — before touching production code
+- When adding a feature, write tests for each acceptance criterion before implementing it
+- Never open a PR where tests were written after the implementation without explicit justification
+
 ### Unit Tests
 - Test business logic in `JIM.Application` servers
 - Mock dependencies using Moq
@@ -627,6 +650,14 @@ JIM uses GitHub Codespaces to provide a fully configured development environment
 **Development Workflows**:
 1. **Local Debugging** (Recommended): Use `jim-db` to start database, then F5 to debug services locally
 2. **Full Stack**: Use `jim-stack` to run all services in containers
+
+**Development URLs** (Docker stack):
+
+| URL | Description |
+|-----|-------------|
+| `http://localhost:5200` | JIM Web UI |
+| `http://localhost:5200/api/swagger` | Swagger API documentation |
+| `http://localhost:5200/dev/error-pages` | Error page preview (Development only) |
 
 **Git Configuration**:
 

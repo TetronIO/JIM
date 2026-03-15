@@ -207,6 +207,18 @@ try {
         Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Source Full Import$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
+        # Fail-fast: check for unresolved references after source import.
+        # Any unresolved references indicate that group member DNs could not be matched to
+        # existing CSOs — either a container scope issue or a cross-run resolution failure.
+        Write-Host "    Checking for unresolved references in Source AD after import..." -ForegroundColor Gray
+        $unresolvedCount = Get-JIMConnectedSystemUnresolvedReferenceCount -ConnectedSystemId $sourceSystem.id
+        if ($unresolvedCount -gt 0) {
+            throw "Source Full Import$contextSuffix completed but $unresolvedCount reference attribute value(s) are unresolved. " +
+                  "Group member DNs could not be matched to imported user CSOs. " +
+                  "Check container scope configuration — all referenced objects must be in scope."
+        }
+        Write-Host "  ✓ No unresolved references in Source AD" -ForegroundColor Green
+
         # Step 2: Full Import from Target (BEFORE any sync)
         # Import Target CSOs early so they can join to MVOs before export rules create provisioning CSOs
         Write-Host "    Full importing from Target AD (discover existing objects)..." -ForegroundColor Gray

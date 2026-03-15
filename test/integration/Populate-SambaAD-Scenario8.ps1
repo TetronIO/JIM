@@ -219,18 +219,23 @@ $createdUsers = $indices | ForEach-Object -Parallel {
     $companyTechnicalName = ($using:sortedCompanyKeysArray)[$i % $using:companyCount]
     $departmentTechnicalName = ($using:sortedDepartmentKeysArray)[$i % $using:departmentCount]
 
+    # userAccountControl distribution: 90% enabled (512 → Active), 10% disabled (514 → Archived)
+    # Slot i=0 reserved for disabled so small datasets always have at least one disabled user
+    $uac = if ($i -eq 0) { 514 } elseif (($i % 10) -eq 9) { 514 } else { 512 }
+
     [PSCustomObject]@{
-        Index              = $i
-        SamAccountName     = $user.SamAccountName
-        DisplayName        = $user.DisplayName
-        FirstName          = $user.FirstName
-        LastName           = $user.LastName
-        Email              = $user.Email
-        Title              = $user.Title
-        Pronouns           = $user.Pronouns
-        Department         = $departmentTechnicalName
-        Company            = $companyTechnicalName
-        DN                 = "CN=$($user.DisplayName),$using:usersOU"
+        Index                = $i
+        SamAccountName       = $user.SamAccountName
+        DisplayName          = $user.DisplayName
+        FirstName            = $user.FirstName
+        LastName             = $user.LastName
+        Email                = $user.Email
+        Title                = $user.Title
+        Pronouns             = $user.Pronouns
+        Department           = $departmentTechnicalName
+        Company              = $companyTechnicalName
+        DN                   = "CN=$($user.DisplayName),$using:usersOU"
+        UserAccountControl   = $uac
     }
 } -ThrottleLimit ([Math]::Min(8, [Environment]::ProcessorCount))
 
@@ -269,6 +274,7 @@ for ($i = 0; $i -lt $createdUsers.Count; $i++) {
     [void]$ldifBuilder.AppendLine("department: $departmentDisplayName")
     [void]$ldifBuilder.AppendLine("title: $($u.Title)")
     [void]$ldifBuilder.AppendLine("company: $companyDisplayName")
+    [void]$ldifBuilder.AppendLine("userAccountControl: $($u.UserAccountControl)")
 
     if ($null -ne $u.Pronouns) {
         [void]$ldifBuilder.AppendLine("extensionAttribute1: $($u.Pronouns)")

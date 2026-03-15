@@ -134,13 +134,13 @@ For API access, JIM supports both JWT Bearer tokens and API keys for automation 
 The setup script downloads everything you need, walks you through configuration, and starts JIM:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/TetronIO/JIM/main/setup.sh | bash
+curl -fsSL https://tetron.io/jim/get | bash
 ```
 
 Or download and inspect first:
 
 ```bash
-curl -fsSL -o setup.sh https://raw.githubusercontent.com/TetronIO/JIM/main/setup.sh
+curl -fsSL -o setup.sh https://tetron.io/jim/get
 less setup.sh    # review the script
 bash setup.sh
 ```

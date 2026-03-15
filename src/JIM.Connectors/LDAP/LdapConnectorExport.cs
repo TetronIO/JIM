@@ -196,12 +196,21 @@ internal class LdapConnectorExport
             EnsureParentContainersExist(dn);
         }
 
-        var addRequest = BuildAddRequest(pendingExport, dn);
+        var (addRequest, overflowModifyRequests) = BuildAddRequestWithOverflow(pendingExport, dn);
 
         var response = (AddResponse)_executor.SendRequest(addRequest);
         if (response.ResultCode != ResultCode.Success)
         {
             ThrowAddFailure(addRequest, dn, response);
+        }
+
+        // Send any overflow ModifyRequests for multi-valued attributes that exceeded the batch size
+        foreach (var modifyRequest in overflowModifyRequests)
+        {
+            var modifyResponse = (ModifyResponse)_executor.SendRequest(modifyRequest);
+            if (modifyResponse.ResultCode != ResultCode.Success)
+                throw new LdapException((int)modifyResponse.ResultCode,
+                    $"Overflow modify failed for '{dn}': {modifyResponse.ErrorMessage}");
         }
 
         _logger.Debug("LdapConnectorExport.ProcessCreate: Successfully created object at '{Dn}'", dn);
@@ -623,13 +632,22 @@ internal class LdapConnectorExport
             await EnsureParentContainersExistAsync(dn);
         }
 
-        var addRequest = BuildAddRequest(pendingExport, dn);
+        var (addRequest, overflowModifyRequests) = BuildAddRequestWithOverflow(pendingExport, dn);
 
         // Sequential within this export: create must succeed before GUID fetch
         var response = (AddResponse)await _executor.SendRequestAsync(addRequest);
         if (response.ResultCode != ResultCode.Success)
         {
             ThrowAddFailure(addRequest, dn, response);
+        }
+
+        // Send any overflow ModifyRequests for multi-valued attributes that exceeded the batch size
+        foreach (var modifyRequest in overflowModifyRequests)
+        {
+            var modifyResponse = (ModifyResponse)await _executor.SendRequestAsync(modifyRequest);
+            if (modifyResponse.ResultCode != ResultCode.Success)
+                throw new LdapException((int)modifyResponse.ResultCode,
+                    $"Overflow modify failed for '{dn}': {modifyResponse.ErrorMessage}");
         }
 
         _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Successfully created object at '{Dn}'", dn);
@@ -929,9 +947,12 @@ internal class LdapConnectorExport
     #region Shared helpers (used by both sync and async paths)
 
     /// <summary>
-    /// Builds an AddRequest for creating a new LDAP object.
+    /// Builds an AddRequest for creating a new LDAP object, plus any overflow ModifyRequests
+    /// needed when a multi-valued attribute (e.g. member) exceeds the batch size limit.
+    /// The AddRequest carries the first batch of values; each overflow ModifyRequest carries
+    /// the next batch as an Add operation against the already-created object.
     /// </summary>
-    private AddRequest BuildAddRequest(PendingExport pendingExport, string dn)
+    internal (AddRequest AddRequest, List<ModifyRequest> OverflowModifyRequests) BuildAddRequestWithOverflow(PendingExport pendingExport, string dn)
     {
         var addRequest = new AddRequest(dn);
 
@@ -942,9 +963,8 @@ internal class LdapConnectorExport
             addRequest.Attributes.Add(new DirectoryAttribute("objectClass", objectClass));
         }
 
-        // Consolidate attribute changes by name so multi-valued attributes (e.g. member with
-        // 50 values) are sent as a single DirectoryAttribute with all values, not 50 separate
-        // DirectoryAttribute entries. The LDAP AddRequest requires one entry per attribute name.
+        // Consolidate attribute changes by name so multi-valued attributes (e.g. member) are
+        // grouped into a single list per attribute name before applying batch size limits.
         var attributeGroups = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var attrChange in pendingExport.AttributeValueChanges)
@@ -974,20 +994,65 @@ internal class LdapConnectorExport
             }
         }
 
+        var overflowModifyRequests = new List<ModifyRequest>();
+
         foreach (var (attrName, values) in attributeGroups)
         {
-            var attr = new DirectoryAttribute(attrName);
-            foreach (var value in values)
+            // For attributes within the batch size, add all values to the AddRequest directly
+            if (values.Count <= _modifyBatchSize)
             {
-                if (value is byte[] bytes)
-                    attr.Add(bytes);
-                else
-                    attr.Add(value.ToString());
+                var attr = new DirectoryAttribute(attrName);
+                foreach (var value in values)
+                {
+                    if (value is byte[] bytes)
+                        attr.Add(bytes);
+                    else
+                        attr.Add(value.ToString());
+                }
+                addRequest.Attributes.Add(attr);
+                continue;
             }
-            addRequest.Attributes.Add(attr);
+
+            // Attribute exceeds batch size: put first batch in the AddRequest, remainder in ModifyRequests
+            _logger.Information("LdapConnectorExport.BuildAddRequestWithOverflow: Attribute '{AttrName}' has {Count} values " +
+                "exceeding batch size {BatchSize} for '{Dn}'. First {BatchSize} values in AddRequest; remainder in overflow ModifyRequests.",
+                attrName, values.Count, _modifyBatchSize, dn);
+
+            var firstBatch = new DirectoryAttribute(attrName);
+            for (var i = 0; i < _modifyBatchSize; i++)
+            {
+                var value = values[i];
+                if (value is byte[] bytes)
+                    firstBatch.Add(bytes);
+                else
+                    firstBatch.Add(value.ToString());
+            }
+            addRequest.Attributes.Add(firstBatch);
+
+            // Build overflow ModifyRequests for remaining values in batches
+            for (var i = _modifyBatchSize; i < values.Count; i += _modifyBatchSize)
+            {
+                var chunk = values.Skip(i).Take(_modifyBatchSize).ToList();
+                var mod = new DirectoryAttributeModification
+                {
+                    Name = attrName,
+                    Operation = DirectoryAttributeOperation.Add
+                };
+                foreach (var value in chunk)
+                {
+                    if (value is byte[] bytes)
+                        mod.Add(bytes);
+                    else
+                        mod.Add(value.ToString());
+                }
+
+                var modifyRequest = new ModifyRequest(dn);
+                modifyRequest.Modifications.Add(mod);
+                overflowModifyRequests.Add(modifyRequest);
+            }
         }
 
-        return addRequest;
+        return (addRequest, overflowModifyRequests);
     }
 
     /// <summary>

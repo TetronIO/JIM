@@ -59,6 +59,11 @@ When creating the implementation plan (either appended to the PRD or as a separa
    - Add relevant labels (enhancement, bug, documentation, etc.)
    - Example: "See full implementation plan: [`docs/plans/PROGRESS_REPORTING.md`](plans/PROGRESS_REPORTING.md)"
 
+3. **Add the issue number back to the plan document header:**
+   - After creating the issue, add an `Issue` line to the plan document header referencing the GitHub issue
+   - Example: `- **Issue:** [#123](https://github.com/TetronIO/JIM/issues/123)`
+   - This creates a two-way link: issue → plan doc, and plan doc → issue
+
 3. **Plan structure guidelines:**
    - **Overview**: Brief summary of what and why
    - **Business Value**: Problem being solved and benefits
@@ -92,18 +97,21 @@ Use `grep` or equivalent to find all references to the filename before completin
 
 ### Document Header
 
-Every plan document must include a status line near the top:
+Every plan document must include a status line and an issue link near the top:
 
 ```markdown
 - **Status:** Planned
+- **Issue:** [#123](https://github.com/TetronIO/JIM/issues/123)
 ```
 
 ```markdown
 - **Status:** Doing (Phases 1–3 complete)
+- **Issue:** [#123](https://github.com/TetronIO/JIM/issues/123)
 ```
 
 ```markdown
 - **Status:** Done
+- **Issue:** [#123](https://github.com/TetronIO/JIM/issues/123)
 ```
 
 Only use these three values. For done plans where some items were deferred, add a brief **Note** line below:

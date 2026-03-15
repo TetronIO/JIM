@@ -29,13 +29,30 @@ Always use Context7 MCP when you need library/API documentation, code generation
 **Partial exception:**
 - **UI-only changes** (Blazor pages, Razor components) require `dotnet build` but do NOT require `dotnet test` - there are no UI tests, so running tests just wastes time
 
-**YOU MUST WRITE UNIT TESTS FOR NEW FUNCTIONALITY:**
+**YOU MUST FOLLOW TEST-DRIVEN DEVELOPMENT (TDD):**
 
-1. **ALWAYS** write unit tests for new classes, methods, and logic
-2. **ALWAYS** write tests for new API endpoints, extension methods, and utilities
-3. **ALWAYS** write tests for bug fixes (to prevent regression)
-4. **NEVER** commit new functionality without corresponding tests
-5. Tests should cover: happy path, edge cases, error conditions
+JIM uses TDD as the standard development workflow. Tests are written **before** implementation — not after.
+
+**TDD Workflow (Red → Green → Refactor):**
+1. **Write the test first** — write a failing test that describes the expected behaviour
+2. **Confirm it fails (Red)** — run the test and verify it fails for the right reason (not just a compile error)
+3. **Implement the fix or feature (Green)** — write the minimum code to make the test pass
+4. **Verify it passes** — run the test again and confirm it is green
+5. **Refactor if needed** — clean up without breaking the test
+
+**For bug fixes specifically:**
+1. Write a test that **reproduces the bug** (it must fail before your fix)
+2. Implement the fix
+3. Run the test — it must now pass
+4. This proves the fix is correct and guards against regression
+
+**Rules:**
+1. **ALWAYS** write the test before implementing new classes, methods, or logic
+2. **ALWAYS** write a failing test before fixing a bug — the test must fail first to be meaningful
+3. **ALWAYS** write tests for new API endpoints, extension methods, and utilities
+4. **NEVER** implement a fix and then retrofit a test — that is not TDD
+5. **NEVER** commit new functionality without corresponding tests
+6. Tests should cover: happy path, edge cases, error conditions
 
 **YOU MUST ASK BEFORE IMPLEMENTING SIGNIFICANT CHANGES:**
 

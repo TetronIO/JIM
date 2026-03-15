@@ -328,7 +328,7 @@ Eliminates explicit backing field declarations for properties that need validati
 
 #### 8. Complex types with value semantics (EF Core 10) — Effort: High
 
-EF Core 10's complex types use value semantics, avoiding the reference identity issues that plague owned entities. This directly relates to the **cross-page reference EF identity conflict** documented in `docs/notes/CROSS_PAGE_REFERENCE_IDENTITY_CONFLICT.md` — the bug where `Update`/`UpdateRange`/`TrackGraph` all traverse the object graph and hit shared entities after `ClearChangeTracker()`.
+EF Core 10's complex types use value semantics, avoiding the reference identity issues that plague owned entities. This directly relates to the **cross-page reference EF identity conflict** documented in `docs/notes/done/CROSS_PAGE_REFERENCE_IDENTITY_CONFLICT.md` — the bug where `Update`/`UpdateRange`/`TrackGraph` all traverse the object graph and hit shared entities after `ClearChangeTracker()`.
 
 Complex types with value semantics would eliminate this entire class of bugs. However, this requires significant data model changes and migration planning — a separate initiative rather than part of the .NET 10 migration itself.
 

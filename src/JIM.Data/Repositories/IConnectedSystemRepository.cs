@@ -575,6 +575,25 @@ public interface IConnectedSystemRepository
     /// </summary>
     public Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId);
 
+    /// <summary>
+    /// Returns the count of attribute values across all CSOs in a connected system that have an
+    /// unresolved reference (UnresolvedReferenceValue is not null and ReferenceValueId is null).
+    /// A non-zero count indicates that some group member references (or other reference attributes)
+    /// could not be resolved during the last import run.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    public Task<int> GetUnresolvedReferenceCountAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Resolves cross-batch reference FKs after a full import.
+    /// When groups are imported before the users they reference (due to container ordering),
+    /// the ReferenceValueId FK cannot be set during the group's batch save because the user CSOs
+    /// don't have real IDs yet. This method runs after all batches complete and resolves any
+    /// remaining unresolved references using the secondary external ID (e.g., distinguishedName).
+    /// </summary>
+    /// <returns>The number of references resolved.</returns>
+    public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId);
+
     public int GetConnectedSystemCount();
     public Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int objectTypeId);
     public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId);

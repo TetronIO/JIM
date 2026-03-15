@@ -511,6 +511,91 @@ public class LdapConnectorExportConsolidationTests
         Assert.That(memberAttrs[0].Count, Is.EqualTo(50));
     }
 
+    [Test]
+    public async Task ExecuteAsync_CreateGroupExceedingBatchSize_SendsAddThenModifyForOverflowAsync()
+    {
+        // Arrange: group with 150 members, batch size 100 — first 100 in AddRequest, next 50 in ModifyRequest
+        var pendingExport = CreateGroupCreatePendingExport("CN=BigGroup,OU=Groups,DC=test,DC=local", memberCount: 150);
+
+        AddRequest? capturedAddRequest = null;
+        var capturedModifyRequests = new List<ModifyRequest>();
+
+        _mockExecutor.Setup(e => e.SendRequest(It.IsAny<AddRequest>()))
+            .Callback<DirectoryRequest>(req => capturedAddRequest = (AddRequest)req)
+            .Returns(CreateDirectoryResponse<AddResponse>(ResultCode.Success));
+
+        _mockExecutor.Setup(e => e.SendRequest(It.IsAny<ModifyRequest>()))
+            .Callback<DirectoryRequest>(req => capturedModifyRequests.Add((ModifyRequest)req))
+            .Returns(CreateDirectoryResponse<ModifyResponse>(ResultCode.Success));
+
+        _mockExecutor.Setup(e => e.SendRequest(It.IsAny<SearchRequest>()))
+            .Returns(CreateDirectoryResponse<SearchResponse>(ResultCode.Success));
+
+        var export = CreateExport(batchSize: 100, concurrency: 1);
+
+        // Act
+        var results = await export.ExecuteAsync(new List<PendingExport> { pendingExport }, CancellationToken.None);
+
+        // Assert
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].Success, Is.True);
+
+        // AddRequest should have exactly 100 member values (first batch)
+        var memberAttrs = capturedAddRequest!.Attributes.Cast<DirectoryAttribute>()
+            .Where(a => a.Name == "member")
+            .ToList();
+        Assert.That(memberAttrs, Has.Count.EqualTo(1), "member should be a single consolidated DirectoryAttribute");
+        Assert.That(memberAttrs[0].Count, Is.EqualTo(100), "AddRequest should contain the first 100 members");
+
+        // Overflow ModifyRequest should contain the remaining 50
+        Assert.That(capturedModifyRequests, Has.Count.EqualTo(1), "One ModifyRequest for overflow members");
+        var modMemberMod = capturedModifyRequests[0].Modifications.Cast<DirectoryAttributeModification>()
+            .Where(m => m.Name == "member")
+            .ToList();
+        Assert.That(modMemberMod, Has.Count.EqualTo(1));
+        Assert.That(modMemberMod[0].Count, Is.EqualTo(50), "ModifyRequest should contain the remaining 50 members");
+        Assert.That(modMemberMod[0].Operation, Is.EqualTo(DirectoryAttributeOperation.Add));
+    }
+
+    [Test]
+    public async Task ExecuteAsync_CreateGroupFarExceedingBatchSize_SendsMultipleOverflowModifyRequestsAsync()
+    {
+        // Arrange: 500 members, batch size 100 — 100 in AddRequest, 4 × ModifyRequests of 100
+        var pendingExport = CreateGroupCreatePendingExport("CN=HugeGroup,OU=Groups,DC=test,DC=local", memberCount: 500);
+
+        AddRequest? capturedAddRequest = null;
+        var capturedModifyRequests = new List<ModifyRequest>();
+
+        _mockExecutor.Setup(e => e.SendRequest(It.IsAny<AddRequest>()))
+            .Callback<DirectoryRequest>(req => capturedAddRequest = (AddRequest)req)
+            .Returns(CreateDirectoryResponse<AddResponse>(ResultCode.Success));
+
+        _mockExecutor.Setup(e => e.SendRequest(It.IsAny<ModifyRequest>()))
+            .Callback<DirectoryRequest>(req => capturedModifyRequests.Add((ModifyRequest)req))
+            .Returns(CreateDirectoryResponse<ModifyResponse>(ResultCode.Success));
+
+        _mockExecutor.Setup(e => e.SendRequest(It.IsAny<SearchRequest>()))
+            .Returns(CreateDirectoryResponse<SearchResponse>(ResultCode.Success));
+
+        var export = CreateExport(batchSize: 100, concurrency: 1);
+
+        // Act
+        var results = await export.ExecuteAsync(new List<PendingExport> { pendingExport }, CancellationToken.None);
+
+        // Assert: 100 in Add + 4 × 100 in Modify = 500 total
+        Assert.That(results[0].Success, Is.True);
+
+        var memberAttrs = capturedAddRequest!.Attributes.Cast<DirectoryAttribute>()
+            .Where(a => a.Name == "member").ToList();
+        Assert.That(memberAttrs[0].Count, Is.EqualTo(100), "AddRequest should contain first 100 members");
+
+        Assert.That(capturedModifyRequests, Has.Count.EqualTo(4), "4 ModifyRequests for remaining 400 members");
+        var totalModifyMembers = capturedModifyRequests
+            .SelectMany(r => r.Modifications.Cast<DirectoryAttributeModification>().Where(m => m.Name == "member"))
+            .Sum(m => m.Count);
+        Assert.That(totalModifyMembers, Is.EqualTo(400), "ModifyRequests should carry remaining 400 members in total");
+    }
+
     #endregion
 
     #region Batch size clamping tests

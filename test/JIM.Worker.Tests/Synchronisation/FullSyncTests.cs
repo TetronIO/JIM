@@ -3072,6 +3072,204 @@ public class FullSyncTests
         Assert.That(csoBDisplayName?.StringValue, Is.EqualTo("The Manager"));
     }
 
+    /// <summary>
+    /// Tests that cross-page reference resolution merges attribute flow into the existing RPEI
+    /// rather than creating a duplicate RPEI for the same CSO.
+    ///
+    /// Bug: ResolveCrossPageReferencesAsync was unconditionally creating a new RPEI with
+    /// ObjectChangeType.AttributeFlow for each resolved CSO, even though the CSO already had
+    /// a Projected RPEI from initial page processing. This caused duplicate rows in the UI
+    /// and inflated TotalAttributeFlows counts.
+    ///
+    /// Expected: Each CSO should have exactly one RPEI. The cross-page reference resolution
+    /// should merge the reference attribute flow count into the existing Projected RPEI.
+    /// </summary>
+    [Test]
+    public async Task CrossPageReferenceResolution_DoesNotCreateDuplicateRpeisAsync()
+    {
+        // Arrange: Set page size to 1 so each CSO is on its own page
+        var pageSizeSetting = ServiceSettingItemsData.Single(s => s.Key == "Sync.PageSize");
+        pageSizeSetting.Value = "1";
+
+        // Create two new CSOs with carefully chosen GUIDs:
+        // CSO-A (the referencing CSO, with Manager) must sort BEFORE CSO-B (the referenced CSO)
+        var csoB = new ConnectedSystemObject
+        {
+            Id = Guid.Parse("FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF"),
+            ConnectedSystemId = 1,
+            Type = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER"),
+            TypeId = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER").Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            Created = DateTime.UtcNow,
+        };
+        csoB.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.HR_ID,
+            Attribute = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER")
+                .Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.HR_ID),
+            ConnectedSystemObject = csoB,
+            GuidValue = Guid.NewGuid()
+        });
+        csoB.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
+            Attribute = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER")
+                .Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME),
+            ConnectedSystemObject = csoB,
+            StringValue = "The Manager"
+        });
+
+        var csoA = new ConnectedSystemObject
+        {
+            Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            ConnectedSystemId = 1,
+            Type = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER"),
+            TypeId = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER").Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            Created = DateTime.UtcNow,
+        };
+        csoA.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.HR_ID,
+            Attribute = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER")
+                .Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.HR_ID),
+            ConnectedSystemObject = csoA,
+            GuidValue = Guid.NewGuid()
+        });
+        csoA.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
+            Attribute = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER")
+                .Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME),
+            ConnectedSystemObject = csoA,
+            StringValue = "The Employee"
+        });
+        // CSO-A has a MANAGER reference to CSO-B (cross-page reference)
+        csoA.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = (int)MockSourceSystemAttributeNames.MANAGER,
+            Attribute = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER")
+                .Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.MANAGER),
+            ConnectedSystemObject = csoA,
+            ReferenceValue = csoB,
+            ReferenceValueId = csoB.Id
+        });
+
+        // Replace the default CSO data with our custom CSOs
+        ConnectedSystemObjectsData.Clear();
+        ConnectedSystemObjectsData.Add(csoA);
+        ConnectedSystemObjectsData.Add(csoB);
+        MockDbSetConnectedSystemObjects = ConnectedSystemObjectsData.BuildMockDbSet();
+        MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(MockDbSetConnectedSystemObjects.Object);
+
+        // Clear existing MVO data (we want clean projections)
+        MetaverseObjectsData.Clear();
+        MockDbSetMetaverseObjects = MetaverseObjectsData.BuildMockDbSet();
+        MockDbSetMetaverseObjects.Setup(m => m.Add(It.IsAny<MetaverseObject>()))
+            .Callback<MetaverseObject>(mvo =>
+            {
+                if (mvo.Id == Guid.Empty) mvo.Id = Guid.NewGuid();
+                MetaverseObjectsData.Add(mvo);
+            });
+        MockDbSetMetaverseObjects.Setup(m => m.AddRange(It.IsAny<IEnumerable<MetaverseObject>>()))
+            .Callback<IEnumerable<MetaverseObject>>(mvos =>
+            {
+                foreach (var mvo in mvos)
+                {
+                    if (mvo.Id == Guid.Empty) mvo.Id = Guid.NewGuid();
+                    MetaverseObjectsData.Add(mvo);
+                }
+            });
+        MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
+
+        // Recreate Jim with updated mocks
+        Jim?.Dispose();
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object));
+
+        // Set up sync rule: enable projection + add Manager reference attribute flow mapping
+        var importSyncRule = SyncRulesData.Single(q => q.Id == 1);
+        importSyncRule.ProjectToMetaverse = true;
+
+        var mvUserType = MetaverseObjectTypesData.Single(q => q.Name == "User");
+        var csUserType = ConnectedSystemObjectTypesData.Single(q => q.Name == "SOURCE_USER");
+
+        // Manager reference mapping: CSO MANAGER -> MVO Manager
+        var managerMapping = new SyncRuleMapping
+        {
+            Id = 100,
+            SyncRule = importSyncRule,
+            TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.Manager),
+            TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.Manager
+        };
+        managerMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1000,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.MANAGER,
+            ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.MANAGER),
+        });
+        importSyncRule.AttributeFlowRules.Add(managerMapping);
+
+        // DisplayName mapping
+        var displayNameMapping = new SyncRuleMapping
+        {
+            Id = 101,
+            SyncRule = importSyncRule,
+            TargetMetaverseAttribute = mvUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.DisplayName),
+            TargetMetaverseAttributeId = (int)MockMetaverseAttributeName.DisplayName
+        };
+        displayNameMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 1001,
+            ConnectedSystemAttributeId = (int)MockSourceSystemAttributeNames.DISPLAY_NAME,
+            ConnectedSystemAttribute = csUserType.Attributes.Single(a => a.Id == (int)MockSourceSystemAttributeNames.DISPLAY_NAME),
+        });
+        importSyncRule.AttributeFlowRules.Add(displayNameMapping);
+
+        // Act: Run full sync
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        Assert.That(connectedSystem, Is.Not.Null);
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q =>
+            q.ConnectedSystemId == connectedSystem!.Id &&
+            q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var syncProcessor = new SyncFullSyncTaskProcessor(Jim, connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        await syncProcessor.PerformFullSyncAsync();
+
+        // Assert: Reference should be resolved (basic sanity)
+        Assert.That(csoA.MetaverseObject, Is.Not.Null, "CSO-A should be projected.");
+        Assert.That(csoB.MetaverseObject, Is.Not.Null, "CSO-B should be projected.");
+        var managerValue = csoA.MetaverseObject!.AttributeValues
+            .FirstOrDefault(av => av.AttributeId == (int)MockMetaverseAttributeName.Manager);
+        Assert.That(managerValue, Is.Not.Null, "Manager reference should be resolved.");
+
+        // Assert: Each CSO should have exactly ONE RPEI — no duplicates from cross-page resolution
+        var csoARpeis = activity.RunProfileExecutionItems
+            .Where(r => r.ConnectedSystemObjectId == csoA.Id ||
+                        (r.ConnectedSystemObject != null && r.ConnectedSystemObject.Id == csoA.Id))
+            .ToList();
+        Assert.That(csoARpeis, Has.Count.EqualTo(1),
+            "CSO-A should have exactly one RPEI. Cross-page reference resolution should merge " +
+            "into the existing Projected RPEI, not create a duplicate.");
+
+        // The single RPEI should be Projected (not a standalone AttributeFlow)
+        Assert.That(csoARpeis[0].ObjectChangeType, Is.EqualTo(ObjectChangeType.Projected),
+            "CSO-A's RPEI should retain its original Projected change type, not be replaced by AttributeFlow.");
+
+        // The RPEI should include the reference attribute flow count (scalar + reference)
+        Assert.That(csoARpeis[0].AttributeFlowCount, Is.Not.Null.And.GreaterThan(0),
+            "CSO-A's RPEI AttributeFlowCount should include both scalar and reference attribute flows.");
+
+        // CSO-B's RPEI is not in the in-memory collection because ResolveCrossPageReferencesAsync
+        // clears the collection before cross-page resolution (CSO-B is not in the unresolved list).
+        // In production, CSO-B's RPEI is persisted to the database and unaffected by this bug.
+        // The key assertion above (CSO-A has exactly 1 Projected RPEI) is the regression guard.
+    }
+
     #endregion
 
     #region Two-Pass CSO Processing Tests

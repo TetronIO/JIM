@@ -99,13 +99,13 @@ JIM runs as a Docker Compose stack with four services:
 The setup script downloads compose files, walks you through configuration, and starts JIM:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/TetronIO/JIM/main/setup.sh | bash
+curl -fsSL https://tetron.io/jim/get | bash
 ```
 
 Or download and inspect first:
 
 ```bash
-curl -fsSL -o setup.sh https://raw.githubusercontent.com/TetronIO/JIM/main/setup.sh
+curl -fsSL -o setup.sh https://tetron.io/jim/get
 less setup.sh
 bash setup.sh
 ```

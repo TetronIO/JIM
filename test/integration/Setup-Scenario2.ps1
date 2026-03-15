@@ -527,20 +527,8 @@ try {
     Set-JIMConnectedSystemObjectType -ConnectedSystemId $targetSystem.id -ObjectTypeId $targetUserType.id -Selected $true | Out-Null
     Write-Host "  ✓ Selected 'user' object types for Source and Target" -ForegroundColor Green
 
-    # Mark objectGUID as External ID (anchor) for both systems
-    # objectGUID is the correct anchor for AD because it's immutable and system-assigned
-    # sAMAccountName can change (user renames) and is not suitable as an anchor
-    $sourceAnchorAttr = $sourceUserType.attributes | Where-Object { $_.name -eq 'objectGUID' }
-    $targetAnchorAttr = $targetUserType.attributes | Where-Object { $_.name -eq 'objectGUID' }
-
-    if ($sourceAnchorAttr) {
-        Set-JIMConnectedSystemAttribute -ConnectedSystemId $sourceSystem.id -ObjectTypeId $sourceUserType.id -AttributeId $sourceAnchorAttr.id -IsExternalId $true | Out-Null
-        Write-Host "  ✓ Set 'objectGUID' as External ID for Source" -ForegroundColor Green
-    }
-    if ($targetAnchorAttr) {
-        Set-JIMConnectedSystemAttribute -ConnectedSystemId $targetSystem.id -ObjectTypeId $targetUserType.id -AttributeId $targetAnchorAttr.id -IsExternalId $true | Out-Null
-        Write-Host "  ✓ Set 'objectGUID' as External ID for Target" -ForegroundColor Green
-    }
+    # Note: objectGUID is automatically marked as IsExternalId = true by the LDAP connector during schema import.
+    # No manual override needed here.
 
     # Select only the LDAP attributes needed for bidirectional sync flows
     # This is more representative of real-world ILM configuration where administrators

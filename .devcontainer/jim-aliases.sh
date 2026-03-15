@@ -40,6 +40,7 @@ Docker Builds (auto-kills local JIM processes, rebuild + start):
 Reset:
   jim-reset          - Full reset (containers, images, volumes)
   jim-wipe           - Wipe JIM data (reset CSOs/MVOs/config, keep schema)
+  jim-cleanup        - Free disk space (prune orphaned volumes and unused images)
 
 Diagrams:
   jim-diagrams       - Export Structurizr C4 diagrams as SVG
@@ -131,7 +132,7 @@ _jim_kill_local() {
 }
 
 # Clear any previous aliases before defining functions (zsh cannot redefine alias as function)
-unalias jim-stack jim-restart jim-build jim-build-web jim-build-worker jim-build-scheduler 2>/dev/null || true
+unalias jim-stack jim-restart jim-build jim-build-web jim-build-worker jim-build-scheduler jim-cleanup 2>/dev/null || true
 
 # Docker stack management
 jim-stack() {
@@ -162,6 +163,24 @@ jim-build-worker() {
 jim-build-scheduler() {
   _jim_kill_local
   VERSION_SUFFIX="dev.$(date -u +%Y%m%d).$((10#$(date -u +%H)*60+10#$(date -u +%M)))" docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db build jim.scheduler && docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d jim.scheduler
+}
+
+# Cleanup orphaned Docker resources to free disk space
+jim-cleanup() {
+  echo "Disk usage before cleanup:"
+  df -h / | tail -1
+  echo ""
+  echo "Docker usage before cleanup:"
+  docker system df
+  echo ""
+  echo "Removing orphaned volumes..."
+  docker volume prune -f
+  echo ""
+  echo "Removing unused images..."
+  docker image prune -a -f
+  echo ""
+  echo "Disk usage after cleanup:"
+  df -h / | tail -1
 }
 
 # Reset

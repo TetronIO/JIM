@@ -2936,6 +2936,22 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Returns the count of reference attribute values across all CSOs in a connected system that are unresolved
+    /// (i.e. the referenced object could not be found during the last import run).
+    /// A non-zero result indicates that group member references or other reference attributes are broken.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the connected system.</param>
+    public async Task<int> GetUnresolvedReferenceCountAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetUnresolvedReferenceCountAsync(connectedSystemId);
+    }
+
+    public async Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.FixupCrossBatchReferenceIdsAsync(connectedSystemId);
+    }
+
+    /// <summary>
     /// Bulk persists Connected System Objects without activity tracking.
     /// Use this for provisioning CSOs created during sync where activity execution items are not needed.
     /// </summary>
@@ -3246,11 +3262,17 @@ public class ConnectedSystemServer
             case AttributeDataType.Binary when connectedSystemObjectAttributeValue.ByteValue != null:
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, true, connectedSystemObjectAttributeValue.ByteValue.Length));
                 break;
-            case AttributeDataType.Reference when connectedSystemObjectAttributeValue.ReferenceValue != null:
+            case AttributeDataType.Reference when connectedSystemObjectAttributeValue.ReferenceValue != null && connectedSystemObjectAttributeValue.ReferenceValue.Id != Guid.Empty:
+                // Reference resolved to a persisted CSO — store the FK relationship for a clickable link in the UI.
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.ReferenceValue));
                 break;
             case AttributeDataType.Reference when connectedSystemObjectAttributeValue.UnresolvedReferenceValue != null:
-                // we do not log changes for unresolved references. only resolved references get change tracked.
+                // Store the raw DN/identifier for display in the UI. This covers two scenarios:
+                // 1. Reference could not be resolved (referenced object out of container scope).
+                // 2. Reference was resolved in-memory to a CSO that has not yet been persisted (Guid.Empty
+                //    Id due to batch ordering — group processed before its member users). In this case
+                //    UnresolvedReferenceValue still holds the original DN since resolution does not clear it.
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.UnresolvedReferenceValue));
                 break;
             case AttributeDataType.NotSet:
             default:

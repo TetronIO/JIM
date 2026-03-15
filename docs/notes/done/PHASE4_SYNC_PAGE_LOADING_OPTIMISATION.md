@@ -4,7 +4,7 @@
 - **Branch**: `feature/338-worker-db-performance-phase4`
 - **Status**: Complete
 - **Created**: 2026-02-25
-- **Related**: `docs/notes/DRIFT_DETECTION_SPURIOUS_MEMBER_REMOVAL.md` (the AsSplitQuery bug RCA)
+- **Related**: `docs/notes/done/DRIFT_DETECTION_SPURIOUS_MEMBER_REMOVAL.md` (the AsSplitQuery bug RCA)
 - **Plan**: `docs/plans/WORKER_DATABASE_PERFORMANCE_OPTIMISATION.md`
 
 ---
