@@ -47,6 +47,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario4-DeletionRules"           # Deletion rules testing
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario5-MatchingRules"           # Matching rules testing
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario6-SchedulerService"        # Scheduler service testing
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario7-ClearConnectedSystemObjects" # Clear connector space testing
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync"  # Group sync between domains
 
 # Run with a specific template size
@@ -62,6 +63,7 @@ This single script handles everything:
 # Run only a specific test step (steps vary by scenario)
 ./test/integration/Run-IntegrationTests.ps1 -Step Joiner                          # Scenario 1: Joiner, Mover, Leaver, Reconnection
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Step Provision  # Scenario 2: Provision, ForwardSync, ReverseSync
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario7-ClearConnectedSystemObjects" -Step DeleteHistory  # Scenario 7: DeleteHistory, KeepHistory, EdgeCases
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync" -Step InitialSync  # Scenario 8: InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup
 
 # Combine scenario, template, and step
@@ -86,6 +88,7 @@ This single script handles everything:
 | `Scenario4-DeletionRules` | Deletion rules and grace period testing | samba-ad-primary |
 | `Scenario5-MatchingRules` | Object matching rules testing | samba-ad-primary |
 | `Scenario6-SchedulerService` | Scheduler service end-to-end testing (parallel steps require 4 systems) | samba-ad-primary (requires Scenario1 setup) |
+| `Scenario7-ClearConnectedSystemObjects` | Clear connector space testing (deleteChangeHistory true/false, edge cases) | samba-ad-primary (requires Scenario1 setup) |
 | `Scenario8-CrossDomainEntitlementSync` | Group synchronisation between APAC and EMEA domains | samba-ad-source, samba-ad-target |
 
 **Available Templates (`-Template` parameter):**
@@ -381,7 +384,9 @@ All external systems run as Docker containers defined in `docker-compose.integra
    └─> Run scenario scripts
        ├─> Invoke-Scenario1-HRToIdentityDirectory.ps1
        ├─> Invoke-Scenario2-CrossDomainSync.ps1
-       └─> Invoke-Scenario3-GALSYNC.ps1
+       ├─> Invoke-Scenario3-GALSYNC.ps1
+       ├─> Invoke-Scenario7-ClearConnectedSystemObjects.ps1
+       └─> ...
 
 5. Validate Results
    └─> Assertions check expected outcomes
