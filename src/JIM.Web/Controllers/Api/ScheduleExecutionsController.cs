@@ -3,6 +3,7 @@ using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Scheduling;
 using JIM.Models.Tasking;
+using JIM.Utilities;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

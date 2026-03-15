@@ -641,7 +641,7 @@ public class SynchronisationController(
 
         if (IsApiKeyAuthenticated())
         {
-            _logger.LogInformation("Connected system creation initiated via API key: {ApiKeyName}", GetApiKeyName());
+            _logger.LogInformation("Connected system creation initiated via API key: {ApiKeyName}", LogSanitiser.Sanitise(GetApiKeyName()));
         }
 
         // Get the connector definition
@@ -1160,7 +1160,7 @@ public class SynchronisationController(
         var result = await _application.Tasking.CreateWorkerTaskAsync(workerTask);
         if (!result.Success)
         {
-            _logger.LogWarning("Run profile execution blocked: {Error}", result.ErrorMessage);
+            _logger.LogWarning("Run profile execution blocked: {Error}", LogSanitiser.Sanitise(result.ErrorMessage));
             return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage ?? "Validation failed."));
         }
 
@@ -1195,7 +1195,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateRunProfileAsync(int connectedSystemId, [FromBody] CreateRunProfileRequest request)
     {
-        _logger.LogInformation("Creating run profile: {Name} for connected system {SystemId}", request.Name, connectedSystemId);
+        _logger.LogInformation("Creating run profile: {Name} for connected system {SystemId}", LogSanitiser.Sanitise(request.Name), connectedSystemId);
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
@@ -1238,13 +1238,13 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.CreateConnectedSystemRunProfileAsync(runProfile, initiatedBy);
 
-            _logger.LogInformation("Created run profile: {Id} ({Name})", runProfile.Id, runProfile.Name);
+            _logger.LogInformation("Created run profile: {Id} ({Name})", runProfile.Id, LogSanitiser.Sanitise(runProfile.Name));
 
             return CreatedAtRoute("GetRunProfiles", new { connectedSystemId }, RunProfileDto.FromEntity(runProfile));
         }
         catch (ArgumentException ex)
         {
-            _logger.LogWarning(ex, "Failed to create run profile: {Message}", ex.Message);
+            _logger.LogWarning(ex, "Failed to create run profile: {Message}", LogSanitiser.Sanitise(ex.Message));
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
     }
@@ -1316,13 +1316,13 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(runProfile, initiatedBy);
 
-            _logger.LogInformation("Updated run profile: {Id} ({Name})", runProfile.Id, runProfile.Name);
+            _logger.LogInformation("Updated run profile: {Id} ({Name})", runProfile.Id, LogSanitiser.Sanitise(runProfile.Name));
 
             return Ok(RunProfileDto.FromEntity(runProfile));
         }
         catch (ArgumentException ex)
         {
-            _logger.LogWarning(ex, "Failed to update run profile: {Message}", ex.Message);
+            _logger.LogWarning(ex, "Failed to update run profile: {Message}", LogSanitiser.Sanitise(ex.Message));
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
     }
@@ -1437,7 +1437,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateSyncRuleAsync([FromBody] CreateSyncRuleRequest request)
     {
-        _logger.LogInformation("Creating sync rule: {Name}", request.Name);
+        _logger.LogInformation("Creating sync rule: {Name}", LogSanitiser.Sanitise(request.Name));
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
@@ -1493,7 +1493,7 @@ public class SynchronisationController(
             return BadRequest(ApiErrorResponse.BadRequest($"Sync rule validation failed: {errorMessage}"));
         }
 
-        _logger.LogInformation("Created sync rule: {Id} ({Name})", syncRule.Id, syncRule.Name);
+        _logger.LogInformation("Created sync rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
 
         // Retrieve the created sync rule
         var created = await _application.ConnectedSystems.GetSyncRuleAsync(syncRule.Id);
@@ -1561,7 +1561,7 @@ public class SynchronisationController(
             return BadRequest(ApiErrorResponse.BadRequest($"Sync rule validation failed: {errorMessage}"));
         }
 
-        _logger.LogInformation("Updated sync rule: {Id} ({Name})", syncRule.Id, syncRule.Name);
+        _logger.LogInformation("Updated sync rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
 
         // Retrieve the updated sync rule
         var updated = await _application.ConnectedSystems.GetSyncRuleAsync(id);
@@ -3016,7 +3016,7 @@ public class SynchronisationController(
 
         if (!result.Success)
         {
-            _logger.LogWarning("Failed to switch matching mode for connected system {SystemId}: {Error}", connectedSystemId, result.ErrorMessage);
+            _logger.LogWarning("Failed to switch matching mode for connected system {SystemId}: {Error}", connectedSystemId, LogSanitiser.Sanitise(result.ErrorMessage));
             return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage ?? "Failed to switch object matching mode."));
         }
 

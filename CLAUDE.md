@@ -315,6 +315,7 @@ JIM is deployed in government, defence, healthcare, financial services, and crit
 - Use `[Authorize]` on all API controllers - deny by default
 - NEVER hardcode secrets, credentials, or connection strings in source code
 - NEVER log secrets, tokens, or personal data
+- ALWAYS wrap user-controlled `string?` values with `LogSanitiser.Sanitise()` (from `JIM.Utilities`) before passing them as arguments to any `ILogger` or Serilog log call - prevents log injection (CWE-117). Integers, GUIDs, enums, and DateTimes do not need wrapping.
 - Use parameterised queries (EF Core default) - never bypass with unparameterised raw SQL
 - Validate ALL input at system boundaries (API controllers, Blazor form submissions)
 - Use AES-256-GCM for encryption at rest, minimum TLS 1.2 for transit

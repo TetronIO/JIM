@@ -5,6 +5,7 @@ using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Security;
+using JIM.Utilities;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -157,7 +158,7 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
         [FromQuery] int pageSize = 50)
     {
         _logger.LogDebug("Getting deleted CSOs - CS:{ConnectedSystemId}, Search:{Search}, Page:{Page}",
-            connectedSystemId, externalIdSearch, page);
+            connectedSystemId, LogSanitiser.Sanitise(externalIdSearch), page);
 
         pageSize = Math.Clamp(pageSize, 1, 1000);
         page = Math.Max(page, 1);
@@ -224,7 +225,7 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
         [FromQuery] int pageSize = 50)
     {
         _logger.LogDebug("Getting deleted MVOs - Type:{ObjectTypeId}, Search:{Search}, Page:{Page}",
-            objectTypeId, displayNameSearch, page);
+            objectTypeId, LogSanitiser.Sanitise(displayNameSearch), page);
 
         pageSize = Math.Clamp(pageSize, 1, 1000);
         page = Math.Max(page, 1);

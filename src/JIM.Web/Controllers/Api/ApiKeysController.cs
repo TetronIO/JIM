@@ -1,6 +1,7 @@
 using Asp.Versioning;
 using JIM.Application;
 using JIM.Models.Security;
+using JIM.Utilities;
 using JIM.Web.Middleware.Api;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Authorization;
@@ -87,7 +88,7 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateAsync([FromBody] ApiKeyCreateRequestDto request)
     {
-        _logger.LogInformation("Creating new API key: {ApiKeyName}", request.Name);
+        _logger.LogInformation("Creating new API key: {ApiKeyName}", LogSanitiser.Sanitise(request.Name));
 
         if (string.IsNullOrWhiteSpace(request.Name))
         {

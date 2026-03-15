@@ -384,7 +384,24 @@ See [GitHub Issue #212](https://github.com/TetronIO/JIM/issues/212) for .NET Asp
 - Sanitise for SQL injection (EF Core parameterises queries)
 - Protect against XSS in Blazor components (framework handles by default)
 
-### 4. Secrets Management
+### 4. Log Injection Prevention (Mandatory)
+- **ALWAYS** wrap user-controlled `string?` values with `LogSanitiser.Sanitise()` from `JIM.Utilities` before passing them as arguments to any `ILogger` or Serilog log call
+- This prevents log injection attacks (CWE-117 / OWASP Log Injection) where malicious input containing newline characters could forge fake log entries
+- Integers, GUIDs, enums, and `DateTime` values are inherently safe and do not need wrapping
+- `LogSanitiser.Sanitise()` handles null safely — it returns null for null input
+
+```csharp
+// BAD — user-controlled string passed directly
+_logger.LogInformation("Search query: {Search}", request.Search);
+
+// GOOD — sanitised before logging
+_logger.LogInformation("Search query: {Search}", LogSanitiser.Sanitise(request.Search));
+
+// Safe — non-string types don't need wrapping
+_logger.LogInformation("Page: {Page}, Id: {Id}", page, objectId);
+```
+
+### 5. Secrets Management
 - **Environment variables**: All secrets configured via `.env` file (gitignored)
 - **No hardcoded secrets**: Never commit credentials, connection strings, API keys
 - **Docker secrets**: Use Docker secrets for production deployments
@@ -1179,11 +1196,12 @@ Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
 3. **Async all the way**: All I/O operations async
 4. **Repository pattern**: Never access DbContext directly from application layer
 5. **Log comprehensively**: Use Serilog with structured logging
-6. **Validate input**: All user input validated at API/UI boundary
-7. **Handle errors gracefully**: Try-catch, log, return meaningful responses
-8. **Test thoroughly**: Unit tests for business logic, integration tests for data layer
-9. **Secure by default**: OIDC/SSO required, no hardcoded secrets
-10. **Document via code**: XML comments, clear naming, self-documenting code
+6. **Sanitise log arguments**: Wrap all user-controlled `string?` values with `LogSanitiser.Sanitise()` from `JIM.Utilities` before passing them as arguments to any log call — prevents log injection (CWE-117). Integers, GUIDs, enums, and DateTimes are safe without wrapping.
+7. **Validate input**: All user input validated at API/UI boundary
+8. **Handle errors gracefully**: Try-catch, log, return meaningful responses
+9. **Test thoroughly**: Unit tests for business logic, integration tests for data layer
+10. **Secure by default**: OIDC/SSO required, no hardcoded secrets
+11. **Document via code**: XML comments, clear naming, self-documenting code
 
 ## Resources
 

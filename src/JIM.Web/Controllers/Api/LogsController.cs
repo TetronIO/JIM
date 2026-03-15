@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using JIM.Application.Services;
+using JIM.Utilities;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -69,7 +70,7 @@ public class LogsController(ILogger<LogsController> logger, LogReaderService log
     public async Task<IActionResult> GetLogEntriesAsync([FromQuery] LogQueryRequest request)
     {
         _logger.LogTrace("Requested log entries (Service: {Service}, Date: {Date}, Levels: {Levels}, Search: {Search})",
-            request.Service, request.Date, request.Levels != null ? string.Join(",", request.Levels) : "all", request.Search);
+            LogSanitiser.Sanitise(request.Service), request.Date, request.Levels != null ? string.Join(",", request.Levels) : "all", LogSanitiser.Sanitise(request.Search));
 
         // Clamp limit to reasonable bounds
         var limit = Math.Clamp(request.Limit, 1, 5000);

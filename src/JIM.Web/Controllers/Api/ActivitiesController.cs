@@ -2,6 +2,7 @@ using Asp.Versioning;
 using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Utilities;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -42,7 +43,7 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
         [FromQuery] string? search = null)
     {
         _logger.LogDebug("Getting activities (Page: {Page}, PageSize: {PageSize}, Search: {Search})",
-            pagination.Page, pagination.PageSize, search);
+            pagination.Page, pagination.PageSize, LogSanitiser.Sanitise(search));
 
         // Map API pagination to application layer
         var sortBy = MapSortBy(pagination.SortBy);

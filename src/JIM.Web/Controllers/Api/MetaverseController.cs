@@ -6,6 +6,7 @@ using JIM.Application;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Security;
+using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -128,7 +129,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         await _application.Metaverse.UpdateMetaverseObjectTypeAsync(objectType);
 
         _logger.LogInformation("Updated metaverse object type: {Id} ({Name}) - DeletionRule: {DeletionRule}, GracePeriod: {GracePeriod}",
-            objectType.Id, objectType.Name, objectType.DeletionRule, objectType.DeletionGracePeriod);
+            objectType.Id, LogSanitiser.Sanitise(objectType.Name), objectType.DeletionRule, objectType.DeletionGracePeriod);
 
         var result = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectType.Id, false);
         return Ok(MetaverseObjectTypeDetailDto.FromEntity(result!));
@@ -188,7 +189,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateAttributeAsync([FromBody] CreateMetaverseAttributeRequest request)
     {
-        _logger.LogInformation("Creating metaverse attribute: {Name}", request.Name);
+        _logger.LogInformation("Creating metaverse attribute: {Name}", LogSanitiser.Sanitise(request.Name));
 
         // Check if attribute with same name already exists
         var existing = await _application.Metaverse.GetMetaverseAttributeAsync(request.Name);
@@ -224,7 +225,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         else
             await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, (MetaverseObject?)null);
 
-        _logger.LogInformation("Created metaverse attribute: {Id} ({Name})", attribute.Id, attribute.Name);
+        _logger.LogInformation("Created metaverse attribute: {Id} ({Name})", attribute.Id, LogSanitiser.Sanitise(attribute.Name));
 
         var result = await _application.Metaverse.GetMetaverseAttributeAsync(attribute.Id);
         // Use Created with explicit URL instead of CreatedAtAction to avoid API versioning route generation issues
@@ -299,7 +300,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         else
             await _application.Metaverse.UpdateMetaverseAttributeAsync(attribute, (MetaverseObject?)null);
 
-        _logger.LogInformation("Updated metaverse attribute: {Id} ({Name})", attribute.Id, attribute.Name);
+        _logger.LogInformation("Updated metaverse attribute: {Id} ({Name})", attribute.Id, LogSanitiser.Sanitise(attribute.Name));
 
         var result = await _application.Metaverse.GetMetaverseAttributeAsync(attribute.Id);
         return Ok(MetaverseAttributeDetailDto.FromEntity(result!));
@@ -380,7 +381,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         [FromQuery] string? filterAttributeValue = null)
     {
         _logger.LogDebug("Getting metaverse objects (Page: {Page}, PageSize: {PageSize}, TypeId: {TypeId}, Search: {Search}, FilterAttr: {FilterAttr}={FilterValue}, Attributes: {Attributes})",
-            pagination.Page, pagination.PageSize, objectTypeId, search, filterAttributeName, filterAttributeValue,
+            pagination.Page, pagination.PageSize, objectTypeId, LogSanitiser.Sanitise(search), LogSanitiser.Sanitise(filterAttributeName), LogSanitiser.Sanitise(filterAttributeValue),
             attributes != null ? string.Join(",", attributes) : "DisplayName only");
 
         var result = await _application.Metaverse.GetMetaverseObjectsAsync(
