@@ -870,5 +870,47 @@ public class ConnectedSystemDeletionTests
         Assert.That(ex!.Message, Does.Contain("not found"));
     }
 
+    [Test]
+    public async Task ClearConnectedSystemObjectsAsync_WithDeleteChangeHistoryTrue_ForwardsParameterAsync()
+    {
+        // Arrange
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test System",
+            Status = ConnectedSystemStatus.Active
+        };
+
+        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, true)).Returns(Task.CompletedTask);
+
+        // Act
+        await _jim.ConnectedSystems.ClearConnectedSystemObjectsAsync(1, deleteChangeHistory: true);
+
+        // Assert
+        _mockCsRepo.Verify(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, true), Times.Once);
+    }
+
+    [Test]
+    public async Task ClearConnectedSystemObjectsAsync_WithDeleteChangeHistoryFalse_ForwardsParameterAsync()
+    {
+        // Arrange
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test System",
+            Status = ConnectedSystemStatus.Active
+        };
+
+        _mockCsRepo.Setup(r => r.GetConnectedSystemAsync(1)).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, false)).Returns(Task.CompletedTask);
+
+        // Act
+        await _jim.ConnectedSystems.ClearConnectedSystemObjectsAsync(1, deleteChangeHistory: false);
+
+        // Assert
+        _mockCsRepo.Verify(r => r.DeleteAllConnectedSystemObjectsAndDependenciesAsync(1, false), Times.Once);
+    }
+
     #endregion
 }

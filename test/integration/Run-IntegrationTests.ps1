@@ -249,6 +249,7 @@ function Show-ScenarioMenu {
                 "*Scenario4*" { "Deletion rules and attribute recall" }
                 "*Scenario5*" { "Matching rules and join logic" }
                 "*Scenario6*" { "Scheduler service end-to-end testing" }
+                "*Scenario7*" { "Clear Connected System Objects testing" }
                 "*Scenario8*" { "Cross-domain entitlement synchronisation" }
                 default { "Integration test scenario" }
             }
