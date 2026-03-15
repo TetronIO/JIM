@@ -3,7 +3,7 @@
     RootModule = 'JIM.psm1'
 
     # Version number of this module.
-    ModuleVersion = '0.6.0'
+    ModuleVersion = '0.6.1'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Core', 'Desktop')
@@ -166,21 +166,26 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
-## 0.6.0
+## 0.6.1
 
 ### New Features
-- Disconnection causality tracking — trace MVO attribute changes and deletion fate during disconnection and recall
-- Reference attributes rendered as clickable links on RPEI detail page
-- Filter controls on the Activities list page
-- Initiated-by name in activity search results
-- CSO large MVA pagination with server-side search for 10K+ attribute values
+- Child activity tracking with drill-down navigation for sync activities
+- Clear-JIMConnectedSystem PowerShell cmdlet
+- Global error boundary for graceful UI error recovery
+- "Has child activities" filter on Activities and Operations pages
+
+### Security
+- Log injection sanitisation across all logging calls (CWE-117)
+- Trivy container image scanning in CI pipeline
 
 ### Fixed
-- 13 bug fixes covering export reliability, causality tree accuracy, pending export handling, and LDAP group membership exports
+- Cross-batch and cross-run reference resolution for out-of-order LDAP imports
+- LDAP large multi-valued attribute chunking
+- Parent/child activity navigation and progress tracking
 
 ### Performance
-- Large-scale import operations now handle 100K+ objects without out-of-memory failures
-- Export batch-loading eliminates EF change tracker overhead at scale
+- PostgreSQL COPY binary import for change history and RPEI persistence
+- Partial database indexes for cross-batch reference fixup queries
 
 For full changelog, see: https://github.com/TetronIO/JIM/blob/main/CHANGELOG.md
 '@

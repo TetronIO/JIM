@@ -7,13 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-03-15
+
 ### Added
 
+- ✨ Child activity tracking — sync activities now show nested child activities with drill-down navigation (#298)
+- ✨ `Clear-JIMConnectedSystem` PowerShell cmdlet — wipe all objects from a connected system without deleting the configuration (#365)
 - 🛡️ Global error boundary catches unhandled rendering exceptions in the UI — instead of a broken page, users see a friendly error message with "Try Again" and "Go to Dashboard" recovery options (#167)
+- 🖥️ "Has child activities" filter on the Activities list and Operations history pages
+- 🖥️ Contextual page heading icons, refined operation/outcome chip colours, and improved causality tree display
+- 🔒 Log injection sanitisation across all logging calls to prevent CWE-117 log forging
+- 🔒 Trivy container image scanning added to CI pipeline
+
+### Changed
+
+- 🔄 Built-in "Employee Status" metaverse attribute replaced with the more generic "Status"
 
 ### Fixed
 
+- 🐛 Cross-batch and cross-run reference resolution now correctly handles out-of-order LDAP imports and foreign key persistence
+- 🐛 Cross-page reference RPEIs are now merged instead of creating duplicates
+- 🐛 LDAP AddRequest now chunks large multi-valued attributes to avoid directory server size limits
+- 🐛 Default `userAccountControl` to 512 on Create exports via Coalesce, preventing AD account creation failures
+- 🐛 Parent activity progress messages no longer overwritten by child activities
+- 🐛 Activity detail page correctly reloads when navigating between parent and child activities
 - 🐛 Group member change history no longer shows "(identifier not recorded)" for members imported in a later batch — the DN string is now recorded when the referenced CSO hasn't been persisted yet at change history time
+
+### Performance
+
+- ⚡ Change history and RPEI persistence now uses PostgreSQL COPY binary import, dramatically reducing write time for large sync operations (#398)
+- ⚡ Cross-batch reference fixup skipped entirely when no unresolved references exist (#398)
+- ⚡ Partial database indexes added for cross-batch reference fixup queries (#397)
 
 ## [0.6.0] - 2026-03-12
 
@@ -313,7 +337,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/TetronIO/JIM/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/TetronIO/JIM/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/TetronIO/JIM/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/TetronIO/JIM/compare/v0.3.0...v0.4.0

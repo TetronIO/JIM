@@ -16,6 +16,7 @@ JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the Git
 
 | Version | Date | Notes |
 |---------|------|-------|
+| `0.6.1` | 2026-03-15 | Child activity tracking, Clear-JIMConnectedSystem cmdlet, global error boundary, CWE-117 log injection sanitisation, Trivy CI scanning, cross-batch reference resolution fixes, PostgreSQL COPY binary import performance. |
 | `0.6.0` | 2026-03-12 | Disconnection causality tracking, activity list filters, CSO large MVA pagination, 13 sync engine bug fixes, large-scale import memory optimisation for 100K+ objects. |
 | `0.5.0` | 2026-03-08 | Self-contained object matching rules for import and export, matching rule CRUD API, matching mode switching, sortable sync rule columns, Docker Desktop setup fix. |
 | `0.4.0` | 2026-03-05 | Sync Outcome Graph with full causal tracing, export change history, one-command deployment installer, sync rule UX redesign, pronouns support, hardened release pipeline, 37% sync performance improvement. |
