@@ -1159,6 +1159,16 @@ html[lang] .mud-dialog .mud-paper-outlined {
     flex-shrink: 0;
 }
 
+/* Clickable chip link - hover effect for chips wrapped in links */
+.jim-chip-link .mud-chip {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.jim-chip-link .mud-chip:hover {
+    background-color: var(--mud-palette-action-default-hover);
+}
+
 /* Schedule Step Drag and Drop Styles */
 .jim-step-drop-zone {
     min-height: 50px;

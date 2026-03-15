@@ -51,14 +51,33 @@ else
                             <MudIcon Icon="@Icons.Material.Filled.Description"
                                      Color="Color.Default" Size="Size.Medium" />
                             <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px;">
-                                @if (!string.IsNullOrEmpty(CsoObjectTypeName))
+                                @if (!string.IsNullOrEmpty(CsoObjectTypeName) && !string.IsNullOrEmpty(CsoExternalId)
+                                     && CsoId.HasValue && CsoConnectedSystemId.HasValue)
+                                {
+                                    <MudLink Href="@Utilities.GetConnectedSystemObjectHref(CsoConnectedSystemId.Value, CsoId.Value)"
+                                             Underline="Underline.None" Class="jim-chip-link"
+                                             Style="margin: 0;">
+                                        <MudChip T="string" Color="Color.Default" Size="Size.Medium"
+                                                 Style="margin: 0;">
+                                            @CsoObjectTypeName: @CsoExternalId
+                                        </MudChip>
+                                    </MudLink>
+                                }
+                                else if (!string.IsNullOrEmpty(CsoObjectTypeName) && !string.IsNullOrEmpty(CsoExternalId))
+                                {
+                                    <MudChip T="string" Color="Color.Default" Size="Size.Medium"
+                                             Style="margin: 0;">
+                                        @CsoObjectTypeName: @CsoExternalId
+                                    </MudChip>
+                                }
+                                else if (!string.IsNullOrEmpty(CsoObjectTypeName))
                                 {
                                     <MudChip T="string" Color="Color.Default" Size="Size.Medium"
                                              Style="margin: 0;">
                                         @CsoObjectTypeName
                                     </MudChip>
                                 }
-                                @if (!string.IsNullOrEmpty(CsoExternalId))
+                                else if (!string.IsNullOrEmpty(CsoExternalId))
                                 {
                                     @if (CsoId.HasValue && CsoConnectedSystemId.HasValue)
                                     {

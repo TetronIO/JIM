@@ -149,19 +149,20 @@
                     @if (_activityRunProfileExecutionItem.ConnectedSystemObject != null)
                     {
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
-                            <MudChip T="string" Color="Color.Default">
-                                @_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name
-                            </MudChip>
                             @if (_externalIdAttributeValue != null)
                             {
-                                <MudLink
-                                    Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))"
-                                    Class="jim-text-code">
-                                    @_externalIdAttributeValue.ToStringNoName()
+                                <MudLink Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))"
+                                         Underline="Underline.None" Class="jim-chip-link">
+                                    <MudChip T="string" Color="Color.Default">
+                                        @_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name: @_externalIdAttributeValue.ToStringNoName()
+                                    </MudChip>
                                 </MudLink>
                             }
                             else
                             {
+                                <MudChip T="string" Color="Color.Default">
+                                    @_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name
+                                </MudChip>
                                 <MudLink
                                     Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))">
                                     View Object
