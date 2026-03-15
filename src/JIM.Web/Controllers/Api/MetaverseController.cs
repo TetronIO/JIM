@@ -129,7 +129,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         await _application.Metaverse.UpdateMetaverseObjectTypeAsync(objectType);
 
         _logger.LogInformation("Updated metaverse object type: {Id} ({Name}) - DeletionRule: {DeletionRule}, GracePeriod: {GracePeriod}",
-            objectType.Id, LogSanitiser.Sanitise(objectType.Name), objectType.DeletionRule, objectType.DeletionGracePeriod);
+            objectType.Id, LogSanitiser.Sanitise(objectType.Name), objectType.DeletionRule.ToString(), objectType.DeletionGracePeriod?.ToString());
 
         var result = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectType.Id, false);
         return Ok(MetaverseObjectTypeDetailDto.FromEntity(result!));
@@ -382,7 +382,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     {
         _logger.LogDebug("Getting metaverse objects (Page: {Page}, PageSize: {PageSize}, TypeId: {TypeId}, Search: {Search}, FilterAttr: {FilterAttr}={FilterValue}, Attributes: {Attributes})",
             pagination.Page, pagination.PageSize, objectTypeId, LogSanitiser.Sanitise(search), LogSanitiser.Sanitise(filterAttributeName), LogSanitiser.Sanitise(filterAttributeValue),
-            attributes != null ? string.Join(",", attributes) : "DisplayName only");
+            LogSanitiser.Sanitise(attributes != null ? string.Join(",", attributes) : "DisplayName only"));
 
         var result = await _application.Metaverse.GetMetaverseObjectsAsync(
             page: pagination.Page,

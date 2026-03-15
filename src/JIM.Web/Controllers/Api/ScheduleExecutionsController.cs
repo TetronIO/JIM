@@ -48,7 +48,7 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
         [FromQuery] bool sortDescending = true)
     {
         _logger.LogTrace("Requested schedule executions page {Page}, size {PageSize}, scheduleId {ScheduleId}",
-            page, pageSize, scheduleId);
+            (int)page, (int)pageSize, scheduleId?.ToString());
 
         var result = await _application.Repository.Scheduling.GetScheduleExecutionsAsync(
             scheduleId, page, pageSize, sortBy, sortDescending);

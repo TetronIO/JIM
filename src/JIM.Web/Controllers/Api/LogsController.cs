@@ -70,7 +70,7 @@ public class LogsController(ILogger<LogsController> logger, LogReaderService log
     public async Task<IActionResult> GetLogEntriesAsync([FromQuery] LogQueryRequest request)
     {
         _logger.LogTrace("Requested log entries (Service: {Service}, Date: {Date}, Levels: {Levels}, Search: {Search})",
-            LogSanitiser.Sanitise(request.Service), request.Date, request.Levels != null ? string.Join(",", request.Levels) : "all", LogSanitiser.Sanitise(request.Search));
+            LogSanitiser.Sanitise(request.Service), request.Date, LogSanitiser.Sanitise(request.Levels != null ? string.Join(",", request.Levels) : "all"), LogSanitiser.Sanitise(request.Search));
 
         // Clamp limit to reasonable bounds
         var limit = Math.Clamp(request.Limit, 1, 5000);

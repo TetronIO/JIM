@@ -308,8 +308,9 @@ public class SynchronisationController(
         int objectTypeId,
         [FromBody] BulkUpdateConnectedSystemAttributesRequest request)
     {
+        var attributeCount = request.Attributes?.Count ?? 0;
         _logger.LogInformation("Bulk updating {Count} attributes for object type {ObjectTypeId} in connected system {SystemId}",
-            request.Attributes?.Count ?? 0, objectTypeId, connectedSystemId);
+            attributeCount, objectTypeId, connectedSystemId);
 
         if (request.Attributes == null || request.Attributes.Count == 0)
         {

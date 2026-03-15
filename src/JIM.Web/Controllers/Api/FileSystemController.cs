@@ -51,7 +51,7 @@ public class FileSystemController(ILogger<FileSystemController> logger, JimAppli
 
         if (!result.Success)
         {
-            _logger.LogWarning("Directory not found or error: {Path} - {Error}", LogSanitiser.Sanitise(path), result.Error);
+            _logger.LogWarning("Directory not found or error: {Path} - {Error}", LogSanitiser.Sanitise(path), LogSanitiser.Sanitise(result.Error));
             return NotFound(result);
         }
 
