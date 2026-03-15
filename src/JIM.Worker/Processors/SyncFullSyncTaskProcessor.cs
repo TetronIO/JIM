@@ -91,18 +91,6 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 .GroupBy(pe => pe.ConnectedSystemObject!.Id)
                 .ToDictionary(g => g.Key, g => g.ToList());
             Log.Verbose("PerformFullSyncAsync: Loaded {Count} pending exports into lookup dictionary", allPendingExports.Count);
-
-            // Surface pending exports awaiting confirmation as RPEIs for operator visibility.
-            // This gives operators insight into what changes will be made on the next export run.
-            SurfacePendingExportsAsExecutionItems(allPendingExports);
-
-            // Flush surfaced RPEIs immediately via bulk insert. These RPEIs must be persisted
-            // and cleared from Activity.RunProfileExecutionItems BEFORE any subsequent
-            // UpdateActivityAsync/UpdateActivityMessageAsync call, because those calls trigger
-            // SaveChangesAsync → DetectChanges() which discovers RPEIs in the tracked Activity's
-            // collection and inserts them. Later FlushRpeisAsync would then attempt raw SQL insert
-            // of the same RPEIs, causing duplicate key violations.
-            await FlushRpeisAsync();
         }
 
         // Pre-load export evaluation cache (export rules + CSO lookups) for O(1) access
@@ -288,62 +276,5 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             Worker.CalculateActivitySummaryStats(_activity);
 
         syncSpan.SetSuccess();
-    }
-
-    /// <summary>
-    /// Creates ActivityRunProfileExecutionItems for pending exports that are awaiting confirmation.
-    /// This surfaces unconfirmed exports (ExportNotConfirmed status) to the Activity so operators
-    /// can see what changes will be made to connected systems on the next export run.
-    /// </summary>
-    /// <param name="allPendingExports">All pending exports for this connected system.</param>
-    private void SurfacePendingExportsAsExecutionItems(List<PendingExport> allPendingExports)
-    {
-        // Filter to only pending exports that are awaiting confirmation (ExportNotConfirmed)
-        // or are pending execution. These represent staged changes the operator should know about.
-        var pendingExportsToSurface = allPendingExports
-            .Where(pe => pe.Status == PendingExportStatus.ExportNotConfirmed ||
-                         pe.Status == PendingExportStatus.Pending)
-            .ToList();
-
-        if (pendingExportsToSurface.Count == 0)
-        {
-            Log.Verbose("SurfacePendingExportsAsExecutionItems: No pending exports to surface.");
-            return;
-        }
-
-        Log.Information("SurfacePendingExportsAsExecutionItems: Surfacing {Count} pending exports as execution items for operator visibility.",
-            pendingExportsToSurface.Count);
-
-        foreach (var pendingExport in pendingExportsToSurface)
-        {
-            var executionItem = _activity.PrepareRunProfileExecutionItem();
-            executionItem.ObjectChangeType = ObjectChangeType.PendingExport;
-            executionItem.ConnectedSystemObject = pendingExport.ConnectedSystemObject;
-            executionItem.ConnectedSystemObjectId = pendingExport.ConnectedSystemObjectId;
-            executionItem.PendingExportId = pendingExport.Id;
-
-            if (pendingExport.ConnectedSystemObject != null)
-            {
-                // Existing CSO (update/delete): snapshot directly from it
-                executionItem.SnapshotCsoDisplayFields(pendingExport.ConnectedSystemObject);
-            }
-            else
-            {
-                // No CSO at all: use source MVO ID as external ID fallback
-                executionItem.ExternalIdSnapshot = pendingExport.SourceMetaverseObjectId?.ToString();
-            }
-
-            // If DisplayNameSnapshot is still null (e.g. Create-type export where the CSO is a
-            // stub with no displayname attribute, or no CSO at all), fall back to the pending
-            // export's attribute value changes which carry the full set of outbound attribute values.
-            executionItem.DisplayNameSnapshot ??= pendingExport.AttributeValueChanges
-                .FirstOrDefault(avc => avc.Attribute?.Name?.Equals("displayname", StringComparison.OrdinalIgnoreCase) == true)
-                ?.StringValue;
-
-            _activity.RunProfileExecutionItems.Add(executionItem);
-        }
-
-        Log.Debug("SurfacePendingExportsAsExecutionItems: Created {Count} execution items for pending exports.",
-            pendingExportsToSurface.Count);
     }
 }
