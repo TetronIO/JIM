@@ -145,7 +145,7 @@
 
                 @* Connected System Object / External ID - label changes based on context *@
                 <MudItem xs="12" sm="6" md="4">
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">@GetObjectFieldLabel()</MudText>
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">@GetObjectFieldLabel()</MudText><br />
                     @if (_activityRunProfileExecutionItem.ConnectedSystemObject != null)
                     {
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
@@ -175,44 +175,35 @@
                         @* CSO doesn't exist but we have an external ID snapshot - differentiate between error (rejected) vs deleted *@
                         @if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
                         {
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudTooltip
-                                    Text="@Helpers.GetExternalIdStatusDescription(ExternalIdStatus.Rejected)"
-                                    Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Error" Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.Rejected)">
-                                        Rejected
-                                    </MudChip>
-                                </MudTooltip>
-                                <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
-                            </MudStack>
+                            <MudTooltip
+                                Text="@Helpers.GetExternalIdStatusDescription(ExternalIdStatus.Rejected)"
+                                Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Color="Color.Error" Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.Rejected)">
+                                    Rejected: @_activityRunProfileExecutionItem.ExternalIdSnapshot
+                                </MudChip>
+                            </MudTooltip>
                         }
                         else if (!IsSyncContext() && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
                         {
                             @* Import context: CSO detected as deleted but not yet removed *@
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudTooltip
-                                    Text="@Helpers.GetExternalIdStatusDescription(ExternalIdStatus.PendingRemoval)"
-                                    Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Warning" Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.PendingRemoval)">
-                                        Pending Removal
-                                    </MudChip>
-                                </MudTooltip>
-                                <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
-                            </MudStack>
+                            <MudTooltip
+                                Text="@Helpers.GetExternalIdStatusDescription(ExternalIdStatus.PendingRemoval)"
+                                Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Color="Color.Warning" Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.PendingRemoval)">
+                                    Pending Removal: @_activityRunProfileExecutionItem.ExternalIdSnapshot
+                                </MudChip>
+                            </MudTooltip>
                         }
                         else
                         {
                             @* Sync context or disconnected: CSO has been deleted *@
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudTooltip
-                                    Text="@Helpers.GetExternalIdStatusDescription(ExternalIdStatus.Deleted)"
-                                    Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Warning" Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.Deleted)">
-                                        Deleted
-                                    </MudChip>
-                                </MudTooltip>
-                                <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
-                            </MudStack>
+                            <MudTooltip
+                                Text="@Helpers.GetExternalIdStatusDescription(ExternalIdStatus.Deleted)"
+                                Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Color="Color.Warning" Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.Deleted)">
+                                    Deleted: @_activityRunProfileExecutionItem.ExternalIdSnapshot
+                                </MudChip>
+                            </MudTooltip>
                         }
                     }
                     else
