@@ -629,7 +629,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateConnectedSystemAsync([FromBody] CreateConnectedSystemRequest request)
     {
-        _logger.LogInformation("Creating connected system: {Name} with connector {ConnectorId}", request.Name, request.ConnectorDefinitionId);
+        _logger.LogInformation("Creating connected system: {Name} with connector {ConnectorId}", LogSanitiser.Sanitise(request.Name), request.ConnectorDefinitionId);
 
         // Get the current user from the JWT claims (may be null for API key auth)
         var initiatedBy = await GetCurrentUserAsync();
@@ -666,7 +666,7 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, initiatedBy);
 
-            _logger.LogInformation("Created connected system: {Id} ({Name})", connectedSystem.Id, connectedSystem.Name);
+            _logger.LogInformation("Created connected system: {Id} ({Name})", connectedSystem.Id, LogSanitiser.Sanitise(connectedSystem.Name));
 
             // Retrieve the created system to get all populated fields
             var created = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystem.Id);
@@ -758,7 +758,7 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, initiatedBy);
 
-            _logger.LogInformation("Updated connected system: {Id} ({Name})", connectedSystem.Id, connectedSystem.Name);
+            _logger.LogInformation("Updated connected system: {Id} ({Name})", connectedSystem.Id, LogSanitiser.Sanitise(connectedSystem.Name));
 
             // Retrieve the updated system
             var updated = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
@@ -1062,7 +1062,7 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetConnectorDefinitionByNameAsync(string name)
     {
-        _logger.LogTrace("Requested connector definition by name: {Name}", name);
+        _logger.LogTrace("Requested connector definition by name: {Name}", LogSanitiser.Sanitise(name));
         var definition = await _application.ConnectedSystems.GetConnectorDefinitionAsync(name);
         if (definition == null)
             return NotFound(ApiErrorResponse.NotFound($"Connector definition with name '{name}' not found."));
@@ -3043,7 +3043,7 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public IActionResult TestExpression([FromBody] TestExpressionRequest request)
     {
-        _logger.LogDebug("Testing expression: {Expression}", request.Expression);
+        _logger.LogDebug("Testing expression: {Expression}", LogSanitiser.Sanitise(request.Expression));
 
         if (string.IsNullOrWhiteSpace(request.Expression))
             return BadRequest(ApiErrorResponse.BadRequest("Expression is required."));
