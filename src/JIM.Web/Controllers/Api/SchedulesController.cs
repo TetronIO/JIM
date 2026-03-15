@@ -2,6 +2,7 @@ using Asp.Versioning;
 using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Scheduling;
+using JIM.Utilities;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -45,7 +46,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         [FromQuery] string? sortBy = null,
         [FromQuery] bool sortDescending = false)
     {
-        _logger.LogTrace("Requested schedules page {Page}, size {PageSize}, search '{Search}'", page, pageSize, search);
+        _logger.LogTrace("Requested schedules page {Page}, size {PageSize}, search '{Search}'", page, pageSize, LogSanitiser.Sanitise(search));
 
         var result = await _application.Scheduler.GetSchedulesAsync(page, pageSize, search, sortBy, sortDescending);
         var dtos = result.Results.Select(ScheduleDto.FromEntity).ToList();
@@ -88,7 +89,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateAsync([FromBody] CreateScheduleRequest request)
     {
-        _logger.LogInformation("Creating new schedule: {ScheduleName}", request.Name);
+        _logger.LogInformation("Creating new schedule: {ScheduleName}", LogSanitiser.Sanitise(request.Name));
 
         // Validate request
         var validationError = ValidateScheduleRequest(request.TriggerType, request.CronExpression, request.Steps);

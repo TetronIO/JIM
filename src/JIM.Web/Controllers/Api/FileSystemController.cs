@@ -1,6 +1,7 @@
 using Asp.Versioning;
 using JIM.Application;
 using JIM.Application.Servers;
+using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -38,19 +39,19 @@ public class FileSystemController(ILogger<FileSystemController> logger, JimAppli
     [ProducesResponseType(typeof(FileSystemListResult), StatusCodes.Status404NotFound)]
     public IActionResult ListDirectory([FromQuery] string? path = null)
     {
-        _logger.LogDebug("FileSystem ListDirectory requested for path: {Path}", path ?? "(root)");
+        _logger.LogDebug("FileSystem ListDirectory requested for path: {Path}", LogSanitiser.Sanitise(path) ?? "(root)");
 
         var result = _application.FileSystem.ListDirectory(path);
 
         if (result.IsAccessDenied)
         {
-            _logger.LogWarning("Access denied for path: {Path}", path);
+            _logger.LogWarning("Access denied for path: {Path}", LogSanitiser.Sanitise(path));
             return StatusCode(StatusCodes.Status403Forbidden, result);
         }
 
         if (!result.Success)
         {
-            _logger.LogWarning("Directory not found or error: {Path} - {Error}", path, result.Error);
+            _logger.LogWarning("Directory not found or error: {Path} - {Error}", LogSanitiser.Sanitise(path), result.Error);
             return NotFound(result);
         }
 
@@ -79,7 +80,7 @@ public class FileSystemController(ILogger<FileSystemController> logger, JimAppli
     [ProducesResponseType(typeof(PathValidationResult), StatusCodes.Status200OK)]
     public IActionResult ValidatePath([FromQuery] string path)
     {
-        _logger.LogDebug("FileSystem ValidatePath requested for: {Path}", path);
+        _logger.LogDebug("FileSystem ValidatePath requested for: {Path}", LogSanitiser.Sanitise(path));
         var isAllowed = _application.FileSystem.IsPathAllowed(path);
         return Ok(new PathValidationResult { Path = path, IsAllowed = isAllowed });
     }

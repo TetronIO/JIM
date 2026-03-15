@@ -77,7 +77,7 @@
         "files.insertFinalNewline": true,
         // Terminal
         "terminal.integrated.defaultProfile.linux": "zsh",
-        "terminal.integrated.fontSize": 14,
+        "terminal.integrated.fontSize": 13,
         // Git
         "git.autofetch": true,
         "git.enableSmartCommit": true,

@@ -3,6 +3,7 @@ using JIM.Web.Extensions.Api;
 using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Models.Core.DTOs;
+using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -114,7 +115,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
 
         try
         {
-            _logger.LogInformation("Adding trusted certificate from uploaded data: {Name}", request.Name);
+            _logger.LogInformation("Adding trusted certificate from uploaded data: {Name}", LogSanitiser.Sanitise(request.Name));
             var certificate = await _application.Certificates.AddFromDataAsync(
                 request.Name,
                 certificateData,
@@ -158,7 +159,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
 
         try
         {
-            _logger.LogInformation("Adding trusted certificate from file: {Name} ({FilePath})", request.Name, request.FilePath);
+            _logger.LogInformation("Adding trusted certificate from file: {Name} ({FilePath})", LogSanitiser.Sanitise(request.Name), LogSanitiser.Sanitise(request.FilePath));
             var certificate = await _application.Certificates.AddFromFilePathAsync(
                 request.Name,
                 request.FilePath,
@@ -168,7 +169,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
         }
         catch (FileNotFoundException ex)
         {
-            _logger.LogWarning(ex, "Certificate file not found: {FilePath}", request.FilePath);
+            _logger.LogWarning(ex, "Certificate file not found: {FilePath}", LogSanitiser.Sanitise(request.FilePath));
             return NotFound(ApiErrorResponse.NotFound(ex.Message));
         }
         catch (InvalidOperationException ex)
