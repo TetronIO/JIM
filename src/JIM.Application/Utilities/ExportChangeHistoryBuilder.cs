@@ -59,7 +59,8 @@ public static class ExportChangeHistoryBuilder
         PendingExport pendingExport,
         ActivityInitiatorType initiatedByType,
         Guid? initiatedById,
-        string? initiatedByName)
+        string? initiatedByName,
+        Dictionary<Guid, ConnectedSystemObject>? resolvedReferences = null)
     {
         var change = new ConnectedSystemObjectChange
         {
@@ -73,7 +74,7 @@ public static class ExportChangeHistoryBuilder
             DeletedObjectExternalId = pendingExport.ConnectedSystemObject?.ExternalIdAttributeValue?.ToStringNoName()
         };
 
-        MapAttributeValueChanges(change, pendingExport.AttributeValueChanges);
+        MapAttributeValueChanges(change, pendingExport.AttributeValueChanges, resolvedReferences);
         return change;
     }
 
@@ -84,7 +85,8 @@ public static class ExportChangeHistoryBuilder
     /// </summary>
     internal static void MapAttributeValueChanges(
         ConnectedSystemObjectChange change,
-        List<PendingExportAttributeValueChange> attributeValueChanges)
+        List<PendingExportAttributeValueChange> attributeValueChanges,
+        Dictionary<Guid, ConnectedSystemObject>? resolvedReferences = null)
     {
         foreach (var peChange in attributeValueChanges)
         {
@@ -110,7 +112,7 @@ public static class ExportChangeHistoryBuilder
             }
 
             var valueChangeType = MapChangeType(peChange.ChangeType);
-            AddValueChange(attributeChange, peChange, valueChangeType);
+            AddValueChange(attributeChange, peChange, valueChangeType, resolvedReferences);
         }
     }
 
@@ -130,7 +132,8 @@ public static class ExportChangeHistoryBuilder
     private static void AddValueChange(
         ConnectedSystemObjectChangeAttribute attributeChange,
         PendingExportAttributeValueChange peChange,
-        ValueChangeType valueChangeType)
+        ValueChangeType valueChangeType,
+        Dictionary<Guid, ConnectedSystemObject>? resolvedReferences = null)
     {
         var attrType = peChange.Attribute.Type;
 
@@ -165,9 +168,29 @@ public static class ExportChangeHistoryBuilder
                     new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, true, peChange.ByteValue.Length));
                 break;
             case AttributeDataType.Reference when peChange.UnresolvedReferenceValue != null:
-                // Store unresolved references as string values for the change history
-                attributeChange.ValueChanges.Add(
-                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.UnresolvedReferenceValue));
+                // Try to resolve the MVO GUID to a stub CSO in the target connected system.
+                // If resolved, store the display identifier as a StringValue with the IsPendingExportStub
+                // flag so the UI can render it meaningfully instead of showing a broken-link icon.
+                // We deliberately avoid setting ReferenceValue (navigation property) because the stub CSO
+                // may be an in-memory entity not yet persisted, and EF's change tracker would attempt
+                // to insert it when the parent entity graph is attached during BulkInsertRpeisAsync.
+                if (resolvedReferences != null
+                    && Guid.TryParse(peChange.UnresolvedReferenceValue, out var mvoGuid)
+                    && resolvedReferences.TryGetValue(mvoGuid, out var stubCso))
+                {
+                    var displayName = GetCsoDisplayIdentifier(stubCso);
+                    var valueChange = new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, displayName)
+                    {
+                        IsPendingExportStub = true
+                    };
+                    attributeChange.ValueChanges.Add(valueChange);
+                }
+                else
+                {
+                    // Fall back to storing as a raw string value for the change history
+                    attributeChange.ValueChanges.Add(
+                        new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.UnresolvedReferenceValue));
+                }
                 break;
             case AttributeDataType.Text when peChange.StringValue == null:
             case AttributeDataType.Number when peChange.IntValue == null:
@@ -183,5 +206,22 @@ public static class ExportChangeHistoryBuilder
                 // is an audit feature, not a sync-critical path
                 break;
         }
+    }
+
+    /// <summary>
+    /// Returns the best available display identifier for a CSO using the priority:
+    /// External ID → Secondary External ID → CSO ID.
+    /// </summary>
+    public static string GetCsoDisplayIdentifier(ConnectedSystemObject cso)
+    {
+        var externalId = cso.ExternalIdAttributeValue?.ToStringNoName();
+        if (!string.IsNullOrEmpty(externalId))
+            return externalId;
+
+        var secondaryExternalId = cso.SecondaryExternalIdAttributeValue?.ToStringNoName();
+        if (!string.IsNullOrEmpty(secondaryExternalId))
+            return secondaryExternalId;
+
+        return cso.Id.ToString();
     }
 }

@@ -1037,6 +1037,48 @@ function Get-ActivityChangeCount {
     }
 }
 
+function Assert-NoUnresolvedReferences {
+    <#
+    .SYNOPSIS
+        Assert that a Connected System has no unresolved reference attribute values.
+
+    .DESCRIPTION
+        Fails fast if any reference attribute values in the Connected System are unresolved.
+        This catches container scope issues and cross-run reference resolution failures early.
+
+    .PARAMETER ConnectedSystemId
+        The Connected System ID to check.
+
+    .PARAMETER Name
+        A friendly name for the check (used in error messages).
+
+    .PARAMETER Context
+        Optional context string (e.g. "after Source Full Import").
+
+    .EXAMPLE
+        Assert-NoUnresolvedReferences -ConnectedSystemId $sourceSystem.id -Name "Source AD" -Context "after Full Import"
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [int]$ConnectedSystemId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Name,
+
+        [string]$Context = ""
+    )
+
+    $contextMsg = if ($Context) { " $Context" } else { "" }
+
+    $unresolvedCount = Get-JIMConnectedSystemUnresolvedReferenceCount -ConnectedSystemId $ConnectedSystemId
+    if ($unresolvedCount -gt 0) {
+        throw "$Name has $unresolvedCount unresolved reference attribute value(s)$contextMsg. " +
+              "Reference values (e.g. group member DNs) could not be matched to CSOs. " +
+              "Check container scope configuration - all referenced objects must be in scope."
+    }
+    Write-Host "  ✓ $Name - no unresolved references$contextMsg" -ForegroundColor Green
+}
+
 function Assert-ScheduleExecutionSuccess {
     <#
     .SYNOPSIS

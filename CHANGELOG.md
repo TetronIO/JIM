@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- 🐛 Pending export reference attributes (e.g. group members) now display meaningful identifiers instead of raw GUIDs with a misleading "unresolved reference" warning (#404)
+
 ## [0.6.1] - 2026-03-15
 
 ### Added

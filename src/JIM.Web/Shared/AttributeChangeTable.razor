@@ -105,6 +105,16 @@
                     </MudStack>
                 }
             }
+            else if (context.IsPendingExportStub)
+            {
+                @* Pending export reference - stub CSO exists but not yet exported *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudText>@context.DisplayValue</MudText>
+                    <MudTooltip Text="Awaiting export — this object has not yet been created in the target system.">
+                        <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">pending export</MudChip>
+                    </MudTooltip>
+                </MudStack>
+            }
             else if (context.ReferenceValue != null)
             {
                 @* MVA reference Add/Remove - resolved *@
@@ -217,12 +227,13 @@
                     ReferenceValue = vc.ReferenceValue != null ? new ReferenceValueInfo
                     {
                         TypeName = vc.ReferenceValue.Type?.Name ?? "Unknown",
-                        DisplayName = vc.ReferenceValue.DisplayNameOrId ?? vc.ReferenceValue.Id.ToString(),
+                        DisplayName = GetReferenceDisplayName(vc.ReferenceValue),
                         Href = Utilities.GetConnectedSystemObjectHref(vc.ReferenceValue)
                     } : null,
                     IsMultiValued = ac.Attribute.AttributePlurality == AttributePlurality.MultiValued,
                     AttributeType = ac.Attribute.Type,
-                    IsUnresolvedReference = ac.Attribute.Type == AttributeDataType.Reference && vc.ReferenceValue == null
+                    IsPendingExportStub = vc.IsPendingExportStub,
+                    IsUnresolvedReference = ac.Attribute.Type == AttributeDataType.Reference && vc.ReferenceValue == null && !vc.IsPendingExportStub
                 })));
         }
 
@@ -309,7 +320,8 @@
                             IsUpdate = false,
                             DisplayValue = change.Value,
                             ReferenceValue = change.ReferenceValue,
-                            IsUnresolvedReference = change.IsUnresolvedReference
+                            IsUnresolvedReference = change.IsUnresolvedReference,
+                            IsPendingExportStub = change.IsPendingExportStub
                         });
                     }
                 }
@@ -328,7 +340,8 @@
                         IsUpdate = false,
                         DisplayValue = change.Value,
                         ReferenceValue = change.ReferenceValue,
-                        IsUnresolvedReference = change.IsUnresolvedReference
+                        IsUnresolvedReference = change.IsUnresolvedReference,
+                        IsPendingExportStub = change.IsPendingExportStub
                     });
                 }
             }
@@ -350,6 +363,23 @@
         };
     }
 
+    /// <summary>
+    /// Returns the best available display name for a CSO reference using the priority:
+    /// External ID → Secondary External ID → CSO ID.
+    /// </summary>
+    private static string GetReferenceDisplayName(ConnectedSystemObject cso)
+    {
+        var externalId = cso.ExternalIdAttributeValue?.ToStringNoName();
+        if (!string.IsNullOrEmpty(externalId))
+            return externalId;
+
+        var secondaryExternalId = cso.SecondaryExternalIdAttributeValue?.ToStringNoName();
+        if (!string.IsNullOrEmpty(secondaryExternalId))
+            return secondaryExternalId;
+
+        return cso.Id.ToString();
+    }
+
     #region Display Types
 
     private class AttributeChange
@@ -362,6 +392,8 @@
         public AttributeDataType AttributeType { get; set; }
         /// <summary>True when the attribute is a Reference type but the reference could not be resolved to a CSO.</summary>
         public bool IsUnresolvedReference { get; set; }
+        /// <summary>True when the value represents a pending export stub — the display identifier is in Value.</summary>
+        public bool IsPendingExportStub { get; set; }
     }
 
     private class AttributeChangeDisplay
@@ -379,6 +411,8 @@
         public string? NewValue { get; set; }
         /// <summary>True when the attribute is a Reference type but the reference could not be resolved to a CSO.</summary>
         public bool IsUnresolvedReference { get; set; }
+        /// <summary>True when the value represents a pending export stub — the display identifier is in DisplayValue.</summary>
+        public bool IsPendingExportStub { get; set; }
     }
 
     private class ReferenceValueInfo

@@ -3273,6 +3273,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return new Dictionary<Guid, ConnectedSystemObject>();
 
         var csos = await Repository.Database.ConnectedSystemObjects
+            .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.Attribute)
             .Where(cso => cso.MetaverseObjectId.HasValue
