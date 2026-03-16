@@ -29,9 +29,16 @@ public class MetaverseRepository : IMetaverseRepository
     public async Task<List<MetaverseObjectType>> GetMetaverseObjectTypesAsync(bool includeChildObjects)
     {
         if (includeChildObjects)
-            return await Repository.Database.MetaverseObjectTypes.Include(q => q.Attributes.OrderBy(a => a.Name)).OrderBy(x => x.Name).ToListAsync();
-                
-        return await Repository.Database.MetaverseObjectTypes.OrderBy(x => x.Name).ToListAsync();
+            return await Repository.Database.MetaverseObjectTypes
+                .Include(q => q.Attributes.OrderBy(a => a.Name))
+                .Include(q => q.PredefinedSearches)
+                .OrderBy(x => x.Name)
+                .ToListAsync();
+
+        return await Repository.Database.MetaverseObjectTypes
+            .Include(q => q.PredefinedSearches)
+            .OrderBy(x => x.Name)
+            .ToListAsync();
     }
 
     public async Task<List<MetaverseObjectTypeHeader>> GetMetaverseObjectTypeHeadersAsync()
