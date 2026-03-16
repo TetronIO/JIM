@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Asp.Versioning;
 using JIM.Application;
 using JIM.Models.Core;
+using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -55,7 +56,7 @@ public class UserInfoController(ILogger<UserInfoController> logger, JimApplicati
 
         if (!hasMvoId)
         {
-            _logger.LogDebug("UserInfo: Authenticated user '{Name}' has no JIM identity (no MetaverseObject)", name);
+            _logger.LogDebug("UserInfo: Authenticated user '{Name}' has no JIM identity (no MetaverseObject)", LogSanitiser.Sanitise(name));
 
             return Task.FromResult<IActionResult>(Ok(new
             {
@@ -70,7 +71,7 @@ public class UserInfoController(ILogger<UserInfoController> logger, JimApplicati
         }
 
         _logger.LogDebug("UserInfo: User '{Name}' (MVO {MetaverseObjectId}) has roles: {Roles}",
-            name, mvoId, string.Join(", ", roles));
+            LogSanitiser.Sanitise(name), mvoId, LogSanitiser.Sanitise(string.Join(", ", roles)));
 
         return Task.FromResult<IActionResult>(Ok(new
         {
