@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using JIM.Utilities;
 using JIM.Web.Models.Api;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -38,11 +39,11 @@ public class GlobalExceptionHandler(RequestDelegate next, ILogger<GlobalExceptio
         if (isTransient)
         {
             _logger.LogWarning(exception, "Transient database error on {Method} {Path}: {Message}",
-                context.Request.Method, context.Request.Path, exception.Message);
+                context.Request.Method, LogSanitiser.Sanitise(context.Request.Path), LogSanitiser.Sanitise(exception.Message));
         }
         else
         {
-            _logger.LogError(exception, "An unhandled exception occurred: {Message}", exception.Message);
+            _logger.LogError(exception, "An unhandled exception occurred: {Message}", LogSanitiser.Sanitise(exception.Message));
         }
 
         var response = context.Response;
