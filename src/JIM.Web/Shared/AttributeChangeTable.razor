@@ -369,17 +369,7 @@
     /// </summary>
     private static string GetReferenceDisplayName(ConnectedSystemObject cso)
     {
-        // DisplayNameOrId checks for a "displayName" attribute (case-insensitive),
-        // then falls back to the external ID attribute value
-        var displayName = cso.DisplayNameOrId;
-        if (!string.IsNullOrEmpty(displayName))
-            return displayName;
-
-        var secondaryExternalId = cso.SecondaryExternalIdAttributeValue?.ToStringNoName();
-        if (!string.IsNullOrEmpty(secondaryExternalId))
-            return secondaryExternalId;
-
-        return cso.Id.ToString();
+        return cso.DisplayNameOrId ?? cso.Id.ToString();
     }
 
     #region Display Types

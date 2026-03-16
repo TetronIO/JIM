@@ -221,18 +221,10 @@ public static class ExportChangeHistoryBuilder
 
     /// <summary>
     /// Returns the best available display identifier for a CSO using the priority:
-    /// External ID → Secondary External ID → CSO ID.
+    /// displayName → External ID → Secondary External ID → CSO ID.
     /// </summary>
     public static string GetCsoDisplayIdentifier(ConnectedSystemObject cso)
     {
-        var externalId = cso.ExternalIdAttributeValue?.ToStringNoName();
-        if (!string.IsNullOrEmpty(externalId))
-            return externalId;
-
-        var secondaryExternalId = cso.SecondaryExternalIdAttributeValue?.ToStringNoName();
-        if (!string.IsNullOrEmpty(secondaryExternalId))
-            return secondaryExternalId;
-
-        return cso.Id.ToString();
+        return cso.DisplayNameOrId ?? cso.Id.ToString();
     }
 }

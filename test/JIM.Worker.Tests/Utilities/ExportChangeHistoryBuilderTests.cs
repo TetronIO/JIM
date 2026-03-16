@@ -685,7 +685,26 @@ public class ExportChangeHistoryBuilderTests
     }
 
     [Test]
-    public void GetCsoDisplayIdentifier_PrefersExternalId()
+    public void GetCsoDisplayIdentifier_PrefersDisplayName()
+    {
+        var displayNameAttr = new ConnectedSystemObjectTypeAttribute { Id = 3, Name = "displayName", Type = AttributeDataType.Text };
+        var externalIdAttr = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "objectGUID", Type = AttributeDataType.Text };
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ExternalIdAttributeId = 1,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new() { AttributeId = 3, Attribute = displayNameAttr, StringValue = "Benjamin Myers" },
+                new() { AttributeId = 1, Attribute = externalIdAttr, StringValue = "external-id-123" }
+            }
+        };
+
+        Assert.That(ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(cso), Is.EqualTo("Benjamin Myers"));
+    }
+
+    [Test]
+    public void GetCsoDisplayIdentifier_FallsBackToExternalId()
     {
         var externalIdAttr = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "objectGUID", Type = AttributeDataType.Text };
         var secondaryIdAttr = new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "distinguishedName", Type = AttributeDataType.Text };
