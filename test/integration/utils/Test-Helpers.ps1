@@ -1070,7 +1070,23 @@ function Assert-NoUnresolvedReferences {
 
     $contextMsg = if ($Context) { " $Context" } else { "" }
 
-    $unresolvedCount = Get-JIMConnectedSystemUnresolvedReferenceCount -ConnectedSystemId $ConnectedSystemId
+    # Retry on transient failures — the database may still be processing a large import
+    $maxRetries = 3
+    $unresolvedCount = $null
+    for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+        try {
+            $unresolvedCount = Get-JIMConnectedSystemUnresolvedReferenceCount -ConnectedSystemId $ConnectedSystemId
+            break
+        }
+        catch {
+            if ($attempt -eq $maxRetries) {
+                throw "Failed to check unresolved references for $Name$contextMsg after $maxRetries attempts: $_"
+            }
+            Write-Host "    Transient failure checking unresolved references (attempt $attempt/$maxRetries), retrying..." -ForegroundColor Yellow
+            Start-Sleep -Seconds 2
+        }
+    }
+
     if ($unresolvedCount -gt 0) {
         throw "$Name has $unresolvedCount unresolved reference attribute value(s)$contextMsg. " +
               "Reference values (e.g. group member DNs) could not be matched to CSOs. " +
