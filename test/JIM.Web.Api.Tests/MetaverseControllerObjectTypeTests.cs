@@ -8,6 +8,8 @@ using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
+using JIM.Models.Search;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -523,6 +525,64 @@ public class MetaverseControllerObjectTypeTests
         var result = await _controller.UpdateObjectTypeAsync(1, request);
 
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
+    }
+
+    #endregion
+
+    #region MetaverseObjectTypeHeader.FromEntity tests
+
+    [Test]
+    public void FromEntity_WithPredefinedSearches_HasPredefinedSearchesIsTrue()
+    {
+        var entity = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "Person",
+            PluralName = "People",
+            BuiltIn = true,
+            PredefinedSearches = new List<PredefinedSearch>
+            {
+                new PredefinedSearch { Id = 1, Name = "All Users" }
+            }
+        };
+
+        var header = MetaverseObjectTypeHeader.FromEntity(entity);
+
+        Assert.That(header.HasPredefinedSearches, Is.True);
+    }
+
+    [Test]
+    public void FromEntity_WithEmptyPredefinedSearches_HasPredefinedSearchesIsFalse()
+    {
+        var entity = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "Device",
+            PluralName = "Devices",
+            BuiltIn = false,
+            PredefinedSearches = new List<PredefinedSearch>()
+        };
+
+        var header = MetaverseObjectTypeHeader.FromEntity(entity);
+
+        Assert.That(header.HasPredefinedSearches, Is.False);
+    }
+
+    [Test]
+    public void FromEntity_WithNullPredefinedSearches_HasPredefinedSearchesIsFalse()
+    {
+        var entity = new MetaverseObjectType
+        {
+            Id = 1,
+            Name = "Device",
+            PluralName = "Devices",
+            BuiltIn = false,
+            PredefinedSearches = null!
+        };
+
+        var header = MetaverseObjectTypeHeader.FromEntity(entity);
+
+        Assert.That(header.HasPredefinedSearches, Is.False);
     }
 
     #endregion

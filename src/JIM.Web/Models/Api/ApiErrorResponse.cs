@@ -129,4 +129,5 @@ public static class ApiErrorCodes
     public const string Conflict = "CONFLICT";
     public const string InternalError = "INTERNAL_ERROR";
     public const string BadRequest = "BAD_REQUEST";
+    public const string ServiceUnavailable = "SERVICE_UNAVAILABLE";
 }

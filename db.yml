@@ -5,6 +5,9 @@ services:
     restart: always
     # shm_size must be >= shared_buffers - see docker-compose.yml for sizing guidance
     shm_size: '512mb'
+    # Align max_connections with the full Docker stack (docker-compose.yml) so that
+    # native development (jim-db + jim-web) and integration tests have the same limits.
+    command: postgres -c max_connections=200
     volumes:
       - jim-db-volume:/var/lib/postgresql
     environment:

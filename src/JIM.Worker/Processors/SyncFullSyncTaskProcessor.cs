@@ -221,6 +221,12 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 // batch process pending export confirmations (deletes and updates)
                 await FlushPendingExportOperationsAsync();
 
+                // Resolve any pending export reference snapshots that couldn't be resolved during
+                // per-object processing (e.g. groups processed before their member users on this page).
+                // Must run after FlushPendingExportOperationsAsync (CSOs now in DB) and before
+                // FlushRpeisAsync (RPEIs with snapshots persisted).
+                await ResolvePendingExportReferenceSnapshotsAsync();
+
                 // batch delete obsolete CSOs
                 await FlushObsoleteCsoOperationsAsync();
 

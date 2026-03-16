@@ -75,6 +75,8 @@
         ],
         "files.trimTrailingWhitespace": true,
         "files.insertFinalNewline": true,
+        // Editor font size - matches terminal for consistency
+        "editor.fontSize": 13,
         // Terminal
         "terminal.integrated.defaultProfile.linux": "zsh",
         "terminal.integrated.fontSize": 13,

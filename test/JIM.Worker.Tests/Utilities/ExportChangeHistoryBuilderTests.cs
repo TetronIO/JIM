@@ -393,6 +393,25 @@ public class ExportChangeHistoryBuilderTests
     }
 
     [Test]
+    public void MapAttributeValueChanges_ResolvedReferenceAttribute_MapsStringValueAsReference()
+    {
+        // Arrange — deferred export with resolved reference (UnresolvedReferenceValue cleared, StringValue set)
+        var change = new ConnectedSystemObjectChange();
+        var peChanges = new List<PendingExportAttributeValueChange>
+        {
+            new() { Attribute = _referenceAttribute, ChangeType = PendingExportAttributeChangeType.Add, StringValue = "CN=User1,OU=Users,DC=test,DC=local" }
+        };
+
+        // Act
+        ExportChangeHistoryBuilder.MapAttributeValueChanges(change, peChanges);
+
+        // Assert — resolved DN stored as string value with pending stub flag
+        var valueChange = change.AttributeChanges.First().ValueChanges.First();
+        Assert.That(valueChange.StringValue, Is.EqualTo("CN=User1,OU=Users,DC=test,DC=local"));
+        Assert.That(valueChange.IsPendingExportStub, Is.True);
+    }
+
+    [Test]
     public void MapAttributeValueChanges_MultipleChangesForSameAttribute_GroupsUnderOneAttributeChange()
     {
         // Arrange — two value changes for the same multi-valued attribute
@@ -475,6 +494,265 @@ public class ExportChangeHistoryBuilderTests
 
         // Assert
         Assert.That(change.AttributeChanges, Has.Count.EqualTo(0));
+    }
+
+    #endregion
+
+    #region MapAttributeValueChanges — resolved pending export references
+
+    [Test]
+    public void MapAttributeValueChanges_ReferenceWithResolvedStubCso_StoresDisplayNameWithPendingFlag()
+    {
+        // Arrange — MVO GUID in UnresolvedReferenceValue, with a matching stub CSO that has a secondary external ID
+        var mvoGuid = Guid.NewGuid();
+        var secondaryIdAttr = new ConnectedSystemObjectTypeAttribute { Id = 100, Name = "distinguishedName", Type = AttributeDataType.Text };
+        var stubCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObjectId = mvoGuid,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning,
+            SecondaryExternalIdAttributeId = 100,
+            ExternalIdAttributeId = 99,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new() { AttributeId = 100, Attribute = secondaryIdAttr, StringValue = "CN=User1,OU=Users,DC=test,DC=local" }
+            }
+        };
+
+        var resolvedReferences = new Dictionary<Guid, ConnectedSystemObject> { { mvoGuid, stubCso } };
+
+        var change = new ConnectedSystemObjectChange();
+        var peChanges = new List<PendingExportAttributeValueChange>
+        {
+            new() { Attribute = _referenceAttribute, ChangeType = PendingExportAttributeChangeType.Add, UnresolvedReferenceValue = mvoGuid.ToString() }
+        };
+
+        // Act
+        ExportChangeHistoryBuilder.MapAttributeValueChanges(change, peChanges, resolvedReferences);
+
+        // Assert — stored as StringValue with the display identifier and IsPendingExportStub flag
+        var valueChange = change.AttributeChanges.First().ValueChanges.First();
+        Assert.That(valueChange.StringValue, Is.EqualTo("CN=User1,OU=Users,DC=test,DC=local"));
+        Assert.That(valueChange.IsPendingExportStub, Is.True);
+        Assert.That(valueChange.ReferenceValue, Is.Null);
+    }
+
+    [Test]
+    public void MapAttributeValueChanges_ReferenceWithNoResolvedCso_FallsBackToStringValue()
+    {
+        // Arrange — MVO GUID with no matching stub CSO in the lookup
+        var mvoGuid = Guid.NewGuid();
+        var resolvedReferences = new Dictionary<Guid, ConnectedSystemObject>();
+
+        var change = new ConnectedSystemObjectChange();
+        var peChanges = new List<PendingExportAttributeValueChange>
+        {
+            new() { Attribute = _referenceAttribute, ChangeType = PendingExportAttributeChangeType.Add, UnresolvedReferenceValue = mvoGuid.ToString() }
+        };
+
+        // Act
+        ExportChangeHistoryBuilder.MapAttributeValueChanges(change, peChanges, resolvedReferences);
+
+        // Assert — falls back to the existing behaviour (raw string)
+        var valueChange = change.AttributeChanges.First().ValueChanges.First();
+        Assert.That(valueChange.StringValue, Is.EqualTo(mvoGuid.ToString()));
+        Assert.That(valueChange.ReferenceValue, Is.Null);
+        Assert.That(valueChange.IsPendingExportStub, Is.False);
+    }
+
+    [Test]
+    public void MapAttributeValueChanges_ReferenceWithNullResolvedReferences_FallsBackToStringValue()
+    {
+        // Arrange — no resolved references dictionary provided (null)
+        var mvoGuid = Guid.NewGuid();
+        var change = new ConnectedSystemObjectChange();
+        var peChanges = new List<PendingExportAttributeValueChange>
+        {
+            new() { Attribute = _referenceAttribute, ChangeType = PendingExportAttributeChangeType.Add, UnresolvedReferenceValue = mvoGuid.ToString() }
+        };
+
+        // Act — null resolvedReferences (backwards compatible)
+        ExportChangeHistoryBuilder.MapAttributeValueChanges(change, peChanges, null);
+
+        // Assert — same as existing behaviour
+        var valueChange = change.AttributeChanges.First().ValueChanges.First();
+        Assert.That(valueChange.StringValue, Is.EqualTo(mvoGuid.ToString()));
+        Assert.That(valueChange.ReferenceValue, Is.Null);
+    }
+
+    [Test]
+    public void MapAttributeValueChanges_ReferenceWithNonGuidUnresolvedValue_FallsBackToStringValue()
+    {
+        // Arrange — UnresolvedReferenceValue is a DN string, not a GUID (e.g. from an LDAP import)
+        var resolvedReferences = new Dictionary<Guid, ConnectedSystemObject>();
+        var change = new ConnectedSystemObjectChange();
+        var peChanges = new List<PendingExportAttributeValueChange>
+        {
+            new() { Attribute = _referenceAttribute, ChangeType = PendingExportAttributeChangeType.Add, UnresolvedReferenceValue = "CN=Manager,OU=Users,DC=test,DC=local" }
+        };
+
+        // Act
+        ExportChangeHistoryBuilder.MapAttributeValueChanges(change, peChanges, resolvedReferences);
+
+        // Assert — non-GUID values cannot be looked up, stored as string
+        var valueChange = change.AttributeChanges.First().ValueChanges.First();
+        Assert.That(valueChange.StringValue, Is.EqualTo("CN=Manager,OU=Users,DC=test,DC=local"));
+        Assert.That(valueChange.ReferenceValue, Is.Null);
+    }
+
+    [Test]
+    public void MapAttributeValueChanges_MultipleReferencesWithMixedResolution_ResolvesCorrectly()
+    {
+        // Arrange — two references: one resolvable, one not
+        var mvoGuid1 = Guid.NewGuid();
+        var mvoGuid2 = Guid.NewGuid();
+        var secondaryIdAttr = new ConnectedSystemObjectTypeAttribute { Id = 100, Name = "distinguishedName", Type = AttributeDataType.Text };
+        var stubCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObjectId = mvoGuid1,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning,
+            SecondaryExternalIdAttributeId = 100,
+            ExternalIdAttributeId = 99,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new() { AttributeId = 100, Attribute = secondaryIdAttr, StringValue = "CN=User1,OU=Users,DC=test,DC=local" }
+            }
+        };
+
+        var resolvedReferences = new Dictionary<Guid, ConnectedSystemObject> { { mvoGuid1, stubCso } };
+
+        var change = new ConnectedSystemObjectChange();
+        var peChanges = new List<PendingExportAttributeValueChange>
+        {
+            new() { Attribute = _referenceAttribute, ChangeType = PendingExportAttributeChangeType.Add, UnresolvedReferenceValue = mvoGuid1.ToString() },
+            new() { Attribute = _referenceAttribute, ChangeType = PendingExportAttributeChangeType.Add, UnresolvedReferenceValue = mvoGuid2.ToString() }
+        };
+
+        // Act
+        ExportChangeHistoryBuilder.MapAttributeValueChanges(change, peChanges, resolvedReferences);
+
+        // Assert — first reference resolved with display name, second falls back to raw GUID string
+        var valueChanges = change.AttributeChanges.First().ValueChanges;
+        Assert.That(valueChanges, Has.Count.EqualTo(2));
+
+        var resolved = valueChanges.First(vc => vc.IsPendingExportStub);
+        Assert.That(resolved.StringValue, Is.EqualTo("CN=User1,OU=Users,DC=test,DC=local"));
+        Assert.That(resolved.ReferenceValue, Is.Null);
+
+        var unresolved = valueChanges.First(vc => !vc.IsPendingExportStub);
+        Assert.That(unresolved.StringValue, Is.EqualTo(mvoGuid2.ToString()));
+    }
+
+    [Test]
+    public void BuildFromPendingExport_WithResolvedReferences_PassesToMapAttributeValueChanges()
+    {
+        // Arrange
+        var mvoGuid = Guid.NewGuid();
+        var secondaryIdAttr = new ConnectedSystemObjectTypeAttribute { Id = 100, Name = "distinguishedName", Type = AttributeDataType.Text };
+        var stubCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObjectId = mvoGuid,
+            Status = ConnectedSystemObjectStatus.PendingProvisioning,
+            SecondaryExternalIdAttributeId = 100,
+            ExternalIdAttributeId = 99,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new() { AttributeId = 100, Attribute = secondaryIdAttr, StringValue = "CN=User1,OU=Users,DC=test,DC=local" }
+            }
+        };
+
+        var resolvedReferences = new Dictionary<Guid, ConnectedSystemObject> { { mvoGuid, stubCso } };
+
+        var pendingExport = CreatePendingExport(
+            new PendingExportAttributeValueChange
+            {
+                Attribute = _referenceAttribute,
+                ChangeType = PendingExportAttributeChangeType.Add,
+                UnresolvedReferenceValue = mvoGuid.ToString()
+            });
+
+        // Act
+        var result = ExportChangeHistoryBuilder.BuildFromPendingExport(
+            pendingExport, ActivityInitiatorType.System, null, null, resolvedReferences);
+
+        // Assert
+        var valueChange = result.AttributeChanges.First().ValueChanges.First();
+        Assert.That(valueChange.StringValue, Is.EqualTo("CN=User1,OU=Users,DC=test,DC=local"));
+        Assert.That(valueChange.IsPendingExportStub, Is.True);
+        Assert.That(valueChange.ReferenceValue, Is.Null);
+    }
+
+    [Test]
+    public void GetCsoDisplayIdentifier_PrefersDisplayName()
+    {
+        var displayNameAttr = new ConnectedSystemObjectTypeAttribute { Id = 3, Name = "displayName", Type = AttributeDataType.Text };
+        var externalIdAttr = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "objectGUID", Type = AttributeDataType.Text };
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ExternalIdAttributeId = 1,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new() { AttributeId = 3, Attribute = displayNameAttr, StringValue = "Benjamin Myers" },
+                new() { AttributeId = 1, Attribute = externalIdAttr, StringValue = "external-id-123" }
+            }
+        };
+
+        Assert.That(ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(cso), Is.EqualTo("Benjamin Myers"));
+    }
+
+    [Test]
+    public void GetCsoDisplayIdentifier_FallsBackToExternalId()
+    {
+        var externalIdAttr = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "objectGUID", Type = AttributeDataType.Text };
+        var secondaryIdAttr = new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "distinguishedName", Type = AttributeDataType.Text };
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ExternalIdAttributeId = 1,
+            SecondaryExternalIdAttributeId = 2,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new() { AttributeId = 1, Attribute = externalIdAttr, StringValue = "external-id-123" },
+                new() { AttributeId = 2, Attribute = secondaryIdAttr, StringValue = "CN=User,OU=Test" }
+            }
+        };
+
+        Assert.That(ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(cso), Is.EqualTo("external-id-123"));
+    }
+
+    [Test]
+    public void GetCsoDisplayIdentifier_FallsBackToSecondaryExternalId()
+    {
+        var secondaryIdAttr = new ConnectedSystemObjectTypeAttribute { Id = 2, Name = "distinguishedName", Type = AttributeDataType.Text };
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ExternalIdAttributeId = 1,
+            SecondaryExternalIdAttributeId = 2,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new() { AttributeId = 2, Attribute = secondaryIdAttr, StringValue = "CN=User,OU=Test" }
+            }
+        };
+
+        Assert.That(ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(cso), Is.EqualTo("CN=User,OU=Test"));
+    }
+
+    [Test]
+    public void GetCsoDisplayIdentifier_FallsBackToCsoId()
+    {
+        var csoId = Guid.NewGuid();
+        var cso = new ConnectedSystemObject
+        {
+            Id = csoId,
+            ExternalIdAttributeId = 1,
+            SecondaryExternalIdAttributeId = 2
+        };
+
+        Assert.That(ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(cso), Is.EqualTo(csoId.ToString()));
     }
 
     #endregion

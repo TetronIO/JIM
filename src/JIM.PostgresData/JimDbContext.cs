@@ -101,10 +101,10 @@ public class JimDbContext : DbContext
 
         // Connection pooling settings for optimal performance
         // - Minimum Pool Size: Keep connections warm to reduce latency for common operations
-        // - Maximum Pool Size: Limit per-process connections (4 services * 50 = 200 max total)
+        // - Maximum Pool Size: Limit per-process connections (3 services × 30 = 90, leaving headroom within PostgreSQL's max_connections=200)
         // - Connection Idle Lifetime: Recycle idle connections after 5 minutes
         // - Connection Pruning Interval: Check for idle connections every 30 seconds
-        _connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword};Minimum Pool Size=5;Maximum Pool Size=50;Connection Idle Lifetime=300;Connection Pruning Interval=30";
+        _connectionString = $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword};Minimum Pool Size=5;Maximum Pool Size=30;Connection Idle Lifetime=300;Connection Pruning Interval=30";
 
         _ = bool.TryParse(dbLogSensitiveInfo, out var logSensitiveInfo);
         if (logSensitiveInfo)
@@ -122,6 +122,12 @@ public class JimDbContext : DbContext
         // Only configure if not already configured (i.e., when using parameterless constructor)
         if (!optionsBuilder.IsConfigured && _connectionString != null)
         {
+            // Note: EnableRetryOnFailure is NOT configured here because the codebase has
+            // manual transactions (BeginTransactionAsync) that are incompatible with
+            // NpgsqlRetryingExecutionStrategy. Each transaction site must be wrapped in
+            // CreateExecutionStrategy().ExecuteAsync() before retry can be enabled.
+            // See issue #408 for the tracking item.
+            // Transient failures are handled at the API level by GlobalExceptionHandler (HTTP 503).
             optionsBuilder.UseNpgsql(_connectionString)
                 .ConfigureWarnings(warnings => warnings.Ignore(
                     Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning,

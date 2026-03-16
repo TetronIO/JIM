@@ -208,16 +208,9 @@ try {
         Start-Sleep -Seconds $WaitSeconds
 
         # Fail-fast: check for unresolved references after source import.
-        # Any unresolved references indicate that group member DNs could not be matched to
-        # existing CSOs — either a container scope issue or a cross-run resolution failure.
-        Write-Host "    Checking for unresolved references in Source AD after import..." -ForegroundColor Gray
-        $unresolvedCount = Get-JIMConnectedSystemUnresolvedReferenceCount -ConnectedSystemId $sourceSystem.id
-        if ($unresolvedCount -gt 0) {
-            throw "Source Full Import$contextSuffix completed but $unresolvedCount reference attribute value(s) are unresolved. " +
-                  "Group member DNs could not be matched to imported user CSOs. " +
-                  "Check container scope configuration — all referenced objects must be in scope."
-        }
-        Write-Host "  ✓ No unresolved references in Source AD" -ForegroundColor Green
+        # All references MUST resolve in a single import run — JIM resolves references after
+        # all pages are imported, so ordering within pages is not an issue.
+        Assert-NoUnresolvedReferences -ConnectedSystemId $sourceSystem.id -Name "Source AD" -Context "after Full Import$contextSuffix"
 
         # Step 2: Full Import from Target (BEFORE any sync)
         # Import Target CSOs early so they can join to MVOs before export rules create provisioning CSOs
@@ -252,6 +245,7 @@ try {
         Write-Host "    Full confirming import in Target AD..." -ForegroundColor Gray
         $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetFullImportProfile.id -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "Target Full Confirming Import$contextSuffix"
+        Assert-NoUnresolvedReferences -ConnectedSystemId $targetSystem.id -Name "Target AD" -Context "after Confirming Import$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
         # Step 7: Full Confirming Sync (informational only during initial sync)
@@ -288,6 +282,7 @@ try {
         Write-Host "    Delta importing from Source AD..." -ForegroundColor Gray
         $importResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceDeltaImportProfile.id -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Source Delta Import$contextSuffix"
+        Assert-NoUnresolvedReferences -ConnectedSystemId $sourceSystem.id -Name "Source AD" -Context "after Delta Import$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
         # Step 2: Delta Sync to Metaverse
@@ -306,6 +301,7 @@ try {
         Write-Host "    Delta confirming import in Target AD..." -ForegroundColor Gray
         $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaImportProfile.id -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "Target Delta Confirming Import$contextSuffix"
+        Assert-NoUnresolvedReferences -ConnectedSystemId $targetSystem.id -Name "Target AD" -Context "after Delta Confirming Import$contextSuffix"
         Start-Sleep -Seconds $WaitSeconds
 
         # Step 5: Delta Confirming Sync

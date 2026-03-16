@@ -1305,7 +1305,8 @@ public class ActivityRepository : IActivityRepository
             COPY "ConnectedSystemObjectChangeAttributeValues" (
                 "Id", "ConnectedSystemObjectChangeAttributeId", "ValueChangeType",
                 "StringValue", "DateTimeValue", "IntValue", "LongValue",
-                "ByteValueLength", "GuidValue", "BoolValue", "ReferenceValueId"
+                "ByteValueLength", "GuidValue", "BoolValue", "ReferenceValueId",
+                "IsPendingExportStub"
             ) FROM STDIN (FORMAT binary)
             """);
 
@@ -1350,6 +1351,7 @@ public class ActivityRepository : IActivityRepository
                 await writer.WriteAsync(refId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
             else
                 await writer.WriteNullAsync();
+            await writer.WriteAsync(v.IsPendingExportStub, NpgsqlTypes.NpgsqlDbType.Boolean);
         }
 
         await writer.CompleteAsync();

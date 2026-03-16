@@ -941,6 +941,8 @@ For production deployments, consider using Docker volume drivers or bind mounts 
 
 The JIM PowerShell module (`src/JIM.PowerShell/`) provides cmdlets for scripting and automation. It's designed to work with the JIM API.
 
+> **For production installation** (PowerShell Gallery or air-gapped), see the [Deployment Guide — PowerShell Module](DEPLOYMENT_GUIDE.md#powershell-module). This section covers development and contribution workflows only.
+
 ### Module Structure
 
 ```

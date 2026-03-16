@@ -297,6 +297,78 @@ docker compose -f docker-compose.yml -f docker-compose.production.yml logs jim.w
 
 JIM also includes a Logs page in the web UI for viewing application and database logs.
 
+## PowerShell Module
+
+JIM includes a cross-platform PowerShell module for scripting, automation, and Identity as Code (IDaC). The module works on Windows, macOS, and Linux and requires PowerShell 7.0+.
+
+### Connected Installation
+
+Install directly from the [PowerShell Gallery](https://www.powershellgallery.com/packages/JIM/):
+
+```powershell
+Install-Module -Name JIM
+```
+
+To update to a newer version:
+
+```powershell
+Update-Module -Name JIM
+```
+
+### Air-Gapped Installation
+
+There are two options for installing the module in disconnected environments.
+
+#### Option 1 — From the Release Bundle (Recommended)
+
+Each [release](https://github.com/TetronIO/JIM/releases) bundle (`jim-release-X.Y.Z.tar.gz`) includes the module pre-packaged in `powershell/JIM/`. After extracting the bundle, copy the module to a PSModulePath directory:
+
+```powershell
+# Windows
+Copy-Item -Recurse ./powershell/JIM "$env:USERPROFILE\Documents\PowerShell\Modules\"
+
+# Linux / macOS
+Copy-Item -Recurse ./powershell/JIM "~/.local/share/powershell/Modules/"
+```
+
+#### Option 2 — From the PowerShell Gallery via Save-Module
+
+On a connected machine, use `Save-Module` to download the module to a local directory without installing it:
+
+```powershell
+Save-Module -Name JIM -Path C:\Modules
+```
+
+Transfer the `C:\Modules\JIM\` directory to the disconnected environment, then copy it to a PSModulePath directory:
+
+```powershell
+# Windows
+Copy-Item -Recurse C:\Transfer\JIM "$env:USERPROFILE\Documents\PowerShell\Modules\"
+
+# Linux / macOS
+Copy-Item -Recurse /mnt/transfer/JIM "~/.local/share/powershell/Modules/"
+```
+
+### Verifying the Installation
+
+```powershell
+Import-Module JIM
+Get-Module JIM    # Verify the module loaded and check the version
+```
+
+### Connecting to JIM
+
+```powershell
+# Interactive — opens browser for SSO sign-in
+Connect-JIM -Url "https://jim.example.com"
+
+# Automation — use an API key (recommended for scripts and CI/CD)
+Connect-JIM -Url "https://jim.example.com" -ApiKey "jim_xxxxxxxxxxxx"
+
+# Verify the connection
+Test-JIMConnection
+```
+
 ## Troubleshooting
 
 ### Services fail to start
@@ -342,3 +414,4 @@ Use this checklist before going live:
 - [ ] Firewall rules restrict access to JIM's port to authorised networks
 - [ ] Docker restart policy is `unless-stopped` (set by production override)
 - [ ] Upgrade procedure documented and tested in staging
+- [ ] PowerShell module installed and connected (if using automation/IDaC)

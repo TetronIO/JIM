@@ -1403,7 +1403,7 @@ public abstract class SyncTaskProcessorBase
 
                     // Snapshot PE attribute changes so the Causality Tree can render detail
                     // even after the PendingExport is deleted during export confirmation
-                    SnapshotPendingExportChanges(peOutcome, pendingExport);
+                    await SnapshotPendingExportChangesAsync(peOutcome, pendingExport);
                 }
             }
             else if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Standard
@@ -1425,7 +1425,7 @@ public abstract class SyncTaskProcessorBase
                         detailCount: pe.AttributeValueChanges.Count,
                         detailMessage: pe.ConnectedSystemId.ToString());
 
-                    SnapshotPendingExportChanges(peOutcome, pe);
+                    await SnapshotPendingExportChangesAsync(peOutcome, pe);
                 }
             }
         }
@@ -2644,20 +2644,185 @@ public abstract class SyncTaskProcessorBase
     /// render attribute detail for PendingExportCreated outcomes even after the PendingExport
     /// is deleted during export confirmation.
     /// </summary>
-    private void SnapshotPendingExportChanges(
+    /// <remarks>
+    /// For reference attributes, resolves MVO GUIDs stored in <see cref="PendingExportAttributeValueChange.UnresolvedReferenceValue"/>
+    /// to their corresponding stub CSOs in the target connected system. This allows the Causality Tree
+    /// to render meaningful identifiers (External ID / Secondary External ID / CSO ID) instead of
+    /// raw MVO GUIDs with a misleading "unresolved reference" icon.
+    /// </remarks>
+    private async Task SnapshotPendingExportChangesAsync(
         ActivityRunProfileExecutionItemSyncOutcome outcome,
         PendingExport pendingExport)
     {
         if (!_csoChangeTrackingEnabled || pendingExport.AttributeValueChanges.Count == 0)
             return;
 
+        // Collect MVO GUIDs from reference attribute changes so we can resolve them
+        // to stub CSOs in the target connected system
+        Dictionary<Guid, ConnectedSystemObject>? resolvedReferences = null;
+        var mvoGuids = pendingExport.AttributeValueChanges
+            .Where(avc => !string.IsNullOrEmpty(avc.UnresolvedReferenceValue)
+                       && avc.Attribute?.Type == AttributeDataType.Reference)
+            .Select(avc => Guid.TryParse(avc.UnresolvedReferenceValue, out var g) ? g : (Guid?)null)
+            .Where(g => g.HasValue)
+            .Select(g => g!.Value)
+            .Distinct()
+            .ToList();
+
+        if (mvoGuids.Count > 0)
+        {
+            // First, check the in-memory batch of provisioning CSOs that haven't been persisted yet.
+            // During sync, provisioning CSOs are collected for batch creation (FlushPendingExportOperationsAsync)
+            // and won't be in the database when this snapshot runs.
+            // IMPORTANT: We create detached copies to avoid EF change tracker issues — the original
+            // CSOs are tracked entities that will be inserted by FlushPendingExportOperationsAsync.
+            // If we reference them directly via the ReferenceValue navigation property, EF's
+            // SaveChangesAsync would attempt to insert them again, causing duplicate key violations.
+            resolvedReferences = new Dictionary<Guid, ConnectedSystemObject>();
+            foreach (var cso in _provisioningCsosToCreate)
+            {
+                if (cso.MetaverseObjectId.HasValue
+                    && cso.ConnectedSystemId == pendingExport.ConnectedSystemId
+                    && mvoGuids.Contains(cso.MetaverseObjectId.Value))
+                {
+                    var detached = new ConnectedSystemObject
+                    {
+                        Id = cso.Id,
+                        MetaverseObjectId = cso.MetaverseObjectId,
+                        ConnectedSystemId = cso.ConnectedSystemId,
+                        Status = cso.Status,
+                        Type = cso.Type,
+                        TypeId = cso.TypeId,
+                        ExternalIdAttributeId = cso.ExternalIdAttributeId,
+                        SecondaryExternalIdAttributeId = cso.SecondaryExternalIdAttributeId,
+                        AttributeValues = cso.AttributeValues.ToList()
+                    };
+                    resolvedReferences.TryAdd(cso.MetaverseObjectId.Value, detached);
+                }
+            }
+
+            // For any MVO GUIDs not found in the in-memory batch, query the database
+            // (these may be CSOs created in a previous page/batch or a prior sync run)
+            var unresolvedMvoGuids = mvoGuids
+                .Where(g => !resolvedReferences.ContainsKey(g))
+                .ToList();
+
+            if (unresolvedMvoGuids.Count > 0)
+            {
+                var dbResolved = await _jim.Repository.ConnectedSystems
+                    .GetConnectedSystemObjectsByMetaverseObjectIdsAsync(unresolvedMvoGuids, pendingExport.ConnectedSystemId);
+                foreach (var kvp in dbResolved)
+                {
+                    resolvedReferences.TryAdd(kvp.Key, kvp.Value);
+                }
+
+                // Some references may remain unresolved if the referenced objects haven't been
+                // processed yet on this page (e.g. a group is synced before its member users).
+                // These will appear as raw MVO GUIDs in the Causality Tree — a cosmetic limitation
+                // of snapshot-time resolution. The references themselves are correct and will be
+                // resolved during export execution.
+            }
+        }
+
         var change = ExportChangeHistoryBuilder.BuildFromPendingExport(
             pendingExport,
             _activity.InitiatedByType,
             _activity.InitiatedById,
-            _activity.InitiatedByName);
+            _activity.InitiatedByName,
+            resolvedReferences);
 
         outcome.ConnectedSystemObjectChange = change;
+    }
+
+    /// <summary>
+    /// Post-page resolution pass for pending export reference snapshots.
+    /// Called after <see cref="FlushPendingExportOperationsAsync"/> has persisted all provisioning CSOs
+    /// but before <see cref="FlushRpeisAsync"/> persists RPEIs with their CSO change snapshots.
+    /// </summary>
+    /// <remarks>
+    /// During per-object processing, <see cref="SnapshotPendingExportChangesAsync"/> may not be able to resolve
+    /// all MVO GUID references because referenced objects haven't been processed yet on the page
+    /// (e.g. a group is synced before its member users). At this point, all provisioning CSOs for the page
+    /// have been created (either in-memory or persisted to the database), so we can resolve the remaining
+    /// references by querying the database.
+    /// </remarks>
+    protected async Task ResolvePendingExportReferenceSnapshotsAsync()
+    {
+        if (!_csoChangeTrackingEnabled)
+            return;
+
+        // Collect all unresolved MVO GUIDs from pending export snapshots across all RPEIs on this page
+        var unresolvedByCs = new Dictionary<int, HashSet<Guid>>();
+        var unresolvedValueChanges = new List<(ConnectedSystemObjectChangeAttributeValue ValueChange, int ConnectedSystemId, Guid MvoGuid)>();
+
+        foreach (var rpei in _activity.RunProfileExecutionItems)
+        {
+            foreach (var outcome in rpei.SyncOutcomes)
+            {
+                if (outcome.ConnectedSystemObjectChange == null)
+                    continue;
+
+                var change = outcome.ConnectedSystemObjectChange;
+                foreach (var attrChange in change.AttributeChanges)
+                {
+                    if (attrChange.Attribute?.Type != AttributeDataType.Reference)
+                        continue;
+
+                    foreach (var valueChange in attrChange.ValueChanges)
+                    {
+                        // Only process string values that look like MVO GUIDs and aren't already resolved
+                        if (valueChange.IsPendingExportStub || valueChange.ReferenceValue != null)
+                            continue;
+
+                        if (!string.IsNullOrEmpty(valueChange.StringValue)
+                            && Guid.TryParse(valueChange.StringValue, out var mvoGuid))
+                        {
+                            if (!unresolvedByCs.TryGetValue(change.ConnectedSystemId, out var guidSet))
+                            {
+                                guidSet = new HashSet<Guid>();
+                                unresolvedByCs[change.ConnectedSystemId] = guidSet;
+                            }
+                            guidSet.Add(mvoGuid);
+                            unresolvedValueChanges.Add((valueChange, change.ConnectedSystemId, mvoGuid));
+                        }
+                    }
+                }
+            }
+        }
+
+        if (unresolvedValueChanges.Count == 0)
+            return;
+
+        // Batch-resolve all MVO GUIDs per connected system
+        var resolvedLookup = new Dictionary<(int CsId, Guid MvoGuid), ConnectedSystemObject>();
+        foreach (var (csId, mvoGuids) in unresolvedByCs)
+        {
+            var resolved = await _jim.Repository.ConnectedSystems
+                .GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoGuids, csId);
+            foreach (var (mvoGuid, cso) in resolved)
+            {
+                resolvedLookup[(csId, mvoGuid)] = cso;
+            }
+        }
+
+        if (resolvedLookup.Count == 0)
+            return;
+
+        // Update the unresolved value changes with resolved display identifiers
+        var resolvedCount = 0;
+        foreach (var (valueChange, csId, mvoGuid) in unresolvedValueChanges)
+        {
+            if (resolvedLookup.TryGetValue((csId, mvoGuid), out var cso))
+            {
+                valueChange.StringValue = ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(cso);
+                valueChange.IsPendingExportStub = true;
+                resolvedCount++;
+            }
+        }
+
+        Log.Debug("ResolvePendingExportReferenceSnapshotsAsync: Resolved {ResolvedCount} of {TotalCount} " +
+            "previously unresolved pending export reference snapshots across {CsCount} connected system(s)",
+            resolvedCount, unresolvedValueChanges.Count, unresolvedByCs.Count);
     }
 
     /// <summary>

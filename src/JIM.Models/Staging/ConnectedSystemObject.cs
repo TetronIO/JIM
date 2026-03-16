@@ -117,8 +117,13 @@ public class ConnectedSystemObject
             if (av != null && !string.IsNullOrEmpty(av.StringValue))
                 return av.StringValue;
 
-            // no displayName attribute on this object, return the external id instead
-            return ExternalIdAttributeValue?.ToString();
+            // no displayName attribute on this object, try the external id
+            var externalId = ExternalIdAttributeValue?.ToStringNoName();
+            if (!string.IsNullOrEmpty(externalId))
+                return externalId;
+
+            // fall back to secondary external id (e.g. DN for LDAP systems)
+            return SecondaryExternalIdAttributeValue?.ToStringNoName();
         }
     }
     #endregion

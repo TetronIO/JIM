@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+#### Pending Export Reference Display (#404)
+
+- 🐛 Pending export reference attributes (e.g. group members) now display meaningful identifiers (DN, External ID) instead of raw GUIDs with a misleading "unresolved reference" warning
+- 🐛 References to objects processed later on the same sync page are now resolved via a post-page resolution pass
+- 🐛 Resolved reference attributes (e.g. group members) now appear in export causality tree attribute changes — previously they were silently dropped
+- 🖥️ Pending export references show a "pending export" indicator to distinguish them from fully resolved and genuinely unresolved references
+- 🔒 Unresolved reference fail-fast assertions added to integration test Scenarios 1, 2, and 8
+
+#### Database Resilience (#408)
+
+- 🐛 Transient database errors now return HTTP 503 (Service Unavailable) with a `Retry-After` header instead of HTTP 400 (Bad Request)
+- ⚡ Transient database failures handled gracefully at API level with retry guidance
+- ⚡ Connection pool sizing reduced from 50 to 30 per service to leave headroom within PostgreSQL's `max_connections`
+- 📦 Development database (`db.yml`) now explicitly sets `max_connections=200` to match the full Docker stack
+
 ## [0.6.1] - 2026-03-15
 
 ### Added
