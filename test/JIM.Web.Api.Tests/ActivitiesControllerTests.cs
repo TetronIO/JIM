@@ -355,7 +355,7 @@ public class ActivitiesControllerTests
         var activity = new Activity
         {
             Id = activityId,
-            TargetType = ActivityTargetType.DataGenerationTemplate, // Not a run profile activity
+            TargetType = ActivityTargetType.ExampleDataTemplate, // Not a run profile activity
             Status = ActivityStatus.Complete
         };
         _mockActivityRepo.Setup(r => r.GetActivityAsync(activityId))

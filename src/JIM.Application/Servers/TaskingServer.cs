@@ -91,19 +91,19 @@ namespace JIM.Application.Servers
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
                 workerTask.Activity = activity;
             }
-            else if (workerTask is DataGenerationTemplateWorkerTask dataGenerationWorkerTask)
+            else if (workerTask is ExampleDataTemplateWorkerTask dataGenerationWorkerTask)
 
             {
-                var template = await Application.DataGeneration.GetTemplateAsync(dataGenerationWorkerTask.TemplateId) ??
+                var template = await Application.ExampleData.GetTemplateAsync(dataGenerationWorkerTask.TemplateId) ??
                     throw new InvalidDataException("CreateWorkerTaskAsync: template not found for id " + dataGenerationWorkerTask.TemplateId);
 
                 // every data generation operation requires tracking with an activity...
                 var activity = new Activity
                 {
                     TargetName = template.Name,
-                    TargetType = ActivityTargetType.DataGenerationTemplate,
+                    TargetType = ActivityTargetType.ExampleDataTemplate,
                     TargetOperationType = ActivityTargetOperationType.Execute,
-                    DataGenerationTemplateId = template.Id
+                    ExampleDataTemplateId = template.Id
                 };
                 await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 
@@ -433,14 +433,14 @@ namespace JIM.Application.Servers
         }
 
         #region Data Generation Tasks
-        public async Task<DataGenerationTemplateWorkerTask?> GetFirstDataGenerationTemplateWorkerTaskAsync(int templateId)
+        public async Task<ExampleDataTemplateWorkerTask?> GetFirstExampleDataTemplateWorkerTaskAsync(int templateId)
         {
-            return await Application.Repository.Tasking.GetFirstDataGenerationWorkerTaskAsync(templateId);
+            return await Application.Repository.Tasking.GetFirstExampleDataWorkerTaskAsync(templateId);
         }
 
-        public async Task<WorkerTaskStatus?> GetFirstDataGenerationTemplateWorkerTaskStatus(int templateId)
+        public async Task<WorkerTaskStatus?> GetFirstExampleDataTemplateWorkerTaskStatus(int templateId)
         {
-            return await Application.Repository.Tasking.GetFirstDataGenerationTemplateWorkerTaskStatus(templateId);
+            return await Application.Repository.Tasking.GetFirstExampleDataTemplateWorkerTaskStatus(templateId);
         }
         #endregion
 

@@ -22,7 +22,7 @@
 - [x] Ensure consistent kebab-case throughout
 
 ### 1.3 Fix Return Types
-- [x] Add explicit `IActionResult` return type to `DataGenerationController.ExecuteTemplateAsync`
+- [x] Add explicit `IActionResult` return type to `ExampleDataController.ExecuteTemplateAsync`
 - [x] Return `202 Accepted` for async operations (template execution)
 - [x] Return `202 Accepted` for queued deletions (SynchronisationController)
 - [x] Return `204 No Content` for void operations (already implemented in CertificatesController)
@@ -69,8 +69,8 @@
 - [x] `ConnectedSystemObjectTypeDto`
 - [x] `ConnectedSystemObjectDto`
 
-### 3.3 Create DTOs for DataGenerationController
-- [x] `DataGenerationTemplateHeader` (uses existing DTO from JIM.Models)
+### 3.3 Create DTOs for ExampleDataController
+- [x] `ExampleDataTemplateHeader` (uses existing DTO from JIM.Models)
 - [x] `ExampleDataSetHeader` (uses existing DTO from JIM.Models)
 
 ### 3.4 Create DTOs for SecurityController
@@ -83,7 +83,7 @@
 ### 3.6 Refactor Controllers to Use DTOs
 - [x] MetaverseController - map all responses to DTOs
 - [x] SynchronisationController - map all responses to DTOs
-- [x] DataGenerationController - map all responses to DTOs
+- [x] ExampleDataController - map all responses to DTOs
 - [x] SecurityController - map all responses to DTOs
 - [x] CertificatesController - use detail DTO for GetById
 
@@ -109,8 +109,8 @@
 - [x] `GET /api/metaverse/attributes` - add pagination
 - [x] `GET /api/synchronisation/connected-systems` - add pagination
 - [x] `GET /api/synchronisation/sync-rules` - add pagination
-- [x] `GET /api/data-generation/templates` - add pagination
-- [x] `GET /api/data-generation/example-data-sets` - add pagination
+- [x] `GET /api/example-data/templates` - add pagination
+- [x] `GET /api/example-data/example-data-sets` - add pagination
 
 ### 4.3 Add Filtering Support
 - [x] Define filter query parameter format: `?filter=property:operator:value`
@@ -133,7 +133,7 @@
 ### 5.1 Add XML Documentation to All Endpoints
 - [x] MetaverseController - add `<summary>`, `<param>`, `<returns>` to all methods
 - [x] SynchronisationController - add XML docs
-- [x] DataGenerationController - add XML docs
+- [x] ExampleDataController - add XML docs
 - [x] SecurityController - add XML docs
 - [x] CertificatesController - enhance existing docs
 - [x] HealthController - add XML docs

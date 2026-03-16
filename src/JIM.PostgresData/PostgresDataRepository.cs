@@ -12,7 +12,7 @@ public class PostgresDataRepository : IRepository
     public IApiKeyRepository ApiKeys { get; }
     public IChangeHistoryRepository ChangeHistory { get; }
     public IConnectedSystemRepository ConnectedSystems { get; }
-    public IDataGenerationRepository DataGeneration { get; }
+    public IExampleDataRepository ExampleData { get; }
     public IMetaverseRepository Metaverse { get; }
     public ISchedulingRepository Scheduling { get; }
     public ISearchRepository Search { get; }
@@ -56,7 +56,7 @@ public class PostgresDataRepository : IRepository
         ApiKeys = new ApiKeyRepository(this);
         ChangeHistory = new ChangeHistoryRepository(jimDbContext);
         ConnectedSystems = new ConnectedSystemRepository(this);
-        DataGeneration = new DataGenerationRepository(this);
+        ExampleData = new ExampleDataRepository(this);
         Database = jimDbContext; // the db context is passed in, so we can unit test jim and the data repository by passing in either a mock or the actual db context.
         Metaverse = new MetaverseRepository(this);
         Scheduling = new SchedulingRepository(this);

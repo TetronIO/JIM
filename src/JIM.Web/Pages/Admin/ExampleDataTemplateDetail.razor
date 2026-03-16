@@ -1,7 +1,7 @@
 ﻿@page "/admin/example-data/templates/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application
-@using JIM.Models.DataGeneration
+@using JIM.Models.ExampleData
 @using JIM.Models.Core
 @using JIM.Models.Tasking
 @using System.Diagnostics
@@ -27,9 +27,9 @@
                 <MudText Typo="Typo.h6">@objectType.MetaverseObjectType.Name</MudText>
             </ToolBarContent>
             <HeaderContent>
-            <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.MetaverseAttribute!.Name)"><MudText Typo="Typo.button">Attribute</MudText></MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.MetaverseAttribute!.Type)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortBy="new Func<DataGenerationTemplateAttribute, object>(x => x.PopulatedValuesPercentage!)"><MudText Typo="Typo.button">Population %</MudText></MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataTemplateAttribute, object>(x => x.MetaverseAttribute!.Name)"><MudText Typo="Typo.button">Attribute</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataTemplateAttribute, object>(x => x.MetaverseAttribute!.Type)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ExampleDataTemplateAttribute, object>(x => x.PopulatedValuesPercentage!)"><MudText Typo="Typo.button">Population %</MudText></MudTableSortLabel></MudTh>
                 <MudTh><MudText Typo="Typo.button">Rules</MudText></MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -187,15 +187,15 @@
     public int Id { get; set; }
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
-    private DataGenerationTemplate? _template;
-    private DataGenerationTemplateWorkerTask? _task;
+    private ExampleDataTemplate? _template;
+    private ExampleDataTemplateWorkerTask? _task;
     private WorkerTaskStatus? _status;
     private bool _isExecuting;
     private List<BreadcrumbItem> _breadcrumbs = null!;
 
     protected override async Task OnInitializedAsync()
     {
-        _template = await Jim.DataGeneration.GetTemplateAsync(Id);
+        _template = await Jim.ExampleData.GetTemplateAsync(Id);
         if (_template == null)
         {
             // template not found, redirect to index page
@@ -218,7 +218,7 @@
             Debug.WriteLine("Timer loop executing...");
             if (_template != null)
             {
-                _status = await Jim.Tasking.GetFirstDataGenerationTemplateWorkerTaskStatus(_template.Id);
+                _status = await Jim.Tasking.GetFirstExampleDataTemplateWorkerTaskStatus(_template.Id);
                 if (_status != null)
                     Debug.WriteLine("TimerLoop: status is " + _status);
                 else
@@ -247,7 +247,7 @@
 
         // attribute the execution to the user
         var user = await Helpers.GetUserAsync(Jim, AuthenticationStateTask);
-        _task = DataGenerationTemplateWorkerTask.ForUser(_template.Id, user.Id, user.DisplayName ?? "Unknown User");
+        _task = ExampleDataTemplateWorkerTask.ForUser(_template.Id, user.Id, user.DisplayName ?? "Unknown User");
         var result = await Jim.Tasking.CreateWorkerTaskAsync(_task);
 
         if (!result.Success)

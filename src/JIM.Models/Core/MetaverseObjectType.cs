@@ -1,5 +1,5 @@
 ﻿using JIM.Models.Activities;
-using JIM.Models.DataGeneration;
+using JIM.Models.ExampleData;
 using JIM.Models.Interfaces;
 using JIM.Models.Search;
 using Microsoft.EntityFrameworkCore;
@@ -61,7 +61,7 @@ public class MetaverseObjectType : IAuditable
 
     public List<MetaverseAttribute> Attributes { get; set; } = new();
     public bool BuiltIn { get; set; }
-    public List<DataGenerationTemplateAttribute> DataGenerationTemplateAttributes { get; set; } = null!;
+    public List<ExampleDataTemplateAttribute> ExampleDataTemplateAttributes { get; set; } = null!;
     public List<PredefinedSearch> PredefinedSearches { get; set; } = null!;
 
     /// <summary>

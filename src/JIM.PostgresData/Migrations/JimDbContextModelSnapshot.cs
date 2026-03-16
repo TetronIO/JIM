@@ -18,7 +18,7 @@ namespace JIM.PostgresData.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.13")
+                .HasAnnotation("ProductVersion", "9.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -38,19 +38,19 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("ApiKeyRole");
                 });
 
-            modelBuilder.Entity("DataGenerationTemplateAttributeMetaverseObjectType", b =>
+            modelBuilder.Entity("ExampleDataTemplateAttributeMetaverseObjectType", b =>
                 {
-                    b.Property<int>("DataGenerationTemplateAttributesId")
+                    b.Property<int>("ExampleDataTemplateAttributesId")
                         .HasColumnType("integer");
 
                     b.Property<int>("ReferenceMetaverseObjectTypesId")
                         .HasColumnType("integer");
 
-                    b.HasKey("DataGenerationTemplateAttributesId", "ReferenceMetaverseObjectTypesId");
+                    b.HasKey("ExampleDataTemplateAttributesId", "ReferenceMetaverseObjectTypesId");
 
                     b.HasIndex("ReferenceMetaverseObjectTypesId");
 
-                    b.ToTable("DataGenerationTemplateAttributeMetaverseObjectType");
+                    b.ToTable("ExampleDataTemplateAttributeMetaverseObjectType");
                 });
 
             modelBuilder.Entity("JIM.Models.Activities.Activity", b =>
@@ -70,9 +70,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("DataGenerationTemplateId")
-                        .HasColumnType("integer");
 
                     b.Property<int?>("DeletedActivityCount")
                         .HasColumnType("integer");
@@ -94,6 +91,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("ErrorStackTrace")
                         .HasColumnType("text");
+
+                    b.Property<int?>("ExampleDataTemplateId")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("Executed")
                         .HasColumnType("timestamp with time zone");
@@ -860,7 +860,7 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("TrustedCertificates");
                 });
 
-            modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationObjectType", b =>
+            modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataObjectType", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -868,7 +868,7 @@ namespace JIM.PostgresData.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<int?>("DataGenerationTemplateId")
+                    b.Property<int?>("ExampleDataTemplateId")
                         .HasColumnType("integer");
 
                     b.Property<int>("MetaverseObjectTypeId")
@@ -879,14 +879,89 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("DataGenerationTemplateId");
+                    b.HasIndex("ExampleDataTemplateId");
 
                     b.HasIndex("MetaverseObjectTypeId");
 
-                    b.ToTable("DataGenerationObjectTypes");
+                    b.ToTable("ExampleDataObjectTypes");
                 });
 
-            modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationTemplate", b =>
+            modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataSet", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("BuiltIn")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Culture")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ExampleDataSets");
+                });
+
+            modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataSetInstance", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ExampleDataSetId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ExampleDataTemplateAttributeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExampleDataSetId");
+
+                    b.HasIndex("ExampleDataTemplateAttributeId");
+
+                    b.ToTable("ExampleDataSetInstances");
+                });
+
+            modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataSetValue", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("ExampleDataSetId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StringValue")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExampleDataSetId");
+
+                    b.ToTable("ExampleDataSetValues");
+                });
+
+            modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataTemplate", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -929,10 +1004,10 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("Name");
 
-                    b.ToTable("DataGenerationTemplates");
+                    b.ToTable("ExampleDataTemplates");
                 });
 
-            modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationTemplateAttribute", b =>
+            modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataTemplateAttribute", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -952,7 +1027,7 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("ConnectedSystemObjectTypeAttributeId")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("DataGenerationObjectTypeId")
+                    b.Property<int?>("ExampleDataObjectTypeId")
                         .HasColumnType("integer");
 
                     b.Property<int?>("ManagerDepthPercentage")
@@ -997,14 +1072,14 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemObjectTypeAttributeId");
 
-                    b.HasIndex("DataGenerationObjectTypeId");
+                    b.HasIndex("ExampleDataObjectTypeId");
 
                     b.HasIndex("MetaverseAttributeId");
 
-                    b.ToTable("DataGenerationTemplateAttributes");
+                    b.ToTable("ExampleDataTemplateAttributes");
                 });
 
-            modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationTemplateAttributeDependency", b =>
+            modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataTemplateAttributeDependency", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1026,10 +1101,10 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("MetaverseAttributeId");
 
-                    b.ToTable("DataGenerationTemplateAttributeDependencies");
+                    b.ToTable("ExampleDataTemplateAttributeDependencies");
                 });
 
-            modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationTemplateAttributeWeightedValue", b =>
+            modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataTemplateAttributeWeightedValue", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1037,7 +1112,7 @@ namespace JIM.PostgresData.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<int?>("DataGenerationTemplateAttributeId")
+                    b.Property<int?>("ExampleDataTemplateAttributeId")
                         .HasColumnType("integer");
 
                     b.Property<string>("Value")
@@ -1049,84 +1124,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("DataGenerationTemplateAttributeId");
+                    b.HasIndex("ExampleDataTemplateAttributeId");
 
-                    b.ToTable("DataGenerationTemplateAttributeWeightedValues");
-                });
-
-            modelBuilder.Entity("JIM.Models.DataGeneration.ExampleDataSet", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<bool>("BuiltIn")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("Created")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Culture")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("ExampleDataSets");
-                });
-
-            modelBuilder.Entity("JIM.Models.DataGeneration.ExampleDataSetInstance", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("DataGenerationTemplateAttributeId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ExampleDataSetId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Order")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("DataGenerationTemplateAttributeId");
-
-                    b.HasIndex("ExampleDataSetId");
-
-                    b.ToTable("ExampleDataSetInstances");
-                });
-
-            modelBuilder.Entity("JIM.Models.DataGeneration.ExampleDataSetValue", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int?>("ExampleDataSetId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("StringValue")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ExampleDataSetId");
-
-                    b.ToTable("ExampleDataSetValues");
+                    b.ToTable("ExampleDataTemplateAttributeWeightedValues");
                 });
 
             modelBuilder.Entity("JIM.Models.Logic.ObjectMatchingRule", b =>
@@ -3100,16 +3100,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasDiscriminator().HasValue("ClearConnectedSystemObjectsWorkerTask");
                 });
 
-            modelBuilder.Entity("JIM.Models.Tasking.DataGenerationTemplateWorkerTask", b =>
-                {
-                    b.HasBaseType("JIM.Models.Tasking.WorkerTask");
-
-                    b.Property<int>("TemplateId")
-                        .HasColumnType("integer");
-
-                    b.HasDiscriminator().HasValue("DataGenerationTemplateWorkerTask");
-                });
-
             modelBuilder.Entity("JIM.Models.Tasking.DeleteConnectedSystemWorkerTask", b =>
                 {
                     b.HasBaseType("JIM.Models.Tasking.WorkerTask");
@@ -3130,6 +3120,16 @@ namespace JIM.PostgresData.Migrations
                         });
 
                     b.HasDiscriminator().HasValue("DeleteConnectedSystemWorkerTask");
+                });
+
+            modelBuilder.Entity("JIM.Models.Tasking.ExampleDataTemplateWorkerTask", b =>
+                {
+                    b.HasBaseType("JIM.Models.Tasking.WorkerTask");
+
+                    b.Property<int>("TemplateId")
+                        .HasColumnType("integer");
+
+                    b.HasDiscriminator().HasValue("ExampleDataTemplateWorkerTask");
                 });
 
             modelBuilder.Entity("JIM.Models.Tasking.SynchronisationWorkerTask", b =>
@@ -3160,11 +3160,11 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("DataGenerationTemplateAttributeMetaverseObjectType", b =>
+            modelBuilder.Entity("ExampleDataTemplateAttributeMetaverseObjectType", b =>
                 {
-                    b.HasOne("JIM.Models.DataGeneration.DataGenerationTemplateAttribute", null)
+                    b.HasOne("JIM.Models.ExampleData.ExampleDataTemplateAttribute", null)
                         .WithMany()
-                        .HasForeignKey("DataGenerationTemplateAttributesId")
+                        .HasForeignKey("ExampleDataTemplateAttributesId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -3356,11 +3356,11 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("SSOUniqueIdentifierMetaverseAttribute");
                 });
 
-            modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationObjectType", b =>
+            modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataObjectType", b =>
                 {
-                    b.HasOne("JIM.Models.DataGeneration.DataGenerationTemplate", null)
+                    b.HasOne("JIM.Models.ExampleData.ExampleDataTemplate", null)
                         .WithMany("ObjectTypes")
-                        .HasForeignKey("DataGenerationTemplateId");
+                        .HasForeignKey("ExampleDataTemplateId");
 
                     b.HasOne("JIM.Models.Core.MetaverseObjectType", "MetaverseObjectType")
                         .WithMany()
@@ -3371,9 +3371,35 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("MetaverseObjectType");
                 });
 
-            modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationTemplateAttribute", b =>
+            modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataSetInstance", b =>
                 {
-                    b.HasOne("JIM.Models.DataGeneration.DataGenerationTemplateAttributeDependency", "AttributeDependency")
+                    b.HasOne("JIM.Models.ExampleData.ExampleDataSet", "ExampleDataSet")
+                        .WithMany("ExampleDataSetInstances")
+                        .HasForeignKey("ExampleDataSetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("JIM.Models.ExampleData.ExampleDataTemplateAttribute", "ExampleDataTemplateAttribute")
+                        .WithMany("ExampleDataSetInstances")
+                        .HasForeignKey("ExampleDataTemplateAttributeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ExampleDataSet");
+
+                    b.Navigation("ExampleDataTemplateAttribute");
+                });
+
+            modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataSetValue", b =>
+                {
+                    b.HasOne("JIM.Models.ExampleData.ExampleDataSet", null)
+                        .WithMany("Values")
+                        .HasForeignKey("ExampleDataSetId");
+                });
+
+            modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataTemplateAttribute", b =>
+                {
+                    b.HasOne("JIM.Models.ExampleData.ExampleDataTemplateAttributeDependency", "AttributeDependency")
                         .WithMany()
                         .HasForeignKey("AttributeDependencyId");
 
@@ -3381,9 +3407,9 @@ namespace JIM.PostgresData.Migrations
                         .WithMany()
                         .HasForeignKey("ConnectedSystemObjectTypeAttributeId");
 
-                    b.HasOne("JIM.Models.DataGeneration.DataGenerationObjectType", null)
+                    b.HasOne("JIM.Models.ExampleData.ExampleDataObjectType", null)
                         .WithMany("TemplateAttributes")
-                        .HasForeignKey("DataGenerationObjectTypeId");
+                        .HasForeignKey("ExampleDataObjectTypeId");
 
                     b.HasOne("JIM.Models.Core.MetaverseAttribute", "MetaverseAttribute")
                         .WithMany()
@@ -3396,7 +3422,7 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("MetaverseAttribute");
                 });
 
-            modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationTemplateAttributeDependency", b =>
+            modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataTemplateAttributeDependency", b =>
                 {
                     b.HasOne("JIM.Models.Core.MetaverseAttribute", "MetaverseAttribute")
                         .WithMany()
@@ -3407,37 +3433,11 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("MetaverseAttribute");
                 });
 
-            modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationTemplateAttributeWeightedValue", b =>
+            modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataTemplateAttributeWeightedValue", b =>
                 {
-                    b.HasOne("JIM.Models.DataGeneration.DataGenerationTemplateAttribute", null)
+                    b.HasOne("JIM.Models.ExampleData.ExampleDataTemplateAttribute", null)
                         .WithMany("WeightedStringValues")
-                        .HasForeignKey("DataGenerationTemplateAttributeId");
-                });
-
-            modelBuilder.Entity("JIM.Models.DataGeneration.ExampleDataSetInstance", b =>
-                {
-                    b.HasOne("JIM.Models.DataGeneration.DataGenerationTemplateAttribute", "DataGenerationTemplateAttribute")
-                        .WithMany("ExampleDataSetInstances")
-                        .HasForeignKey("DataGenerationTemplateAttributeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("JIM.Models.DataGeneration.ExampleDataSet", "ExampleDataSet")
-                        .WithMany("ExampleDataSetInstances")
-                        .HasForeignKey("ExampleDataSetId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("DataGenerationTemplateAttribute");
-
-                    b.Navigation("ExampleDataSet");
-                });
-
-            modelBuilder.Entity("JIM.Models.DataGeneration.ExampleDataSetValue", b =>
-                {
-                    b.HasOne("JIM.Models.DataGeneration.ExampleDataSet", null)
-                        .WithMany("Values")
-                        .HasForeignKey("ExampleDataSetId");
+                        .HasForeignKey("ExampleDataTemplateAttributeId");
                 });
 
             modelBuilder.Entity("JIM.Models.Logic.ObjectMatchingRule", b =>
@@ -4119,28 +4119,28 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("PredefinedSearches");
                 });
 
-            modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationObjectType", b =>
+            modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataObjectType", b =>
                 {
                     b.Navigation("TemplateAttributes");
                 });
 
-            modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationTemplate", b =>
-                {
-                    b.Navigation("ObjectTypes");
-                });
-
-            modelBuilder.Entity("JIM.Models.DataGeneration.DataGenerationTemplateAttribute", b =>
-                {
-                    b.Navigation("ExampleDataSetInstances");
-
-                    b.Navigation("WeightedStringValues");
-                });
-
-            modelBuilder.Entity("JIM.Models.DataGeneration.ExampleDataSet", b =>
+            modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataSet", b =>
                 {
                     b.Navigation("ExampleDataSetInstances");
 
                     b.Navigation("Values");
+                });
+
+            modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataTemplate", b =>
+                {
+                    b.Navigation("ObjectTypes");
+                });
+
+            modelBuilder.Entity("JIM.Models.ExampleData.ExampleDataTemplateAttribute", b =>
+                {
+                    b.Navigation("ExampleDataSetInstances");
+
+                    b.Navigation("WeightedStringValues");
                 });
 
             modelBuilder.Entity("JIM.Models.Logic.ObjectMatchingRule", b =>

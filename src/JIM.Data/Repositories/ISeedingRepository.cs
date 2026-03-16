@@ -1,5 +1,5 @@
 ﻿using JIM.Models.Core;
-using JIM.Models.DataGeneration;
+using JIM.Models.ExampleData;
 using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
@@ -18,6 +18,6 @@ public interface ISeedingRepository
         List<PredefinedSearch> predefinedSearches,
         List<Role> roles,
         List<ExampleDataSet> exampleDataSets,
-        List<DataGenerationTemplate> dataGenerationTemplates,
+        List<ExampleDataTemplate> dataGenerationTemplates,
         List<ConnectorDefinition> connectorDefinitions);
 }

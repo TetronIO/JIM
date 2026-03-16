@@ -2,7 +2,7 @@
 using JIM.Connectors.LDAP;
 using JIM.Models.Activities;
 using JIM.Models.Core;
-using JIM.Models.DataGeneration;
+using JIM.Models.ExampleData;
 using JIM.Models.Interfaces;
 using JIM.Models.Search;
 using JIM.Models.Security;
@@ -50,7 +50,7 @@ internal class SeedingServer
         var predefinedSearchesToCreate = new List<PredefinedSearch>();
         var rolesToCreate = new List<Role>();
         var exampleDataSetsToCreate = new List<ExampleDataSet>();
-        var dataGenerationTemplatesToCreate = new List<DataGenerationTemplate>();
+        var dataGenerationTemplatesToCreate = new List<ExampleDataTemplate>();
         var connectorDefinitions = new List<ConnectorDefinition>();
 
         #region MetaverseAttributes
@@ -542,8 +542,8 @@ internal class SeedingServer
             exampleDataSetsToCreate.Add(groupStatusesEnDataSet);
         #endregion
 
-        #region DataGenerationTemplates
-        var template = await PrepareUsersAndGroupsDataGenerationTemplateAsync(userObjectType, groupObjectType, exampleDataSetsToCreate, attributesToCreate);
+        #region ExampleDataTemplates
+        var template = await PrepareUsersAndGroupsExampleDataTemplateAsync(userObjectType, groupObjectType, exampleDataSetsToCreate, attributesToCreate);
         if (template != null)
         {
             AuditHelper.SetCreatedBySystem(template);
@@ -1090,7 +1090,7 @@ internal class SeedingServer
     private async Task<ExampleDataSet?> PrepareExampleDataSetAsync(string name, string culture, string resourceValues)
     {
         var changes = false;
-        var exampleDataSet = await Application.Repository.DataGeneration.GetExampleDataSetAsync(name, culture);
+        var exampleDataSet = await Application.Repository.ExampleData.GetExampleDataSetAsync(name, culture);
         if (exampleDataSet == null)
         {
             exampleDataSet = new ExampleDataSet()
@@ -1117,18 +1117,18 @@ internal class SeedingServer
         return changes ? exampleDataSet : null;
     }
 
-    private async Task<DataGenerationTemplate?> PrepareUsersAndGroupsDataGenerationTemplateAsync(MetaverseObjectType userType, MetaverseObjectType groupType, List<ExampleDataSet> dataSets, List<MetaverseAttribute> metaverseAttributes)
+    private async Task<ExampleDataTemplate?> PrepareUsersAndGroupsExampleDataTemplateAsync(MetaverseObjectType userType, MetaverseObjectType groupType, List<ExampleDataSet> dataSets, List<MetaverseAttribute> metaverseAttributes)
     {
         var templateName = "Users & Groups";
 
         // does a template exist already?
-        var template = await Application.Repository.DataGeneration.GetTemplateAsync(templateName);
+        var template = await Application.Repository.ExampleData.GetTemplateAsync(templateName);
         if (template != null)
             return null;
 
-        template = new DataGenerationTemplate { Name = templateName, BuiltIn = true };
-        AddUsersToDataGenerationTemplate(template, userType, dataSets, metaverseAttributes);
-        AddGroupsToDataGenerationTemplate(template, groupType, userType, dataSets, metaverseAttributes);
+        template = new ExampleDataTemplate { Name = templateName, BuiltIn = true };
+        AddUsersToExampleDataTemplate(template, userType, dataSets, metaverseAttributes);
+        AddGroupsToExampleDataTemplate(template, groupType, userType, dataSets, metaverseAttributes);
         return template;
     }
 
@@ -1164,14 +1164,14 @@ internal class SeedingServer
         return connectorDefinition;
     }
 
-    private static void AddUsersToDataGenerationTemplate(DataGenerationTemplate template, MetaverseObjectType userType, List<ExampleDataSet> dataSets, List<MetaverseAttribute> metaverseAttributes)
+    private static void AddUsersToExampleDataTemplate(ExampleDataTemplate template, MetaverseObjectType userType, List<ExampleDataSet> dataSets, List<MetaverseAttribute> metaverseAttributes)
     {
-        var userDataGenerationObjectType = new DataGenerationObjectType
+        var userExampleDataObjectType = new ExampleDataObjectType
         {
             MetaverseObjectType = userType,
             ObjectsToCreate = 10000
         };
-        template.ObjectTypes.Add(userDataGenerationObjectType);            
+        template.ObjectTypes.Add(userExampleDataObjectType);            
 
         // do we have all the attribute definitions?
         var firstnamesMaleDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.FirstnamesMale);
@@ -1183,10 +1183,10 @@ internal class SeedingServer
         var jobTitlesDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.JobTitles);
         var userStatusDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.UserStatuses);
 
-        var firstnameAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.FirstName);
+        var firstnameAttribute = userExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.FirstName);
         if (firstnameAttribute == null)
         {
-            userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            userExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.FirstName),
                 ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance { ExampleDataSet = firstnamesMaleDataSet, Order = 0 }, new ExampleDataSetInstance { ExampleDataSet = firstnamesFemaleDataSet, Order = 1 } },
@@ -1194,10 +1194,10 @@ internal class SeedingServer
             });
         }
 
-        var lastnameAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.LastName);
+        var lastnameAttribute = userExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.LastName);
         if (lastnameAttribute == null)
         {
-            userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            userExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.LastName),
                 ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance { ExampleDataSet = lastnamesDataSet } },
@@ -1205,10 +1205,10 @@ internal class SeedingServer
             });
         }
 
-        var displayNameAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.DisplayName);
+        var displayNameAttribute = userExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.DisplayName);
         if (displayNameAttribute == null)
         {
-            userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            userExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.DisplayName),
                 PopulatedValuesPercentage = 100,
@@ -1216,10 +1216,10 @@ internal class SeedingServer
             });
         }
 
-        var emailAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Email);
+        var emailAttribute = userExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Email);
         if (emailAttribute == null)
         {
-            userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            userExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Email),
                 PopulatedValuesPercentage = 100,
@@ -1227,10 +1227,10 @@ internal class SeedingServer
             });
         }
 
-        var employeeIdAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.EmployeeId);
+        var employeeIdAttribute = userExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.EmployeeId);
         if (employeeIdAttribute == null)
         {
-            userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            userExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.EmployeeId),
                 PopulatedValuesPercentage = 100,
@@ -1239,10 +1239,10 @@ internal class SeedingServer
             });
         }
 
-        var companyAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Company);
+        var companyAttribute = userExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Company);
         if (companyAttribute == null)
         {
-            userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            userExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Company),
                 ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance { ExampleDataSet = companiesDataSet } },
@@ -1250,10 +1250,10 @@ internal class SeedingServer
             });
         }
 
-        var departmentAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Department);
+        var departmentAttribute = userExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Department);
         if (departmentAttribute == null)
         {
-            userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            userExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Department),
                 ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance { ExampleDataSet = departmentsDataSet } },
@@ -1261,10 +1261,10 @@ internal class SeedingServer
             });
         }
 
-        var teamAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Team);
+        var teamAttribute = userExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Team);
         if (teamAttribute == null)
         {
-            userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            userExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Team),
                 ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance { ExampleDataSet = teamsDataSet } },
@@ -1272,10 +1272,10 @@ internal class SeedingServer
             });
         }
 
-        var typeAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Type);
+        var typeAttribute = userExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Type);
         if (typeAttribute == null)
         {
-            userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            userExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Type),
                 Pattern = "PersonEntity",
@@ -1283,10 +1283,10 @@ internal class SeedingServer
             });
         }
 
-        var jobTitleAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.JobTitle);
+        var jobTitleAttribute = userExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.JobTitle);
         if (jobTitleAttribute == null)
         {
-            userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            userExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.JobTitle),
                 ExampleDataSetInstances = new List<ExampleDataSetInstance> { new ExampleDataSetInstance { ExampleDataSet = jobTitlesDataSet } },
@@ -1294,10 +1294,10 @@ internal class SeedingServer
             });
         }
 
-        var employeeStartDateAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.EmployeeStartDate);
+        var employeeStartDateAttribute = userExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.EmployeeStartDate);
         if (employeeStartDateAttribute == null)
         {
-            userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            userExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.EmployeeStartDate),
                 MinDate = DateTime.UtcNow.AddYears(-20),
@@ -1306,10 +1306,10 @@ internal class SeedingServer
             });
         }
 
-        var employeeEndDateAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.EmployeeEndDate);
+        var employeeEndDateAttribute = userExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.EmployeeEndDate);
         if (employeeEndDateAttribute == null)
         {
-            userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            userExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.EmployeeEndDate),
                 MinDate = DateTime.UtcNow.AddMonths(-11),
@@ -1318,33 +1318,33 @@ internal class SeedingServer
             });
         }
 
-        var objectGuidAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.ObjectGuid);
+        var objectGuidAttribute = userExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.ObjectGuid);
         if (objectGuidAttribute == null)
         {
-            userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            userExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.ObjectGuid),
                 PopulatedValuesPercentage = 100
             });
         }
 
-        var managerAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Manager);
+        var managerAttribute = userExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Manager);
         if (managerAttribute == null)
         {
-            userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            userExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Manager),
                 ManagerDepthPercentage = 25
             });
         }
 
-        var pronounsTemplateAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Pronouns);
+        var pronounsTemplateAttribute = userExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Pronouns);
         if (pronounsTemplateAttribute == null)
         {
-            userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            userExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Pronouns),
-                WeightedStringValues = new List<DataGenerationTemplateAttributeWeightedValue>
+                WeightedStringValues = new List<ExampleDataTemplateAttributeWeightedValue>
                 {
                     new() { Value = "he/him", Weight = 0.35f },
                     new() { Value = "she/her", Weight = 0.35f },
@@ -1356,13 +1356,13 @@ internal class SeedingServer
             });
         }
 
-        var statusAttribute = userDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Status);
+        var statusAttribute = userExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Status);
         if (statusAttribute == null)
         {
-            userDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            userExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Status),
-                WeightedStringValues = new List<DataGenerationTemplateAttributeWeightedValue>
+                WeightedStringValues = new List<ExampleDataTemplateAttributeWeightedValue>
                 {
                     new() { Value = "Active", Weight = 0.8f },
                     new() { Value = "Suspended", Weight = 0.02f },
@@ -1378,19 +1378,19 @@ internal class SeedingServer
         }
     }
 
-    private static void AddGroupsToDataGenerationTemplate(
-        DataGenerationTemplate template, 
+    private static void AddGroupsToExampleDataTemplate(
+        ExampleDataTemplate template, 
         MetaverseObjectType groupType, 
         MetaverseObjectType userType, 
         IReadOnlyCollection<ExampleDataSet> dataSets, 
         IReadOnlyCollection<MetaverseAttribute> metaverseAttributes)
     {
-        var groupDataGenerationObjectType = new DataGenerationObjectType
+        var groupExampleDataObjectType = new ExampleDataObjectType
         {
             MetaverseObjectType = groupType,
             ObjectsToCreate = 500
         };
-        template.ObjectTypes.Add(groupDataGenerationObjectType);
+        template.ObjectTypes.Add(groupExampleDataObjectType);
 
         // do we have all the attribute definitions?
         var adjectivesDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.Adjectives);
@@ -1398,10 +1398,10 @@ internal class SeedingServer
         var wordsDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.Words);
         var groupEndingsDataSet = dataSets.Single(q => q.Name == Constants.BuiltInExampleDataSets.GroupNameEndings);
 
-        var displayNameAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.DisplayName);
+        var displayNameAttribute = groupExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.DisplayName);
         if (displayNameAttribute == null)
         {
-            groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            groupExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.DisplayName),
                 ExampleDataSetInstances = new List<ExampleDataSetInstance> { 
@@ -1414,13 +1414,13 @@ internal class SeedingServer
             });
         }
 
-        var groupTypeAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.GroupType);
+        var groupTypeAttribute = groupExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.GroupType);
         if (groupTypeAttribute == null)
         {
-            groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            groupExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.GroupType),
-                WeightedStringValues = new List<DataGenerationTemplateAttributeWeightedValue>
+                WeightedStringValues = new List<ExampleDataTemplateAttributeWeightedValue>
                 {
                     new() { Value = "Security", Weight = 0.6f },
                     new() { Value = "Distribution", Weight = 0.4f },
@@ -1429,13 +1429,13 @@ internal class SeedingServer
             });
         }
 
-        var emailAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Email);
+        var emailAttribute = groupExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Email);
         if (emailAttribute == null)
         {
-            groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            groupExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Email),
-                AttributeDependency = new DataGenerationTemplateAttributeDependency { 
+                AttributeDependency = new ExampleDataTemplateAttributeDependency { 
                     MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.GroupType),
                     ComparisonType = ComparisonType.Equals,
                     StringValue = "Distribution"
@@ -1445,10 +1445,10 @@ internal class SeedingServer
             });
         }
 
-        var groupScopeAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.GroupScope);
+        var groupScopeAttribute = groupExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.GroupScope);
         if (groupScopeAttribute == null)
         {
-            groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            groupExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.GroupScope),
                 Pattern = "Universal",
@@ -1456,10 +1456,10 @@ internal class SeedingServer
             });
         }
 
-        var infoAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Info);
+        var infoAttribute = groupExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Info);
         if (infoAttribute == null)
         {
-            groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            groupExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Info),
                 Pattern = "This group was created by the JIM data generation feature.",
@@ -1467,10 +1467,10 @@ internal class SeedingServer
             });
         }
 
-        var staticMembersAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.StaticMembers);
+        var staticMembersAttribute = groupExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.StaticMembers);
         if (staticMembersAttribute == null)
         {
-            groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            groupExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.StaticMembers),
                 ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { userType },
@@ -1480,10 +1480,10 @@ internal class SeedingServer
             });
         }
 
-        var ownersAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Owners);
+        var ownersAttribute = groupExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Owners);
         if (ownersAttribute == null)
         {
-            groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            groupExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Owners),
                 ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { userType },
@@ -1493,10 +1493,10 @@ internal class SeedingServer
             });
         }
 
-        var managedByAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.ManagedBy);
+        var managedByAttribute = groupExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.ManagedBy);
         if (managedByAttribute == null)
         {
-            groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            groupExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.ManagedBy),
                 ReferenceMetaverseObjectTypes = new List<MetaverseObjectType> { userType },
@@ -1504,13 +1504,13 @@ internal class SeedingServer
             });
         }
 
-        var statusAttribute = groupDataGenerationObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Status);
+        var statusAttribute = groupExampleDataObjectType.TemplateAttributes.SingleOrDefault(q => q.MetaverseAttribute != null && q.MetaverseAttribute.Name == Constants.BuiltInAttributes.Status);
         if (statusAttribute == null)
         {
-            groupDataGenerationObjectType.TemplateAttributes.Add(new DataGenerationTemplateAttribute
+            groupExampleDataObjectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
             {
                 MetaverseAttribute = metaverseAttributes.Single(q => q.Name == Constants.BuiltInAttributes.Status),
-                WeightedStringValues = new List<DataGenerationTemplateAttributeWeightedValue>
+                WeightedStringValues = new List<ExampleDataTemplateAttributeWeightedValue>
                 {
                     new() { Value = "Active", Weight = 0.9f },
                     new() { Value = "Retiring", Weight = 0.05f },
