@@ -1579,10 +1579,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // - UnresolvedReferenceValue is set (contains the raw DN/secondary external ID string)
         // - ReferenceValueId is null (reference not yet resolved to a CSO ID)
         //
-        // This happens when groups are imported before the users they reference — the group CSO
-        // batch is saved while user CSOs still have Guid.Empty as their ID (not yet persisted).
-        // After all batches complete, this query resolves the remaining FKs by matching the
-        // UnresolvedReferenceValue against the secondary external ID attribute values of existing CSOs.
+        // Defence-in-depth for cross-run reference resolution (e.g., groups imported in a later
+        // run referencing users from a prior run). Within a single import run, upfront CSO ID
+        // pre-generation in SyncImportTaskProcessor should resolve all FKs before persistence.
+        //
+        // Uses case-insensitive LOWER() comparison because LDAP Distinguished Names are
+        // case-insensitive per RFC 4514, and different connector runs or LDAP servers may
+        // return DNs with different capitalisation.
         try
         {
             // Fast early exit: skip the expensive multi-table JOIN UPDATE when there are no
@@ -1609,7 +1612,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                       AND av."ConnectedSystemObjectId" = owner_cso."Id"
                       AND av."UnresolvedReferenceValue" IS NOT NULL
                       AND av."ReferenceValueId" IS NULL
-                      AND av."UnresolvedReferenceValue" = target_av."StringValue"
+                      AND target_av."StringValue" IS NOT NULL
+                      AND LOWER(av."UnresolvedReferenceValue") = LOWER(target_av."StringValue")
                     """,
                     connectedSystemId);
             }
@@ -1623,6 +1627,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // Fallback for unit tests using a mocked or in-memory DbContext that does not support raw SQL.
             // The in-memory provider auto-resolves FKs from navigation properties so cross-batch
             // reference issues do not manifest in tests. Return 0 — no fixup needed.
+            Log.Warning(ex, "FixupCrossBatchReferenceIdsAsync: Raw SQL not available (likely in-memory test provider). Skipping cross-batch FK fixup.");
             return 0;
         }
     }
@@ -1682,11 +1687,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             // ReferenceValue (navigation) but not ReferenceValueId (FK). EF change tracking would
             // normally sync these, but raw SQL bulk insert bypasses change tracking entirely,
             // so we must explicitly copy the ID from the navigation property to the FK column.
+            //
+            // IMPORTANT: Only set the FK when the referenced CSO is in THIS batch. Cross-batch
+            // references (where the referenced CSO is in a later batch) cannot have their FK set
+            // here because the referenced CSO row doesn't exist in the database yet — the FK
+            // constraint would reject the INSERT. Cross-batch FKs are resolved after all batches
+            // complete via FixupCrossBatchReferenceIdsAsync.
+            var batchCsoIds = new HashSet<Guid>(connectedSystemObjects.Select(c => c.Id));
             foreach (var cso in connectedSystemObjects)
             {
                 foreach (var av in cso.AttributeValues)
                 {
-                    if (av.ReferenceValue != null && av.ReferenceValue.Id != Guid.Empty && !av.ReferenceValueId.HasValue)
+                    if (av.ReferenceValue != null && av.ReferenceValue.Id != Guid.Empty && !av.ReferenceValueId.HasValue
+                        && batchCsoIds.Contains(av.ReferenceValue.Id))
                         av.ReferenceValueId = av.ReferenceValue.Id;
                 }
             }

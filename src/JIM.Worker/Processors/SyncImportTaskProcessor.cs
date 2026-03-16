@@ -316,6 +316,23 @@ public class SyncImportTaskProcessor
                     string.Join("; ", rpeiWithErrors.Select(r => $"[Id={r.Id}, ErrorType={r.ErrorType}, Message={r.ErrorMessage}]")));
             }
 
+            // Pre-generate IDs for ALL CSOs before batch saves begin. This eliminates
+            // the cross-batch FK gap where a group in batch 1 references a user in batch 3
+            // whose ID is still Guid.Empty. With all IDs assigned upfront, the per-batch
+            // ReferenceValueId fixup in CreateConnectedSystemObjectsAsync can resolve ALL
+            // reference FKs regardless of batch boundaries.
+            foreach (var cso in connectedSystemObjectsToBeCreated)
+            {
+                if (cso.Id == Guid.Empty)
+                    cso.Id = Guid.NewGuid();
+
+                foreach (var av in cso.AttributeValues)
+                {
+                    if (av.Id == Guid.Empty)
+                        av.Id = Guid.NewGuid();
+                }
+            }
+
             // Process CSO creates in batches to bound memory. CreateConnectedSystemObjectsAsync
             // creates ConnectedSystemObjectChange graphs (~20 ChangeAttribute + ChangeAttributeValue
             // objects per CSO). At 100K CSOs this creates ~2-6M objects consuming 3-7GB if done at once.
@@ -332,8 +349,7 @@ public class SyncImportTaskProcessor
                     totalCreatedSoFar, totalCreatedSoFar + batchSize, totalToCreate);
                 var csoBatch = connectedSystemObjectsToBeCreated.GetRange(0, batchSize);
 
-                // Extract just the RPEIs for this batch of CSOs using object references (not IDs,
-                // since CSO IDs are Guid.Empty before CreateConnectedSystemObjectsAsync assigns them).
+                // Extract just the RPEIs for this batch of CSOs using object references.
                 var batchCsoSet = new HashSet<ConnectedSystemObject>(csoBatch);
                 var batchRpeis = _activityRunProfileExecutionItems
                     .Where(r => r.ConnectedSystemObject != null && batchCsoSet.Contains(r.ConnectedSystemObject))
@@ -344,7 +360,7 @@ public class SyncImportTaskProcessor
                 Log.Debug("PerformFullImportAsync: CreateConnectedSystemObjectsAsync took {ElapsedMs}ms for {Count} CSOs",
                     batchSw.ElapsedMilliseconds, batchSize);
 
-                // Now that CSOs have real IDs (assigned by EF), sync the FK on RPEIs
+                // Sync the FK on RPEIs from CSO IDs (pre-generated before the batch loop)
                 foreach (var rpei in batchRpeis)
                 {
                     if (rpei.ConnectedSystemObject != null)
@@ -386,10 +402,10 @@ public class SyncImportTaskProcessor
                 await _jim.Activities.UpdateActivityProgressOutOfBandAsync(_activity);
             }
 
-            // After all create batches complete, fix up any ReferenceValueId FKs that could not be set
-            // during batch saves. This happens when an object (e.g. a group) is in an earlier batch than
-            // the objects it references (e.g. users), which means the referenced CSOs had Id==Guid.Empty
-            // at the time the group's batch was saved. Now that all CSOs have real IDs, we can resolve them.
+            // Defence-in-depth: fix up any remaining unresolved ReferenceValueId FKs via SQL.
+            // With upfront ID pre-generation, cross-batch references within the same import run
+            // should already be resolved. This fixup still handles edge cases such as cross-run
+            // references (e.g., groups imported in a later run referencing users from a prior run).
             var crossBatchFixed = await _jim.ConnectedSystems.FixupCrossBatchReferenceIdsAsync(_connectedSystem.Id);
             if (crossBatchFixed > 0)
                 Log.Information("PerformFullImportAsync: Fixed up {Count} cross-batch reference FKs after all create batches completed.", crossBatchFixed);
@@ -838,14 +854,14 @@ public class SyncImportTaskProcessor
         foreach (var importedObject in importResult.ImportObjects)
         {
             // find the object type for the imported object in our schema
-            var connectedSystemObjectType = _connectedSystem.ObjectTypes.Single(q => q.Name.Equals(importedObject.ObjectType, StringComparison.InvariantCultureIgnoreCase));
+            var connectedSystemObjectType = _connectedSystem.ObjectTypes.Single(q => q.Name.Equals(importedObject.ObjectType, StringComparison.OrdinalIgnoreCase));
 
             // what is the external id attribute for this object type in our schema?
             var externalIdAttributeName = connectedSystemObjectType.Attributes.Single(q => q.IsExternalId).Name;
             externalIdsImported.Add(new ExternalIdPair
             {
                 ConnectedSystemObjectType = connectedSystemObjectType,
-                ConnectedSystemImportObjectAttribute = importedObject.Attributes.Single(q => q.Name.Equals(externalIdAttributeName, StringComparison.InvariantCultureIgnoreCase))
+                ConnectedSystemImportObjectAttribute = importedObject.Attributes.Single(q => q.Name.Equals(externalIdAttributeName, StringComparison.OrdinalIgnoreCase))
             });
         }
     }
@@ -889,7 +905,7 @@ public class SyncImportTaskProcessor
             {
                 // validate the results.
                 // are any of the attribute values duplicated? stop processing if so
-                var duplicateAttributeNames = importObject.Attributes.GroupBy(a => a.Name, StringComparer.InvariantCultureIgnoreCase).Where(g => g.Count() > 1).Select(n => n.Key).ToList();
+                var duplicateAttributeNames = importObject.Attributes.GroupBy(a => a.Name, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1).Select(n => n.Key).ToList();
                 if (duplicateAttributeNames is { Count: > 0 })
                 {
                     activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes;
@@ -2214,7 +2230,7 @@ public class SyncImportTaskProcessor
                         switch (attrType)
                         {
                             case AttributeDataType.Text when !string.IsNullOrEmpty(primaryIdAttrValue.StringValue):
-                                lookups.PrimaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(StringComparer.InvariantCultureIgnoreCase);
+                                lookups.PrimaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal);
                                 if (!lookups.PrimaryTextLookup.TryAdd(primaryIdAttrValue.StringValue, cso))
                                     throw new InvalidOperationException($"Duplicate primary external ID text value '{primaryIdAttrValue.StringValue}' found for CSO {cso.Id}. Another CSO already has the same external ID value.");
                                 break;
@@ -2249,7 +2265,7 @@ public class SyncImportTaskProcessor
                             switch (attrType2)
                             {
                                 case AttributeDataType.Text when !string.IsNullOrEmpty(secondaryIdAttrValue.StringValue):
-                                    lookups.SecondaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
+                                    lookups.SecondaryTextLookup ??= new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal);
                                     if (!lookups.SecondaryTextLookup.TryAdd(secondaryIdAttrValue.StringValue, cso))
                                         throw new InvalidOperationException($"Duplicate secondary external ID text value '{secondaryIdAttrValue.StringValue}' found for CSO {cso.Id}. Another CSO already has the same secondary external ID value.");
                                     break;
@@ -2280,8 +2296,8 @@ public class SyncImportTaskProcessor
 
     /// <summary>
     /// Holds pre-built lookup dictionaries for O(1) in-memory reference resolution.
-    /// Dictionaries are keyed by external ID values with appropriate comparers
-    /// (InvariantCultureIgnoreCase for primary text, OrdinalIgnoreCase for secondary text).
+    /// Dictionaries are keyed by external ID values with case-sensitive Ordinal comparers
+    /// per the case sensitivity policy (external ID matching is always case-sensitive).
     /// Only the dictionaries needed for the data types present in the import are initialised.
     /// </summary>
     private sealed class ExternalIdLookups
